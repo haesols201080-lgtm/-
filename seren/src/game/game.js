@@ -1,0 +1,721 @@
+// 게임 전체를 묶는 중심. 엔진·세계·플레이어·시스템·UI 를 만들고, 모드에 따라 매 프레임 갱신합니다.
+// 모드: boot → title → intro → play ⇄ (dialogue | menu | card | cinematic)
+import * as THREE from 'three';
+import { Engine } from '../core/engine.js';
+import { Input } from '../core/input.js';
+import { detectQuality } from '../core/quality.js';
+import { audio } from '../core/audio.js';
+import { music } from '../core/music.js';
+import { bus } from '../core/events.js';
+import { World } from '../world/world.js';
+import { Flora } from '../world/flora.js';
+import { Structures } from '../world/structures.js';
+import { Currents } from '../world/currents.js';
+import { Creatures } from '../world/creatures.js';
+import { playerUniform, glowMaterial } from '../world/materials.js';
+import { Player } from '../player/player.js';
+import { Avatar } from '../player/avatar.js';
+import { CameraRig } from '../player/camera-rig.js';
+import { CURRENTS } from '../data/currents.js';
+import { LINES, MOA, KEEPERS, PYLON_TONES, CODEX } from '../data/story.js';
+import { UR_DIR } from '../world/sky-clock.js';
+import { defaultState, loadState, saveState, hasSave, loadSettings, deleteSave } from './state.js';
+import { Language } from './language.js';
+import { NPCs } from './npcs.js';
+import { Quests } from './quests.js';
+import { Dialogue } from './dialogue.js';
+import { Actions } from './actions.js';
+import { Resonance } from './resonance.js';
+import { Discovery } from './discovery.js';
+import { WorldEvents, Requests } from './world-events.js';
+import { Director } from './director.js';
+import { UI } from '../ui/ui.js';
+import { MapData } from '../ui/map.js';
+
+export class Game {
+  constructor() {
+    this.params = new URLSearchParams(location.search);
+    this.settings = loadSettings();
+    const q = this.params.get('q') || this.settings.quality || detectQuality();
+    this.engine = new Engine(document.getElementById('gl'), q);
+    this.input = new Input(this.engine.canvas);
+    this.input.sensitivity = this.settings.sensitivity;
+    this.input.invertY = this.settings.invertY;
+    this.audio = audio;
+    this.music = music;
+    for (const [k, v] of Object.entries(this.settings.vol)) audio.vol[k] = v;
+    this.state = defaultState();
+    this.time = 0;
+    this.mode = 'boot';
+    this.frames = 0;
+    this.settledFrames = 0;
+    this.lines = Object.fromEntries(Object.entries(LINES).map(([id, l]) => [id, { id, ...l }]));
+
+    this.world = new World(this.engine);
+    this.structures = this.world.add(new Structures(this.world));
+    this.flora = this.world.add(new Flora(this.world, this.engine.q));
+    this.currents = this.world.add(new Currents(this.world, CURRENTS));
+    this.player = new Player(this.world);
+    this.creatures = this.world.add(new Creatures(this.world, this));
+    this.avatar = new Avatar();
+    this.avatar.addTo(this.engine.scene);
+    this.rig = new CameraRig(this.engine.camera, this.world);
+
+    this.ui = new UI(this);
+    this.lang = new Language(this);
+    this.actions = new Actions(this);
+    this.quests = new Quests(this);
+    this.npcs = new NPCs(this);
+    this.dialogue = new Dialogue(this);
+    this.resonance = new Resonance(this);
+    this.discovery = new Discovery(this);
+    this.events = new WorldEvents(this);
+    this.director = new Director(this);
+    this.mapData = new MapData(this);
+    this.requests = new Requests(this);
+
+    this._beacons();
+    this._wireEvents();
+    this.saveT = 30;
+  }
+
+  // ── 시작 ─────────────────────────────────
+  boot() {
+    const bar = document.querySelector('#boot .boot-bar i');
+    const msg = document.querySelector('#boot .boot-msg');
+    // 타이틀 카메라 자리에서 지형을 먼저 만들어 둔다
+    this.world.clock.time = 0.745;
+    this.world.clock.frozen = true;
+    this.player.teleport(606, undefined, 8606);
+    this.player.state = 'down';
+    this.director.titleFrame(0);
+    this._last = performance.now();
+    const start = this._last;
+    const tick = (now) => {
+      const dt = Math.min(0.05, (now - this._last) / 1000);
+      this._last = now;
+      const waited = (now - start) / 1000;
+      this.time += dt;
+      this.director.titleFrame(this.time);
+      this.rig._applyOverride();
+      this.world.update(dt, this.engine.camera, { game: this, player: this.player });
+      this.world.preRender(this.engine.camera);
+      this.engine.render();
+      const t = this.world.terrain;
+      const prog = Math.min(1, (this.frames + 1) / 40) * (t.settled ? 1 : 0.85);
+      bar.style.width = `${Math.round(prog * 100)}%`;
+      this.frames++;
+      this.settledFrames = t.settled ? this.settledFrames + 1 : 0;
+      if ((this.settledFrames > 8 && this.frames > 30) || (this.settledFrames > 2 && waited > 8) || waited > 30) {
+        msg.textContent = '';
+        document.getElementById('boot').classList.add('hide');
+        this.showTitle();
+        requestAnimationFrame((tt) => this._frame(tt));
+        return;
+      }
+      msg.textContent = t.settled ? '빛을 모으는 중…' : '세계를 그리는 중…';
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }
+
+  showTitle() {
+    this.mode = 'title';
+    music.setMood('title');
+    const auto = this.params.get('play');
+    if (auto) { // 테스트·바로가기: ?play=new | ?play=continue
+      if (auto === 'continue' && hasSave()) this.continueGame(); else this.newGame(true);
+      return;
+    }
+    this.ui.title({
+      hasSave: hasSave(),
+      onContinue: () => { audio.unlock(); this.continueGame(); },
+      onNew: () => { audio.unlock(); this.newGame(); },
+      onSettings: () => { audio.unlock(); this.ui.openMenu('settings', true); },
+    });
+    const unlock = () => { audio.unlock(); removeEventListener('pointerdown', unlock); removeEventListener('keydown', unlock); };
+    addEventListener('pointerdown', unlock);
+    addEventListener('keydown', unlock);
+  }
+
+  newGame(skipIntro = false) {
+    deleteSave();
+    this.state = defaultState();
+    this.ui.hideTitle();
+    this.mode = 'intro';
+    this.world.clock.frozen = false;
+    this.world.clock.time = 0.655;
+    this.player.teleport(this.state.player.x, undefined, this.state.player.z);
+    this.player.state = 'down';
+    this.player.yaw = Math.PI * 0.9;
+    this.player.canSkim = false;
+    this.rig.yaw = 0;
+    this.rig.pitch = -0.12;
+    this.ui.refreshButtons();
+    const begin = () => {
+      this.ui.fade(false);
+      this.rig.override = null;
+      const wake = this.params.has('nowake') ? (f) => f() : (f) => this.director.wake(f);
+      wake(() => {
+        this.mode = 'play';
+        this.ui.setHud(true);
+        this.ui.refreshButtons();
+        this.quests.start('mq0', true);
+        this.ui.refreshObjective();
+        this._moaLater('…생체 신호 안정. 조종사님, 들리세요? 모아예요. 탐사복 보조 지능.', 0.3);
+        this._moaLater('포드는 망가졌지만 우리는 무사해요. 그리고… 저기 보세요. 거대한 행성, 하늘을 가로지르는 고리, 그리고 저 탑. 누군가 저걸 지었어요.', 5.5);
+        this._moaLater('신호가 시작된 곳이 바로 이 위성이에요. 우리가 찾던 곳이요.', 12.5);
+      });
+    };
+    this.ui.setHud(false);
+    if (skipIntro) { begin(); return; }
+    this.ui.fade(true);
+    music.setMood('night');
+    this.ui.caption([
+      '신호를 따라 312일.',
+      '가스행성 「우르」를 도는 위성에서,<br>우리는 노래를 들었다.',
+      '데이터가 아니었다.<br>누군가가, 아주 오래, 부르고 있었다.',
+      '그리고 — 대기권에서 배가 부서졌다.',
+    ], begin);
+  }
+
+  continueGame() {
+    const s = loadState();
+    if (!s) { this.newGame(); return; }
+    this.state = s;
+    this.ui.hideTitle();
+    this.world.clock.frozen = false;
+    this.world.clock.time = s.clock;
+    const p = s.player;
+    this.player.teleport(p.x, undefined, p.z);
+    this.player.yaw = p.yaw || 0;
+    this.rig.yaw = (p.yaw || 0) + Math.PI;
+    this._applyState();
+    this.rig.override = null;
+    this.mode = 'play';
+    this.ui.setHud(true);
+    this.ui.toast(`다시 울리자 · 세렌의 ${this.world.clock.day + 1}일째`, { kind: 'quest' });
+  }
+
+  /** 불러온 상태를 세계에 반영 */
+  _applyState() {
+    const s = this.state;
+    this.player.canSkim = !!s.flags.skimmer;
+    this.player.upgrades = { glide: 0, skim: 0, rise: 0, ...s.upgrades };
+    for (const id of Object.keys(s.pylons)) this.structures.awakenPylon(id, true);
+    for (const c of this.currents.list) {
+      if (c.def.unlock && s.pylons[c.def.unlock]) c.setEnabled(true);
+      if (s.flags['cur:' + c.id]) c.setEnabled(true);
+    }
+    if (s.flags.wellAwake && this.structures.wellAwake) this.structures.wellAwake(true);
+    if (s.nameSong) { music.nameSong = s.nameSong; music.nameSongChance = 0.3; }
+    if (s.flags.festival) this.world.sky.hoopMat.uniforms.uLights.value = 2.4;
+    this.mapData.load(s.reveal);
+    if (s.flags['pickups:sled']) this.discovery.spawnPickups('sled');
+    for (const [id, pos] of Object.entries(s.flags.npcPos || {})) this.npcs.goTo(id, pos[0], pos[1], { instant: true });
+    this.requests.active = s.flags.requests || [];
+    this.ui.refreshButtons();
+    this.ui.refreshObjective();
+    this.updateWaypoint();
+  }
+
+  save(force = false) {
+    if (this.mode === 'title' || this.mode === 'boot' || this.mode === 'intro') return;
+    const s = this.state;
+    const p = this.player;
+    if (p.state !== 'current' && p.state !== 'lift' && p.state !== 'down') s.player = { x: p.pos.x, y: null, z: p.pos.z, yaw: p.yaw };
+    s.clock = this.world.clock.time;
+    s.upgrades = { ...p.upgrades };
+    s.reveal = this.mapData.serialize();
+    const np = {};
+    for (const n of this.npcs.list) if (!n.ambient && n.moved) np[n.id] = [n.home.x, n.home.z];
+    s.flags.npcPos = np;
+    saveState(s);
+    if (force) this.saveT = 30;
+  }
+
+  setQuality(name) {
+    this.engine.setQuality(name);
+    this.world.terrain.lodFactor = this.engine.q.lod;
+  }
+
+  setMode(m) {
+    this.mode = m;
+    this.input.wantLock = m === 'play';
+    if (m !== 'play' && document.pointerLockElement) document.exitPointerLock?.();
+  }
+
+  // ── 반복 ─────────────────────────────────
+  _frame(now) {
+    const dt = Math.min(0.05, Math.max(0.0005, (now - this._last) / 1000));
+    this._last = now;
+    this.time += dt;
+    try { this.update(dt); } catch (e) { console.error(e); }
+    requestAnimationFrame((t) => this._frame(t));
+  }
+
+  /** 렌더링 없이 시뮬레이션만 한 걸음 (자동 테스트용) */
+  updateSim(dt) {
+    this.input.poll(dt);
+    this.player.update(dt, this.input, this.rig);
+    this.input.endFrame();
+  }
+
+  update(dt) {
+    const input = this.input;
+    input.poll(dt);
+    const mode = this.mode;
+    if (mode === 'title') {
+      this.director.titleFrame(this.time);
+      this.rig._applyOverride();
+      this.npcs.update(dt);
+    } else {
+      this._handleInput(dt);
+      const free = mode === 'play' && !this.director.active;
+      const steps = Math.max(1, Math.ceil(dt / (1 / 60)));
+      const h = dt / steps;
+      const prev = this.player.pos.clone();
+      for (let i = 0; i < steps; i++) {
+        if (this.player.state !== 'down') this.player.update(h, free ? input : NO_INPUT, this.rig);
+        if (i < steps - 1) input.down.clear();
+        this._playerEvents();
+      }
+      this._stats(prev);
+      this.avatar.update(dt, this.player);
+      playerUniform.value.copy(this.player.pos);
+      this.rig.update(dt, free ? input : NO_INPUT, this.player);
+      this.director.update(dt);
+      this.dialogue.update(dt);
+      this.resonance.update(dt);
+      this.discovery.update(dt);
+      this.npcs.update(dt);
+      if (mode === 'play' || mode === 'dialogue') this.quests.update(dt);
+      this.events.update(dt);
+      this.requests.update(dt);
+      this._hud(dt);
+      this.mapData.reveal(this.player.pos.x, this.player.pos.z, 450 + Math.max(0, this.player.pos.y - this.player.groundH) * 2);
+      this.state.playTime += dt;
+      this.saveT -= dt;
+      if (this.saveT <= 0 && mode === 'play') { this.save(); this.saveT = 30; }
+    }
+    this.mapData.step(this.mode === 'menu' ? 6 : 1.2);
+    this.world.update(dt, this.engine.camera, { game: this, player: this.player });
+    this._atmosphereByPlace(dt);
+    this.world.preRender(this.engine.camera);
+    this._audio(dt);
+    this.engine.render();
+    this.engine.adapt(dt);
+    input.endFrame();
+    this.frames++;
+    this.settledFrames = this.world.terrain.settled ? this.settledFrames + 1 : 0;
+  }
+
+  // ── 입력 ─────────────────────────────────
+  _handleInput() {
+    const i = this.input;
+    const m = this.mode;
+    if (i.pressed('pause')) {
+      if (this.ui.menuEl) this.ui.closeMenu();
+      else if (m === 'card') this.ui.closeCard();
+      else if (m === 'play') this.ui.openMenu('settings');
+      return;
+    }
+    if (i.pressed('map')) { if (this.ui.menuEl && this.ui.menuTab === 'map') this.ui.closeMenu(); else if (m === 'play' || m === 'menu') this.ui.openMenu('map'); }
+    if (i.pressed('journal')) { if (this.ui.menuEl && this.ui.menuTab === 'journal') this.ui.closeMenu(); else if (m === 'play' || m === 'menu') this.ui.openMenu('journal'); }
+    if (i.pressed('hud')) this.ui.setHud(this.ui.hud.classList.contains('off'));
+    if (m === 'intro' && (i.pressed('jump') || i.pressed('interact') || i.pressed('confirm'))) this.director.skip();
+    if (m === 'dialogue') {
+      if (i.pressed('interact') || i.pressed('jump') || i.pressed('confirm') || i.pressed('click')) this.dialogue.next();
+      return;
+    }
+    if (m === 'card') { if (i.pressed('interact') || i.pressed('confirm') || i.pressed('jump')) this.ui.closeCard(); return; }
+    if (m !== 'play' || this.director.active) return;
+    if (this.player.state === 'down') {
+      if (i.move.x || i.move.y || i.pressed('jump') || i.pressed('interact') || i.pressed('tap') || i.pressed('click')) {
+        this.player.setState('ground');
+        this.avatar.landSquash = 1;
+        audio.noise({ freq: 300, dur: 0.3, gain: 0.2 });
+      }
+      return;
+    }
+    for (let n = 0; n < 5; n++) {
+      if (!i.pressed('tone' + (n + 1))) continue;
+      if (this._composing) {
+        if (this.state.tones.includes(n)) { audio.tone(n, { gain: 0.5 }); this.ui.composeNote(n); this.ui.flashTone(n); }
+      } else { this.resonance.play(n); this.ui.flashTone(n); }
+    }
+    if (i.pressed('interact') && this._target) this._interact(this._target);
+    if (i.pressed('skimmer') && !this.state.flags.skimmer) this.ui.toast('아직 탈것이 없어요', { kind: 'muted' });
+  }
+
+  // ── 상호작용 ───────────────────────────────
+  _findTarget() {
+    const p = this.player.pos;
+    const npc = this.npcs.nearest(p, 5.5, (n) => !n.ambient);
+    if (npc) return { kind: 'npc', o: npc, label: `${npc.name}와(과) 마주하기` };
+    return this.discovery.nearestInteract(p);
+  }
+
+  _interact(t) {
+    if (t.kind === 'npc') return this.talkTo(t.o);
+    if (t.kind === 'deck' && this.quests.step('mq4')?.type === 'compose') {
+      if (this.world.atmos.state.night > 0.5) return this.startCompose();
+      this.ui.moa('하우는 밤에 노래를 보내라고 했어요. 메뉴에서 쉬면서 밤을 기다려요.');
+      return;
+    }
+    this.discovery.interact(t);
+  }
+
+  talkTo(n) {
+    const convo = this.quests.talkFor(n.id) || this.extraTalk(n.id);
+    if (convo) this.dialogue.start(convo, n);
+  }
+
+  /** 퀘스트 밖의 대화 (지역 지기, 미르, 온 등). checkOnly 면 「!」 표시 여부만 */
+  extraTalk(id, checkOnly = false) {
+    const s = this.state;
+    const keeperPylon = Object.keys(KEEPERS).find((k) => KEEPERS[k] === id);
+    if (this.requests.hasVisit(id)) {
+      if (checkOnly) return true;
+      return id === 'hau' ? 'hau-pylon' : keeperPylon ? (s.pylons[keeperPylon] ? 'keeper-awake' : 'keeper-silent') : id === 'mir' ? 'mir-1' : id === 'on' ? 'on-seeds' : 'iel-idle';
+    }
+    if (checkOnly) return id === 'mir' && !this.quests.isActive('sq_mir') && !this.quests.isDone('sq_mir') && this.quests.isDone('mq2');
+    if (keeperPylon) {
+      const own = { soel: 'soel-1', ruon: 'ruon-1', tar: s.pylons[keeperPylon] ? 'tar-2' : 'tar-1', vei: 'vei-1', narin: 'narin-1' }[id];
+      if (!s.flags['met:' + id]) { s.flags['met:' + id] = true; return own; }
+      return s.pylons[keeperPylon] ? 'keeper-awake' : 'keeper-silent';
+    }
+    if (id === 'mir') {
+      if (!this.quests.isActive('sq_mir') && !this.quests.isDone('sq_mir')) { this.quests.start('sq_mir'); return this.quests.talkFor('mir'); }
+      return 'mir-1';
+    }
+    if (id === 'on') {
+      if (s.flags.skimmer) { this._afterConvo = () => this.upgradeCard(); return 'on-seeds'; }
+      return 'on-sled';
+    }
+    if (id === 'hau') return Object.keys(s.pylons).length ? 'hau-pylon' : 'hau-first';
+    if (id === 'iel') return 'iel-idle';
+    return null;
+  }
+
+  upgradeCard() {
+    const s = this.state, p = this.player;
+    const opts = [
+      { k: 'glide', name: '날개 다듬기', desc: '활공이 더 멀리, 더 빠르게', max: 3 },
+      { k: 'skim', name: '썰매 공명 강화', desc: '썰매 최고 속도 +12%', max: 3 },
+      { k: 'rise', name: '솟음 증폭', desc: '공중에서 「솟음」을 한 번 더', max: 2 },
+    ];
+    const cost = (lv) => [3, 5, 8][lv] ?? 99;
+    const html = opts.map((o) => {
+      const lv = p.upgrades[o.k] || 0;
+      const c = cost(lv);
+      const can = lv < o.max && s.inv.starseed >= c;
+      return `<div class="qitem" style="text-align:left"><div class="qt">${o.name} <small style="color:var(--ink-dim)">${lv}/${o.max}</small></div><div class="qs">${o.desc}</div>${lv < o.max ? `<button class="btn" data-up="${o.k}" ${can ? '' : 'disabled'} style="margin-top:8px">별씨 ${c}개로 손보기</button>` : '<div class="qs" style="color:var(--teal)">최고 단계</div>'}</div>`;
+    }).join('');
+    this.ui.infoCard('장인 온의 작업대', `가진 별씨 ${s.inv.starseed}개`, '별비가 내리는 밤에 떨어진 별씨를 모아 오세요.');
+    const card = document.querySelector('.card');
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    card.insertBefore(box, card.lastElementChild);
+    box.querySelectorAll('[data-up]').forEach((b) => b.addEventListener('click', () => {
+      const k = b.dataset.up;
+      const lv = p.upgrades[k] || 0;
+      if (s.inv.starseed < cost(lv)) return;
+      s.inv.starseed -= cost(lv);
+      p.upgrades[k] = lv + 1;
+      s.upgrades = { ...p.upgrades };
+      audio.chime('quest');
+      this.ui.closeCard();
+      this.ui.toast('장비를 손봤다', { kind: 'item' });
+      this.save();
+    }));
+  }
+
+  /** 아웬이 말한다: 노래 + 자막 + 학습. 반환: 노래 길이(초) */
+  say(npc, line, ambient) {
+    const notes = this.lang.notesOf(line);
+    const pos = npc ? { x: npc.pos.x, y: npc.pos.y + 3, z: npc.pos.z } : null;
+    const pitch = npc && npc.scale && npc.scale < 0.8 ? 1.5 : npc && npc.id === 'hau' ? 0.75 : 1;
+    const dur = audio.sing(notes, { pos, gain: ambient ? 0.22 : 0.34, pitch }) || notes.length * 0.2;
+    if (npc) npc.fig.speak(dur);
+    this.lang.hear(line, npc ? npc.id : null);
+    if (ambient) this.ui.say(npc && !npc.ambient ? npc.name : '지나가는 아웬', this.lang.render(line, { size: 22 }));
+    return dur;
+  }
+
+  giveTone(n) {
+    if (this.state.tones.includes(n)) return;
+    this.state.tones.push(n);
+    this.state.tones.sort();
+    this.lang.learn(['rise', 'open', 'flow', 'light', 'still'][n], 'teach', true);
+    this.ui.refreshButtons();
+    this.ui.flashTone(n);
+    audio.chime('quest');
+    this.ui.toast(`새 공명 음 · 「${['솟음', '열림', '흐름', '빛', '고요'][n]}」 (${n + 1})`, { kind: 'word' });
+  }
+
+  giveItem(k, n = 1) {
+    this.state.inv[k] = (this.state.inv[k] || 0) + n;
+    if (k === 'starseed') this.ui.toast(`별씨 +${n} (모두 ${this.state.inv.starseed})`, { kind: 'item' });
+  }
+
+  scan(id) {
+    if (this.state.codex[id]) return;
+    this.state.codex[id] = true;
+    const c = CODEX[id];
+    if (!c) return;
+    this.ui.toast(`도감 · ${c.name}`, { kind: 'word', sub: '일지의 「도감」에 기록했어요' });
+    if (c.word) this.lang.learn(c.word, 'scan');
+    audio.chime('word');
+  }
+
+  journalNote(text) {
+    const j = this.state.journal;
+    if (j[j.length - 1] === text) return;
+    j.push(text);
+    if (j.length > 80) j.shift();
+  }
+
+  _moaLater(text, delay) { setTimeout(() => this.ui.moa(text), delay * 1000); }
+
+  // ── 공명탑 ─────────────────────────────────
+  awakenPylon(id) {
+    const P = this.structures.pylons.get(id);
+    if (!P || this.state.pylons[id]) return;
+    this.state.pylons[id] = true;
+    const count = Object.keys(this.state.pylons).length;
+    this.structures.awakenPylon(id);
+    audio.chime('pylon');
+    this.setMode('cinematic');
+    this.director.pylon(P, () => {
+      this.setMode('play');
+      this.ui.regionTitle(P.place.name, '탑이 다시 노래한다. 색이 돌아온다.', true);
+      for (const c of this.currents.list) if (c.def.unlock === id) { c.setEnabled(true); this.ui.toast(`해류가 다시 흐른다 · ${c.def.name}`, { kind: 'done' }); }
+      if (count <= PYLON_TONES.length) this.giveTone(PYLON_TONES[count - 1]);
+      const keeper = KEEPERS[id];
+      const kn = keeper && this.npcs.get(keeper);
+      if (kn) { this.npcs.goTo(keeper, P.x + 18, P.z + 12); kn.moved = true; }
+      this.state.harmony[P.place.region] = Math.max(this.state.harmony[P.place.region] || 0, 60);
+      const lines = [
+        '탑이 깨어났어요! 주변의 색이 돌아오고… 척추 쪽으로 해류가 다시 흘러요.',
+        '두 번째 탑이에요. 새 음도 받았어요. 세렌이 우리를 기억하는 것 같아요.',
+        '세 번째예요. 하우가 우리를 부르는 것 같아요. 척추로 돌아가 봐요.',
+        '네 번째. 세렌이 조금씩 더 크게 울려요.',
+        '다섯 탑이 모두 노래해요! 하우에게 가요.',
+      ];
+      this.ui.moa(lines[Math.min(count, lines.length) - 1]);
+      bus.emit('awaken', { id, count });
+      this.save(true);
+    });
+  }
+
+  // ── 조망점 ─────────────────────────────────
+  vista(id, v) {
+    const first = !this.state.vistas[id];
+    this.state.vistas[id] = true;
+    const deck = id === 'spine-deck';
+    this.mapData.reveal(v.x, v.z, deck ? 16000 : 3500);
+    this.setMode('cinematic');
+    const name = v.place ? v.place.name : '조망점';
+    const reg = this.world.regionAt(v.x, v.z);
+    this.director.vista({ x: v.x, y: v.y, z: v.z, deck }, name, deck ? '세렌의 모든 땅이 내려다보인다.' : reg.name, () => {
+      this.setMode('play');
+      if (first) this.ui.toast(deck ? '지도가 넓게 밝혀졌다' : '지도의 주변이 밝혀졌다', { kind: 'place' });
+      if (first && deck) this.ui.moa('빛기둥이 꺼진 곳들이 보여요. 지도에 표시해 둘게요.');
+      this.save();
+    });
+  }
+
+  // ── 이름 노래 ──────────────────────────────
+  startCompose() {
+    this._composing = true;
+    this.ui.moa('여섯 음을 골라 주세요. 조종사님만의 노래예요.');
+    this.ui.compose((notes) => {
+      this._composing = false;
+      this.state.nameSong = notes;
+      music.nameSong = notes;
+      music.nameSongChance = 0.3;
+      this.setMode('cinematic');
+      this.director.sendSong(notes, () => {
+        this.setMode('play');
+        this.structures.tetherPulse = 0;
+        this.save(true);
+      });
+    });
+  }
+
+  rest(frac) {
+    this.ui.fade(true);
+    setTimeout(() => {
+      this.world.clock.skipTo(frac);
+      this.ui.fade(false);
+      this.ui.toast(`${this.world.clock.timeLabel()} · 세렌의 ${this.world.clock.day + 1}일째`);
+    }, 1300);
+  }
+
+  focusOn(npc) {
+    const p = this.player;
+    p.yaw = Math.atan2(npc.pos.x - p.pos.x, npc.pos.z - p.pos.z);
+    p.vel.set(0, 0, 0);
+    npc.fig.look = p.pos;
+  }
+
+  // ── 목표·표식 빛기둥 ─────────────────────────
+  _beacons() {
+    const mk = (color) => {
+      const m = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 3.5, 1, 10, 1, true).translate(0, 0.5, 0), glowMaterial({ color, intensity: 0.7, fresnel: 0.6, side: THREE.DoubleSide }));
+      m.frustumCulled = false;
+      m.visible = false;
+      this.engine.scene.add(m);
+      return m;
+    };
+    this.questBeam = mk(0xffd27a);
+    this.wayBeam = mk(0xffffff);
+  }
+
+  updateWaypoint() {
+    const w = this.state.waypoint;
+    this.wayBeam.visible = !!w;
+    if (w) {
+      this.wayBeam.position.set(w.x, this.world.groundAt(w.x, w.z), w.z);
+      this.wayBeam.scale.set(1, 900, 1);
+    }
+  }
+
+  _hud() {
+    const p = this.player;
+    this._target = this.mode === 'play' && p.state !== 'down' && !this.director.active ? this._findTarget() : null;
+    this.ui.prompt(this._target ? this._target.label : null);
+    const markers = [];
+    const pos = p.pos;
+    const bearing = (x, z) => ((Math.atan2(x - pos.x, -(z - pos.z)) * 180) / Math.PI + 360) % 360;
+    markers.push({ bearing: bearing(pos.x + UR_DIR.x, pos.z + UR_DIR.z), cls: 'ur', label: '우르' });
+    const tg = this.quests.targets();
+    for (const t of tg.slice(0, 4)) {
+      const d = Math.hypot(t.x - pos.x, t.z - pos.z);
+      markers.push({ bearing: bearing(t.x, t.z), cls: 'q', label: d > 30 ? (d > 1000 ? (d / 1000).toFixed(1) + 'km' : Math.round(d) + 'm') : '' });
+    }
+    if (this.state.waypoint) {
+      const w = this.state.waypoint;
+      const d = Math.hypot(w.x - pos.x, w.z - pos.z);
+      markers.push({ bearing: bearing(w.x, w.z), cls: 'w', label: d > 1000 ? (d / 1000).toFixed(1) + 'km' : Math.round(d) + 'm' });
+      if (d < 25) { this.state.waypoint = null; this.updateWaypoint(); this.ui.toast('표식에 도착했다', { kind: 'muted' }); }
+    }
+    if (Math.hypot(pos.x, pos.z) > 1200) markers.push({ bearing: bearing(0, 0), cls: 'p', label: '척추' });
+    this.ui.updateCompass(this.rig.yaw, markers);
+    const t0 = tg[0];
+    if (t0) {
+      const d = Math.hypot(t0.x - pos.x, t0.z - pos.z);
+      this.questBeam.visible = d > 60;
+      const h = t0.y ?? this.world.groundAt(t0.x, t0.z);
+      this.questBeam.position.set(t0.x, h, t0.z);
+      this.questBeam.scale.set(1 + d / 800, 600 + d * 0.15, 1 + d / 800);
+    } else this.questBeam.visible = false;
+  }
+
+  _stats(prev) {
+    const p = this.player;
+    const d = Math.hypot(p.pos.x - prev.x, p.pos.z - prev.z);
+    if (d < 100) {
+      if (p.state === 'ground') this.state.stats.distance += d;
+      if (p.state === 'glide') this.state.stats.glideDistance += d;
+    }
+  }
+
+  // ── 플레이어 사건 → 소리·연출·모아 ────────────────
+  _playerEvents() {
+    const p = this.player;
+    const s = this.state;
+    for (const e of p.events) {
+      if (e === 'jump') audio.noise({ freq: 900, dur: 0.18, gain: 0.08, sweep: 2000 });
+      if (e === 'land') {
+        const k = Math.min(1, (p.impact || 4) / 20);
+        audio.noise({ freq: 220, dur: 0.12 + k * 0.2, gain: 0.08 + k * 0.25, type: 'lowpass' });
+        this.avatar.landSquash = Math.min(1, 0.3 + k);
+        if (k > 0.5) this.rig.shake(0.08 * k);
+      }
+      if (e === 'hardland') { this.rig.shake(0.3); if (!s.flags.moaHard) { s.flags.moaHard = true; this.ui.moa(MOA.hardLand); } }
+      if (e === 'glideStart') {
+        audio.noise({ freq: 1400, dur: 0.35, gain: 0.12, sweep: 500 });
+        audio.tone(2, { gain: 0.12, octave: 1, soft: true, dur: 1.2 });
+        if (!s.flags.moaGlide) { s.flags.moaGlide = true; this.ui.moa(MOA.firstGlide); }
+      }
+      if (e === 'skimOn') {
+        audio.blip({ hz: 200, to: 600, dur: 0.3, gain: 0.08, type: 'triangle' });
+        if (!s.flags.moaSkim) { s.flags.moaSkim = true; this.ui.moa(MOA.firstSkim); }
+      }
+      if (e === 'currentIn') {
+        audio.noise({ freq: 600, dur: 1.2, gain: 0.25, sweep: 3000 });
+        [0, 2, 4].forEach((n, i) => audio.tone(n, { delay: i * 0.08, gain: 0.15, soft: true, octave: 1 }));
+        s.stats.currentRides++;
+        if (!s.flags.moaCurrent) { s.flags.moaCurrent = true; this.ui.moa(MOA.firstCurrent); }
+      }
+      if (e === 'currentOut' && this._lastCurrent) bus.emit('currentDone', { id: this._lastCurrent });
+      if (e === 'liftIn') [0, 1, 2, 3, 4].forEach((n, i) => audio.tone(n, { delay: i * 0.12, gain: 0.12, soft: true }));
+      if (e === 'splash') audio.noise({ freq: 1200, dur: 0.6, gain: 0.3, sweep: 300 });
+      if (e === 'edge') this.ui.moa(MOA.edge);
+      if (e === 'bump') { this.rig.shake(0.15); audio.noise({ freq: 160, dur: 0.2, gain: 0.25, type: 'lowpass' }); }
+    }
+    if (p.state === 'current' && p.current) this._lastCurrent = p.current.id;
+  }
+
+  _audio(dt) {
+    const p = this.player;
+    const cam = this.engine.camera;
+    audio.listener.x = cam.position.x; audio.listener.y = cam.position.y; audio.listener.z = cam.position.z;
+    audio.listener.yaw = Math.atan2(-Math.sin(this.rig.yaw), -Math.cos(this.rig.yaw));
+    const speed = p.state === 'glide' ? p.glideSpeed : p.state === 'current' ? 80 : p.hspeed;
+    audio.updateLoops(this.mode === 'title' ? 4 : speed, p.state, p.pos.y - p.groundH);
+    if (p.state === 'ground' && p.hspeed > 1 && this.mode === 'play') {
+      this._step = (this._step || 0) + dt * (1.6 + p.hspeed * 0.22);
+      if (this._step > 1) {
+        this._step = 0;
+        const reg = this.world.regionAt(p.pos.x, p.pos.z).id;
+        const f = p.groundC ? 2400 : p.pos.y < 4 ? 1400 : reg === 'glass' ? 3200 : reg === 'frost' && p.pos.y > 900 ? 900 : 700;
+        audio.noise({ freq: f * (0.85 + Math.random() * 0.3), q: 1.2, dur: 0.07, gain: 0.05 + p.hspeed * 0.004, wet: 0.02 });
+      }
+    }
+    if (this.mode !== 'title') {
+      const c = this.world.clock;
+      let mood = 'explore';
+      if (c.eclipseNear > 0.3) mood = 'eclipse';
+      else if (this.world.atmos.state.night > 0.6) mood = 'night';
+      else for (const P of this.structures.pylons.values()) if (!P.alive && Math.hypot(P.x - p.pos.x, P.z - p.pos.z) < 1200) mood = 'silence';
+      music.setMood(mood);
+      music.intensity = 0.3 + Object.keys(this.state.pylons).length * 0.12;
+    }
+    music.update(dt);
+  }
+
+  /** 장소에 따른 대기 변화 (서리 첨봉의 눈보라 등) */
+  _atmosphereByPlace(dt) {
+    const p = this.player.pos;
+    const frost = this.structures.pylons.get('frost-pylon');
+    let target = 1;
+    if (frost && !frost.alive) target = 1 + 2.5 * Math.max(0, 1 - Math.hypot(p.x - frost.x, p.z - frost.z) / 4500);
+    const a = this.world.atmos;
+    a.fogScale += (target - a.fogScale) * Math.min(1, dt * 0.3);
+    if (!this.state.flags.moaNight && a.state.night > 0.8 && this.mode === 'play') { this.state.flags.moaNight = true; this.ui.moa(MOA.firstNight); }
+  }
+
+  _wireEvents() {
+    bus.on('word', (e) => {
+      const w = e.word;
+      if (e.how === 'guess') this.ui.toast(`번역 추정 · 「${w.ko}」`, { kind: 'word', sub: '여러 번 들은 말에서 뜻을 짐작했어요' });
+      else this.ui.toast(`단어 · 「${w.ko}」`, { kind: 'word' });
+      audio.chime('word');
+      if (!this.state.flags.moaWord && Object.keys(this.state.vocab).length >= 2) { this.state.flags.moaWord = true; setTimeout(() => this.ui.moa(MOA.firstWord), 1500); }
+    });
+    bus.on('lineUnderstood', (e) => {
+      if (e.id === 'iel_1') {
+        setTimeout(() => this.ui.infoCard('예전에 들었던 말', '「오라, 작은 별. 우리는 오래 기다렸어.」', '이엘이 처음 만났을 때 했던 말이에요. 그때는 한 마디도 알아듣지 못했죠.'), 1200);
+      } else this.ui.toast('들었던 말 하나를 이제 이해한다', { kind: 'word', sub: '일지 → 들은 말' });
+    });
+    bus.on('tone', (e) => this.discovery.onTone(e.n, e.pos));
+    bus.on('convoDone', () => { if (this._afterConvo) { const f = this._afterConvo; this._afterConvo = null; setTimeout(f, 100); } });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) this.save(); });
+    addEventListener('beforeunload', () => this.save());
+  }
+}
+
+const NO_INPUT = { move: { x: 0, y: 0 }, look: { x: 0, y: 0 }, wheel: 0, pressed: () => false, isHeld: () => false, lookActive: 99, lastDevice: 'keyboard' };
