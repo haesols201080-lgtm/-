@@ -222,7 +222,7 @@ body.titlemode .hud,body.titlemode #touch,body.titlemode #lock{visibility:hidden
     <div class="row"><span id="pow" class="lbl num">전력 0/0 MW</span><span id="lvup" class="lbl" hidden>레벨 업 가능!</span></div>
   </div>
   <div class="btnrow">
-    <button id="bBag">가방 E</button><button id="bSave">저장</button><button id="bSnd">소리 끔</button><button id="bHelp">도움말</button><button id="bMenu">메인 화면</button>
+    <button id="bBag">가방 E</button><button id="bSave">저장</button><button id="bSnd">소리 끔</button><button id="bHelp">도움말</button><button id="bMenu">메인 화면</button><button id="bDev" hidden>개발</button>
   </div>
 </div>
 
@@ -1835,6 +1835,7 @@ function attack(){
 }
 function coneSlime(){const fx=-Math.sin(camYaw),fz=-Math.cos(camYaw);return slimes.some(s=>{const dx=s.x-P.x,dz=s.z-P.z,d=Math.hypot(dx,dz);return d<1.9+SLT[s.type].sc*.4&&(dx*fx+dz*fz)/(d||1)>.35&&Math.abs(s.y-P.y)<2})}
 function hurtPlayer(d){
+  if(DEV.god)return;
   S.hp-=d;P.hurt=.35;P.regen=6;sfx('hurt');
   if(S.hp<=0){S.hp=50;const b=S.banner||{x:48,y:surfaceY(48,50),z:50};P.x=b.x+.5;P.z=b.z+2.5;P.y=surfaceY(Math.floor(P.x),Math.floor(P.z));P.vy=0;
     toast('쓰러졌다… 깃발 앞에서 정신을 차렸다.','bad');for(const s of slimes)if(!s.raid&&Math.hypot(s.x-P.x,s.z-P.z)<10)s.hp=0}
@@ -1890,8 +1891,10 @@ function sfx(k){if(!soundOn||!AC)return;const sp=SFX[k];if(!sp)return;const t=AC
 // ============================================================ settings
 const SET_KEY='builders-factory-settings';
 const SET=Object.assign({sound:true,sens:1,quality:isCoarse?'low':'high'},(()=>{try{return JSON.parse(localStorage.getItem(SET_KEY))||{}}catch(e){return{}}})());
+const DEV={god:false,fly:false,fast:false,skip:false};
+if(/[?&]dev=1/.test(location.search))SET.dev=true;
 function saveSettings(){try{localStorage.setItem(SET_KEY,JSON.stringify(SET))}catch(e){}}
-function applySettings(){const hq=SET.quality==='high';if(renderer.shadowMap.enabled!==hq){renderer.shadowMap.enabled=hq;sun.castShadow=hq;scene.traverse(o=>{if(o.material)(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.needsUpdate=true)})}matShadow.opacity=hq?.14:.28;soundOn=SET.sound;$('bSnd').textContent=soundOn?'소리 끔':'소리 켬';renderer.setPixelRatio(SET.quality==='low'?1:Math.min(window.devicePixelRatio||1,isCoarse?1.25:1.75));resize()}
+function applySettings(){const hq=SET.quality==='high';if(renderer.shadowMap.enabled!==hq){renderer.shadowMap.enabled=hq;sun.castShadow=hq;scene.traverse(o=>{if(o.material)(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.needsUpdate=true)})}matShadow.opacity=hq?.14:.28;soundOn=SET.sound;$('bSnd').textContent=soundOn?'소리 끔':'소리 켬';if($('bDev'))$('bDev').hidden=!SET.dev;renderer.setPixelRatio(SET.quality==='low'?1:Math.min(window.devicePixelRatio||1,isCoarse?1.25:1.75));resize()}
 
 // ============================================================ HUD helpers
 function toast(msg,kind){const d=document.createElement('div');d.className='toast '+(kind||'');d.textContent=msg;$('toasts').appendChild(d);setTimeout(()=>d.remove(),3600);while($('toasts').children.length>4)$('toasts').firstChild.remove()}
@@ -1940,6 +1943,7 @@ function targetInfo(){
 let cine=null;const storyQ=[];let fwT=0;
 const SPEAKER_COL={[VOICE]:'#8fd0ff',[STILL]:'#d78bff'};
 function playStory(key,onDone){
+  if(DEV.skip){const L=typeof key==='string'?STORY[key]:key;if(L&&L.some(l=>l[3]==='wake'))S.downed=false;if(onDone)onDone();return}
   const vn=new Set(VILLAGERS.map(v=>v.name));
   const lines=(typeof key==='string'?STORY[key]:key||[]).filter(l=>!vn.has(l[0])||!S||S.villagers.some(v=>v.name===l[0]));if(!lines||!lines.length){if(onDone)onDone();return}
   if(cine){storyQ.push([lines,onDone]);return}
@@ -2104,10 +2108,12 @@ function showHelp(){
   <h3>조작 (터치)</h3><div class="keys"><b>왼쪽 스틱</b><span>이동</span><b>화면 드래그</b><span>시점</span><b>부수기 모드</b><span>길게 누르면 부수기 · 탭하면 공격/열기/대화</span><b>쌓기 모드</b><span>탭한 곳에 쌓기 · 탭으로 열기/대화</span></div>
   <h3>드퀘빌식 진행</h3><p class="sub">마을 깃발을 꽂으면 그 주변이 마을이 돼요. 처음 얻은 재료는 레시피를 번뜩이게 해요. 2칸 높이 벽 + 문 + 횃불로 방을 만들고, 가구에 따라 방 레시피(침실 · 식당 · 작업실 · 작은 공장 …)가 완성돼요. 주민 머리 위의 하트를 모아 깃발에서 마을 레벨을 올리면 새 주민과 레시피, 설계도가 생겨요. 설계도를 놓고 마을 보관함에 재료를 넣으면 주민들이 대신 지어요. 밤과 습격 때는 몬스터가 와요.</p>
   <h3>새티스팩토리식 공장</h3><p class="sub">빛나는 광맥 노드 위에 채굴기를 놓고, 주황 화살표(출구) 앞에 컨베이어를 이어 제련기 · 제작기 · 조립기로 보내세요. 기계는 출구를 뺀 세 면으로 재료를 받아요. 경사 컨베이어로 한 칸 올리고, 컨베이어 끝이 허공이면 아래 컨베이어로 떨어져요. 발전기에 연료를 넣어야 기계가 돌고, 전력이 모자라면 모두 느려져요. 깃발이 HUB 역할을 해서 부품으로 마일스톤을 달성하면 새 기술이 열려요.</p>
-  <h3>저장</h3><p class="sub">60초마다 이 브라우저에 자동 저장돼요.</p>`);
+  <h3>저장</h3><p class="sub">60초마다 이 브라우저에 자동 저장돼요.</p>
+  <h3>개발자 모드</h3><p class="sub">메인 화면 → 설정에서 켜면(또는 주소 끝에 ?dev=1) 화면에 「개발」 버튼이 생기고 ` 키로도 열 수 있어요. 목표 바로 이동 · 현재 목표 완료 · 이야기 장면 다시 보기 · 모든 아이템 · 무적 · 비행 · 빠른 이동 · 이야기 건너뛰기 · 시간 바꾸기 · 순간이동을 쓸 수 있어요.</p>`);
 }
 $('panel').addEventListener('click',e=>{
   const b=e.target.closest('[data-act]');if(!b||b.disabled)return;const a=b.dataset.act,en=modal.i>=0?ents.get(modal.i):null;
+  if(a.startsWith('dev')&&devAct(a,b))return;
   switch(a){
     case 'close':closeModal();break;
     case 'craft':craft(+b.dataset.k,+b.dataset.n);break;
@@ -2205,6 +2211,7 @@ addEventListener('keydown',e=>{
   if(cine){if(e.code==='Space'||e.code==='Enter'||e.code==='KeyE'||e.code==='KeyZ')advanceStory();return}
   keys[e.code]=true;
   if(e.code==='Escape'){if(modal.kind)closeModal();return}
+  if(e.code==='Backquote'&&SET.dev){if(modal.kind==='dev')closeModal();else{if(modal.kind)closeModal();openDev()}return}
   if(e.code==='KeyE'){if(modal.kind==='bag')closeModal();else if(!modal.kind)openBag();return}
   if(modal.kind)return;
   if(e.code==='KeyR'){S.rot=(S.rot+(e.shiftKey?3:1))%4;hotDirty=true}
@@ -2280,6 +2287,7 @@ $('bSave').addEventListener('click',()=>save());
 $('bHelp').addEventListener('click',showHelp);
 $('bSnd').addEventListener('click',()=>{ensureAudio();SET.sound=!SET.sound;saveSettings();applySettings()});
 $('bMenu').addEventListener('click',()=>{save(true);showTitle()});
+$('bDev').addEventListener('click',()=>{if(modal.kind==='dev')closeModal();else openDev()});
 $('obj').addEventListener('click',()=>$('obj').classList.toggle('open'));
 if(isCoarse)enableTouch();
 
@@ -2303,6 +2311,7 @@ function titleView(v){
     <div class="setrow"><span>소리</span><button class="tog ${SET.sound?'on':''}" data-s="sound">${SET.sound?'켬':'끔'}</button></div>
     <div class="setrow"><label for="sSens">시점 감도</label><input id="sSens" type="range" min="0.4" max="2" step="0.1" value="${SET.sens}"></div>
     <div class="setrow"><span>그래픽</span><button class="tog ${SET.quality==='high'?'on':''}" data-s="quality">${SET.quality==='high'?'선명하게':'가볍게'}</button></div>
+    <div class="setrow"><span>개발자 모드</span><button class="tog ${SET.dev?'on':''}" data-s="dev">${SET.dev?'켬':'끔'}</button></div>
     <button class="tb" data-t="back"><span>돌아가기</span></button>`;
   if(v==='load'||v==='new'||v==='del'){
     const head={load:'이어할 슬롯',new:'새 게임을 시작할 슬롯',del:'지울 슬롯'}[v];let h=`<h3>${head}</h3>`;
@@ -2336,7 +2345,7 @@ function titleAct(t){
   if(t==='back'){titleView('menu');return}
 }
 $('title').addEventListener('click',e=>{
-  const s=e.target.closest('[data-s]');if(s){ensureAudio();if(s.dataset.s==='sound')SET.sound=!SET.sound;else SET.quality=SET.quality==='high'?'low':'high';saveSettings();applySettings();titleView('settings');sfx('pop');return}
+  const s=e.target.closest('[data-s]');if(s){ensureAudio();if(s.dataset.s==='sound')SET.sound=!SET.sound;else if(s.dataset.s==='dev')SET.dev=!SET.dev;else SET.quality=SET.quality==='high'?'low':'high';saveSettings();applySettings();titleView('settings');sfx('pop');return}
   const b=e.target.closest('[data-t]');if(!b||b.disabled)return;if(b.dataset.n)tSlot=+b.dataset.n;titleAct(b.dataset.t);
 });
 $('title').addEventListener('mousemove',e=>{const b=e.target.closest('.tmenu button,.tpanel .tb');if(!b||b.disabled)return;const k=titleItems().indexOf(b);if(k>=0&&k!==tSel)setTSel(k)});
@@ -2365,8 +2374,10 @@ function updatePlayer(dt){
   let wx=fx*fw+rx*st,wz=fz*fw+rz*st;const l=Math.hypot(wx,wz);if(l>1){wx/=l;wz/=l}
   let bvx=0,bvz=0;const fe=ents.get(I(clamp(Math.floor(P.x),0,WX-1),clamp(Math.floor(P.y+.05),0,WY-1),clamp(Math.floor(P.z),0,WZ-1)));
   if(fe&&ENTS[fe.t].belt&&!ENTS[fe.t].ramp){bvx=DX[fe.dir]*ENTS[fe.t].speed*.9;bvz=DZ[fe.dir]*ENTS[fe.t].speed*.9}
-  const r=physStep(P,wx*4.8+bvx,wz*4.8+bvz,dt,true);
-  if((keys.Space||jumpBtn)&&!modal.kind&&!S.downed&&(P.onGround||r.inWater))P.vy=r.inWater?4.5:8.6;
+  const spd=DEV.fast?14.4:4.8;
+  if(DEV.fly){const sp=DEV.fast?24:10;P.x=clamp(P.x+wx*sp*dt,.5,WX-.5);P.z=clamp(P.z+wz*sp*dt,.5,WZ-.5);P.y=clamp(P.y+((keys.Space||jumpBtn?1:0)-(keys.ShiftLeft||keys.ShiftRight?1:0))*sp*dt,1,WY+10);P.vy=0;P.onGround=true}
+  const r=DEV.fly?{}:physStep(P,wx*spd+bvx,wz*spd+bvz,dt,true);
+  if(!DEV.fly&&(keys.Space||jumpBtn)&&!modal.kind&&!S.downed&&(P.onGround||r.inWater))P.vy=r.inWater?4.5:8.6;
   P.moving=l>.1;if(P.moving){P.face=Math.atan2(-wx,-wz);P.walk+=dt*10}
   if(P.y<-8){P.y=surfaceY(Math.floor(P.x),Math.floor(P.z));P.vy=0}
   P.hurt-=dt;P.atk-=dt;P.swing-=dt;P.regen-=dt;if(P.regen<=0&&S.hp<100){S.hp=Math.min(100,S.hp+1);P.regen=isNight()?5:2}
@@ -2482,6 +2493,55 @@ renderHotbar();updHUD();showTitle();
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{for(const k in iconCache)delete iconCache[k];hotDirty=true});
 addEventListener('beforeunload',()=>save(true));
 requestAnimationFrame(frame);
+// ============================================================ developer mode (settings → 개발자 모드, or ?dev=1; open with ` or the 개발 button)
+const DEV_STORY=[['prologue','프롤로그'],['lulu','레온의 배'],['c1_village','꺾인 깃발'],['c1_banner','물러나는 안개'],['c1_wood','번뜩임'],['c1_bench','무너진 등대'],['c1_night','첫 번째 밤'],['c1_room','「방」'],['kai','카이 등장'],['c1_bed','지도 조각'],['c1_end','1장 엔딩'],['raid1','습격'],['ending','최종 엔딩']];
+function devTp(k){
+  const b=S.ruin&&S.ruin.beach;let p=null;
+  if(k==='beach'&&b)p=[b.x,b.z];if(k==='village')p=[48.5,51.5];if(k==='banner'&&S.banner)p=[S.banner.x+.5,S.banner.z+2.5];
+  if(k==='lamp'&&S.ruin){P.x=S.ruin.x-1.5;P.z=S.ruin.z-1.5;P.y=S.ruin.y+9.05;P.vy=0;return}
+  if(!p){toast('갈 수 없는 곳이에요','bad');return}P.x=p[0];P.z=p[1];P.y=surfaceY(Math.floor(p[0]),Math.floor(p[1]));P.vy=0}
+function devPlaceBanner(){if(S.banner)return;const x=48,z=48,y=surfaceY(x,z);for(let yy=y;yy<y+4;yy++)if(getB(x,yy,z)!==A)setB(x,yy,z,A);if(S.inv.banner>0)S.inv.banner--;addEnt(I(x,y,z),newEnt('banner',0,x,y,z));hotDirty=true}
+function devJump(k){
+  while(cine)endStory();storyQ.length=0;S.downed=false;
+  if(k>=2)devPlaceBanner();
+  if(k>=6){if(S.lv<2)S.lv=2;if(!S.villagers.some(v=>v.name===VILLAGERS[0].name)){arriveVillager(VILLAGERS[0]);while(cine)endStory();storyQ.length=0}}
+  if(k>=5)S.night1=true;
+  if(k>=8&&!S.lamp){S.lamp=true;buildLighthouse()}
+  S.obj=k;roomsDirty=true;updHUD();toast(`목표 ${k+1}: ${OBJ[k]?OBJ[k].t:'에필로그'}`,'gold')}
+function devDone(){const o=OBJ[S.obj];if(!o)return;if(o.t.includes('등대에 불')&&!S.lamp){S.lamp=true;buildLighthouse()}if(o.t.includes('깃발 세우기'))devPlaceBanner();const ok=o.ok;o.ok=()=>true;try{checkObjective()}finally{o.ok=ok}}
+function devItems(){for(const k in IT){if(k==='banner')continue;const it=IT[k];S.inv[k]=(S.inv[k]||0)+(it.bp||it.tool?1:99);S.seen[k]=1}hotDirty=true;toast('모든 아이템을 받았어요','gold')}
+function openDev(){
+  const tg=(k,l)=>`<button class="tog ${DEV[k]?'on':''}" data-act="devtog" data-k="${k}">${l} ${DEV[k]?'켬':'끔'}</button>`;
+  let h=`<div class="mhead"><h2>개발자 모드</h2><button data-act="close">닫기</button></div>
+  <p class="sub">위치 ${P.x.toFixed(1)}, ${P.y.toFixed(1)}, ${P.z.toFixed(1)} · 목표 ${S.obj+1}/${OBJ.length} · 마을 Lv.${S.lv} · 하트 ${S.hearts|0} · 시간 ${S.time.toFixed(2)}</p>
+  <h3>치트</h3><div class="btnrow">${tg('god','무적')}${tg('fly','비행 (Space 위 · Shift 아래, 벽 통과)')}${tg('fast','빠른 이동 ×3')}${tg('skip','이야기 자동 건너뛰기')}</div>
+  <h3>진행</h3><div class="btnrow"><button class="pri" data-act="devdone">현재 목표 완료</button></div><div class="btnrow">`;
+  OBJ.forEach((o,k)=>h+=`<button data-act="devjump" data-k="${k}" ${k===S.obj?'class="pri"':''}>${k+1}. ${o.t}</button>`);
+  h+=`</div><h3>이야기 장면 보기</h3><div class="btnrow">`;
+  for(const[k,l]of DEV_STORY)h+=`<button data-act="devstory" data-k="${k}">${l}</button>`;
+  h+=`</div><h3>아이템 · 마을</h3><div class="btnrow"><button data-act="devitems">모든 아이템 99개</button><button data-act="devhearts">하트 +50</button><button data-act="devlv">마을 레벨 업</button><button data-act="devvill">다음 주민 부르기</button><button data-act="devraid">습격 시작</button><button data-act="devheal">체력 회복</button></div>
+  <h3>시간</h3><div class="btnrow"><button data-act="devtime" data-k=".02">아침</button><button data-act="devtime" data-k=".25">낮</button><button data-act="devtime" data-k=".56">저녁</button><button data-act="devtime" data-k=".75">밤</button></div>
+  <h3>순간이동</h3><div class="btnrow"><button data-act="devtp" data-k="beach">해변</button><button data-act="devtp" data-k="village">마을 광장</button><button data-act="devtp" data-k="banner">깃발 앞</button><button data-act="devtp" data-k="lamp">등대 꼭대기</button></div>`;
+  openPanel('dev',h)}
+function devAct(a,b){
+  const k=b.dataset.k;
+  switch(a){
+    case 'devtog':DEV[k]=!DEV[k];if(k==='fly'&&!DEV.fly)P.vy=0;openDev();return true;
+    case 'devdone':closeModal();devDone();return true;
+    case 'devjump':closeModal();devJump(+k);return true;
+    case 'devstory':closeModal();{const was=DEV.skip;DEV.skip=false;if(k==='kai'){const d=VILLAGERS[0];playStory(d.intro.map(t=>Array.isArray(t)?[t[0],t[1],t[2]||'player']:[d.name,t,'player']))}else playStory(k);DEV.skip=was}return true;
+    case 'devitems':devItems();openDev();return true;
+    case 'devhearts':S.hearts+=50;toast('하트 +50','heart');openDev();return true;
+    case 'devlv':if(!S.banner){toast('먼저 깃발이 있어야 해요','bad');return true}S.hearts=Math.max(S.hearts,LV_NEED[S.lv]||0);levelUp();openDev();return true;
+    case 'devvill':{if(!S.banner){toast('먼저 깃발이 있어야 해요','bad');return true}const n=S.villagers.length-1;if(n<VILLAGERS.length){closeModal();arriveVillager(VILLAGERS[n])}else toast('더 올 주민이 없어요','bad');return true}
+    case 'devraid':if(!S.banner){toast('먼저 깃발이 있어야 해요','bad');return true}closeModal();startRaid('normal');return true;
+    case 'devheal':S.hp=100;openDev();return true;
+    case 'devtime':S.time=+k;openDev();return true;
+    case 'devtp':closeModal();devTp(k);return true;
+  }
+  return false}
+function updDevUI(){$('bDev').hidden=!SET.dev}
 </script>
 </body>
 </html>
+
