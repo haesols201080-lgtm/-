@@ -37,7 +37,7 @@ button.pri{background:var(--accent);color:#2a1606;border-color:var(--accent)}
 button:disabled{opacity:.45;cursor:default;border-color:var(--line)}
 .hud{position:fixed;z-index:5;pointer-events:none}
 .card{background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
-#tl{top:calc(env(safe-area-inset-top,0px) + 10px);left:10px;width:min(250px,46vw);display:grid;gap:6px}
+#tl{z-index:9;top:calc(env(safe-area-inset-top,0px) + 10px);left:10px;width:min(250px,46vw);display:grid;gap:6px}
 #tr{top:calc(env(safe-area-inset-top,0px) + 10px);right:10px;width:min(310px,50vw);display:grid;gap:6px}
 .row{display:flex;align-items:center;gap:8px;justify-content:space-between}
 .lbl{font-family:var(--display);letter-spacing:.02em;color:var(--muted);font-size:13px}
@@ -163,6 +163,48 @@ button:disabled{opacity:.45;cursor:default;border-color:var(--line)}
 body.cine .hud,body.cine #touch,body.cine #lock{visibility:hidden}
 body.cine #ctitle{visibility:visible}
 @media (max-width:640px){#story.narr #sTxt{font-size:18px}#sTxt{font-size:15px}}
+/* title screen */
+#title{position:fixed;inset:0;z-index:30;display:grid;grid-template-columns:minmax(0,500px) 1fr;align-items:center;padding:calc(env(safe-area-inset-top,0px) + 24px) 56px calc(env(safe-area-inset-bottom,0px) + 40px)}
+.tvig{position:absolute;inset:0;pointer-events:none;background:linear-gradient(90deg,rgba(8,12,28,.9) 0%,rgba(8,12,28,.62) 36%,rgba(8,12,28,0) 68%),linear-gradient(0deg,rgba(8,12,28,.55),transparent 28%)}
+.tbox{position:relative;display:grid;gap:20px;width:100%;max-width:440px;animation:tup .8s ease-out}
+@keyframes tup{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.logo{display:flex;align-items:center;gap:16px}
+.logo img{width:86px;height:86px;filter:drop-shadow(0 4px 0 rgba(0,0,0,.45))}
+.logo .l1,.logo .l2{font-family:var(--display);line-height:.98;letter-spacing:.03em}
+.logo .l1{font-size:66px;color:var(--gold);text-shadow:0 3px 0 #b8741a,0 6px 0 #7a4a10,0 14px 26px rgba(0,0,0,.6)}
+.logo .l2{font-size:66px;color:var(--accent);text-shadow:0 3px 0 #a3561a,0 6px 0 #5a2a08,0 14px 26px rgba(0,0,0,.6)}
+.logo .en{font-family:var(--display);font-size:13px;letter-spacing:.42em;color:#cfe6ff;opacity:.8;margin-top:8px}
+.tsub{font-family:var(--display);font-size:18px;color:#cfe6ff;letter-spacing:.1em;display:flex;align-items:center;gap:10px}
+.tsub::before{content:"";width:30px;height:2px;background:var(--gold)}
+.tmenu{display:grid;gap:4px;background:rgba(8,12,28,.84);border:2px solid #e9e3cf;border-radius:12px;padding:10px}
+.tmenu button,.tpanel .tb{all:unset;box-sizing:border-box;display:grid;grid-template-columns:20px minmax(0,1fr);column-gap:6px;align-items:center;padding:9px 12px;border-radius:8px;cursor:pointer;font-family:var(--display);font-size:21px;color:var(--ink)}
+.tmenu button::before,.tpanel .tb::before{content:"▶";grid-row:span 2;font-size:13px;color:var(--gold);opacity:0;transition:opacity .12s}
+.tmenu button.sel::before,.tpanel .tb.sel::before{opacity:1}
+.tmenu button.sel,.tpanel .tb.sel{background:rgba(255,214,107,.1)}
+.tmenu button small{grid-column:2;font-family:var(--body);font-size:12.5px;color:var(--muted);margin-top:2px}
+.tmenu button:disabled{opacity:.38;cursor:default}
+.tmenu button:focus-visible,.tpanel .tb:focus-visible{outline:2px solid var(--gold)}
+.tpanel{background:rgba(8,12,28,.9);border:2px solid #e9e3cf;border-radius:12px;padding:14px 16px;display:grid;gap:12px;max-height:min(60vh,520px);overflow:auto}
+.tpanel h3{font-family:var(--display);font-weight:400;font-size:19px;color:var(--gold);margin:0}
+.tpanel .tb{font-size:17px;padding:7px 10px}
+.setrow{display:flex;justify-content:space-between;align-items:center;gap:12px;font-family:var(--display);font-size:16px}
+.setrow .tog{all:unset;cursor:pointer;min-width:84px;text-align:center;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:#0f1428;font-family:var(--display);font-size:14px}
+.setrow .tog.on{background:var(--accent);color:#2a1606;border-color:var(--accent)}
+.setrow .tog:focus-visible{outline:2px solid var(--gold)}
+.setrow input[type=range]{width:min(180px,45vw);accent-color:var(--accent)}
+.tfoot{position:absolute;left:56px;right:56px;bottom:calc(env(safe-area-inset-bottom,0px) + 14px);display:flex;justify-content:space-between;gap:6px 16px;flex-wrap:wrap;color:var(--muted);font-size:12px}
+.tfoot b{font-family:var(--display);font-weight:400;color:var(--ink)}
+body.titlemode .hud,body.titlemode #touch,body.titlemode #lock{visibility:hidden}
+@media (max-width:720px){
+  #title{grid-template-columns:minmax(0,1fr);align-items:end;padding:calc(env(safe-area-inset-top,0px) + 24px) 16px calc(env(safe-area-inset-bottom,0px) + 56px)}
+  .tvig{background:linear-gradient(0deg,rgba(8,12,28,.94) 0%,rgba(8,12,28,.7) 52%,rgba(8,12,28,.05) 100%)}
+  .tbox{max-width:none;gap:14px}
+  .logo .l1,.logo .l2{font-size:46px}.logo img{width:60px;height:60px}
+  .tmenu button{font-size:19px;padding:8px 10px}
+  .tfoot{left:16px;right:16px;font-size:11px}.tfoot span:first-child{display:none}
+  #title{padding-bottom:calc(env(safe-area-inset-bottom,0px) + 64px)}
+}
+@media (prefers-reduced-motion:reduce){.tbox{animation:none}}
 @media (prefers-reduced-motion:reduce){.toast,#ctitle{animation:none}}
 </style>
 </head>
@@ -179,7 +221,7 @@ body.cine #ctitle{visibility:visible}
     <div class="row"><span id="pow" class="lbl num">전력 0/0 MW</span><span id="lvup" class="lbl" hidden>레벨 업 가능!</span></div>
   </div>
   <div class="btnrow">
-    <button id="bBag">가방 E</button><button id="bSave">저장</button><button id="bSnd">소리 끔</button><button id="bHelp">도움말</button><button id="bNew">새 게임</button>
+    <button id="bBag">가방 E</button><button id="bSave">저장</button><button id="bSnd">소리 끔</button><button id="bHelp">도움말</button><button id="bMenu">메인 화면</button>
   </div>
 </div>
 
@@ -209,6 +251,22 @@ body.cine #ctitle{visibility:visible}
 </div>
 
 <div id="story" hidden><button id="sSkip">건너뛰기</button><div id="sbox"><div id="sWho"></div><div id="sTxt"></div><div id="snext">▼</div></div></div>
+
+<div id="title" hidden>
+  <div class="tvig"></div>
+  <div class="tbox">
+    <div class="logo"><img id="tIcon" alt=""><div><div class="l1">빌더즈</div><div class="l2">팩토리</div><div class="en">BUILDERS FACTORY</div></div></div>
+    <div class="tsub">멈춤의 저주와 별의 사다리</div>
+    <nav class="tmenu" id="tmenu" aria-label="메인 메뉴">
+      <button data-t="continue" id="tCont"><span>이어하기</span><small id="tSave">저장된 마을이 없어요</small></button>
+      <button data-t="new"><span>새 게임</span><small>프롤로그부터 시작해요</small></button>
+      <button data-t="howto"><span>조작 방법</span></button>
+      <button data-t="settings"><span>설정</span></button>
+    </nav>
+    <div class="tpanel" id="tpanel" hidden></div>
+  </div>
+  <div class="tfoot"><span><b>↑↓</b> 선택 · <b>Enter</b> 결정 · <b>Esc</b> 돌아가기</span><span>드래곤 퀘스트 빌더즈와 새티스팩토리에서 영감을 받은 팬메이드 게임 · v0.4</span></div>
+</div>
 
 <div id="modal" hidden><div id="panel"></div></div>
 
@@ -514,7 +572,7 @@ const STORY={
 const got=id=>S.stats.got[id]||0;
 const OBJ=[
   {ch:1,t:'희망의 깃발 꽂기',h:'단축칸의 「희망의 깃발」을 고르고 평평한 땅을 오른쪽 버튼으로 눌러 꽂으세요. 깃발 주변이 마을 구역이 돼요.',ok:()=>!!S.banner,
-   say:'일어났군요, 빌더님! 저는 루루예요. 몬스터 때문에 이 땅엔 아무것도 남지 않았어요… 그래도 희망의 깃발을 꽂으면 사람들이 다시 모일 거예요!'},
+   say:'빌더님, 깃발을 꽂을 곳을 골라 주세요! 평평한 땅이면 어디든 좋아요.'},
   {ch:1,t:'원목 8개 모으기',h:'나무 줄기를 왼쪽 버튼으로 꾹 눌러 부수면 원목이 나와요. 처음 얻는 재료는 새 레시피를 떠올리게 해요.',ok:()=>got('wood')>=8,
    say:'깃발이 섰어요! 여기가 이제 우리 마을이에요. 우선 나무를 베어 볼까요?'},
   {ch:1,t:'작업대를 만들어 설치하기',h:'가방(E)에서 작업대를 만들고 단축칸에서 골라 오른쪽 버튼으로 놓으세요.',ok:()=>countEnt('workbench')>0,
@@ -1286,7 +1344,7 @@ function mkVillager(def,x,z){const y=surfaceY(Math.floor(x),Math.floor(z));
   return{name:def.name,pal:def.pal,guide:def.guide||0,x,y,z,vx:0,vy:0,vz:0,w:.28,h:1.5,onGround:false,face:0,walk:0,moving:false,tx:x,tz:z,wait:1,hp:30,faint:0,hearts:0,atk:0,stuck:0,
     req:0,reqState:'none',reqT:0,reqBase:0,bed:null,sleeping:false,task:null}}
 function attachVillagerMesh(v){
-  if(v._m)scene.remove(v._m);v._m=makePerson(v.pal,false);v._m.scale.setScalar(.9);scene.add(v._m);
+  if(v._m)scene.remove(v._m);v._m=makePerson(v.pal,false);v._m.userData.villager=true;v._m.scale.setScalar(.9);scene.add(v._m);
   v._name=makeSprite(textTex(v.name,v.guide?'#ffd66b':'#f3ebd6'),1.5,.38);v._name.position.y=2.05;v._m.add(v._name);
   v._mark=makeSprite(heartTex,.55,.55,false);v._mark.position.y=2.55;v._mark.visible=false;v._m.add(v._mark);v._markKey='';
 }
@@ -1544,6 +1602,12 @@ function sfx(k){if(!soundOn||!AC)return;const sp=SFX[k];if(!sp)return;const t=AC
   try{const o=AC.createOscillator(),g=AC.createGain();o.connect(g);g.connect(AC.destination);o.type=sp[3];o.frequency.setValueAtTime(sp[0],t);o.frequency.exponentialRampToValueAtTime(sp[1],t+sp[2]);
     g.gain.setValueAtTime(sp[4],t);g.gain.exponentialRampToValueAtTime(.0001,t+sp[2]+.05);o.start(t);o.stop(t+sp[2]+.08)}catch(e){}}
 
+// ============================================================ settings
+const SET_KEY='builders-factory-settings';
+const SET=Object.assign({sound:true,sens:1,quality:'high'},(()=>{try{return JSON.parse(localStorage.getItem(SET_KEY))||{}}catch(e){return{}}})());
+function saveSettings(){try{localStorage.setItem(SET_KEY,JSON.stringify(SET))}catch(e){}}
+function applySettings(){soundOn=SET.sound;$('bSnd').textContent=soundOn?'소리 끔':'소리 켬';renderer.setPixelRatio(SET.quality==='low'?1:Math.min(window.devicePixelRatio||1,isCoarse?1.25:1.75));resize()}
+
 // ============================================================ HUD helpers
 function toast(msg,kind){const d=document.createElement('div');d.className='toast '+(kind||'');d.textContent=msg;$('toasts').appendChild(d);setTimeout(()=>d.remove(),3600);while($('toasts').children.length>4)$('toasts').firstChild.remove()}
 let dlgT=0,titleT=0,inspT=0;
@@ -1733,6 +1797,11 @@ function completeMilestone(){
 function showWin(){
   openPanel('win',`<div class="mhead"><h2>저주가 풀렸어요!</h2></div><p style="font-size:16px;line-height:1.75">만드는 법을 잊었던 땅에 희망의 깃발이 서고, 마을이 생기고, 공장이 돌고, 마침내 별의 사다리를 타고 희망의 등불이 하늘에 닿았어요.<br>${S.day}일 만에 해냈어요. 마을 Lv.${S.lv} · 주민 ${S.villagers.length}명 · 방 ${rooms.length}개 · 물리친 몬스터 ${S.stats.kills}마리.</p><div class="btnrow"><button class="pri" data-act="close">계속 키우기</button></div>`);
 }
+function controlsHTML(){return`<h3>키보드 · 마우스</h3><div class="keys">
+  <b>화면 클릭</b><span>마우스 고정 (시점 조작). Esc로 해제</span><b>WASD · Space</b><span>이동 · 점프 (한 칸 턱은 자동으로 넘어요)</span>
+  <b>왼쪽 버튼 유지</b><span>블록 부수기 · 몬스터 공격</span><b>오른쪽 버튼</b><span>쌓기 · 열기 · 대화 · 잠자기</span>
+  <b>오른쪽 유지 + 시점</b><span>컨베이어와 블록을 이어서 설치</span><b>R · 1–9 · 휠</b><span>방향 회전 · 단축칸</span><b>E · F · V</b><span>가방 · 베리 먹기 · 시점 거리</span></div>
+  <h3>터치</h3><div class="keys"><b>왼쪽 스틱</b><span>이동</span><b>화면 드래그</b><span>시점</span><b>부수기 모드</b><span>길게 눌러 부수기 · 탭으로 공격/열기/대화</span><b>쌓기 모드</b><span>탭한 곳에 쌓기</span></div>`}
 function showHelp(){
   openPanel('help',`<div class="mhead"><h2>도움말</h2><button data-act="close">닫기</button></div>
   <h3>이야기</h3><p class="sub">「멈춤의 왕」의 저주로 아르테라 사람들은 만드는 법을 잊었고, 하늘에 닿던 「별의 사다리」는 무너졌어요. 저주가 닿지 않은 마지막 빌더인 당신은 루루와 함께 희망의 깃발을 꽂아 마을을 되살리고, 할아버지의 기술 수첩으로 공장을 일으켜 사다리를 다시 세워야 해요.</p>
@@ -1779,7 +1848,8 @@ function eatBerry(){if(cnt('berry')<=0){toast('베리가 없어요','bad');retur
 function rle(a){const out=[];let cur=a[0],n=0;for(let i=0;i<a.length;i++){if(a[i]===cur)n++;else{out.push(cur.toString(36)+'.'+n.toString(36));cur=a[i];n=1}}out.push(cur.toString(36)+'.'+n.toString(36));return out.join(',')}
 function unrle(s,a){let p=0;for(const tok of s.split(',')){const[x,y]=tok.split('.'),v=parseInt(x,36),n=parseInt(y,36);a.fill(v,p,p+n);p+=n}}
 function save(quiet){
-  try{const data={v:3,S,vox:rle(vox),ents:[...ents],P:[P.x,P.y,P.z],cam:[camYaw,camPitch,camDist]};
+  if(!S||S.bg)return;
+  try{localStorage.setItem(SAVE_KEY+'-meta',JSON.stringify({day:S.day,lv:S.lv,obj:S.obj,won:S.won,ts:Date.now()}));const data={v:3,S,vox:rle(vox),ents:[...ents],P:[P.x,P.y,P.z],cam:[camYaw,camPitch,camDist]};
     localStorage.setItem(SAVE_KEY,JSON.stringify(data,(k,v)=>k[0]==='_'||k==='task'?undefined:v));if(!quiet)toast('저장했어요','good')}
   catch(e){if(!quiet)toast('이 환경에서는 저장할 수 없어요','bad')}
 }
@@ -1793,13 +1863,14 @@ function afterLoad(){
   for(const g of entMesh.values())scene.remove(g);entMesh.clear();
   for(const[i,e]of ents)createEntMesh(i,e);
   rebuildM();rebuildAllChunks();buildBaseLine();
-  for(const v of S.villagers){if(v._m)scene.remove(v._m);v._m=null;attachVillagerMesh(v)}
+  for(const c of scene.children.filter(c=>c.userData&&c.userData.villager))scene.remove(c);
+  for(const v of S.villagers){v._m=null;attachVillagerMesh(v)}
   for(const s of slimes)scene.remove(s._m);slimes=[];raid=null;
   roomsDirty=true;bpDirty=true;hotDirty=true;rooms=[];
   if(!playerModel){playerModel=makePerson({body:0x3d6fd8,hair:0x6b3f22,band:0xf39a35},true);scene.add(playerModel)}
   const o=OBJ[S.obj];raidAt=o&&o.t.includes('습격')?T+20:0;
 }
-function newGame(){
+function newGame(story){
   const seed=(Math.random()*1e9)|0;
   S={seed,inv:{},hot:Array(9).fill(null),sel:0,rot:0,time:.04,day:1,hp:100,lv:1,hearts:0,ms:0,hub:{},obj:0,banner:null,elev:null,seen:{},roomKeys:[],roomSeen:{},villagers:[],bp:null,won:false,kingDone:false,
      stats:{got:{},hubIn:{},crafted:{},placed:{},kills:0,raids:0,bps:0,hubTotal:0}};
@@ -1808,13 +1879,15 @@ function newGame(){
   give('banner',1);S.inv.berry=3;S.seen.berry=1;
   S.villagers.push(mkVillager(LULU,47.5,50.5));
   afterLoad();
-  S.ruin=ruin;playStory('prologue',()=>{chapterTitle(1);setTimeout(()=>playStory('lulu'),3400)});
+  S.ruin=ruin;
+  if(story===false){S.bg=true;return}
+  playStory('prologue',()=>{chapterTitle(1);setTimeout(()=>playStory('lulu'),3400)});
 }
 
 // ============================================================ input
 const keys={};let locked=false,cursorMode=false,leftHeld=false,leftPressed=false,rightHeld=false,rdrag=null,lastPlace=null,started=false,jumpBtn=false;
 let tch=null,tMode='break',isTouch=false,joyV={x:0,y:0};
-function updLockUI(){$('lock').hidden=locked||cursorMode||isTouch||!!modal.kind||!!cine;$('cross').hidden=!(locked||isTouch)}
+function updLockUI(){$('lock').hidden=locked||cursorMode||isTouch||!!modal.kind||!!cine||titleOpen;$('cross').hidden=!(locked||isTouch)}
 function lockFail(){if(cursorMode)return;cursorMode=true;updLockUI();toast('마우스 고정을 쓸 수 없어 커서 모드로 바꿨어요. 오른쪽 드래그나 방향키로 시점을 돌려요.')}
 function requestLock(){ensureAudio();started=true;try{const p=cvs.requestPointerLock();if(p&&p.catch)p.catch(lockFail)}catch(e){lockFail()}}
 document.addEventListener('pointerlockchange',()=>{locked=document.pointerLockElement===cvs;if(!locked){leftHeld=rightHeld=false}updLockUI()});
@@ -1825,6 +1898,7 @@ addEventListener('keydown',e=>{
   if(e.target&&e.target.tagName==='INPUT')return;
   if(e.code==='Space'||e.code.startsWith('Arrow'))e.preventDefault();
   if(e.repeat&&!/^(Key[WASD]|Arrow|Space)/.test(e.code))return;
+  if(titleOpen){titleKey(e);return}
   if(cine){if(e.code==='Space'||e.code==='Enter'||e.code==='KeyE'||e.code==='KeyZ')advanceStory();return}
   keys[e.code]=true;
   if(e.code==='Escape'){if(modal.kind)closeModal();return}
@@ -1841,7 +1915,7 @@ cvs.addEventListener('contextmenu',e=>e.preventDefault());
 cvs.addEventListener('wheel',e=>{e.preventDefault();if(modal.kind)return;S.sel=(S.sel+(e.deltaY>0?1:8))%9;hotDirty=true},{passive:false});
 cvs.addEventListener('mousedown',e=>{
   if(isTouch)return;ensureAudio();
-  if(cine)return;
+  if(cine||titleOpen)return;
   if(!locked&&!cursorMode){requestLock();return}
   if(e.button===0){leftHeld=true;leftPressed=true}
   else if(e.button===2){if(locked){rightPress();rightHeld=true}else rdrag={moved:false}}
@@ -1849,9 +1923,9 @@ cvs.addEventListener('mousedown',e=>{
 addEventListener('mouseup',e=>{if(e.button===0)leftHeld=false;if(e.button===2){rightHeld=false;lastPlace=null;if(rdrag&&!rdrag.moved)rightPress();rdrag=null}});
 addEventListener('mousemove',e=>{
   if(isTouch)return;
-  if(locked){camYaw-=e.movementX*.0026;camPitch=clamp(camPitch-e.movementY*.0026,-1.4,1.15);return}
+  if(locked){camYaw-=e.movementX*.0026*SET.sens;camPitch=clamp(camPitch-e.movementY*.0026*SET.sens,-1.4,1.15);return}
   if(cursorMode){aimX=e.clientX/innerWidth*2-1;aimY=-(e.clientY/innerHeight)*2+1;
-    if(rdrag){if(Math.abs(e.movementX)+Math.abs(e.movementY)>1)rdrag.moved=true;camYaw-=e.movementX*.006;camPitch=clamp(camPitch-e.movementY*.006,-1.4,1.15)}}
+    if(rdrag){if(Math.abs(e.movementX)+Math.abs(e.movementY)>1)rdrag.moved=true;camYaw-=e.movementX*.006*SET.sens;camPitch=clamp(camPitch-e.movementY*.006*SET.sens,-1.4,1.15)}}
 });
 function rightPress(){if(modal.kind)return;if(interact())return;if(aim.place&&placeSel(...aim.place))lastPlace=aim.place.slice()}
 function dragPlace(){
@@ -1875,7 +1949,7 @@ cvs.addEventListener('pointerdown',e=>{
 cvs.addEventListener('pointermove',e=>{
   if(!tch||e.pointerId!==tch.id)return;const dx=e.clientX-tch.lx,dy=e.clientY-tch.ly;tch.lx=e.clientX;tch.ly=e.clientY;
   if(Math.hypot(e.clientX-tch.x,e.clientY-tch.y)>12)tch.moved=true;
-  if(tch.moved){camYaw-=dx*.0065;camPitch=clamp(camPitch-dy*.0065,-1.4,1.15)}
+  if(tch.moved){camYaw-=dx*.0065*SET.sens;camPitch=clamp(camPitch-dy*.0065*SET.sens,-1.4,1.15)}
 });
 function touchEnd(e){
   if(!tch||e.pointerId!==tch.id)return;const t=tch;tch=null;
@@ -1901,10 +1975,67 @@ for(const ev of['pointerup','pointercancel','pointerleave'])$('tJump').addEventL
 $('bBag').addEventListener('click',()=>{modal.kind==='bag'?closeModal():openBag()});
 $('bSave').addEventListener('click',()=>save());
 $('bHelp').addEventListener('click',showHelp);
-$('bSnd').addEventListener('click',()=>{ensureAudio();soundOn=!soundOn;$('bSnd').textContent=soundOn?'소리 끔':'소리 켬'});
-$('bNew').addEventListener('click',()=>openPanel('new',`<div class="mhead"><h2>새 게임</h2><button data-act="close">닫기</button></div><p>지금의 마을과 공장은 모두 사라져요. 새로운 땅에서 다시 시작할까요?</p><div class="btnrow"><button class="pri" data-act="newyes">새로 시작</button><button data-act="close">취소</button></div>`));
+$('bSnd').addEventListener('click',()=>{ensureAudio();SET.sound=!SET.sound;saveSettings();applySettings()});
+$('bMenu').addEventListener('click',()=>{save(true);showTitle()});
 $('obj').addEventListener('click',()=>$('obj').classList.toggle('open'));
 if(isCoarse)enableTouch();
+
+// ============================================================ title screen
+let titleOpen=false,tView='menu';
+function saveMeta(){try{const m=JSON.parse(localStorage.getItem(SAVE_KEY+'-meta')||'null');if(m)return m;if(localStorage.getItem(SAVE_KEY))return{day:'?',lv:'?',obj:0}}catch(e){}return null}
+function showTitle(){
+  titleOpen=true;document.body.classList.add('titlemode');$('title').hidden=false;if(modal.kind)closeModal();
+  if(locked&&document.exitPointerLock)document.exitPointerLock();$('dialog').hidden=true;leftHeld=rightHeld=false;tch=null;mine=null;joyV={x:0,y:0};for(const k in keys)keys[k]=false;
+  $('tIcon').src=icon('banner');titleView('menu');updLockUI();
+}
+function hideTitle(){titleOpen=false;document.body.classList.remove('titlemode');$('title').hidden=true;updLockUI()}
+function titleView(v){
+  tView=v;const m=saveMeta(),hasSave=!!m&&!(S&&S.bg&&!localStorage.getItem(SAVE_KEY));
+  $('tCont').disabled=!hasSave;
+  if(m){const o=OBJ[m.obj];$('tSave').textContent=`${m.day}일차 · ${m.won?'에필로그':o?`제${o.ch}장 ${CHAPTERS[o.ch]}`:'에필로그'} · 마을 Lv.${m.lv}`}else $('tSave').textContent='저장된 마을이 없어요';
+  const pn=$('tpanel');$('tmenu').hidden=v!=='menu';pn.hidden=v==='menu';
+  if(v==='howto')pn.innerHTML=`<h3>조작 방법</h3>${controlsHTML()}<button class="tb" data-t="back"><span>돌아가기</span></button>`;
+  if(v==='settings')pn.innerHTML=`<h3>설정</h3>
+    <div class="setrow"><span>소리</span><button class="tog ${SET.sound?'on':''}" data-s="sound">${SET.sound?'켬':'끔'}</button></div>
+    <div class="setrow"><label for="sSens">시점 감도</label><input id="sSens" type="range" min="0.4" max="2" step="0.1" value="${SET.sens}"></div>
+    <div class="setrow"><span>그래픽</span><button class="tog ${SET.quality==='high'?'on':''}" data-s="quality">${SET.quality==='high'?'선명하게':'가볍게'}</button></div>
+    <button class="tb" data-t="back"><span>돌아가기</span></button>`;
+  if(v==='confirm')pn.innerHTML=`<h3>새 게임</h3><p class="sub">저장된 마을(${$('tSave').textContent})이 지워지고, 새로운 땅에서 프롤로그부터 시작해요.</p>
+    <button class="tb" data-t="newyes"><span>새로 시작</span></button><button class="tb" data-t="back"><span>취소</span></button>`;
+  const sl=$('sSens');if(sl)sl.addEventListener('input',()=>{SET.sens=+sl.value;saveSettings()});
+  const items=titleItems();setTSel(items.findIndex(b=>!b.disabled));
+}
+const titleItems=()=>[...(tView==='menu'?$('tmenu').querySelectorAll('button'):$('tpanel').querySelectorAll('.tb'))];
+let tSel=0;
+function setTSel(k){const items=titleItems();if(!items.length)return;tSel=(k+items.length)%items.length;items.forEach((b,j)=>b.classList.toggle('sel',j===tSel))}
+function titleMove(d){const items=titleItems();for(let n=0;n<items.length;n++){const k=(tSel+d*(n+1)+items.length*4)%items.length;if(!items[k].disabled){setTSel(k);sfx('pop');return}}}
+function titleAct(t){
+  ensureAudio();sfx('place');
+  if(t==='continue'){if(S.bg)return;hideTitle();if(!isTouch&&!cursorMode)requestLock();const o=OBJ[S.obj];setTimeout(()=>toast(o?`이어서: ${o.t}`:'마을과 공장을 마음껏 키워 보세요','gold'),500);return}
+  if(t==='new'){if(saveMeta()&&localStorage.getItem(SAVE_KEY)){titleView('confirm');return}t='newyes'}
+  if(t==='newyes'){try{localStorage.removeItem(SAVE_KEY);localStorage.removeItem(SAVE_KEY+'-meta')}catch(_){}hideTitle();newGame(true);return}
+  if(t==='howto'||t==='settings'){titleView(t);return}
+  if(t==='back'){titleView('menu');return}
+}
+$('title').addEventListener('click',e=>{
+  const s=e.target.closest('[data-s]');if(s){ensureAudio();if(s.dataset.s==='sound')SET.sound=!SET.sound;else SET.quality=SET.quality==='high'?'low':'high';saveSettings();applySettings();titleView('settings');sfx('pop');return}
+  const b=e.target.closest('[data-t]');if(!b||b.disabled)return;titleAct(b.dataset.t);
+});
+$('title').addEventListener('mousemove',e=>{const b=e.target.closest('.tmenu button,.tpanel .tb');if(!b||b.disabled)return;const k=titleItems().indexOf(b);if(k>=0&&k!==tSel)setTSel(k)});
+function titleKey(e){
+  if(e.code==='ArrowDown'||e.code==='KeyS'){titleMove(1);return}
+  if(e.code==='ArrowUp'||e.code==='KeyW'){titleMove(-1);return}
+  if(e.code==='Enter'||e.code==='Space'){const b=titleItems()[tSel];if(b&&!b.disabled)b.click();return}
+  if(e.code==='Escape'&&tView!=='menu')titleView('menu');
+}
+function titleCamera(){
+  const c=S.banner?{x:S.banner.x+.5,y:S.banner.y+2,z:S.banner.z+.5}:S.ruin?{x:S.ruin.x+.5,y:S.ruin.y+3,z:S.ruin.z+.5}:{x:48,y:14,z:48};
+  const a=T*.045,r=17,px_=c.x+Math.cos(a)*r,pz_=c.z+Math.sin(a)*r;
+  let hy=c.y+10;for(let k=0;k<=1;k+=.2){const sx=lerp(px_,c.x,k),sz=lerp(pz_,c.z,k);hy=Math.max(hy,topAt(Math.floor(sx),Math.floor(sz))+3-k*4)}
+  camera.position.set(px_,hy,pz_);
+  const fx=c.x-px_,fz=c.z-pz_,l=Math.hypot(fx,fz)||1,wide=innerWidth>720;
+  _hv.set(c.x-(-fz/l)*(wide?6:0),c.y+(wide?0:-3),c.z-(fx/l)*(wide?6:0));camera.lookAt(_hv);playerModel.visible=true;
+}
 
 // ============================================================ player update
 let mine=null;
@@ -1937,6 +2068,7 @@ function updatePlayer(dt){
 function groundUnder(x,y,z){const xi=Math.floor(x),zi=Math.floor(z);for(let yy=Math.floor(y+.1);yy>Math.floor(y)-6;yy--){if(yy<0)return 0;const id=getB(xi,yy,zi);if(id!==A&&id!==ENT_TOP&&(BL[id].solid||id===WATER||id===ENT))return yy+(id===WATER?.86:1)}return y-6}
 const _hv=new THREE.Vector3();
 function updCamera(){
+  if(titleOpen){titleCamera();return}
   if(cine&&cine.cam!=='player'&&cineCamera())return;
   const hx=P.x,hy=P.y+1.75,hz=P.z,cp=Math.cos(camPitch),vx=-Math.sin(camYaw)*cp,vy=Math.sin(camPitch),vz=-Math.cos(camYaw)*cp;
   let dist=camDist;if(dist>0){const h=rayVox(hx,hy,hz,-vx,-vy,-vz,dist+.3);if(h)dist=Math.max(.15,h.t-.25)}
@@ -1993,6 +2125,7 @@ function update(dt){
   T+=dt;if(fade>0)fade-=dt;
   for(const p of parts){p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;p.vy-=dt*14}parts=parts.filter(p=>p.life>0);
   if(titleT>0){titleT-=dt;if(titleT<=0)$('ctitle').hidden=true}
+  if(titleOpen){rebuildDirty(3);return}
   if(cine){storyTick(dt);fireworks(dt);rebuildDirty(3);for(const f of floaters){f.life-=dt;f.s.material.opacity=Math.min(1,f.life*1.5);if(f.life<=0)scene.remove(f.s)}floaters=floaters.filter(f=>f.life>0);return}
   updTime(dt);updatePlayer(dt);
   acc+=dt;while(acc>=.05){factoryTick(.05);acc-=.05}
@@ -2022,8 +2155,9 @@ function frame(now){
 }
 addEventListener('error',e=>{if(!frame.err2){frame.err2=1;toast('오류: '+e.message,'bad')}});
 resize();
-if(!load())newGame();else{toast('저장된 마을을 불러왔어요','good');const o=OBJ[S.obj];if(o)setTimeout(()=>say(LULU.name,o.say),800)}
-renderHotbar();updHUD();updLockUI();
+applySettings();
+if(!load())newGame(false);
+renderHotbar();updHUD();showTitle();
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{for(const k in iconCache)delete iconCache[k];hotDirty=true});
 addEventListener('beforeunload',()=>save(true));
 requestAnimationFrame(frame);
