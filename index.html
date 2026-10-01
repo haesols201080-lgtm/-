@@ -827,6 +827,13 @@ const chunkDirty=new Uint8Array(NCX*NCZ);
 function markDirty(x,z){const cx=x>>4,cz=z>>4;chunkDirty[cz*NCX+cx]=1;const lx=x&15,lz=z&15;
   if(lx===0&&cx>0)chunkDirty[cz*NCX+cx-1]=1;if(lx===15&&cx<NCX-1)chunkDirty[cz*NCX+cx+1]=1;
   if(lz===0&&cz>0)chunkDirty[(cz-1)*NCX+cx]=1;if(lz===15&&cz<NCZ-1)chunkDirty[(cz+1)*NCX+cx]=1}
+// leaves that have no trunk nearby (a tree canopy reaches ~2 blocks out and 2 up from its trunk)
+function orphanLeaves(x0,y0,z0,x1,y1,z1){const out=[];
+  for(let y=Math.max(1,y0);y<=Math.min(WY-1,y1);y++)for(let z=Math.max(0,z0);z<=Math.min(WZ-1,z1);z++)for(let x=Math.max(0,x0);x<=Math.min(WX-1,x1);x++){
+    if(vox[I(x,y,z)]!==LEAVES)continue;let ok=false;
+    for(let dy=-3;dy<=1&&!ok;dy++)for(let dz=-3;dz<=3&&!ok;dz++)for(let dx=-3;dx<=3;dx++){const X=x+dx,Y=y+dy,Z=z+dz;if(inW(X,Y,Z)&&vox[I(X,Y,Z)]===LOG){ok=true;break}}
+    if(!ok)out.push(I(x,y,z))}
+  return out}
 function setB(x,y,z,id){if(!inW(x,y,z))return;vox[I(x,y,z)]=id;markDirty(x,z);roomsDirty=true;bpDirty=true}
 
 // ============================================================ world generation
@@ -908,6 +915,7 @@ function genWorld(seed){
     if(Math.abs(dx)<=2&&dz>=-2&&dz<=0){for(let y=1;y<gy;y++)if(!BL[vox[I(x,y,z)]].solid||vox[I(x,y,z)]===WATER)vox[I(x,y,z)]=SAND;
       vox[I(x,gy-1,z)]=SAND;for(let y=gy;y<gy+5;y++)vox[I(x,y,z)]=A}}
   const beach={x:bx+.5,y:gy,z:lz+.5};
+  for(const i of orphanLeaves(0,0,0,WX-1,WY-1,WZ-1))vox[i]=A; // no floating canopies after clearing ruins/beach
   return{x:rx,y:ry,z:rz,beach};
 }
 
@@ -1396,6 +1404,8 @@ function breakAt(x,y,z){
   if(b.node){const n=Math.random()<.2?2:1;give(b.node,n);burst(x,y,z,IT[b.node].c,6);popText(x+.5,y+1.4,z+.5,`+${n} ${nameOf(b.node)}`);sfx('pop');return}
   if(id===A||id===WATER||id===BEDROCK)return;
   setB(x,y,z,A);burst(x,y,z,partColor(id),10);sfx('break');
+  if(id===LOG)setTimeout(()=>{ // leaves fall once their trunk is gone
+    for(const i of orphanLeaves(x-4,y-2,z-4,x+4,y+6,z+4)){const[X,Y,Z]=XYZ(i);setB(X,Y,Z,A);if(Math.random()<.35)burst(X,Y,Z,partColor(LEAVES),3);if(Math.random()<.15){give('fiber',1)}}},450);
   let got=[];
   if(id===LEAVES){if(Math.random()<.55)got.push(['fiber',1]);if(Math.random()<.08)got.push(['berry',1])}
   else if(id===BUSH){got.push(['berry',2],['fiber',1])}
@@ -2148,6 +2158,7 @@ function load(n){
   catch(e){console.warn(e);return false}
 }
 function afterLoad(){
+  for(const i of orphanLeaves(0,0,0,WX-1,WY-1,WZ-1))vox[i]=A; // also cleans canopies left floating in older saves
   for(const g of entMesh.values())scene.remove(g);entMesh.clear();
   for(const[i,e]of ents)createEntMesh(i,e);
   rebuildM();rebuildAllChunks();buildBaseLine();buildLighthouse();
