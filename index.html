@@ -797,10 +797,12 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,isCoarse?1.25:1.75));
 $('game').appendChild(renderer.domElement);
 const cvs=renderer.domElement;
 const scene=new THREE.Scene();
-const camera=new THREE.PerspectiveCamera(66,1,.08,170);
+const camera=new THREE.PerspectiveCamera(66,1,.08,230);
 scene.fog=new THREE.Fog(0x8ec9f5,38,92);
 // open sea around the island (below the voxel water surface, so it only shows outside the world)
-const oceanMesh=new THREE.Mesh(new THREE.PlaneGeometry(700,700),new THREE.MeshLambertMaterial({color:0x3f78ad}));oceanMesh.rotation.x=-Math.PI/2;oceanMesh.position.set(48,SEA+.8,48);scene.add(oceanMesh);
+const oceanTex=(()=>{const c=document.createElement('canvas');c.width=c.height=TILE;c.getContext('2d').drawImage(atlas,(23%ATW)*TILE,Math.floor(23/ATW)*TILE,TILE,TILE,0,0,TILE,TILE);
+  const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(700,700);t.magFilter=THREE.NearestFilter;t.minFilter=THREE.LinearMipmapLinearFilter;t.anisotropy=4;return t})();
+const oceanMesh=new THREE.Mesh(new THREE.PlaneGeometry(700,700),new THREE.MeshLambertMaterial({map:oceanTex,color:0x8fb4d4}));oceanMesh.rotation.x=-Math.PI/2;oceanMesh.position.set(48,SEA+.8,48);scene.add(oceanMesh);
 scene.background=new THREE.Color(0x8ec9f5);
 const hemi=new THREE.HemisphereLight(0xe6f2ff,0x5a4a3a,.75);scene.add(hemi);
 const sun=new THREE.DirectionalLight(0xfff2dd,.8);scene.add(sun);scene.add(sun.target);
@@ -1593,22 +1595,19 @@ function arriveVillager(def){
 let lampG=null,farLand=null;
 function lampLit(){if(S.lamp)return true;if(!S.ruin)return false;const tx=S.ruin.x-2,tz=S.ruin.z-2,ty=S.ruin.y+8;
   for(const[i,e]of ents){if(e.t!=='torch'&&e.t!=='bonfire')continue;const[x,y,z]=XYZ(i);if(y>=ty&&Math.abs(x-tx)<=1&&Math.abs(z-tz)<=1){S.lamp=true;buildLighthouse();sfx('level');return true}}return false}
-function farLandTex(seed){
-  const W=1024,Hh=200,c=document.createElement('canvas');c.width=W;c.height=Hh;const g=c.getContext('2d');
-  const ridge=(x,sc,o)=>{let v=0,a=1,n=0;for(let k=0;k<4;k++){const r=vnoise(x*(1<<k)/sc,o,1,seed+k*7);v+=(1-Math.abs(r*2-1))*a;n+=a;a*=.5}return v/n};
-  const layers=[[100,62,[168,180,196],.5,200,11],[128,46,[136,150,172],.68,130,23],[152,26,[116,130,154],.82,70,37]];
-  for(const[base,amp,col,al,sc,o]of layers){
-    // ridge line, sharpened near the middle so the land looks like a distant island range
-    g.beginPath();g.moveTo(0,Hh);
-    for(let x=0;x<=W;x+=2){const mid=1-Math.pow(Math.abs(x/W-.5)*2,2.2);g.lineTo(x,base+ (1-mid)*60-ridge(x,sc,o)*amp*mid)}
-    g.lineTo(W,Hh);g.closePath();
-    const gr=g.createLinearGradient(0,base-amp,0,Hh);gr.addColorStop(0,`rgba(${col},${al})`);gr.addColorStop(.7,`rgba(${col},${al*.75})`);gr.addColorStop(1,'rgba(214,220,226,0)');
-    g.fillStyle=gr;g.fill()}
-  // soften the sides into the fog
-  g.globalCompositeOperation='destination-in';const fd=g.createLinearGradient(0,0,W,0);
-  fd.addColorStop(0,'rgba(0,0,0,0)');fd.addColorStop(.15,'rgba(0,0,0,1)');fd.addColorStop(.85,'rgba(0,0,0,1)');fd.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=fd;g.fillRect(0,0,W,Hh);
-  const t=new THREE.CanvasTexture(c);t.minFilter=THREE.LinearFilter;return t;
-}
+// the land beyond the fog: a real blocky island far to the north, so it reads like the rest of the world
+function buildFarIsland(seed){
+  const C=2,X0=-60,X1=160,Z0=-150,Z1=-62,ox=50,oz=-104,rx=88,rz=34,cells=[];
+  for(let z=Z0;z<Z1;z+=C)for(let x=X0;x<X1;x+=C){
+    const ang=Math.atan2((z-oz)/rz,(x-ox)/rx),e=Math.hypot((x-ox)/rx,(z-oz)/rz)*(1+(vnoise(ang*5+20,7,1,seed+3)-.5)*.35);
+    const m=clamp((1-e)/.35,0,1);if(m<=0)continue;
+    const ridge=1-Math.abs(vnoise(x,z,30,seed+9)*2-1),hill=vnoise(x,z,17,seed+4),peak=Math.max(0,vnoise(x,z,46,seed+12)-.45)*2,hh=Math.pow(m,1.3)*(1.5+ridge*9+hill*7+peak*20)+m*1.2;
+    if(hh<.6)continue;cells.push([x,z,Math.round(hh)])}
+  const geo=new THREE.BoxGeometry(C,1,C);geo.translate(0,.5,0);
+  const mesh=new THREE.InstancedMesh(geo,new THREE.MeshLambertMaterial({color:0xffffff}),cells.length),mt=new THREE.Matrix4(),col=new THREE.Color();
+  cells.forEach(([x,z,h],k)=>{mt.makeScale(1,h+2,1);mt.setPosition(x,SEA-1,z);mesh.setMatrixAt(k,mt);
+    const n=hash2(x,z,seed)*.12;col.setHex(h<=2?0xd8c890:h>19?0x9a9a96:h>13?0x6f7a5e:0x5d9446).offsetHSL(0,0,n-.06);mesh.setColorAt(k,col)});
+  mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;return mesh}
 function buildLighthouse(){
   if(lampG){scene.remove(lampG);lampG=null}if(farLand){scene.remove(farLand);farLand=null}
   if(!S.ruin||!S.lamp)return;
@@ -1618,9 +1617,7 @@ function buildLighthouse(){
   const beam=new THREE.Group(),bm=new THREE.MeshBasicMaterial({color:0xfff2c0,transparent:true,opacity:.07,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
   const cone=new THREE.Mesh(new THREE.CylinderGeometry(.25,4.5,46,20,1,true),bm);cone.rotation.z=Math.PI/2;cone.position.x=23;beam.add(cone);
   const c2=cone.clone();c2.position.x=-23;beam.add(c2);lampG.add(beam);lampG.userData.beam=beam;scene.add(lampG);
-  // painted silhouette of another land, far to the north beyond the fog
-  const mat=new THREE.MeshBasicMaterial({map:farLandTex(S.seed),transparent:true,fog:false,depthWrite:false});
-  farLand=new THREE.Mesh(new THREE.PlaneGeometry(190,37),mat);farLand.position.set(48,SEA+15,-88);farLand.renderOrder=-1;
+  farLand=buildFarIsland(S.seed);
   scene.add(farLand);
 }
 function mkVillager(def,x,z){const y=surfaceY(Math.floor(x),Math.floor(z));
@@ -1866,11 +1863,11 @@ function updLighting(dt){
   const n=nightAmt(),t=S.time,dusk=(t>.5&&t<.66||t>.9)?Math.sin(clamp(n,0,1)*Math.PI)*.55:0;
   _sky.copy(C_DAY).lerp(C_NIGHT,n).lerp(C_DUSK,dusk);
   // fog: thick before the banner, thinner under it, lifted once the old lighthouse burns again
-  const fl=S.lamp||S.obj>7?2:S.banner?1:S.bg?1:0,FN=[[3,24],[12,50],[38,92]][fl];
+  const fl=S.lamp||S.obj>7?2:S.banner?1:S.bg?1:0,FN=[[3,24],[12,50],[40,140]][fl];
   if(updLighting.snap){updLighting.snap=0;scene.fog.near=FN[0];scene.fog.far=FN[1]}
   scene.fog.near+=(FN[0]-scene.fog.near)*Math.min(1,dt*.7);scene.fog.far+=(FN[1]-scene.fog.far)*Math.min(1,dt*.7);
-  _sky.lerp(C_MIST,clamp((92-scene.fog.far)/68,0,1)*(1-n*.75));
-  if(lampG){lampG.userData.beam.rotation.y+=dt*.45;lampG.userData.beam.visible=!(cine&&cine.cam==='far');lampG.children[0].intensity=n>.2?2.4:.9}scene.background.copy(_sky);scene.fog.color.copy(_sky);
+  _sky.lerp(C_MIST,clamp((92-scene.fog.far)/68,0,1)*(1-n*.75));oceanTex.offset.x=(oceanTex.offset.x+dt*.03)%1;
+  if(lampG){lampG.userData.beam.rotation.y+=dt*.45;lampG.userData.beam.visible=n>.15&&!(cine&&cine.cam==='far');lampG.userData.beam.children.forEach(c=>c.material.opacity=.11*n);lampG.children[0].intensity=n>.2?2.4:.9}scene.background.copy(_sky);scene.fog.color.copy(_sky);
   hemi.intensity=lerp(.78,.3,n);hemi.color.copy(C_HDAY).lerp(C_HNIGHT,n);
   sun.intensity=lerp(.78,.14,n);sun.color.setHex(n>.5?0x9ab0ff:0xfff2dd);
   const a=t<.6?t/.6*Math.PI:(t-.6)/.4*Math.PI;sun.position.set(P.x+Math.cos(a)*40,P.y+Math.sin(a)*45+8,P.z+18);sun.target.position.set(P.x,P.y,P.z);
@@ -1964,7 +1961,7 @@ function cineCamera(){
   else if(c==='beach'&&S.ruin&&S.ruin.beach){const b=S.ruin.beach;camera.position.set(b.x+3.2+Math.sin(T*.2)*.4,b.y+2.4,b.z+5.5);_hv.set(b.x,b.y+.3,b.z-.4);camera.lookAt(_hv);playerModel.visible=true;return true}
   else if(c==='village')ctr={x:48.5,y:13,z:48.5,r:13,h:6};
   else if(c==='lamp'&&S.ruin){const a=T*.12,bx=S.ruin.x-1.5,by=S.ruin.y+9.8,bz=S.ruin.z-1.5;camera.position.set(bx+Math.cos(a)*5,by+1.6,bz+Math.sin(a)*5);_hv.set(bx,by,bz);camera.lookAt(_hv);playerModel.visible=true;return true}
-  else if(c==='far'&&S.ruin){const bx=S.ruin.x-1.5,by=S.ruin.y+10.5,bz=S.ruin.z-1.5;camera.position.set(bx+Math.sin(T*.05)*1.5,by+2,bz+6);_hv.set(48,SEA+12,-88);camera.lookAt(_hv);playerModel.visible=true;return true}
+  else if(c==='far'){P.face=0;const sw=Math.sin(T*.08)*.4;camera.position.set(P.x+2.1+sw,P.y+2.1,P.z+3.6);_hv.set(P.x-6,SEA+6,P.z-130);camera.lookAt(_hv);playerModel.visible=true;return true}
   else if(c==='banner'&&S.banner)ctr={x:S.banner.x+.5,y:S.banner.y+1.5,z:S.banner.z+.5,r:9,h:4};
   else if(c==='boss'){const b=slimes.find(s=>SLT[s.type].boss);if(b){const dx=P.x-b.x,dz=P.z-b.z,l=Math.hypot(dx,dz)||1;camera.position.set(P.x+dx/l*4,P.y+3.2,P.z+dz/l*4);_hv.set(b.x,b.y+2,b.z);camera.lookAt(_hv);playerModel.visible=true;return true}}
   else if(c==='elev'&&S.elev){const g=entMesh.get(I(S.elev.x,S.elev.y,S.elev.z));const cy=g&&g.userData.cap?g.userData.cap.position.y:0;
