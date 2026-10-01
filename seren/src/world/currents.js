@@ -40,6 +40,8 @@ void main() {
   float a = (edge * 0.55 + s1 * 0.6 + s2 * 0.4) * (0.6 + 0.4 * n);
   float fade = smoothstep(0.0, 0.015, vUv.x) * smoothstep(1.0, 0.985, vUv.x);
   float fog = fogAmount(cameraPosition, vWorld);
+  float near = smoothstep(3.0, 18.0, distance(cameraPosition, vWorld));
+  a *= near;
   float night = 0.5 + uGlow * 0.35;
   gl_FragColor = vec4(uColor * a * fade * uOn * night * (1.0 - fog) * 1.1, 1.0);
   #include <tonemapping_fragment>
@@ -58,7 +60,7 @@ export class Current {
     this.length = this.curve.getLength();
     const segs = Math.max(20, Math.floor(this.length / 12));
     this.radius = def.radius ?? 2.4;
-    const geo = new THREE.TubeGeometry(this.curve, segs, this.radius, 8, false);
+    const geo = new THREE.TubeGeometry(this.curve, segs, this.radius * 0.6, 8, false);
     this.mat = new THREE.ShaderMaterial({
       uniforms: { ...atmosUniforms, uColor: { value: new THREE.Color(def.color ?? 0x7ff3e6) }, uLen: { value: this.length }, uFlow: { value: this.speed * 0.6 }, uOn: { value: this.on }, uDir: { value: 1 } },
       vertexShader: vert, fragmentShader: frag,

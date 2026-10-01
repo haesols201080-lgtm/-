@@ -141,27 +141,30 @@ export class Avatar {
     this.legL = mkLeg(-1);
     this.legR = mkLeg(1);
 
-    // 날개 (활공)
+    // 날개 (활공): 등판과 같은 평면(XY)에 펼쳐진다 — 몸을 앞으로 눕히면 수평이 된다
     this.wings = new THREE.Group();
-    this.wings.position.set(0, 0.06, -0.05);
+    this.wings.position.set(0, 0.04, -0.08);
     this.pack.add(this.wings);
     const wingShape = new THREE.Shape();
-    wingShape.moveTo(0, 0.05);
-    wingShape.bezierCurveTo(0.6, 0.35, 1.3, 0.25, 1.75, 0.05);
-    wingShape.bezierCurveTo(1.45, -0.05, 1.2, -0.2, 1.05, -0.32);
-    wingShape.bezierCurveTo(0.8, -0.2, 0.55, -0.42, 0.42, -0.5);
-    wingShape.bezierCurveTo(0.3, -0.3, 0.12, -0.2, 0, -0.12);
-    const wGeo = new THREE.ShapeGeometry(wingShape, 12);
-    wGeo.rotateX(-Math.PI / 2);
-    this.wingMat = litMaterial({ color: 0xbff3ff, emissive: 0x2a7f99, emissiveIntensity: 0.6, rim: 0.9, rimColor: 0xa8fff4, transparent: true, opacity: 0.62, side: THREE.DoubleSide });
-    const ribGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, -0.05), new THREE.Vector3(0.6, 0, -0.3), new THREE.Vector3(1.3, 0, -0.22), new THREE.Vector3(1.75, 0, -0.05)]);
-    const ribMat = new THREE.LineBasicMaterial({ color: 0xbffcff });
+    wingShape.moveTo(0, 0.12);
+    wingShape.bezierCurveTo(0.7, 0.42, 1.55, 0.36, 2.15, 0.12);
+    wingShape.bezierCurveTo(1.8, -0.02, 1.5, -0.2, 1.3, -0.38);
+    wingShape.bezierCurveTo(1.0, -0.26, 0.7, -0.5, 0.5, -0.6);
+    wingShape.bezierCurveTo(0.35, -0.38, 0.15, -0.26, 0, -0.16);
+    const wGeo = new THREE.ShapeGeometry(wingShape, 14);
+    this.wingMat = litMaterial({ color: 0xd8fbff, emissive: 0x3aa8c8, emissiveIntensity: 0.9, emissiveNight: 0.6, rim: 1.0, rimColor: 0xbffff4, transparent: true, opacity: 0.78, side: THREE.DoubleSide });
+    const ribMat = glowMaterial({ color: 0xbffcff, intensity: 2.2 });
+    const ribPts = [[0, 0.1], [0.7, 0.36], [1.5, 0.32], [2.15, 0.12]];
+    const ribGeo = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ribPts.map(([x, y]) => new THREE.Vector3(x, y, 0.005))), 16, 0.018, 4, false);
+    this.wingTips = [];
     for (const side of [-1, 1]) {
       const w = new THREE.Group();
-      const m = new THREE.Mesh(wGeo, this.wingMat);
-      w.add(m);
-      const rib = new THREE.Line(ribGeo, ribMat);
-      w.add(rib);
+      w.add(new THREE.Mesh(wGeo, this.wingMat));
+      w.add(new THREE.Mesh(ribGeo, ribMat));
+      const tip = new THREE.Object3D();
+      tip.position.set(2.15, 0.12, 0);
+      w.add(tip);
+      this.wingTips.push(tip);
       w.scale.set(side, 1, 1);
       this.wings.add(w);
       if (side < 0) this.wingL = w; else this.wingR = w;
@@ -354,12 +357,15 @@ export class Avatar {
     const wo = this.wingOpen;
     this.wings.visible = wo > 0.02;
     if (this.wings.visible) {
-      const flap = Math.sin(this.t * 2.2) * 0.04 * wo;
-      this.wingL.scale.set(-wo, 1, 0.3 + 0.7 * wo);
-      this.wingR.scale.set(wo, 1, 0.3 + 0.7 * wo);
-      this.wingL.rotation.z = -0.15 * wo - flap - bodyRoll * 0.2;
-      this.wingR.rotation.z = 0.15 * wo + flap - bodyRoll * 0.2;
-      this.wings.rotation.x = -1.2 * wo;
+      const flap = Math.sin(this.t * 2.2) * 0.05 * wo;
+      // 접힌 날개는 등에 붙어 아래로, 펼치면 옆으로
+      this.wingL.scale.set(-(0.15 + 0.85 * wo), 0.4 + 0.6 * wo, 1);
+      this.wingR.scale.set(0.15 + 0.85 * wo, 0.4 + 0.6 * wo, 1);
+      // 위로 살짝 꺾인 날개 (몸 기준 Y 축 회전 = 수평일 때 상반각)
+      this.wingL.rotation.y = -(0.18 * wo + flap);
+      this.wingR.rotation.y = 0.18 * wo + flap;
+      this.wingL.rotation.z = (1 - wo) * 1.2;
+      this.wingR.rotation.z = -(1 - wo) * 1.2;
     }
 
     // 보드
@@ -385,25 +391,32 @@ export class Avatar {
     this.root.updateMatrixWorld(true);
     const anchor = this.scarfAnchor.getWorldPosition(this._v);
     const pts = this.scarfPts, prev = this.scarfPrev, n = this.scarfN;
-    const seg = 0.11;
+    const seg = 0.095;
     if (this.scarfInit && pts[0].distanceToSquared(anchor) > 9) this.scarfInit = false; // 순간이동
     if (!this.scarfInit) {
       for (let i = 0; i < n; i++) { pts[i].copy(anchor); pts[i].y -= i * seg; prev[i].copy(pts[i]); }
       this.scarfInit = true;
     }
-    const wind = this._w.set(Math.sin(this.t * 0.7) * 1.5, 0, Math.cos(this.t * 0.5) * 1.5).sub(p.vel);
+    // 고정점이 움직인 만큼 모든 점을 함께 옮긴다 (빠르게 날아도 늘어나지 않게) — 대신 바람으로 뒤로 날린다
+    if (this._lastAnchor) {
+      const mx = anchor.x - this._lastAnchor.x, my = anchor.y - this._lastAnchor.y, mz = anchor.z - this._lastAnchor.z;
+      for (let i = 0; i < n; i++) { pts[i].x += mx; pts[i].y += my; pts[i].z += mz; prev[i].x += mx; prev[i].y += my; prev[i].z += mz; }
+    } else this._lastAnchor = new THREE.Vector3();
+    this._lastAnchor.copy(anchor);
+    const vmax = Math.min(1, p.vel.length() / 25);
+    const wind = this._w.set(Math.sin(this.t * 0.7) * 1.5, 0, Math.cos(this.t * 0.5) * 1.5).addScaledVector(p.vel, -Math.min(1, 12 / Math.max(1, p.vel.length())));
     const sdt = Math.min(dt, 1 / 30);
     pts[0].copy(anchor);
     for (let i = 1; i < n; i++) {
       const c = pts[i], pv = prev[i];
       const vx = (c.x - pv.x) * 0.92, vy = (c.y - pv.y) * 0.92, vz = (c.z - pv.z) * 0.92;
       pv.copy(c);
-      const flutter = Math.sin(this.t * 13 + i * 1.3) * 0.4 * Math.min(1, p.hspeed / 10);
-      c.x += vx + (wind.x * 0.9 + flutter) * sdt * sdt * 6;
-      c.y += vy - 9.8 * sdt * sdt * 0.6 + wind.y * sdt * sdt * 4 + flutter * sdt * sdt * 4;
-      c.z += vz + wind.z * 0.9 * sdt * sdt * 6;
+      const flutter = Math.sin(this.t * 14 + i * 1.3) * (0.6 + vmax * 6) * (i / n);
+      c.x += vx + (wind.x * 3 + flutter) * sdt * sdt * 6;
+      c.y += vy - 9.8 * sdt * sdt * 0.6 * (1 - vmax * 0.8) + wind.y * sdt * sdt * 8 + flutter * sdt * sdt * 5;
+      c.z += vz + (wind.z * 3 - flutter * 0.5) * sdt * sdt * 6;
     }
-    for (let it = 0; it < 3; it++) {
+    for (let it = 0; it < 4; it++) {
       pts[0].copy(anchor);
       for (let i = 1; i < n; i++) {
         const a = pts[i - 1], b = pts[i];
@@ -413,6 +426,14 @@ export class Avatar {
         if (i === 1) { b.x -= dx * f; b.y -= dy * f; b.z -= dz * f; }
         else { a.x += dx * f * 0.5; a.y += dy * f * 0.5; a.z += dz * f * 0.5; b.x -= dx * f * 0.5; b.y -= dy * f * 0.5; b.z -= dz * f * 0.5; }
       }
+    }
+    // 마지막으로 앞에서부터 길이를 정확히 맞춘다 (절대 늘어나지 않게)
+    pts[0].copy(anchor);
+    for (let i = 1; i < n; i++) {
+      const a = pts[i - 1], b = pts[i];
+      const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+      const d = Math.hypot(dx, dy, dz) || 1e-5;
+      b.x = a.x + (dx / d) * seg; b.y = a.y + (dy / d) * seg; b.z = a.z + (dz / d) * seg;
     }
     // 띠 메시 (폭 방향 = 몸의 좌우)
     const pos = this.scarf.geometry.attributes.position.array;

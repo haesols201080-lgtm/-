@@ -47,7 +47,7 @@ export class Discovery {
       const m = new THREE.Mesh(shimmerGeo, glowMaterial({ color: 0xb9a6ff, intensity: 0.9, fresnel: 1, side: THREE.DoubleSide }));
       m.position.set(x, y, z);
       this.scene.add(m);
-      const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.35, 0), glowMaterial({ color: 0xe0d4ff, intensity: 2.2 }));
+      const core = new THREE.Mesh(new THREE.OctahedronGeometry(0.35, 0), glowMaterial({ color: 0xe0d4ff, intensity: 1.2 }));
       core.position.set(x, y + 1.6, z);
       this.scene.add(core);
       return { ...d, x, y, z, mesh: m, core };
@@ -186,6 +186,7 @@ export class Discovery {
       e.mesh.visible = !hidden;
       e.core.visible = !hidden;
       e.mesh.material.uniforms.uIntensity.value = (open ? 0.2 : 0.45 + Math.sin(t * 2 + e.x) * 0.15) * (0.4 + g.world.atmos.u.uGlow.value * 0.6);
+      e.core.material.uniforms.uIntensity.value = (open ? 0.35 : 0.9) * (0.45 + g.world.atmos.u.uGlow.value * 0.55);
       e.core.position.y = e.y + 1.6 + Math.sin(t * 1.5 + e.z) * 0.2;
       e.core.rotation.y = t;
     }

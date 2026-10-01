@@ -299,7 +299,7 @@ export const ECHOES = [
     text: '윤슬의 수정은 들은 소리를 모두 기억한다. 조용히 오래 서 있으면, 오래전 아이들의 웃음소리가 들린다.' },
   { id: 'e-silence', at: 'old-gate', off: [0, 30], title: '침묵의 시작', words: ['silence', 'wait'],
     text: '마지막 대합창이 끝난 뒤, 아웬의 수는 조금씩 줄었다. 탑은 하나씩 잠들었다. 그래도 그들은 기다렸다. 기다림도 노래의 일부였으니까.' },
-  { id: 'e-lark', at: 'crash', off: [8, 6], title: '라르크 호 일지', words: ['answer'],
+  { id: 'e-lark', at: 'crash', off: [16, 12], title: '라르크 호 일지', words: ['answer'],
     text: '라르크 호 비행 일지, 312일째. 「신호를 해독했다. 이건 데이터가 아니다. 노래다. 누군가 아주 오래 우리를 부르고 있었다.」' },
   { id: 'e-farewell', at: 'meadow-vista', off: [6, 0], title: '다시 울리자', words: ['again', 'return'],
     text: '아웬에게는 「안녕」이라는 말이 없다. 헤어질 때 그들은 이렇게 노래한다. 「다시 울리자.」' },

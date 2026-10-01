@@ -193,6 +193,7 @@ export class Requests {
       g.state.flags.requests = this.active;
       g.state.flags.requestDay = day;
       if (fresh.length) g.ui.toast(`새 부탁 ${fresh.length}개 · 일지에서 볼 수 있어요`, { kind: 'quest' });
+      g.ui.refreshObjective();
     }
   }
 
@@ -224,6 +225,7 @@ export class Requests {
     const unknown = WORDS.filter((w) => !g.lang.known(w.id));
     if (unknown.length) g.lang.learn(unknown[Math.floor(Math.random() * unknown.length)].id, 'teach');
     g.ui.toast(`부탁 완료 · ${r.title}`, { kind: 'done' });
+    g.ui.refreshObjective();
     g.audio.chime('quest');
   }
 }

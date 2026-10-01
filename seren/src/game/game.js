@@ -13,6 +13,8 @@ import { Structures } from '../world/structures.js';
 import { Currents } from '../world/currents.js';
 import { Creatures } from '../world/creatures.js';
 import { Clouds } from '../world/clouds.js';
+import { Particles, Trail } from '../world/particles.js';
+import { REGIONS } from '../world/regions.js';
 import { playerUniform, glowMaterial } from '../world/materials.js';
 import { Player } from '../player/player.js';
 import { Avatar } from '../player/avatar.js';
@@ -76,6 +78,8 @@ export class Game {
     this.mapData = new MapData(this);
     this.requests = new Requests(this);
 
+    this.particles = new Particles(this.engine.scene);
+    this.trails = [new Trail(this.engine.scene, 0xbffcff), new Trail(this.engine.scene, 0xbffcff)];
     this._beacons();
     this._wireEvents();
     this.saveT = 30;
@@ -278,16 +282,21 @@ export class Game {
       const steps = Math.max(1, Math.ceil(dt / (1 / 60)));
       const h = dt / steps;
       const prev = this.player.pos.clone();
+      this._frameEvents = [];
       for (let i = 0; i < steps; i++) {
         if (this.player.state !== 'down') this.player.update(h, free ? input : NO_INPUT, this.rig);
         if (i < steps - 1) input.down.clear();
         this._playerEvents();
+        this._frameEvents.push(...this.player.events);
       }
       this._stats(prev);
       this.avatar.update(dt, this.player);
       playerUniform.value.copy(this.player.pos);
       this.rig.update(dt, free ? input : NO_INPUT, this.player);
+      if (mode === 'dialogue' && this.dialogue.active && this.dialogue.active.npc) this._dialogueCam(dt);
+      else this._dlgCam = null;
       this.director.update(dt);
+      this._effects(dt);
       this.dialogue.update(dt);
       this.resonance.update(dt);
       this.discovery.update(dt);
@@ -563,6 +572,72 @@ export class Game {
     npc.fig.look = p.pos;
   }
 
+  /** 대화 카메라: 플레이어 어깨 너머로 상대를 비춘다 */
+  _dialogueCam(dt) {
+    const n = this.dialogue.active.npc;
+    const p = this.player.pos;
+    const dx = n.pos.x - p.x, dz = n.pos.z - p.z;
+    const d = Math.hypot(dx, dz) || 1;
+    const fx = dx / d, fz = dz / d;
+    const sx = -fz, sz = fx;
+    const s = n.scale || 1;
+    const pos = new THREE.Vector3(p.x - fx * 3.6 + sx * 1.6, p.y + 2.3, p.z - fz * 3.6 + sz * 1.6);
+    const gh = this.world.heightAt(pos.x, pos.z) + 0.8;
+    if (pos.y < gh) pos.y = gh;
+    const look = new THREE.Vector3(n.pos.x, n.pos.y + 2.4 * s, n.pos.z);
+    if (!this._dlgCam) this._dlgCam = { pos: this.engine.camera.position.clone(), look: look.clone() };
+    const k = Math.min(1, dt * 3);
+    this._dlgCam.pos.lerp(pos, k);
+    this._dlgCam.look.lerp(look, k);
+    this.rig.override = { pos: this._dlgCam.pos, look: this._dlgCam.look };
+    this.rig._applyOverride();
+    this.rig.override = null;
+  }
+
+  /** 움직임의 손맛: 먼지·물보라·날개 궤적·반짝임 */
+  _effects(dt) {
+    const p = this.player;
+    const P = this.particles;
+    const reg = this._regionCache && this.frames % 15 ? this._regionCache : (this._regionCache = this.world.regionAt(p.pos.x, p.pos.z));
+    const dust = reg ? reg.pal.soil : 0xb0a090;
+    for (const e of this._frameEvents || []) {
+      if (e === 'land') {
+        const k = Math.min(1, (p.impact || 4) / 18);
+        P.emit({ pos: p.pos, count: 6 + Math.round(k * 16), spread: 2 + k * 4, flat: true, up: 1.5, life: 0.9, size: [0.6, 2.2 + k * 2], color: dust, alpha: 0.35 + k * 0.3, drag: 3, gravity: 1, radius: 0.6 });
+      }
+      if (e === 'jump') P.emit({ pos: p.pos, count: 5, spread: 1.4, flat: true, life: 0.6, size: [0.4, 1.4], color: dust, alpha: 0.3, drag: 3 });
+      if (e === 'splash') P.emit({ pos: p.pos, count: 26, spread: 3, up: 6, life: 1.1, size: [0.3, 0.8], color: 0xcffaff, alpha: 0.7, gravity: 12, drag: 0.5, add: true });
+      if (e === 'rise') P.emit({ pos: p.pos, count: 22, spread: 3.5, flat: true, life: 0.9, size: [0.3, 0.9], color: 0xffd27a, alpha: 0.9, drag: 2, add: true, vel: { x: 0, y: -4, z: 0 } });
+      if (e === 'glideStart') P.emit({ pos: { x: p.pos.x, y: p.pos.y + 1, z: p.pos.z }, count: 14, spread: 2, life: 0.7, size: [0.2, 0.5], color: 0xbffcff, alpha: 0.9, add: true });
+      if (e === 'currentIn') P.emit({ pos: p.pos, count: 30, spread: 4, life: 1.0, size: [0.2, 0.7], color: p.current ? p.current.mat.uniforms.uColor.value.getHex() : 0x7ff3e6, alpha: 1, add: true });
+    }
+    // 썰매: 물 위면 물보라, 땅이면 먼지
+    if (p.state === 'skim' && p.skimSpeed > 6 && !p._skimAir) {
+      const water = this.world.heightAt(p.pos.x, p.pos.z) < 0.2;
+      const back = { x: p.pos.x - Math.sin(p.yaw) * 1.2, y: p.pos.y - 0.3, z: p.pos.z - Math.cos(p.yaw) * 1.2 };
+      const rate = Math.min(4, p.skimSpeed / 10);
+      this._skimAcc = (this._skimAcc || 0) + rate * dt * 30;
+      while (this._skimAcc > 1) {
+        this._skimAcc -= 1;
+        const side = Math.random() < 0.5 ? -1 : 1;
+        const vel = { x: Math.cos(p.yaw) * side * 3 - Math.sin(p.yaw) * 2, y: water ? 3 : 1, z: -Math.sin(p.yaw) * side * 3 - Math.cos(p.yaw) * 2 };
+        P.emit({ pos: back, vel, count: 1, spread: 1, life: water ? 0.8 : 1.2, size: water ? [0.3, 1.0] : [0.6, 2.4], color: water ? 0xd8fbff : dust, alpha: water ? 0.6 : 0.3, gravity: water ? 9 : 0.5, drag: water ? 0.6 : 2.5, add: water });
+      }
+    }
+    // 해류: 주위를 흐르는 빛 알갱이
+    if (p.state === 'current' && p.current && Math.random() < 0.6) {
+      P.emit({ pos: { x: p.pos.x, y: p.pos.y + 1, z: p.pos.z }, count: 2, spread: 3, life: 0.5, size: [0.15, 0.4], color: p.current.mat.uniforms.uColor.value.getHex(), alpha: 0.9, add: true, radius: 4, vel: { x: -p.vel.x * 0.3, y: -p.vel.y * 0.3, z: -p.vel.z * 0.3 } });
+    }
+    P.update(dt);
+    // 날개 끝 궤적
+    const gliding = (p.state === 'glide' && p.glideSpeed > 13) || p.state === 'current';
+    const cam = this.engine.camera.position;
+    this.avatar.wingTips.forEach((tip, i) => {
+      tip.getWorldPosition(this._tipV || (this._tipV = new THREE.Vector3()));
+      this.trails[i].update(dt, this._tipV, gliding && this.avatar.wingOpen > 0.6, cam);
+    });
+  }
+
   // ── 목표·표식 빛기둥 ─────────────────────────
   _beacons() {
     const mk = (color) => {
@@ -717,7 +792,10 @@ export class Game {
         setTimeout(() => this.ui.infoCard('예전에 들었던 말', '「오라, 작은 별. 우리는 오래 기다렸어.」', '이엘이 처음 만났을 때 했던 말이에요. 그때는 한 마디도 알아듣지 못했죠.'), 1200);
       } else this.ui.toast('들었던 말 하나를 이제 이해한다', { kind: 'word', sub: '일지 → 들은 말' });
     });
-    bus.on('tone', (e) => this.discovery.onTone(e.n, e.pos));
+    bus.on('tone', (e) => {
+      this.discovery.onTone(e.n, e.pos);
+      this.particles.emit({ pos: e.pos, count: 18, spread: 3, up: 2, life: 1.1, size: [0.2, 0.6], color: [0xffd27a, 0x7ff3e6, 0x7fb8ff, 0xffb8e8, 0xb9a6ff][e.n], alpha: 1, add: true, drag: 1.5 });
+    });
     bus.on('convoDone', () => { if (this._afterConvo) { const f = this._afterConvo; this._afterConvo = null; setTimeout(f, 100); } });
     document.addEventListener('visibilitychange', () => { if (document.hidden) this.save(); });
     addEventListener('beforeunload', () => this.save());

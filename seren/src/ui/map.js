@@ -162,7 +162,7 @@ export class MapView {
     tools.querySelector('[data-clear]').addEventListener('click', () => { g.state.waypoint = null; g.updateWaypoint(); this.draw(); });
     this.canvas = c;
     this.cx = g.player.pos.x; this.cz = g.player.pos.z;
-    this.zoom = this.zoom || 1;
+    if (!this._zoomed) { this.zoom = 1.7; this._zoomed = true; }
     const resize = () => {
       const r = parent.getBoundingClientRect();
       const dpr = Math.min(2, devicePixelRatio || 1);
