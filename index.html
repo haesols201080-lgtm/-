@@ -182,7 +182,8 @@ body.cine #ctitle{visibility:visible}
 .tmenu button.sel::before,.tpanel .tb.sel::before{opacity:1}
 .tmenu button.sel,.tpanel .tb.sel{background:rgba(255,214,107,.1)}
 .tmenu button small{grid-column:2;font-family:var(--body);font-size:12.5px;color:var(--muted);margin-top:2px}
-.tmenu button:disabled{opacity:.38;cursor:default}
+.tmenu button:disabled,.tpanel .tb:disabled{opacity:.38;cursor:default}
+.tpanel .tb small{grid-column:2;font-family:var(--body);font-size:12.5px;color:var(--muted);margin-top:2px}
 .tmenu button:focus-visible,.tpanel .tb:focus-visible{outline:2px solid var(--gold)}
 .tpanel{background:rgba(8,12,28,.9);border:2px solid #e9e3cf;border-radius:12px;padding:14px 16px;display:grid;gap:12px;max-height:min(60vh,520px);overflow:auto}
 .tpanel h3{font-family:var(--display);font-weight:400;font-size:19px;color:var(--gold);margin:0}
@@ -259,7 +260,7 @@ body.titlemode .hud,body.titlemode #touch,body.titlemode #lock{visibility:hidden
     <div class="tsub">멈춤의 저주와 별의 사다리</div>
     <nav class="tmenu" id="tmenu" aria-label="메인 메뉴">
       <button data-t="continue" id="tCont"><span>이어하기</span><small id="tSave">저장된 마을이 없어요</small></button>
-      <button data-t="new"><span>새 게임</span><small>프롤로그부터 시작해요</small></button>
+      <button data-t="new"><span>새 게임</span><small>슬롯을 골라 프롤로그부터 시작해요</small></button>
       <button data-t="howto"><span>조작 방법</span></button>
       <button data-t="settings"><span>설정</span></button>
     </nav>
@@ -428,9 +429,9 @@ const CRAFT=[
   {g:'공장',id:'conveyor',q:3,in:{iron_plate:1},insp:'iron_plate'},
   {g:'공장',id:'ramp',q:2,in:{iron_plate:2,iron_rod:1},insp:'iron_rod'},
   {g:'공장',id:'miner',in:{iron_plate:8,stone:10},insp:'iron_plate'},
-  {g:'공장',id:'smelter',in:{iron_rod:5,stone:8},insp:'iron_rod'},
-  {g:'공장',id:'maker',in:{iron_plate:6,iron_rod:6},insp:'iron_rod'},
-  {g:'공장',id:'burner',in:{iron_plate:6,iron_rod:4},insp:'iron_rod'},
+  {g:'공장',id:'smelter',in:{iron_rod:5,stone:8},insp:'iron_plate'},
+  {g:'공장',id:'maker',in:{iron_plate:6,iron_rod:6},insp:'iron_plate'},
+  {g:'공장',id:'burner',in:{iron_plate:6,iron_rod:4},insp:'iron_plate'},
   {g:'공장',id:'splitter',in:{iron_plate:2,iron_rod:2},ms:1},
   {g:'공장',id:'assembler',in:{iron_plate:12,screw:30,cable:10},ms:2},
   {g:'공장',id:'coalgen',in:{iron_plate:15,rotor:3,cable:8},ms:2},
@@ -2027,7 +2028,6 @@ $('panel').addEventListener('click',e=>{
     case 'hubtake':{const id=b.dataset.id,n=Math.min(50,S.hub[id]||0);if(n){S.hub[id]-=n;give(id,n)}refreshMachine(true);break}
     case 'elevdep':{let n=0;for(const k in ELEV_NEED){const d=Math.min(cnt(k),ELEV_NEED[k]-(en.st[k]||0));if(d>0){S.inv[k]-=d;en.st[k]=(en.st[k]||0)+d;n+=d}}hotDirty=true;toast(n?`${n}개를 넣었어요`:'가방에 필요한 부품이 없어요',n?'good':'bad');refreshMachine(true);break}
     case 'replay':closeModal();playStory('prologue');break;
-    case 'newyes':try{localStorage.removeItem(SAVE_KEY)}catch(_){}closeModal();newGame();break;
   }
 });
 function eatBerry(){if(cnt('berry')<=0){toast('베리가 없어요','bad');return}if(S.hp>=100){toast('기운이 넘쳐요');return}S.inv.berry--;S.hp=Math.min(100,S.hp+15);popText(P.x,P.y+2.2,P.z,'+15','#7dff9a');hotDirty=true;sfx('heart')}
@@ -2035,16 +2035,23 @@ function eatBerry(){if(cnt('berry')<=0){toast('베리가 없어요','bad');retur
 // ============================================================ save / load
 function rle(a){const out=[];let cur=a[0],n=0;for(let i=0;i<a.length;i++){if(a[i]===cur)n++;else{out.push(cur.toString(36)+'.'+n.toString(36));cur=a[i];n=1}}out.push(cur.toString(36)+'.'+n.toString(36));return out.join(',')}
 function unrle(s,a){let p=0;for(const tok of s.split(',')){const[x,y]=tok.split('.'),v=parseInt(x,36),n=parseInt(y,36);a.fill(v,p,p+n);p+=n}}
+let curSlot=1;
+const slotKey=n=>SAVE_KEY+'-slot'+n;
+function migrateLegacy(){try{const old=localStorage.getItem(SAVE_KEY);if(old&&!localStorage.getItem(slotKey(1))){localStorage.setItem(slotKey(1),old);const m=localStorage.getItem(SAVE_KEY+'-meta');if(m)localStorage.setItem(slotKey(1)+'-meta',m)}if(old){localStorage.removeItem(SAVE_KEY);localStorage.removeItem(SAVE_KEY+'-meta')}}catch(e){}}
+function slotMeta(n){try{const m=JSON.parse(localStorage.getItem(slotKey(n)+'-meta')||'null');if(m)return m;if(localStorage.getItem(slotKey(n)))return{day:'?',lv:'?',obj:0,ts:0}}catch(e){}return null}
+function latestSlot(){let best=0,bt=-1;for(let n=1;n<=3;n++){const m=slotMeta(n);if(m&&(m.ts||0)>bt){bt=m.ts||0;best=n}}return best}
+function deleteSlot(n){try{localStorage.removeItem(slotKey(n));localStorage.removeItem(slotKey(n)+'-meta')}catch(e){}}
 function save(quiet){
   if(!S||S.bg)return;
+  const SAVE_KEY=slotKey(curSlot);
   try{localStorage.setItem(SAVE_KEY+'-meta',JSON.stringify({day:S.day,lv:S.lv,obj:S.obj,won:S.won,ts:Date.now()}));const data={v:3,S,vox:rle(vox),ents:[...ents],P:[P.x,P.y,P.z],cam:[camYaw,camPitch,camDist]};
-    localStorage.setItem(SAVE_KEY,JSON.stringify(data,(k,v)=>k[0]==='_'||k==='task'?undefined:v));if(!quiet)toast('저장했어요','good')}
+    localStorage.setItem(SAVE_KEY,JSON.stringify(data,(k,v)=>k[0]==='_'||k==='task'?undefined:v));if(!quiet)toast(`슬롯 ${curSlot}에 저장했어요`,'good')}
   catch(e){if(!quiet)toast('이 환경에서는 저장할 수 없어요','bad')}
 }
-function load(){
-  try{const raw=localStorage.getItem(SAVE_KEY);if(!raw)return false;const d=JSON.parse(raw);if(d.v!==3)return false;
+function load(n){
+  try{const raw=localStorage.getItem(slotKey(n));if(!raw)return false;const d=JSON.parse(raw);if(d.v!==3)return false;
     unrle(d.vox,vox);ents.clear();for(const[i,e]of d.ents)ents.set(i,e);S=d.S;[P.x,P.y,P.z]=d.P;[camYaw,camPitch,camDist]=d.cam;
-    for(const v of S.villagers){v.task=null;v.sleeping=false}afterLoad();return true}
+    for(const v of S.villagers){v.task=null;v.sleeping=false}curSlot=n;afterLoad();return true}
   catch(e){console.warn(e);return false}
 }
 function afterLoad(){
@@ -2170,7 +2177,9 @@ if(isCoarse)enableTouch();
 
 // ============================================================ title screen
 let titleOpen=false,tView='menu';
-function saveMeta(){try{const m=JSON.parse(localStorage.getItem(SAVE_KEY+'-meta')||'null');if(m)return m;if(localStorage.getItem(SAVE_KEY))return{day:'?',lv:'?',obj:0}}catch(e){}return null}
+function slotDesc(m){const o=OBJ[m.obj];return`${m.day}일차 · ${m.won?'에필로그':o?`제${o.ch}장 ${CHAPTERS[o.ch]}`:'에필로그'} · 마을 Lv.${m.lv}`}
+function agoText(ts){if(!ts)return'';const s=(Date.now()-ts)/1000;return s<60?'방금 저장':s<3600?`${Math.floor(s/60)}분 전`:s<86400?`${Math.floor(s/3600)}시간 전`:`${Math.floor(s/86400)}일 전`}
+let tSlot=0;
 function showTitle(){
   titleOpen=true;document.body.classList.add('titlemode');$('title').hidden=false;if(modal.kind)closeModal();
   if(locked&&document.exitPointerLock)document.exitPointerLock();$('dialog').hidden=true;leftHeld=rightHeld=false;tch=null;mine=null;joyV={x:0,y:0};for(const k in keys)keys[k]=false;
@@ -2178,9 +2187,8 @@ function showTitle(){
 }
 function hideTitle(){titleOpen=false;document.body.classList.remove('titlemode');$('title').hidden=true;updLockUI()}
 function titleView(v){
-  tView=v;const m=saveMeta(),hasSave=!!m&&!(S&&S.bg&&!localStorage.getItem(SAVE_KEY));
-  $('tCont').disabled=!hasSave;
-  if(m){const o=OBJ[m.obj];$('tSave').textContent=`${m.day}일차 · ${m.won?'에필로그':o?`제${o.ch}장 ${CHAPTERS[o.ch]}`:'에필로그'} · 마을 Lv.${m.lv}`}else $('tSave').textContent='저장된 마을이 없어요';
+  tView=v;const ls=latestSlot(),lm=ls?slotMeta(ls):null;
+  $('tCont').disabled=!ls;$('tSave').textContent=lm?`최근: 슬롯 ${ls} · ${slotDesc(lm)}`:'저장된 마을이 없어요';
   const pn=$('tpanel');$('tmenu').hidden=v!=='menu';pn.hidden=v==='menu';
   if(v==='howto')pn.innerHTML=`<h3>조작 방법</h3>${controlsHTML()}<button class="tb" data-t="back"><span>돌아가기</span></button>`;
   if(v==='settings')pn.innerHTML=`<h3>설정</h3>
@@ -2188,8 +2196,16 @@ function titleView(v){
     <div class="setrow"><label for="sSens">시점 감도</label><input id="sSens" type="range" min="0.4" max="2" step="0.1" value="${SET.sens}"></div>
     <div class="setrow"><span>그래픽</span><button class="tog ${SET.quality==='high'?'on':''}" data-s="quality">${SET.quality==='high'?'선명하게':'가볍게'}</button></div>
     <button class="tb" data-t="back"><span>돌아가기</span></button>`;
-  if(v==='confirm')pn.innerHTML=`<h3>새 게임</h3><p class="sub">저장된 마을(${$('tSave').textContent})이 지워지고, 새로운 땅에서 프롤로그부터 시작해요.</p>
-    <button class="tb" data-t="newyes"><span>새로 시작</span></button><button class="tb" data-t="back"><span>취소</span></button>`;
+  if(v==='load'||v==='new'||v==='del'){
+    const head={load:'이어할 슬롯',new:'새 게임을 시작할 슬롯',del:'지울 슬롯'}[v];let h=`<h3>${head}</h3>`;
+    for(let n=1;n<=3;n++){const m=slotMeta(n),dis=(v!=='new'&&!m)?'disabled':'';
+      h+=`<button class="tb slot-${n}" data-t="slot" data-n="${n}" ${dis}><span>슬롯 ${n}${m&&n===curSlot&&!S.bg?' · 지금 마을':''}</span><small>${m?`${slotDesc(m)}${m.ts?' · '+agoText(m.ts):''}`:'비어 있음'}</small></button>`}
+    if(v==='load')h+=`<button class="tb" data-t="del"><span>슬롯 지우기</span></button>`;
+    h+=`<button class="tb" data-t="back"><span>돌아가기</span></button>`;pn.innerHTML=h}
+  if(v==='confirm'){const m=slotMeta(tSlot);pn.innerHTML=`<h3>슬롯 ${tSlot}에 새 게임</h3><p class="sub">슬롯 ${tSlot}의 마을(${m?slotDesc(m):''})이 지워지고, 새로운 땅에서 프롤로그부터 시작해요.</p>
+    <button class="tb" data-t="newyes"><span>지우고 새로 시작</span></button><button class="tb" data-t="new"><span>취소</span></button>`}
+  if(v==='delconfirm'){const m=slotMeta(tSlot);pn.innerHTML=`<h3>슬롯 ${tSlot} 지우기</h3><p class="sub">${m?slotDesc(m):''} 마을이 영영 사라져요. 정말 지울까요?</p>
+    <button class="tb" data-t="delyes"><span>지우기</span></button><button class="tb" data-t="continue"><span>취소</span></button>`}
   const sl=$('sSens');if(sl)sl.addEventListener('input',()=>{SET.sens=+sl.value;saveSettings()});
   const items=titleItems();setTSel(items.findIndex(b=>!b.disabled));
 }
@@ -2199,22 +2215,28 @@ function setTSel(k){const items=titleItems();if(!items.length)return;tSel=(k+ite
 function titleMove(d){const items=titleItems();for(let n=0;n<items.length;n++){const k=(tSel+d*(n+1)+items.length*4)%items.length;if(!items[k].disabled){setTSel(k);sfx('pop');return}}}
 function titleAct(t){
   ensureAudio();sfx('place');
-  if(t==='continue'){if(S.bg)return;hideTitle();if(!isTouch&&!cursorMode)requestLock();const o=OBJ[S.obj];setTimeout(()=>toast(o?`이어서: ${o.t}`:'마을과 공장을 마음껏 키워 보세요','gold'),500);return}
-  if(t==='new'){if(saveMeta()&&localStorage.getItem(SAVE_KEY)){titleView('confirm');return}t='newyes'}
-  if(t==='newyes'){try{localStorage.removeItem(SAVE_KEY);localStorage.removeItem(SAVE_KEY+'-meta')}catch(_){}hideTitle();newGame(true);return}
+  if(t==='continue'){titleView('load');return}
+  if(t==='new'){titleView('new');return}
+  if(t==='del'){titleView('del');return}
+  if(t==='slot'){const n=tSlot;
+    if(tView==='load'){if(n!==curSlot||S.bg){if(!load(n)){toast('불러오지 못했어요','bad');return}}hideTitle();if(!isTouch&&!cursorMode)requestLock();const o=OBJ[S.obj];setTimeout(()=>toast(`슬롯 ${n} · ${o?'이어서: '+o.t:'마을과 공장을 마음껏 키워 보세요'}`,'gold'),500);return}
+    if(tView==='new'){if(slotMeta(n)){titleView('confirm');return}curSlot=n;hideTitle();newGame(true);return}
+    if(tView==='del'){titleView('delconfirm');return}}
+  if(t==='newyes'){deleteSlot(tSlot);curSlot=tSlot;hideTitle();newGame(true);return}
+  if(t==='delyes'){deleteSlot(tSlot);if(tSlot===curSlot&&!S.bg){const ls=latestSlot();if(!(ls&&load(ls)))newGame(false)}toast(`슬롯 ${tSlot}을 지웠어요`);titleView(latestSlot()?'load':'menu');return}
   if(t==='howto'||t==='settings'){titleView(t);return}
   if(t==='back'){titleView('menu');return}
 }
 $('title').addEventListener('click',e=>{
   const s=e.target.closest('[data-s]');if(s){ensureAudio();if(s.dataset.s==='sound')SET.sound=!SET.sound;else SET.quality=SET.quality==='high'?'low':'high';saveSettings();applySettings();titleView('settings');sfx('pop');return}
-  const b=e.target.closest('[data-t]');if(!b||b.disabled)return;titleAct(b.dataset.t);
+  const b=e.target.closest('[data-t]');if(!b||b.disabled)return;if(b.dataset.n)tSlot=+b.dataset.n;titleAct(b.dataset.t);
 });
 $('title').addEventListener('mousemove',e=>{const b=e.target.closest('.tmenu button,.tpanel .tb');if(!b||b.disabled)return;const k=titleItems().indexOf(b);if(k>=0&&k!==tSel)setTSel(k)});
 function titleKey(e){
   if(e.code==='ArrowDown'||e.code==='KeyS'){titleMove(1);return}
   if(e.code==='ArrowUp'||e.code==='KeyW'){titleMove(-1);return}
   if(e.code==='Enter'||e.code==='Space'){const b=titleItems()[tSel];if(b&&!b.disabled)b.click();return}
-  if(e.code==='Escape'&&tView!=='menu')titleView('menu');
+  if(e.code==='Escape'&&tView!=='menu')titleView(tView==='confirm'?'new':tView==='delconfirm'||tView==='del'?'load':'menu');
 }
 function titleCamera(){
   const c=S.banner?{x:S.banner.x+.5,y:S.banner.y+2,z:S.banner.z+.5}:S.ruin?{x:S.ruin.x+.5,y:S.ruin.y+3,z:S.ruin.z+.5}:{x:48,y:14,z:48};
@@ -2344,8 +2366,8 @@ function frame(now){
 }
 addEventListener('error',e=>{if(!frame.err2){frame.err2=1;toast('오류: '+e.message,'bad')}});
 resize();
-applySettings();
-if(!load())newGame(false);
+applySettings();migrateLegacy();
+{const ls=latestSlot();if(!(ls&&load(ls)))newGame(false)}
 renderHotbar();updHUD();showTitle();
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(()=>{for(const k in iconCache)delete iconCache[k];hotDirty=true});
 addEventListener('beforeunload',()=>save(true));
