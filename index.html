@@ -565,6 +565,7 @@ const STORY={
     ['세라','작업대다! 오빠 오두막에도 이런 게 있었어요. 돛을 깁고, 노를 깎고.','player'],
     ['세라','저기 북쪽 곶 끝에 돌기둥 보여요? 저게 옛날 등대예요. 50년 전 폭풍에 무너졌대요. 그 뒤로 해마다 안개가 가까워졌고요.','ruin'],
     ['세라','해가 지면 안개가 짙어지고, 그 안에서 「안개 슬라임」이 기어 나와요. 그 전에 몸을 숨길 방이 필요해요. 벽은 두 칸 높이로 둘러싸고, 문 하나, 그리고 불빛!','player'],
+    ['세라','광장 둘레의 무너진 집터를 고쳐 써도 좋아요. 무너진 벽 틈을 메우고 출입구에 문만 달면 될 거예요.','village'],
   ],
   c1_night:[
     ['','해가 지자 안개가 숲 가장자리까지 밀려들었고, 그 속에서 젤리 같은 것들이 꿈틀거리기 시작했습니다.','player'],
@@ -629,7 +630,7 @@ const OBJ=[
    say:'안개가 물러났어요! 여기가 다시 우리 마을이에요. 우선 나무를 베어 볼까요?'},
   {ch:1,story:'c1_wood',t:'작업대를 만들어 설치하기',h:'가방(E)에서 작업대를 만들고 단축칸에서 골라 오른쪽 버튼으로 놓으세요.',ok:()=>countEnt('workbench')>0,
    say:'원목이다! 작업대가 있으면 그 근처에서 이것저것 만들 수 있어요.'},
-  {ch:1,story:'c1_bench',t:'첫 방 만들기',h:'마을 구역 안을 2칸 높이 벽으로 둘러싸고, 나무 문 하나와 횃불 하나를 안에 두세요. 횃불엔 석탄이 필요해요. 검은 점박이 돌을 캐 보세요.',ok:()=>rooms.length>0,
+  {ch:1,story:'c1_bench',t:'첫 방 만들기',h:'마을 구역 안을 2칸 높이 벽으로 둘러싸고, 나무 문 하나와 횃불 하나를 안에 두세요. 광장 둘레의 무너진 집터는 벽 틈만 메우고 출입구에 문을 달면 돼요. 횃불엔 석탄이 필요해요. 검은 점박이 돌을 캐 보세요.',ok:()=>rooms.length>0,
    say:'작업대 완성! 이제 지낼 방이 필요해요. 벽은 꼭 두 칸 높이로, 문과 횃불도 잊지 마세요!'},
   {ch:1,story:'c1_room',t:'하트를 모아 마을 레벨 2 만들기',h:'주민 머리 위에 뜬 하트에 다가가면 모여요. 하트가 차면 깃발을 오른쪽 버튼으로 눌러 레벨 업! 주민 부탁(!)을 들어주면 하트를 더 받아요.',ok:()=>S.lv>=2,
    say:'방이다! 고마워요, 마음이 따뜻해졌어요. 제 머리 위의 하트를 모아서 깃발에 바치면 마을이 자라요.'},
@@ -893,15 +894,17 @@ function genWorld(seed){
   for(let dz=-15;dz<=15;dz++)for(let dx=-15;dx<=15;dx++){if(dx*dx+dz*dz>225)continue;const X=rx+dx,Z=rz+dz;if(X<0||Z<0||X>=WX||Z>=WZ)continue;for(let y=1;y<WY;y++){const i=I(X,y,Z);if(vox[i]===LOG||vox[i]===LEAVES)vox[i]=A}}
   // the ruined village around the old plaza
   for(let dz=-2;dz<=2;dz++)for(let dx=-2;dx<=2;dx++)if(dx*dx+dz*dz<=6){const y=surfaceY(cx+dx,cz+dz)-1;vox[I(cx+dx,y,cz+dz)]=STONE}
-  const houses=[[0.4,10],[1.5,11],[2.6,10],[3.6,12],[4.9,10],[5.8,12]];
-  for(const[a,d]of houses){const x0=Math.round(cx+Math.cos(a)*d)-2,z0=Math.round(cz+Math.sin(a)*d)-2,by=surfaceY(x0+2,z0+2);
+  // ruined houses ring the plaza, close enough to sit inside the flag's town zone; each has a doorway facing the plaza
+  const houses=[[0,8.5],[2.3,8.5],[3.4,8.5],[4.5,8.5],[5.6,8.5]];
+  for(const[a,d]of houses){const hx=Math.round(cx+Math.cos(a)*d),hz=Math.round(cz+Math.sin(a)*d),x0=hx-2,z0=hz-2,by=surfaceY(hx,hz);
+    const ddx=cx-hx,ddz=cz-hz,doorX=Math.abs(ddx)>=Math.abs(ddz),dside=doorX?(ddx>0?4:0):(ddz>0?4:0);
     for(let dz=0;dz<5;dz++)for(let dx=0;dx<5;dx++){const x=x0+dx,z=z0+dz;
-      for(let y=by-3;y<by;y++)if(!BL[vox[I(x,y,z)]].solid)vox[I(x,y,z)]=DIRT;for(let y=by;y<by+6;y++)vox[I(x,y,z)]=A;
-      vox[I(x,by-1,z)]=R()<.5?PLANKS:DIRT;
-      const wall=dx===0||dz===0||dx===4||dz===4,door=dz===4&&dx===2;if(!wall||door)continue;
-      const corner=(dx===0||dx===4)&&(dz===0||dz===4),hh=corner?1+(R()*3|0):(R()<.3?0:1+(R()*2|0));
+      for(let y=by-3;y<by;y++)if(!BL[vox[I(x,y,z)]].solid||vox[I(x,y,z)]===WATER)vox[I(x,y,z)]=DIRT;for(let y=by;y<by+6;y++)vox[I(x,y,z)]=A;
+      vox[I(x,by-1,z)]=R()<.6?PLANKS:DIRT;
+      const wall=dx===0||dz===0||dx===4||dz===4,door=doorX?(dx===dside&&dz===2):(dz===dside&&dx===2);if(!wall||door)continue;
+      const corner=(dx===0||dx===4)&&(dz===0||dz===4),hh=corner?2+(R()*2|0):(R()<.35?(R()*2|0):2);
       for(let y=0;y<hh;y++)vox[I(x,by+y,z)]=corner?LOG:y===0&&R()<.5?STONE:PLANKS}
-    for(let k=0;k<4;k++){const x=x0-1+(R()*7|0),z=z0-1+(R()*7|0),y=surfaceY(x,z);if(vox[I(x,y,z)]===A&&y<by+2)vox[I(x,y,z)]=ROOF}}
+    for(let k=0;k<3;k++){const x=x0-1+(R()*7|0),z=z0-1+(R()*7|0),y=surfaceY(x,z);if(vox[I(x,y,z)]===A&&y<by+2&&!(x>=x0&&x<x0+5&&z>=z0&&z<z0+5))vox[I(x,y,z)]=ROOF}}
   // the wrecked boat on the southern beach, where the builder washes ashore
   let wz=cz;while(wz<WZ-2&&H[wz*WX+cx]>SEA)wz++;
   const bx=cx,bz=wz+1;
