@@ -257,7 +257,7 @@ body.titlemode .hud,body.titlemode #touch,body.titlemode #lock{visibility:hidden
   <div class="tvig"></div>
   <div class="tbox">
     <div class="logo"><img id="tIcon" alt=""><div><div class="l1">빌더즈</div><div class="l2">팩토리</div><div class="en">BUILDERS FACTORY</div></div></div>
-    <div class="tsub">부서진 대륙과 멈춤의 종</div>
+    <div class="tsub">안개의 바다와 대륙의 조각</div>
     <nav class="tmenu" id="tmenu" aria-label="메인 메뉴">
       <button data-t="continue" id="tCont"><span>이어하기</span><small id="tSave">저장된 마을이 없어요</small></button>
       <button data-t="new"><span>새 게임</span><small>슬롯을 골라 프롤로그부터 시작해요</small></button>
@@ -348,7 +348,7 @@ item('hammer_cu',{n:'구리 망치',sh:'hammer',c:'#e39150',tool:1,mine:1.7,d:'�
 item('hammer_fe',{n:'철 망치',sh:'hammer',c:'#cdd1d8',tool:1,mine:2.6,d:'부수는 속도 ×2.6'});
 
 const ENTS={
-  banner:{n:'희망의 깃발',solid:1,light:1,d:'마을의 중심. 주변이 마을 구역이 되고, 컨베이어로 부품을 받는 HUB 역할도 해요.'},
+  banner:{n:'마을 깃발',solid:1,light:1,d:'마을의 중심. 주변이 마을 구역이 되고, 컨베이어로 부품을 받는 HUB 역할도 해요.'},
   workbench:{n:'작업대',solid:1,d:'근처에서 대부분의 물건을 만들 수 있어요.'},
   torch:{n:'횃불',light:1,d:'방을 밝히는 조명. 빛 근처에는 몬스터가 생기지 않아요.'},
   bonfire:{n:'모닥불',light:1,d:'조명. 식탁과 함께 방에 두면 식당이 돼요.'},
@@ -368,7 +368,7 @@ const ENTS={
   assembler:{n:'조립기',solid:1,rot:1,power:15,recipes:['rplate','rotor','frame'],d:'재료 2종으로 고급 부품 조립. 전력 15MW.'},
   burner:{n:'바이오매스 발전기',solid:1,gen:30,fuel:'wood',ft:6,d:'원목을 태워 30MW.'},
   coalgen:{n:'석탄 발전기',solid:1,gen:80,fuel:'coal',ft:8,d:'석탄을 태워 80MW.'},
-  elevator:{n:'별의 사다리',solid:1,d:'옛 우주 엘리베이터. 모듈식 프레임·로터·케이블을 채우면 희망의 등불을 하늘로 보내요.'},
+  elevator:{n:'하늘 등대',solid:1,d:'안개 위까지 닿는 승강 탑(우주 엘리베이터). 모듈식 프레임·로터·케이블을 채우면 등불을 하늘로 보내요.'},
 };
 for(const k in ENTS)item(k,{n:ENTS[k].n,ent:k,d:ENTS[k].d});
 const FACT=new Set(['conveyor','conveyor2','ramp','splitter','miner','miner2','smelter','maker','assembler','burner','coalgen','chest']);
@@ -445,7 +445,7 @@ const CRAFT=[
 const MS=[
   {n:'기초 물류',need:{iron_plate:20,iron_rod:20},un:'분배기 · 철 망치'},
   {n:'부품 조립',need:{iron_plate:50,screw:100,cable:30,concrete:20},un:'조립기 · 석탄 발전기 · 강화 철판 · 로터'},
-  {n:'고급 생산',need:{rplate:15,rotor:10,concrete:60},un:'채굴기 Mk2 · 컨베이어 Mk2 · 모듈식 프레임 · 별의 사다리'},
+  {n:'고급 생산',need:{rplate:15,rotor:10,concrete:60},un:'채굴기 Mk2 · 컨베이어 Mk2 · 모듈식 프레임 · 하늘 등대'},
 ];
 const ELEV_NEED={frame:20,rotor:30,cable:100};
 
@@ -466,35 +466,34 @@ const ROOMTYPES=[
 ];
 const RT=Object.fromEntries(ROOMTYPES.map(r=>[r.id,r]));
 
-const LULU={name:'리아',pal:{body:0xe07aa8,hair:0x8a4b2a,band:0xffd66b},guide:1};
+const LULU={name:'세라',pal:{body:0x3d5f8a,hair:0x3a2418,band:0xf2f0e8},guide:1};
 const VILLAGERS=[
-  {name:'브리타',statue:1,intro:[
-    ['','깃발의 빛이 사다리 잔해까지 번지자, 모루 앞에 선 소녀의 잿빛 몸에 금이 가기 시작했습니다.','stat'],
-    ['브리타','—아빠! 불이, 불이 번져! 빨리 물을…!','stat'],
-    ['브리타','…어? 불이… 없어? 하늘이 왜 이렇게 파래? 리아, 너 왜 그렇게 쳐다봐?','stat'],
-    ['리아','브리타… 그날 밤 이후로, 아주 오랜 시간이 지났어.','stat'],
-    ['브리타','아빠는? 아빠는 바로 옆에 있었는데… 아빠! 왜 대답을 안 해…!','stat'],
-    ['리아','아저씨는… 아직 멈춰 있어. 하지만 빛이 더 커지면 분명 깨어날 거야. 빌더님이 그렇게 해 줄 거야.','stat'],
-    ['브리타','…알았어. 울고 있을 시간 없지. 대장장이 딸은 손이 쉬면 안 된댔어. 그런데 나 어디서 자? 대장간 바닥은 너무 차가운데.','player'],
-    ['리아','침대를 둔 방을 만들면 「침실」이 돼요. 빌더님, 부탁해요!','player']],pal:{body:0xd4574a,hair:0xf2d16b,band:0x3d6fd8},lines:['밤엔 슬라임이 와요. 횃불 근처는 비교적 안전해요!','침실이 있으면 다들 푹 잘 수 있어요.','저도 슬라임이랑 싸울 수 있다고요!']},
-  {name:'마르코',intro:['흠흠, 상인 마르코라고 해요. 물건을 나를 길이 다 끊겨서 장사를 접었었죠.','그런데 여기선 물건이 저절로 굴러간다면서요? 컨베이어라니, 상인의 꿈이에요!'],pal:{body:0x5aa36b,hair:0x3a2a1e,band:0xf2d16b},lines:['주민이 늘수록 공장도 신이 나서 빨라진대요.','분배기를 쓰면 한 줄의 컨베이어를 여러 기계에 나눌 수 있어요.','보관함은 앞쪽 컨베이어로 물건을 내보내요.']},
-  {name:'바르톨',intro:['에헴, 석공 바르톨일세. 젊을 적엔 별의 사다리 주춧돌도 깎았지.','손이 기억을 되찾고 있어. 설계도만 주게. 벽 쌓는 건 내가 맡지.'],pal:{body:0x7a6a5a,hair:0x222222,band:0xb8433a},lines:['돌은 석회암 노드에 채굴기를 놓아도 캘 수 있다네.','설계도를 놓고 보관함에 재료만 채워 두게. 우리가 지어 주지.','벽은 두 칸 높이여야 방으로 쳐 준다네.']},
-  {name:'테오',intro:['저는 테오예요. 할아버지가 옛 발전소에서 일하셨대요.','전기가 다시 흐르는 걸 보니 가슴이 뛰어요. 전력이라면 저한테 물어보세요!'],pal:{body:0x3d7fb8,hair:0xc4c9d4,band:0xf39a35},lines:['석탄 발전기는 바이오매스보다 훨씬 강력해요.','전력이 부족하면 모든 기계가 느려져요.','경사 컨베이어로 한 칸씩 올려 보낼 수 있어요.']},
-  {name:'시엘',intro:['시엘이에요. 어릴 때부터 무너진 사다리 끝을 올려다보는 게 버릇이었어요.','사다리가 다시 서면… 저도 별을 보러 갈 수 있을까요?'],pal:{body:0xa35bb3,hair:0xf0a0c0,band:0xffffff},lines:['서로 다른 종류의 방을 지으면 하트를 더 받을 수 있어요.','기계가 있는 방은 작은 공장이 돼서 기계가 빨라져요.','우주 엘리베이터… 언젠가 하늘까지 닿겠죠?']},
-  {name:'오스카',intro:['요리사 오스카예요! 밥 짓는 솜씨만큼은 멈춘 시간도 못 빼앗아 갔지요.','식당만 있으면 다들 배불리 먹여 드릴게요!'],pal:{body:0xc9a03c,hair:0x6b3f22,band:0x5aa36b},lines:['베리는 F키로 먹으면 체력이 회복돼요.','깃발에 쌓인 물건은 언제든 꺼내 쓸 수 있어요.','저 멀리엔 광맥 노드가 더 많대요.']},
+  {name:'카이',intro:[
+    ['','그날 오후, 북쪽 바닷가에서 한 소년이 젖은 그물을 끌고 마을로 들어왔습니다.','banner'],
+    ['카이','세라, 깃발이 다시 섰다는 게 정말이었네. …그리고 넌 누구야?','player'],
+    ['세라','카이! 이분은 빌더예요. 안개 너머에서 왔어요. 레온 오빠 배를 타고.','player'],
+    ['카이','…레온 배를? 웃기지 마. 레온은 안개에 먹혔어. 그 배가 돌아왔다면, 레온은 어디 있는데?','player'],
+    ['카이','…미안. 너한테 화낼 일은 아니지. 어젯밤 내 오두막이 안개에 먹혔어. 북쪽 바닷가가 통째로 하얘졌다고.','player'],
+    ['카이','갈 데가 없어. 여기서 좀 지내도 될까? 대신 물고기는 내가 잡을게.','player'],
+    ['세라','물론이지! 빌더님, 카이가 잘 곳이 필요해요. 침대를 둔 방을 만들면 「침실」이 돼요!','player']],pal:{body:0x2f7a78,hair:0x1e1a16,band:0xd8c49a},lines:['밤엔 안개가 짙어져. 횃불 곁을 떠나지 마.','레온은 노 젓는 것도 나보다 빨랐어. …분해서 하는 말 아냐.','슬라임쯤은 나도 상대할 수 있어!']},
+  {name:'마르코',intro:['흠흠, 마르코라고 해요. 섬 남쪽 끝에서 혼자 잡화를 팔았죠. 손님이 없어서 접었지만요.','그런데 여기선 물건이 저절로 굴러간다면서요? 컨베이어라니, 장사꾼의 꿈이에요!'],pal:{body:0x5aa36b,hair:0x3a2a1e,band:0xf2d16b},lines:['주민이 늘수록 공장도 신이 나서 빨라진대요.','분배기를 쓰면 한 줄의 컨베이어를 여러 기계에 나눌 수 있어요.','보관함은 앞쪽 컨베이어로 물건을 내보내요.']},
+  {name:'바르톨',intro:['에헴, 석공 바르톨일세. 젊을 적엔 무너지기 전의 등대 돌도 깎았지.','다시 망치를 들 날이 올 줄이야. 설계도만 주게. 벽 쌓는 건 내가 맡지.'],pal:{body:0x7a6a5a,hair:0x222222,band:0xb8433a},lines:['돌은 석회암 노드에 채굴기를 놓아도 캘 수 있다네.','설계도를 놓고 보관함에 재료만 채워 두게. 우리가 지어 주지.','벽은 두 칸 높이여야 방으로 쳐 준다네.']},
+  {name:'테오',intro:['저는 테오예요. 할아버지가 옛날 섬의 풍차 방앗간을 돌리셨대요.','기계가 다시 도는 걸 보니 가슴이 뛰어요. 전력이라면 저한테 물어보세요!'],pal:{body:0x3d7fb8,hair:0xc4c9d4,band:0xf39a35},lines:['석탄 발전기는 바이오매스보다 훨씬 강력해요.','전력이 부족하면 모든 기계가 느려져요.','경사 컨베이어로 한 칸씩 올려 보낼 수 있어요.']},
+  {name:'시엘',intro:['시엘이에요. 어릴 때부터 등대 언덕에서 안개 너머를 바라보는 게 버릇이었어요.','언젠가… 저도 저 너머에 가 볼 수 있을까요?'],pal:{body:0xa35bb3,hair:0xf0a0c0,band:0xffffff},lines:['서로 다른 종류의 방을 지으면 하트를 더 받을 수 있어요.','기계가 있는 방은 작은 공장이 돼서 기계가 빨라져요.','우주 엘리베이터… 언젠가 하늘까지 닿겠죠?']},
+  {name:'오스카',intro:['요리사 오스카예요! 생선 요리라면 섬에서 제일이지요.','식당만 있으면 다들 배불리 먹여 드릴게요!'],pal:{body:0xc9a03c,hair:0x6b3f22,band:0x5aa36b},lines:['베리는 F키로 먹으면 체력이 회복돼요.','깃발에 쌓인 물건은 언제든 꺼내 쓸 수 있어요.','저 멀리엔 광맥 노드가 더 많대요.']},
 ];
 // villager requests (DQB "부탁")
 const REQS={
-  '리아':[
+  '세라':[
     {k:'give',item:'berry',n:3,t:'배가 고파요… 베리 3개만 나눠 줄래요?',h:8},
     {k:'ent',ent:'chest',n:1,t:'물건 둘 곳이 필요해요. 마을에 보관함을 하나 놓아 줄래요?',h:8},
     {k:'ent',ent:'torch',n:4,t:'밤이 무서워요. 마을에 횃불을 4개 놓아 주세요.',h:10},
     {k:'deliver',item:'iron_plate',n:20,t:'공장에서 만든 철판을 컨베이어로 깃발에 20개 보내 줄래요?',h:15},
   ],
-  '브리타':[
-    {k:'room',room:'kitchen',t:'다 같이 밥 먹을 식당이 있으면 좋겠어요! 모닥불과 식탁이 있는 방이요.',h:15},
-    {k:'block',b:ROOF,n:10,t:'지붕이 있는 집이 멋지잖아요. 붉은 기와를 10개 얹어 주세요!',h:12},
-    {k:'kill',n:6,t:'슬라임이 너무 많아요… 6마리만 물리쳐 주세요.',h:12},
+  '카이':[
+    {k:'room',room:'kitchen',t:'잡은 생선을 다 같이 먹을 식당이 있으면 좋겠어. 모닥불과 식탁이 있는 방!',h:15},
+    {k:'block',b:ROOF,n:10,t:'내 오두막은 지붕부터 날아갔거든. 붉은 기와를 10개 얹어 줘.',h:12},
+    {k:'kill',n:6,t:'안개 슬라임이 너무 많아. 6마리만 같이 잡자.',h:12},
   ],
   '마르코':[
     {k:'deliver',item:'screw',n:100,t:'나사가 잔뜩 필요해요. 컨베이어로 깃발에 100개!',h:15},
@@ -520,128 +519,124 @@ const REQS={
   ],
 };
 
-const CHAPTERS={1:'멈춘 들판',2:'개척 기록',3:'개척 기록',4:'개척 기록'};
+const CHAPTERS={1:'안개 끝의 섬',2:'개척 기록',3:'개척 기록',4:'개척 기록'};
 const STORY_CH=1; // chapters with written story (later chapters: objectives only, story in preparation)
 // story scenes: [speaker ('' = narration), text, camera]
-const VOICE='별의 목소리',STILL='멈춤의 왕';
+const VOICE='안개 속의 목소리',STILL='안개의 주인';
 const STORY={
   prologue:[
-    ['','옛날, 아르테라는 하나로 이어진 커다란 대륙이었습니다.','ruin'],
-    ['','사람들은 무엇이든 만들 줄 알았고, 대륙 한가운데에는 하늘에 닿는 「별의 사다리」가 서 있었지요.','ruin'],
-    ['','그러던 어느 밤, 온 세상에 맑은 종소리가 울려 퍼졌습니다.','ruin'],
-    [STILL,'…멈추어라. 슬픔도, 기쁨도, 모든 것이 그 자리에서.','ruin'],
-    ['','종소리가 지나간 자리마다 시간이 멈췄습니다. 대륙은 산산이 부서져 흩어졌고, 조각마다 그날 밤의 한순간이 그대로 갇혀 버렸습니다.','ruin'],
-    ['','바람도 불지 않고, 해도 움직이지 않는 잿빛 들판. 그곳에서—','ruin'],
-    [VOICE,'…들리나요? 눈을 뜨세요, 빌더여.','player'],
-    [VOICE,'멈춘 세상에서 움직일 수 있는 건 무언가를 「만드는 손」뿐입니다. 당신의 손이 그 마지막 하나예요.','player'],
-    [VOICE,'부서진 땅을 하나씩 돌아보세요. 멈춘 시간을 다시 흐르게 하고, 흩어진 대륙을 다시 이어 주세요.','player'],
+    ['','세상에는 섬이 하나뿐이라고, 오르네섬 사람들은 믿었습니다.','ruin'],
+    ['','섬을 둘러싼 것은 끝없는 흰 안개. 안개 너머로 나간 배는 돌아오지 않았고, 사람들은 언젠가부터 바다 너머를 궁금해하지 않게 되었습니다.','ruin'],
+    ['','그런데 해마다 조금씩, 안개는 섬 가장자리를 먹어 들어오고 있었습니다. 50년 전 언덕 위의 등대가 무너진 뒤로는 더욱.','ruin'],
+    ['','그리고 어느 아침— 안개 속에서 부서진 배 한 척이 떠밀려 왔습니다.','player'],
+    ['세라','사람이다…! 저기요, 정신 차려요! …다행이다, 숨은 쉬고 있어.','player'],
   ],
   lulu:[
-    ['리아','…움직였어. 지금 움직였죠? 꿈 아니죠?','player'],
-    ['리아','미안해요, 너무 오랜만이라서. 이 들판에서 저 말고 움직이는 사람은 처음 봐요.','player'],
-    ['리아','저는 리아예요. 저 너머 무너진 사다리 옆이 우리 마을이었어요. 그날 밤 종소리가 울린 뒤로… 다들 돌처럼 멈춰 버렸어요.','player'],
-    ['리아','저만 할아버지 공방 지하실에 있어서 멀쩡했대요. 그 뒤로 얼마나 지났는지도 몰라요. 해가 한 번도 지지 않았거든요.','player'],
-    ['리아','그 깃발… 할아버지가 말한 「희망의 깃발」이죠? 멈춘 땅에 꽂으면 시간이 다시 흐른다던. 부탁이에요, 여기에 꽂아 주세요.','player'],
+    ['세라','깨어났어요? 저는 세라예요. 이 섬 등대지기 집 딸이에요. 등대는 무너진 지 오래지만요.','player'],
+    ['세라','당신, 안개 너머에서 왔죠? …말도 안 돼. 안개 밖엔 아무것도 없다고 다들 그러는데.','player'],
+    ['세라','그리고 이 배… 돛에 수놓인 등대 문양, 내가 놓은 거예요. 이건 레온 오빠 배야. 3년 전에 안개 너머를 보고 오겠다며 떠난.','player'],
+    ['세라','기억이 안 난다고요? 손에 쥔 건… 망치랑, 낡은 지도 조각? 이런 모양의 땅은 이 섬 어디에도 없는데.','player'],
+    ['세라','…일단 마을로 가요. 거의 다 무너졌지만요. 이건 우리 집에 남아 있던 마을 깃발이에요. 마을이 살아 있을 땐 늘 광장에 서 있었대요. 당신이 세워 줄래요?','player'],
   ],
   c1_banner:[
-    ['','깃발이 땅에 꽂히는 순간, 깃대 끝에서 따뜻한 빛이 둥글게 퍼져 나갔습니다.','banner'],
-    ['','멈춰 있던 풀잎이 흔들리고, 구름이 천천히 흘러가기 시작했습니다. 아주 오랜만에, 해가 움직였습니다.','banner'],
-    ['리아','바람이… 불어요. 바람 냄새가 이랬구나.','banner'],
-    [VOICE,'깃발의 빛이 닿는 곳에서만 시간이 흐릅니다. 마을을 일구어 빛을 넓히면, 멈춘 것들도 다시 움직일 수 있을 거예요.','banner'],
-    ['리아','그럼… 우리 마을 사람들도요? 좋아요. 우선 살 곳부터 만들어요. 나무가 필요해요!','player'],
+    ['','깃발이 바람을 받아 펄럭이자, 마을을 덮고 있던 안개가 천천히 물러났습니다.','banner'],
+    ['세라','봤어요? 안개가 물러났어! …할머니 말이 맞았나 봐요. 「사람이 손을 놓은 곳부터 안개가 먹어 들어온다」던.','banner'],
+    ['세라','이 마을, 옛날엔 집이 서른 채도 넘었대요. 지금은 다 무너지고 저 혼자 사는 거나 마찬가지예요. 고칠 줄 아는 사람이 아무도 없었거든요.','player'],
+    ['세라','당신이라면 할 수 있을 것 같아요. 우선 나무부터! 숲에서 나무를 베어 와요.','player'],
   ],
   c1_wood:[
-    ['리아','빌더님, 잠깐 같이 가요. 보여 드릴 게 있어요.','player'],
-    ['','사다리 잔해 곁에, 잿빛으로 굳은 사람들이 그날 밤의 모습 그대로 서 있었습니다.','stat'],
-    ['리아','창을 든 사람은 마을 파수꾼 아저씨. 저쪽은 아기를 안은 아주머니. 모루 앞에 선 건 대장장이 아저씨랑 딸 브리타예요.','stat'],
-    ['리아','다들 무언가에 놀란 얼굴이죠. 그날 밤 무슨 일이 있었는지, 저도 몰라요.','stat'],
-    [VOICE,'새로운 재료를 손에 쥐면, 그것으로 무엇을 만들 수 있는지 떠오를 거예요. 빌더의 힘, 「번뜩임」입니다. 지금 떠오른 작업대를 만들어 보세요.','player'],
+    ['세라','와, 손이 정말 빠르네요. 오빠도 배를 고칠 땐 저렇게 손이 빨랐는데.','player'],
+    ['세라','…그런 눈으로 보지 마요. 오빠 얘기는 괜찮아요. 3년이나 지났는걸.','player'],
+    ['','그때 빌더의 머릿속에 무언가가 번뜩 떠올랐습니다. 손에 쥔 원목으로 만들 수 있는 것의 모양이.','player'],
+    ['세라','응? 뭔가 떠올랐어요? 「작업대」? 좋아요, 만들어 봐요!','player'],
   ],
   c1_bench:[
-    ['리아','작업대… 할아버지 공방에도 있었어요. 할아버지는 별의 사다리를 돌보던 마지막 기술자였어요.','player'],
-    ['리아','그날 밤 할아버지는 저를 지하실로 밀어 넣고 문을 잠그셨어요. 「무슨 소리가 나도 나오지 마라」 하고요.','player'],
-    ['리아','그리고 종소리가 들렸어요. 문을 열고 나왔을 땐… 아무것도 움직이지 않았어요. 할아버지는 어디에도 없었고요.','player'],
-    ['리아','…밤이 다시 오면 그날처럼 슬라임이 나올지도 몰라요. 해가 지기 전에 몸을 숨길 방을 만들어요. 벽은 두 칸 높이로, 문 하나, 그리고 불빛!','player'],
+    ['세라','작업대다! 오빠 오두막에도 이런 게 있었어요. 돛을 깁고, 노를 깎고.','player'],
+    ['세라','저기 언덕 위 돌무더기 보여요? 저게 옛날 등대예요. 50년 전 폭풍에 무너졌대요. 그 뒤로 해마다 안개가 가까워졌고요.','ruin'],
+    ['세라','해가 지면 안개가 짙어지고, 그 안에서 「안개 슬라임」이 기어 나와요. 그 전에 몸을 숨길 방이 필요해요. 벽은 두 칸 높이로 둘러싸고, 문 하나, 그리고 불빛!','player'],
   ],
   c1_night:[
-    ['','해가 지자, 어둠 속에서 젤리처럼 반짝이는 눈들이 하나둘 떠올랐습니다.','player'],
-    ['리아','저것들… 그날 밤에도 마을로 몰려왔었어요. 불길 속에서, 저 눈들이 반짝였던 게 기억나요.','player'],
-    [VOICE,'멈춤의 왕의 졸개들은 빛을 싫어합니다. 횃불과 깃발 가까이에는 함부로 생겨나지 못해요.','player'],
-    ['리아','불길…? 맞아요, 그날 밤 마을에 불이 났었어요. 왜 지금껏 잊고 있었지…','player'],
+    ['','해가 지자 안개가 숲 가장자리까지 밀려들었고, 그 속에서 젤리 같은 것들이 꿈틀거리기 시작했습니다.','player'],
+    ['세라','안개 슬라임이에요. 불빛을 싫어하니까, 횃불 곁을 떠나지 마요.','player'],
+    ['세라','오빠가 떠나던 밤도 이렇게 안개가 짙었어요. 「등대가 없으니 내가 직접 보고 오겠다」면서…','player'],
   ],
   c1_room:[
-    ['리아','벽이 있고, 문이 있고, 불이 켜져 있어요. …이게 「방」이구나.','player'],
-    ['리아','이상하죠. 지하실에서 나온 뒤로 한 번도 마음 놓고 쉰 적이 없었는데, 지금은 가슴이 따뜻해요.','player'],
-    [VOICE,'그 따뜻함이 「감사의 하트」입니다. 하트를 깃발에 바치면 마을이 자라고, 빛도 더 멀리 닿지요.','banner'],
-    [VOICE,'빛이 저 돌이 된 사람들에게까지 닿는다면… 누군가는 깨어날지도 모릅니다.','stat'],
+    ['세라','벽이 있고, 문이 있고, 불이 켜져 있어요. …이게 「방」이구나. 바람 한 점 안 들어와요.','player'],
+    ['세라','이상하다. 오빠가 떠난 뒤로 이렇게 마음이 놓인 건 처음이에요.','player'],
+    ['','세라의 머리 위로 작은 하트가 떠올랐습니다. 누군가 진심으로 고마워할 때 피어나는 마음의 빛입니다.','player'],
+    ['세라','하트를 모아서 깃발에 바치면 마을이 자란대요. 마을이 커지면… 섬 여기저기 흩어진 사람들도 돌아올지 몰라요.','banner'],
+  ],
+  c1_bed:[
+    ['카이','침대다… 진짜 침대에서 자 보는 거, 몇 년 만이지.','player'],
+    ['카이','야, 빌더. 너 정말 안개 너머에서 왔으면… 그 지도, 나도 좀 보자.','player'],
+    ['카이','이 해안선… 등대 언덕에서 북쪽을 보면 딱 이런 모양일 거야. 근데 그쪽엔 안개뿐인데.','player'],
+    ['세라','등대…! 옛날엔 등대 불빛이 안개를 갈랐대요. 그 불을 다시 켜면, 안개 너머가 보일지도 몰라요.','ruin'],
+    ['카이','무너진 등대 꼭대기까지 올라가서 불을 켜자고? …좋아. 미친 소리지만, 레온이라면 벌써 올라갔을 거야.','ruin'],
   ],
   c1_end:[
-    ['','그날 밤, 새로 지은 침실에 처음으로 등불이 켜졌습니다.','banner'],
-    ['브리타','리아, 나 생각났어. 그날 밤 불을 낸 건 슬라임 떼였어. 사다리 쪽에서 몰려와서…','banner'],
-    ['브리타','그리고 불길이 마을을 다 삼키려던 순간, 사다리 꼭대기에서 종소리가 울렸어. 그다음은 기억이 안 나.','banner'],
-    ['리아','사다리 꼭대기… 할아버지가 일하던 곳이야.','banner'],
-    ['','두 사람과 빌더는 횃불을 들고 사다리 잔해를 올려다보았습니다. 부서진 기둥 꼭대기에, 낡은 종 하나를 끌어안은 노인이 잿빛으로 굳어 있었습니다.','bell'],
-    ['리아','할아버지…!','bell'],
-    [VOICE,'저 종은 「멈춤의 종」. 멈춤의 왕이 세상에 뿌린 종 가운데 하나입니다.','bell'],
-    [VOICE,'아마 불길이 마을을 삼키려던 그 순간, 그는 선택했겠지요. 모두가 불타는 것보다, 모두가 멈추는 쪽을.','bell'],
-    ['리아','…할아버지가 우리를 멈추게 한 거예요? 우리를 지키려고?','ruin'],
-    [VOICE,'그리고 멈춤의 왕은 그 종소리를 빌미로, 이 땅을 대륙에서 떼어 내 버렸습니다. 다른 땅들도 저마다의 종소리에 묶여 있을 거예요.','ruin'],
-    ['리아','그럼 할아버지를 깨우려면…','ruin'],
-    [VOICE,'종을 깨뜨리는 것만으로는 안 됩니다. 멈춘 시간 속의 불길도 함께 깨어나니까요. 불을 이겨낼 만큼 마을이 강해져야 해요. 그리고 다른 땅의 종들도 찾아야 합니다.','ruin'],
-    ['브리타','…좋아. 그럼 해야 할 일은 하나네. 더 튼튼한 마을, 불도 몬스터도 못 이기는 마을. 그런 걸 만들려면 쇠가 있어야 해. 그건 내 전문이고!','banner'],
-    ['리아','할아버지, 조금만 기다려요. 이번엔 우리가 할아버지를 지킬게요.','banner'],
+    ['','빌더가 기둥 꼭대기에 불을 놓자, 무너진 등대에 남아 있던 거울 조각들이 그 빛을 받아 바다 쪽으로 길게 뻗어 냈습니다.','lamp'],
+    ['','빛이 닿는 곳마다 안개가 갈라졌습니다. 그리고 그 너머, 수평선 끝에—','far'],
+    ['세라','…땅이야. 산이 있어. 안개 너머에, 정말로 땅이 있어!','far'],
+    ['카이','지도랑 똑같은 모양이야. 저게… 레온이 가려던 곳이구나.','far'],
+    ['','빌더가 쥔 지도 조각이 희미하게 빛났습니다. 마치 저 땅이 조각을 부르는 것처럼.','lamp'],
+    ['세라','할머니가 들려준 옛날이야기가 있어요. 세상은 원래 커다란 대륙 하나였는데, 흰 안개가 땅을 조각조각 삼켜 버렸다는.','lamp'],
+    ['세라','다들 그냥 동화라고 했는데… 저 땅도, 이 섬도, 원래는 하나였던 거라면?','far'],
+    ['카이','그럼 할 일은 정해졌네. 배를 만들자. 안개를 뚫고 저기까지 갈 수 있는 튼튼한 배.','banner'],
+    ['카이','나무배로는 안 돼. 레온 배도 나무였으니까. 쇠로 만들어야 해. 쇠를 캐고, 녹이고, 두드리고… 할 일이 산더미다.','banner'],
+    ['세라','오빠, 조금만 기다려. 이번엔 우리가 데리러 갈게.','banner'],
+    ['','그날 밤, 오르네섬의 등대에 50년 만에 불이 켜졌습니다. 그리고 그 불빛을 따라, 길고 긴 순례가 시작되었습니다.','far'],
   ],
   raid1:[
-    ['','그날 저녁, 마을의 기계 소리가 멀리 언덕 너머까지 울려 퍼졌습니다.','ruin'],
-    [VOICE,'조심하세요. 불빛과 기계 소리가 멈춤의 왕의 눈에 띄었습니다.','ruin'],
-    [STILL,'만드는 자가 아직 남아 있었다고? 게다가 멈추지 않는 기계까지… 부숴라. 모조리 멈추게 하라!','ruin'],
-    ['브리타','저, 저기! 슬라임 떼가 몰려와! 공장 쪽으로 오고 있어!','banner'],
-    ['리아','빌더님, 다 같이 마을을 지켜요! 갇힌 몬스터는 벽을 부순대요. 조심하세요!','banner'],
+    ['','그날 저녁, 마을의 기계 소리가 안개 너머까지 울려 퍼졌습니다.','ruin'],
+    ['세라','안개가… 이쪽으로 몰려와요. 기계 소리에 이끌린 것처럼!','banner'],
+    ['카이','슬라임 떼다! 공장 쪽으로 오고 있어!','banner'],
+    ['세라','빌더님, 다 같이 마을을 지켜요! 갇힌 슬라임은 벽을 부순대요. 조심하세요!','banner'],
   ],
   boss:[
-    [STILL,'그만두어라! 하늘에 닿는 것만은 허락하지 않는다!','boss'],
-    [VOICE,'멈춤의 왕이 직접 나타났습니다! 빌더여, 마을 사람들과 함께 맞서세요!','boss'],
+    [STILL,'…빛을 꺼라. 너희는 안개 속에서 잠들어 있으면 된다.','boss'],
+    ['세라','안개 속에서 거대한 그림자가…! 빌더님, 다 같이 맞서요!','boss'],
   ],
   bossDown:[
-    [STILL,'만드는… 힘이… 이토록… 끈질기다니…','player'],
-    ['리아','해치웠어요! 이제 남은 부품만 채우면 등불을 보낼 수 있어요!','player'],
+    [STILL,'만드는… 손이… 이토록… 끈질기다니…','player'],
+    ['세라','해치웠어요! 이제 남은 부품만 채우면 돼요!','player'],
   ],
   ending:[
-    ['','희망의 등불을 실은 승강기가 별의 사다리를 타고 하늘 높이 솟아올랐습니다.','elev'],
-    ['','구름을 뚫고, 밤을 넘어, 마침내 하늘 끝에 빛이 닿은 순간—','elev'],
-    ['','온 땅을 묶고 있던 멈춤의 종소리가 눈처럼 녹아 사라졌습니다.','elev'],
-    ['리아','빌더님… 보여요? 마을 사람들이 전부 하늘을 올려다보고 있어요.','elev'],
-    ['리아','할아버지도 분명 기뻐하실 거예요. 고마워요. 우리에게 다시 만드는 법을 알려 줘서.','elev'],
-    [VOICE,'빌더여, 당신의 이야기는 여기서 끝나지 않습니다. 만드는 사람이 있는 한, 이 땅은 계속 자라날 테니까요.','elev'],
+    ['','등불을 실은 승강기가 하늘 높이 솟아올랐습니다.','elev'],
+    ['','구름을 뚫고, 안개를 넘어, 마침내 하늘 끝에 빛이 닿은 순간—','elev'],
+    ['','섬을 둘러싼 흰 안개가 아주 조금, 엷어졌습니다.','elev'],
+    ['세라','빌더님… 보여요? 마을 사람들이 전부 하늘을 올려다보고 있어요.','elev'],
+    ['카이','이 정도 빛이면, 안개 너머 어디에 있든 보이겠지. 레온한테도.','elev'],
   ],
 };
 const got=id=>S.stats.got[id]||0;
 const OBJ=[
-  {ch:1,t:'희망의 깃발 꽂기',h:'단축칸의 「희망의 깃발」을 고르고 평평한 땅을 오른쪽 버튼으로 눌러 꽂으세요. 깃발 주변이 마을 구역이 돼요.',ok:()=>!!S.banner,
-   say:'빌더님, 깃발을 꽂을 곳을 골라 주세요! 평평한 땅이면 어디든 좋아요.'},
+  {ch:1,t:'마을 깃발 세우기',h:'단축칸의 「마을 깃발」을 고르고 평평한 땅을 오른쪽 버튼으로 눌러 세우세요. 깃발 주변이 마을 구역이 돼요.',ok:()=>!!S.banner,
+   say:'빌더님, 깃발을 세울 곳을 골라 주세요! 평평한 땅이면 어디든 좋아요.'},
   {ch:1,story:'c1_banner',t:'원목 8개 모으기',h:'나무 줄기를 왼쪽 버튼으로 꾹 눌러 부수면 원목이 나와요. 처음 얻는 재료는 새 레시피를 떠올리게 해요.',ok:()=>got('wood')>=8,
-   say:'시간이 흐르기 시작했어요! 여기가 이제 우리 마을이에요. 우선 나무를 베어 볼까요?'},
+   say:'안개가 물러났어요! 여기가 다시 우리 마을이에요. 우선 나무를 베어 볼까요?'},
   {ch:1,story:'c1_wood',t:'작업대를 만들어 설치하기',h:'가방(E)에서 작업대를 만들고 단축칸에서 골라 오른쪽 버튼으로 놓으세요.',ok:()=>countEnt('workbench')>0,
    say:'원목이다! 작업대가 있으면 그 근처에서 이것저것 만들 수 있어요.'},
   {ch:1,story:'c1_bench',t:'첫 방 만들기',h:'마을 구역 안을 2칸 높이 벽으로 둘러싸고, 나무 문 하나와 횃불 하나를 안에 두세요. 횃불엔 석탄이 필요해요. 검은 점박이 돌을 캐 보세요.',ok:()=>rooms.length>0,
-   say:'작업대 완성! 이제 우리가 지낼 방이 필요해요. 벽은 꼭 두 칸 높이로, 문과 횃불도 잊지 마세요!'},
+   say:'작업대 완성! 이제 지낼 방이 필요해요. 벽은 꼭 두 칸 높이로, 문과 횃불도 잊지 마세요!'},
   {ch:1,story:'c1_room',t:'하트를 모아 마을 레벨 2 만들기',h:'주민 머리 위에 뜬 하트에 다가가면 모여요. 하트가 차면 깃발을 오른쪽 버튼으로 눌러 레벨 업! 주민 부탁(!)을 들어주면 하트를 더 받아요.',ok:()=>S.lv>=2,
-   say:'방이다! 고마워요, 마음이 따뜻해졌어요. 제 머리 위의 하트를 모아서 깃발에 바치면 마을이 성장해요.'},
+   say:'방이다! 고마워요, 마음이 따뜻해졌어요. 제 머리 위의 하트를 모아서 깃발에 바치면 마을이 자라요.'},
   {ch:1,t:'침실 만들기',h:'방 안에 짚 침대를 두면 침실이 돼요. 레벨 업 보상인 「기본 침실」 설계도를 놓고 보관함에 판자를 넣으면 주민이 대신 지어 줘요.',ok:()=>rooms.some(r=>r.type==='bedroom'),
-   say:'브리타가 깨어났어요! 그런데 잘 곳이 없네요… 침실을 만들어 줘요.'},
+   say:'카이가 왔어요! 그런데 잘 곳이 없네요… 침실을 만들어 줘요.'},
+  {ch:1,story:'c1_bed',t:'무너진 등대에 불 밝히기',h:'언덕 위 등대 잔해에서 가장 높은 기둥 꼭대기에 횃불을 놓으세요. 블록을 계단처럼 쌓으면 올라갈 수 있어요.',ok:()=>lampLit(),
+   say:'등대 꼭대기까지 올라가 봐요! 블록을 쌓으면 갈 수 있을 거예요.'},
   {ch:2,t:'철판 만들기',h:'붉은 점박이 철광석을 캐서 작업대에서 철 주괴(석탄 필요) → 철판을 만드세요.',ok:()=>(S.stats.crafted.iron_plate||0)+(got('iron_plate'))>=2,
    say:'포근한 침실이에요! 이제 마을을 지킬 힘이 필요해요. 철을 다뤄 봐요.'},
   {ch:2,t:'광맥 노드 위에 채굴기 설치하기',h:'빛나는 광맥 노드 블록 위에 채굴기를 놓으세요. 주황 화살표 쪽이 출구예요. R로 방향을 돌릴 수 있어요.',ok:()=>countEnt('miner')+countEnt('miner2')>0,
    say:'철판이다! 손으로 캐는 데는 한계가 있죠. 끝없이 캐는 기계를 만들어 봐요.'},
   {ch:2,t:'발전기 가동하기',h:'바이오매스 발전기를 놓고 오른쪽 버튼으로 열어 원목을 넣으세요. 전력은 마을 전체가 함께 써요.',ok:()=>power.cap>0,
    say:'채굴기는 전기가 있어야 움직여요. 발전기가 필요해요!'},
-  {ch:2,t:'컨베이어로 철 주괴 20개를 깃발에 보내기',h:'채굴기 → 컨베이어 → 제련기 → 컨베이어 → 희망의 깃발. 깃발은 HUB처럼 어느 쪽에서든 받아요.',ok:()=>(S.stats.hubIn.iron_ingot||0)>=20,
+  {ch:2,t:'컨베이어로 철 주괴 20개를 깃발에 보내기',h:'채굴기 → 컨베이어 → 제련기 → 컨베이어 → 마을 깃발. 깃발은 HUB처럼 어느 쪽에서든 받아요.',ok:()=>(S.stats.hubIn.iron_ingot||0)>=20,
    say:'전기가 들어왔어요! 이제 진짜 자동화 공장을 만들 차례예요.'},
   {ch:2,t:'기록 1장 「기초 물류」 되살리기',h:'깃발을 열어 철판 20 · 철봉 20을 바치세요. 제작기로 자동 생산해 보세요.',ok:()=>S.ms>=1,
    say:'깃발이 공장의 부품을 받고 있어요! 부품을 모으면 새 기술이 열려요.'},
   {ch:2,t:'「작은 공장」 방 만들기',h:'기계를 벽으로 둘러싸고 문과 횃불을 두면 작은 공장. 안의 기계가 25% 빨라져요. 「작은 공장」 설계도(마을 Lv3)도 있어요.',ok:()=>rooms.some(r=>r.type==='factory'),
    say:'새 기술! 기계를 방 안에 두면 주민들이 일을 거들어서 더 빨라진대요.'},
-  {ch:2,story:'raid1',t:'몬스터 습격을 막아라!',h:'멈춤의 왕이 보낸 몬스터 군단이 몰려와요. 주민들과 함께 모두 물리치세요. 갇힌 몬스터는 벽을 부숴요.',ok:()=>S.stats.raids>=1,
+  {ch:2,story:'raid1',t:'몬스터 습격을 막아라!',h:'안개의 주인이 보낸 몬스터 군단이 몰려와요. 주민들과 함께 모두 물리치세요. 갇힌 몬스터는 벽을 부숴요.',ok:()=>S.stats.raids>=1,
    say:'큰일이에요! 마을이 커지자 몬스터들이 몰려오고 있어요! 다 같이 막아요!'},
   {ch:3,t:'마을 레벨 4 달성',h:'방을 늘리고 부탁을 들어주고, 공장이 깃발로 부품을 보내면 하트가 모여요.',ok:()=>S.lv>=4,
    say:'해냈어요! 마을을 지켰어요! 이제 더 큰 마을, 더 큰 공장을 만들어요.'},
@@ -651,9 +646,9 @@ const OBJ=[
    say:'조립기가 생겼어요! 그런데 조립기는 전기를 많이 먹어요.'},
   {ch:3,t:'기록 3장 「고급 생산」 되살리기',h:'조립기로 강화 철판과 로터를 만들어 깃발로 보내세요.',ok:()=>S.ms>=3,
    say:'든든한 전력이에요! 이제 고급 부품을 만들 차례예요.'},
-  {ch:4,t:'별의 사다리 세우기',h:'모듈식 프레임 5 · 콘크리트 30 · 케이블 30으로 별의 사다리(우주 엘리베이터)를 만들어 넓은 땅에 놓으세요.',ok:()=>!!S.elev,
-   say:'하늘로 가는 길이 열렸어요! 별의 사다리를 세워요!'},
-  {ch:4,t:'희망의 등불을 하늘로 보내기',h:'모듈식 프레임 20 · 로터 30 · 케이블 100을 엘리베이터에 넣으세요. 절반을 채우면 멈춤의 왕이 직접 쳐들어와요.',ok:()=>S.won,
+  {ch:4,t:'하늘 등대 세우기',h:'모듈식 프레임 5 · 콘크리트 30 · 케이블 30으로 하늘 등대(우주 엘리베이터)를 만들어 넓은 땅에 놓으세요.',ok:()=>!!S.elev,
+   say:'하늘로 가는 길이 열렸어요! 하늘 등대를 세워요!'},
+  {ch:4,t:'등불을 하늘로 보내기',h:'모듈식 프레임 20 · 로터 30 · 케이블 100을 엘리베이터에 넣으세요. 절반을 채우면 안개의 주인이 직접 쳐들어와요.',ok:()=>S.won,
    say:'엘리베이터가 섰어요! 부품을 채우면 하늘로 출발할 수 있어요. 몬스터 왕이 가만있지 않을 거예요…'},
 ];
 
@@ -861,16 +856,16 @@ function genWorld(seed){
         const X=x+dx,Y=ty+dy,Z=z+dz;if(inW(X,Y,Z)&&vox[I(X,Y,Z)]===A)vox[I(X,Y,Z)]=LEAVES}
     }else if(r<.03)vox[I(x,h,z)]=BUSH;
   }
-  // ruins of the old Star Ladder near the spawn
+  // ruins of the old lighthouse on the hill near the spawn
   const rx=cx+7,rz=cz-8,ry=12;
   for(let dz=-5;dz<=5;dz++)for(let dx=-5;dx<=5;dx++){const x=rx+dx,z=rz+dz;
     for(let y=1;y<WY;y++){const i=I(x,y,z);if(y<ry-1){if(!BL[vox[i]].solid||vox[i]===LEAVES||vox[i]===LOG)vox[i]=y<ry-3?STONE:DIRT}else if(y===ry-1)vox[i]=(Math.abs(dx)<=2&&Math.abs(dz)<=2)?(R()<.8?CONC:STONE):GRASS;else vox[i]=A}}
-  const pillar=(x,z,h)=>{for(let y=0;y<h;y++)vox[I(x,ry+y,z)]=IRONBLK};
+  const pillar=(x,z,h)=>{for(let y=0;y<h;y++)vox[I(x,ry+y,z)]=BRICK};
   pillar(rx-2,rz-2,9);pillar(rx+2,rz-2,4);pillar(rx-2,rz+2,6);pillar(rx+2,rz+2,2);
-  vox[I(rx-1,ry+8,rz-2)]=IRONBLK;vox[I(rx-2,ry+8,rz-1)]=IRONBLK;
-  for(let k=0;k<4;k++)vox[I(rx+3+k,ry,rz-1)]=IRONBLK;
-  for(let k=0;k<3;k++)vox[I(rx-4,ry,rz+1+k)]=IRONBLK;
-  for(let k=0;k<10;k++){const x=rx+(R()*11|0)-5,z=rz+(R()*11|0)-5;if(vox[I(x,ry,z)]===A)vox[I(x,ry,z)]=R()<.5?IRONBLK:STONE}
+  vox[I(rx-1,ry+8,rz-2)]=BRICK;vox[I(rx-2,ry+8,rz-1)]=BRICK;
+  for(let k=0;k<4;k++)vox[I(rx+3+k,ry,rz-1)]=BRICK;
+  for(let k=0;k<3;k++)vox[I(rx-4,ry,rz+1+k)]=BRICK;
+  for(let k=0;k<10;k++){const x=rx+(R()*11|0)-5,z=rz+(R()*11|0)-5;if(vox[I(x,ry,z)]===A)vox[I(x,ry,z)]=R()<.5?BRICK:STONE}
   for(let dz=-15;dz<=15;dz++)for(let dx=-15;dx<=15;dx++){if(dx*dx+dz*dz>225)continue;const X=rx+dx,Z=rz+dz;if(X<0||Z<0||X>=WX||Z>=WZ)continue;for(let y=1;y<WY;y++){const i=I(X,y,Z);if(vox[i]===LOG||vox[i]===LEAVES)vox[i]=A}}
   return{x:rx,y:ry,z:rz};
 }
@@ -1022,8 +1017,8 @@ function part(parent,boxes,detail){
 }
 const LOOKS={
   player:{skin:0xe8b48e,hair:0x4a2c1a,iris:0x2a3a5a,jacket:0x2e3f63,trim:0xf39a35,shirt:0xd8d2c4,pants:0x3a3f4a,boots:0x4a3020,gloves:0x5a4030,belt:0x5a3a22,style:'messy',goggles:1,backpack:1,pads:1,pouches:1,scarf:0xf39a35,brow:0x2e1c10},
-  '리아':{skin:0xf2c8a4,hair:0x7a3e22,iris:0x3f6a3a,jacket:0x9c4f6c,trim:0xe8c46a,shirt:0xefe6d6,pants:0x4a3a40,boots:0x6a4428,belt:0x5a3a22,skirt:0x5e3442,style:'braid',scarf:0xe8c46a,satchel:1,brow:0x5a2c16},
-  '브리타':{skin:0xe6b08a,hair:0xe0bc5e,iris:0x6a4a2a,jacket:0xa8443a,shirt:0xa8443a,rolled:1,apron:0x7a5638,pants:0x3a3230,boots:0x2e2420,gloves:0x3a2a20,belt:0x3a2a20,style:'pony',band:0x2e4f8a,brow:0x9a7a30},
+  '세라':{skin:0xf0c9a6,hair:0x3a2418,iris:0x3a5a7a,jacket:0x2f4f78,trim:0xe8e2d0,shirt:0xf2efe6,pants:0x3a3f4a,boots:0x5a3a24,belt:0x4a3020,skirt:0x2a3e5e,style:'pony',band:0xd8443a,scarf:0xd8443a,satchel:1,brow:0x2e1a10},
+  '카이':{skin:0xc98e66,hair:0x1e1a16,iris:0x2a2a22,jacket:0x2f7a78,shirt:0xd8cfb8,rolled:1,vest:1,pants:0x4a4438,boots:0x3a2e22,belt:0x5a4028,style:'messy',scarf:0xd8c49a,pouches:1,brow:0x1e1a16},
   '마르코':{skin:0xd9a07a,hair:0x2e2018,iris:0x3a2a1a,jacket:0x3f7a52,trim:0xd8b45a,shirt:0xe8dcc0,pants:0x5a4a32,boots:0x3e2a1a,belt:0x4a3020,style:'hat',hat:0x6b4a2a,mustache:0x2e2018,coat:1,backpack:1,brow:0x2e2018},
   '바르톨':{skin:0xd49a74,hair:0xbdbdbd,iris:0x3a3028,jacket:0x6a5644,shirt:0xb8ad98,rolled:1,vest:1,pants:0x4a4036,boots:0x34281e,belt:0x3a2a1a,style:'bald',beard:0xd8d8d8,brow:0xd0d0d0,band:0x8a3a2e},
   '테오':{skin:0xeac09a,hair:0xb8c0cc,iris:0x2a4a6a,jacket:0x2f6a9a,trim:0xf39a35,shirt:0x2f6a9a,pants:0x2f6a9a,boots:0x22262c,gloves:0x2a2a30,belt:0x2a2a30,style:'short',goggles:1,pouches:1,brow:0x8a929e},
@@ -1338,7 +1333,7 @@ function breakAt(x,y,z){
   if(id===ENT_TOP){y--;id=getB(x,y,z)}
   if(id===ENT){
     const i=I(x,y,z),e=ents.get(i);if(!e)return;
-    if(e.t==='banner'){toast('희망의 깃발은 옮길 수 없어요','bad');return}
+    if(e.t==='banner'){toast('마을 깃발은 옮길 수 없어요','bad');return}
     if(e.t==='elevator'&&(e.launch!=null||elevProgress()>0)){toast('부품이 들어간 엘리베이터는 부술 수 없어요','bad');return}
     give(e.t,1);
     if(e.item)give(e.item,1);if(e.buf)give(e.buf,1);
@@ -1377,8 +1372,8 @@ function placeSel(px,py,pz){
     if(E.node){if(!BL[below].node){toast('광맥 노드 블록 위에만 놓을 수 있어요','bad');return false}}
     else if(!BL[below].solid){toast('아래에 받칠 블록이 필요해요','bad');return false}
     if(E.tall&&getB(px,py+1,pz)!==A){toast('문은 위로 한 칸 더 비어 있어야 해요','bad');return false}
-    if(it.ent==='banner'&&S.banner){toast('희망의 깃발은 하나만 꽂을 수 있어요','bad');return false}
-    if(it.ent==='elevator'&&S.elev){toast('별의 사다리는 하나만 세울 수 있어요','bad');return false}
+    if(it.ent==='banner'&&S.banner){toast('마을 깃발은 하나만 꽂을 수 있어요','bad');return false}
+    if(it.ent==='elevator'&&S.elev){toast('하늘 등대는 하나만 세울 수 있어요','bad');return false}
     if(E.solid&&entOverlapsCell(px,py,pz)){toast('누군가 서 있어요','bad');return false}
     addEnt(I(px,py,pz),newEnt(it.ent,it.ent==='door'?cd:dir,px,py,pz));S.inv[id]--;hotDirty=true;sfx('place');
     if(it.ent==='banner'){sfx('level');S.villagers.forEach(v=>{if(v.reqState==='none'){v.reqState='wait';v.reqT=6}})}
@@ -1464,7 +1459,7 @@ function factoryTick(dt){
   // elevator completion
   if(S.elev&&!S.won){const ei=I(S.elev.x,S.elev.y,S.elev.z),ee=ents.get(ei);if(ee){const p=elevProgress();
     if(p>=.5&&!S.kingDone&&!raid){startRaid('king');playStory('boss')}
-    if(p>=1&&ee.launch==null&&!raid){ee.launch=0;S.time=.585;title('발사!','희망의 등불이 하늘로 올라가요');sfx('level');setTimeout(()=>playStory('ending',()=>{S.time=.05;S.won=true;showWin()}),2200)}}}
+    if(p>=1&&ee.launch==null&&!raid){ee.launch=0;S.time=.585;title('발사!','등불이 하늘로 올라가요');sfx('level');setTimeout(()=>playStory('ending',()=>{S.time=.05;S.won=true;showWin()}),2200)}}}
 }
 function elevProgress(){if(!S.elev)return 0;const e=ents.get(I(S.elev.x,S.elev.y,S.elev.z));if(!e)return 0;let a=0,b=0;for(const k in ELEV_NEED){a+=Math.min(e.st[k]||0,ELEV_NEED[k]);b+=ELEV_NEED[k]}return a/b}
 const boost=()=>1+.08*S.villagers.filter(v=>!v.guide&&v.faint<=0).length;
@@ -1529,45 +1524,35 @@ function levelUp(){
 function arriveVillager(def){
   if(S.villagers.some(v=>v.name===def.name))return;
   const r=baseR(),a=Math.random()*Math.PI*2;let x=clamp(S.banner.x+Math.cos(a)*r,2,WX-3),z=clamp(S.banner.z+Math.sin(a)*r,2,WZ-3);
-  const st=def.statue&&statues.find(g=>g.userData.who===def.name);
-  if(st){x=st.position.x;z=st.position.z;scene.remove(st);statues.splice(statues.indexOf(st),1);sfx('insp');
-    for(let k=0;k<3;k++)burst(Math.floor(x),Math.floor(st.position.y)+k*.6,Math.floor(z),'#a9a9a9',14)}
-  const v=mkVillager(def,x,z);v.tx=S.banner.x+1.5;v.tz=S.banner.z+1.5;if(st){v.face=Math.PI*.42;v.wait=1e9}v.reqState='wait';v.reqT=25;S.villagers.push(v);attachVillagerMesh(v);
-  playStory(def.intro.map(t=>Array.isArray(t)?[t[0],t[1],t[2]||'player']:[def.name,t,'player']),()=>{v.wait=0;toast(`${def.name}이(가) 마을 주민이 됐어요. 공장 속도 +8%`,'gold')});
+  const v=mkVillager(def,x,z);v.tx=S.banner.x+1.5;v.tz=S.banner.z+1.5;v.reqState='wait';v.reqT=25;S.villagers.push(v);attachVillagerMesh(v);
+  playStory(def.intro.map(t=>Array.isArray(t)?[t[0],t[1],t[2]||'player']:[def.name,t,'player']),()=>{toast(`${def.name}이(가) 마을 주민이 됐어요. 공장 속도 +8%`,'gold')});
   assignBeds();
 }
-// ============================================================ stone statues (people frozen by the Bell of Stillness)
-let statues=[];const stoneMat=new THREE.MeshLambertMaterial({color:0x76767a});
-const STONE_LOOK=(o)=>Object.assign({skin:0,hair:0,iris:0,jacket:0,shirt:0,pants:0,boots:0,belt:0,brow:0,style:'short'},o);
-function buildStatues(){
-  for(const g of statues)scene.remove(g);statues=[];if(!S.ruin)return;
-  const{x:rx,y:ry,z:rz}=S.ruin;
-  const add=(look,x,z,face,pose,who,y)=>{const g=makeChar(look,!!pose.hammer),u=g.userData;
-    scene.remove(u.shadow);u.shadow.parent&&u.shadow.parent.remove(u.shadow);pose(u,g);
-    g.traverse(m=>{if(m.isMesh){m.material=stoneMat;m.castShadow=true}});
-    g.position.set(x+.5,y==null?surfaceY(Math.floor(x),Math.floor(z)):y,z+.5);g.rotation.y=face;g.scale.setScalar(.96);g.userData.statue=true;g.userData.who=who||'';scene.add(g);statues.push(g);return g};
-  // guard with spear, startled, looking up at the ladder
-  add(STONE_LOOK({style:'short',vest:1}),rx-6,rz-5,-Math.PI*.12,u=>{u.armR.rotation.set(-.35,0,-.1);u.elbowR.rotation.x=-1.1;u.head.rotation.x=.35;u.torso.rotation.x=.08;u.thighL.rotation.x=-.4;u.kneeL.rotation.x=.3;
-    part(pivot(u.elbowR,0,-.33,0),[[.05,1.9,.05,0,.35,0,0],[.09,.22,.03,0,1.38,0,0]])});
-  // mother shielding her baby
-  add(STONE_LOOK({style:'long',skirt:1,longskirt:1}),rx+1,rz-5,Math.PI*.1,u=>{u.armL.rotation.set(-.9,0,.25);u.armR.rotation.set(-.9,0,-.25);u.elbowL.rotation.x=u.elbowR.rotation.x=-1.0;u.torso.rotation.x=.18;u.head.rotation.set(-.25,.5,0);
-    part(u.torso,[[.22,.16,.16,0,.3,-.2,0],[.14,.14,.14,0,.42,-.22,0]])});
-  // blacksmith father at the anvil, hammer raised
-  const fx=rx-3,fz=rz-4;
-  add(STONE_LOOK({style:'bald',beard:1,band:1,apron:1,rolled:1}),fx,fz,0,Object.assign(u=>{u.armR.rotation.set(-2.5,0,-.15);u.elbowR.rotation.x=-1.1;u.armL.rotation.set(-.5,0,.1);u.elbowL.rotation.x=-.6;u.head.rotation.set(.3,-.35,0)},{hammer:1}));
-  const anvil=new THREE.Group();part(anvil,[[.5,.18,.3,0,.09,0,0],[.22,.3,.2,0,.33,0,0],[.6,.16,.32,0,.56,0,0],[.2,.08,.22,.38,.6,0,0]]);anvil.traverse(m=>{if(m.isMesh){m.material=stoneMat;m.castShadow=true}});
-  anvil.position.set(fx+.5,surfaceY(fx,fz-1),fz-.4);scene.add(anvil);statues.push(anvil);
-  // Britta, reaching for her father
-  if(!S.villagers.some(v=>v.name==='브리타'))add(LOOKS['브리타'],fx+1.6,fz-.6,Math.PI*.42,u=>{u.armL.rotation.set(-1.45,0,-.2);u.elbowL.rotation.x=-.15;u.armR.rotation.set(-.3,0,-.2);u.elbowR.rotation.x=-.8;u.torso.rotation.set(.12,-.2,0);u.head.rotation.set(.25,-.2,0);u.thighR.rotation.x=-.5;u.kneeR.rotation.x=.4;u.thighL.rotation.x=.25},'브리타');
-  // grandfather clutching the Bell of Stillness atop the tallest pillar
-  add(STONE_LOOK({style:'bald',beard:1,band:1,coat:1}),rx-2,rz-2,Math.PI*.25,u=>{u.armL.rotation.set(-1.05,0,.35);u.armR.rotation.set(-1.05,0,-.35);u.elbowL.rotation.x=u.elbowR.rotation.x=-1.05;u.head.rotation.set(.45,0,0);u.thighL.rotation.x=-1.4;u.kneeL.rotation.x=1.4;u.thighR.rotation.x=.1;u.kneeR.rotation.x=1.5;u.root.position.y=-.32;
-    part(pivot(u.torso,0,.24,-.34),[[.5,.08,.5,0,-.3,0,0],[.42,.28,.42,0,-.14,0,0],[.3,.16,.3,0,.06,0,0],[.1,.1,.1,0,.19,0,0]])},'',ry+9);
+// ============================================================ the old lighthouse (chapter 1 goal) and the land beyond the fog
+let lampG=null,farLand=null;
+function lampLit(){if(S.lamp)return true;if(!S.ruin)return false;const tx=S.ruin.x-2,tz=S.ruin.z-2,ty=S.ruin.y+8;
+  for(const[i,e]of ents){if(e.t!=='torch'&&e.t!=='bonfire')continue;const[x,y,z]=XYZ(i);if(y>=ty&&Math.abs(x-tx)<=1&&Math.abs(z-tz)<=1){S.lamp=true;buildLighthouse();sfx('level');return true}}return false}
+function buildLighthouse(){
+  if(lampG){scene.remove(lampG);lampG=null}if(farLand){scene.remove(farLand);farLand=null}
+  if(!S.ruin||!S.lamp)return;
+  lampG=new THREE.Group();lampG.position.set(S.ruin.x-1.5,S.ruin.y+9.7,S.ruin.z-1.5);
+  const pl=new THREE.PointLight(0xffdc8a,2.2,26,1.6);lampG.add(pl);
+  lampG.add(new THREE.Mesh(new THREE.SphereGeometry(.16,10,8),new THREE.MeshBasicMaterial({color:0xfff0b8})));
+  const beam=new THREE.Group(),bm=new THREE.MeshBasicMaterial({color:0xfff2c0,transparent:true,opacity:.11,blending:THREE.AdditiveBlending,depthWrite:false,side:THREE.DoubleSide});
+  const cone=new THREE.Mesh(new THREE.CylinderGeometry(.25,4.5,46,20,1,true),bm);cone.rotation.z=Math.PI/2;cone.position.x=23;beam.add(cone);
+  const c2=cone.clone();c2.position.x=-23;beam.add(c2);lampG.add(beam);lampG.userData.beam=beam;scene.add(lampG);
+  // silhouette of another land, far to the north beyond the fog
+  farLand=new THREE.Group();const R=mulberry(S.seed+7);
+  const tone=[new THREE.MeshBasicMaterial({color:0x8b9bb0,fog:false,transparent:true,opacity:.55,depthWrite:false}),new THREE.MeshBasicMaterial({color:0xa9b6c6,fog:false,transparent:true,opacity:.45,depthWrite:false})];
+  for(let row=1;row>=0;row--)for(let k=0;k<14;k++){const h=(row?16:8)+R()*(row?20:12),r=12+R()*12,m=new THREE.Mesh(new THREE.ConeGeometry(r,h,6),tone[row]);
+    m.position.set(-20+k*10+R()*5,SEA+h/2-1,-64-row*14-R()*4);m.rotation.y=R()*3;m.renderOrder=-1;farLand.add(m)}
+  scene.add(farLand);
 }
 function mkVillager(def,x,z){const y=surfaceY(Math.floor(x),Math.floor(z));
   return{name:def.name,pal:def.pal,guide:def.guide||0,x,y,z,vx:0,vy:0,vz:0,w:.28,h:1.5,onGround:false,face:0,walk:0,moving:false,tx:x,tz:z,wait:1,hp:30,faint:0,hearts:0,atk:0,stuck:0,
     req:0,reqState:'none',reqT:0,reqBase:0,bed:null,sleeping:false,task:null}}
 function attachVillagerMesh(v){
-  if(v._m)scene.remove(v._m);v._m=makeChar(LOOKS[v.name]||LOOKS['리아'],false);v._m.userData.villager=true;v._m.userData.base=.96;v._m.scale.setScalar(.96);scene.add(v._m);
+  if(v._m)scene.remove(v._m);v._m=makeChar(LOOKS[v.name]||LOOKS['세라'],false);v._m.userData.villager=true;v._m.userData.base=.96;v._m.scale.setScalar(.96);scene.add(v._m);
   v._name=makeSprite(textTex(v.name,v.guide?'#ffd66b':'#f3ebd6'),1.5,.38);v._name.position.y=2.05;v._m.add(v._name);
   v._mark=makeSprite(heartTex,.55,.55,false);v._mark.position.y=2.55;v._mark.visible=false;v._m.add(v._mark);v._markKey='';
 }
@@ -1730,7 +1715,7 @@ function startRaid(kind){
   if(raid||!S.banner)return;const r=baseR()+3,list=kind==='king'?['king','she','she','slime','slime','she','slime']:['slime','slime','slime','she','slime','she','slime','slime'];
   for(const t of list){const a=Math.random()*Math.PI*2;spawnSlime(t,clamp(S.banner.x+Math.cos(a)*r,3,WX-4),clamp(S.banner.z+Math.sin(a)*r,3,WZ-4),true)}
   raid={kind,total:list.length};if(kind==='king')S.kingDone=true;
-  title(kind==='king'?'멈춤의 왕이 나타났다!':'몬스터 습격!','마을을 지켜라!',2400);sfx('alarm');
+  title(kind==='king'?'안개의 주인이 나타났다!':'몬스터 습격!','마을을 지켜라!',2400);sfx('alarm');
 }
 function hitSlime(s,dmg,by){
   s.hp-=dmg;s.flash=.15;const d=Math.hypot(s.x-(by?by.x:P.x),s.z-(by?by.z:P.z))||1,kb=SLT[s.type].boss?2:6;
@@ -1768,7 +1753,7 @@ function updSlimes(dt){
       if(s.byPlayer||s.raid){S.stats.kills++;const r=Math.random();if(SLT[s.type].boss){give('frame',3);give('rotor',5);popText(s.x,s.y+2,s.z,'+보물','#ffd66b')}else if(r<.45){give('coal',1);popText(s.x,s.y+1,s.z,'+1 석탄')}else if(r<.75){give('berry',1);popText(s.x,s.y+1,s.z,'+1 베리','#ff9fbf')}}}return false}
     return true;
   });
-  if(raid&&!slimes.some(s=>s.raid)){const k=raid.kind;raid=null;S.stats.raids++;title('습격을 물리쳤다!',k==='king'?'멈춤의 왕을 쓰러뜨렸어요':'마을을 지켜 냈어요',2400);if(k==='king')setTimeout(()=>playStory('bossDown'),1500);sfx('level');
+  if(raid&&!slimes.some(s=>s.raid)){const k=raid.kind;raid=null;S.stats.raids++;title('습격을 물리쳤다!',k==='king'?'안개의 주인을 쓰러뜨렸어요':'마을을 지켜 냈어요',2400);if(k==='king')setTimeout(()=>playStory('bossDown'),1500);sfx('level');
     for(const v of S.villagers)addHearts(k==='king'?10:6,v);toast('주민들이 고마워하고 있어요. 하트를 모으세요!','heart')}
 }
 function attack(){
@@ -1795,18 +1780,22 @@ function noon(){
   if(rooms.some(r=>r.type==='factory')&&power.ratio>0&&power.demand>0)addHearts(3,null,'공장 일이 즐거워요!');
 }
 function updTime(dt){
-  if(!S.banner)return; // the frozen field: time only flows under the banner's light
   const prev=S.time,wasNight=isNight();S.time+=dt/DAY_LEN;
   if(prev<.25&&S.time>=.25)noon();
   if(S.time>=1){S.time-=1;morning()}
-  if(!wasNight&&isNight()){toast('밤이 되었어요. 몬스터를 조심하세요!','bad');if(!S.night1&&S.banner&&S.obj<=5){S.night1=true;playStory('c1_night')}}
+  if(!wasNight&&isNight()){toast('밤이 되었어요. 몬스터를 조심하세요!','bad');if(!S.night1&&S.banner&&S.obj<=6){S.night1=true;playStory('c1_night')}}
 }
-const C_STILL=new THREE.Color(0xa7adb3),_sky=new THREE.Color(),C_DAY=new THREE.Color(0x8ec9f5),C_NIGHT=new THREE.Color(0x0e1630),C_DUSK=new THREE.Color(0xf0946a),C_HDAY=new THREE.Color(0xe6f2ff),C_HNIGHT=new THREE.Color(0x5a6ab0);
+const C_MIST=new THREE.Color(0xd6dce2),_sky=new THREE.Color(),C_DAY=new THREE.Color(0x8ec9f5),C_NIGHT=new THREE.Color(0x0e1630),C_DUSK=new THREE.Color(0xf0946a),C_HDAY=new THREE.Color(0xe6f2ff),C_HNIGHT=new THREE.Color(0x5a6ab0);
 let lightT=0;
 function updLighting(dt){
   const n=nightAmt(),t=S.time,dusk=(t>.5&&t<.66||t>.9)?Math.sin(clamp(n,0,1)*Math.PI)*.55:0;
-  _sky.copy(C_DAY).lerp(C_NIGHT,n).lerp(C_DUSK,dusk);if(!S.banner)_sky.copy(C_STILL);
-  const still=!S.banner&&!S.bg?'saturate(.18) brightness(.92)':'none';if(updLighting.f!==still){updLighting.f=still;renderer.domElement.style.transition='filter 3s';renderer.domElement.style.filter=still}scene.background.copy(_sky);scene.fog.color.copy(_sky);
+  _sky.copy(C_DAY).lerp(C_NIGHT,n).lerp(C_DUSK,dusk);
+  // fog: thick before the banner, thinner under it, lifted once the old lighthouse burns again
+  const fl=S.lamp||S.obj>6?2:S.banner?1:S.bg?1:0,FN=[[3,24],[12,50],[38,92]][fl];
+  if(updLighting.snap){updLighting.snap=0;scene.fog.near=FN[0];scene.fog.far=FN[1]}
+  scene.fog.near+=(FN[0]-scene.fog.near)*Math.min(1,dt*.7);scene.fog.far+=(FN[1]-scene.fog.far)*Math.min(1,dt*.7);
+  _sky.lerp(C_MIST,clamp((92-scene.fog.far)/68,0,1)*(1-n*.75));
+  if(lampG){lampG.userData.beam.rotation.y+=dt*.45;lampG.children[0].intensity=n>.2?2.4:.9}scene.background.copy(_sky);scene.fog.color.copy(_sky);
   hemi.intensity=lerp(.78,.3,n);hemi.color.copy(C_HDAY).lerp(C_HNIGHT,n);
   sun.intensity=lerp(.78,.14,n);sun.color.setHex(n>.5?0x9ab0ff:0xfff2dd);
   const a=t<.6?t/.6*Math.PI:(t-.6)/.4*Math.PI;sun.position.set(P.x+Math.cos(a)*40,P.y+Math.sin(a)*45+8,P.z+18);sun.target.position.set(P.x,P.y,P.z);
@@ -1897,8 +1886,8 @@ function topAt(x,z){if(x<0||z<0||x>=WX||z>=WZ)return 0;for(let y=WY-1;y>=0;y--)i
 function cineCamera(){
   const c=cine.cam;let ctr=null;
   if(c==='ruin'&&S.ruin)ctr={x:S.ruin.x+.5,y:S.ruin.y+3,z:S.ruin.z+.5,r:10,h:7};
-  else if(c==='stat'&&S.ruin){const cx_=S.ruin.x-1.5+Math.sin(T*.15)*1.5,cz_=S.ruin.z-10;camera.position.set(cx_,Math.max(S.ruin.y+3.6,topAt(Math.floor(cx_),Math.floor(cz_))+2),cz_);_hv.set(S.ruin.x-1.5,S.ruin.y+.9,S.ruin.z-4.5);camera.lookAt(_hv);playerModel.visible=true;return true}
-  else if(c==='bell'&&S.ruin){const a=Math.PI*1.25+Math.sin(T*.2)*.35,bx=S.ruin.x-1.5,by=S.ruin.y+9.8,bz=S.ruin.z-1.5;camera.position.set(bx+Math.cos(a)*4.2,by+1.4,bz+Math.sin(a)*4.2);_hv.set(bx,by,bz);camera.lookAt(_hv);playerModel.visible=true;return true}
+  else if(c==='lamp'&&S.ruin){const a=T*.12,bx=S.ruin.x-1.5,by=S.ruin.y+9.8,bz=S.ruin.z-1.5;camera.position.set(bx+Math.cos(a)*5,by+1.6,bz+Math.sin(a)*5);_hv.set(bx,by,bz);camera.lookAt(_hv);playerModel.visible=true;return true}
+  else if(c==='far'&&S.ruin){const bx=S.ruin.x-1.5,by=S.ruin.y+10.5,bz=S.ruin.z-1.5;camera.position.set(bx+Math.sin(T*.05)*1.5,by+3.2,bz+5);_hv.set(48,by+4,-60);camera.lookAt(_hv);playerModel.visible=true;return true}
   else if(c==='banner'&&S.banner)ctr={x:S.banner.x+.5,y:S.banner.y+1.5,z:S.banner.z+.5,r:9,h:4};
   else if(c==='boss'){const b=slimes.find(s=>SLT[s.type].boss);if(b){const dx=P.x-b.x,dz=P.z-b.z,l=Math.hypot(dx,dz)||1;camera.position.set(P.x+dx/l*4,P.y+3.2,P.z+dz/l*4);_hv.set(b.x,b.y+2,b.z);camera.lookAt(_hv);playerModel.visible=true;return true}}
   else if(c==='elev'&&S.elev){const g=entMesh.get(I(S.elev.x,S.elev.y,S.elev.z));const cy=g&&g.userData.cap?g.userData.cap.position.y:0;
@@ -1982,7 +1971,7 @@ function machineHTML(i){
 }
 function bannerHTML(){
   const need=LV_NEED[S.lv];
-  let h=`<div class="mhead"><h2>희망의 깃발</h2><button data-act="close">닫기</button></div>
+  let h=`<div class="mhead"><h2>마을 깃발</h2><button data-act="close">닫기</button></div>
    <div class="lvbox"><div class="lv">Lv.${S.lv}</div><div>${S.lv<LV_MAX?`<div class="row"><span class="lbl">감사의 하트</span><span class="num">♥ ${S.hearts}/${need}</span></div><div class="bar heart" style="margin:6px 0"><i style="width:${Math.min(100,S.hearts/need*100)}%"></i></div>
    <div class="row"><span class="sub">다음 레벨: ${LV_UNLOCK[S.lv+1]}, 새 주민</span><button class="pri" data-act="lvup" ${canLevelUp()?'':'disabled'}>레벨 업</button></div>`:'<span class="sub">최고 레벨이에요!</span>'}</div></div>
    <p class="sub">하트는 주민 머리 위에 떠요. 다가가면 모여요. 방을 만들고, 부탁을 들어주고, 침실에서 재우고, 공장이 깃발로 부품을 보내면 하트가 생겨요.</p>`;
@@ -1999,14 +1988,14 @@ function bannerHTML(){
   if(m){let all=true;h+=`<h3>옛 기술의 기록 ${S.ms+1}장 「${m.n}」</h3><p class="sub">깃발은 옛 기술자들의 기록석이에요. 컨베이어를 깃발에 이어 부품을 바치면 잊힌 기술이 되살아나요. 해금: ${m.un}</p>`;
     for(const k in m.need){const hv=S.hub[k]||0,n=m.need[k];if(hv<n)all=false;h+=`<div class="need">${img(k)}<div><div class="row"><span>${nameOf(k)}</span><span class="num sub">${Math.min(hv,n)}/${n}</span></div><div class="bar prog"><i style="width:${Math.min(100,hv/n*100)}%"></i></div></div></div>`}
     h+=`<div class="btnrow"><button data-act="hubdep">가방에서 필요한 만큼 넣기</button><button class="pri" data-act="hubms" ${all?'':'disabled'}>마일스톤 완료</button></div>`}
-  else h+='<h3>기록을 모두 되살렸어요</h3><p class="sub">별의 사다리(우주 엘리베이터)를 세울 수 있어요.</p>';
+  else h+='<h3>기록을 모두 되살렸어요</h3><p class="sub">하늘 등대(우주 엘리베이터)를 세울 수 있어요.</p>';
   h+='<h3>깃발 저장고</h3><p class="sub">칸을 누르면 최대 50개를 가방으로 꺼내요.</p><div class="grid">';
   const ks=Object.keys(S.hub).filter(k=>S.hub[k]>0);if(!ks.length)h+='<div class="sub">비어 있어요. 컨베이어를 깃발에 이어 보세요.</div>';
   for(const k of ks)h+=`<div class="cell" data-act="hubtake" data-id="${k}">${img(k)}<div class="cc">${S.hub[k]}</div><div class="cn">${nameOf(k)}</div></div>`;
   return h+'</div>';
 }
 function elevHTML(e){
-  let h=`<div class="mhead"><h2>별의 사다리</h2><button data-act="close">닫기</button></div><p class="sub">부품을 모두 채우면 희망의 등불이 하늘로 출발해요. 절반을 넘기면 멈춤의 왕이 직접 쳐들어와요! 컨베이어로도 넣을 수 있어요.</p>`;
+  let h=`<div class="mhead"><h2>하늘 등대</h2><button data-act="close">닫기</button></div><p class="sub">부품을 모두 채우면 등불이 하늘로 출발해요. 절반을 넘기면 안개의 주인이 직접 쳐들어와요! 컨베이어로도 넣을 수 있어요.</p>`;
   for(const k in ELEV_NEED){const hv=e.st[k]||0,n=ELEV_NEED[k];h+=`<div class="need">${img(k)}<div><div class="row"><span>${nameOf(k)}</span><span class="num sub">${hv}/${n}</span></div><div class="bar prog"><i style="width:${Math.min(100,hv/n*100)}%"></i></div></div></div>`}
   return h+`<div class="btnrow"><button class="pri" data-act="elevdep" ${e.launch!=null?'disabled':''}>가방에서 넣기</button></div>`;
 }
@@ -2023,7 +2012,7 @@ function completeMilestone(){
   const nr=CRAFT.filter(r=>r.ms===S.ms&&recipeKnown(r));if(nr.length)setTimeout(()=>inspire(nr.map(r=>nameOf(r.id)),'새 기술!'),1600);
 }
 function showWin(){
-  openPanel('win',`<div class="mhead"><h2>별의 사다리가 다시 섰어요!</h2></div><p style="font-size:16px;line-height:1.75">시간이 멈췄던 땅에 희망의 깃발이 서고, 마을이 생기고, 공장이 돌고, 마침내 별의 사다리를 타고 희망의 등불이 하늘에 닿았어요.<br>${S.day}일 만에 해냈어요. 마을 Lv.${S.lv} · 주민 ${S.villagers.length}명 · 방 ${rooms.length}개 · 물리친 몬스터 ${S.stats.kills}마리.</p><div class="btnrow"><button class="pri" data-act="close">계속 키우기</button></div>`);
+  openPanel('win',`<div class="mhead"><h2>하늘 등대에 불이 켜졌어요!</h2></div><p style="font-size:16px;line-height:1.75">안개에 갇힌 섬에 마을 깃발이 서고, 마을이 생기고, 공장이 돌고, 마침내 하늘 등대를 타고 등불이 하늘에 닿았어요.<br>${S.day}일 만에 해냈어요. 마을 Lv.${S.lv} · 주민 ${S.villagers.length}명 · 방 ${rooms.length}개 · 물리친 몬스터 ${S.stats.kills}마리.</p><div class="btnrow"><button class="pri" data-act="close">계속 키우기</button></div>`);
 }
 function controlsHTML(){return`<h3>키보드 · 마우스</h3><div class="keys">
   <b>화면 클릭</b><span>마우스 고정 (시점 조작). Esc로 해제</span><b>WASD · Space</b><span>이동 · 점프 (한 칸 턱은 자동으로 넘어요)</span>
@@ -2032,7 +2021,7 @@ function controlsHTML(){return`<h3>키보드 · 마우스</h3><div class="keys">
   <h3>터치</h3><div class="keys"><b>왼쪽 스틱</b><span>이동</span><b>화면 드래그</b><span>시점</span><b>부수기 모드</b><span>길게 눌러 부수기 · 탭으로 공격/열기/대화</span><b>쌓기 모드</b><span>탭한 곳에 쌓기</span></div>`}
 function showHelp(){
   openPanel('help',`<div class="mhead"><h2>도움말</h2><button data-act="close">닫기</button></div>
-  <h3>이야기</h3><p class="sub">어느 밤 울려 퍼진 「멈춤의 종」 소리에 하나였던 대륙 아르테라는 산산이 부서지고, 조각마다 시간이 멈춰 버렸어요. 멈춘 세상에서 움직일 수 있는 마지막 「만드는 손」인 당신은 희망의 깃발로 멈춘 땅에 시간을 되돌리고, 돌이 된 사람들을 깨우며, 부서진 땅을 하나씩 다시 이어 가야 해요.</p>
+  <h3>이야기</h3><p class="sub">세상에는 흰 안개에 둘러싸인 오르네섬 하나뿐이라고 모두가 믿고 있었어요. 어느 아침, 기억을 잃은 당신이 안개 너머에서 부서진 배를 타고 떠밀려 와요. 등대지기의 딸 세라와 함께 무너진 마을을 다시 세우고, 50년 전 꺼진 등대에 불을 밝혀 안개 너머에 숨은 땅들을 찾아가세요.</p>
   <div class="btnrow"><button data-act="replay">프롤로그 다시 보기</button></div>
   <h3>조작 (키보드 · 마우스)</h3><div class="keys">
   <b>화면 클릭</b><span>마우스 고정 (시점 조작). Esc로 해제</span><b>WASD</b><span>이동 · Space 점프 (한 칸 턱은 자동으로 넘어요)</span>
@@ -2040,7 +2029,7 @@ function showHelp(){
   <b>오른쪽 버튼 유지 + 시점 이동</b><span>컨베이어와 블록을 이어서 설치 (컨베이어 방향 자동)</span>
   <b>R / Shift+R</b><span>기계 방향 회전</span><b>1–9 · 휠</b><span>단축칸</span><b>E</b><span>가방 · 제작</span><b>F</b><span>베리 먹기</span><b>V</b><span>시점 거리 (1인칭 포함)</span><b>방향키</b><span>시점 돌리기 (커서 모드)</span></div>
   <h3>조작 (터치)</h3><div class="keys"><b>왼쪽 스틱</b><span>이동</span><b>화면 드래그</b><span>시점</span><b>부수기 모드</b><span>길게 누르면 부수기 · 탭하면 공격/열기/대화</span><b>쌓기 모드</b><span>탭한 곳에 쌓기 · 탭으로 열기/대화</span></div>
-  <h3>드퀘빌식 진행</h3><p class="sub">희망의 깃발을 꽂으면 그 주변이 마을이 돼요. 처음 얻은 재료는 레시피를 번뜩이게 해요. 2칸 높이 벽 + 문 + 횃불로 방을 만들고, 가구에 따라 방 레시피(침실 · 식당 · 작업실 · 작은 공장 …)가 완성돼요. 주민 머리 위의 하트를 모아 깃발에서 마을 레벨을 올리면 새 주민과 레시피, 설계도가 생겨요. 설계도를 놓고 마을 보관함에 재료를 넣으면 주민들이 대신 지어요. 밤과 습격 때는 몬스터가 와요.</p>
+  <h3>드퀘빌식 진행</h3><p class="sub">마을 깃발을 꽂으면 그 주변이 마을이 돼요. 처음 얻은 재료는 레시피를 번뜩이게 해요. 2칸 높이 벽 + 문 + 횃불로 방을 만들고, 가구에 따라 방 레시피(침실 · 식당 · 작업실 · 작은 공장 …)가 완성돼요. 주민 머리 위의 하트를 모아 깃발에서 마을 레벨을 올리면 새 주민과 레시피, 설계도가 생겨요. 설계도를 놓고 마을 보관함에 재료를 넣으면 주민들이 대신 지어요. 밤과 습격 때는 몬스터가 와요.</p>
   <h3>새티스팩토리식 공장</h3><p class="sub">빛나는 광맥 노드 위에 채굴기를 놓고, 주황 화살표(출구) 앞에 컨베이어를 이어 제련기 · 제작기 · 조립기로 보내세요. 기계는 출구를 뺀 세 면으로 재료를 받아요. 경사 컨베이어로 한 칸 올리고, 컨베이어 끝이 허공이면 아래 컨베이어로 떨어져요. 발전기에 연료를 넣어야 기계가 돌고, 전력이 모자라면 모두 느려져요. 깃발이 HUB 역할을 해서 부품으로 마일스톤을 달성하면 새 기술이 열려요.</p>
   <h3>저장</h3><p class="sub">60초마다 이 브라우저에 자동 저장돼요.</p>`);
 }
@@ -2090,14 +2079,15 @@ function save(quiet){
 function load(n){
   try{const raw=localStorage.getItem(slotKey(n));if(!raw)return false;const d=JSON.parse(raw);if(d.v!==3)return false;
     unrle(d.vox,vox);ents.clear();for(const[i,e]of d.ents)ents.set(i,e);S=d.S;[P.x,P.y,P.z]=d.P;[camYaw,camPitch,camDist]=d.cam;
-    const RENAME={'루루':'리아','피피':'브리타','모모':'마르코','돌쇠':'바르톨','가람':'테오','나래':'시엘','보리':'오스카'};
-    for(const v of S.villagers){if(RENAME[v.name])v.name=RENAME[v.name];v.task=null;v.sleeping=false;v.wait=Math.min(v.wait||0,2)}curSlot=n;afterLoad();return true}
+    const RENAME={'리아':'세라','브리타':'카이','루루':'세라','피피':'카이','모모':'마르코','돌쇠':'바르톨','가람':'테오','나래':'시엘','보리':'오스카'};
+    for(const v of S.villagers){if(RENAME[v.name])v.name=RENAME[v.name];v.task=null;v.sleeping=false;v.wait=Math.min(v.wait||0,2)}if(!S.v2){if(S.obj>=6)S.obj++;S.v2=1}if(S.obj>6)S.lamp=true;curSlot=n;afterLoad();return true}
   catch(e){console.warn(e);return false}
 }
 function afterLoad(){
   for(const g of entMesh.values())scene.remove(g);entMesh.clear();
   for(const[i,e]of ents)createEntMesh(i,e);
-  rebuildM();rebuildAllChunks();buildBaseLine();buildStatues();
+  rebuildM();rebuildAllChunks();buildBaseLine();buildLighthouse();
+  updLighting.snap=1;
   for(const c of scene.children.filter(c=>c.userData&&c.userData.villager))scene.remove(c);
   for(const v of S.villagers){v._m=null;attachVillagerMesh(v)}
   for(const s of slimes)scene.remove(s._m);slimes=[];raid=null;
@@ -2107,7 +2097,7 @@ function afterLoad(){
 }
 function newGame(story){
   const seed=(Math.random()*1e9)|0;
-  S={seed,inv:{},hot:Array(9).fill(null),sel:0,rot:0,time:.04,day:1,hp:100,lv:1,hearts:0,ms:0,hub:{},obj:0,banner:null,elev:null,seen:{},roomKeys:[],roomSeen:{},villagers:[],bp:null,won:false,kingDone:false,
+  S={seed,inv:{},hot:Array(9).fill(null),sel:0,rot:0,time:.04,day:1,hp:100,lv:1,hearts:0,ms:0,hub:{},obj:0,v2:1,lamp:false,banner:null,elev:null,seen:{},roomKeys:[],roomSeen:{},villagers:[],bp:null,won:false,kingDone:false,
      stats:{got:{},hubIn:{},crafted:{},placed:{},kills:0,raids:0,bps:0,hubTotal:0}};
   const ruin=genWorld(seed);ents.clear();
   P.x=48.5;P.z=52.5;P.y=surfaceY(48,52);P.vy=0;camYaw=0;camPitch=-.28;
