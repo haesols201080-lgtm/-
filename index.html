@@ -1042,7 +1042,7 @@ function pivot(parent,x,y,z){const p=new THREE.Group();p.position.set(x,y,z);par
 
 // ============================================================ characters (merged-part rig with toon outline)
 const _bxG=new THREE.BoxGeometry(1,1,1);
-const charMat=new THREE.MeshToonMaterial({vertexColors:true,gradientMap:toonGrad});
+const charMat=new THREE.MeshLambertMaterial({vertexColors:true});
 const outlineMat=new THREE.MeshBasicMaterial({color:0x14100c,side:THREE.BackSide});
 function mergeBoxes(list,inflate){
   const pos=[],nor=[],col=[],idx=[],bp=_bxG.attributes.position.array,bn=_bxG.attributes.normal.array,bi=_bxG.index.array;
@@ -1057,7 +1057,6 @@ function mergeBoxes(list,inflate){
 function part(parent,boxes,detail){
   const all=detail?boxes.concat(detail):boxes;
   const m=new THREE.Mesh(mergeBoxes(all),charMat);m.castShadow=true;parent.add(m);
-  if(boxes.length){const o=new THREE.Mesh(mergeBoxes(boxes,.014),outlineMat);parent.add(o)}
   return m;
 }
 const LOOKS={
@@ -1072,13 +1071,13 @@ const LOOKS={
 };
 function makeChar(lk,hammer){
   const g=new THREE.Group(),root=pivot(g,0,0,0),u={root};
-  const hips=pivot(root,0,.88,0);u.hips=hips;
+  const hips=pivot(root,0,.76,0);u.hips=hips;
   const sleeve=lk.jacket,fore=lk.rolled?lk.skin:lk.jacket,hand=lk.gloves||lk.skin;
   // legs: thigh (hip pivot) + shin (knee pivot)
   for(const s of[-1,1]){
-    const th=pivot(hips,s*.1,0,0),kn=pivot(th,0,-.4,0);
-    const tb_=[[.15,.42,.17,0,-.42,0,lk.pants]];if(lk.pads)tb_.push([.15,.09,.03,0,-.44,-.095,0x6a6a72]);part(th,tb_);
-    part(kn,[[.14,.36,.15,0,-.36,0,lk.pants],[.16,.14,.24,0,-.48,-.03,lk.boots],[.17,.04,.19,0,-.36,-.005,lk.boots]],[[.16,.02,.245,0,-.48,-.03,0x1e1610]]);
+    const th=pivot(hips,s*.1,0,0),kn=pivot(th,0,-.36,0);
+    const tb_=[[.16,.38,.18,0,-.38,0,lk.pants]];if(lk.pads)tb_.push([.15,.09,.03,0,-.4,-.1,0x6a6a72]);part(th,tb_);
+    part(kn,[[.15,.28,.16,0,-.28,0,lk.pants],[.17,.14,.25,0,-.4,-.03,lk.boots],[.18,.04,.2,0,-.28,-.005,lk.boots]],[[.17,.02,.255,0,-.4,-.03,0x1e1610]]);
     u[s<0?'thighL':'thighR']=th;u[s<0?'kneeL':'kneeR']=kn;
   }
   // torso (pivot at hips)
@@ -1107,7 +1106,7 @@ function makeChar(lk,hammer){
   }
   if(hammer){const t=pivot(u.elbowR,0,-.31,0);part(t,[[.045,.045,.5,0,-.02,-.2,0x6b4628],[.12,.13,.22,0,-.07,-.45,0x8d939b]],[[.125,.03,.225,0,.05,-.45,0xc8ccd2]]);u.tool=t}
   // head
-  const head=pivot(torso,0,.54,0);u.head=head;
+  const head=pivot(torso,0,.54,0);head.scale.setScalar(1.32);u.head=head;
   const H=lk.hair,st=lk.style,hb=[[.1,.06,.1,0,-.05,0,lk.skin],[.34,.33,.32,0,0,0,lk.skin],[.035,.075,.06,-.185,.1,0,lk.skin],[.035,.075,.06,.185,.1,0,lk.skin]],hd=[];
   hd.push([.04,.045,.035,0,.1,-.172,lk.skin]);
   for(const s of[-1,1])hd.push([.085,.022,.012,s*.075,.215,-.166,lk.brow,0,0,st==='bald'?-s*.18:s*.06]);
@@ -1127,7 +1126,7 @@ function makeChar(lk,hammer){
   if(st==='pony'){hb.length=0;const p=pivot(head,0,.3,.15);part(p,[[.1,.08,.1,0,-.02,0,lk.band],[.1,.34,.09,0,-.34,.04,H]]);u.hairL=p}
   if(st==='long'){const p=pivot(head,0,.24,.15);part(p,[[.36,.5,.06,0,-.5,0,H]],[[.06,.06,.02,-.12,.04,-.04,0xffffff]]);u.hairL=p}
   // face (separate meshes for blinking and talking)
-  const eyes=pivot(head,0,.16,-.16);u.eyes=eyes;const ed=[];
+  const eyes=pivot(head,0,.16,-.16);eyes.scale.set(1.12,1.2,1);u.eyes=eyes;const ed=[];
   for(const s of[-1,1]){ed.push([.075,.05,.01,s*.075,-.025,-.004,0xf4f0ea]);ed.push([.04,.05,.01,s*.07,-.025,-.011,lk.iris]);ed.push([.018,.018,.01,s*.062,0,-.018,0xffffff])}
   part(eyes,[],ed);
   const mo=pivot(head,0,.055,-.16);part(mo,[],[[.075,.016,.01,0,-.008,-.006,0x7a3a32]]);u.mouth=mo;
