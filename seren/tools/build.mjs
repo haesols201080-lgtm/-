@@ -5,7 +5,7 @@
 //   node tools/build.mjs --watch  소스가 바뀔 때마다 다시 빌드
 //   node tools/build.mjs --dev    압축 없이 빌드 (디버깅용)
 import * as esbuild from 'esbuild';
-import { readFileSync, writeFileSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, statSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -58,6 +58,17 @@ async function buildOnce() {
     .replace('//__JS__', () => js);
   const out = join(root, 'index.html');
   writeFileSync(out, html);
+  // 아티팩트(claude.ai) 게시용: 문서 뼈대(doctype·html·head·body)는 게시할 때 씌워지므로 빼고 내용만
+  const art = html
+    .replace(/<!doctype html>\s*/i, '')
+    .replace(/<html[^>]*>\s*/i, '')
+    .replace(/<\/?head>\s*/gi, '')
+    .replace(/<\/?body>\s*/gi, '')
+    .replace(/<\/html>\s*/i, '')
+    .replace('<meta charset="utf-8">', '')
+    .replace(/<title>[^<]*<\/title>/, '<title>울림이 남는 별 세렌</title>');
+  mkdirSync(join(root, 'dist'), { recursive: true });
+  writeFileSync(join(root, 'dist', 'seren-artifact.html'), art);
   const kb = (statSync(out).size / 1024).toFixed(0);
   console.log(`[build] index.html ${kb} KB (${Date.now() - t0} ms)`);
 }

@@ -393,13 +393,21 @@ export class UI {
     </div>`);
     el.querySelector('[data-c]')?.addEventListener('click', onContinue);
     el.querySelector('[data-n]').addEventListener('click', () => {
-      if (hasSave && !confirm('새로 시작하면 지금까지의 여정이 지워져요. 괜찮을까요?')) return;
-      onNew();
+      if (!hasSave) { onNew(); return; }
+      this.confirm('새로 시작하면 지금까지의 여정이 지워져요.', '처음부터 시작', onNew);
     });
     el.querySelector('[data-s]').addEventListener('click', onSettings);
     this.root.appendChild(el);
     this.titleEl = el;
     this.setHud(false);
+  }
+
+  /** 페이지 안의 확인 창 (브라우저 confirm 대신 — 일부 환경에서는 confirm 이 막혀 있다) */
+  confirm(text, yesLabel, onYes) {
+    const el = $(`<div class="card-wrap" style="z-index:40"><div class="card glass"><p style="color:var(--ink);font-size:16px">${text}</p><div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><button class="btn" data-no>그만두기</button><button class="btn primary" data-yes>${yesLabel}</button></div></div></div>`);
+    el.querySelector('[data-no]').addEventListener('click', () => el.remove());
+    el.querySelector('[data-yes]').addEventListener('click', () => { el.remove(); onYes(); });
+    this.root.appendChild(el);
   }
 
   hideTitle() {
