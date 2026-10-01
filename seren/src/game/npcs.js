@@ -77,6 +77,7 @@ export class NPCs {
     if (!n) return;
     n.target = { x, z };
     n.home = { x, z, r: 6 };
+    n.moved = true;
     if (opts.instant) { n.pos.set(x, this.game.world.groundAt(x, z), z); n.target = null; }
   }
 

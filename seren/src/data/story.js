@@ -285,7 +285,7 @@ export const ECHOES = [
     text: '아주 먼 옛날, 아웬은 땅이 우는 소리를 처음 들었다. 그 울림이 외로워 보여서, 그들은 대답했다. 그것이 첫 노래였다.' },
   { id: 'e-ring', at: 'spine', off: [180, -120], title: '고리를 짓다', words: ['ring', 'sky'],
     text: '천 세대의 합창으로 아웬은 하늘에 고리를 걸었다. 고리는 별을 향해 열어 둔 거대한 귀였다.' },
-  { id: 'e-seed', at: 'spine', off: [-60, 0], y: 1300, title: '씨앗 노래', words: ['seed', 'far'],
+  { id: 'e-seed', at: 'spine', off: [-60, 0], y: 'deck', title: '씨앗 노래', words: ['seed', 'far'],
     text: '아웬은 노래를 씨앗처럼 하늘로 보냈다. 얼마나 걸릴지 아무도 몰랐다. 누군가 언젠가 들을 거라고, 그들은 그저 믿었다.' },
   { id: 'e-becoming', at: 'gatmaeul', off: [60, -40], title: '울림이 된 이들', words: ['echo', 'gone'],
     text: '늙은 아웬은 죽지 않는다. 몸을 내려놓고 울림이 된다. 균사 숲의 빛은 그렇게 떠난 이들의 숨결이다.' },
@@ -303,7 +303,7 @@ export const ECHOES = [
     text: '라르크 호 비행 일지, 312일째. 「신호를 해독했다. 이건 데이터가 아니다. 노래다. 누군가 아주 오래 우리를 부르고 있었다.」' },
   { id: 'e-farewell', at: 'meadow-vista', off: [6, 0], title: '다시 울리자', words: ['again', 'return'],
     text: '아웬에게는 「안녕」이라는 말이 없다. 헤어질 때 그들은 이렇게 노래한다. 「다시 울리자.」' },
-  { id: 'e-eclipse', at: 'spine-deck', off: [40, 40], y: 1300, title: '우르의 그림자', words: ['dark', 'together'], eclipseOnly: true,
+  { id: 'e-eclipse', at: 'spine', off: [40, 40], y: 'deck', title: '우르의 그림자', words: ['dark', 'together'], eclipseOnly: true,
     text: '우르가 해를 삼키는 날이면, 세렌의 모든 목소리가 하나가 된다. 어둠 속에서 아웬은 서로의 노래로 서로를 찾는다.' },
 ];
 
@@ -370,5 +370,6 @@ export const MOA = {
   hardLand: '착지 충격 흡수. 그래도 조금만 살살 부탁해요.',
   lowHarmony: '이 지역은 색이 바래 있어요. 근처 공명탑이 잠들어 있어서 그런 것 같아요.',
   firstSkim: '썰매가 공명을 타고 떠요. 내리막에서는 더 빨라지고, 물 위도 달릴 수 있어요.',
+  firstJump: '공중에서 점프를 한 번 더 누르면 등의 날개가 펴져요. 높은 곳에서 뛰어내려 보세요.',
   firstWord: '단어를 하나 알게 됐어요. 예전에 들었던 말도 다시 읽어 볼 수 있어요 — 일지의 「들은 말」을 보세요.',
 };

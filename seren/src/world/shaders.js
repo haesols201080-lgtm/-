@@ -77,7 +77,9 @@ vec3 skyBase(vec3 rd) {
 }
 
 vec3 fogColorFor(vec3 rd) {
-  return skyBase(vec3(rd.x, max(rd.y, 0.0), rd.z));
+  vec3 c = skyBase(vec3(rd.x, max(rd.y, 0.0), rd.z));
+  // 높은 곳에서 내려다보면 공기층이 푸르스름하게
+  return c * mix(vec3(1.0), vec3(0.74, 0.84, 1.0), smoothstep(0.0, -0.45, rd.y));
 }
 
 float fogAmount(vec3 ro, vec3 wpos) {

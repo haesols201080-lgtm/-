@@ -50,8 +50,8 @@ export class Structures {
     const parts = A.liftBase({ r });
     this._mesh(parts.map((g) => xf(g, { x, y: y0, z })));
     // 빛기둥
-    const h = top - y0 + 6;
-    const col = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.9, r * 0.9, h, 24, 1, true), glowMaterial({ color: 0x7ff3e6, intensity: 0.5, fresnel: 1, side: THREE.DoubleSide }));
+    const h = top - y0;
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.6, r * 0.9, h, 24, 1, true), glowMaterial({ color: 0x7ff3e6, intensity: 0.4, fresnel: 1, side: THREE.DoubleSide }));
     col.position.set(x, y0 + h / 2, z);
     this.group.add(col);
     // 떠오르는 빛 알갱이

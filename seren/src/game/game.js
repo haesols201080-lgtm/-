@@ -12,6 +12,7 @@ import { Flora } from '../world/flora.js';
 import { Structures } from '../world/structures.js';
 import { Currents } from '../world/currents.js';
 import { Creatures } from '../world/creatures.js';
+import { Clouds } from '../world/clouds.js';
 import { playerUniform, glowMaterial } from '../world/materials.js';
 import { Player } from '../player/player.js';
 import { Avatar } from '../player/avatar.js';
@@ -57,6 +58,7 @@ export class Game {
     this.currents = this.world.add(new Currents(this.world, CURRENTS));
     this.player = new Player(this.world);
     this.creatures = this.world.add(new Creatures(this.world, this));
+    this.clouds = this.world.add(new Clouds(this.world, this.engine.q));
     this.avatar = new Avatar();
     this.avatar.addTo(this.engine.scene);
     this.rig = new CameraRig(this.engine.camera, this.world);
@@ -241,6 +243,7 @@ export class Game {
 
   setMode(m) {
     this.mode = m;
+    document.body.classList.toggle('busy', m !== 'play');
     this.input.wantLock = m === 'play';
     if (m !== 'play' && document.pointerLockElement) document.exitPointerLock?.();
   }
@@ -352,7 +355,7 @@ export class Game {
   _findTarget() {
     const p = this.player.pos;
     const npc = this.npcs.nearest(p, 5.5, (n) => !n.ambient);
-    if (npc) return { kind: 'npc', o: npc, label: `${npc.name}와(과) 마주하기` };
+    if (npc) return { kind: 'npc', o: npc, label: `${npc.name}와(과) 마주하기`, short: '말 걸기' };
     return this.discovery.nearestInteract(p);
   }
 
@@ -585,7 +588,7 @@ export class Game {
   _hud() {
     const p = this.player;
     this._target = this.mode === 'play' && p.state !== 'down' && !this.director.active ? this._findTarget() : null;
-    this.ui.prompt(this._target ? this._target.label : null);
+    this.ui.prompt(this._target ? this._target.label : null, this._target ? this._target.short : null);
     const markers = [];
     const pos = p.pos;
     const bearing = (x, z) => ((Math.atan2(x - pos.x, -(z - pos.z)) * 180) / Math.PI + 360) % 360;
@@ -627,7 +630,10 @@ export class Game {
     const p = this.player;
     const s = this.state;
     for (const e of p.events) {
-      if (e === 'jump') audio.noise({ freq: 900, dur: 0.18, gain: 0.08, sweep: 2000 });
+      if (e === 'jump') {
+        audio.noise({ freq: 900, dur: 0.18, gain: 0.08, sweep: 2000 });
+        if (!s.flags.moaJump) { s.flags.moaJump = true; this.ui.moa(MOA.firstJump); }
+      }
       if (e === 'land') {
         const k = Math.min(1, (p.impact || 4) / 20);
         audio.noise({ freq: 220, dur: 0.12 + k * 0.2, gain: 0.08 + k * 0.25, type: 'lowpass' });

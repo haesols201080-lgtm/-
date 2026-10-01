@@ -138,6 +138,7 @@ export class Terrain {
       for (let i = 0; i < count; i++) {
         const w = new Worker(url);
         w.onmessage = (e) => this._onResult(e.data);
+        w.onerror = () => this._workerFailed();
         w.busy = 0;
         this.workers.push(w);
       }
@@ -145,6 +146,17 @@ export class Terrain {
       console.warn('[terrain] 워커를 만들 수 없어 메인 스레드에서 생성합니다', err);
       this.workers = [];
     }
+  }
+
+  /** 워커가 막힌 환경(엄격한 보안 정책 등): 메인 스레드로 전환하고 대기 중이던 작업을 다시 넣는다 */
+  _workerFailed() {
+    if (!this.workers.length) return;
+    console.warn('[terrain] 워커 오류 — 메인 스레드에서 지형을 만듭니다');
+    for (const w of this.workers) w.terminate();
+    this.workers = [];
+    for (const n of this.callbacks.values()) { n.pending = false; }
+    this.callbacks.clear();
+    this.inflight = 0;
   }
 
   _node(level, x0, z0, size) {
@@ -191,6 +203,7 @@ export class Terrain {
     this.callbacks.delete(d.id);
     for (const w of this.workers) if (w.jobs && w.jobs.has(d.id)) { w.jobs.delete(d.id); w.busy--; }
     this.inflight--;
+    this._stall = 0;
     if (!n || !n.pending) return;
     this._makeMesh(n, d);
   }
@@ -246,6 +259,10 @@ export class Terrain {
 
   update(camPos, budgetMs = 6) {
     this.frame++;
+    if (this.workers.length && this.inflight > 0) {
+      this._stall = (this._stall || 0) + 1;
+      if (this._stall > 600) this._workerFailed(); // 10초 넘게 응답이 없으면
+    } else this._stall = 0;
     const p = this._cam.copy(camPos);
     for (const m of this.group.children) m.visible = false;
     this.visibleCount = 0;

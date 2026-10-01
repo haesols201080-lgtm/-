@@ -269,17 +269,17 @@ void main() {
   float edge = smoothstep(0.0, 0.08, across) * smoothstep(1.0, 0.92, across);
   float panels = 0.82 + 0.18 * step(0.5, fract(along * 0.5)) * step(0.15, fract(across * 6.0));
   float seam = smoothstep(0.04, 0.0, abs(across - 0.5));
-  vec3 base = vec3(0.78, 0.8, 0.86) * panels;
+  vec3 base = vec3(0.72, 0.76, 0.86) * panels;
   float ndl = abs(dot(normalize(vN), uSunDir)) * 0.6 + 0.4;
-  vec3 col = base * ndl * 1.8 * (1.0 - inShadow * 0.92);
+  vec3 col = base * ndl * 0.85 * (1.0 - inShadow * 0.94);
   // 불빛: 가장자리를 따라 이어지는 점등과 정거장
   float dots = step(0.86, fract(along * 3.0)) * (smoothstep(0.1, 0.0, abs(across - 0.12)) + smoothstep(0.1, 0.0, abs(across - 0.88)));
   float station = smoothstep(0.004, 0.0, abs(fract(vUv.x * 12.0) - 0.5) - 0.006);
   vec3 lights = vec3(1.0, 0.85, 0.55) * dots * 3.0 + vec3(0.6, 0.95, 1.0) * (seam * 1.2 + station * 2.5);
   col += lights * uLights * mix(0.25, 1.0, max(uNight, inShadow));
   float T = mix(0.35, 0.95, smoothstep(0.0, 0.6, rd.y));
-  float alpha = edge * mix(0.55, 1.0, max(uNight, inShadow * 0.5));
-  col = col * T + skyBase(rd) * 0.35 * (1.0 - uNight);
+  float alpha = edge * mix(0.32, 0.9, max(uNight, inShadow * 0.5));
+  col = col * T + skyBase(rd) * 0.25 * (1.0 - uNight);
   gl_FragColor = vec4(col, alpha);
   ${OUT}
 }`;
@@ -360,7 +360,7 @@ export class Sky {
 
     // 궤도 고리 (남북 방향 축의 원통 띠 — 아래에서 보면 동서로 하늘을 가로지르는 띠)
     const hoopR = (PLANET_R + RING_ALT) * SKY_SCALE;
-    const hoopW = 70000 * SKY_SCALE;
+    const hoopW = 26000 * SKY_SCALE;
     const hoopGeo = new THREE.CylinderGeometry(hoopR, hoopR, hoopW, 720, 1, true);
     hoopGeo.rotateX(Math.PI / 2);
     hoopGeo.rotateZ(Math.PI / 2);

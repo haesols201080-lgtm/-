@@ -43,7 +43,7 @@ export class Discovery {
     shimmerGeo.translate(0, 1.6, 0);
     this.echoes = ECHOES.map((d) => {
       const [x, z] = resolve(d.at, d.off);
-      const y = d.y ?? game.world.groundAt(x, z, 1e5);
+      const y = d.y === 'deck' ? game.structures.deckY : d.y ?? game.world.groundAt(x, z, 1e5);
       const m = new THREE.Mesh(shimmerGeo, glowMaterial({ color: 0xb9a6ff, intensity: 0.9, fresnel: 1, side: THREE.DoubleSide }));
       m.position.set(x, y, z);
       this.scene.add(m);

@@ -420,7 +420,7 @@ export class Avatar {
     const yaw = p.yaw;
     const sx = Math.cos(yaw), sz = -Math.sin(yaw);
     for (let i = 0; i < n; i++) {
-      const w = 0.075 * (1 - i / n * 0.35);
+      const w = 0.055 * (1 - i / n * 0.3);
       const c = pts[i];
       pos[i * 6] = c.x - sx * w; pos[i * 6 + 1] = c.y; pos[i * 6 + 2] = c.z - sz * w;
       pos[i * 6 + 3] = c.x + sx * w; pos[i * 6 + 4] = c.y; pos[i * 6 + 5] = c.z + sz * w;

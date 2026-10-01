@@ -303,8 +303,15 @@ button { font-family: inherit; color: inherit; }
   .region { top: 18%; }
 }
 @media (max-width: 600px) {
-  .compass { width: 52vw; top: calc(60px + var(--safe-t)); }
-  .objective { max-width: 60vw; top: calc(10px + var(--safe-t)); }
-  .toasts { top: calc(98px + var(--safe-t)); }
+  .compass { width: 78vw; top: calc(66px + var(--safe-t)); }
+  .objective { max-width: 52vw; top: calc(8px + var(--safe-t)); padding: 6px 10px; }
+  .objective .t { font-size: 13px; }
+  .objective .h { font-size: 11px; }
+  .icobtn { width: 38px; height: 38px; }
+  .toasts { top: calc(104px + var(--safe-t)); }
   .dialogue .text { font-size: 16px; }
+  .touch .moa { width: 64vw; left: 40%; bottom: calc(250px + var(--safe-b)); font-size: 14px; }
 }
+body.busy .touchui, body.busy .tones { opacity: 0; pointer-events: none; }
+body.busy .touchui *, body.busy .tones * { pointer-events: none !important; }
+.touchui, .tones { transition: opacity 0.3s; }

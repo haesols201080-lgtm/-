@@ -166,13 +166,18 @@ export class UI {
     this._sayT = setTimeout(() => (this.sayEl.style.opacity = 0), 5200);
   }
 
-  prompt(text) {
+  prompt(text, short) {
     if (!text) { this.promptEl.classList.add('hidden'); if (this.tAct) this.tAct.classList.add('hidden'); this._prompt = null; return; }
     if (this._prompt === text) return;
     this._prompt = text;
     this.promptEl.innerHTML = `<span class="kbd">E</span>${text}`;
-    this.promptEl.classList.toggle('hidden', this.touch);
-    if (this.tAct) { this.tAct.classList.remove('hidden'); this.tAct.innerHTML = text.length > 7 ? text.slice(0, 7) + '…' : text; }
+    // 터치: 단추에는 짧은 말, 화면에는 전체 설명
+    this.promptEl.classList.remove('hidden');
+    if (this.tAct) {
+      this.tAct.classList.remove('hidden');
+      const s = short || (text.includes('읽') ? '읽기' : text.includes('열') ? '열기' : text.includes('줍') ? '줍기' : text.includes('탑') ? '손 대기' : '살피기');
+      this.tAct.textContent = s;
+    }
   }
 
   regionTitle(name, desc, first) {

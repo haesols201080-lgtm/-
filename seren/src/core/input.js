@@ -52,12 +52,18 @@ export class Input {
     const c = this.canvas;
     c.addEventListener('mousedown', (e) => {
       if (!this.enabled) return;
-      if (e.button === 0 && this.wantLock && !this.locked) c.requestPointerLock?.();
-      if (e.button === 0) { this.down.add('click'); }
+      if (e.button === 0 && this.wantLock && !this.locked && !this.lockFailed) {
+        try {
+          const r = c.requestPointerLock?.();
+          if (r && r.catch) r.catch(() => { this.lockFailed = true; });
+        } catch { this.lockFailed = true; }
+      }
+      if (e.button === 0) { this.down.add('click'); if (!this.locked) this._drag = true; }
       if (e.button === 2) { this._drag = true; }
       this.lastDevice = 'keyboard';
     });
-    addEventListener('mouseup', (e) => { if (e.button === 2) this._drag = false; });
+    addEventListener('mouseup', () => { this._drag = false; });
+    document.addEventListener('pointerlockerror', () => { this.lockFailed = true; });
     c.addEventListener('contextmenu', (e) => e.preventDefault());
     addEventListener('mousemove', (e) => {
       if (this.locked || this._drag) {
