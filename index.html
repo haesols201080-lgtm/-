@@ -27,7 +27,7 @@
 }
 [hidden]{display:none!important}
 *,*::before,*::after{box-sizing:border-box}
-html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:14px;word-break:keep-all;overflow-wrap:break-word;touch-action:none;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
 #game{position:fixed;inset:0}
 #game canvas{display:block;width:100%;height:100%}
 button{font-family:var(--display);font-size:15px;color:var(--ink);background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer}
@@ -147,6 +147,22 @@ button:disabled{opacity:.45;cursor:default;border-color:var(--line)}
   #selname{bottom:calc(env(safe-area-inset-bottom,0px) + 54px)}
   #ctitle .c2{font-size:32px}
 }
+/* story scenes */
+#story{position:fixed;inset:0;z-index:15;cursor:pointer}
+#story::before,#story::after{content:"";position:absolute;left:0;right:0;height:9vh;background:#000;z-index:1}
+#story::before{top:0}#story::after{bottom:0}
+#story.narr{background:radial-gradient(ellipse at center,rgba(0,0,0,.1),rgba(0,0,0,.6))}
+#sbox{position:absolute;z-index:2;left:50%;transform:translateX(-50%);bottom:calc(9vh + 18px);width:min(720px,calc(100vw - 32px));background:rgba(8,12,28,.92);border:2px solid #e9e3cf;border-radius:10px;padding:14px 18px 24px}
+#story.narr #sbox{background:transparent;border:none;text-align:center;bottom:auto;top:50%;transform:translate(-50%,-50%)}
+#story.narr #sTxt{font-family:var(--display);font-size:23px;text-shadow:0 2px 6px #000,0 0 18px rgba(0,0,0,.85);min-height:0}
+#sWho{font-family:var(--display);font-size:17px;margin-bottom:6px;color:var(--gold)}
+#sTxt{font-size:16px;line-height:1.75;min-height:3.5em;text-wrap:pretty}
+#snext{position:absolute;right:16px;bottom:6px;color:var(--gold);font-size:14px;animation:bob 1s infinite}
+@keyframes bob{50%{transform:translateY(3px)}}
+#sSkip{position:absolute;z-index:3;right:16px;top:calc(9vh + 12px);font-size:13px;padding:4px 12px;background:rgba(17,23,43,.75)}
+body.cine .hud,body.cine #touch,body.cine #lock{visibility:hidden}
+body.cine #ctitle{visibility:visible}
+@media (max-width:640px){#story.narr #sTxt{font-size:18px}#sTxt{font-size:15px}}
 @media (prefers-reduced-motion:reduce){.toast,#ctitle{animation:none}}
 </style>
 </head>
@@ -191,6 +207,8 @@ button:disabled{opacity:.45;cursor:default;border-color:var(--line)}
   <div id="joy"><div id="knob"></div></div>
   <div id="tbtns"><button id="tMode">부수기</button><button id="tRot">회전</button><button id="tBag">가방</button><button id="tCam">시점</button><button id="tJump">점프</button></div>
 </div>
+
+<div id="story" hidden><button id="sSkip">건너뛰기</button><div id="sbox"><div id="sWho"></div><div id="sTxt"></div><div id="snext">▼</div></div></div>
 
 <div id="modal" hidden><div id="panel"></div></div>
 
@@ -291,7 +309,7 @@ const ENTS={
   assembler:{n:'조립기',solid:1,rot:1,power:15,recipes:['rplate','rotor','frame'],d:'재료 2종으로 고급 부품 조립. 전력 15MW.'},
   burner:{n:'바이오매스 발전기',solid:1,gen:30,fuel:'wood',ft:6,d:'원목을 태워 30MW.'},
   coalgen:{n:'석탄 발전기',solid:1,gen:80,fuel:'coal',ft:8,d:'석탄을 태워 80MW.'},
-  elevator:{n:'우주 엘리베이터',solid:1,d:'모듈식 프레임·로터·케이블을 넣어 완성하세요.'},
+  elevator:{n:'별의 사다리',solid:1,d:'옛 우주 엘리베이터. 모듈식 프레임·로터·케이블을 채우면 희망의 등불을 하늘로 보내요.'},
 };
 for(const k in ENTS)item(k,{n:ENTS[k].n,ent:k,d:ENTS[k].d});
 const FACT=new Set(['conveyor','conveyor2','ramp','splitter','miner','miner2','smelter','maker','assembler','burner','coalgen','chest']);
@@ -368,7 +386,7 @@ const CRAFT=[
 const MS=[
   {n:'기초 물류',need:{iron_plate:20,iron_rod:20},un:'분배기 · 철 망치'},
   {n:'부품 조립',need:{iron_plate:50,screw:100,cable:30,concrete:20},un:'조립기 · 석탄 발전기 · 강화 철판 · 로터'},
-  {n:'고급 생산',need:{rplate:15,rotor:10,concrete:60},un:'채굴기 Mk2 · 컨베이어 Mk2 · 모듈식 프레임 · 우주 엘리베이터'},
+  {n:'고급 생산',need:{rplate:15,rotor:10,concrete:60},un:'채굴기 Mk2 · 컨베이어 Mk2 · 모듈식 프레임 · 별의 사다리'},
 ];
 const ELEV_NEED={frame:20,rotor:30,cable:100};
 
@@ -391,12 +409,12 @@ const RT=Object.fromEntries(ROOMTYPES.map(r=>[r.id,r]));
 
 const LULU={name:'루루',pal:{body:0xe07aa8,hair:0x8a4b2a,band:0xffd66b},guide:1};
 const VILLAGERS=[
-  {name:'피피',pal:{body:0xd4574a,hair:0xf2d16b,band:0x3d6fd8},lines:['밤엔 슬라임이 와요. 횃불 근처는 비교적 안전해요!','침실이 있으면 다들 푹 잘 수 있어요.','저도 슬라임이랑 싸울 수 있다고요!']},
-  {name:'모모',pal:{body:0x5aa36b,hair:0x3a2a1e,band:0xf2d16b},lines:['주민이 늘수록 공장도 신이 나서 빨라진대요.','분배기를 쓰면 한 줄의 컨베이어를 여러 기계에 나눌 수 있어요.','보관함은 앞쪽 컨베이어로 물건을 내보내요.']},
-  {name:'돌쇠',pal:{body:0x7a6a5a,hair:0x222222,band:0xb8433a},lines:['돌은 석회암 노드에 채굴기를 놓아도 캘 수 있다네.','설계도를 놓고 보관함에 재료만 채워 두게. 우리가 지어 주지.','벽은 두 칸 높이여야 방으로 쳐 준다네.']},
-  {name:'가람',pal:{body:0x3d7fb8,hair:0xc4c9d4,band:0xf39a35},lines:['석탄 발전기는 바이오매스보다 훨씬 강력해요.','전력이 부족하면 모든 기계가 느려져요.','경사 컨베이어로 한 칸씩 올려 보낼 수 있어요.']},
-  {name:'나래',pal:{body:0xa35bb3,hair:0xf0a0c0,band:0xffffff},lines:['서로 다른 종류의 방을 지으면 하트를 더 받을 수 있어요.','기계가 있는 방은 작은 공장이 돼서 기계가 빨라져요.','우주 엘리베이터… 언젠가 하늘까지 닿겠죠?']},
-  {name:'보리',pal:{body:0xc9a03c,hair:0x6b3f22,band:0x5aa36b},lines:['베리는 F키로 먹으면 체력이 회복돼요.','깃발에 쌓인 물건은 언제든 꺼내 쓸 수 있어요.','저 멀리엔 광맥 노드가 더 많대요.']},
+  {name:'피피',intro:['안녕하세요! 저는 피피예요. 저 멀리서 깃발의 빛을 보고 달려왔어요!','우리 아빠는 대장장이였는데, 저주 때문에 망치 쥐는 법을 잊어버렸어요… 저라도 다시 배우고 싶어요!'],pal:{body:0xd4574a,hair:0xf2d16b,band:0x3d6fd8},lines:['밤엔 슬라임이 와요. 횃불 근처는 비교적 안전해요!','침실이 있으면 다들 푹 잘 수 있어요.','저도 슬라임이랑 싸울 수 있다고요!']},
+  {name:'모모',intro:['흠흠, 상인 모모라고 해요. 물건을 나를 길이 다 끊겨서 장사를 접었었죠.','그런데 여기선 물건이 저절로 굴러간다면서요? 컨베이어라니, 상인의 꿈이에요!'],pal:{body:0x5aa36b,hair:0x3a2a1e,band:0xf2d16b},lines:['주민이 늘수록 공장도 신이 나서 빨라진대요.','분배기를 쓰면 한 줄의 컨베이어를 여러 기계에 나눌 수 있어요.','보관함은 앞쪽 컨베이어로 물건을 내보내요.']},
+  {name:'돌쇠',intro:['에헴, 석공 돌쇠일세. 젊을 적엔 별의 사다리 주춧돌도 깎았지.','손이 기억을 되찾고 있어. 설계도만 주게. 벽 쌓는 건 내가 맡지.'],pal:{body:0x7a6a5a,hair:0x222222,band:0xb8433a},lines:['돌은 석회암 노드에 채굴기를 놓아도 캘 수 있다네.','설계도를 놓고 보관함에 재료만 채워 두게. 우리가 지어 주지.','벽은 두 칸 높이여야 방으로 쳐 준다네.']},
+  {name:'가람',intro:['저는 가람이에요. 할아버지가 옛 발전소에서 일하셨대요.','전기가 다시 흐르는 걸 보니 가슴이 뛰어요. 전력이라면 저한테 물어보세요!'],pal:{body:0x3d7fb8,hair:0xc4c9d4,band:0xf39a35},lines:['석탄 발전기는 바이오매스보다 훨씬 강력해요.','전력이 부족하면 모든 기계가 느려져요.','경사 컨베이어로 한 칸씩 올려 보낼 수 있어요.']},
+  {name:'나래',intro:['나래예요. 어릴 때부터 무너진 사다리 끝을 올려다보는 게 버릇이었어요.','사다리가 다시 서면… 저도 별을 보러 갈 수 있을까요?'],pal:{body:0xa35bb3,hair:0xf0a0c0,band:0xffffff},lines:['서로 다른 종류의 방을 지으면 하트를 더 받을 수 있어요.','기계가 있는 방은 작은 공장이 돼서 기계가 빨라져요.','우주 엘리베이터… 언젠가 하늘까지 닿겠죠?']},
+  {name:'보리',intro:['요리사 보리예요! 밥 짓는 솜씨만큼은 저주도 못 빼앗아 갔지요.','식당만 있으면 다들 배불리 먹여 드릴게요!'],pal:{body:0xc9a03c,hair:0x6b3f22,band:0x5aa36b},lines:['베리는 F키로 먹으면 체력이 회복돼요.','깃발에 쌓인 물건은 언제든 꺼내 쓸 수 있어요.','저 멀리엔 광맥 노드가 더 많대요.']},
 ];
 // villager requests (DQB "부탁")
 const REQS={
@@ -436,6 +454,63 @@ const REQS={
 };
 
 const CHAPTERS={1:'희망의 깃발',2:'불꽃의 공장',3:'조립 라인',4:'하늘로 가는 길'};
+// story scenes: [speaker ('' = narration), text, camera]
+const VOICE='별의 목소리',STILL='멈춤의 왕';
+const STORY={
+  prologue:[
+    ['','아주 먼 옛날, 아르테라 땅의 사람들은 무엇이든 만들 줄 알았습니다.','ruin'],
+    ['','손으로 집을 짓고, 기계로 물건을 빚고, 마침내 하늘 너머 별에 닿는 「별의 사다리」까지 세웠지요.','ruin'],
+    ['','그러던 어느 날, 「멈춤의 왕」이 나타나 온 땅에 저주를 내렸습니다.','ruin'],
+    [STILL,'아무것도 새로 만들지 마라. 모든 것은 이대로… 멈추어라.','ruin'],
+    ['','사람들은 만드는 법을 잊었습니다. 별의 사다리는 무너졌고, 대지는 몬스터의 차지가 되었습니다.','ruin'],
+    ['','그리고 오랜 세월이 흐른 어느 날—','ruin'],
+    [VOICE,'일어나세요, 빌더여. 저주가 닿지 않은 단 하나의 손. 당신에게는 아직 「만드는 힘」이 남아 있습니다.','player'],
+    [VOICE,'무너진 사다리를 다시 세우세요. 하늘에 빛이 닿으면 저주도 풀릴 거예요. 하지만 먼저… 사람들이 돌아올 자리를 만드세요.','player'],
+  ],
+  lulu:[
+    ['루루','앗, 사람이다! 괜찮아요? 사다리 잔해 옆에 쓰러져 있어서 깜짝 놀랐어요.','player'],
+    ['루루','저는 루루예요. 살던 마을이 슬라임 떼에 부서져서… 여기까지 혼자 도망쳐 왔어요.','player'],
+    ['루루','어? 그 손에 든 깃발… 할아버지가 들려주던 「희망의 깃발」이랑 똑같아요! 빌더만 꽂을 수 있다는 그 깃발!','player'],
+    ['루루','부탁이에요, 빌더님. 여기에 깃발을 꽂아 주세요. 깃발이 서면 흩어진 사람들이 그 빛을 보고 찾아올 거예요.','player'],
+  ],
+  ch2:[
+    ['루루','빌더님, 이것 좀 보세요. 할아버지의 낡은 수첩이에요. 도망칠 때도 이것만은 꼭 챙겼어요.','banner'],
+    ['루루','할아버지는 별의 사다리를 돌보던 마지막 기술자였어요. 사다리가 무너진 뒤로는 아무도 이 글을 읽지 못했는데…','banner'],
+    ['루루','빌더님이라면 읽을 수 있을지도 몰라요! 첫 장엔 「광맥에서 철을 캐고, 불로 녹이고, 기계에게 일을 맡겨라」라고 쓰여 있대요.','banner'],
+    [VOICE,'그 수첩에는 옛 기술자들의 기억이 잠들어 있습니다. 공장에서 만든 부품을 깃발에 바칠 때마다, 잊힌 기술이 한 장씩 되살아날 거예요.','banner'],
+  ],
+  raid1:[
+    [VOICE,'조심하세요. 마을의 불빛과 기계 소리가 멈춤의 왕의 눈에 띄었습니다.','banner'],
+    [STILL,'만드는 자가 아직 남아 있었다고? …부숴라. 모조리 멈추게 하라!','banner'],
+    ['루루','모, 몬스터 떼가 몰려와요! 빌더님, 다 같이 마을을 지켜요!','banner'],
+  ],
+  ch3:[
+    ['루루','해냈어요! 우리가 마을을 지켜 냈어요!','banner'],
+    ['루루','다들 그러더라고요. 빌더님을 보고 있으면 잊어버린 손의 감각이 조금씩 돌아오는 것 같대요.','banner'],
+    [VOICE,'보세요. 사람들의 손에 만드는 기억이 돌아오고 있습니다. 하지만 사다리를 세우려면 훨씬 정교한 부품이 필요해요. 마을과 공장을 함께 키우세요.','banner'],
+  ],
+  ch4:[
+    ['루루','빌더님! 할아버지 수첩의 마지막 장이 읽혀요. 「프레임으로 뼈대를, 로터로 승강기를, 케이블로 숨결을」…','banner'],
+    ['루루','별의 사다리 설계도예요! 우리 손으로 다시 세울 수 있어요!','banner'],
+    [VOICE,'사다리를 세우고, 꼭대기로 「희망의 등불」을 보내세요. 하늘에 빛이 닿는 순간 멈춤의 왕의 저주는 끝납니다.','ruin'],
+  ],
+  boss:[
+    [STILL,'그만두어라! 하늘에 닿는 것만은 허락하지 않는다!','boss'],
+    [VOICE,'멈춤의 왕이 직접 나타났습니다! 빌더여, 마을 사람들과 함께 맞서세요!','boss'],
+  ],
+  bossDown:[
+    [STILL,'만드는… 힘이… 이토록… 끈질기다니…','player'],
+    ['루루','해치웠어요! 이제 남은 부품만 채우면 등불을 보낼 수 있어요!','player'],
+  ],
+  ending:[
+    ['','희망의 등불을 실은 승강기가 별의 사다리를 타고 하늘 높이 솟아올랐습니다.','elev'],
+    ['','구름을 뚫고, 밤을 넘어, 마침내 하늘 끝에 빛이 닿은 순간—','elev'],
+    ['','온 땅을 덮고 있던 멈춤의 저주가 눈처럼 녹아내렸습니다.','elev'],
+    ['루루','빌더님… 보여요? 마을 사람들이 전부 하늘을 올려다보고 있어요.','elev'],
+    ['루루','할아버지도 분명 기뻐하실 거예요. 고마워요. 우리에게 다시 만드는 법을 알려 줘서.','elev'],
+    [VOICE,'빌더여, 당신의 이야기는 여기서 끝나지 않습니다. 만드는 사람이 있는 한, 이 땅은 계속 자라날 테니까요.','elev'],
+  ],
+};
 const got=id=>S.stats.got[id]||0;
 const OBJ=[
   {ch:1,t:'희망의 깃발 꽂기',h:'단축칸의 「희망의 깃발」을 고르고 평평한 땅을 오른쪽 버튼으로 눌러 꽂으세요. 깃발 주변이 마을 구역이 돼요.',ok:()=>!!S.banner,
@@ -450,7 +525,7 @@ const OBJ=[
    say:'방이다! 고마워요, 마음이 따뜻해졌어요. 제 머리 위의 하트를 모아서 깃발에 바치면 마을이 성장해요.'},
   {ch:1,t:'침실 만들기',h:'방 안에 짚 침대를 두면 침실이 돼요. 레벨 업 보상인 「기본 침실」 설계도를 놓고 보관함에 판자를 넣으면 주민이 대신 지어 줘요.',ok:()=>rooms.some(r=>r.type==='bedroom'),
    say:'마을 레벨 2! 새 주민도 왔어요. 그런데 잘 곳이 없네요… 침실을 만들어 줘요.'},
-  {ch:2,t:'철판 만들기',h:'붉은 점박이 철광석을 캐서 작업대에서 철 주괴(석탄 필요) → 철판을 만드세요.',ok:()=>(S.stats.crafted.iron_plate||0)+(got('iron_plate'))>=2,
+  {ch:2,story:'ch2',t:'철판 만들기',h:'할아버지의 수첩대로! 붉은 점박이 철광석을 캐서 작업대에서 철 주괴(석탄 필요) → 철판을 만드세요.',ok:()=>(S.stats.crafted.iron_plate||0)+(got('iron_plate'))>=2,
    say:'포근한 침실이에요! 이제 마을을 지킬 힘이 필요해요. 철을 다뤄 봐요.'},
   {ch:2,t:'광맥 노드 위에 채굴기 설치하기',h:'빛나는 광맥 노드 블록 위에 채굴기를 놓으세요. 주황 화살표 쪽이 출구예요. R로 방향을 돌릴 수 있어요.',ok:()=>countEnt('miner')+countEnt('miner2')>0,
    say:'철판이다! 손으로 캐는 데는 한계가 있죠. 끝없이 캐는 기계를 만들어 봐요.'},
@@ -458,23 +533,23 @@ const OBJ=[
    say:'채굴기는 전기가 있어야 움직여요. 발전기가 필요해요!'},
   {ch:2,t:'컨베이어로 철 주괴 20개를 깃발에 보내기',h:'채굴기 → 컨베이어 → 제련기 → 컨베이어 → 희망의 깃발. 깃발은 HUB처럼 어느 쪽에서든 받아요.',ok:()=>(S.stats.hubIn.iron_ingot||0)>=20,
    say:'전기가 들어왔어요! 이제 진짜 자동화 공장을 만들 차례예요.'},
-  {ch:2,t:'마일스톤 1 「기초 물류」 달성',h:'깃발을 열어 철판 20 · 철봉 20을 채우고 완료하세요. 제작기로 자동 생산해 보세요.',ok:()=>S.ms>=1,
+  {ch:2,t:'수첩 1장 「기초 물류」 되살리기',h:'깃발을 열어 철판 20 · 철봉 20을 바치세요. 제작기로 자동 생산해 보세요.',ok:()=>S.ms>=1,
    say:'깃발이 공장의 부품을 받고 있어요! 부품을 모으면 새 기술이 열려요.'},
   {ch:2,t:'「작은 공장」 방 만들기',h:'기계를 벽으로 둘러싸고 문과 횃불을 두면 작은 공장. 안의 기계가 25% 빨라져요. 「작은 공장」 설계도(마을 Lv3)도 있어요.',ok:()=>rooms.some(r=>r.type==='factory'),
    say:'새 기술! 기계를 방 안에 두면 주민들이 일을 거들어서 더 빨라진대요.'},
-  {ch:2,t:'몬스터 습격을 막아라!',h:'몬스터 무리가 마을로 몰려와요. 주민들과 함께 모두 물리치세요. 갇힌 몬스터는 벽을 부숴요.',ok:()=>S.stats.raids>=1,
+  {ch:2,story:'raid1',t:'몬스터 습격을 막아라!',h:'멈춤의 왕이 보낸 몬스터 군단이 몰려와요. 주민들과 함께 모두 물리치세요. 갇힌 몬스터는 벽을 부숴요.',ok:()=>S.stats.raids>=1,
    say:'큰일이에요! 마을이 커지자 몬스터들이 몰려오고 있어요! 다 같이 막아요!'},
-  {ch:3,t:'마을 레벨 4 달성',h:'방을 늘리고 부탁을 들어주고, 공장이 깃발로 부품을 보내면 하트가 모여요.',ok:()=>S.lv>=4,
+  {ch:3,story:'ch3',t:'마을 레벨 4 달성',h:'방을 늘리고 부탁을 들어주고, 공장이 깃발로 부품을 보내면 하트가 모여요.',ok:()=>S.lv>=4,
    say:'해냈어요! 마을을 지켰어요! 이제 더 큰 마을, 더 큰 공장을 만들어요.'},
-  {ch:3,t:'마일스톤 2 「부품 조립」 달성',h:'나사 · 케이블 · 콘크리트까지 자동화하세요. 구리 노드는 조금 먼 곳에 있어요.',ok:()=>S.ms>=2,
+  {ch:3,t:'수첩 2장 「부품 조립」 되살리기',h:'나사 · 케이블 · 콘크리트까지 자동화하세요. 구리 노드는 조금 먼 곳에 있어요.',ok:()=>S.ms>=2,
    say:'마을이 북적북적해요! 공장도 키워 봐요.'},
   {ch:3,t:'석탄 발전기 가동하기',h:'석탄 노드에 채굴기를 놓고 컨베이어로 석탄 발전기에 연결하세요. 80MW!',ok:()=>[...ents.values()].some(e=>e.t==='coalgen'&&e.on),
    say:'조립기가 생겼어요! 그런데 조립기는 전기를 많이 먹어요.'},
-  {ch:3,t:'마일스톤 3 「고급 생산」 달성',h:'조립기로 강화 철판과 로터를 만들어 깃발로 보내세요.',ok:()=>S.ms>=3,
+  {ch:3,t:'수첩 3장 「고급 생산」 되살리기',h:'조립기로 강화 철판과 로터를 만들어 깃발로 보내세요.',ok:()=>S.ms>=3,
    say:'든든한 전력이에요! 이제 고급 부품을 만들 차례예요.'},
-  {ch:4,t:'우주 엘리베이터 설치하기',h:'모듈식 프레임 5 · 콘크리트 30 · 케이블 30으로 만들어 넓은 땅에 놓으세요.',ok:()=>!!S.elev,
-   say:'하늘로 가는 길이 열렸어요! 우주 엘리베이터를 세워요!'},
-  {ch:4,t:'우주 엘리베이터 완성하기',h:'모듈식 프레임 20 · 로터 30 · 케이블 100을 엘리베이터에 넣으세요. 컨베이어로 연결하면 편해요.',ok:()=>S.won,
+  {ch:4,story:'ch4',t:'별의 사다리 세우기',h:'모듈식 프레임 5 · 콘크리트 30 · 케이블 30으로 별의 사다리(우주 엘리베이터)를 만들어 넓은 땅에 놓으세요.',ok:()=>!!S.elev,
+   say:'하늘로 가는 길이 열렸어요! 별의 사다리를 세워요!'},
+  {ch:4,t:'희망의 등불을 하늘로 보내기',h:'모듈식 프레임 20 · 로터 30 · 케이블 100을 엘리베이터에 넣으세요. 절반을 채우면 멈춤의 왕이 직접 쳐들어와요.',ok:()=>S.won,
    say:'엘리베이터가 섰어요! 부품을 채우면 하늘로 출발할 수 있어요. 몬스터 왕이 가만있지 않을 거예요…'},
 ];
 
@@ -681,6 +756,18 @@ function genWorld(seed){
         const X=x+dx,Y=ty+dy,Z=z+dz;if(inW(X,Y,Z)&&vox[I(X,Y,Z)]===A)vox[I(X,Y,Z)]=LEAVES}
     }else if(r<.03)vox[I(x,h,z)]=BUSH;
   }
+  // ruins of the old Star Ladder near the spawn
+  const rx=cx+7,rz=cz-8,ry=12;
+  for(let dz=-5;dz<=5;dz++)for(let dx=-5;dx<=5;dx++){const x=rx+dx,z=rz+dz;
+    for(let y=1;y<WY;y++){const i=I(x,y,z);if(y<ry-1){if(!BL[vox[i]].solid||vox[i]===LEAVES||vox[i]===LOG)vox[i]=y<ry-3?STONE:DIRT}else if(y===ry-1)vox[i]=(Math.abs(dx)<=2&&Math.abs(dz)<=2)?(R()<.8?CONC:STONE):GRASS;else vox[i]=A}}
+  const pillar=(x,z,h)=>{for(let y=0;y<h;y++)vox[I(x,ry+y,z)]=IRONBLK};
+  pillar(rx-2,rz-2,9);pillar(rx+2,rz-2,4);pillar(rx-2,rz+2,6);pillar(rx+2,rz+2,2);
+  vox[I(rx-1,ry+8,rz-2)]=IRONBLK;vox[I(rx-2,ry+8,rz-1)]=IRONBLK;
+  for(let k=0;k<4;k++)vox[I(rx+3+k,ry,rz-1)]=IRONBLK;
+  for(let k=0;k<3;k++)vox[I(rx-4,ry,rz+1+k)]=IRONBLK;
+  for(let k=0;k<10;k++){const x=rx+(R()*11|0)-5,z=rz+(R()*11|0)-5;if(vox[I(x,ry,z)]===A)vox[I(x,ry,z)]=R()<.5?IRONBLK:STONE}
+  for(let dz=-15;dz<=15;dz++)for(let dx=-15;dx<=15;dx++){if(dx*dx+dz*dz>225)continue;const X=rx+dx,Z=rz+dz;if(X<0||Z<0||X>=WX||Z>=WZ)continue;for(let y=1;y<WY;y++){const i=I(X,y,Z);if(vox[i]===LOG||vox[i]===LEAVES)vox[i]=A}}
+  return{x:rx,y:ry,z:rz};
 }
 
 // ============================================================ chunk meshing
@@ -828,7 +915,7 @@ const slimeGeo=new THREE.LatheGeometry([[0,0],[.28,.02],[.42,.14],[.42,.32],[.3,
 const SLT={
   slime:{n:'슬라임',col:0x4a9bff,hp:20,dmg:5,sp:2.4,w:.34,h:.7,sc:1},
   she:{n:'오렌지 슬라임',col:0xf08a3a,hp:36,dmg:8,sp:2.8,w:.34,h:.7,sc:1.08},
-  king:{n:'킹 슬라임',col:0x3a7bff,hp:420,dmg:16,sp:2.6,w:.95,h:2,sc:2.5,boss:1},
+  king:{n:'멈춤의 왕',col:0x5b3a9a,hp:420,dmg:16,sp:2.6,w:.95,h:2,sc:2.5,boss:1},
 };
 function makeSlime(type){
   const T=SLT[type],g=new THREE.Group(),inner=new THREE.Group();g.add(inner);inner.scale.setScalar(T.sc);
@@ -852,7 +939,7 @@ function makeSprite(tex,sx,sy,depth){const m=new THREE.SpriteMaterial({map:tex,t
 // instanced belt items, particles, blueprint ghosts
 const MAXI=3000;
 const beltInst=new THREE.InstancedMesh(new THREE.BoxGeometry(.26,.26,.26),new THREE.MeshLambertMaterial(),MAXI);beltInst.count=0;beltInst.frustumCulled=false;scene.add(beltInst);
-const partInst=new THREE.InstancedMesh(new THREE.BoxGeometry(.12,.12,.12),new THREE.MeshLambertMaterial(),400);partInst.count=0;partInst.frustumCulled=false;scene.add(partInst);
+const partInst=new THREE.InstancedMesh(new THREE.BoxGeometry(.12,.12,.12),new THREE.MeshBasicMaterial(),400);partInst.count=0;partInst.frustumCulled=false;scene.add(partInst);
 const ghostInst=new THREE.InstancedMesh(new THREE.BoxGeometry(.94,.94,.94),new THREE.MeshBasicMaterial({transparent:true,opacity:.32,depthWrite:false}),600);ghostInst.count=0;ghostInst.frustumCulled=false;ghostInst.renderOrder=3;scene.add(ghostInst);
 const _c=new THREE.Color();for(let k=0;k<MAXI;k++)beltInst.setColorAt(k,_c);for(let k=0;k<400;k++)partInst.setColorAt(k,_c);for(let k=0;k<600;k++)ghostInst.setColorAt(k,_c);
 const _m4=new THREE.Matrix4(),_q=new THREE.Quaternion(),_s=new THREE.Vector3(1,1,1),_v=new THREE.Vector3();
@@ -1040,7 +1127,7 @@ function placeSel(px,py,pz){
     else if(!BL[below].solid){toast('아래에 받칠 블록이 필요해요','bad');return false}
     if(E.tall&&getB(px,py+1,pz)!==A){toast('문은 위로 한 칸 더 비어 있어야 해요','bad');return false}
     if(it.ent==='banner'&&S.banner){toast('희망의 깃발은 하나만 꽂을 수 있어요','bad');return false}
-    if(it.ent==='elevator'&&S.elev){toast('우주 엘리베이터는 하나만 지을 수 있어요','bad');return false}
+    if(it.ent==='elevator'&&S.elev){toast('별의 사다리는 하나만 세울 수 있어요','bad');return false}
     if(E.solid&&entOverlapsCell(px,py,pz)){toast('누군가 서 있어요','bad');return false}
     addEnt(I(px,py,pz),newEnt(it.ent,it.ent==='door'?cd:dir,px,py,pz));S.inv[id]--;hotDirty=true;sfx('place');
     if(it.ent==='banner'){title('희망의 깃발을 꽂았다!','여기가 새로운 마을이에요');sfx('level');S.villagers.forEach(v=>{if(v.reqState==='none'){v.reqState='wait';v.reqT=6}})}
@@ -1125,8 +1212,8 @@ function factoryTick(dt){
   }
   // elevator completion
   if(S.elev&&!S.won){const ei=I(S.elev.x,S.elev.y,S.elev.z),ee=ents.get(ei);if(ee){const p=elevProgress();
-    if(p>=.5&&!S.kingDone&&!raid)startRaid('king');
-    if(p>=1&&ee.launch==null&&!raid){ee.launch=0;title('발사!','우주 엘리베이터가 하늘로 올라가요');sfx('level');setTimeout(()=>{S.won=true;showWin()},6000)}}}
+    if(p>=.5&&!S.kingDone&&!raid){startRaid('king');playStory('boss')}
+    if(p>=1&&ee.launch==null&&!raid){ee.launch=0;S.time=.585;title('발사!','희망의 등불이 하늘로 올라가요');sfx('level');setTimeout(()=>playStory('ending',()=>{S.time=.05;S.won=true;showWin()}),2200)}}}
 }
 function elevProgress(){if(!S.elev)return 0;const e=ents.get(I(S.elev.x,S.elev.y,S.elev.z));if(!e)return 0;let a=0,b=0;for(const k in ELEV_NEED){a+=Math.min(e.st[k]||0,ELEV_NEED[k]);b+=ELEV_NEED[k]}return a/b}
 const boost=()=>1+.08*S.villagers.filter(v=>!v.guide&&v.faint<=0).length;
@@ -1192,7 +1279,7 @@ function arriveVillager(def){
   if(S.villagers.some(v=>v.name===def.name))return;
   const r=baseR(),a=Math.random()*Math.PI*2;let x=clamp(S.banner.x+Math.cos(a)*r,2,WX-3),z=clamp(S.banner.z+Math.sin(a)*r,2,WZ-3);
   const v=mkVillager(def,x,z);v.tx=S.banner.x+1.5;v.tz=S.banner.z+1.5;v.reqState='wait';v.reqT=25;S.villagers.push(v);attachVillagerMesh(v);
-  say(def.name,`안녕하세요! 저는 ${def.name}예요. 희망의 깃발을 보고 찾아왔어요. 이 마을에서 살게 해 주세요! (공장 속도 +8%)`);
+  playStory(def.intro.map(t=>[def.name,t,'player']),()=>toast(`${def.name}이(가) 마을 주민이 됐어요. 공장 속도 +8%`,'gold'));
   assignBeds();
 }
 function mkVillager(def,x,z){const y=surfaceY(Math.floor(x),Math.floor(z));
@@ -1225,7 +1312,7 @@ function talk(v){
   if(v.reqState==='active'&&r){const[a,b]=reqProgress(v);
     if(a>=b){if(r.k==='give')S.inv[r.item]-=r.n;hotDirty=true;v.req++;v.reqState='wait';v.reqT=45;v.hearts+=r.h;collectHearts(v);say(v.name,'고마워요, 빌더님! 정말 기뻐요!');sfx('level');return}
     say(v.name,`${r.t} (${a}/${b})`);return}
-  if(v.guide){const o=OBJ[S.obj];say(v.name,o?`${o.t}! ${o.h}`:'우주 엘리베이터가 하늘로 올라갔어요! 이제 마음껏 마을과 공장을 키워 봐요.');return}
+  if(v.guide){const o=OBJ[S.obj];say(v.name,o?`${o.t}! ${o.h}`:'저주가 풀렸어요! 이제 마음껏 마을과 공장을 키워 봐요.');return}
   const def=VILLAGERS.find(d=>d.name===v.name);say(v.name,v.sleeping?'쿨쿨…':def.lines[(Math.random()*def.lines.length)|0]);
 }
 function collectHearts(v){if(!v.hearts)return;S.hearts+=v.hearts;popText(v.x,v.y+2.2,v.z,'♥ +'+v.hearts,'#ff7aa8');sfx('heart');v.hearts=0}
@@ -1362,7 +1449,7 @@ function startRaid(kind){
   if(raid||!S.banner)return;const r=baseR()+3,list=kind==='king'?['king','she','she','slime','slime','she','slime']:['slime','slime','slime','she','slime','she','slime','slime'];
   for(const t of list){const a=Math.random()*Math.PI*2;spawnSlime(t,clamp(S.banner.x+Math.cos(a)*r,3,WX-4),clamp(S.banner.z+Math.sin(a)*r,3,WZ-4),true)}
   raid={kind,total:list.length};if(kind==='king')S.kingDone=true;
-  title(kind==='king'?'킹 슬라임의 습격!':'몬스터 습격!','마을을 지켜라!',2400);sfx('alarm');
+  title(kind==='king'?'멈춤의 왕이 나타났다!':'몬스터 습격!','마을을 지켜라!',2400);sfx('alarm');
 }
 function hitSlime(s,dmg,by){
   s.hp-=dmg;s.flash=.15;const d=Math.hypot(s.x-(by?by.x:P.x),s.z-(by?by.z:P.z))||1,kb=SLT[s.type].boss?2:6;
@@ -1400,7 +1487,7 @@ function updSlimes(dt){
       if(s.byPlayer||s.raid){S.stats.kills++;const r=Math.random();if(SLT[s.type].boss){give('frame',3);give('rotor',5);popText(s.x,s.y+2,s.z,'+보물','#ffd66b')}else if(r<.45){give('coal',1);popText(s.x,s.y+1,s.z,'+1 석탄')}else if(r<.75){give('berry',1);popText(s.x,s.y+1,s.z,'+1 베리','#ff9fbf')}}}return false}
     return true;
   });
-  if(raid&&!slimes.some(s=>s.raid)){const k=raid.kind;raid=null;S.stats.raids++;title('습격을 물리쳤다!',k==='king'?'킹 슬라임을 쓰러뜨렸어요':'마을을 지켜 냈어요',2400);sfx('level');
+  if(raid&&!slimes.some(s=>s.raid)){const k=raid.kind;raid=null;S.stats.raids++;title('습격을 물리쳤다!',k==='king'?'멈춤의 왕을 쓰러뜨렸어요':'마을을 지켜 냈어요',2400);if(k==='king')setTimeout(()=>playStory('bossDown'),1500);sfx('level');
     for(const v of S.villagers)addHearts(k==='king'?10:6,v);toast('주민들이 고마워하고 있어요. 하트를 모으세요!','heart')}
 }
 function attack(){
@@ -1486,7 +1573,7 @@ function updHUD(){
   $('lvup').hidden=!canLevelUp();
   const pw=$('pow');pw.textContent=`전력 ${power.cap}/${power.demand} MW`;pw.className='lbl num'+(power.ratio<1?' low':'');
   const o=OBJ[S.obj];$('chap').textContent=o?`제${o.ch}장 ${CHAPTERS[o.ch]} · ${S.obj+1}/${OBJ.length}`:'에필로그';$('ms').textContent=`마일스톤 ${S.ms}/3`;
-  $('objT').textContent=o?o.t:'우주 엘리베이터 발사 성공!';$('objH').textContent=o?o.h:'마을과 공장을 마음껏 키워 보세요.';
+  $('objT').textContent=o?o.t:'저주가 풀렸어요!';$('objH').textContent=o?o.h:'마을과 공장을 마음껏 키워 보세요.';
   if(raid){const n=slimes.filter(s=>s.raid).length;$('raid').textContent=`습격! 남은 몬스터 ${n}`;$('raid').hidden=false}else $('raid').hidden=true;
   if(hotDirty)renderHotbar();
 }
@@ -1499,6 +1586,38 @@ function targetInfo(){
     else{const b=BL[h.id];t=b.n;if(b.node)t+=' · 채굴기를 올릴 수 있어요'}}
   $('tinfo').textContent=t;
 }
+
+// ============================================================ story scenes
+let cine=null;const storyQ=[];let fwT=0;
+const SPEAKER_COL={[VOICE]:'#8fd0ff',[STILL]:'#d78bff'};
+function playStory(key,onDone){
+  const lines=typeof key==='string'?STORY[key]:key;if(!lines||!lines.length){if(onDone)onDone();return}
+  if(cine){storyQ.push([lines,onDone]);return}
+  cine={lines,i:0,shown:0,full:'',cam:'player',onDone};$('ctitle').hidden=true;titleT=0;document.body.classList.add('cine');$('story').hidden=false;
+  leftHeld=rightHeld=false;tch=null;mine=null;joyV={x:0,y:0};for(const k in keys)keys[k]=false;
+  if(locked&&document.exitPointerLock)document.exitPointerLock();$('dialog').hidden=true;if(modal.kind)closeModal();showLine();updLockUI();
+}
+function showLine(){const[who,text,cam]=cine.lines[cine.i];cine.cam=cam||cine.cam;cine.full=text;cine.shown=0;
+  $('story').classList.toggle('narr',!who);$('sWho').textContent=who||'';$('sWho').style.color=SPEAKER_COL[who]||'';$('sTxt').textContent='';$('snext').hidden=true;if(who)sfx('pop')}
+function storyTick(dt){if(!cine)return;if(cine.shown<cine.full.length){cine.shown=Math.min(cine.full.length,cine.shown+dt*36);$('sTxt').textContent=cine.full.slice(0,Math.floor(cine.shown));$('snext').hidden=true}else $('snext').hidden=false}
+function advanceStory(){if(!cine)return;if(cine.shown<cine.full.length){cine.shown=cine.full.length;$('sTxt').textContent=cine.full;return}cine.i++;if(cine.i>=cine.lines.length)endStory();else showLine()}
+function endStory(){const f=cine&&cine.onDone;cine=null;$('story').hidden=true;document.body.classList.remove('cine');updLockUI();if(f)f();if(!cine&&storyQ.length){const[l,o]=storyQ.shift();playStory(l,o)}}
+$('story').addEventListener('click',e=>{if(e.target.id==='sSkip'){endStory();return}ensureAudio();advanceStory()});
+function topAt(x,z){if(x<0||z<0||x>=WX||z>=WZ)return 0;for(let y=WY-1;y>=0;y--)if(vox[I(x,y,z)]!==A)return y+1;return 0}
+function cineCamera(){
+  const c=cine.cam;let ctr=null;
+  if(c==='ruin'&&S.ruin)ctr={x:S.ruin.x+.5,y:S.ruin.y+3,z:S.ruin.z+.5,r:10,h:7};
+  else if(c==='banner'&&S.banner)ctr={x:S.banner.x+.5,y:S.banner.y+1.5,z:S.banner.z+.5,r:9,h:4};
+  else if(c==='boss'){const b=slimes.find(s=>SLT[s.type].boss);if(b){const dx=P.x-b.x,dz=P.z-b.z,l=Math.hypot(dx,dz)||1;camera.position.set(P.x+dx/l*4,P.y+3.2,P.z+dz/l*4);_hv.set(b.x,b.y+2,b.z);camera.lookAt(_hv);playerModel.visible=true;return true}}
+  else if(c==='elev'&&S.elev){const g=entMesh.get(I(S.elev.x,S.elev.y,S.elev.z));const cy=g&&g.userData.cap?g.userData.cap.position.y:0;
+    const a=T*.1,ex_=S.elev.x+.5+Math.cos(a)*12,ez_=S.elev.z+.5+Math.sin(a)*12;camera.position.set(ex_,Math.max(S.elev.y+8,topAt(Math.floor(ex_),Math.floor(ez_))+2),ez_);_hv.set(S.elev.x+.5,S.elev.y+9+Math.min(cy,60)*.7,S.elev.z+.5);camera.lookAt(_hv);playerModel.visible=true;return true}
+  if(!ctr)return false;const a=T*.13,px_=ctr.x+Math.cos(a)*ctr.r,pz_=ctr.z+Math.sin(a)*ctr.r;
+  camera.position.set(px_,Math.max(ctr.y+ctr.h,topAt(Math.floor(px_),Math.floor(pz_))+1.6),pz_);_hv.set(ctr.x,ctr.y,ctr.z);camera.lookAt(_hv);playerModel.visible=true;return true;
+}
+function fireworks(dt){if(!cine||cine.cam!=='elev'||!S.elev)return;fwT-=dt;if(fwT>0)return;fwT=.45;
+  const cols=['#ffd66b','#ff7aa8','#8fd0ff','#6fd08c','#f39a35','#ffffff'],col=cols[(Math.random()*cols.length)|0];
+  const x=S.elev.x+(Math.random()-.5)*24,y=S.elev.y+16+Math.random()*12,z=S.elev.z+(Math.random()-.5)*24;
+  for(let k=0;k<28;k++)parts.push({x,y,z,vx:(Math.random()-.5)*12,vy:(Math.random()-.5)*12+2,vz:(Math.random()-.5)*12,c:col,life:1+Math.random()*.6});sfx('pop')}
 
 // ============================================================ modals
 const modal={kind:null,i:-1,last:''};
@@ -1585,17 +1704,17 @@ function bannerHTML(){
     h+=`<h3>설계도 「${BPS[S.bp.k].n}」</h3><p class="sub">남은 칸 ${left}개. 마을 보관함에 재료를 넣어 두면 주민들이 낮에 지어요. 빨간 칸은 막혀 있는 곳이라 주민이 치워요.</p><div class="chips">${Object.entries(nd).map(([k,n])=>chip(k,`보관함 ${chestCount(k)}/${n}`,chestCount(k)>=n)).join('')}</div>
       <div class="btnrow" style="margin-top:8px">${townChests().length?'<button data-act="bpfill">가방에서 보관함으로 재료 넣기</button>':'<span class="sub">마을 구역 안에 보관함이 없어요!</span>'}<button data-act="bpcancel">설계도 취소</button></div>`}
   const m=MS[S.ms];
-  if(m){let all=true;h+=`<h3>마일스톤 ${S.ms+1} 「${m.n}」</h3><p class="sub">깃발은 공장의 HUB이기도 해요. 컨베이어를 깃발에 이으면 부품이 쌓여요. 해금: ${m.un}</p>`;
+  if(m){let all=true;h+=`<h3>할아버지의 수첩 ${S.ms+1}장 「${m.n}」</h3><p class="sub">깃발은 옛 기술자들의 기록석이에요. 컨베이어를 깃발에 이어 부품을 바치면 잊힌 기술이 되살아나요. 해금: ${m.un}</p>`;
     for(const k in m.need){const hv=S.hub[k]||0,n=m.need[k];if(hv<n)all=false;h+=`<div class="need">${img(k)}<div><div class="row"><span>${nameOf(k)}</span><span class="num sub">${Math.min(hv,n)}/${n}</span></div><div class="bar prog"><i style="width:${Math.min(100,hv/n*100)}%"></i></div></div></div>`}
     h+=`<div class="btnrow"><button data-act="hubdep">가방에서 필요한 만큼 넣기</button><button class="pri" data-act="hubms" ${all?'':'disabled'}>마일스톤 완료</button></div>`}
-  else h+='<h3>마일스톤 모두 완료</h3><p class="sub">우주 엘리베이터를 지을 수 있어요.</p>';
+  else h+='<h3>수첩을 모두 되살렸어요</h3><p class="sub">별의 사다리(우주 엘리베이터)를 세울 수 있어요.</p>';
   h+='<h3>깃발 저장고</h3><p class="sub">칸을 누르면 최대 50개를 가방으로 꺼내요.</p><div class="grid">';
   const ks=Object.keys(S.hub).filter(k=>S.hub[k]>0);if(!ks.length)h+='<div class="sub">비어 있어요. 컨베이어를 깃발에 이어 보세요.</div>';
   for(const k of ks)h+=`<div class="cell" data-act="hubtake" data-id="${k}">${img(k)}<div class="cc">${S.hub[k]}</div><div class="cn">${nameOf(k)}</div></div>`;
   return h+'</div>';
 }
 function elevHTML(e){
-  let h=`<div class="mhead"><h2>우주 엘리베이터</h2><button data-act="close">닫기</button></div><p class="sub">부품을 모두 채우면 하늘로 출발해요. 절반을 넘기면 킹 슬라임이 쳐들어와요! 컨베이어로도 넣을 수 있어요.</p>`;
+  let h=`<div class="mhead"><h2>별의 사다리</h2><button data-act="close">닫기</button></div><p class="sub">부품을 모두 채우면 희망의 등불이 하늘로 출발해요. 절반을 넘기면 멈춤의 왕이 직접 쳐들어와요! 컨베이어로도 넣을 수 있어요.</p>`;
   for(const k in ELEV_NEED){const hv=e.st[k]||0,n=ELEV_NEED[k];h+=`<div class="need">${img(k)}<div><div class="row"><span>${nameOf(k)}</span><span class="num sub">${hv}/${n}</span></div><div class="bar prog"><i style="width:${Math.min(100,hv/n*100)}%"></i></div></div></div>`}
   return h+`<div class="btnrow"><button class="pri" data-act="elevdep" ${e.launch!=null?'disabled':''}>가방에서 넣기</button></div>`;
 }
@@ -1607,15 +1726,17 @@ function refreshMachine(force){
 }
 function completeMilestone(){
   const m=MS[S.ms];if(!m)return;for(const k in m.need)if((S.hub[k]||0)<m.need[k])return;
-  for(const k in m.need)S.hub[k]-=m.need[k];S.ms++;title(`마일스톤 「${m.n}」 완료!`,'새 기술 해금',2400);toast('해금: '+m.un,'gold');sfx('level');
+  for(const k in m.need)S.hub[k]-=m.need[k];S.ms++;title(`수첩 ${S.ms}장 「${m.n}」`,'잊힌 기술이 되살아났다!',2400);toast('해금: '+m.un,'gold');sfx('level');
   addHearts(15,null,'새 기술이다! 대단해요!');
   const nr=CRAFT.filter(r=>r.ms===S.ms&&recipeKnown(r));if(nr.length)setTimeout(()=>inspire(nr.map(r=>nameOf(r.id)),'새 기술!'),1600);
 }
 function showWin(){
-  openPanel('win',`<div class="mhead"><h2>우주 엘리베이터 발사 성공!</h2></div><p style="font-size:16px;line-height:1.75">몬스터에게 모든 걸 잃었던 땅에 희망의 깃발이 서고, 마을이 생기고, 공장이 돌고, 마침내 하늘로 이어지는 길이 열렸어요.<br>${S.day}일 만에 해냈어요. 마을 Lv.${S.lv} · 주민 ${S.villagers.length}명 · 방 ${rooms.length}개 · 물리친 몬스터 ${S.stats.kills}마리.</p><div class="btnrow"><button class="pri" data-act="close">계속 키우기</button></div>`);
+  openPanel('win',`<div class="mhead"><h2>저주가 풀렸어요!</h2></div><p style="font-size:16px;line-height:1.75">만드는 법을 잊었던 땅에 희망의 깃발이 서고, 마을이 생기고, 공장이 돌고, 마침내 별의 사다리를 타고 희망의 등불이 하늘에 닿았어요.<br>${S.day}일 만에 해냈어요. 마을 Lv.${S.lv} · 주민 ${S.villagers.length}명 · 방 ${rooms.length}개 · 물리친 몬스터 ${S.stats.kills}마리.</p><div class="btnrow"><button class="pri" data-act="close">계속 키우기</button></div>`);
 }
 function showHelp(){
   openPanel('help',`<div class="mhead"><h2>도움말</h2><button data-act="close">닫기</button></div>
+  <h3>이야기</h3><p class="sub">「멈춤의 왕」의 저주로 아르테라 사람들은 만드는 법을 잊었고, 하늘에 닿던 「별의 사다리」는 무너졌어요. 저주가 닿지 않은 마지막 빌더인 당신은 루루와 함께 희망의 깃발을 꽂아 마을을 되살리고, 할아버지의 기술 수첩으로 공장을 일으켜 사다리를 다시 세워야 해요.</p>
+  <div class="btnrow"><button data-act="replay">프롤로그 다시 보기</button></div>
   <h3>조작 (키보드 · 마우스)</h3><div class="keys">
   <b>화면 클릭</b><span>마우스 고정 (시점 조작). Esc로 해제</span><b>WASD</b><span>이동 · Space 점프 (한 칸 턱은 자동으로 넘어요)</span>
   <b>왼쪽 버튼 유지</b><span>블록 부수기 · 몬스터 공격</span><b>오른쪽 버튼</b><span>블록 쌓기 · 기계/깃발/보관함 열기 · 주민과 대화 · 침대에서 자기</span>
@@ -1648,6 +1769,7 @@ $('panel').addEventListener('click',e=>{
     case 'hubms':completeMilestone();refreshMachine(true);break;
     case 'hubtake':{const id=b.dataset.id,n=Math.min(50,S.hub[id]||0);if(n){S.hub[id]-=n;give(id,n)}refreshMachine(true);break}
     case 'elevdep':{let n=0;for(const k in ELEV_NEED){const d=Math.min(cnt(k),ELEV_NEED[k]-(en.st[k]||0));if(d>0){S.inv[k]-=d;en.st[k]=(en.st[k]||0)+d;n+=d}}hotDirty=true;toast(n?`${n}개를 넣었어요`:'가방에 필요한 부품이 없어요',n?'good':'bad');refreshMachine(true);break}
+    case 'replay':closeModal();playStory('prologue');break;
     case 'newyes':try{localStorage.removeItem(SAVE_KEY)}catch(_){}closeModal();newGame();break;
   }
 });
@@ -1681,18 +1803,18 @@ function newGame(){
   const seed=(Math.random()*1e9)|0;
   S={seed,inv:{},hot:Array(9).fill(null),sel:0,rot:0,time:.04,day:1,hp:100,lv:1,hearts:0,ms:0,hub:{},obj:0,banner:null,elev:null,seen:{},roomKeys:[],roomSeen:{},villagers:[],bp:null,won:false,kingDone:false,
      stats:{got:{},hubIn:{},crafted:{},placed:{},kills:0,raids:0,bps:0,hubTotal:0}};
-  genWorld(seed);ents.clear();
+  const ruin=genWorld(seed);ents.clear();
   P.x=48.5;P.z=52.5;P.y=surfaceY(48,52);P.vy=0;camYaw=0;camPitch=-.28;
   give('banner',1);S.inv.berry=3;S.seen.berry=1;
   S.villagers.push(mkVillager(LULU,47.5,50.5));
   afterLoad();
-  setTimeout(()=>chapterTitle(1),300);setTimeout(()=>say(LULU.name,OBJ[0].say),3400);
+  S.ruin=ruin;playStory('prologue',()=>{chapterTitle(1);setTimeout(()=>playStory('lulu'),3400)});
 }
 
 // ============================================================ input
 const keys={};let locked=false,cursorMode=false,leftHeld=false,leftPressed=false,rightHeld=false,rdrag=null,lastPlace=null,started=false,jumpBtn=false;
 let tch=null,tMode='break',isTouch=false,joyV={x:0,y:0};
-function updLockUI(){$('lock').hidden=locked||cursorMode||isTouch||!!modal.kind;$('cross').hidden=!(locked||isTouch)}
+function updLockUI(){$('lock').hidden=locked||cursorMode||isTouch||!!modal.kind||!!cine;$('cross').hidden=!(locked||isTouch)}
 function lockFail(){if(cursorMode)return;cursorMode=true;updLockUI();toast('마우스 고정을 쓸 수 없어 커서 모드로 바꿨어요. 오른쪽 드래그나 방향키로 시점을 돌려요.')}
 function requestLock(){ensureAudio();started=true;try{const p=cvs.requestPointerLock();if(p&&p.catch)p.catch(lockFail)}catch(e){lockFail()}}
 document.addEventListener('pointerlockchange',()=>{locked=document.pointerLockElement===cvs;if(!locked){leftHeld=rightHeld=false}updLockUI()});
@@ -1703,6 +1825,7 @@ addEventListener('keydown',e=>{
   if(e.target&&e.target.tagName==='INPUT')return;
   if(e.code==='Space'||e.code.startsWith('Arrow'))e.preventDefault();
   if(e.repeat&&!/^(Key[WASD]|Arrow|Space)/.test(e.code))return;
+  if(cine){if(e.code==='Space'||e.code==='Enter'||e.code==='KeyE'||e.code==='KeyZ')advanceStory();return}
   keys[e.code]=true;
   if(e.code==='Escape'){if(modal.kind)closeModal();return}
   if(e.code==='KeyE'){if(modal.kind==='bag')closeModal();else if(!modal.kind)openBag();return}
@@ -1718,6 +1841,7 @@ cvs.addEventListener('contextmenu',e=>e.preventDefault());
 cvs.addEventListener('wheel',e=>{e.preventDefault();if(modal.kind)return;S.sel=(S.sel+(e.deltaY>0?1:8))%9;hotDirty=true},{passive:false});
 cvs.addEventListener('mousedown',e=>{
   if(isTouch)return;ensureAudio();
+  if(cine)return;
   if(!locked&&!cursorMode){requestLock();return}
   if(e.button===0){leftHeld=true;leftPressed=true}
   else if(e.button===2){if(locked){rightPress();rightHeld=true}else rdrag={moved:false}}
@@ -1813,6 +1937,7 @@ function updatePlayer(dt){
 function groundUnder(x,y,z){const xi=Math.floor(x),zi=Math.floor(z);for(let yy=Math.floor(y+.1);yy>Math.floor(y)-6;yy--){if(yy<0)return 0;const id=getB(xi,yy,zi);if(id!==A&&id!==ENT_TOP&&(BL[id].solid||id===WATER||id===ENT))return yy+(id===WATER?.86:1)}return y-6}
 const _hv=new THREE.Vector3();
 function updCamera(){
+  if(cine&&cine.cam!=='player'&&cineCamera())return;
   const hx=P.x,hy=P.y+1.75,hz=P.z,cp=Math.cos(camPitch),vx=-Math.sin(camYaw)*cp,vy=Math.sin(camPitch),vz=-Math.cos(camYaw)*cp;
   let dist=camDist;if(dist>0){const h=rayVox(hx,hy,hz,-vx,-vy,-vz,dist+.3);if(h)dist=Math.max(.15,h.t-.25)}
   camera.position.set(hx-vx*dist,hy-vy*dist,hz-vz*dist);_hv.set(hx+vx*10,hy+vy*10,hz+vz*10);camera.lookAt(_hv);
@@ -1866,17 +1991,18 @@ function renderFrame(dt){
 let acc=0,last=performance.now(),slowT=0,saveT=60;
 function update(dt){
   T+=dt;if(fade>0)fade-=dt;
+  for(const p of parts){p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;p.vy-=dt*14}parts=parts.filter(p=>p.life>0);
+  if(titleT>0){titleT-=dt;if(titleT<=0)$('ctitle').hidden=true}
+  if(cine){storyTick(dt);fireworks(dt);rebuildDirty(3);for(const f of floaters){f.life-=dt;f.s.material.opacity=Math.min(1,f.life*1.5);if(f.life<=0)scene.remove(f.s)}floaters=floaters.filter(f=>f.life>0);return}
   updTime(dt);updatePlayer(dt);
   acc+=dt;while(acc>=.05){factoryTick(.05);acc-=.05}
   updVillagers(dt);updSlimes(dt);
-  for(const p of parts){p.life-=dt;p.x+=p.vx*dt;p.y+=p.vy*dt;p.z+=p.vz*dt;p.vy-=dt*14}parts=parts.filter(p=>p.life>0);
   for(const f of floaters){f.life-=dt;f.s.position.y+=f.vy*dt;f.s.material.opacity=Math.min(1,f.life*1.5);if(f.life<=0)scene.remove(f.s)}floaters=floaters.filter(f=>f.life>0);
   rebuildDirty(3);
   if(roomsDirty)computeRooms();if(bpDirty)updateBlueprint();
   dragPlace();
   if(raidAt&&T>raidAt&&!raid){raidAt=0;startRaid('normal')}
   if(dlgT>0){dlgT-=dt;if(dlgT<=0)$('dialog').hidden=true}
-  if(titleT>0){titleT-=dt;if(titleT<=0)$('ctitle').hidden=true}
   if(inspT>0){inspT-=dt;if(inspT<=0)$('insp').hidden=true}
   slowT-=dt;if(slowT<=0){slowT=.25;checkObjective();updHUD();refreshMachine(false)}
   saveT-=dt;if(saveT<=0){saveT=60;save(true)}
@@ -1885,8 +2011,9 @@ function checkObjective(){
   const o=OBJ[S.obj];if(!o||!o.ok())return;
   S.obj++;toast('목표 달성!','gold');sfx('insp');const lulu=S.villagers.find(v=>v.guide);if(lulu&&S.banner)lulu.hearts+=5;
   const nx=OBJ[S.obj];if(!nx)return;const newCh=nx.ch!==o.ch;
-  if(newCh)setTimeout(()=>chapterTitle(nx.ch),1200);setTimeout(()=>say(LULU.name,nx.say),newCh?4600:1000);
-  if(nx.t.includes('습격'))raidAt=T+30;
+  const onDone=nx.story==='raid1'?()=>{raidAt=T+5}:null;
+  if(nx.story){if(newCh){setTimeout(()=>chapterTitle(nx.ch),1000);setTimeout(()=>playStory(nx.story,onDone),4400)}else setTimeout(()=>playStory(nx.story,onDone),1000)}
+  else{if(newCh)setTimeout(()=>chapterTitle(nx.ch),1200);setTimeout(()=>say(LULU.name,nx.say),newCh?4600:1000)}
 }
 function frame(now){
   const dt=Math.min(.05,(now-last)/1000);last=now;
