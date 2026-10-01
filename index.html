@@ -467,7 +467,7 @@ const RT=Object.fromEntries(ROOMTYPES.map(r=>[r.id,r]));
 
 const LULU={name:'루루',pal:{body:0xe07aa8,hair:0x8a4b2a,band:0xffd66b},guide:1};
 const VILLAGERS=[
-  {name:'피피',intro:['안녕하세요! 저는 피피예요. 저 멀리서 깃발의 빛을 보고 달려왔어요!','우리 아빠는 대장장이였는데, 저주 때문에 망치 쥐는 법을 잊어버렸어요… 저라도 다시 배우고 싶어요!'],pal:{body:0xd4574a,hair:0xf2d16b,band:0x3d6fd8},lines:['밤엔 슬라임이 와요. 횃불 근처는 비교적 안전해요!','침실이 있으면 다들 푹 잘 수 있어요.','저도 슬라임이랑 싸울 수 있다고요!']},
+  {name:'피피',intro:[['피피','헉, 헉… 여기 맞죠? 빛나는 깃발이 있는 곳! 언덕 너머에서부터 보고 밤새 걸어왔어요!'],['루루','어서 와요! 저는 루루, 이분은 빌더님이에요. 진짜로 나무를 베고 벽을 쌓을 수 있는 사람이에요!'],['피피','우와… 저는 피피예요. 우리 아빠는 대장장이였는데, 저주 때문에 망치 쥐는 법을 잊어버렸어요.'],['피피','저라도 다시 배우고 싶어요. 여기 있게 해 주세요! …그런데 저, 어디서 자요? 바닥은 너무 차가운데.'],['루루','앗, 침대가 없었네! 빌더님, 짚 침대를 놓은 방을 만들면 「침실」이 돼요. 깃발이 준 설계도를 써도 좋고요!']],pal:{body:0xd4574a,hair:0xf2d16b,band:0x3d6fd8},lines:['밤엔 슬라임이 와요. 횃불 근처는 비교적 안전해요!','침실이 있으면 다들 푹 잘 수 있어요.','저도 슬라임이랑 싸울 수 있다고요!']},
   {name:'모모',intro:['흠흠, 상인 모모라고 해요. 물건을 나를 길이 다 끊겨서 장사를 접었었죠.','그런데 여기선 물건이 저절로 굴러간다면서요? 컨베이어라니, 상인의 꿈이에요!'],pal:{body:0x5aa36b,hair:0x3a2a1e,band:0xf2d16b},lines:['주민이 늘수록 공장도 신이 나서 빨라진대요.','분배기를 쓰면 한 줄의 컨베이어를 여러 기계에 나눌 수 있어요.','보관함은 앞쪽 컨베이어로 물건을 내보내요.']},
   {name:'돌쇠',intro:['에헴, 석공 돌쇠일세. 젊을 적엔 별의 사다리 주춧돌도 깎았지.','손이 기억을 되찾고 있어. 설계도만 주게. 벽 쌓는 건 내가 맡지.'],pal:{body:0x7a6a5a,hair:0x222222,band:0xb8433a},lines:['돌은 석회암 노드에 채굴기를 놓아도 캘 수 있다네.','설계도를 놓고 보관함에 재료만 채워 두게. 우리가 지어 주지.','벽은 두 칸 높이여야 방으로 쳐 준다네.']},
   {name:'가람',intro:['저는 가람이에요. 할아버지가 옛 발전소에서 일하셨대요.','전기가 다시 흐르는 걸 보니 가슴이 뛰어요. 전력이라면 저한테 물어보세요!'],pal:{body:0x3d7fb8,hair:0xc4c9d4,band:0xf39a35},lines:['석탄 발전기는 바이오매스보다 훨씬 강력해요.','전력이 부족하면 모든 기계가 느려져요.','경사 컨베이어로 한 칸씩 올려 보낼 수 있어요.']},
@@ -531,8 +531,48 @@ const STORY={
     ['루루','어? 그 손에 든 깃발… 할아버지가 들려주던 「희망의 깃발」이랑 똑같아요! 빌더만 꽂을 수 있다는 그 깃발!','player'],
     ['루루','부탁이에요, 빌더님. 여기에 깃발을 꽂아 주세요. 깃발이 서면 흩어진 사람들이 그 빛을 보고 찾아올 거예요.','player'],
   ],
+  c1_banner:[
+    ['','깃발이 땅에 꽂히는 순간, 깃대 끝의 구슬에서 따뜻한 빛이 피어올랐습니다.','banner'],
+    ['','오랫동안 잿빛이던 하늘에, 아주 작은 별 하나가 다시 켜진 것처럼.','banner'],
+    [VOICE,'잘 했어요, 빌더여. 이 빛은 멀리, 아주 멀리까지 닿을 거예요. 길을 잃은 사람들이 이 빛을 보고 하나둘 찾아올 겁니다.','banner'],
+    ['루루','와아… 정말 빛나요. 여기가 이제 우리 마을이에요! 언젠가 멋진 이름도 지어 줄 거예요.','banner'],
+    ['루루','그런데 우리, 아무것도 없네요. 집도, 침대도, 밥그릇 하나도… 우선 나무부터 구해 볼까요?','player'],
+  ],
+  c1_wood:[
+    ['루루','빌더님… 방금 나무를 베신 거죠? 진짜로?','player'],
+    ['루루','저주를 받은 사람들은 나무 한 그루도 못 베요. 도끼를 들어도 손에 힘이 하나도 안 들어가거든요. 저도 그래요.','player'],
+    [VOICE,'그것이 「멈춤의 저주」입니다. 이 땅 사람들은 만들려고 하는 순간 손이 멈춰 버려요. 하지만 당신의 손은 멈추지 않습니다.','player'],
+    [VOICE,'새로운 재료를 손에 쥐면 그걸로 무엇을 만들 수 있는지 떠오를 거예요. 그것이 빌더의 힘, 「번뜩임」입니다. 지금 떠오른 작업대를 만들어 보세요.','player'],
+  ],
+  c1_bench:[
+    ['루루','작업대다…! 할아버지 공방에도 이런 게 있었어요. 기름 냄새랑 나무 냄새가 섞여 있었는데.','player'],
+    ['루루','할아버지는 마을이 무너지던 날, 사람들을 먼저 피신시켜야 한다며 끝까지 남으셨어요. 그 뒤로는… 소식을 몰라요.','player'],
+    ['루루','…아, 미안해요. 울적한 얘기는 그만! 해가 지기 전에 몸을 숨길 곳이 필요해요. 밤에는 슬라임들이 돌아다니거든요.','player'],
+    ['루루','할아버지가 그랬어요. 벽이 사방을 두 칸 높이로 막고, 문이 하나 있고, 불이 켜져 있으면 그게 「방」이래요. 횃불에는 석탄이 있어야 해요!','player'],
+  ],
+  c1_room:[
+    ['루루','벽이 있고, 문이 있고, 불이 켜져 있어요… 이게 방이구나. 바람이 안 들어와요.','player'],
+    ['루루','이상하죠. 무너진 마을에서 도망친 뒤로 한 번도 마음 놓고 쉰 적이 없었는데, 지금은 가슴이 따뜻해요.','player'],
+    [VOICE,'그 따뜻함이 「감사의 하트」입니다. 사람들의 마음이 채워질 때 머리 위에 떠오르지요. 다가가서 받아 주세요.','player'],
+    [VOICE,'하트를 희망의 깃발에 바치면 마을이 자랍니다. 마을이 자라면 깃발의 빛도 더 멀리 닿고, 더 많은 사람이 찾아올 거예요.','banner'],
+  ],
+  c1_night:[
+    ['','해가 지자, 어둠 속에서 젤리처럼 반짝이는 눈들이 하나둘 떠올랐습니다.','player'],
+    ['루루','빌, 빌더님… 저기 풀숲에… 슬라임이에요. 마을이 무너지던 날 밤에도 저것들이 몰려왔어요.','player'],
+    [VOICE,'멈춤의 왕의 졸개들은 빛을 싫어합니다. 횃불과 깃발 가까이에는 함부로 생겨나지 못해요. 위험하면 불빛 곁으로 돌아오세요.','player'],
+    ['루루','무서우면… 저는 방 안에 있을게요. 빌더님도 너무 멀리 가지 마세요!','player'],
+  ],
+  c1_end:[
+    ['','그날 밤, 새로 지은 침실에 처음으로 등불이 켜졌습니다.','banner'],
+    ['피피','루루, 저 깃발 빛 보여? 저 언덕 너머에서도 보였어. 그래서 나 혼자 밤새 걸어왔잖아.','banner'],
+    ['피피','아빠도 어딘가에서 저 빛을 보고 있을까? 망치 쥐는 법은 잊었어도, 길 찾는 법은 안 잊었을 텐데.','banner'],
+    ['루루','…할아버지도요. 분명 어딘가에서 보고 계실 거예요.','banner'],
+    ['루루','빌더님, 사실 숨겨 둔 게 하나 있어요. 할아버지가 마지막에 쥐여 주신 낡은 수첩이에요. 저는 글씨가 흐려서 한 줄도 못 읽었는데…','banner'],
+    ['루루','내일 아침에 같이 펼쳐 봐 줄래요? 오늘은… 오랜만에 침대에서 자 보고 싶어요.','banner'],
+    [VOICE,'작은 깃발 하나에서 시작된 빛이 이제 두 사람의 마음을 밝혔습니다. 빌더여, 이것이 시작입니다.','ruin'],
+  ],
   ch2:[
-    ['루루','빌더님, 이것 좀 보세요. 할아버지의 낡은 수첩이에요. 도망칠 때도 이것만은 꼭 챙겼어요.','banner'],
+    ['루루','좋은 아침이에요, 빌더님! 어젯밤 말한 할아버지의 수첩, 가져왔어요.','banner'],
     ['루루','할아버지는 별의 사다리를 돌보던 마지막 기술자였어요. 사다리가 무너진 뒤로는 아무도 이 글을 읽지 못했는데…','banner'],
     ['루루','빌더님이라면 읽을 수 있을지도 몰라요! 첫 장엔 「광맥에서 철을 캐고, 불로 녹이고, 기계에게 일을 맡겨라」라고 쓰여 있대요.','banner'],
     [VOICE,'그 수첩에는 옛 기술자들의 기억이 잠들어 있습니다. 공장에서 만든 부품을 깃발에 바칠 때마다, 잊힌 기술이 한 장씩 되살아날 거예요.','banner'],
@@ -573,13 +613,13 @@ const got=id=>S.stats.got[id]||0;
 const OBJ=[
   {ch:1,t:'희망의 깃발 꽂기',h:'단축칸의 「희망의 깃발」을 고르고 평평한 땅을 오른쪽 버튼으로 눌러 꽂으세요. 깃발 주변이 마을 구역이 돼요.',ok:()=>!!S.banner,
    say:'빌더님, 깃발을 꽂을 곳을 골라 주세요! 평평한 땅이면 어디든 좋아요.'},
-  {ch:1,t:'원목 8개 모으기',h:'나무 줄기를 왼쪽 버튼으로 꾹 눌러 부수면 원목이 나와요. 처음 얻는 재료는 새 레시피를 떠올리게 해요.',ok:()=>got('wood')>=8,
+  {ch:1,story:'c1_banner',t:'원목 8개 모으기',h:'나무 줄기를 왼쪽 버튼으로 꾹 눌러 부수면 원목이 나와요. 처음 얻는 재료는 새 레시피를 떠올리게 해요.',ok:()=>got('wood')>=8,
    say:'깃발이 섰어요! 여기가 이제 우리 마을이에요. 우선 나무를 베어 볼까요?'},
-  {ch:1,t:'작업대를 만들어 설치하기',h:'가방(E)에서 작업대를 만들고 단축칸에서 골라 오른쪽 버튼으로 놓으세요.',ok:()=>countEnt('workbench')>0,
+  {ch:1,story:'c1_wood',t:'작업대를 만들어 설치하기',h:'가방(E)에서 작업대를 만들고 단축칸에서 골라 오른쪽 버튼으로 놓으세요.',ok:()=>countEnt('workbench')>0,
    say:'원목이다! 작업대가 있으면 그 근처에서 이것저것 만들 수 있어요.'},
-  {ch:1,t:'첫 방 만들기',h:'마을 구역 안을 2칸 높이 벽으로 둘러싸고, 나무 문 하나와 횃불 하나를 안에 두세요. 횃불엔 석탄이 필요해요. 검은 점박이 돌을 캐 보세요.',ok:()=>rooms.length>0,
+  {ch:1,story:'c1_bench',t:'첫 방 만들기',h:'마을 구역 안을 2칸 높이 벽으로 둘러싸고, 나무 문 하나와 횃불 하나를 안에 두세요. 횃불엔 석탄이 필요해요. 검은 점박이 돌을 캐 보세요.',ok:()=>rooms.length>0,
    say:'작업대 완성! 이제 우리가 지낼 방이 필요해요. 벽은 꼭 두 칸 높이로, 문과 횃불도 잊지 마세요!'},
-  {ch:1,t:'하트를 모아 마을 레벨 2 만들기',h:'주민 머리 위에 뜬 하트에 다가가면 모여요. 하트가 차면 깃발을 오른쪽 버튼으로 눌러 레벨 업! 주민 부탁(!)을 들어주면 하트를 더 받아요.',ok:()=>S.lv>=2,
+  {ch:1,story:'c1_room',t:'하트를 모아 마을 레벨 2 만들기',h:'주민 머리 위에 뜬 하트에 다가가면 모여요. 하트가 차면 깃발을 오른쪽 버튼으로 눌러 레벨 업! 주민 부탁(!)을 들어주면 하트를 더 받아요.',ok:()=>S.lv>=2,
    say:'방이다! 고마워요, 마음이 따뜻해졌어요. 제 머리 위의 하트를 모아서 깃발에 바치면 마을이 성장해요.'},
   {ch:1,t:'침실 만들기',h:'방 안에 짚 침대를 두면 침실이 돼요. 레벨 업 보상인 「기본 침실」 설계도를 놓고 보관함에 판자를 넣으면 주민이 대신 지어 줘요.',ok:()=>rooms.some(r=>r.type==='bedroom'),
    say:'마을 레벨 2! 새 주민도 왔어요. 그런데 잘 곳이 없네요… 침실을 만들어 줘요.'},
@@ -1188,7 +1228,7 @@ function placeSel(px,py,pz){
     if(it.ent==='elevator'&&S.elev){toast('별의 사다리는 하나만 세울 수 있어요','bad');return false}
     if(E.solid&&entOverlapsCell(px,py,pz)){toast('누군가 서 있어요','bad');return false}
     addEnt(I(px,py,pz),newEnt(it.ent,it.ent==='door'?cd:dir,px,py,pz));S.inv[id]--;hotDirty=true;sfx('place');
-    if(it.ent==='banner'){title('희망의 깃발을 꽂았다!','여기가 새로운 마을이에요');sfx('level');S.villagers.forEach(v=>{if(v.reqState==='none'){v.reqState='wait';v.reqT=6}})}
+    if(it.ent==='banner'){sfx('level');S.villagers.forEach(v=>{if(v.reqState==='none'){v.reqState='wait';v.reqT=6}})}
     return true;
   }
   return false;
@@ -1337,7 +1377,7 @@ function arriveVillager(def){
   if(S.villagers.some(v=>v.name===def.name))return;
   const r=baseR(),a=Math.random()*Math.PI*2;let x=clamp(S.banner.x+Math.cos(a)*r,2,WX-3),z=clamp(S.banner.z+Math.sin(a)*r,2,WZ-3);
   const v=mkVillager(def,x,z);v.tx=S.banner.x+1.5;v.tz=S.banner.z+1.5;v.reqState='wait';v.reqT=25;S.villagers.push(v);attachVillagerMesh(v);
-  playStory(def.intro.map(t=>[def.name,t,'player']),()=>toast(`${def.name}이(가) 마을 주민이 됐어요. 공장 속도 +8%`,'gold'));
+  playStory(def.intro.map(t=>Array.isArray(t)?[t[0],t[1],'player']:[def.name,t,'player']),()=>toast(`${def.name}이(가) 마을 주민이 됐어요. 공장 속도 +8%`,'gold'));
   assignBeds();
 }
 function mkVillager(def,x,z){const y=surfaceY(Math.floor(x),Math.floor(z));
@@ -1575,7 +1615,7 @@ function updTime(dt){
   const prev=S.time,wasNight=isNight();S.time+=dt/DAY_LEN;
   if(prev<.25&&S.time>=.25)noon();
   if(S.time>=1){S.time-=1;morning()}
-  if(!wasNight&&isNight())toast('밤이 되었어요. 몬스터를 조심하세요!','bad');
+  if(!wasNight&&isNight()){toast('밤이 되었어요. 몬스터를 조심하세요!','bad');if(!S.night1&&S.banner&&S.obj<=5){S.night1=true;playStory('c1_night')}}
 }
 const _sky=new THREE.Color(),C_DAY=new THREE.Color(0x8ec9f5),C_NIGHT=new THREE.Color(0x0e1630),C_DUSK=new THREE.Color(0xf0946a),C_HDAY=new THREE.Color(0xe6f2ff),C_HNIGHT=new THREE.Color(0x5a6ab0);
 let lightT=0;
@@ -2144,6 +2184,7 @@ function checkObjective(){
   const o=OBJ[S.obj];if(!o||!o.ok())return;
   S.obj++;toast('목표 달성!','gold');sfx('insp');const lulu=S.villagers.find(v=>v.guide);if(lulu&&S.banner)lulu.hearts+=5;
   const nx=OBJ[S.obj];if(!nx)return;const newCh=nx.ch!==o.ch;
+  if(o.ch===1&&nx.ch===2){setTimeout(()=>playStory('c1_end',()=>{title('제1장 「희망의 깃발」','— 끝 —',3000);sfx('level');setTimeout(()=>chapterTitle(2),3600);setTimeout(()=>playStory('ch2'),7000)}),1200);return}
   const onDone=nx.story==='raid1'?()=>{raidAt=T+5}:null;
   if(nx.story){if(newCh){setTimeout(()=>chapterTitle(nx.ch),1000);setTimeout(()=>playStory(nx.story,onDone),4400)}else setTimeout(()=>playStory(nx.story,onDone),1000)}
   else{if(newCh)setTimeout(()=>chapterTitle(nx.ch),1200);setTimeout(()=>say(LULU.name,nx.say),newCh?4600:1000)}
