@@ -468,14 +468,14 @@ const RT=Object.fromEntries(ROOMTYPES.map(r=>[r.id,r]));
 
 const LULU={name:'세라',pal:{body:0x3d5f8a,hair:0x3a2418,band:0xf2f0e8},guide:1};
 const VILLAGERS=[
-  {name:'카이',intro:[
-    ['','그날 오후, 북쪽 바닷가에서 한 소년이 젖은 그물을 끌고 마을로 들어왔습니다.','banner'],
-    ['카이','세라, 깃발이 다시 섰다는 게 정말이었네. …그리고 넌 누구야?','player'],
-    ['세라','카이! 이분은 빌더예요. 안개 너머에서 왔어요. 레온 오빠 배를 타고.','player'],
-    ['카이','…레온 배를? 웃기지 마. 레온은 안개에 먹혔어. 그 배가 돌아왔다면, 레온은 어디 있는데?','player'],
-    ['카이','…미안. 너한테 화낼 일은 아니지. 어젯밤 내 오두막이 안개에 먹혔어. 북쪽 바닷가가 통째로 하얘졌다고.','player'],
-    ['카이','갈 데가 없어. 여기서 좀 지내도 될까? 대신 물고기는 내가 잡을게.','player'],
-    ['세라','물론이지! 빌더님, 카이가 잘 곳이 필요해요. 침대를 둔 방을 만들면 「침실」이 돼요!','player']],pal:{body:0x2f7a78,hair:0x1e1a16,band:0xd8c49a},lines:['밤엔 안개가 짙어져. 횃불 곁을 떠나지 마.','아침 물때가 좋으면 물고기를 잔뜩 잡아 올게.','슬라임쯤은 나도 상대할 수 있어!']},
+  {name:'카이',from:'north',intro:[
+    ['','북쪽 바닷가에서 걸어온 소년이 젖은 그물을 내려놓고 숨을 골랐습니다.','meet'],
+    ['카이','세라, 깃발이 다시 섰다는 게 정말이었네. …그리고 넌 누구야?','meet'],
+    ['세라','카이! 이분은 빌더예요. 안개 너머에서 왔어요. 레온 오빠 배를 타고.','meet'],
+    ['카이','…레온 배를? 웃기지 마. 레온은 안개에 먹혔어. 그 배가 돌아왔다면, 레온은 어디 있는데?','meet'],
+    ['카이','…미안. 너한테 화낼 일은 아니지. 어젯밤 내 오두막이 안개에 먹혔어. 북쪽 바닷가가 통째로 하얘졌다고.','meet'],
+    ['카이','갈 데가 없어. 여기서 좀 지내도 될까? 대신 물고기는 내가 잡을게.','meet'],
+    ['세라','물론이지! 빌더님, 카이가 잘 곳이 필요해요. 침대를 둔 방을 만들면 「침실」이 돼요!','meet']],pal:{body:0x2f7a78,hair:0x1e1a16,band:0xd8c49a},lines:['밤엔 안개가 짙어져. 횃불 곁을 떠나지 마.','아침 물때가 좋으면 물고기를 잔뜩 잡아 올게.','슬라임쯤은 나도 상대할 수 있어!']},
   {name:'마르코',intro:['흠흠, 마르코라고 해요. 섬 남쪽 끝에서 혼자 잡화를 팔았죠. 손님이 없어서 접었지만요.','그런데 여기선 물건이 저절로 굴러간다면서요? 컨베이어라니, 장사꾼의 꿈이에요!'],pal:{body:0x5aa36b,hair:0x3a2a1e,band:0xf2d16b},lines:['주민이 늘수록 공장도 신이 나서 빨라진대요.','분배기를 쓰면 한 줄의 컨베이어를 여러 기계에 나눌 수 있어요.','보관함은 앞쪽 컨베이어로 물건을 내보내요.']},
   {name:'바르톨',intro:['에헴, 석공 바르톨일세. 젊을 적엔 무너지기 전의 등대 돌도 깎았지.','다시 망치를 들 날이 올 줄이야. 설계도만 주게. 벽 쌓는 건 내가 맡지.'],pal:{body:0x7a6a5a,hair:0x222222,band:0xb8433a},lines:['돌은 석회암 노드에 채굴기를 놓아도 캘 수 있다네.','설계도를 놓고 보관함에 재료만 채워 두게. 우리가 지어 주지.','벽은 두 칸 높이여야 방으로 쳐 준다네.']},
   {name:'테오',intro:['저는 테오예요. 할아버지가 옛날 섬의 풍차 방앗간을 돌리셨대요.','기계가 다시 도는 걸 보니 가슴이 뛰어요. 전력이라면 저한테 물어보세요!'],pal:{body:0x3d7fb8,hair:0xc4c9d4,band:0xf39a35},lines:['석탄 발전기는 바이오매스보다 훨씬 강력해요.','전력이 부족하면 모든 기계가 느려져요.','경사 컨베이어로 한 칸씩 올려 보낼 수 있어요.']},
@@ -1585,10 +1585,22 @@ function levelUp(){
 }
 function arriveVillager(def){
   if(S.villagers.some(v=>v.name===def.name))return;
-  const r=baseR(),a=Math.random()*Math.PI*2;let x=clamp(S.banner.x+Math.cos(a)*r,2,WX-3),z=clamp(S.banner.z+Math.sin(a)*r,2,WZ-3);
-  const v=mkVillager(def,x,z);v.tx=S.banner.x+1.5;v.tz=S.banner.z+1.5;v.reqState='wait';v.reqT=25;S.villagers.push(v);attachVillagerMesh(v);
-  playStory(def.intro.map(t=>Array.isArray(t)?[t[0],t[1],t[2]||'player']:[def.name,t,'player']),()=>{toast(`${def.name}이(가) 마을 주민이 됐어요. 공장 속도 +8%`,'gold')});
+  // newcomers appear outside the town and walk in; the intro starts once they reach the builder
+  const a0=def.from==='north'?-Math.PI/2:Math.random()*Math.PI*2;let x=S.banner.x+.5,z=S.banner.z+.5;
+  search:for(let d=baseR()+9;d>=baseR()+2;d--)for(const da of[0,.25,-.25,.5,-.5]){const a=a0+da,X=clamp(Math.round(S.banner.x+Math.cos(a)*d),2,WX-3),Z=clamp(Math.round(S.banner.z+Math.sin(a)*d),2,WZ-3),y=surfaceY(X,Z);
+    if(y>SEA+1&&getB(X,y,Z)===A&&getB(X,y+1,Z)===A){x=X+.5;z=Z+.5;break search}}
+  const v=mkVillager(def,x,z);v.tx=S.banner.x+1.5;v.tz=S.banner.z+1.5;v.reqState='none';v.arriving=true;v.arriveT=0;S.villagers.push(v);attachVillagerMesh(v);
+  toast(def.from==='north'?'북쪽 바닷가에서 누군가 마을로 걸어오고 있어요!':'누군가 마을로 걸어오고 있어요!','gold');sfx('pop');
   assignBeds();
+}
+let meetV=null;
+function finishArrival(v){
+  meetV=v;
+  const def=VILLAGERS.find(d=>d.name===v.name);v.arriving=false;v.path=null;v.navKey=null;v.wait=6;v.reqState='wait';v.reqT=25;if(v._name)v._name.visible=true;
+  if(Math.hypot(P.x-v.x,P.z-v.z)>4){const a=Math.atan2(v.z-P.z,v.x-P.x);v.x=P.x+Math.cos(a)*1.8;v.z=P.z+Math.sin(a)*1.8;v.y=surfaceY(Math.floor(v.x),Math.floor(v.z))}
+  v.face=Math.atan2(-(P.x-v.x),-(P.z-v.z));P.face=Math.atan2(-(v.x-P.x),-(v.z-P.z));
+  if(!def)return;
+  playStory(def.intro.map(t=>Array.isArray(t)?[t[0],t[1],t[2]||'player']:[def.name,t,'player']),()=>{toast(`${def.name}이(가) 마을 주민이 됐어요. 공장 속도 +8%`,'gold')});
 }
 // ============================================================ the old lighthouse (chapter 1 goal) and the land beyond the fog
 let lampG=null,farLand=null;
@@ -1626,6 +1638,7 @@ function attachVillagerMesh(v){
   if(v._m)scene.remove(v._m);v._m=makeChar(LOOKS[v.name]||LOOKS['세라'],false);v._m.userData.villager=true;v._m.userData.base=.96;v._m.scale.setScalar(.96);scene.add(v._m);
   v._name=makeSprite(textTex(v.name,v.guide?'#ffd66b':'#f3ebd6'),1.5,.38);v._name.position.y=2.05;v._m.add(v._name);
   v._mark=makeSprite(heartTex,.55,.55,false);v._mark.position.y=2.55;v._mark.visible=false;v._m.add(v._mark);v._markKey='';
+  if(v.arriving)v._name.visible=false;
 }
 
 // ============================================================ villager requests
@@ -1733,6 +1746,12 @@ function updVillagers(dt){
     let wp=null,sp=1.7,stop=false;
     const hasBed=v.bed!=null&&ents.get(v.bed)&&ents.get(v.bed).t==='bed';
     if(foe){v.sleeping=false;v.navKey=null;sp=2.7;if(fd<1.2+SLT[foe.type].sc*.4){stop=true;if(v.atk<=0){v.atk=1;hitSlime(foe,6,v)}}else wp=[foe.x,foe.z];v.face=Math.atan2(-(foe.x-v.x),-(foe.z-v.z))}
+    else if(v.arriving){
+      v.arriveT+=dt;sp=2.4;const near=Math.hypot(P.x-v.x,P.z-v.z);
+      if(!cine&&((near<3.2&&Math.abs(P.y-v.y)<3)||v.arriveT>70)){stop=true;finishArrival(v)}
+      else{const home=!S.banner||Math.hypot(P.x-S.banner.x,P.z-S.banner.z)<baseR()+10,tx=Math.floor(home?P.x:S.banner.x+1),tz=Math.floor(home?P.z:S.banner.z+1);
+        if(near<2.6)stop=true;
+        else{navTo(v,'arr'+Math.floor(v.arriveT/2.5),(x,y,z)=>Math.hypot(x-tx,z-tz)<=2.2);wp=nextWaypoint(v)||[tx+.5,tz+.5]}}}
     else if(v.sleeping){if(!night||!hasBed){v.sleeping=false}else{const[bx,by,bz]=XYZ(v.bed);v.x=bx+.5;v.z=bz+.5;v.y=by+.3;v.vy=0;continue}}
     else if(night&&hasBed){const[bx,by,bz]=XYZ(v.bed);
       if(Math.hypot(bx+.5-v.x,bz+.5-v.z)<.7&&Math.abs(by-v.y)<1.2){v.sleeping=true;v.slept=true;continue}
@@ -1962,6 +1981,10 @@ function cineCamera(){
   const c=cine.cam;let ctr=null;
   if(c==='ruin'&&S.ruin)ctr={x:S.ruin.x+.5,y:S.ruin.y+3,z:S.ruin.z+.5,r:10,h:7};
   else if(c==='beach'&&S.ruin&&S.ruin.beach){const b=S.ruin.beach;camera.position.set(b.x+3.2+Math.sin(T*.2)*.4,b.y+2.4,b.z+5.5);_hv.set(b.x,b.y+.3,b.z-.4);camera.lookAt(_hv);playerModel.visible=true;return true}
+  else if(c==='meet'&&meetV){ // two-shot from the side of the builder and the newcomer
+    const v=meetV,mx=(P.x+v.x)/2,mz=(P.z+v.z)/2,dx=v.x-P.x,dz=v.z-P.z,l=Math.hypot(dx,dz)||1,nx=-dz/l,nz=dx/l,y0=Math.max(P.y,v.y);
+    let best=null;for(const sg of[1,-1]){const cx=mx+nx*sg*4.2,cz=mz+nz*sg*4.2,cy=y0+1.9;const clear=topAt(Math.floor(cx),Math.floor(cz))<=cy-.6;if(clear){best=[cx,cy,cz];break}if(!best)best=[cx,Math.max(cy,topAt(Math.floor(cx),Math.floor(cz))+1.2),cz]}
+    camera.position.set(best[0],best[1],best[2]);_hv.set(mx,y0+1.1,mz);camera.lookAt(_hv);playerModel.visible=true;return true}
   else if(c==='village')ctr={x:48.5,y:13,z:48.5,r:13,h:6};
   else if(c==='lamp'&&S.ruin){const a=T*.12,bx=S.ruin.x-1.5,by=S.ruin.y+9.8,bz=S.ruin.z-1.5;camera.position.set(bx+Math.cos(a)*5,by+1.6,bz+Math.sin(a)*5);_hv.set(bx,by,bz);camera.lookAt(_hv);playerModel.visible=true;return true}
   else if(c==='far'){P.face=0;const sw=Math.sin(T*.08)*.4;camera.position.set(P.x+2.1+sw,P.y+2.1,P.z+3.6);_hv.set(P.x-6,SEA+6,P.z-130);camera.lookAt(_hv);playerModel.visible=true;return true}
@@ -2504,7 +2527,7 @@ function devPlaceBanner(){if(S.banner)return;const x=48,z=48,y=surfaceY(x,z);for
 function devJump(k){
   while(cine)endStory();storyQ.length=0;S.downed=false;
   if(k>=2)devPlaceBanner();
-  if(k>=6){if(S.lv<2)S.lv=2;if(!S.villagers.some(v=>v.name===VILLAGERS[0].name)){arriveVillager(VILLAGERS[0]);while(cine)endStory();storyQ.length=0}}
+  if(k>=6){if(S.lv<2)S.lv=2;if(!S.villagers.some(v=>v.name===VILLAGERS[0].name))arriveVillager(VILLAGERS[0]);const kv=S.villagers.find(v=>v.name===VILLAGERS[0].name);if(kv&&kv.arriving){kv.arriving=false;kv.reqState='wait';kv.reqT=25;if(kv._name)kv._name.visible=true;kv.x=P.x+1.5;kv.z=P.z+.5;kv.y=surfaceY(Math.floor(kv.x),Math.floor(kv.z))}}
   if(k>=5)S.night1=true;
   if(k>=8&&!S.lamp){S.lamp=true;buildLighthouse()}
   S.obj=k;roomsDirty=true;updHUD();toast(`목표 ${k+1}: ${OBJ[k]?OBJ[k].t:'에필로그'}`,'gold')}
