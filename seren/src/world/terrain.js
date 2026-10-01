@@ -7,6 +7,7 @@ import { atmosUniforms } from './atmosphere.js';
 
 const ROOT = 65536;
 const RES = 32;
+const RES_LOW = 16; // 먼 청크(2 km 이상)는 성기게
 
 const vert = /* glsl */ `
 ${CURVE_GLSL}
@@ -111,6 +112,7 @@ export class Terrain {
     this.scene = scene;
     this.material = createTerrainMaterial();
     this.index = new THREE.BufferAttribute(buildChunkIndex(RES), 1);
+    this.indexLow = new THREE.BufferAttribute(buildChunkIndex(RES_LOW), 1);
     this.lodFactor = opts.lodFactor ?? 2.0;
     this.minSize = 64;
     this.nodes = new Map();
@@ -182,6 +184,7 @@ export class Terrain {
   }
 
   _detailFor(size) { return size <= 128 ? 2 : size <= 1024 ? 1 : 0; }
+  _resFor(size) { return size >= 2048 ? RES_LOW : RES; }
 
   _onResult(d) {
     const n = this.callbacks.get(d.id);
@@ -199,7 +202,7 @@ export class Terrain {
     g.setAttribute('normal', new THREE.BufferAttribute(d.nor, 3));
     g.setAttribute('color', new THREE.BufferAttribute(d.col, 3));
     g.setAttribute('glow', new THREE.BufferAttribute(d.glw, 3));
-    g.setIndex(this.index);
+    g.setIndex(this._resFor(n.size) === RES ? this.index : this.indexLow);
     const hs = n.size / 2;
     const cy = (d.minH + d.maxH) / 2;
     g.boundingSphere = new THREE.Sphere(new THREE.Vector3(hs, cy, hs), Math.sqrt(hs * hs * 2 + ((d.maxH - d.minH) / 2 + 20) ** 2));
@@ -229,14 +232,14 @@ export class Terrain {
         w.jobs.add(id);
         w.busy++;
         this.inflight++;
-        w.postMessage({ id, x0: n.x0, z0: n.z0, size: n.size, res: RES, detail: this._detailFor(n.size) });
+        w.postMessage({ id, x0: n.x0, z0: n.z0, size: n.size, res: this._resFor(n.size), detail: this._detailFor(n.size) });
       }
     } else {
       const t0 = performance.now();
       while (this.queue.length && performance.now() - t0 < budgetMs) {
         const n = this.queue.shift();
         if (!n.pending) continue;
-        this._makeMesh(n, buildChunk(n.x0, n.z0, n.size, RES, this._detailFor(n.size)));
+        this._makeMesh(n, buildChunk(n.x0, n.z0, n.size, this._resFor(n.size), this._detailFor(n.size)));
       }
     }
   }
@@ -264,8 +267,12 @@ export class Terrain {
         if (all) { for (const c of ch) this._visit(c, p); return; }
       }
     }
-    if (n.ready) { n.mesh.visible = true; this.visibleCount++; }
-    else this._request(n, p);
+    if (n.ready) {
+      // 깊은 바다 밑 지형은 멀리서는 물에 가려 보이지 않으므로 그리지 않는다
+      const deep = n.maxH < -18 && this._distTo(n, p) > 2200;
+      n.mesh.visible = !deep;
+      if (!deep) this.visibleCount++;
+    } else this._request(n, p);
   }
 
   _evict() {

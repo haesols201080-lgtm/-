@@ -53,7 +53,7 @@ export const PLACES = [
   { id: 'frost-vista', type: 'vista', name: '얼음 이마', region: 'frost', pos: [-1900, -8500] },
 
   // ── 노래하는 바다 (남동) ─────────────────
-  { id: 'mulnorae', type: 'seacity', name: '물노래', region: 'sea', pos: [14900, 12350], radius: 500,
+  { id: 'mulnorae', type: 'seacity', name: '물노래', region: 'sea', pos: [14900, 12350], radius: 500, flat: { r: 150, h: 34, blend: 140 },
     desc: '섬과 바다 아치에 기대어 지은 도시. 파도가 아치를 지날 때 노래가 난다.' },
   { id: 'sea-pylon', type: 'pylon', name: '바다의 공명탑', region: 'sea', pos: [12050, 6950], flat: { r: 40, blend: 60 },
     desc: '해안 절벽 위의 공명탑.' },

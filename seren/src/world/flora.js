@@ -77,6 +77,17 @@ class ScatterLayer {
   _key(i, j) { return i * 65536 + j; }
 
   update(cam) {
+    // 배치 셀마다 거리에 따라 단순한 모델로 바꿔 그린다
+    for (const b of this.batches.values()) {
+      for (const m of b.meshes) {
+        const K = m.userData.kind;
+        if (!K || !K.low) continue;
+        const c = m.boundingSphere.center;
+        const d = Math.hypot(c.x - cam.x, c.z - cam.z) - m.boundingSphere.radius * 0.6;
+        const g = d > (K.lodDist || 1800) ? K.low : K.geo;
+        if (m.geometry !== g) m.geometry = g;
+      }
+    }
     const P = this.patch, R = this.radius;
     const ci = Math.floor(cam.x / P), cj = Math.floor(cam.z / P);
     const n = Math.ceil(R / P) + 1;
@@ -150,6 +161,7 @@ class ScatterLayer {
     for (const [kind, arr] of byKind) {
       const K = this.kinds[kind];
       const mesh = new THREE.InstancedMesh(K.geo, K.mat, arr.length);
+      mesh.userData.kind = K;
       let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, z0 = 1e9, z1 = -1e9;
       const useColor = arr.some((a) => a.c !== undefined);
       for (let n = 0; n < arr.length; n++) {
@@ -183,6 +195,14 @@ class ScatterLayer {
     const b = this.batches.get(this._batchKey(p.i, p.j));
     if (b) { b.patches.delete(k); this.dirty.add(b); }
   }
+}
+
+// 가중치에 따라 지역 하나를 뽑는다 (경계에서는 두 지역의 식생이 자연스럽게 섞임)
+function pickRegion(weight, rng) {
+  const r = rng();
+  let acc = 0;
+  for (let i = 0; i < RC; i++) { acc += weight(i); if (r < acc) return i; }
+  return RC - 1;
 }
 
 function variants(n, fn) { return Array.from({ length: n }, (_, i) => fn(i * 7919 + 13)); }
@@ -219,17 +239,16 @@ export class Flora {
           if (h < 0.6) continue;
           const sl = s.slope(x, z);
           if (sl > 0.9) continue;
+          const reg = pickRegion((i) => s.weight(x, z, i), rng);
           const pick = rng();
-          const wm = s.weight(x, z, R.meadow), wb = s.weight(x, z, R.bloom), wg = s.weight(x, z, R.glass),
-            wc = s.weight(x, z, R.canyon), wf = s.weight(x, z, R.frost), wsp = s.weight(x, z, R.spine), wse = s.weight(x, z, R.sea);
           let k = -1, sc = 1;
           if (h < 3.2) { if (pick < 0.15) { k = kGrass[0]; sc = 0.7; } }
-          else if (pick < wm * 0.95) { k = rng() < 0.75 ? kReeds[Math.floor(rng() * kReeds.length)] : kGrass[0]; sc = 0.8 + rng() * 0.5; }
-          else if (pick < wm + wb * 0.85) { k = kMoss[Math.floor(rng() * kMoss.length)]; sc = 0.8 + rng() * 0.6; }
-          else if (pick < wm + wb + wg * 0.2) { k = kPink[0]; sc = 0.6 + rng() * 0.5; }
-          else if (pick < wm + wb + wg + wc * 0.35) { k = kDry[0]; sc = 0.7 + rng() * 0.6; }
-          else if (pick < wm + wb + wg + wc + wf * 0.45 && h < 1000) { k = kFrost[0]; sc = 0.6 + rng() * 0.5; }
-          else if (pick < wm + wb + wg + wc + wf + (wsp + wse) * 0.7) { k = kGrass[0]; sc = 0.7 + rng() * 0.5; }
+          else if (reg === R.meadow) { if (pick < 0.95) { k = rng() < 0.75 ? kReeds[Math.floor(rng() * kReeds.length)] : kGrass[0]; sc = 0.8 + rng() * 0.5; } }
+          else if (reg === R.bloom) { if (pick < 0.85) { k = kMoss[0]; sc = 0.8 + rng() * 0.6; } }
+          else if (reg === R.glass) { if (pick < 0.2) { k = kPink[0]; sc = 0.6 + rng() * 0.5; } }
+          else if (reg === R.canyon) { if (pick < 0.35) { k = kDry[0]; sc = 0.7 + rng() * 0.6; } }
+          else if (reg === R.frost) { if (pick < 0.45 && h < 950) { k = kFrost[0]; sc = 0.6 + rng() * 0.5; } }
+          else if (pick < 0.7) { k = kGrass[0]; sc = 0.7 + rng() * 0.5; }
           if (k < 0) continue;
           out.push({ k, x, y: h - 0.05, z, ry: rng() * 6.28, s: sc });
         }
@@ -256,39 +275,41 @@ export class Flora {
           const x = x0 + rng() * size, z = z0 + rng() * size;
           const h = s.height(x, z);
           const sl = s.slope(x, z);
-          const pick = rng();
-          const wm = s.weight(x, z, R.meadow), wb = s.weight(x, z, R.bloom), wg = s.weight(x, z, R.glass),
-            wc = s.weight(x, z, R.canyon), wf = s.weight(x, z, R.frost), wsp = s.weight(x, z, R.spine), wse = s.weight(x, z, R.sea);
+          const reg = pickRegion((i) => s.weight(x, z, i), rng);
           const ry = rng() * 6.28;
           const push = (k, sc, extra) => out.push({ k, x, y: h - 0.1, z, ry, s: sc, ...extra });
           if (h < -1.5) {
-            if (h > -6 && wse + wm > 0.3 && rng() < 0.4) push(kFan[0], 0.8 + rng() * 0.8);
+            if (h > -6 && (reg === R.sea || reg === R.meadow) && rng() < 0.4) push(kFan[0], 0.8 + rng() * 0.8);
             continue;
           }
-          if (sl > 1.1) { if (rng() < 0.25) push(wc > 0.4 ? kRedBoulder[0] : kBoulder[0], 0.8 + rng() * 2.2); continue; }
+          if (sl > 1.1) { if (rng() < 0.25) push(reg === R.canyon ? kRedBoulder[0] : kBoulder[0], 0.8 + rng() * 2.2); continue; }
           if (h < 2.5) continue;
-          if (pick < wm) {
-            const r2 = rng();
-            if (r2 < 0.5) push(kBulbs[Math.floor(rng() * 2)], 0.8 + rng() * 0.7);
-            else if (r2 < 0.85) push(kFern[Math.floor(rng() * 2)], 0.8 + rng() * 0.8);
-            else push(kBoulder[Math.floor(rng() * 2)], 0.6 + rng() * 1.6);
-          } else if (pick < wm + wb) {
-            const r2 = rng();
-            if (r2 < 0.6) push(kShroom[Math.floor(rng() * 2)], 1 + rng() * 2.2);
-            else if (r2 < 0.85) push(kBulbs[Math.floor(rng() * 2)], 1 + rng() * 0.8, { c: 0xc8b8ff });
-            else push(kFern[0], 1 + rng(), { c: 0xb0a0ff });
-          } else if (pick < wm + wb + wg) {
-            if (rng() < 0.55) push(kCrys[Math.floor(rng() * 2)], 0.8 + rng() * 2.6);
-            else if (rng() < 0.4) push(kPinkBoulder[0], 0.8 + rng() * 2);
-          } else if (pick < wm + wb + wg + wc) {
-            if (rng() < 0.4) push(kRedBoulder[0], 0.6 + rng() * 2.4);
-          } else if (pick < wm + wb + wg + wc + wf) {
-            if (rng() < 0.4) push(kIce[0], 1 + rng() * 2.5);
-            else if (rng() < 0.4) push(kBoulder[Math.floor(rng() * 2)], 0.8 + rng() * 2, { c: 0xdde8ff });
-          } else if (pick < wm + wb + wg + wc + wf + wsp + wse) {
-            const r2 = rng();
-            if (r2 < 0.35) push(kBulbs[0], 0.8 + rng() * 0.6);
-            else if (r2 < 0.5) push(kBoulder[Math.floor(rng() * 2)], 0.5 + rng() * 1.2);
+          const r2 = rng();
+          switch (reg) {
+            case R.meadow:
+              if (r2 < 0.5) push(kBulbs[Math.floor(rng() * 2)], 0.8 + rng() * 0.7);
+              else if (r2 < 0.85) push(kFern[Math.floor(rng() * 2)], 0.8 + rng() * 0.8);
+              else push(kBoulder[Math.floor(rng() * 2)], 0.6 + rng() * 1.6);
+              break;
+            case R.bloom:
+              if (r2 < 0.6) push(kShroom[Math.floor(rng() * 2)], 1 + rng() * 2.2);
+              else if (r2 < 0.85) push(kBulbs[Math.floor(rng() * 2)], 1 + rng() * 0.8, { c: 0xc8b8ff });
+              else push(kFern[0], 1 + rng(), { c: 0xb0a0ff });
+              break;
+            case R.glass:
+              if (r2 < 0.55) push(kCrys[Math.floor(rng() * 2)], 0.8 + rng() * 2.6);
+              else if (r2 < 0.75) push(kPinkBoulder[0], 0.8 + rng() * 2);
+              break;
+            case R.canyon:
+              if (r2 < 0.4) push(kRedBoulder[0], 0.6 + rng() * 2.4);
+              break;
+            case R.frost:
+              if (r2 < 0.4) push(kIce[0], 1 + rng() * 2.5);
+              else if (r2 < 0.65) push(kBoulder[Math.floor(rng() * 2)], 0.8 + rng() * 2, { c: 0xdde8ff });
+              break;
+            default:
+              if (r2 < 0.35) push(kBulbs[0], 0.8 + rng() * 0.6);
+              else if (r2 < 0.5) push(kBoulder[Math.floor(rng() * 2)], 0.5 + rng() * 1.2);
           }
         }
       },
@@ -307,13 +328,13 @@ export class Flora {
           const x = x0 + rng() * size, z = z0 + rng() * size;
           const h = s.height(x, z);
           if (h < 0.8 || s.slope(x, z) > 0.8) continue;
+          const reg = pickRegion((i) => s.weight(x, z, i), rng);
           const pick = rng();
-          const wm = s.weight(x, z, R.meadow), wf = s.weight(x, z, R.frost), wse = s.weight(x, z, R.sea), wsp = s.weight(x, z, R.spine);
           const ry = rng() * 6.28;
-          if (h < 4) { if (rng() < 0.5 * (wse + wm + wsp)) out.push({ k: kWhip[Math.floor(rng() * 2)], x, y: h - 0.2, z, ry, s: 6 + rng() * 7 }); continue; }
-          if (pick < wm * 0.55) out.push({ k: kLantern[Math.floor(rng() * 3)], x, y: h - 0.2, z, ry, s: 7 + rng() * 9 });
-          else if (pick < wm * 0.55 + wf * 1.6 && h < 1050) out.push({ k: kPine[Math.floor(rng() * 2)], x, y: h - 0.3, z, ry, s: 7 + rng() * 10 });
-          else if (pick < wm * 0.55 + wf * 1.6 + (wse + wsp) * 0.25) out.push({ k: kWhip[0], x, y: h - 0.2, z, ry, s: 6 + rng() * 6 });
+          if (h < 4) { if (rng() < 0.5 && (reg === R.sea || reg === R.meadow || reg === R.spine)) out.push({ k: kWhip[Math.floor(rng() * 2)], x, y: h - 0.2, z, ry, s: 6 + rng() * 7 }); continue; }
+          if (reg === R.meadow && pick < 0.55) out.push({ k: kLantern[Math.floor(rng() * 3)], x, y: h - 0.2, z, ry, s: 7 + rng() * 9 });
+          else if (reg === R.frost && h < 1000) out.push({ k: kPine[Math.floor(rng() * 2)], x, y: h - 0.3, z, ry, s: 7 + rng() * 10 });
+          else if ((reg === R.sea || reg === R.spine) && pick < 0.25) out.push({ k: kWhip[0], x, y: h - 0.2, z, ry, s: 6 + rng() * 6 });
         }
       },
     });
@@ -321,30 +342,31 @@ export class Flora {
     // ── 3층: 멀리서도 보이는 거대 식물·바위 ─────────────
     const K3 = [];
     const giantsGeo = variants(4, (s) => F.mushroomGiant(s));
-    const kGiant = giantsGeo.map((g) => K3.push({ geo: g.geo, mat: giants, height: 1.2, width: 0.6 }) - 1);
+    const kGiant = giantsGeo.map((g, i) => K3.push({ geo: g.geo, low: F.mushroomGiantLow(g), mat: giants, height: 1.2, width: 0.6, lodDist: 1400 }) - 1);
     const spires = variants(3, (s) => F.crystalSpire(s));
-    const kSpire = spires.map((g) => K3.push({ geo: g, mat: crystal, height: 6.2, width: 1.5 }) - 1);
+    const spireLow = F.crystalSpireLow();
+    const kSpire = spires.map((g) => K3.push({ geo: g, low: spireLow, mat: crystal, height: 6.2, width: 1.5, lodDist: 1200 }) - 1);
     const hoodoos = variants(3, (s) => F.hoodoo(s));
     const kHoodoo = hoodoos.map((g) => K3.push({ geo: g.geo, mat: solid, height: 1.1, width: 0.3 }) - 1);
     const kBigPine = variants(2, (s) => F.frostPine(s + 99)).map((g) => K3.push({ geo: g, mat: plants, height: 1, width: 0.5 }) - 1);
     const kBigLantern = variants(2, (s) => F.lanternTree(s + 51)).map((g) => K3.push({ geo: g, mat: plants, height: 1.1, width: 0.6 }) - 1);
     const far = new ScatterLayer(world, {
-      name: 'giants', patch: 512, radius: 7000 * q.farFlora, samples: 0, batch: 8, kinds: K3,
+      name: 'giants', patch: 512, radius: 7000 * q.farFlora, samples: 0, batch: 4, kinds: K3,
       gen: ({ x0, z0, size, rng, out }) => {
         const tries = 14;
         for (let t = 0; t < tries; t++) {
           const x = x0 + rng() * size, z = z0 + rng() * size;
           const h = heightAt(x, z, 1, _w);
           if (h < 1) continue;
+          const reg = pickRegion((i) => _w[i], rng);
           const pick = rng();
           const ry = rng() * 6.28;
-          if (pick < _w[R.bloom] * 0.6) {
+          if (reg === R.bloom && pick < 0.32) {
             const v = Math.floor(rng() * giantsGeo.length);
             const g = giantsGeo[v];
             const sc = 70 + rng() * 170;
             const top = g.top;
             const cs = Math.cos(ry), sn = Math.sin(ry);
-            // 회전된 갓 위치
             const tx = x + (top.x * cs + top.z * sn) * sc, tz = z + (-top.x * sn + top.z * cs) * sc;
             out.push({
               k: kGiant[v], x, y: h - 2, z, ry, s: sc,
@@ -353,22 +375,22 @@ export class Flora {
                 { type: 'cyl', x: tx, z: tz, r: g.capR * sc, y0: h - 2 + top.y * sc - sc * 0.02, y1: h - 2 + (top.y + 0.125) * sc, dome: 0.09 * sc },
               ],
             });
-          } else if (pick < _w[R.bloom] * 0.6 + _w[R.glass] * 0.35) {
+          } else if (reg === R.glass && pick < 0.22) {
             const sc = 8 + rng() * 22;
             out.push({ k: kSpire[Math.floor(rng() * 3)], x, y: h - 3, z, ry, s: sc, rx: (rng() - 0.5) * 0.15, col: [{ type: 'cyl', x, z, r: 0.6 * sc, y0: h - 5, y1: h - 3 + 4.6 * sc }] });
-          } else if (pick < _w[R.bloom] * 0.6 + _w[R.glass] * 0.35 + _w[R.canyon] * 0.35) {
+          } else if (reg === R.canyon && pick < 0.35) {
             const v = Math.floor(rng() * 3);
             const sc = 25 + rng() * 55;
             out.push({ k: kHoodoo[v], x, y: h - 1, z, ry, s: sc, col: [{ type: 'cyl', x, z, r: 0.08 * sc, y0: h - 3, y1: h - 1 + hoodoos[v].height * sc }] });
-          } else if (pick < _w[R.bloom] * 0.6 + _w[R.glass] * 0.35 + _w[R.canyon] * 0.35 + _w[R.frost] * 0.5 && h < 1100) {
+          } else if (reg === R.frost && pick < 0.5 && h < 1000) {
             // 서리 숲: 큰 소나무 무리
             for (let k = 0; k < 6; k++) {
               const px = x + (rng() - 0.5) * 60, pz = z + (rng() - 0.5) * 60;
               const ph = heightAt(px, pz, 1);
-              if (ph < 1 || ph > 1100) continue;
+              if (ph < 1 || ph > 1000) continue;
               out.push({ k: kBigPine[Math.floor(rng() * 2)], x: px, y: ph - 0.5, z: pz, ry: rng() * 6.28, s: 16 + rng() * 16 });
             }
-          } else if (pick < _w[R.meadow] * 0.12) {
+          } else if (reg === R.meadow && pick < 0.12) {
             out.push({ k: kBigLantern[Math.floor(rng() * 2)], x, y: h - 0.5, z, ry, s: 24 + rng() * 18 });
           }
         }

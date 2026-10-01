@@ -537,6 +537,234 @@ export class Structures {
     this.markers.push({ id: p.id, x, y, z });
   }
 
+  // ── 윤슬: 수정 메사 위의 도시 ─────────────────
+  _glasscity(p) {
+    const [cx, cz] = p.pos;
+    const y0 = this._ground(cx, cz);
+    const rnd = mulberry32(501);
+    const crys = [], pearl = [];
+    const towers = [];
+    for (let i = 0; i < 26; i++) {
+      const a = rnd() * Math.PI * 2, R = 20 + rnd() * 130;
+      const x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
+      const h = 25 + rnd() * 110 * (1 - R / 220), r = 2.5 + rnd() * 4;
+      const y = this._ground(x, z) - 1;
+      if (y < y0 - 25) continue;
+      const tilt = (rnd() - 0.5) * 0.12;
+      const col = [0xf4c8e2, 0xd8c8ff, 0xffd8ec, 0xc8e8ff][Math.floor(rnd() * 4)];
+      const body = new THREE.CylinderGeometry(r * 0.8, r, h * 0.85, 6, 4).translate(0, h * 0.425, 0);
+      crys.push(part(xf(body, { x, y, z, rz: tilt, ry: rnd() }), (px, py) => (Math.abs(((py - y) % 12) - 6) < 0.6 ? 0xffffff : col), (px, py) => (Math.abs(((py - y) % 12) - 6) < 0.6 ? 1.2 : 0.18)));
+      crys.push(part(xf(new THREE.ConeGeometry(r * 0.8, h * 0.18, 6).translate(0, h * 0.94, 0), { x, y, z, rz: tilt }), 0xffffff, 0.7));
+      this._col({ type: 'cyl', x, z, r: r * 1.05, y0: y - 2, y1: y + h * 0.85 });
+      towers.push({ x, y: y + h * 0.9, z });
+      if (i % 4 === 0) this.resonators.push({ x, y: y + h * 0.9, z });
+    }
+    // 진주 돔 집
+    for (let i = 0; i < 12; i++) {
+      const a = rnd() * Math.PI * 2, R = 40 + rnd() * 110;
+      const x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
+      const r = 3.5 + rnd() * 3;
+      const y = this._ground(x, z) - 0.3;
+      if (y < y0 - 10) continue;
+      A.place(pearl, A.domeHouse({ r, h: r * 1.3, seed: 700 + i, glow: A.PAL.rose }), { x, y, z });
+      this._col({ type: 'cyl', x, z, r: r * 0.95, y0: y - 1, y1: y + r * 1.3, dome: r * 0.7 });
+    }
+    this._mesh(crys, this.mats.crystal);
+    this._mesh(pearl);
+    // 떠 있는 프리즘 심장
+    const heart = new THREE.Mesh(new THREE.OctahedronGeometry(16, 0), this.mats.crystal);
+    heart.geometry = merge([part(new THREE.OctahedronGeometry(16, 0), 0xffd8f0, 0.5)]);
+    heart.position.set(cx, y0 + 150, cz);
+    this.group.add(heart);
+    const shards = [];
+    for (let i = 0; i < 8; i++) {
+      const m = new THREE.Mesh(merge([part(new THREE.OctahedronGeometry(4, 0).scale(0.6, 1.8, 0.6), 0xd8c8ff, 0.6)]), this.mats.crystal);
+      this.group.add(m);
+      shards.push(m);
+    }
+    this.anims.push((t) => {
+      heart.rotation.set(t * 0.1, t * 0.17, 0);
+      heart.position.y = y0 + 150 + Math.sin(t * 0.4) * 4;
+      shards.forEach((m, i) => {
+        const a = t * 0.2 + (i / 8) * Math.PI * 2;
+        m.position.set(cx + Math.cos(a) * 34, heart.position.y + Math.sin(t * 0.7 + i) * 8, cz + Math.sin(a) * 34);
+        m.rotation.set(t * 0.3 + i, t * 0.5, 0);
+      });
+    });
+    this.resonators.push({ x: cx, y: y0 + 150, z: cz });
+    this.world.updrafts.push({ x: cx, z: cz, r: 14, y0, y1: y0 + 170, strength: 22 });
+    this.markers.push({ id: p.id, x: cx, y: y0, z: cz });
+  }
+
+  // ── 갓마을: 거대 버섯 위의 마을 ─────────────────
+  _bloomcity(p) {
+    const [cx, cz] = p.pos;
+    const rnd = mulberry32(611);
+    const caps = [];
+    const parts = [];
+    const defs = [[0, 0, 150], [120, 60, 110], [-110, 90, 125], [60, -130, 95], [-90, -110, 165], [190, -60, 80]];
+    for (const [dx, dz, h] of defs) {
+      const x = cx + dx, z = cz + dz, g = this._ground(x, z);
+      const capR = h * 0.32;
+      const stalk = tube([V(x, g - 3, z), V(x + 3, g + h * 0.4, z), V(x - 2, g + h * 0.8, z + 2), V(x, g + h, z)], h * 0.05, 10, 10, (t) => 1.5 - 0.6 * t + Math.max(0, 0.15 - t) * 6);
+      parts.push(part(stalk, (px, py) => (Math.sin((py - g) * 0.5) > 0.93 ? 0x9ff6e0 : 0xcfc4e8), (px, py) => (Math.sin((py - g) * 0.5) > 0.93 ? 1.2 : 0)));
+      const top = g + h;
+      const cap = lathe([[0.001, 8], [capR * 0.4, 7.5], [capR * 0.8, 4.5], [capR, 0.5], [capR * 0.97, -0.5], [capR * 0.6, 0.2], [capR * 0.2, -1.5], [0.001, -1.8]], 28);
+      parts.push(part(xf(cap, { x, y: top, z }), (px, py) => (py < top + 0.1 ? 0x4dfcd0 : 0x5a3aa8), (px, py) => (py < top + 0.1 ? 1.4 : 0)));
+      this._col({ type: 'cyl', x, z, r: h * 0.07, y0: g - 5, y1: top - 2, walk: false });
+      this._col({ type: 'cyl', x, z, r: capR * 0.95, y0: top - 2, y1: top + 8, dome: 7.5 });
+      caps.push({ x, z, y: top + 7.6, r: capR });
+      // 갓 위의 집
+      const n = 1 + Math.floor(rnd() * 3);
+      for (let i = 0; i < n; i++) {
+        const a = rnd() * Math.PI * 2, d = rnd() * capR * 0.35;
+        const hx = x + Math.cos(a) * d, hz = z + Math.sin(a) * d, hr = 3.5 + rnd() * 2;
+        const hy = top + 8 - 7.5 * (d / capR) ** 2 - 0.5;
+        A.place(parts, A.domeHouse({ r: hr, h: hr * 1.3, seed: 900 + i + dx, glow: A.PAL.teal }), { x: hx, y: hy, z: hz });
+        this._col({ type: 'cyl', x: hx, z: hz, r: hr * 0.95, y0: hy - 1, y1: hy + hr * 1.3, dome: hr * 0.7 });
+      }
+    }
+    // 갓과 갓을 잇는 다리
+    for (let i = 1; i < caps.length; i++) {
+      const a = caps[0], b = caps[i];
+      const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
+      const sx = a.x + (dx / d) * a.r * 0.6, sz = a.z + (dz / d) * a.r * 0.6, ex = b.x - (dx / d) * b.r * 0.6, ez = b.z - (dz / d) * b.r * 0.6;
+      const len = Math.hypot(ex - sx, ez - sz);
+      const ya = a.y - 7.5 * 0.36 + 0.2, yb = b.y - 7.5 * 0.36 + 0.2;
+      const rot = Math.atan2(-(ez - sz), ex - sx);
+      const mx = (sx + ex) / 2, mz = (sz + ez) / 2;
+      const deck = new THREE.BoxGeometry(len, 0.4, 3);
+      const pos = deck.attributes.position;
+      for (let k = 0; k < pos.count; k++) { const t = (pos.getX(k) + len / 2) / len; pos.setY(k, pos.getY(k) + ya + (yb - ya) * t - Math.sin(t * Math.PI) * 3); }
+      deck.computeVertexNormals();
+      parts.push(part(xf(deck, { x: mx, z: mz, ry: rot }), 0x8a7a6a, 0));
+      parts.push(part(xf(new THREE.BoxGeometry(len, 0.12, 0.12).translate(0, ya + 1.2, 1.5), { x: mx, z: mz, ry: rot }), 0x7dfde0, 1.2));
+      this._col({ type: 'ramp', x: mx, z: mz, hx: len / 2, hz: 1.5, rot, y0: Math.min(ya, yb) - 4, y1: ya, y1b: yb });
+    }
+    this._mesh(parts, this.mats.pearl);
+    // 땅에서 갓으로 오르는 승강 기둥
+    const c0 = caps[0], c4 = caps[4];
+    const gx = cx + 26, gz = cz + 40;
+    this._makeLift(gx, gz, this._ground(gx, gz), c0.y - 2, [0, 0], 6).topPos = [c0.x + 10, c0.z + 8];
+    const hx = c4.x + 30, hz = c4.z + 30;
+    this._makeLift(hx, hz, this._ground(hx, hz), c4.y - 2, [0, 0], 6).topPos = [c4.x + 8, c4.z + 8];
+    this.resonators.push({ x: cx, y: c0.y, z: cz });
+    this.markers.push({ id: p.id, x: cx, y: c0.y, z: cz });
+  }
+
+  // ── 떠돌섬: 협곡 위로 떠오르는 섬들 ─────────────────
+  _canyoncity(p) {
+    const [cx, cz] = p.pos;
+    const rnd = mulberry32(733);
+    this.islands = [];
+    for (let i = 0; i < 9; i++) {
+      const a = (i / 9) * Math.PI * 2 + rnd() * 0.4, R = 160 + rnd() * 380;
+      const x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
+      const r = 18 + rnd() * 26;
+      const parts = A.floatingIsland({ r, seed: 40 + i });
+      const k = Math.floor(rnd() * 3);
+      for (let j = 0; j < k; j++) {
+        const b = rnd() * Math.PI * 2, d = rnd() * r * 0.45, hr = 3 + rnd() * 2.5;
+        A.place(parts, A.domeHouse({ r: hr, h: hr * 1.2, seed: 800 + i * 3 + j, glow: A.PAL.amber }), { x: Math.cos(b) * d, y: 0, z: Math.sin(b) * d });
+      }
+      if (k === 0) A.place(parts, A.gardenBed({ r: r * 0.3, seed: 20 + i, colors: [A.PAL.amber, A.PAL.rose] }), {});
+      const obj = new THREE.Group();
+      const mesh = new THREE.Mesh(merge(parts), this.mats.pearl);
+      obj.add(mesh);
+      const ground = this._ground(x, z);
+      const upY = Math.max(ground, 200) + 90 + rnd() * 230;
+      const downY = ground + 1.5;
+      obj.position.set(x, downY, z);
+      obj.rotation.set((rnd() - 0.5) * 0.25, rnd() * 6, (rnd() - 0.5) * 0.25);
+      this.group.add(obj);
+      const col = this._col({ type: 'cyl', x: 0, z: 0, r: r * 0.95, y0: -6, y1: 0.1, obj });
+      this.islands.push({ obj, upY, downY, x, z, r, k: 0, tilt: [obj.rotation.x, obj.rotation.z], phase: rnd() * 6, col });
+    }
+    this.anims.push((t, dt) => {
+      const P = this.pylons.get('canyon-pylon');
+      const target = P && P.alive ? 1 : 0;
+      for (const I of this.islands) {
+        I.k += (target - I.k) * Math.min(1, dt * 0.08) + (target > I.k ? dt * 0.01 : 0);
+        I.k = Math.min(1, Math.max(0, I.k));
+        const e = I.k * I.k * (3 - 2 * I.k);
+        I.obj.position.y = I.downY + (I.upY - I.downY) * e + Math.sin(t * 0.4 + I.phase) * 2 * e;
+        I.obj.rotation.x = I.tilt[0] * (1 - e);
+        I.obj.rotation.z = I.tilt[1] * (1 - e);
+      }
+    });
+    // 섬지기의 받침 + 상승 기류 (깨어나면 섬으로 오를 수 있게)
+    const y0 = this._ground(cx, cz);
+    this._mesh(A.liftBase({ r: 8, glow: A.PAL.amber }).map((g) => xf(g, { x: cx, y: y0, z: cz })));
+    this.canyonDraft = { x: cx, z: cz, r: 12, y0, y1: y0 + 420, strength: 24, enabled: false };
+    this.world.updrafts.push(this.canyonDraft);
+    this.anims.push(() => { const P = this.pylons.get('canyon-pylon'); this.canyonDraft.enabled = !!(P && P.alive); });
+    this.markers.push({ id: p.id, x: cx, y: y0, z: cz });
+  }
+
+  // ── 별듣는 탑: 첨봉 꼭대기 관측소 ─────────────────
+  _observatory(p) {
+    const [cx, cz] = p.pos;
+    const y = this._ground(cx, cz);
+    const parts = [];
+    parts.push(part(new THREE.CylinderGeometry(30, 34, 3, 24).translate(cx, y - 1, cz), A.PAL.stone, 0));
+    A.place(parts, A.domeHouse({ r: 12, h: 14, seed: 77, glow: 0xa8c8ff }), { x: cx - 8, y: y + 0.5, z: cz - 6 });
+    this._col({ type: 'cyl', x: cx, z: cz, r: 32, y0: y - 6, y1: y + 0.5 });
+    this._col({ type: 'cyl', x: cx - 8, z: cz - 6, r: 11.5, y0: y, y1: y + 14, dome: 9 });
+    // 별을 듣는 고리 안테나
+    for (let i = 0; i < 3; i++) {
+      const g = new THREE.TorusGeometry(10 - i * 2.5, 0.5, 6, 40);
+      parts.push(part(xf(g, { x: cx + 14, y: y + 26 + i * 4, z: cz + 8, rx: 0.9 + i * 0.12, ry: -0.6 }), i === 1 ? A.PAL.gold : A.PAL.pearl, i === 1 ? 0.8 : 0));
+    }
+    parts.push(part(xf(new THREE.CylinderGeometry(0.8, 1.6, 26, 8), { x: cx + 14, y: y + 13, z: cz + 8 }), A.PAL.pearl, 0));
+    A.place(parts, A.spireTower({ h: 60, r: 2.4, seed: 66, glow: 0xa8c8ff }), { x: cx + 18, y, z: cz - 14 });
+    this._col({ type: 'cyl', x: cx + 18, z: cz - 14, r: 2.8, y0: y, y1: y + 30, walk: false });
+    this._mesh(parts);
+    this.resonators.push({ x: cx + 14, y: y + 30, z: cz + 8 });
+    this.markers.push({ id: p.id, x: cx, y, z: cz });
+  }
+
+  // ── 물노래: 섬과 바다 아치의 도시 ──────────────────
+  _seacity(p) {
+    const [cx, cz] = p.pos;
+    const rnd = mulberry32(919);
+    const parts = [];
+    // 바다 아치 (파도의 악기)
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 7) * Math.PI * 2 + rnd() * 0.3, R = 260 + rnd() * 160;
+      const x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
+      const span = 60 + rnd() * 50, h = 50 + rnd() * 50;
+      A.place(parts, A.archGate({ span, h, w: 5, glow: 0x7ff0ff }), { x, y: Math.min(this._ground(x, z), -2) - 4, z, ry: a + Math.PI / 2 });
+      this.resonators.push({ x, y: h * 0.8, z });
+    }
+    // 섬 위의 탑과 집
+    for (let i = 0; i < 9; i++) {
+      const a = rnd() * Math.PI * 2, R = rnd() * 160;
+      const x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
+      const y = this._ground(x, z);
+      if (y < 3) continue;
+      if (i < 4) {
+        const h = 40 + rnd() * 50, r = 3 + rnd() * 2;
+        A.place(parts, A.spireTower({ h, r, seed: 950 + i, glow: 0x7ff0ff }), { x, y: y - 1, z });
+        this._col({ type: 'cyl', x, z, r: r * 1.1, y0: y - 2, y1: y + h * 0.45 });
+      } else {
+        const r = 4 + rnd() * 3;
+        A.place(parts, A.domeHouse({ r, h: r * 1.2, seed: 960 + i, glow: 0x7ff0ff }), { x, y: y - 0.3, z });
+        this._col({ type: 'cyl', x, z, r: r * 0.95, y0: y - 1, y1: y + r * 1.2, dome: r * 0.7 });
+      }
+    }
+    // 물 위의 꽃잎 발판 (썰매로 건널 수 있는 징검다리)
+    for (let i = 0; i < 10; i++) {
+      const a = rnd() * Math.PI * 2, R = 180 + rnd() * 200;
+      const x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
+      if (this._ground(x, z) > -1) continue;
+      const r = 6 + rnd() * 6;
+      A.place(parts, A.petal({ r, depth: 3, glow: 0x7ff0ff }), { x, y: 1.6, z });
+      this._col({ type: 'cyl', x, z, r: r * 0.97, y0: -1, y1: 1.62 });
+    }
+    this._mesh(parts);
+    this.markers.push({ id: p.id, x: cx, y: this._ground(cx, cz), z: cz });
+  }
+
   update(dt, ctx) {
     this.t += dt;
     const t = this.t;

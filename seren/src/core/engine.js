@@ -6,6 +6,14 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { PRESETS } from './quality.js';
 
+// 모든 재질의 최종 색을 안전하게: 무한대·NaN 이 블룸에 들어가면 화면 전체가 검게 번진다
+if (!THREE.ShaderChunk.tonemapping_fragment.includes('SAFE_OUT')) {
+  THREE.ShaderChunk.tonemapping_fragment = `// SAFE_OUT
+gl_FragColor.rgb = clamp(gl_FragColor.rgb, 0.0, 48.0);
+if (!(gl_FragColor.r == gl_FragColor.r && gl_FragColor.g == gl_FragColor.g && gl_FragColor.b == gl_FragColor.b)) gl_FragColor.rgb = vec3(0.0);
+` + THREE.ShaderChunk.tonemapping_fragment;
+}
+
 class SkyWorldPass extends Pass {
   constructor(engine) {
     super();
@@ -33,6 +41,7 @@ export class Engine {
     r.toneMappingExposure = 1.0;
     r.outputColorSpace = THREE.SRGBColorSpace;
     r.autoClear = false;
+    r.info.autoReset = false;
     r.setClearColor(0x000000, 1);
 
     this.scene = new THREE.Scene();
@@ -92,6 +101,7 @@ export class Engine {
   }
 
   render() {
+    this.renderer.info.reset();
     if (this.composer) this.composer.render();
     else {
       this.renderer.setRenderTarget(null);

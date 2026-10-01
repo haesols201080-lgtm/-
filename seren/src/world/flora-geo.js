@@ -38,10 +38,12 @@ export function reedClump(seed = 1) {
     const a = r() * Math.PI * 2;
     const ox = (r() - 0.5) * 0.4, oz = (r() - 0.5) * 0.4;
     const bend = (r() - 0.3) * 0.5;
-    parts.push(part(blade(h, 0.05, bend, a, 4, ox, oz), (x, y) => lerpHex(0x1d5e5a, 0x7fd6b8, y / h), 0));
-    // 끝의 빛 씨앗
-    const tp = xf(new THREE.OctahedronGeometry(0.032, 0), { x: ox + Math.cos(a) * bend, y: h + 0.02, z: oz + Math.sin(a) * bend, sy: 2.2 });
-    parts.push(part(tp, 0x9ffcff, 1.2));
+    parts.push(part(blade(h, 0.05, bend, a, 3, ox, oz), (x, y) => lerpHex(0x1d5e5a, 0x7fd6b8, y / h), 0));
+    // 끝의 빛 씨앗 (일부 줄기에만)
+    if (i % 2 === 0) {
+      const tp = xf(new THREE.OctahedronGeometry(0.032, 0), { x: ox + Math.cos(a) * bend, y: h + 0.02, z: oz + Math.sin(a) * bend, sy: 2.2 });
+      parts.push(part(tp, 0x9ffcff, 1.0));
+    }
   }
   return merge(parts);
 }
@@ -60,13 +62,13 @@ export function grassClump(seed = 1, c0 = 0x3a7a5a, c1 = 0x9ccf8a, height = 0.55
 export function mossTuft(seed = 1) {
   const r = mulberry32(seed);
   const parts = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 5; i++) {
     const h = 0.25 + r() * 0.45;
     const a = r() * Math.PI * 2;
     const ox = (r() - 0.5) * 0.5, oz = (r() - 0.5) * 0.5;
     const b = (r() - 0.5) * 0.3;
     parts.push(part(blade(h, 0.03, b, a, 3, ox, oz), (x, y) => lerpHex(0x2a2456, 0x5a4aa0, y / h), 0));
-    parts.push(part(xf(new THREE.SphereGeometry(0.035, 5, 4), { x: ox + Math.cos(a) * b, y: h, z: oz + Math.sin(a) * b }), 0x7dfde0, 1.4));
+    parts.push(part(xf(new THREE.OctahedronGeometry(0.04, 0), { x: ox + Math.cos(a) * b, y: h, z: oz + Math.sin(a) * b }), 0x7dfde0, 1.4));
   }
   return merge(parts);
 }
@@ -159,6 +161,26 @@ export function mushroomGiant(seed = 1) {
     parts.push(part(xf(new THREE.CylinderGeometry(0.0015, 0.0015, len, 3), { x: top.x + Math.cos(a) * capR * 0.92, y: top.y - len / 2, z: top.z + Math.sin(a) * capR * 0.92 }), 0x7dfde0, 1.6));
   }
   return { geo: merge(parts), capY: top.y + 0.12, capR: capR * 0.85, top, stalkR: 0.035 * 1.5 };
+}
+
+/** 거대 버섯의 먼 거리용 단순 모델 (같은 비례) */
+export function mushroomGiantLow(g) {
+  const t = g.top;
+  const stalk = new THREE.CylinderGeometry(0.035, 0.06, t.y, 6, 1, true).translate(t.x * 0.5, t.y / 2, t.z * 0.5);
+  const R = g.capR / 0.85;
+  const cap = lathe([[0.001, 0.13], [R * 0.6, 0.1], [R, 0.02], [R * 0.6, 0.0], [0.001, -0.01]], 10);
+  return merge([
+    part(stalk, 0xb8acd8, 0),
+    part(xf(cap, { x: t.x, y: t.y, z: t.z }), (x, y) => (y - t.y < 0.008 ? 0x4dfcd0 : 0x5a3aa8), (x, y) => (y - t.y < 0.008 ? 1.6 : 0.1)),
+  ]);
+}
+
+/** 노래수정의 먼 거리용 단순 모델 */
+export function crystalSpireLow() {
+  return merge([
+    part(new THREE.CylinderGeometry(0.55, 0.58, 4.7, 6, 1).translate(0, 2.35, 0), 0xf2b4d6, 0.3),
+    part(new THREE.ConeGeometry(0.55, 1.3, 6, 1).translate(0, 5.35, 0), 0xffffff, 0.5),
+  ]);
 }
 
 /** 등불나무: 가는 줄기, 늘어진 가지 끝마다 빛 열매 (단위 높이 ~1) */

@@ -386,6 +386,7 @@ export class Avatar {
     const anchor = this.scarfAnchor.getWorldPosition(this._v);
     const pts = this.scarfPts, prev = this.scarfPrev, n = this.scarfN;
     const seg = 0.11;
+    if (this.scarfInit && pts[0].distanceToSquared(anchor) > 9) this.scarfInit = false; // 순간이동
     if (!this.scarfInit) {
       for (let i = 0; i < n; i++) { pts[i].copy(anchor); pts[i].y -= i * seg; prev[i].copy(pts[i]); }
       this.scarfInit = true;

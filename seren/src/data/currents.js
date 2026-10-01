@@ -3,7 +3,7 @@
 
 export const CURRENTS = [
   {
-    id: 'meadow-spine', name: '들판의 해류', color: 0x7ff3e6, speed: 85,
+    id: 'meadow-spine', name: '들판의 해류', color: 0x7ff3e6, speed: 85, enabled: false,
     points: [[-330, 2.6, 7690], [-260, 20, 7480], [-120, 75, 6800], [0, 140, 5600], [110, 185, 4300], [70, 250, 3200], [0, 560, 2300, 1], [0, 470, 1650, 1], [40, 430, 1180, 1]],
   },
   {

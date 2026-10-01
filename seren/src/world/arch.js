@@ -128,10 +128,12 @@ export function pylonBody({ h = 90, seed = 1 } = {}) {
 
 export function pylonRing(r, seed = 1, glow = PAL.teal, base = PAL.stone, thick = 0.09) {
   const rnd = mulberry32(seed);
-  const parts = [part(new THREE.TorusGeometry(r, r * thick, 6, 48), base, 0)];
-  for (let i = 0; i < 10; i++) {
-    const a = (i / 10) * Math.PI * 2 + rnd() * 0.2;
-    parts.push(part(xf(new THREE.BoxGeometry(r * 0.12, r * 0.04, r * 0.2), { x: Math.cos(a) * r, z: 0, y: Math.sin(a) * r, rz: a }), glow, 1.5));
+  const tr = r * thick;
+  const parts = [part(new THREE.TorusGeometry(r, tr, 6, 64), base, 0)];
+  const n = r > 100 ? 24 : 10;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rnd() * 0.1;
+    parts.push(part(xf(new THREE.BoxGeometry(tr * 1.4, tr * 0.5, tr * 2.4), { x: Math.cos(a) * (r + tr * 0.6), z: 0, y: Math.sin(a) * (r + tr * 0.6), rz: a }), glow, 1.5));
   }
   return parts;
 }

@@ -87,7 +87,8 @@ export class NPCs {
     for (const n of this.list) {
       const dx = n.pos.x - pp.x, dz = n.pos.z - pp.z;
       const d2 = dx * dx + dz * dz;
-      const near = d2 < 700 * 700;
+      const lim = n.ambient ? g.engine.q.npcDist || 320 : 650;
+      const near = d2 < lim * lim;
       n.fig.root.visible = near;
       n.mark.visible = false;
       if (!near) continue;

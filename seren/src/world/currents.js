@@ -40,8 +40,8 @@ void main() {
   float a = (edge * 0.55 + s1 * 0.6 + s2 * 0.4) * (0.6 + 0.4 * n);
   float fade = smoothstep(0.0, 0.015, vUv.x) * smoothstep(1.0, 0.985, vUv.x);
   float fog = fogAmount(cameraPosition, vWorld);
-  float night = 0.45 + uGlow * 0.6;
-  gl_FragColor = vec4(uColor * a * fade * uOn * night * (1.0 - fog) * 1.6, 1.0);
+  float night = 0.5 + uGlow * 0.35;
+  gl_FragColor = vec4(uColor * a * fade * uOn * night * (1.0 - fog) * 1.1, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;

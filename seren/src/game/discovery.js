@@ -39,8 +39,8 @@ export class Discovery {
     });
     this.glyphById = new Map(this.glyphs.map((g) => [g.id, g]));
     // 메아리: 땅 위에 일렁이는 빛
-    const shimmerGeo = new THREE.CylinderGeometry(1.4, 1.8, 4.5, 16, 1, true);
-    shimmerGeo.translate(0, 2.25, 0);
+    const shimmerGeo = new THREE.CylinderGeometry(0.7, 1.2, 3.2, 14, 1, true);
+    shimmerGeo.translate(0, 1.6, 0);
     this.echoes = ECHOES.map((d) => {
       const [x, z] = resolve(d.at, d.off);
       const y = d.y ?? game.world.groundAt(x, z, 1e5);
@@ -185,7 +185,7 @@ export class Discovery {
       const hidden = e.eclipseOnly && g.world.clock.eclipse < 0.3 && !open;
       e.mesh.visible = !hidden;
       e.core.visible = !hidden;
-      e.mesh.material.uniforms.uIntensity.value = open ? 0.35 : 0.8 + Math.sin(t * 2 + e.x) * 0.3;
+      e.mesh.material.uniforms.uIntensity.value = (open ? 0.2 : 0.45 + Math.sin(t * 2 + e.x) * 0.15) * (0.4 + g.world.atmos.u.uGlow.value * 0.6);
       e.core.position.y = e.y + 1.6 + Math.sin(t * 1.5 + e.z) * 0.2;
       e.core.rotation.y = t;
     }

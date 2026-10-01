@@ -63,16 +63,17 @@ vec3 galaxy(vec3 rd) {
 }
 
 vec3 aurora(vec3 rd) {
-  if (rd.z > 0.15 || rd.y < 0.0) return vec3(0.0);
+  if (rd.y < 0.02) return vec3(0.0);
   float az = atan(rd.x, -rd.z);
-  float y = rd.y;
-  float curtain = vnoise(vec2(az * 5.0 + uTime * 0.03, uTime * 0.02));
-  curtain = smoothstep(0.35, 0.85, curtain);
-  float rays = 0.6 + 0.4 * vnoise(vec2(az * 60.0, uTime * 0.2));
-  float h0 = 0.08 + 0.12 * vnoise(vec2(az * 2.0, uTime * 0.01));
-  float v = smoothstep(h0, h0 + 0.05, y) * smoothstep(h0 + 0.45, h0 + 0.1, y);
-  vec3 c = mix(vec3(0.2, 1.0, 0.65), vec3(0.65, 0.35, 1.0), smoothstep(h0 + 0.05, h0 + 0.35, y));
-  return c * curtain * rays * v * smoothstep(0.15, -0.3, rd.z) * 0.55;
+  float north = smoothstep(1.7, 0.3, abs(az));
+  float fold = az * 2.2 + 0.5 * sin(az * 5.0 + uTime * 0.07) + 0.3 * sin(az * 11.0 - uTime * 0.05);
+  float base = 0.07 + 0.05 * sin(fold * 1.7 + uTime * 0.03);
+  float y = rd.y - base;
+  float band = smoothstep(0.0, 0.025, y) * exp(-max(y, 0.0) * 5.0);
+  float rays = 0.45 + 0.55 * vnoise(vec2(fold * 46.0, uTime * 0.35));
+  float curtain = smoothstep(0.25, 0.85, vnoise(vec2(fold * 3.0, uTime * 0.04)));
+  vec3 c = mix(vec3(0.15, 1.0, 0.6), vec3(0.6, 0.3, 1.0), smoothstep(0.0, 0.3, y));
+  return c * band * rays * curtain * north * 0.55;
 }
 
 void main() {
