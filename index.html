@@ -899,7 +899,13 @@ function genWorld(seed){
   for(let dz=0;dz<5;dz++)for(let dx=-1;dx<=1;dx++){const x=bx+dx,z=bz+dz;if(Math.abs(dx)===1&&(dz===0||dz===4))continue;
     vox[I(x,SEA,z)]=PLANKS;if(dx!==0&&R()<.7)vox[I(x,SEA+1,z)]=PLANKS}
   vox[I(bx,SEA+1,bz+2)]=LOG;vox[I(bx,SEA+2,bz+2)]=LOG;
-  const beach={x:bx+.5,y:surfaceY(bx,wz-3),z:wz-2.5};
+  // a small flat sandy landing where the builder lies, clear of trees
+  const lz=wz-3,gy=Math.max(SEA+1,H[lz*WX+bx]);
+  for(let dz=-5;dz<=2;dz++)for(let dx=-4;dx<=4;dx++){const x=bx+dx,z=lz+dz;if(!inW(x,0,z))continue;
+    for(let y=SEA+1;y<WY;y++){const id=vox[I(x,y,z)];if(id===LOG||id===LEAVES||id===BUSH)vox[I(x,y,z)]=A}
+    if(Math.abs(dx)<=2&&dz>=-2&&dz<=0){for(let y=1;y<gy;y++)if(!BL[vox[I(x,y,z)]].solid||vox[I(x,y,z)]===WATER)vox[I(x,y,z)]=SAND;
+      vox[I(x,gy-1,z)]=SAND;for(let y=gy;y<gy+5;y++)vox[I(x,y,z)]=A}}
+  const beach={x:bx+.5,y:gy,z:lz+.5};
   return{x:rx,y:ry,z:rz,beach};
 }
 
@@ -1935,7 +1941,7 @@ function topAt(x,z){if(x<0||z<0||x>=WX||z>=WZ)return 0;for(let y=WY-1;y>=0;y--)i
 function cineCamera(){
   const c=cine.cam;let ctr=null;
   if(c==='ruin'&&S.ruin)ctr={x:S.ruin.x+.5,y:S.ruin.y+3,z:S.ruin.z+.5,r:10,h:7};
-  else if(c==='beach'&&S.ruin&&S.ruin.beach){const b=S.ruin.beach;ctr={x:b.x,y:b.y+.4,z:b.z+1.5,r:6.5,h:2.6}}
+  else if(c==='beach'&&S.ruin&&S.ruin.beach){const b=S.ruin.beach;camera.position.set(b.x+3.2+Math.sin(T*.2)*.4,b.y+2.4,b.z+5.5);_hv.set(b.x,b.y+.3,b.z-.4);camera.lookAt(_hv);playerModel.visible=true;return true}
   else if(c==='village')ctr={x:48.5,y:13,z:48.5,r:13,h:6};
   else if(c==='lamp'&&S.ruin){const a=T*.12,bx=S.ruin.x-1.5,by=S.ruin.y+9.8,bz=S.ruin.z-1.5;camera.position.set(bx+Math.cos(a)*5,by+1.6,bz+Math.sin(a)*5);_hv.set(bx,by,bz);camera.lookAt(_hv);playerModel.visible=true;return true}
   else if(c==='far'&&S.ruin){const bx=S.ruin.x-1.5,by=S.ruin.y+10.5,bz=S.ruin.z-1.5;camera.position.set(bx+Math.sin(T*.05)*1.5,by+2,bz+6);_hv.set(48,SEA+12,-88);camera.lookAt(_hv);playerModel.visible=true;return true}
@@ -2153,7 +2159,11 @@ function newGame(story){
   const ruin=genWorld(seed);ents.clear();
   const bc=ruin.beach;P.x=bc.x;P.z=bc.z;P.y=bc.y;P.vy=0;P.face=Math.PI*.5;camYaw=Math.PI;camPitch=-.28;
   S.inv.berry=3;S.seen.berry=1;if(story===false)give('banner',1);else S.downed=true;
-  const lv=mkVillager(LULU,bc.x+1.4,bc.z-.8);lv.wait=8;S.villagers.push(lv);
+  // Sera stands right beside the lying builder, on a free cell at the same ground height
+  const px=Math.floor(bc.x),pz=Math.floor(bc.z),gy=surfaceY(px,pz);let sx=px,sz=pz-1;
+  for(const[dx,dz]of[[0,-1],[1,-1],[-1,-1],[0,1],[0,-2],[1,0],[-1,0]]){const x=px+dx,z=pz+dz;
+    if(surfaceY(x,z)===gy&&getB(x,gy-1,z)!==WATER&&getB(x,gy,z)===A&&getB(x,gy+1,z)===A){sx=x;sz=z;break}}
+  const lv=mkVillager(LULU,sx+.5,sz+.5);lv.wait=8;lv.face=Math.atan2(-(bc.x-lv.x),-(bc.z-lv.z));S.villagers.push(lv);
   S.ruin=ruin;
   afterLoad();
   if(story===false){S.bg=true;return}
@@ -2373,7 +2383,7 @@ function renderFrame(dt){
   playerModel.position.set(P.x,P.y,P.z);animChar(playerModel,dt,{face:P.face,ground:P.onGround,swing:P.swing>0?1-P.swing/.3:-1,lying:!!S.downed,talk:false});
   playerModel.userData.shadow.position.y=groundUnder(P.x,P.y,P.z)-P.y+.02;
   // villagers
-  for(const v of S.villagers){const m=v._m;if(!m)continue;m.position.set(v.x,v.y,v.z);animChar(m,dt,{face:v.face,ground:v.onGround||v.sleeping,swing:v.atk>.7?1-(v.atk-.7)/.3:-1,lying:v.sleeping||v.faint>0,talk:speaking===v.name});
+  for(const v of S.villagers){const m=v._m;if(!m)continue;m.position.set(v.x,v.y,v.z);animChar(m,dt,{face:S.downed&&v.guide?Math.atan2(-(P.x-v.x),-(P.z-v.z)):v.face,ground:v.onGround||v.sleeping,swing:v.atk>.7?1-(v.atk-.7)/.3:-1,lying:v.sleeping||v.faint>0,talk:speaking===v.name});
     m.userData.shadow.position.y=(groundUnder(v.x,v.y,v.z)-v.y)/.9+.02;
     const r=reqOf(v);let mk='';if(v.hearts>0)mk='heart';else if(v.sleeping)mk='z';else if(v.reqState==='avail')mk='!';else if(v.reqState==='active'&&r){const p=reqProgress(v);if(p&&p[0]>=p[1])mk='ok'}
     if(mk!==v._markKey){v._markKey=mk;v._mark.visible=!!mk;if(mk)v._mark.material.map=mk==='heart'?heartTex:mk==='!'?bubbleTex('!','#e08a10'):mk==='ok'?bubbleTex('♪','#3aa860'):bubbleTex('z','#5a6ab0');v._mark.material.needsUpdate=true}
