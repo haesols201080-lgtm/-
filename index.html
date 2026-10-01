@@ -1152,11 +1152,11 @@ function animChar(g,dt,o){
   u.mouth.scale.y=o.talk?1+Math.abs(Math.sin(t*15))*2.2:1;
   if(o.lying){u.root.rotation.x=-Math.PI/2;u.root.position.set(0,.2,.85);for(const k of['thighL','thighR','kneeL','kneeR'])u[k].rotation.x=0;u.armL.rotation.set(0,0,.08);u.armR.rotation.set(0,0,-.08);u.elbowL.rotation.x=u.elbowR.rotation.x=-.1;u.head.rotation.set(0,0,0);u.torso.rotation.set(0,0,0);u.shadow.visible=false;return}
   u.root.rotation.x=0;u.shadow.visible=true;
-  if(o.kneel){ // kneeling on one knee, leaning over someone on the ground
-    u.root.position.set(0,-.31,0);u.thighL.rotation.x=-1.45;u.kneeL.rotation.x=1.45;u.thighR.rotation.x=.15;u.kneeR.rotation.x=1.55;
-    u.torso.rotation.set(.38+Math.sin(T*1.9)*.01,0,0);u.hips.rotation.y=0;u.armL.rotation.set(-.75,0,.12);u.armR.rotation.set(-.9+Math.sin(T*6)*.12,0,-.12);u.elbowL.rotation.x=-.35;u.elbowR.rotation.x=-.25;
-    u.head.rotation.set(.32+(o.talk?Math.sin(T*5)*.05:0),0,0);u.eyes.scale.y=a.bt>0?.1:1;u.mouth.scale.y=o.talk?1+Math.abs(Math.sin(T*15))*2.2:1;
-    if(u.hairL)u.hairL.rotation.set(-.3,0,0);if(u.coat)u.coat.rotation.x=.3;if(u.tail)u.tail.rotation.set(.1,0,0);g.scale.setScalar(u.base||1);return}
+  if(o.kneel){ // kneeling on one knee, leaning over someone on the ground (model faces -z)
+    u.root.position.set(0,-.31,0);u.thighL.rotation.x=1.45;u.kneeL.rotation.x=-1.45;u.thighR.rotation.x=-.15;u.kneeR.rotation.x=-1.55;
+    u.torso.rotation.set(-.38+Math.sin(T*1.9)*.01,0,0);u.hips.rotation.y=0;u.armL.rotation.set(.75,0,.12);u.armR.rotation.set(.9+Math.sin(T*6)*.12,0,-.12);u.elbowL.rotation.x=.35;u.elbowR.rotation.x=.25;
+    u.head.rotation.set(-.32+(o.talk?Math.sin(T*5)*.05:0),0,0);u.eyes.scale.y=a.bt>0?.1:1;u.mouth.scale.y=o.talk?1+Math.abs(Math.sin(T*15))*2.2:1;
+    if(u.hairL)u.hairL.rotation.set(.3,0,0);if(u.coat)u.coat.rotation.x=0;if(u.tail)u.tail.rotation.set(.1,0,0);g.scale.setScalar(u.base||1);return}
   // legs with knee bend
   const g1=1-ai;
   u.thighL.rotation.x=s*.7*w*g1-ai*.9;u.thighR.rotation.x=-s*.7*w*g1+ai*.25;
