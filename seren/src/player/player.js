@@ -120,6 +120,7 @@ export class Player {
       case 'current': this._current(dt, ctl, wish, wishLen); break;
       case 'lift': this._lift(dt, ctl, wish, wishLen); break;
       case 'ride': this._ride(dt); break;
+      case 'fly': this._fly(dt, ctl, wish, wishLen, cam); break;
     }
 
     // 세계 경계 — 장막
@@ -574,6 +575,56 @@ export class Player {
       this.events.push('rideOut');
       this.setState('ground');
     }
+  }
+
+  /** 빌린 나룻배로 날기 — 카메라가 보는 쪽으로, 위를 보면 오르고 아래를 보면 내려간다 */
+  startFly() {
+    this.flySpeed = Math.hypot(this.vel.x, this.vel.z);
+    this.flyVy = 0;
+    this.current = null;
+    this.events.push('flyOn');
+    this.setState('fly');
+  }
+
+  stopFly() {
+    if (this.state !== 'fly') return;
+    this.events.push('flyOff');
+    const above = this.pos.y - this._groundBelow();
+    if (above < 1.6) { this.vel.set(0, 0, 0); this.setState(this.pos.y < WATER - 1 ? 'swim' : 'ground'); }
+    else { this.setState('air'); this.airTime = 0.3; this.riseUsed = 0; }
+  }
+
+  _fly(dt, ctl, wish, wishLen, cam) {
+    const v = this.vel;
+    const boost = ctl && ctl.isHeld('sprint');
+    const vmax = boost ? 115 : 62;
+    const target = wishLen * vmax;
+    const acc = target > this.flySpeed ? (boost ? 36 : 24) : 30;
+    this.flySpeed += Math.max(-acc * dt, Math.min(acc * dt, target - this.flySpeed));
+    let turn = 0;
+    if (wishLen > 0.1) {
+      const tgt = Math.atan2(wish.x, wish.z);
+      const d = Math.atan2(Math.sin(tgt - this.yaw), Math.cos(tgt - this.yaw));
+      const rate = 1.5 + 1.4 * (1 - Math.min(1, this.flySpeed / 90));
+      turn = Math.max(-rate * dt, Math.min(rate * dt, d));
+      this.yaw += turn;
+    }
+    this.turn += ((turn / Math.max(dt, 1e-4)) * 0.45 - this.turn) * Math.min(1, dt * 5);
+    // 높이: 시선의 기울기 + Space 로 곧장 오르기
+    const climb = Math.max(-0.8, Math.min(0.8, (cam.pitch + 0.22) * 1.7));
+    let vy = this.flySpeed * climb * 0.85;
+    if (ctl && ctl.isHeld('jump')) vy = Math.max(vy, 16);
+    const ceil = 5200; // 공기가 옅어 고리가 더 밀어내지 못한다
+    if (this.pos.y > ceil - 400) vy = Math.min(vy, (ceil - this.pos.y) * 0.5);
+    this.flyVy += (vy - this.flyVy) * Math.min(1, dt * 3);
+    v.set(Math.sin(this.yaw) * this.flySpeed, this.flyVy, Math.cos(this.yaw) * this.flySpeed);
+    this.pos.addScaledVector(v, dt);
+    const hit = this.world.colliders.pushOut(this.pos, RADIUS + 1.1, 1.2, 0.1);
+    if (hit && this.flySpeed > 20) { this.flySpeed *= 0.6; this.events.push('bump'); }
+    // 땅과 물 위로 떠 있기
+    const g = this.world.colliders.ground(this.pos.x, this.pos.z, this.pos.y + 1.0, 1.0, 0.05, this._g);
+    const floor = Math.max(g.h, WATER) + 1.0;
+    if (this.pos.y < floor) { this.pos.y += (floor - this.pos.y) * Math.min(1, dt * 12); if (this.flyVy < 0) this.flyVy = 0; }
   }
 
   /** 공명 승강 기둥: 아래에서 위로 실어 올림 */

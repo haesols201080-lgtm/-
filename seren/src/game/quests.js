@@ -186,6 +186,7 @@ export class Quests {
     if (r.kind === 'tone') { const p = PLACE[r.place]; return p ? [{ x: p.pos[0], y: null, z: p.pos[1], label: p.name }] : []; }
     if (r.kind === 'ride') { const c = g.currents.byId.get(r.current); if (c) { const p = c.samples[0]; return [{ x: p.x, y: p.y, z: p.z, label: c.def.name }]; } }
     if (r.kind === 'walker' && g.colossi && g.colossi.town) { const w = g.colossi.town; return [{ x: w.pos.x, y: w.pos.y, z: w.pos.z, label: '거신' }]; }
+    if (r.kind === 'parcel' && g.facilities) { const F = g.facilities.byId.get(r.to); return F ? [{ x: F.keeper.x, y: F.keeper.y + 3, z: F.keeper.z, label: F.name }] : []; }
     if (r.kind === 'dive' && g.anchor && g.player.pos.y < 20000) { const d = g.anchor.deckStop; return [{ x: d.x, y: d.y, z: d.z, label: '승강차' }]; }
     return [];
   }

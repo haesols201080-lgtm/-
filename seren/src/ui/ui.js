@@ -243,7 +243,7 @@ export class UI {
     const el = this.puzzleEl;
     if (!z) { el.classList.add('hidden'); return; }
     el.classList.remove('hidden');
-    el.querySelector('.label').textContent = z.playing ? '탑의 노래를 들으세요…' : '같은 선율을 연주하세요';
+    el.querySelector('.label').textContent = z.playing ? z.listenLabel || '탑의 노래를 들으세요…' : '같은 선율을 연주하세요';
     el.querySelector('.slots').innerHTML = z.melody.map((n, i) => `<div class="slot ${i < z.i || z.playing ? 'on' : ''}" style="--c:${hex(NOTE_COLORS[n])}"></div>`).join('');
     if (z.playing) {
       // 탑이 노래하는 동안 한 음씩 불이 켜진다
@@ -308,9 +308,9 @@ export class UI {
 
   // ── 카드 ─────────────────────────────
   _card(inner, onClose) {
-    const wrap = $(`<div class="card-wrap"><div class="card glass">${inner}<div><button class="btn">닫기</button></div></div></div>`);
+    const wrap = $(`<div class="card-wrap"><div class="card glass">${inner}<div><button class="btn" data-close-card>닫기</button></div></div></div>`);
     const close = () => { wrap.remove(); this.game.setMode('play'); onClose && onClose(); };
-    wrap.querySelector('.btn').addEventListener('click', close);
+    wrap.querySelector('[data-close-card]').addEventListener('click', close);
     wrap.addEventListener('pointerdown', (e) => { if (e.target === wrap) close(); });
     this.root.appendChild(wrap);
     this.game.setMode('card');
@@ -332,6 +332,24 @@ export class UI {
 
   infoCard(kicker, title, body) {
     this._card(`<div class="kicker">${kicker}</div><h2>${title}</h2><p>${body}</p>`);
+  }
+
+  /**
+   * 시설 카드: 할 수 있는 일을 단추로.
+   * items: [{ label, sub, disabled, primary, onClick, stay }] — stay 면 누른 뒤에도 카드를 닫지 않는다
+   */
+  serviceCard(kicker, title, body, items, extra = '') {
+    const html = `<div class="kicker">${kicker}</div><h2>${title}</h2>${body ? `<p>${body}</p>` : ''}${extra}<div class="svc">${items.map((it, i) => it.head ? `<div class="svc-h">${it.head}</div>` : `<button class="btn svc-b${it.primary ? ' primary' : ''}" data-i="${i}" ${it.disabled ? 'disabled' : ''}><b>${it.label}</b>${it.sub ? `<small>${it.sub}</small>` : ''}</button>`).join('')}</div>`;
+    const wrap = this._card(html);
+    wrap.querySelector('.card').classList.add('svc-card');
+    wrap.querySelectorAll('[data-i]').forEach((b) => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const it = items[+b.dataset.i];
+      if (!it || it.disabled) return;
+      if (!it.stay) this.closeCard();
+      it.onClick && it.onClick(b);
+    }));
+    return wrap;
   }
 
   // ── 메뉴 ─────────────────────────────

@@ -59,6 +59,7 @@ uniform float uCurv;
 #endif
 uniform vec4 uSilence[10];
 uniform float uAlt;
+uniform float uAurora;
 
 vec3 skyBase(vec3 rd) {
   float y = rd.y;

@@ -20,6 +20,7 @@ npm run watch        # 저장할 때마다 다시 빌드
 | `node tools/shot.mjs 이름 "쿼리" 1280x720 대기ms "페이지JS"` | 스크린샷 1장 (`shots/이름.png`) |
 | `node tools/tour.mjs 1280x720 medium [필터]` | 주요 장소를 돌며 스크린샷 |
 | `node tools/flow.mjs` | 본편 전체를 자동으로 진행하며 오류 확인 |
+| `node tools/facilities.mjs [shots]` | 시설 9종의 기능(카드·탐지기·책·지도·쉼터 이동·온실·합창·소포·날씨·연락선·나룻배·저장)을 차례로 눌러 확인 |
 | `node tools/check.mjs move` | 이동 물리(걷기·활공·썰매) 수치 확인 |
 | `node tools/heightmap.mjs 900 20000 shots/map.png` | 지형 전체 지도(2 km 격자) |
 | `node tools/survey.mjs` | 지역별 높은 곳·평지 찾기 (장소 배치용) |
@@ -41,11 +42,15 @@ src/
            megacity(하모네아 구역·울림탑·하늘바퀴·하늘고리·빛다리·별항구) traffic(하늘배·하늘길·왕복선)
            transit(빛길 철도·역·캡슐 타기) landmarks(지방 기술 시설) drones(돌보미) anchor(하늘닻·승강차)
            farlands(먼 땅의 구조물) colossus(걷는 도시 거신) hologram(글자 홀로그램) lights(점광원 무리)
+           ── 쓰임이 있는 건물 (v0.3) ──
+           facilities(시설 9종 모델·자리·간판·움직임) boats(나룻배·연락선 모델)
   player/  player(이동 상태기계) avatar(모델·절차 애니메이션) camera-rig
   game/    game(중심·모드·입력·저장) state(저장 형식) quests dialogue actions language npcs resonance discovery
+           services(시설의 쓰임: 시설지기 카드·연락선·나룻배·온실·날씨·탐지기)
            world-events(일식·별비·축제·부탁) director(연출 카메라)
   ui/      ui(HUD·대화·카드·메뉴·타이틀·터치) map(지도·안개) journal settings
   data/    places(장소·평탄화) currents(해류 경로) story(인물·대사·대화·퀘스트·메아리·글자돌·도감·모아) lexicon(아웬어 사전)
+           facilities(시설 목록·종류·옛 책)
 ```
 - 좌표: 1 = 1 m, Y 위, **−Z 가 북쪽**(우르 방향), +X 동쪽. 플레이어 yaw 는 `atan2(dx, dz)`, 카메라 yaw 0 은 북쪽을 봄.
 - 모든 지형 높이는 `heightAt(x, z)` 하나에서 나옵니다(렌더·충돌·배치·지도 공통). 지형을 바꾸면 `node tools/heightmap.mjs` 로 확인하세요. 장소 주변은 `places.js` 의 `flat` 으로 평탄화됩니다.
@@ -62,6 +67,8 @@ src/
 - **부탁(날마다)**: `game/world-events.js` 의 `TEMPLATES` 에 함수 추가.
 - **메아리·글자돌·도감**: `story.js` 의 `ECHOES`, `GLYPH_STONES`, `CODEX`.
 - **저장 항목**: `game/state.js` 의 `defaultState()` 에 추가(불러올 때 빠진 항목은 기본값으로 채워짐).
+- **시설**: `data/facilities.js` 의 `FACILITIES` 에 한 줄(`at` 장소 + `off`/`polar`/`toward`). 자리에 다른 구조물이 있으면 빌더가 나선으로 밀어서 빈 곳을 찾습니다. 새 종류는 `FACILITY_TYPES` + `world/facilities.js` 의 `_종류` 모델 + `game/services.js` 의 `_종류` 카드. 시설지기는 `npcs` 에 `service` 가 붙은 인물(`fac-시설id`)이라 `_findTarget` 이 「시설지기 · 하는 일」로 보여 줍니다.
+- **옛 책**: `data/facilities.js` 의 `BOOKS` (`at` = 서고 id, `word` = 읽으면 배우는 단어).
 
 ## 큰 세계에서 알아 둘 것 (v0.2)
 - 세계는 ±60 km (지형 쿼드트리 뿌리 131 km). 먼 땅은 `regions.js` 의 `far: true` 지역 + `heightfield.js` 의 `farMask` 로 바다 위에 올라옵니다.
@@ -77,7 +84,8 @@ src/
 - 먼 지형 청크(2 km 이상)는 16×16, 가까운 청크는 32×32. 깊은 바다 밑 청크는 멀면 생략.
 - 거대 버섯·노래수정은 1.2~1.4 km 너머에서 단순 모델(LOD)로 바뀝니다.
 - `engine.adapt()` 가 프레임 시간에 따라 해상도 배율을 0.55~1.0 으로 조절합니다.
-- `?debug=1` 로 calls/tris 를 보며 작업하세요. v0.2 기준 낮음 품질 약 63~83만 삼각형, 330~560 그리기 (도시·배·먼 땅이 늘어남).
+- `?debug=1` 로 calls/tris 를 보며 작업하세요. v0.2 기준 낮음 품질 약 63~83만 삼각형, 330~560 그리기 (도시·배·먼 땅이 늘어남). v0.3 시설을 더한 뒤 하모네아 지상 360~390 그리기·74~89만 삼각형, 이슬터 280 그리기.
+- 시설(`facilities.js`)은 4.5 km 밖에서 숨기고, 1.4 km 밖에서는 합친 본체만(움직이는 장치·유리·배는 가까이서만), 간판은 900 m 안에서만. 매 프레임 44곳 거리만 계산합니다.
 - 배·돌보미·다리는 모두 인스턴스(그리기 1회). 하모네아 구역은 THREE.LOD(4.2 km 밖은 단순 모델), 큰 탑·안쪽 탑만 움직이는 관/홀로그램을 따로 그리고 나머지는 합친 모델에 굳혀 둡니다.
 
 ## 지켜야 할 것

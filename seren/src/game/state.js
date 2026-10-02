@@ -24,7 +24,7 @@ export function defaultState() {
     pylons: {}, // 깨운 공명탑
     quests: { active: [], done: [], step: {}, data: {} },
     inv: { starseed: 0, shard: 0 },
-    upgrades: { glide: 0, skim: 0, rise: 0 },
+    upgrades: { glide: 0, skim: 0, rise: 0, detector: 0 },
     harmony: {}, // 지역 → 0..100
     nameSong: null,
     requestsDone: 0,
@@ -32,6 +32,8 @@ export function defaultState() {
     stats: { distance: 0, glideDistance: 0, tones: 0, currentRides: 0, daysSeen: 0 },
     journal: [], // 모아의 기록
     waypoint: null,
+    // 쓰임이 있는 건물 (v0.3): 들른 시설, 읽은 책, 온실 밭(심은 시각), 날마다 한 번씩 하는 일, 빛깔, 고른 날씨
+    facility: { visited: {}, books: {}, garden: {}, daily: {}, cosmetic: 0, weather: null },
   };
 }
 

@@ -40,6 +40,12 @@ export class WorldEvents {
     // 별비: 날마다 정해진 확률로 밤에
     const day = c.day;
     const hour = c.hour;
+    // 기상탑에서 부른 별비: 다음 밤에 반드시
+    if (g.state.flags.wxStars && (hour > 21 || hour < 3)) {
+      g.state.flags.wxStars = false;
+      this.starDay = day;
+      this.starfall(mulberry32(day * 977 + 11));
+    }
     if (this.starDay !== day && (hour > 21 || hour < 3)) {
       this.starDay = day;
       const rnd = mulberry32(day * 977 + 5);
@@ -215,13 +221,34 @@ export class Requests {
         const r = TEMPLATES[Math.floor(rnd() * TEMPLATES.length)](g, rnd);
         if (r && !fresh.find((x) => x.kind === r.kind) && !this.active.find((x) => x.title === r.title)) fresh.push(r);
       }
-      this.active = [...this.active.slice(-2), ...fresh];
+      // 소포는 전할 때까지 남는다
+      this.active = [...this.active.filter((x) => x.kind === 'parcel'), ...this.active.filter((x) => x.kind !== 'parcel').slice(-2), ...fresh];
       g.state.flags.requests = this.active;
       g.state.flags.requestDay = day;
       if (fresh.length) g.ui.toast(`새 부탁 ${fresh.length}개 · 일지에서 볼 수 있어요`, { kind: 'quest' });
       g.ui.refreshObjective();
     }
   }
+
+  /** 부탁 하나를 직접 붙이기 (소식탑) */
+  add(r) {
+    this.active.push(r);
+    this.game.state.flags.requests = this.active;
+    this.game.ui.refreshObjective();
+    return r;
+  }
+
+  /** 게시판에서 하나 더 (소식탑) */
+  addOne() {
+    const g = this.game;
+    for (let k = 0; k < 14; k++) {
+      const r = TEMPLATES[Math.floor(Math.random() * TEMPLATES.length)](g, Math.random);
+      if (r && !this.active.find((x) => x.title === r.title)) return this.add(r);
+    }
+    return null;
+  }
+
+  check(type, e) { this._check(type, e); }
 
   hasVisit(npcId) { return this.active.some((r) => r.kind === 'visit' && r.npc === npcId); }
 
@@ -239,6 +266,7 @@ export class Requests {
       if (r.kind === 'ride' && type === 'ride' && e.id === r.current) ok = true;
       if (r.kind === 'walker' && type === 'walker') ok = true;
       if (r.kind === 'dive' && type === 'dive' && e.region === r.region) ok = true;
+      if (r.kind === 'parcel' && type === 'facility' && e.id === r.to) ok = true;
       if (ok) this._complete(r);
     }
   }

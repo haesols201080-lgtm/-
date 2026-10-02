@@ -104,7 +104,7 @@ void main() {
   float starVis = clamp(uNight * 1.15 + uEclipse * 0.9 + smoothstep(6000.0, 30000.0, uAlt) * 0.85, 0.0, 1.0) * smoothstep(-0.02, 0.18, rd.y);
   if (starVis > 0.001) {
     col += (stars(rd) + galaxy(rd)) * starVis;
-    col += aurora(rd) * uNight;
+    col += aurora(rd) * uNight * uAurora;
     col += satellites(rd) * starVis;
   }
 

@@ -2,6 +2,7 @@
 // 모든 동작은 관절 각도를 직접 계산하는 절차적 애니메이션입니다.
 import * as THREE from 'three';
 import { litMaterial, glowMaterial } from '../world/materials.js';
+import { skiffGeo, boatMaterial } from '../world/boats.js';
 
 const SUIT = 0xe9e2d4;
 const SUIT_DARK = 0x6a6f80;
@@ -210,6 +211,10 @@ export class Avatar {
     this.board.add(this.boardGlow);
     this.board.visible = false;
     this.root.add(this.board);
+    // 빌린 나룻배
+    this.skiff = new THREE.Mesh(skiffGeo(), boatMaterial());
+    this.skiff.visible = false;
+    this.root.add(this.skiff);
 
     // 그림자 (원판)
     const sh = new THREE.Mesh(new THREE.CircleGeometry(0.5, 20), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.28, depthWrite: false }));
@@ -303,6 +308,13 @@ export class Avatar {
       bodyRoll = -p.turn * 0.55;
       bodyPitch = Math.max(-0.3, Math.min(0.3, -(p.vel.y || 0) * 0.03));
       headX = -0.2;
+    } else if (s === 'fly') {
+      // 나룻배 조종: 키 고리를 두 손으로
+      lHip = -0.2; rHip = 0.15; lKnee = 0.3; rKnee = 0.25;
+      spineX = 0.15;
+      lSh = -0.75; rSh = -0.75; lShZ = 0.25; rShZ = -0.25; lEl = -0.9; rEl = -0.9;
+      bodyRoll = -p.turn * 0.3;
+      headX = -0.1;
     } else if (s === 'down') {
       // 쓰러져 누운 자세 (오프닝)
       bodyPitch = -1.45; bodyRoll = 0.15;
@@ -318,7 +330,7 @@ export class Avatar {
 
     // 공명 연주: 오른팔을 앞으로
     this.toneGlow = Math.max(0, this.toneGlow - dt * 1.6);
-    if (this.toneGlow > 0 && s !== 'glide' && s !== 'skim' && s !== 'current') {
+    if (this.toneGlow > 0 && s !== 'glide' && s !== 'skim' && s !== 'current' && s !== 'fly') {
       const k = Math.min(1, this.toneGlow * 2.5);
       rSh = rSh + (-1.5 - rSh) * k; rShZ = rShZ + (-0.1 - rShZ) * k; rEl = rEl + (-0.4 - rEl) * k;
     }
@@ -374,6 +386,12 @@ export class Avatar {
       this.board.position.set(0, 0.12 + Math.sin(this.t * 5) * 0.02, 0);
       this.board.rotation.set(bodyPitch * 0.5, 0, bodyRoll * 0.6);
       this.boardGlow.material.uniforms.uIntensity.value = 1.5 + Math.min(2.5, speed * 0.05);
+    }
+
+    this.skiff.visible = s === 'fly';
+    if (this.skiff.visible) {
+      this.skiff.position.set(0, Math.sin(this.t * 2.4) * 0.04, 0);
+      this.skiff.rotation.set(Math.max(-0.3, Math.min(0.3, -(p.vel.y || 0) * 0.012)), 0, -p.turn * 0.4);
     }
 
     // 그림자

@@ -80,6 +80,7 @@ export class Resonance {
     const p = this.game.player;
     if (p.state === 'glide') p.glideSpeed = Math.min(p.glideSpeed + 16, 60);
     else if (p.state === 'skim') p.skimSpeed = Math.min(p.skimSpeed + 16, 62);
+    else if (p.state === 'fly') p.flySpeed = Math.min(p.flySpeed + 30, 140);
     else if (p.state === 'ground' || p.state === 'air') {
       const f = Math.sin(p.yaw), c = Math.cos(p.yaw);
       p.vel.x += f * 14; p.vel.z += c * 14;
@@ -134,6 +135,13 @@ export class Resonance {
     this._singMelody();
   }
 
+  /** 선율 따라 하기 (음악당 합창 등): 맞히면 onSolve */
+  startSong(P, melody, onSolve, listenLabel) {
+    this.puzzle = { P, melody, i: 0, listen: 0, playing: true, t: 0, tries: 0, onSolve, listenLabel };
+    this.game.ui.puzzle(this.puzzle);
+    this._singMelody();
+  }
+
   _singMelody() {
     const z = this.puzzle;
     z.playing = true;
@@ -165,10 +173,11 @@ export class Resonance {
 
   _pylonSolved() {
     const g = this.game;
-    const P = this.puzzle.P;
+    const z = this.puzzle;
     this.puzzle = null;
     g.ui.puzzle(null);
-    g.awakenPylon(P.id);
+    if (z.onSolve) z.onSolve();
+    else g.awakenPylon(z.P.id);
   }
 
   cancelPuzzle() {

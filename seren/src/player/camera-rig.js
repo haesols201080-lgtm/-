@@ -1,7 +1,7 @@
 // 3인칭 카메라: 마우스/터치로 돌리고, 움직이면 천천히 뒤로 돌아오며, 속도에 따라 시야각이 넓어집니다.
 import * as THREE from 'three';
 
-const DIST = { ground: 6.2, air: 7, glide: 9.5, skim: 8.5, swim: 6, current: 11, lift: 9 };
+const DIST = { ground: 6.2, air: 7, glide: 9.5, skim: 8.5, swim: 6, current: 11, lift: 9, fly: 10.5 };
 
 export class CameraRig {
   constructor(camera, world) {
@@ -39,7 +39,7 @@ export class CameraRig {
     if (this.autoFollow && moving && idleLook && s !== 'swim') {
       const behind = player.yaw + Math.PI;
       let d = Math.atan2(Math.sin(behind - this.yaw), Math.cos(behind - this.yaw));
-      const rate = s === 'glide' || s === 'skim' || s === 'current' ? 2.2 : 0.8;
+      const rate = s === 'glide' || s === 'skim' || s === 'current' || s === 'fly' ? 2.2 : 0.8;
       this.yaw += d * Math.min(1, dt * rate * Math.min(1, player.hspeed / 8));
       if (s === 'ground' || s === 'skim') this.pitch += (-0.2 - this.pitch) * Math.min(1, dt * 0.5);
     }

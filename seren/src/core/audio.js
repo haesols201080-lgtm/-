@@ -292,7 +292,7 @@ export class Audio {
     const w = Math.min(1, windBase + (air ? speed / 35 : speed / 70) + Math.max(0, altitude - 200) / 3000);
     this.wind.g.gain.setTargetAtTime(w * 0.32, t, 0.25);
     this.wind.f.frequency.setTargetAtTime(250 + w * 1300, t, 0.3);
-    const sk = state === 'skim';
+    const sk = state === 'skim' || state === 'fly';
     this.hum.g.gain.setTargetAtTime(sk ? 0.035 + Math.min(0.05, speed / 900) : 0, t, 0.15);
     this.hum.o.frequency.setTargetAtTime(48 + speed * 2.2, t, 0.1);
     this.hum.o2.frequency.setTargetAtTime(96 + speed * 4.4, t, 0.1);

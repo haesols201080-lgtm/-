@@ -37,6 +37,7 @@ export const atmosUniforms = {
   uFogDensity: { value: 0.0001 },
   uFogFalloff: { value: 1 / 1100 },
   uCurv: { value: 1 / (2 * 1600000) },
+  uAurora: { value: 1 }, // 오로라 세기 (기상탑)
   uAlt: { value: 0 }, // 카메라 높이 (m) — 높이 오르면 하늘이 우주처럼 어두워진다
   uSilence: { value: Array.from({ length: 10 }, () => new THREE.Vector4(0, 0, 1, 0)) },
 };

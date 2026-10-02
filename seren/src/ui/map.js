@@ -167,7 +167,7 @@ export class MapView {
     parent.appendChild(c);
     const legend = document.createElement('div');
     legend.className = 'map-legend glass';
-    legend.innerHTML = `<span style="color:#ffd89a">◆</span> 목표 &nbsp; <span style="color:#7ff3e6">●</span> 노래하는 탑 &nbsp; <span style="color:#8a8aa0">●</span> 잠든 탑 &nbsp; <span style="color:#fff">✦</span> 표식 &nbsp; ${g.ui.touch ? '눌러서 표식' : '클릭해서 표식 · 휠로 확대'}`;
+    legend.innerHTML = `<span style="color:#ffd89a">◆</span> 목표 &nbsp; <span style="color:#7ff3e6">●</span> 노래하는 탑 &nbsp; <span style="color:#8a8aa0">●</span> 잠든 탑 &nbsp; <span style="color:#fff">✦</span> 표식 &nbsp; <span style="color:#7fb8ff">◯</span> 시설 &nbsp; ${g.ui.touch ? '눌러서 표식' : '클릭해서 표식 · 휠로 확대'}`;
     parent.appendChild(legend);
     const tools = document.createElement('div');
     tools.className = 'map-tools';
@@ -312,6 +312,29 @@ export class MapView {
         ctx.shadowColor = '#000'; ctx.shadowBlur = 4 * dpr;
         ctx.fillText(p.name, sx, sy - 9 * dpr);
         ctx.shadowBlur = 0;
+      }
+    }
+    // 쓰임이 있는 건물 (들렀거나 밝혀진 곳) — 가까이 볼수록 많이
+    if (g.facilities) {
+      const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+      ctx.font = `${10 * dpr}px sans-serif`;
+      for (const F of g.facilities.list) {
+        if (F.y > 20000) continue;
+        const visited = g.state.facility.visited[F.id];
+        if (!visited && md.revealedAt(F.x, F.z) < 0.5) continue;
+        const travel = F.type === 'dock' || F.type === 'rest';
+        if (this.zoom < (travel && visited ? 1.6 : 5)) continue;
+        const [sx, sy] = this._toScreen(F.x, F.z);
+        const r = 7 * dpr;
+        ctx.fillStyle = 'rgba(12,13,34,0.75)';
+        ctx.strokeStyle = hex(F.info.color);
+        ctx.lineWidth = (visited ? 1.6 : 1) * dpr;
+        ctx.globalAlpha = visited ? 1 : 0.6;
+        ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = hex(F.info.color);
+        ctx.fillText(F.info.icon, sx, sy + 3.5 * dpr);
+        if (this.zoom > 20) { ctx.fillStyle = 'rgba(243,239,230,0.85)'; ctx.fillText(F.name, sx, sy + 18 * dpr); }
+        ctx.globalAlpha = 1;
       }
     }
     // 목표

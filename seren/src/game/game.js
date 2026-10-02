@@ -18,6 +18,7 @@ import { Drones } from '../world/drones.js';
 import { SkyAnchor } from '../world/anchor.js';
 import { Farlands } from '../world/farlands.js';
 import { Colossi } from '../world/colossus.js';
+import { Facilities } from '../world/facilities.js';
 import { Currents } from '../world/currents.js';
 import { Creatures } from '../world/creatures.js';
 import { Clouds } from '../world/clouds.js';
@@ -40,6 +41,7 @@ import { Resonance } from './resonance.js';
 import { Discovery } from './discovery.js';
 import { WorldEvents, Requests } from './world-events.js';
 import { Director } from './director.js';
+import { Services } from './services.js';
 import { UI } from '../ui/ui.js';
 import { MapData } from '../ui/map.js';
 
@@ -72,6 +74,7 @@ export class Game {
     this.anchor = this.world.add(new SkyAnchor(this.world, this.structures));
     this.farlands = this.world.add(new Farlands(this.world, this.structures));
     this.colossi = this.world.add(new Colossi(this.world, this.structures, this));
+    this.facilities = this.world.add(new Facilities(this.world, this.structures));
     this.transit.isOpen = (u) => (!u ? true : u.startsWith('quest:') ? this.quests.isDone(u.slice(6)) : !!this.state.pylons[u]);
     this.flora = this.world.add(new Flora(this.world, this.engine.q));
     this.currents = this.world.add(new Currents(this.world, CURRENTS));
@@ -95,6 +98,7 @@ export class Game {
     this.director = new Director(this);
     this.mapData = new MapData(this);
     this.requests = new Requests(this);
+    this.services = new Services(this);
 
     this.particles = new Particles(this.engine.scene);
     this.trails = [new Trail(this.engine.scene, 0xbffcff), new Trail(this.engine.scene, 0xbffcff)];
@@ -116,7 +120,7 @@ export class Game {
     this._last = performance.now();
     const start = this._last;
     const tick = (now) => {
-      const dt = Math.min(0.05, (now - this._last) / 1000);
+      const dt = Math.max(0, Math.min(0.05, (now - this._last) / 1000)); // 첫 rAF 시각이 시작 시각보다 앞설 수 있다
       this._last = now;
       const waited = (now - start) / 1000;
       this.time += dt;
@@ -165,6 +169,7 @@ export class Game {
   newGame(skipIntro = false) {
     deleteSave();
     this.state = defaultState();
+    this.services.applyState();
     this.ui.hideTitle();
     this.mode = 'intro';
     this.world.clock.frozen = false;
@@ -243,6 +248,7 @@ export class Game {
     // 1부를 끝낸 옛 저장: 2부(바다 건너)를 이어서 시작
     if (this.quests.isDone('mq5') && !this.quests.isActive('mq6') && !this.quests.isDone('mq6')) this.quests.start('mq6', true);
     this.transit.refresh();
+    this.services.applyState();
     this.ui.refreshButtons();
     this.ui.refreshObjective();
     this.updateWaypoint();
@@ -335,6 +341,7 @@ export class Game {
       if (mode === 'play' || mode === 'dialogue') this.quests.update(dt);
       this.events.update(dt);
       this.requests.update(dt);
+      this.services.update(dt);
       if ((this._scanT = (this._scanT || 0) - dt) < 0) { this._scanT = 0.5; this._techScan(); }
       this._hud(dt);
       this.mapData.reveal(this.player.pos.x, this.player.pos.z, 450 + Math.max(0, this.player.pos.y - this.player.groundH) * 2);
@@ -395,7 +402,12 @@ export class Game {
   // ── 상호작용 ───────────────────────────────
   _findTarget() {
     const p = this.player.pos;
+    if (this.player.state === 'fly') {
+      const dock = this.facilities.list.some((F) => F.type === 'dock' && Math.hypot(F.x - p.x, F.z - p.z) < 60 && Math.abs(F.y + F.padY - p.y) < 30);
+      return { kind: 'unfly', label: dock ? '나룻배 돌려주기' : '나룻배에서 내리기', short: '내리기' };
+    }
     const npc = this.npcs.nearest(p, 5.5, (n) => !n.ambient);
+    if (npc && npc.service) { const F = this.facilities.byId.get(npc.service); return { kind: 'facility', o: F, label: `${F.info.keeper} · ${F.info.verb}`, short: F.info.name }; }
     if (npc) return { kind: 'npc', o: npc, label: `${npc.name}와(과) 마주하기`, short: '말 걸기' };
     const el = this.anchor.stopNear(p);
     if (el) return { kind: 'elevator', o: el, label: el.up ? (this.elevatorOpen() ? '승강차 · 하늘닻으로 오르기 (30 km)' : '승강차 (아직 멈춰 있다)') : '승강차 · 척추 전망대로 내려가기', short: '승강차' };
@@ -408,6 +420,8 @@ export class Game {
 
   _interact(t) {
     if (t.kind === 'npc') return this.talkTo(t.o);
+    if (t.kind === 'facility') { this.focusOn(t.o.npc); return this.services.open(t.o); }
+    if (t.kind === 'unfly') return this.services.endFly();
     if (t.kind === 'station') return this.stationCard(t.o);
     if (t.kind === 'elevator') return this.rideElevator(t.o.up);
     if (t.kind === 'deck' && this.quests.step('mq4')?.type === 'compose') {
@@ -823,6 +837,7 @@ export class Game {
       if (d < 25) { this.state.waypoint = null; this.updateWaypoint(); this.ui.toast('표식에 도착했다', { kind: 'muted' }); }
     }
     if (Math.hypot(pos.x, pos.z) > 1200) markers.push({ bearing: bearing(0, 0), cls: 'p', label: '척추' });
+    markers.push(...this.services.compassMarkers(bearing));
     this.ui.updateCompass(this.rig.yaw, markers);
     this.ui.altimeter(p.pos.y, p.state === 'glide' ? p.glideSpeed : p.vel.length());
     const t0 = tg[0];
@@ -916,8 +931,8 @@ export class Game {
   _atmosphereByPlace(dt) {
     const p = this.player.pos;
     const frost = this.structures.pylons.get('frost-pylon');
-    let target = 1;
-    if (frost && !frost.alive) target = 1 + 2.5 * Math.max(0, 1 - Math.hypot(p.x - frost.x, p.z - frost.z) / 4500);
+    let target = this.services.fogTarget();
+    if (frost && !frost.alive) target *= 1 + 2.5 * Math.max(0, 1 - Math.hypot(p.x - frost.x, p.z - frost.z) / 4500);
     const a = this.world.atmos;
     a.fogScale += (target - a.fogScale) * Math.min(1, dt * 0.3);
     if (!this.state.flags.moaNight && a.state.night > 0.8 && this.mode === 'play') { this.state.flags.moaNight = true; this.ui.moa(MOA.firstNight); }
