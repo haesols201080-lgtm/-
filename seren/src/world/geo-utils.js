@@ -3,8 +3,11 @@ import * as THREE from 'three';
 
 const _c = new THREE.Color();
 
-/** 지오메트리에 색과 발광 값을 입힌 부품 */
-export function part(geo, color = 0xffffff, emit = 0) {
+/**
+ * 지오메트리에 색과 발광 값을 입힌 부품.
+ * win: 창문 격자(고층 건물 외벽) — 양수면 원통형(라디안당 창 열 수), 음수면 평면형(창 폭 m)
+ */
+export function part(geo, color = 0xffffff, emit = 0, win = 0) {
   const g = geo.index ? geo.toNonIndexed() : geo.clone();
   for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
   if (!g.attributes.normal) g.computeVertexNormals();
@@ -28,6 +31,11 @@ export function part(geo, color = 0xffffff, emit = 0) {
   }
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setAttribute('emit', new THREE.BufferAttribute(em, 1));
+  if (win) {
+    const wa = new Float32Array(n);
+    if (typeof win === 'function') { const p = g.attributes.position; for (let i = 0; i < n; i++) wa[i] = win(p.getX(i), p.getY(i), p.getZ(i)); } else wa.fill(win);
+    g.setAttribute('win', new THREE.BufferAttribute(wa, 1));
+  }
   return g;
 }
 
@@ -36,6 +44,8 @@ export function merge(parts) {
   let n = 0;
   for (const p of parts) n += p.attributes.position.count;
   const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3), em = new Float32Array(n);
+  const anyWin = parts.some((p) => p.attributes.win);
+  const win = anyWin ? new Float32Array(n) : null;
   let o = 0;
   for (const p of parts) {
     const c = p.attributes.position.count;
@@ -43,6 +53,7 @@ export function merge(parts) {
     nor.set(p.attributes.normal.array, o * 3);
     col.set(p.attributes.color.array, o * 3);
     em.set(p.attributes.emit.array, o);
+    if (win && p.attributes.win) win.set(p.attributes.win.array, o);
     o += c;
   }
   const g = new THREE.BufferGeometry();
@@ -50,6 +61,7 @@ export function merge(parts) {
   g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
   g.setAttribute('color', new THREE.BufferAttribute(col, 3));
   g.setAttribute('emit', new THREE.BufferAttribute(em, 1));
+  if (win) g.setAttribute('win', new THREE.BufferAttribute(win, 1));
   g.computeBoundingSphere();
   g.computeBoundingBox();
   return g;

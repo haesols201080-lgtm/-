@@ -5,6 +5,10 @@ import * as THREE from 'three';
 import { NOISE_GLSL, ATMOS_PARS } from './shaders.js';
 import { atmosUniforms } from './atmosphere.js';
 import { UR_DIR, UR_RADIUS } from './sky-clock.js';
+import { mulberry32 } from '../core/noise.js';
+
+const _Z = new THREE.Vector3(0, 0, 1);
+const _Y = new THREE.Vector3(0, 1, 0);
 
 const SKY_R = 3.0e6;
 const UR_DIST = 1.6e6;
@@ -76,6 +80,23 @@ vec3 aurora(vec3 rd) {
   return c * band * rays * curtain * north * 0.55;
 }
 
+// 궤도를 도는 위성·거울: 밤하늘을 천천히 가로지르는 빛점 (가끔 햇빛을 반사해 번쩍인다)
+vec3 satellites(vec3 rd) {
+  vec3 col = vec3(0.0);
+  for (int i = 0; i < 9; i++) {
+    float fi = float(i);
+    vec3 n = normalize(vec3(sin(fi * 2.7 + 0.3), 0.35 + 0.5 * fract(fi * 0.37), cos(fi * 1.9 + 1.1)));
+    vec3 a = normalize(cross(n, vec3(0.0, 1.0, 0.0)));
+    vec3 b = cross(n, a);
+    float w = uTime * (0.006 + 0.004 * fract(fi * 0.61)) + fi * 1.7;
+    vec3 p = a * cos(w) + b * sin(w);
+    float d = 1.0 - dot(rd, p);
+    float flare = pow(max(0.0, sin(uTime * 0.05 + fi * 3.1)), 40.0);
+    col += vec3(0.9, 0.95, 1.0) * (smoothstep(4e-7, 0.0, d) * 1.6 + smoothstep(3e-5, 0.0, d) * flare * 3.0);
+  }
+  return col;
+}
+
 void main() {
   vec3 rd = normalize(vDir);
   vec3 col = skyBase(rd);
@@ -84,6 +105,7 @@ void main() {
   if (starVis > 0.001) {
     col += (stars(rd) + galaxy(rd)) * starVis;
     col += aurora(rd) * uNight;
+    col += satellites(rd) * starVis;
   }
 
   // 해
@@ -275,7 +297,10 @@ void main() {
   // 불빛: 가장자리를 따라 이어지는 점등과 정거장
   float dots = step(0.86, fract(along * 3.0)) * (smoothstep(0.1, 0.0, abs(across - 0.12)) + smoothstep(0.1, 0.0, abs(across - 0.88)));
   float station = smoothstep(0.004, 0.0, abs(fract(vUv.x * 12.0) - 0.5) - 0.006);
-  vec3 lights = vec3(1.0, 0.85, 0.55) * dots * 3.0 + vec3(0.6, 0.95, 1.0) * (seam * 1.2 + station * 2.5);
+  // 고리를 따라 흐르는 배들 (두 줄, 반대 방향)
+  float lane1 = smoothstep(0.03, 0.0, abs(across - 0.32)) * step(0.985, fract(along * 0.7 - uTime * 0.0035));
+  float lane2 = smoothstep(0.03, 0.0, abs(across - 0.68)) * step(0.985, fract(along * 0.55 + uTime * 0.0028 + 0.37));
+  vec3 lights = vec3(1.0, 0.85, 0.55) * dots * 3.0 + vec3(0.6, 0.95, 1.0) * (seam * 1.2 + station * 2.5) + vec3(1.0, 0.95, 0.85) * (lane1 + lane2) * 4.0;
   col += lights * uLights * mix(0.25, 1.0, max(uNight, inShadow));
   float T = mix(0.35, 0.95, smoothstep(0.0, 0.6, rd.y));
   float alpha = edge * mix(0.32, 0.9, max(uNight, inShadow * 0.5));
@@ -391,7 +416,60 @@ export class Sky {
     tether.renderOrder = -2;
     this.scene.add(tether);
 
+    // 다른 척추들: 고리를 따라 동서로 늘어선 승강줄 (지평선 너머에서 솟아 고리에 닿는다)
+    this.farTethers = [];
+    for (const deg of [-31, -19, -9, 11, 22, 34]) {
+      const th = (deg * Math.PI) / 180;
+      const A = new THREE.Vector3(), B = new THREE.Vector3();
+      const mat = new THREE.ShaderMaterial({
+        uniforms: { ...u, uA: { value: A }, uB: { value: B }, uPix: { value: 0.002 } },
+        vertexShader: tetherVert, fragmentShader: tetherFrag,
+        transparent: true, depthWrite: false, side: THREE.DoubleSide,
+      });
+      const m = new THREE.Mesh(tGeo, mat);
+      m.frustumCulled = false;
+      m.renderOrder = -2;
+      this.scene.add(m);
+      this.farTethers.push({ th, A, B, mat });
+    }
+    // 고리 위의 정거장 (각 척추가 닿는 곳 + 그 사이)
+    const stG = new THREE.CylinderGeometry(1, 1, 1, 16);
+    stG.rotateX(Math.PI / 2);
+    this.stationMat = new THREE.ShaderMaterial({
+      uniforms: { ...u },
+      vertexShader: `varying vec3 vN; varying vec3 vWorld; void main(){ vN = normalize(mat3(modelMatrix) * normal); vec4 wp = modelMatrix * instanceMatrix * vec4(position,1.0); vWorld = wp.xyz; gl_Position = projectionMatrix * viewMatrix * wp; }`,
+      fragmentShader: `${ATMOS_PARS}
+        varying vec3 vN; varying vec3 vWorld;
+        void main(){ vec3 rd = normalize(vWorld - cameraPosition);
+          float ndl = abs(dot(normalize(vN), uSunDir)) * 0.6 + 0.4;
+          vec3 col = vec3(0.85, 0.86, 0.92) * ndl + vec3(0.6, 0.95, 1.0) * (0.4 + 1.6 * uNight);
+          float T = mix(0.4, 0.95, smoothstep(0.0, 0.6, rd.y));
+          col = col * T + skyBase(rd) * 0.3 * (1.0 - uNight);
+          gl_FragColor = vec4(col, 1.0); ${OUT} }`,
+    });
+    this.stationAngles = [-31, -25, -19, -14, -9, -4, 0, 5, 11, 16, 22, 28, 34].map((d) => (d * Math.PI) / 180);
+    this.stations = new THREE.InstancedMesh(stG, this.stationMat, this.stationAngles.length);
+    this.stations.frustumCulled = false;
+    this.stations.renderOrder = -2.5;
+    this.scene.add(this.stations);
+
+    // 우르 둘레의 거주 궤도: 우르를 도는 작은 빛들
+    const habN = 60;
+    const hp = new Float32Array(habN * 3);
+    const hr = mulberry32(5);
+    for (let i = 0; i < habN; i++) {
+      const a = hr() * Math.PI * 2, r = 1.25 + hr() * 1.6;
+      hp[i * 3] = Math.cos(a) * r; hp[i * 3 + 1] = (hr() - 0.5) * 0.04 * r; hp[i * 3 + 2] = Math.sin(a) * r;
+    }
+    const hg = new THREE.BufferGeometry();
+    hg.setAttribute('position', new THREE.BufferAttribute(hp, 3));
+    this.habMat = new THREE.PointsMaterial({ color: 0xffe6c0, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+    this.habitats = new THREE.Points(hg, this.habMat);
+    this.habitats.renderOrder = -3.5;
+    this.urGroup.add(this.habitats);
+
     this._inv = new THREE.Matrix4();
+    this._qz = new THREE.Quaternion();
     this._m3 = new THREE.Matrix3();
   }
 
@@ -412,7 +490,34 @@ export class Sky {
     // 승강줄
     this.tetherA.set(-cp.x, tetherTopY - cp.y, -cp.z).multiplyScalar(SKY_SCALE);
     this.tetherB.set(-cp.x, RING_ALT - cp.y, -cp.z).multiplyScalar(SKY_SCALE);
-    this.tetherMat.uniforms.uPix.value = (Math.tan((c.fov * Math.PI) / 360) * 2) / Math.max(400, innerHeight) * 1.4;
+    const pix = (Math.tan((c.fov * Math.PI) / 360) * 2) / Math.max(400, innerHeight) * 1.4;
+    this.tetherMat.uniforms.uPix.value = pix;
+    // 행성 중심 (하늘 단위, 카메라 기준)
+    const Cx = -cp.x * SKY_SCALE, Cy = -PLANET_R * SKY_SCALE - cp.y * SKY_SCALE, Cz = -cp.z * SKY_SCALE;
+    const Rs = PLANET_R * SKY_SCALE, Rt = (PLANET_R + RING_ALT) * SKY_SCALE;
+    const ry = this.hoop.rotation.y, cr = Math.cos(ry), sr = Math.sin(ry);
+    for (const f of this.farTethers) {
+      const sx = Math.sin(f.th), cy = Math.cos(f.th);
+      f.A.set(Cx + sx * cr * Rs, Cy + cy * Rs, Cz - sx * sr * Rs);
+      f.B.set(Cx + sx * cr * Rt, Cy + cy * Rt, Cz - sx * sr * Rt);
+      f.mat.uniforms.uPix.value = pix * 0.8;
+    }
+    const m4 = this._m4 || (this._m4 = new THREE.Matrix4());
+    const q = this._q || (this._q = new THREE.Quaternion());
+    const sc = this._sc || (this._sc = new THREE.Vector3());
+    const ps = this._ps || (this._ps = new THREE.Vector3());
+    this.stationAngles.forEach((th, i) => {
+      const big = this.farTethers.some((f) => Math.abs(f.th - th) < 1e-3) || th === 0;
+      const rr = Rt - 600 * SKY_SCALE;
+      ps.set(Cx + Math.sin(th) * cr * rr, Cy + Math.cos(th) * rr, Cz - Math.sin(th) * sr * rr);
+      q.setFromAxisAngle(_Y, ry).multiply(this._qz.setFromAxisAngle(_Z, -th));
+      sc.set((big ? 9000 : 5000) * SKY_SCALE, (big ? 7000 : 3600) * SKY_SCALE, (big ? 34000 : 22000) * SKY_SCALE);
+      m4.compose(ps, q, sc);
+      this.stations.setMatrixAt(i, m4);
+    });
+    this.stations.instanceMatrix.needsUpdate = true;
+    this.habitats.rotation.y = atmosUniforms.uTime.value * 0.002;
+    this.habMat.opacity = 0.35 + 0.65 * atmosUniforms.uNight.value;
     // 해 방향을 우르 좌표계로
     this.urGroup.updateMatrixWorld();
     this._m3.setFromMatrix4(this.urGroup.matrixWorld).invert();

@@ -71,6 +71,7 @@ export class Quests {
     if (q.onDone) this.game.actions.run(q.onDone, { quest: id });
     if (q.next) this.start(q.next);
     this.game.ui.refreshObjective();
+    bus.emit('questDone', { id });
   }
 
   /** 이 인물에게 진행할 대화가 있나 */

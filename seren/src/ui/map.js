@@ -261,6 +261,23 @@ export class MapView {
       });
       ctx.stroke();
     }
+    // 빛길
+    if (g.transit) {
+      const T = g.transit;
+      const line = (pts, col, w) => {
+        ctx.strokeStyle = col; ctx.lineWidth = w * dpr;
+        ctx.beginPath();
+        pts.forEach((p, i) => { const [sx, sy] = this._toScreen(p.x, p.z); if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy); });
+        ctx.stroke();
+      };
+      line(T.ring.pts, 'rgba(255,210,122,0.75)', 1.6);
+      for (const L of T.lines) line(L.path.pts.filter((p, i) => i % 3 === 0 || i === L.path.pts.length - 1), L.open ? 'rgba(255,210,122,0.75)' : 'rgba(160,160,180,0.35)', 1.4);
+      for (const S of T.stations) {
+        const [sx, sy] = this._toScreen(S.x, S.z);
+        ctx.fillStyle = S.open ? '#ffd27a' : '#8a8aa0';
+        ctx.fillRect(sx - 3 * dpr, sy - 3 * dpr, 6 * dpr, 6 * dpr);
+      }
+    }
     // 장소
     ctx.font = `${12 * dpr}px 'Noto Sans KR', sans-serif`;
     ctx.textAlign = 'center';
@@ -275,7 +292,7 @@ export class MapView {
       ctx.beginPath();
       ctx.arc(sx, sy, (p.type === 'pylon' ? 5 : p.type === 'vista' ? 3.5 : 4) * dpr, 0, Math.PI * 2);
       ctx.fill();
-      if (this.zoom > 1.6 || ['capital', 'village', 'glasscity', 'bloomcity', 'canyoncity', 'seacity', 'observatory', 'crash'].includes(p.type)) {
+      if (this.zoom > 1.6 || ['capital', 'village', 'glasscity', 'bloomcity', 'canyoncity', 'seacity', 'observatory', 'crash', 'district', 'starport'].includes(p.type) || (p.type === 'landmark' && this.zoom > 1.1)) {
         ctx.fillStyle = 'rgba(243,239,230,0.9)';
         ctx.shadowColor = '#000'; ctx.shadowBlur = 4 * dpr;
         ctx.fillText(p.name, sx, sy - 9 * dpr);

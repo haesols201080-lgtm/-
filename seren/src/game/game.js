@@ -10,6 +10,11 @@ import { bus } from '../core/events.js';
 import { World } from '../world/world.js';
 import { Flora } from '../world/flora.js';
 import { Structures } from '../world/structures.js';
+import { Megacity } from '../world/megacity.js';
+import { Traffic } from '../world/traffic.js';
+import { Transit } from '../world/transit.js';
+import { Landmarks } from '../world/landmarks.js';
+import { Drones } from '../world/drones.js';
 import { Currents } from '../world/currents.js';
 import { Creatures } from '../world/creatures.js';
 import { Clouds } from '../world/clouds.js';
@@ -56,10 +61,17 @@ export class Game {
 
     this.world = new World(this.engine);
     this.structures = this.world.add(new Structures(this.world));
+    this.megacity = this.world.add(new Megacity(this.world, this.structures, this.engine.q));
+    this.structures.markers.push(...this.megacity.markers);
+    this.traffic = this.world.add(new Traffic(this.world, this.megacity, this.engine.q));
+    this.transit = this.world.add(new Transit(this.world, this.engine.q));
+    this.landmarks = this.world.add(new Landmarks(this.world, this.structures));
+    this.transit.isOpen = (u) => (!u ? true : u.startsWith('quest:') ? this.quests.isDone(u.slice(6)) : !!this.state.pylons[u]);
     this.flora = this.world.add(new Flora(this.world, this.engine.q));
     this.currents = this.world.add(new Currents(this.world, CURRENTS));
     this.player = new Player(this.world);
     this.creatures = this.world.add(new Creatures(this.world, this));
+    this.drones = this.world.add(new Drones(this.world, this));
     this.clouds = this.world.add(new Clouds(this.world, this.engine.q));
     this.avatar = new Avatar();
     this.avatar.addTo(this.engine.scene);
@@ -208,7 +220,7 @@ export class Game {
     const s = this.state;
     this.player.canSkim = !!s.flags.skimmer;
     this.player.upgrades = { glide: 0, skim: 0, rise: 0, ...s.upgrades };
-    for (const id of Object.keys(s.pylons)) this.structures.awakenPylon(id, true);
+    for (const id of Object.keys(s.pylons)) { this.structures.awakenPylon(id, true); this.traffic.unlock(id, true); }
     for (const c of this.currents.list) {
       if (c.def.unlock && s.pylons[c.def.unlock]) c.setEnabled(true);
       if (s.flags['cur:' + c.id]) c.setEnabled(true);
@@ -220,6 +232,7 @@ export class Game {
     if (s.flags['pickups:sled']) this.discovery.spawnPickups('sled');
     for (const [id, pos] of Object.entries(s.flags.npcPos || {})) this.npcs.goTo(id, pos[0], pos[1], { instant: true });
     this.requests.active = s.flags.requests || [];
+    this.transit.refresh();
     this.ui.refreshButtons();
     this.ui.refreshObjective();
     this.updateWaypoint();
@@ -229,7 +242,7 @@ export class Game {
     if (this.mode === 'title' || this.mode === 'boot' || this.mode === 'intro') return;
     const s = this.state;
     const p = this.player;
-    if (p.state !== 'current' && p.state !== 'lift' && p.state !== 'down') s.player = { x: p.pos.x, y: null, z: p.pos.z, yaw: p.yaw };
+    if (p.state !== 'current' && p.state !== 'lift' && p.state !== 'down' && p.state !== 'ride') s.player = { x: p.pos.x, y: null, z: p.pos.z, yaw: p.yaw };
     s.clock = this.world.clock.time;
     s.upgrades = { ...p.upgrades };
     s.reveal = this.mapData.serialize();
@@ -295,6 +308,14 @@ export class Game {
       this.rig.update(dt, free ? input : NO_INPUT, this.player);
       if (mode === 'dialogue' && this.dialogue.active && this.dialogue.active.npc) this._dialogueCam(dt);
       else this._dlgCam = null;
+      if (this.player.state === 'ride' && this.player.ride) {
+        const r = this.player.ride;
+        if (mode === 'play' && (input.pressed('jump') || input.pressed('interact'))) r.skip();
+        this.rig.override = r.cam;
+        this.rig._applyOverride();
+        this.rig.override = null;
+      }
+      this.avatar.root.visible = this.player.state !== 'ride';
       this.director.update(dt);
       this._effects(dt);
       this.dialogue.update(dt);
@@ -365,11 +386,16 @@ export class Game {
     const p = this.player.pos;
     const npc = this.npcs.nearest(p, 5.5, (n) => !n.ambient);
     if (npc) return { kind: 'npc', o: npc, label: `${npc.name}와(과) 마주하기`, short: '말 걸기' };
-    return this.discovery.nearestInteract(p);
+    const d = this.discovery.nearestInteract(p);
+    if (d) return d;
+    const st = this.transit.nearest(p);
+    if (st) return { kind: 'station', o: st, label: `빛길 · ${st.name}`, short: '빛길' };
+    return null;
   }
 
   _interact(t) {
     if (t.kind === 'npc') return this.talkTo(t.o);
+    if (t.kind === 'station') return this.stationCard(t.o);
     if (t.kind === 'deck' && this.quests.step('mq4')?.type === 'compose') {
       if (this.world.atmos.state.night > 0.5) return this.startCompose();
       this.ui.moa('하우는 밤에 노래를 보내라고 했어요. 메뉴에서 쉬면서 밤을 기다려요.');
@@ -408,6 +434,40 @@ export class Game {
     if (id === 'hau') return Object.keys(s.pylons).length ? 'hau-pylon' : 'hau-first';
     if (id === 'iel') return 'iel-idle';
     return null;
+  }
+
+  /** 빛길 역: 갈 곳 고르기 */
+  stationCard(S) {
+    const T = this.transit;
+    T.refresh();
+    if (!S.open) {
+      const L = T.lines.find((l) => l.id === S.line);
+      this.ui.toast(`${L.name}은 잠들어 있다`, { kind: 'muted', sub: L.unlock.startsWith('quest:') ? '썰매를 고친 뒤에 다시 와 보자' : '그 지방의 공명탑을 깨우면 다시 달린다' });
+      return;
+    }
+    const dests = T.stations.filter((d) => d !== S && d.open);
+    const html = `<div class="dests">${dests.map((d, i) => `<button class="btn" data-dest="${i}">${d.name}</button>`).join('')}</div>`;
+    this.ui.infoCard('빛길', S.name, '관 속의 캡슐이 하모네아를 도는 고리선과 여섯 갈래로 세렌을 잇는다. 어디로 갈까?');
+    const card = document.querySelector('.card');
+    const box = document.createElement('div');
+    box.innerHTML = html;
+    card.insertBefore(box, card.lastElementChild);
+    box.querySelectorAll('[data-dest]').forEach((b) => b.addEventListener('click', () => {
+      const D = dests[+b.dataset.dest];
+      this.ui.closeCard();
+      this.startRide(S, D);
+    }));
+  }
+
+  startRide(A, B) {
+    const ride = this.transit.makeRide(A, B, (S) => {
+      this.rig.override = null;
+      this.ui.regionTitle(S.name, '빛길에서 내렸다', false);
+      this.save();
+    });
+    this.player.enterRide(ride);
+    audio.noise({ freq: 500, q: 0.6, dur: 2.5, gain: 0.5, type: 'bandpass', sweep: 1600, attack: 0.6 });
+    audio.chime('soft');
   }
 
   upgradeCard() {
@@ -662,7 +722,7 @@ export class Game {
 
   _hud() {
     const p = this.player;
-    this._target = this.mode === 'play' && p.state !== 'down' && !this.director.active ? this._findTarget() : null;
+    this._target = this.mode === 'play' && p.state !== 'down' && p.state !== 'ride' && !this.director.active ? this._findTarget() : null;
     this.ui.prompt(this._target ? this._target.label : null, this._target ? this._target.short : null);
     const markers = [];
     const pos = p.pos;

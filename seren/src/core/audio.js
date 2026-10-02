@@ -197,11 +197,11 @@ export class Audio {
   }
 
   /** 짧은 잡음 효과 (발소리·착지·물 등) */
-  noise({ freq = 800, q = 1, dur = 0.08, gain = 0.2, type = 'bandpass', pos, sweep, attack = 0.004, bus = 'sfx', wet = 0.05 } = {}) {
+  noise({ freq = 800, q = 1, dur = 0.08, gain = 0.2, type = 'bandpass', pos, sweep, attack = 0.004, bus = 'sfx', wet = 0.05, maxDist = 200 } = {}) {
     if (!this.ready) return;
     const ctx = this.ctx;
     const t = this.now;
-    const sp = this._spatial(pos, 200);
+    const sp = this._spatial(pos, maxDist);
     if (sp.gain * gain < 0.002) return;
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuf;

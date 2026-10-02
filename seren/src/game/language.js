@@ -6,10 +6,8 @@ import { bus } from '../core/events.js';
 
 const glyphCache = new Map();
 
-/** 단어의 글자 (SVG 문자열). 점의 높이 = 음의 높이 */
-export function glyphSVG(id, size = 28) {
-  const key = id + ':' + size;
-  if (glyphCache.has(key)) return glyphCache.get(key);
+/** 단어 글자의 모양: 곡선 경로·장식·점 (40×40 좌표). 점의 높이 = 음의 높이 */
+export function glyphParts(id) {
   const w = WORD[id];
   const rnd = mulberry32(hashStr(id) * 7 + 3);
   const notes = w ? w.notes : [0];
@@ -27,13 +25,22 @@ export function glyphSVG(id, size = 28) {
   const deco = [];
   const kind = Math.floor(rnd() * 4);
   const [fx, fy] = pts[0];
-  if (kind === 0) deco.push(`<path d="M${fx},${fy} L${fx},${Math.min(38, fy + 9)}"/>`);
-  if (kind === 1) deco.push(`<path d="M6,37 Q20,${31 + rnd() * 4} 34,37"/>`);
-  if (kind === 2) deco.push(`<path d="M${fx - 6},${fy - 7} A7,7 0 0,1 ${fx + 6},${fy - 7}"/>`);
-  if (kind === 3) deco.push(`<circle cx="${pts[n - 1][0]}" cy="${pts[n - 1][1]}" r="5" fill="none"/>`);
-  if (rnd() < 0.5) deco.push(`<path d="M${8 + rnd() * 6},6 L${26 + rnd() * 6},${4 + rnd() * 4}"/>`);
-  const dots = pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.4" fill="currentColor" stroke="none"/>`).join('');
-  const svg = `<svg class="gl" viewBox="0 0 40 40" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d ? `<path d="${d}"/>` : ''}${deco.join('')}${dots}</svg>`;
+  if (kind === 0) deco.push({ d: `M${fx},${fy} L${fx},${Math.min(38, fy + 9)}` });
+  if (kind === 1) deco.push({ d: `M6,37 Q20,${31 + rnd() * 4} 34,37` });
+  if (kind === 2) deco.push({ d: `M${fx - 6},${fy - 7} A7,7 0 0,1 ${fx + 6},${fy - 7}` });
+  if (kind === 3) deco.push({ circle: [pts[n - 1][0], pts[n - 1][1], 5] });
+  if (rnd() < 0.5) deco.push({ d: `M${8 + rnd() * 6},6 L${26 + rnd() * 6},${4 + rnd() * 4}` });
+  return { d, deco, dots: pts };
+}
+
+/** 단어의 글자 (SVG 문자열) */
+export function glyphSVG(id, size = 28) {
+  const key = id + ':' + size;
+  if (glyphCache.has(key)) return glyphCache.get(key);
+  const { d, deco, dots } = glyphParts(id);
+  const decoS = deco.map((o) => (o.d ? `<path d="${o.d}"/>` : `<circle cx="${o.circle[0]}" cy="${o.circle[1]}" r="${o.circle[2]}" fill="none"/>`)).join('');
+  const dotS = dots.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2.4" fill="currentColor" stroke="none"/>`).join('');
+  const svg = `<svg class="gl" viewBox="0 0 40 40" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${d ? `<path d="${d}"/>` : ''}${decoS}${dotS}</svg>`;
   glyphCache.set(key, svg);
   return svg;
 }

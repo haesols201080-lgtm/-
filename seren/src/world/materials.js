@@ -24,8 +24,15 @@ varying float vEmit;
 #ifdef USE_INSTANCING_COLOR
 varying vec3 vIColor;
 #endif
+#ifdef USE_WINDOWS
+attribute float win;
+varying float vWin;
+#endif
 void main() {
   vec3 p = position;
+#ifdef USE_WINDOWS
+  vWin = win;
+#endif
 #ifdef USE_VEMIT
   vEmit = emit;
 #endif
@@ -85,6 +92,9 @@ varying float vEmit;
 #ifdef USE_INSTANCING_COLOR
 varying vec3 vIColor;
 #endif
+#ifdef USE_WINDOWS
+varying float vWin;
+#endif
 void main() {
   vec3 N = normalize(vNormal);
   if (!gl_FrontFacing) N = -N;
@@ -110,6 +120,28 @@ void main() {
   em *= vColor;
 #endif
 #endif
+#ifdef USE_WINDOWS
+  // 고층 건물 외벽: 유리창 격자 — 낮에는 하늘을 비추고, 밤에는 집집마다 불이 켜진다
+  if (abs(vWin) > 0.001) {
+    vec3 Nw = normalize(vNormal);
+    float cc = vWin > 0.0 ? atan(Nw.z, Nw.x) * vWin : dot(vWorld.xz, normalize(vec2(-Nw.z, Nw.x) + 1e-5)) / (-vWin);
+    vec2 cell = vec2(cc, vWorld.y / 4.2);
+    vec2 f = fract(cell);
+    vec2 id = floor(cell);
+    float frame = step(0.16, f.x) * step(f.x, 0.84) * step(0.22, f.y) * step(f.y, 0.8);
+    vec2 fw = fwidth(cell);
+    float aa = clamp(1.6 - max(fw.x, fw.y) * 2.2, 0.0, 1.0);
+    float glassF = mix(0.45, frame, aa);
+    float r = hash12(id + vec2(floor(vWin * 7.0), 0.0));
+    float litP = mix(0.1, 0.55, clamp(uGlow, 0.0, 1.0));
+    float lit = mix(litP, step(1.0 - litP, r), aa);
+    vec3 warm = mix(vec3(1.0, 0.76, 0.45), vec3(0.55, 0.95, 1.0), step(0.72, hash12(id + 3.1)));
+    vec3 R = reflect(-V, N);
+    vec3 glass = skyBase(vec3(R.x, abs(R.y), R.z)) * 0.5 + vec3(0.015, 0.03, 0.06);
+    col = mix(col, glass, glassF * 0.88);
+    em += warm * lit * glassF * (0.18 + uGlow * 1.5);
+  }
+#endif
 #ifdef USE_LINES
   // 아웬 건축의 빛나는 이음선
   float ln = smoothstep(0.08, 0.0, abs(fract(vLocal.y * uLines) - 0.5) - 0.42);
@@ -130,7 +162,8 @@ export const playerUniform = { value: new THREE.Vector3(0, -1e4, 0) };
 /**
  * opts: color, emissive, emissiveNight(0..1: 밤에 더 빛남), rim, rimColor, spec,
  *       vertexColors, wind(흔들림 m), windH(흔들림 기준 높이), lines(이음선 빈도), lineColor,
- *       vertexEmit(정점 emit 속성으로 발광 부위 지정), transparent, opacity, side, depthWrite, blending
+ *       vertexEmit(정점 emit 속성으로 발광 부위 지정), windows(정점 win 속성으로 창문 격자),
+ *       transparent, opacity, side, depthWrite, blending
  */
 export function litMaterial(opts = {}) {
   const defines = {};
@@ -139,6 +172,7 @@ export function litMaterial(opts = {}) {
   if (opts.lines) defines.USE_LINES = '';
   if (opts.vertexEmit) defines.USE_VEMIT = '';
   if (opts.push) defines.USE_PUSH = '';
+  if (opts.windows) defines.USE_WINDOWS = '';
   const m = new THREE.ShaderMaterial({
     uniforms: {
       ...atmosUniforms,

@@ -6,6 +6,7 @@ import { mulberry32 } from '../core/noise.js';
 import { part, merge, xf, lathe, tube, jitter } from './geo-utils.js';
 import * as A from './arch.js';
 import { litMaterial, glowMaterial } from './materials.js';
+import { TOWERS } from './megacity.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -191,7 +192,8 @@ export class Structures {
     const rnd = mulberry32(777);
     const parts = [];
     const glowCols = [A.PAL.teal, A.PAL.amber, A.PAL.rose, A.PAL.violet];
-    const occupied = [];
+    // 울림탑(megacity.js) 자리는 비워 둔다
+    const occupied = TOWERS.map((T) => [Math.cos((T.a * Math.PI) / 180) * T.R, Math.sin((T.a * Math.PI) / 180) * T.R, T.r * 3.7]);
     const free = (x, z, r) => occupied.every((o) => Math.hypot(o[0] - x, o[1] - z) > o[2] + r);
     const ribAngles = Array.from({ length: 6 }, (_, i) => (i / 6) * Math.PI * 2 + 0.26);
     const nearRib = (x, z) => ribAngles.some((a) => Math.hypot(x - Math.cos(a) * 450, z - Math.sin(a) * 450) < 120);
@@ -252,8 +254,8 @@ export class Structures {
       const a = rnd() * Math.PI * 2;
       const R = 420 + rnd() * 900;
       const x = Math.cos(a) * R, z = Math.sin(a) * R;
-      if (nearRib(x, z)) continue;
       const r = 12 + rnd() * 20;
+      if (nearRib(x, z) || occupied.slice(0, TOWERS.length).some((o) => Math.hypot(o[0] - x, o[1] - z) < 150 + r)) continue;
       const y = H0 + 30 + rnd() * 170;
       petals.push({ x, y, z, r });
       A.place(pParts, A.petal({ r, depth: r * 0.45, glow: glowCols[i % 4] }), { x, y, z });

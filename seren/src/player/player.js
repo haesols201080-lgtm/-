@@ -116,6 +116,7 @@ export class Player {
       case 'swim': this._swim(dt, ctl, wish, wishLen); break;
       case 'current': this._current(dt, ctl, wish, wishLen); break;
       case 'lift': this._lift(dt, ctl, wish, wishLen); break;
+      case 'ride': this._ride(dt); break;
     }
 
     // 세계 경계 — 장막
@@ -150,6 +151,9 @@ export class Player {
     // 움직이는 발판 위에 서 있으면 함께 이동
     const c = this.groundC;
     if (c && c.obj && c.px !== undefined) {
+      // 한 번 움직인 만큼은 한 번만 (프레임을 나눠 계산해도 두 번 실어 나르지 않게)
+      if (c._ax === c.x && c._az === c.z && c._ay === c.y1) return;
+      c._ax = c.x; c._az = c.z; c._ay = c.y1;
       const dx = c.x - c.px, dz = c.z - c.pz, dy = c.y1 - c.py;
       this.pos.x += dx; this.pos.z += dz; this.pos.y += dy;
       if (c.dyaw) {
@@ -536,6 +540,26 @@ export class Player {
       this.vel.copy(res.exitVel);
       if (this.canGlide) this.startGlide(); else this.setState('air');
       this.glideSpeed = Math.max(this.glideSpeed, Math.hypot(res.exitVel.x, res.exitVel.z) * 0.8);
+    }
+  }
+
+  /** 탈것(빛길 캡슐 등)에 실려 감 — ride.step(dt, player) 이 위치를 정한다 */
+  enterRide(ride) {
+    this.ride = ride;
+    this.current = null;
+    this.events.push('rideIn');
+    this.setState('ride');
+  }
+
+  _ride(dt) {
+    const r = this.ride;
+    if (!r) { this.setState('air'); return; }
+    r.step(dt, this);
+    if (r.done) {
+      this.ride = null;
+      this.vel.set(0, 0, 0);
+      this.events.push('rideOut');
+      this.setState('ground');
     }
   }
 
