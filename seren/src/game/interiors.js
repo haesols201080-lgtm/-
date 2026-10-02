@@ -25,6 +25,13 @@ const PURPOSE = {
   hall: { name: '작은 공연장', desc: '동네 합창단이 저녁마다 노래한다.', npc: 6 },
 };
 const BY_STYLE = {
+  civic: ['hall', 'lab', 'garden', 'school'],
+  commerce: ['market', 'market', 'home', 'hall'],
+  transit: ['market', 'lab', 'hall'],
+  residential: ['home', 'home', 'school', 'garden', 'heal'],
+  research: ['lab', 'lab', 'school', 'heal'],
+  energy: ['lab', 'lab', 'hall'],
+  bioindustry: ['garden', 'lab', 'market', 'heal'],
   capital: ['lab', 'home', 'market', 'heal', 'hall', 'garden', 'home', 'lab'],
   highrise: ['home', 'lab', 'home', 'market', 'heal', 'hall'],
   garden: ['garden', 'school', 'home', 'garden'],

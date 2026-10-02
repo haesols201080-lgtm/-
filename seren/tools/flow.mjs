@@ -77,5 +77,5 @@ await step('저장', () => ev(() => { SEREN.game.save(true); return localStorage
 console.log('save bytes', await ev(() => localStorage.getItem('seren.save.v1').length));
 console.log('understood iel_1?', await ev(() => SEREN.game.lang.isUnderstood(SEREN.game.lines.iel_1)));
 for (const l of logs.slice(0, 30)) console.log(l);
-await page.screenshot({ path: join(root, 'shots', 'flow-end.png') });
+await page.screenshot({ path: join(root, 'shots', 'flow-end.png'), timeout: 180000 }); // 도시가 무거워 헤드리스에서 느림
 await browser.close();

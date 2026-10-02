@@ -46,7 +46,13 @@ void main() {
   P.y += sin(uT * 1.7 + aPod.y * 61.0) * 0.25;
   float d = distance(P, cameraPosition);
   if (d > uFar) { gl_Position = vec4(0.0, 0.0, -2.0, 1.0); return; }
+#ifdef WALK
+  // 걷는 사람: 크기 그대로, 걸음에 맞춰 살짝 들썩
+  float s = 1.0;
+  P.y += abs(sin(uT * 5.2 + aPod.y * 97.0)) * 0.07 - 0.25 * sin(uT * 1.7 + aPod.y * 61.0);
+#else
   float s = clamp(d * 0.0014, 1.0, 7.0);
+#endif
   vec3 wp = P + (Rt * position.x + U * position.y + F * position.z) * s;
   vWorld = wp;
   vNormal = normalize(Rt * normal.x + U * normal.y + F * normal.z);
@@ -68,6 +74,8 @@ void main() {
   vec3 col = shadeLit(vColor, N, 1.0);
   vec3 V = normalize(cameraPosition - vWorld);
   col += vec3(0.85, 0.92, 1.0) * pow(1.0 - max(dot(N, V), 0.0), 3.0) * 0.35;
+  float litL = dot(col, vec3(0.2126, 0.7152, 0.0722));
+  col *= 1.0 / (1.0 + max(litL - 0.72, 0.0) * 1.15);
   col += vColor * vEmit * (0.7 + uGlow * 2.2);
   col = applyFog(col, vWorld);
   gl_FragColor = vec4(col, 1.0);
@@ -91,6 +99,22 @@ function podGeo() {
   return g;
 }
 
+/** 걷는 아웬 (키 약 1.9 m): 긴 옷자락 몸, 어깨, 머리, 빛나는 띠 */
+function walkerGeo() {
+  const g = merge([
+    part(new THREE.CylinderGeometry(0.13, 0.36, 1.25, 6, 1, true).translate(0, 0.62, 0), 0xf0ecf4, 0),
+    part(new THREE.OctahedronGeometry(0.26, 0).scale(1.15, 0.7, 0.85).translate(0, 1.3, 0), 0xf0ecf4, 0),
+    part(new THREE.OctahedronGeometry(0.17, 0).scale(0.85, 1.2, 0.9).translate(0, 1.64, 0.02), 0xf6f2f8, 0),
+    part(new THREE.CylinderGeometry(0.235, 0.235, 0.06, 6, 1, true).translate(0, 1.0, 0), 0x7ff3e6, 2.2),
+    part(new THREE.OctahedronGeometry(0.05, 0).translate(0, 1.95, 0.02), 0xffd27a, 2.6),
+  ]);
+  g.setAttribute('aVCol', g.attributes.color);
+  g.setAttribute('aEmit', g.attributes.emit);
+  g.deleteAttribute('color');
+  g.deleteAttribute('emit');
+  return g;
+}
+
 export class Streams {
   constructor(world, city, q = {}) {
     this.world = world;
@@ -98,6 +122,8 @@ export class Streams {
     const f = q.flora ?? 0.9;
     this.cap = f < 0.5 ? 2500 : f < 0.7 ? 5000 : f < 1 ? 8000 : 11000; // 한 번에 그리는 차 수 상한
     this.reach = f < 0.5 ? 2600 : 4200; // 카메라에서 이 거리 안의 차선에만 차를 올린다
+    this.wcap = f < 0.5 ? 500 : f < 0.7 ? 1200 : f < 1 ? 2000 : 3000; // 걷는 사람 수 상한
+    this.wreach = f < 0.5 ? 260 : 420;
     this.lanes = []; // { pts: [x,y,z,1]*NS, len, kind, w(교통량), cx, cz, rad }
     this.t = 0;
     const rnd = mulberry32(4242);
@@ -130,9 +156,19 @@ export class Streams {
     this.lanes.push({ pts, len, kind, w: this._w, cx, cz, rad });
   }
 
-  /** 거리 위 1~4 m 를 떠서 달리는 차 (양방향) */
+  /** 거리 위 1~4 m 를 떠서 달리는 차 (양방향) + 양쪽 보행로를 걷는 사람 */
   _groundLanes(Z) {
     const hov = (x, z) => Math.max(heightAt(x, z), 0) + 3.2;
+    const foot = (x, z) => Math.max(heightAt(x, z), 0) + 0.5;
+    const w = Z.street * 0.55, sw = Math.min(4.6, Z.street * 0.225 - 0.4), walkOff = w / 2 + 0.15 + sw / 2;
+    if (Z.streetEvery) Z.streets.forEach((R, k) => {
+      if (k % Z.streetEvery) return;
+      for (const [side, dir] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        if (!Z.id.startsWith('cap') && !Z.id.startsWith('dist') && side !== dir) continue;
+        const r = R + side * (walkOff + dir * 0.7);
+        this._lane((t) => { const a = dir * t * TAU; const x = Z.cx + Math.cos(a) * r, z = Z.cz + Math.sin(a) * r; return [x, foot(x, z), z]; }, 'walk');
+      }
+    });
     Z.streets.forEach((R, k) => {
       if (Z.streetEvery && k % Z.streetEvery) return;
       if (!Z.streetEvery) return;
@@ -208,12 +244,21 @@ export class Streams {
     this.tex.needsUpdate = true;
     // 차선마다 차를 미리 정해 둔다 (같은 차선은 언제 다시 골라도 같은 자리에 같은 차)
     const tints = [[1, 1, 1], [0.75, 0.95, 1], [1, 0.9, 0.75], [0.95, 0.8, 1], [0.8, 1, 0.9], [1, 0.82, 0.88]];
+    const people = [[0.46, 0.62, 0.8], [0.74, 0.48, 0.62], [0.84, 0.62, 0.36], [0.52, 0.46, 0.76], [0.4, 0.68, 0.6], [0.82, 0.78, 0.86], [0.66, 0.36, 0.42], [0.36, 0.5, 0.56]]; // 옷자락 색
     this.lanes.forEach((L, i) => {
-      const sky = L.kind === 'sky';
-      const gap = (sky ? 90 : 34) / L.w;
+      const sky = L.kind === 'sky', walk = L.kind === 'walk';
+      const gap = walk ? 7 / L.w : (sky ? 90 : 34) / L.w;
       const n = Math.max(2, Math.floor(L.len / gap));
       const r = mulberry32(i * 7919 + 17);
-      const sp = sky ? 45 + r() * 40 : 15 + r() * 14; // m/s
+      const sp = walk ? 1.25 : sky ? 45 + r() * 40 : 15 + r() * 14; // m/s
+      if (walk) {
+        L.pod = new Float32Array(n * 4); L.tint = new Float32Array(n * 3); L.n = n;
+        for (let k = 0; k < n; k++) {
+          L.pod.set([i, (k + r() * 0.8) / n, (sp * (0.75 + r() * 0.5)) / L.len, (r() - 0.5) * 1.4], k * 4);
+          L.tint.set(people[Math.floor(r() * people.length)], k * 3);
+        }
+        return;
+      }
       L.pod = new Float32Array(n * 4);
       L.tint = new Float32Array(n * 3);
       L.n = n;
@@ -241,6 +286,48 @@ export class Streams {
     this.mesh = new THREE.Mesh(g, this.mat);
     this.mesh.frustumCulled = false;
     this.world.scene.add(this.mesh);
+    // 걷는 사람들 (같은 차선 텍스처, 다른 모양)
+    const wb = walkerGeo();
+    const wg = new THREE.InstancedBufferGeometry();
+    for (const k of ['position', 'normal', 'aVCol', 'aEmit']) wg.setAttribute(k, wb.attributes[k]);
+    this.wPod = new THREE.InstancedBufferAttribute(new Float32Array(this.wcap * 4), 4).setUsage(THREE.DynamicDrawUsage);
+    this.wTint = new THREE.InstancedBufferAttribute(new Float32Array(this.wcap * 3), 3).setUsage(THREE.DynamicDrawUsage);
+    wg.setAttribute('aPod', this.wPod);
+    wg.setAttribute('aTint', this.wTint);
+    wg.instanceCount = 0;
+    this.wgeo = wg;
+    this.wmat = new THREE.ShaderMaterial({ uniforms: this.mat.uniforms, vertexShader: vert, fragmentShader: frag, side: THREE.DoubleSide, defines: { WALK: '' } });
+    this.wmat.uniforms = { ...this.mat.uniforms, uFar: { value: this.wreach + 60 } };
+    this.wmesh = new THREE.Mesh(wg, this.wmat);
+    this.wmesh.frustumCulled = false;
+    this.world.scene.add(this.wmesh);
+    this._wat = new THREE.Vector3(1e9, 0, 1e9);
+    this._wT = 0;
+    this.walkers = 0;
+  }
+
+  /** 걷는 사람: 지금 카메라 가까이 있는 사람만 고른다 (차선은 길어서 차선 단위로 고르면 낭비) */
+  _fillWalk(cam) {
+    this._wat.copy(cam);
+    this._wT = 6;
+    const P = this.wPod.array, T = this.wTint.array, R2 = (this.wreach + 40) ** 2;
+    let k = 0;
+    for (let li = 0; li < this.lanes.length && k < this.wcap; li++) {
+      const L = this.lanes[li];
+      if (L.kind !== 'walk' || Math.max(0, Math.hypot(cam.x - L.cx, cam.z - L.cz) - L.rad) > this.wreach) continue;
+      for (let j = 0; j < L.n && k < this.wcap; j++) {
+        const u = ((L.pod[j * 4 + 1] + this.t * L.pod[j * 4 + 2]) % 1 + 1) % 1;
+        const s = Math.floor(u * NS) % NS;
+        const dx = L.pts[s * 4] - cam.x, dz = L.pts[s * 4 + 2] - cam.z;
+        if (dx * dx + dz * dz > R2) continue;
+        P.set(L.pod.subarray(j * 4, j * 4 + 4), k * 4);
+        T.set(L.tint.subarray(j * 3, j * 3 + 3), k * 3);
+        k++;
+      }
+    }
+    this.walkers = this.wgeo.instanceCount = k;
+    this.wPod.clearUpdateRanges(); this.wPod.addUpdateRange(0, k * 4); this.wPod.needsUpdate = true;
+    this.wTint.clearUpdateRanges(); this.wTint.addUpdateRange(0, k * 3); this.wTint.needsUpdate = true;
   }
 
   /** 카메라 가까운 차선부터 차를 채운다 */
@@ -248,6 +335,7 @@ export class Streams {
     this._at.copy(cam);
     const sel = [];
     for (const L of this.lanes) {
+      if (L.kind === 'walk') continue;
       const d = Math.max(0, Math.hypot(cam.x - L.cx, cam.z - L.cz) - L.rad);
       if (d < this.reach) sel.push([d, L]);
     }
@@ -271,5 +359,7 @@ export class Streams {
     this.mat.uniforms.uT.value = this.t;
     const cam = ctx && ctx.game ? ctx.game.engine.camera.position : null;
     if (cam && Math.hypot(cam.x - this._at.x, cam.z - this._at.z) > 250) this._fill(cam);
+    this._wT -= dt;
+    if (cam && (this._wT <= 0 || Math.hypot(cam.x - this._wat.x, cam.z - this._wat.z) > 40)) this._fillWalk(cam);
   }
 }

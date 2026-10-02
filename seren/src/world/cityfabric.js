@@ -7,7 +7,7 @@
 import * as THREE from 'three';
 import { heightAt } from './heightfield.js';
 import { mulberry32, createNoise2D } from '../core/noise.js';
-import { cityArchetypes, SIZE, doorGeo } from './city-arch.js';
+import { cityArchetypes, SIZE, doorGeo, propArchetypes } from './city-arch.js';
 import { litMaterial } from './materials.js';
 import { PointLights } from './lights.js';
 import { glyphStripTexture } from './hologram.js';
@@ -20,12 +20,13 @@ import { ZONES, STYLES, TINTS } from '../data/city.js';
 const ACC = [0x7ff3e6, 0xffc46a, 0xff9fd0, 0xb9a6ff];
 const TAU = Math.PI * 2;
 const SKIP_PLACE = new Set(['capital', 'district', 'none']);
-const LOWKIND = new Set(['dome', 'cap', 'stilt', 'villa']);
+const FLAT = new Set(['lawn', 'plaza']);
+const LOWKIND = new Set(['dome', 'cap', 'stilt', 'villa', 'reactor', 'cooler', 'tanks', 'fabricator', 'hangar', 'bubbles', 'observatory']);
 // 들어갈 수 있는 건물 (쌍둥이 탑·기둥 집은 기단이 있을 때만)
-const ENTER = new Set(['twist', 'blade', 'stack', 'spire', 'ovoid', 'arcology', 'slab', 'villa', 'dome', 'crystal', 'cap']);
+const ENTER = new Set(['twist', 'blade', 'stack', 'spire', 'ovoid', 'arcology', 'slab', 'villa', 'dome', 'crystal', 'cap', 'observatory', 'podlab', 'balcony', 'bubbles', 'fabricator', 'hangar']);
 
 // 땅에 닿은 평면 모양 (city-arch 의 모양과 같은 초타원: [k, 가로, 세로])
-export const PLAN = { twist: [4, 1, 1], blade: [2.2, 1, 0.42], stack: [8, 1, 0.78], spire: [2, 1, 1], ovoid: [2, 0.62, 0.62], arcology: [6, 1, 1], slab: [10, 1, 1], villa: [10, 1, 0.7], dome: [2, 1.03, 1.03], crystal: [2, 0.88, 0.88], cap: [2, 0.3, 0.3] };
+export const PLAN = { observatory: [8, 1, 0.85], podlab: [2, 0.4, 0.4], balcony: [2, 0.78, 0.78], bubbles: [2, 0.55, 0.55], fabricator: [10, 1, 0.62], hangar: [12, 1, 1], padtower: [2, 0.26, 0.26], twist: [4, 1, 1], blade: [2.2, 1, 0.42], stack: [8, 1, 0.78], spire: [2, 1, 1], ovoid: [2, 0.62, 0.62], arcology: [6, 1, 1], slab: [10, 1, 1], villa: [10, 1, 0.7], dome: [2, 1.03, 1.03], crystal: [2, 0.88, 0.88], cap: [2, 0.3, 0.3] };
 /** 건물 가운데에서 (nx, nz) 쪽으로 벽까지의 거리 (m) */
 function planExt(r, nx, nz) {
   const [k, A, B] = PLAN[r.kind] || [2, 1, 1];
@@ -49,7 +50,10 @@ export class CityFabric {
     this.arch = cityArchetypes();
     this.list = Object.fromEntries(Object.keys(this.arch).map((k) => [k, []])); // 모양 → [x, y, z, sx, sy, sz, rot, r, g, b]
     this.zones = [];
-    this.lamps = new PointLights(this.scene, 6000, { minPx: 1.3, day: 0.0 });
+    this.lamps = new PointLights(this.scene, 12000, { minPx: 1.3, day: 0.0 });
+    this.parch = propArchetypes();
+    this.plist = Object.fromEntries(Object.keys(this.parch).map((k) => [k, []])); // 거리의 작은 것들: [x, y, z, 배율, 방향]
+    this.propR = f < 0.5 ? 260 : f < 0.7 ? 420 : f < 1 ? 600 : 800;
     this.beacons = new PointLights(this.scene, 900, { minPx: 1.6, day: 0.25 });
     this._excl = [];
     this.holo = []; // [x, y, z, 너비, 높이, 방향, 색]
@@ -60,6 +64,7 @@ export class CityFabric {
     const t0 = performance.now();
     for (const Z of ZONES) { try { this._zone(Z); } catch (e) { console.warn('[city]', Z.id, e); } }
     this._meshes();
+    this._propMeshes();
     this._holograms();
     this.count = Object.values(this.list).reduce((s, l) => s + l.length / 10, 0);
     this.buildMs = performance.now() - t0;
@@ -79,15 +84,24 @@ export class CityFabric {
     for (const n of NPCS) { const p = res(n.place, n.offset); if (p) E.push([p[0], p[1], 22]); }
     for (const g of GLYPH_STONES) { const p = res(g.at, g.off); if (p) E.push([p[0], p[1], 16]); }
     for (const e of ECHOES) { const p = res(e.at, e.off); if (p) E.push([p[0], p[1], 16]); }
-    // 빛길 관 아래 (40 m 칸)
-    this._tube = new Set();
-    const mark = (x, z) => { const i = Math.floor(x / 40), j = Math.floor(z / 40); for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) this._tube.add((i + a) * 100003 + (j + b)); };
-    const walk = (pts) => { for (let k = 1; k < pts.length; k++) { const A = pts[k - 1], B = pts[k]; const n = Math.ceil(A.distanceTo(B) / 20); for (let s = 0; s <= n; s++) mark(A.x + (B.x - A.x) * (s / n), A.z + (B.z - A.z) * (s / n)); } };
-    if (transit) { walk(transit.ring.pts); for (const L of transit.lines) walk(L.path.pts); }
-    // 낮게 흐르는 해류 아래도 비운다
+    // 빛길 역은 통째로 비우고, 관·낮은 해류 밑은 「높이만」 막는다 (거리·낮은 건물은 그 밑으로 이어진다)
+    if (transit) for (const S of transit.stations) E.push([S.x, S.z, 46]);
+    this._corr = new Map(); // 40 m 칸 → [ax, az, bx, bz, 바닥 높이, 반폭]
+    const seg = (A, B, under, w) => {
+      const m = w + 30, x0 = Math.min(A.x, B.x) - m, x1 = Math.max(A.x, B.x) + m, z0 = Math.min(A.z, B.z) - m, z1 = Math.max(A.z, B.z) + m;
+      const S = [A.x, A.z, B.x, B.z, Math.min(A.y, B.y) - under, w];
+      for (let i = Math.floor(x0 / 40); i <= Math.floor(x1 / 40); i++) for (let j = Math.floor(z0 / 40); j <= Math.floor(z1 / 40); j++) {
+        const k = i * 100003 + j;
+        if (!this._corr.has(k)) this._corr.set(k, []);
+        this._corr.get(k).push(S);
+      }
+    };
+    const walk = (pts, under, w) => { for (let k = 1; k < pts.length; k++) seg(pts[k - 1], pts[k], under, w); };
+    if (transit) { walk(transit.ring.pts, 10, 9); for (const L of transit.lines) walk(L.path.pts, 10, 9); }
+    // 낮게 흐르는 해류: 타고 지나갈 자리를 넉넉히
     if (currents) for (const c of currents.list) {
       const low = (c.samples || []).filter((p) => p.y - Math.max(0, heightAt(p.x, p.z)) < 380);
-      for (let k = 1; k < low.length; k++) if (low[k].distanceTo(low[k - 1]) < 200) walk([low[k - 1], low[k]]);
+      for (let k = 1; k < low.length; k++) if (low[k].distanceTo(low[k - 1]) < 200) seg(low[k - 1], low[k], 34, 30);
     }
     // 칸으로 나눠 빠르게 찾기
     this._exGrid = new Map();
@@ -102,10 +116,23 @@ export class CityFabric {
   }
 
   _excluded(x, z, R) {
-    if (this._tube.has(Math.floor(x / 40) * 100003 + Math.floor(z / 40))) return true;
     const arr = this._exGrid.get(Math.floor(x / 200) * 100003 + Math.floor(z / 200));
     if (arr) for (const e of arr) if (Math.hypot(x - e[0], z - e[1]) < e[2] + R) return true;
     return false;
+  }
+
+  /** 빛길 관·낮은 해류 밑: 반지름 R 의 무엇이 닿지 않아야 할 높이 (없으면 Infinity) */
+  _under(x, z, R) {
+    const arr = this._corr.get(Math.floor(x / 40) * 100003 + Math.floor(z / 40));
+    let cap = Infinity;
+    if (!arr) return cap;
+    for (const S of arr) {
+      if (S[4] >= cap) continue;
+      const dx = S[2] - S[0], dz = S[3] - S[1], L2 = dx * dx + dz * dz || 1;
+      const t = Math.max(0, Math.min(1, ((x - S[0]) * dx + (z - S[1]) * dz) / L2));
+      if (Math.hypot(x - S[0] - dx * t, z - S[1] - dz * t) < S[5] + R) cap = S[4];
+    }
+    return cap;
   }
 
   /** 다른 구조물과 겹치는가 → 겹치면 -1, 아니면 지을 수 있는 최고 높이 */
@@ -128,9 +155,16 @@ export class CityFabric {
     const [cx, cz] = Array.isArray(Z.at) ? Z.at : PLACE[Z.at].pos;
     const rnd = mulberry32((cx * 13 + cz * 7) | 0);
     const noise = Z.clump ? createNoise2D((cx | 0) ^ 0x5bd1) : null;
-    const style = Object.entries(STYLES[Z.style]);
-    const wsum = style.reduce((s, [, w]) => s + w, 0);
-    const pick = () => { let r = rnd() * wsum; for (const [k, w] of style) { if ((r -= w) <= 0) return k; } return style[0][0]; };
+    // 양식 고르기: 부채꼴(대로 사이)마다 다른 쓰임 → 구역마다 실루엣이 달라진다
+    const styleOf = (name) => { const st = Object.entries(STYLES[name]); return { name, st, sum: st.reduce((s, [, w]) => s + w, 0) }; };
+    const styles = (Z.sectors || [Z.style]).map(styleOf);
+    const pick = (a) => {
+      const sec = Z.sectors ? Math.floor((((a - (cx % 7) * 0.1) % TAU + TAU) % TAU) / (TAU / Math.max(1, Z.avenues))) % styles.length : 0;
+      const S = styles[sec];
+      let r = rnd() * S.sum;
+      for (const [k, w] of S.st) { if ((r -= w) <= 0) return [k, S.name]; }
+      return [S.st[0][0], S.name];
+    };
     const tints = (TINTS[Z.tint] || TINTS.pearl).map((h) => new THREE.Color(h));
     const avA = Array.from({ length: Z.avenues }, (_, i) => (i / Z.avenues) * TAU + (cx % 7) * 0.1);
     const zone = { ...Z, cx, cz, streets: [], avA, buildings: 0, roadMesh: null, tall: [] };
@@ -146,27 +180,37 @@ export class CityFabric {
         const n = Math.floor((TAU * R) / Z.lot);
         const a0 = rnd() * TAU;
         for (let i = 0; i < n; i++) {
-          if (rnd() > Z.fill * this.density) continue;
+          const skip = rnd() > Z.fill * (Z.podium ? Math.max(this.density, 0.9) : this.density); // 도심은 품질이 낮아도 빽빽하게
           const a = a0 + (i / n) * TAU + (rnd() - 0.5) * 0.15 * (Z.lot / R);
           const rr = Math.max(Z.foot[0], rrMax * (0.7 + rnd() * 0.3));
           // 대로 자리
           let onAv = false;
           for (const av of avA) { const da = Math.abs(Math.atan2(Math.sin(a - av), Math.cos(a - av))); if (da * R < avW + rr) { onAv = true; break; } }
           if (onAv) continue;
+          if (skip) {
+            const px = cx + Math.cos(a) * R, pz = cz + Math.sin(a) * R, u = rnd();
+            // 빈 필지: 도심은 광장이 많고, 교외·마을은 공원
+            if (Z.podium && u < 0.5) this._plaza(px, pz, rr, a, rnd);
+            else if (u < (Z.streetEvery ? 0.85 : 0.3)) this._park(px, pz, rr, a, rnd);
+            continue;
+          }
           const x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
-          if (noise && noise(x / Z.clump, z / Z.clump) < -0.15) continue;
+          if (noise && noise(x / Z.clump, z / Z.clump) < -0.15) { if (rnd() < 0.25) this._park(x, z, rr, a, rnd); continue; }
           if (this._excluded(x, z, rr + 4)) continue;
           // 땅: 가운데와 네 귀퉁이
           const hc = heightAt(x, z);
           let mn = hc, mx = hc;
           for (let s = 0; s < 4; s++) { const sa = a + s * 1.5708; const h = heightAt(x + Math.cos(sa) * rr, z + Math.sin(sa) * rr); mn = Math.min(mn, h); mx = Math.max(mx, h); }
           const wet = mn < 1.2;
-          let kind = pick();
+          let [kind, secStyle] = pick(a);
           if (wet) { if (!Z.water || mn < -10) continue; kind = 'stilt'; }
           if (mx - mn > rr * 0.9 + 3) continue; // 벼랑
           const gy = Math.max(hc, 0);
-          const room = this._room(x, z, rr, gy);
-          if (room < 0) continue;
+          // 빛길 관·낮은 해류 밑: 낮은 건물만, 너무 낮으면 광장으로
+          const under = this._under(x, z, rr + 2);
+          if (under - gy < 16) { this._plaza(x, z, rr, a, rnd); continue; }
+          const room = Math.min(this._room(x, z, rr, gy), under);
+          if (room < 0) { if (rnd() < 0.6) this._park(x, z, rr, a, rnd); continue; } // 큰 구조물(떠 있는 꽃잎 등) 밑은 공원으로
           // 높이: 안쪽일수록(tall) 높고, 가끔 우뚝
           const inner = Math.exp(-(R - Z.r0) / ((Z.r1 - Z.r0) * 0.45));
           let h = Z.h[0] + (Z.h[1] - Z.h[0]) * Math.pow(rnd(), 1.7) * (1 - Z.tall + Z.tall * inner);
@@ -185,7 +229,7 @@ export class CityFabric {
           const top = base + sy * roofK;
           const col = colR ? this.world.colliders.add({ type: 'cyl', x, z, r: sx * colR, y0: base, y1: top, dome: kind === 'dome' ? sy * 0.55 : undefined, city: true })
             : this.world.colliders.add({ type: 'box', x, z, hx: sx * 0.95, hz: sz * hzK, rot, y0: base, y1: top, city: true });
-          const rec = { mx, kind, idx: this.list[kind].length / 10 - 1, x, z, a, base, gy, sx, sy, sz, rot, colR, hzK, roofK, top, col, podium: null, zone: Z.id, style: Z.style, seed: rnd(), doorSign: Z.rows === 2 && row === 1 ? 1 : -1 };
+          const rec = { mx, kind, idx: this.list[kind].length / 10 - 1, x, z, a, base, gy, sx, sy, sz, rot, colR, hzK, roofK, top, col, podium: null, zone: Z.id, style: secStyle, seed: rnd(), doorSign: Z.rows === 2 && row === 1 ? 1 : -1 };
           // 기단: 고층 구역에서는 탑 밑을 낮은 블록이 이어 준다
           if (Z.podium && !LOWKIND.has(kind) && sy > 30) {
             const hl = (Z.lot / 2) * 0.98, hd = (bw / Z.rows / 2) * 0.96; // 반 길이·반 폭 (이웃 블록과 맞닿게)
@@ -217,6 +261,7 @@ export class CityFabric {
     zone.rOut = Z.r0 + nb * Z.ring;
     this._bridges(zone, rnd);
     this._roads(zone);
+    this._streetProps(zone, rnd);
     this.zones.push(zone);
   }
 
@@ -280,6 +325,153 @@ export class CityFabric {
     this._repartition(this._last);
   }
 
+  // ── 거리의 작은 것들 ─────────────────────────
+  /** 비어 있는가 (피할 곳·구조물·건물과 겹치지 않음) */
+  _free(x, z, r) {
+    if (this._excluded(x, z, r)) return false;
+    let gy = null;
+    for (const c of this.world.colliders.near(x, z, r + 2)) {
+      if (c.obj || c.sky) continue;
+      if (gy === null) gy = heightAt(x, z);
+      if (c.y0 > gy + 8 || c.y1 < gy - 1) continue;
+      let d;
+      if (c.type === 'cyl') d = Math.hypot(x - c.x, z - c.z) - c.r;
+      else { const dx = x - c.x, dz = z - c.z; const lx = Math.abs(dx * c.cos - dz * c.sin) - c.hx, lz = Math.abs(dx * c.sin + dz * c.cos) - c.hz; d = Math.hypot(Math.max(lx, 0), Math.max(lz, 0)); }
+      if (d < r) return false;
+    }
+    return true;
+  }
+
+  /** 소품 하나. col: 충돌 { r, h } (원통) */
+  _prop(kind, x, z, rot = 0, { s = 1, y, col } = {}) {
+    const gy = y ?? Math.max(heightAt(x, z), 0) + 0.5;
+    this.plist[kind].push(x, gy, z, s, rot);
+    if (col) this.world.colliders.add({ type: 'cyl', x, z, r: col.r * s, y0: gy - 1, y1: gy + col.h * s, walk: col.walk ?? true, city: true });
+    return gy;
+  }
+
+  /** 빈 필지의 작은 공원: 잔디 + 나무 + 의자, 가끔 정자 */
+  _park(x, z, rr, a, rnd) {
+    if (this._excluded(x, z, rr + 2)) return;
+    const hc = heightAt(x, z);
+    if (hc < 1.2 || Math.abs(heightAt(x + rr, z) - hc) > 3 || Math.abs(heightAt(x, z + rr) - hc) > 3) return;
+    if (!this._free(x, z, rr * 0.9)) return;
+    this._prop('lawn', x, z, 0, { s: rr * 0.92, y: hc + 0.02 });
+    if (rr > 12 && rnd() < 0.3) { this._prop('pavilion', x, z, rnd() * TAU, { s: Math.min(1.3, rr / 12), y: hc + 0.14, col: { r: 5.1, h: 0.3 } }); return; }
+    const nt = 1 + Math.floor(rnd() * 3);
+    for (let k = 0; k < nt; k++) { const t = rnd() * TAU, d = rr * (0.25 + rnd() * 0.45); this._prop(rnd() < 0.75 ? 'tree' : 'fern', x + Math.cos(t) * d, z + Math.sin(t) * d, rnd() * TAU, { s: 0.85 + rnd() * 0.5, y: hc + 0.12 }); }
+    if (rnd() < 0.7) this._prop('bench', x + Math.cos(a) * rr * 0.55, z + Math.sin(a) * rr * 0.55, -a + Math.PI / 2 + Math.PI, { y: hc + 0.12 });
+  }
+
+  /** 빈 필지·관 밑의 광장: 무늬 포장 + 가운데 조형(분수·조형물·홀로 기둥·키오스크) + 둘레의 화분·나무·의자 */
+  _plaza(x, z, rr, a, rnd) {
+    if (this._excluded(x, z, rr * 0.8)) return;
+    const hc = heightAt(x, z);
+    if (hc < 1.2 || Math.abs(heightAt(x + rr, z) - hc) > 2.5 || Math.abs(heightAt(x, z + rr) - hc) > 2.5) return;
+    if (!this._free(x, z, rr * 0.85)) return;
+    const y = hc + 0.06;
+    this._prop('plaza', x, z, rnd() * TAU, { s: rr * 0.95, y });
+    const u = rnd();
+    if (u < 0.3 && rr > 11) this._prop('fountain', x, z, rnd() * TAU, { s: Math.min(1, rr / 16), y: y + 0.1, col: { r: 5.4, h: 0.8 } });
+    else if (u < 0.55) this._prop('sculpt', x, z, rnd() * TAU, { s: 0.9 + rnd() * 0.4, y: y + 0.1, col: { r: 1.9, h: 1 } });
+    else if (u < 0.8) this._prop('kiosk', x, z, rnd() * TAU, { y: y + 0.1, col: { r: 2.4, h: 3.2 } });
+    else this._prop('pillar', x, z, 0, { s: 1.3, y: y + 0.1, col: { r: 0.6, h: 5 } });
+    const n = rr > 13 ? 6 : 4, t0 = rnd() * TAU, R = rr * 0.68;
+    for (let k = 0; k < n; k++) {
+      const t = t0 + (k / n) * TAU, px = x + Math.cos(t) * R, pz = z + Math.sin(t) * R;
+      if (k % 2) this._prop(rnd() < 0.6 ? 'tree' : 'planter', px, pz, rnd() * TAU, { s: 0.8 + rnd() * 0.35, y: y + 0.1, col: { r: 0.9, h: 0.75 } });
+      else this._prop('bench', px, pz, -t + Math.PI / 2, { y: y + 0.1 });
+    }
+  }
+
+  /** 거리를 따라: 연석 쪽 나무·가로등, 건물 쪽 의자·화분·홀로 기둥·키오스크·정거장. 교차로에는 분수·조형물 */
+  _streetProps(zone, rnd) {
+    if (!zone.roadMesh) return;
+    const { cx, cz } = zone;
+    const fernish = zone.style === 'glass' || zone.style === 'bloom' || zone.style === 'bioindustry';
+    // 소품 밀도: 수도·구역은 빽빽하게, 지방·먼 땅은 듬성듬성 (낮은 품질은 더 줄인다)
+    const pd = (zone.id.startsWith('cap') ? 1 : zone.id.startsWith('dist') ? 0.8 : zone.id.startsWith('town') ? 0.55 : 0.35) * (this.density < 0.6 ? 0.6 : 1);
+    const lane = (pts, w, sw, k0) => {
+      // pts: 길 가운데 선 [[x, z]…], 양쪽 보행로에 늘어놓는다
+      for (const sd of [1, -1]) {
+        let acc = 0, idx = k0;
+        for (let i = 1; i < pts.length; i++) {
+          const [x0, z0] = pts[i - 1], [x1, z1] = pts[i];
+          const L = Math.hypot(x1 - x0, z1 - z0), tx = (x1 - x0) / L, tz = (z1 - z0) / L, nx = -tz * sd, nz = tx * sd;
+          acc += L;
+          while (acc > 18) {
+            acc -= 18;
+            const t = 1 - acc / L, px = x0 + (x1 - x0) * t, pz = z0 + (z1 - z0) * t;
+            idx++;
+            // 연석 쪽
+            const cxp = px + nx * (w / 2 + 1.4), czp = pz + nz * (w / 2 + 1.4);
+            if (idx % 3 === 2) {
+              if (rnd() < 0.4 + pd * 0.6 && this._free(cxp, czp, 0.6)) {
+                const gy = this._prop('lamp', cxp, czp, Math.atan2(-nx, -nz));
+                this.lamps.add(cxp - nx * 1.3, gy + 6.0, czp - nz * 1.3, 0xffe2b8, 3.2, 0, 0);
+              }
+            } else if (rnd() < pd && this._free(cxp, czp, 1.0)) this._prop(fernish && rnd() < 0.5 ? 'fern' : 'tree', cxp, czp, rnd() * TAU, { s: 0.8 + rnd() * 0.45 });
+            // 건물 쪽
+            const bxp = px + nx * (w / 2 + sw - 1.0), bzp = pz + nz * (w / 2 + sw - 1.0);
+            const face = Math.atan2(-nx, -nz);
+            if (rnd() > pd) continue;
+            if (idx % 41 === 20 && sd === 1 && this._free(bxp, bzp, 2.4)) this._prop('shelter', bxp, bzp, face + Math.PI, { col: { r: 1.6, h: 3.4, walk: true } });
+            else if (idx % 29 === 11 && this._free(bxp, bzp, 2.8)) this._prop('kiosk', bxp, bzp, face, { col: { r: 2.4, h: 3.2 } });
+            else if (idx % 17 === 7 && this._free(bxp, bzp, 0.8)) this._prop('pillar', bxp, bzp, 0, { col: { r: 0.6, h: 5 } });
+            else if (idx % 7 === 0 && this._free(bxp, bzp, 1.2)) this._prop('bench', bxp, bzp, face + Math.PI);
+            else if (idx % 9 === 4 && this._free(bxp, bzp, 1.0)) this._prop('planter', bxp, bzp, 0, { col: { r: 0.9, h: 0.75 } });
+            else if (idx % 13 === 6 && this._free(bxp, bzp, 0.3)) this._prop('bollard', bxp, bzp, 0);
+          }
+        }
+      }
+    };
+    const w = zone.street * 0.55, sw = Math.min(4.6, zone.street * 0.225 - 0.4);
+    zone.streets.forEach((R, k) => {
+      if (!zone.streetEvery || k % zone.streetEvery) return;
+      const n = Math.ceil((TAU * R) / 22);
+      lane(Array.from({ length: n + 1 }, (_, i) => [cx + Math.cos((i / n) * TAU) * R, cz + Math.sin((i / n) * TAU) * R]), w, sw, k * 7);
+    });
+    for (const a of zone.avA) {
+      const r0 = zone.r0, r1 = zone.rOut, n = Math.ceil((r1 - r0) / 22);
+      lane(Array.from({ length: n + 1 }, (_, i) => { const r = r0 + ((r1 - r0) * i) / n; return [cx + Math.cos(a) * r, cz + Math.sin(a) * r]; }), zone.street * 0.7, 4.2, Math.round(a * 100));
+      // 교차로: 둘에 하나는 분수, 하나는 조형물 (회전 교차로 가운데)
+      zone.streets.forEach((R, k) => {
+        if (!zone.streetEvery || k % (zone.streetEvery * 2) || R > r1) return;
+        const x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
+        if (!this._free(x, z, 5.5)) return;
+        if ((k / zone.streetEvery + Math.round(a * 10)) % 2) this._prop('fountain', x, z, rnd() * TAU, { s: zone.street < 20 ? 0.75 : 1, col: { r: 5.4, h: 0.8 } });
+        else this._prop('sculpt', x, z, rnd() * TAU, { s: zone.street < 20 ? 0.8 : 1.1, col: { r: 1.9, h: 1 } });
+      });
+    }
+  }
+
+  /** 소품 인스턴스 (가까운 것만 그린다) */
+  _propMeshes() {
+    this.propMat = litMaterial({ vertexColors: true, vertexEmit: true, emissive: 0xffffff, emissiveIntensity: 1.4, emissiveNight: 0.85, rim: 0.2, rimColor: 0xd8e8ff, spec: 0.35, side: THREE.DoubleSide });
+    this.psets = [];
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), p = new THREE.Vector3(), sc = new THREE.Vector3();
+    for (const [kind, L] of Object.entries(this.plist)) {
+      const n = L.length / 5;
+      if (!n) continue;
+      const mats = new Float32Array(n * 16), pos = new Float32Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        const o = i * 5;
+        q.setFromAxisAngle(up, L[o + 4]);
+        m4.compose(p.set(L[o], L[o + 1], L[o + 2]), q, sc.set(L[o + 3], FLAT.has(kind) ? 1 : L[o + 3], L[o + 3])); // 바닥판은 옆으로만 키운다
+        m4.toArray(mats, i * 16);
+        pos[i * 3] = L[o]; pos[i * 3 + 1] = L[o + 1]; pos[i * 3 + 2] = L[o + 2];
+      }
+      const cap = Math.min(n, FLAT.has(kind) ? 1500 : 3000);
+      const mesh = new THREE.InstancedMesh(this.parch[kind], this.propMat, cap);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      mesh.count = 0;
+      mesh.frustumCulled = false;
+      this.scene.add(mesh);
+      this.psets.push({ kind, n, mats, pos, mesh, cap });
+    }
+    this.propCount = Object.values(this.plist).reduce((s, l) => s + l.length / 5, 0);
+  }
+
   // ── 공중다리: 가까운 높은 탑끼리 (걸어서 건널 수 있다) ──
   _bridges(zone, rnd) {
     const T = zone.tall;
@@ -301,7 +493,7 @@ export class CityFabric {
       const mx = (x1 + x2) / 2, mz = (z1 + z2) / 2, rot = -Math.atan2(z2 - z1, x2 - x1);
       const half = bd / 2 - Math.min(r1, r2) * 0.3;
       // 다리 아래로 높은 차선이 지나갈 수 있게, 그리고 다른 구조물과 겹치지 않게
-      if (this._excluded(mx, mz, 4)) continue;
+      if (this._excluded(mx, mz, 4) || this._under(mx, mz, half) < y + 8) continue;
       this.list.bridge.push(mx, y, mz, half, 5.5, 3.2, rot, 1, 1, 1);
       this.world.colliders.add({ type: 'box', x: mx, z: mz, hx: half, hz: 3.2, rot, y0: y, y1: y + 5.5, city: true, walk: true });
       used.add(i); used.add(best);
@@ -314,7 +506,8 @@ export class CityFabric {
     const P = [], C = [], E = [], I = [];
     const col = new THREE.Color(0x8e8a9c), line = new THREE.Color(ACC[zone.id.length % 4]);
     let vi = 0;
-    const strip = (pts, w, lamps) => {
+    const side = new THREE.Color(0xb2aec0), curbC = new THREE.Color(0x7ff3e6);
+    const strip = (pts, w, lamps, sw = 4) => {
       // pts: [[x, z], …] 를 따라 폭 w 띠. 물·벼랑·피할 곳은 끊는다
       let prev = null;
       for (let i = 0; i < pts.length; i++) {
@@ -332,7 +525,13 @@ export class CityFabric {
           };
           quad(-w / 2, w / 2, 0.35, col, 0.0);
           quad(-0.3, 0.3, 0.42, line, 1.2);
-          if (lamps && (i % 3 === 0)) this.lamps.add(x + nx * (w / 2 + 1), h + 6, z + nz * (w / 2 + 1), 0xffd6a0, 3, 0, 0);
+          // 보행로 (양쪽) + 연석의 빛줄
+          if (sw > 0.5) {
+            quad(w / 2 + 0.15, w / 2 + sw, 0.5, side, 0);
+            quad(-w / 2 - sw, -w / 2 - 0.15, 0.5, side, 0);
+            quad(w / 2 - 0.05, w / 2 + 0.15, 0.56, curbC, 1.0);
+            quad(-w / 2 - 0.15, -w / 2 + 0.05, 0.56, curbC, 1.0);
+          }
         }
         prev = ok ? { x, z, h } : null;
       }
@@ -342,12 +541,12 @@ export class CityFabric {
       zone.streets.forEach((R, k) => {
         if (k % zone.streetEvery) return;
         const n = Math.ceil((TAU * R) / 22);
-        strip(Array.from({ length: n + 1 }, (_, i) => [cx + Math.cos((i / n) * TAU) * R, cz + Math.sin((i / n) * TAU) * R]), zone.street * 0.55, true);
+        strip(Array.from({ length: n + 1 }, (_, i) => [cx + Math.cos((i / n) * TAU) * R, cz + Math.sin((i / n) * TAU) * R]), zone.street * 0.55, true, Math.min(4.6, zone.street * 0.225 - 0.4));
       });
     }
     for (const a of zone.avA) {
       const n = Math.ceil((zone.rOut - zone.r0) / 22);
-      strip(Array.from({ length: n + 1 }, (_, i) => { const r = zone.r0 - zone.street + ((zone.rOut - zone.r0 + zone.street) * i) / n; return [cx + Math.cos(a) * r, cz + Math.sin(a) * r]; }), zone.street * 0.7, true);
+      strip(Array.from({ length: n + 1 }, (_, i) => { const r = zone.r0 - zone.street + ((zone.rOut - zone.r0 + zone.street) * i) / n; return [cx + Math.cos(a) * r, cz + Math.sin(a) * r]; }), zone.street * 0.7, true, 4.2);
     }
     if (!P.length) return;
     const g = new THREE.BufferGeometry();
@@ -357,7 +556,7 @@ export class CityFabric {
     g.setIndex(I);
     g.computeVertexNormals();
     if (!this.roadMat) {
-      this.roadMat = litMaterial({ vertexColors: true, vertexEmit: true, emissive: 0xffffff, emissiveIntensity: 1.2, emissiveNight: 0.9, rim: 0.1, side: THREE.DoubleSide });
+      this.roadMat = litMaterial({ vertexColors: true, vertexEmit: true, emissive: 0xffffff, emissiveIntensity: 1.2, emissiveNight: 0.9, rim: 0.1, side: THREE.DoubleSide, tech: this.density < 0.6 ? undefined : { scale: 1.8, glow: 0.4, metal: 0.1, mode: 0 } });
       this.roadMat.polygonOffset = true;
       this.roadMat.polygonOffsetFactor = -2;
       this.roadMat.polygonOffsetUnits = -6;
@@ -370,8 +569,8 @@ export class CityFabric {
 
   // ── 인스턴스 메시 ─────────────────────────
   _meshes() {
-    const common = { vertexColors: true, vertexEmit: true, facade: true, emissive: 0xffffff, emissiveIntensity: 1.5, emissiveNight: 0.8, rim: 0.3, rimColor: 0xe0e8ff, spec: 0.5, side: THREE.DoubleSide, winGlow: 0.7,
-      tech: this.density < 0.6 ? undefined : { scale: 2.8, glow: 0.55, metal: 0.4, mode: 0 } };
+    const common = { vertexColors: true, vertexEmit: true, facade: true, emissive: 0xffffff, emissiveIntensity: 1.5, emissiveNight: 0.8, rim: 0.18, rimColor: 0xd0d8f0, spec: 0.25, side: THREE.DoubleSide, winGlow: 0.7,
+      tech: this.density < 0.6 ? undefined : { scale: 2.8, glow: 0.55, metal: 0.26, mode: 0 } };
     this.common = common;
     this.matHi = litMaterial(common);
     this.matLo = litMaterial({ ...common, cut: this.cut });
@@ -482,6 +681,22 @@ export class CityFabric {
       if (k) {
         S.hi.instanceMatrix.clearUpdateRanges(); S.hi.instanceMatrix.addUpdateRange(0, k * 16); S.hi.instanceMatrix.needsUpdate = true;
         S.hi.instanceColor.clearUpdateRanges(); S.hi.instanceColor.addUpdateRange(0, k * 3); S.hi.instanceColor.needsUpdate = true;
+      }
+    }
+    // 가까운 소품
+    if (this.psets) {
+      const PR2 = this.propR * this.propR;
+      for (const S of this.psets) {
+        const hm = S.mesh.instanceMatrix.array;
+        let k = 0;
+        for (let i = 0; i < S.n && k < S.cap; i++) {
+          const dx = S.pos[i * 3] - cam.x, dy = S.pos[i * 3 + 1] - cam.y, dz = S.pos[i * 3 + 2] - cam.z;
+          if (dx * dx + dy * dy * 0.25 + dz * dz >= PR2) continue;
+          hm.set(S.mats.subarray(i * 16, i * 16 + 16), k * 16);
+          k++;
+        }
+        S.mesh.count = k;
+        if (k) { S.mesh.instanceMatrix.clearUpdateRanges(); S.mesh.instanceMatrix.addUpdateRange(0, k * 16); S.mesh.instanceMatrix.needsUpdate = true; }
       }
     }
     // 가까운 입구

@@ -76,8 +76,11 @@ export function surfaceColor(x, z, h, ny, w, col, glow) {
   // 도시: 포장된 땅 (돌판 무늬, 군데군데 공원)
   let pave = h > 1 ? pavedAt(x, z) : 0;
   if (pave > 0) {
-    pave *= smoothstep(-0.45, -0.2, nV(x / 520 + 3, z / 520 - 5)) * (1 - rockAmt * 0.6);
-    const tile = 0.9 + 0.12 * hash2(Math.floor(x / 14), Math.floor(z / 14), 3);
+    // 공원·잔디 마당: 큰 공원(노이즈) + 작은 마당 조각
+    pave *= smoothstep(-0.62, -0.45, nV(x / 520 + 3, z / 520 - 5)) * (1 - rockAmt * 0.6);
+    pave *= 1 - 0.85 * smoothstep(0.8, 0.86, nV(x / 95 - 11, z / 95 + 4) * 0.5 + 0.5);
+    // 돌판 줄눈·빛 무늬는 셰이더가 그린다(glow.w = 포장 정도). 여기서는 구역마다 살짝 다른 돌 색만
+    const tile = 0.94 + 0.1 * hash2(Math.floor(x / 56), Math.floor(z / 56), 3);
     const t = v2;
     c0 += ((PAVE1[0] + (PAVE2[0] - PAVE1[0]) * t) * tile - c0) * pave;
     c1 += ((PAVE1[1] + (PAVE2[1] - PAVE1[1]) * t) * tile - c1) * pave;
@@ -87,6 +90,7 @@ export function surfaceColor(x, z, h, ny, w, col, glow) {
 
   const g = ga * (1 - rockAmt) * (1 - sand) * (1 - snow) * (1 - pave) * (h > 0.5 ? 1 : 0);
   glow[0] = lr * g; glow[1] = lg * g; glow[2] = lb * g;
+  glow[3] = pave;
 }
 
 /**
@@ -118,8 +122,8 @@ export function buildChunk(x0, z0, size, res, detail) {
   const pos = new Float32Array(vCount * 3);
   const nor = new Float32Array(vCount * 3);
   const col = new Float32Array(vCount * 3);
-  const glw = new Float32Array(vCount * 3);
-  const c3 = [0, 0, 0], g3 = [0, 0, 0];
+  const glw = new Float32Array(vCount * 4); // 생물발광 rgb + 포장 정도
+  const c3 = [0, 0, 0], g3 = [0, 0, 0, 0];
   let v = 0;
   for (let j = 0; j < n; j++) {
     for (let i = 0; i < n; i++) {
@@ -133,7 +137,7 @@ export function buildChunk(x0, z0, size, res, detail) {
       nor[v * 3] = nx / l; nor[v * 3 + 1] = ny / l; nor[v * 3 + 2] = nz / l;
       surfaceColor(x0 + i * step, z0 + j * step, h, ny / l, W.subarray((j * n + i) * RC, (j * n + i + 1) * RC), c3, g3);
       col[v * 3] = c3[0]; col[v * 3 + 1] = c3[1]; col[v * 3 + 2] = c3[2];
-      glw[v * 3] = g3[0]; glw[v * 3 + 1] = g3[1]; glw[v * 3 + 2] = g3[2];
+      glw[v * 4] = g3[0]; glw[v * 4 + 1] = g3[1]; glw[v * 4 + 2] = g3[2]; glw[v * 4 + 3] = g3[3];
       v++;
     }
   }
@@ -142,7 +146,8 @@ export function buildChunk(x0, z0, size, res, detail) {
   const edge = (i, j) => {
     const src = j * n + i;
     pos[v * 3] = pos[src * 3]; pos[v * 3 + 1] = pos[src * 3 + 1] - drop; pos[v * 3 + 2] = pos[src * 3 + 2];
-    for (let k = 0; k < 3; k++) { nor[v * 3 + k] = nor[src * 3 + k]; col[v * 3 + k] = col[src * 3 + k]; glw[v * 3 + k] = glw[src * 3 + k]; }
+    for (let k = 0; k < 3; k++) { nor[v * 3 + k] = nor[src * 3 + k]; col[v * 3 + k] = col[src * 3 + k]; }
+    for (let k = 0; k < 4; k++) glw[v * 4 + k] = glw[src * 4 + k];
     v++;
   };
   for (let i = 0; i < n; i++) edge(i, 0);

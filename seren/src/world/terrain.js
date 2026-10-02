@@ -11,17 +11,19 @@ const RES_LOW = 16; // 먼 청크(2 km 이상)는 성기게
 
 const vert = /* glsl */ `
 ${CURVE_GLSL}
-attribute vec3 glow;
+attribute vec4 glow;
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying vec3 vColor;
 varying vec3 vGlow;
+varying float vPave;
 void main() {
   vec4 wp = modelMatrix * vec4(position, 1.0);
   vWorld = wp.xyz;
   vNormal = normal;
   vColor = color;
-  vGlow = glow;
+  vGlow = glow.xyz;
+  vPave = glow.w;
   gl_Position = projectionMatrix * viewMatrix * vec4(curveWorld(wp.xyz), 1.0);
 }`;
 
@@ -32,6 +34,7 @@ varying vec3 vWorld;
 varying vec3 vNormal;
 varying vec3 vColor;
 varying vec3 vGlow;
+varying float vPave;
 uniform vec3 uWaterDeep;
 uniform vec3 uWaterShallow;
 
@@ -43,8 +46,31 @@ void main() {
   float meso = vnoise(xz * 0.031);
   float near = smoothstep(160.0, 25.0, dist);
   float micro = (vnoise(xz * 0.45) - 0.5) * near + (vnoise(xz * 2.1) - 0.5) * smoothstep(30.0, 5.0, dist) * 0.6;
-  vec3 alb = vColor * (0.8 + 0.28 * macro + 0.14 * meso + 0.22 * micro);
+  float pv = clamp(vPave, 0.0, 1.0);
+  vec3 alb = vColor * mix(0.8 + 0.28 * macro + 0.14 * meso + 0.22 * micro, 0.97 + 0.06 * macro, pv);
   float ao = mix(0.7, 1.0, N.y);
+  // 도시의 포장: 3.5 m 돌판 줄눈 + 판마다 다른 결, 28 m 마다 넓은 띠와 빛 새김 (멀어지면 고르게 흐려짐)
+  vec3 paveEm = vec3(0.0);
+  if (pv > 0.02) {
+    vec2 q = xz / 3.5;
+    vec2 f = fract(q), fw = fwidth(q);
+    float fd = clamp(1.3 - max(fw.x, fw.y) * 2.4, 0.0, 1.0);
+    float e = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+    float seam = 1.0 - smoothstep(0.025, 0.025 + max(fw.x, fw.y) * 1.5, e);
+    float slab = hash12(floor(q));
+    alb *= 1.0 + ((slab - 0.5) * 0.12 - seam * 0.3) * fd * pv - 0.03 * (1.0 - fd) * pv;
+    vec2 Q = xz / 28.0;
+    vec2 F = abs(fract(Q) - 0.5) * 28.0, FW = fwidth(Q) * 28.0;
+    float fwm = max(FW.x, FW.y), dm = max(F.x, F.y);
+    float bandW = smoothstep(12.6 - fwm, 12.6, dm); // 칸 가장자리 1.4 m 띠 (이웃 칸과 합쳐 2.8 m)
+    float fd2 = clamp(1.2 - fwm * 0.25, 0.0, 1.0);
+    alb *= 1.0 - bandW * 0.16 * pv * fd2;
+    // 띠 가운데 가는 빛줄 (14 m 마다 끊어지며 숨 쉬듯 밝아진다)
+    float cl = smoothstep(13.8 - fwm * 0.8, 13.8, dm);
+    float seg = step(0.45, hash12(floor(Q * 2.0) + 3.7));
+    float fdl = clamp(1.5 - fwm * 2.5, 0.0, 1.0);
+    paveEm = vec3(0.45, 0.95, 0.9) * cl * seg * pv * fdl * (0.12 + uGlow * 0.5) * (0.6 + 0.4 * sin(uTime * 1.3 + dot(floor(Q), vec2(1.7, 2.3))));
+  }
 
   // 물속: 깊이에 따라 빛이 흡수된다
   float depth = -vWorld.y;
@@ -56,7 +82,7 @@ void main() {
     alb = mix(alb, uWaterDeep * 0.4, k);
   }
 
-  vec3 col = shadeLit(alb, N, ao);
+  vec3 col = shadeLit(alb, N, ao) + paveEm;
 
   // 물가의 거품
   float wave = sin(uTime * 0.9 + dot(xz, vec2(0.08, 0.05))) * 0.35;
@@ -214,7 +240,7 @@ export class Terrain {
     g.setAttribute('position', new THREE.BufferAttribute(d.pos, 3));
     g.setAttribute('normal', new THREE.BufferAttribute(d.nor, 3));
     g.setAttribute('color', new THREE.BufferAttribute(d.col, 3));
-    g.setAttribute('glow', new THREE.BufferAttribute(d.glw, 3));
+    g.setAttribute('glow', new THREE.BufferAttribute(d.glw, 4));
     g.setIndex(this._resFor(n.size) === RES ? this.index : this.indexLow);
     const hs = n.size / 2;
     const cy = (d.minH + d.maxH) / 2;

@@ -235,8 +235,8 @@ void main() {
     vec3 irid = 0.5 + 0.5 * cos(6.2831853 * (frm * 1.3 + dot(N, vec3(0.3, 0.2, 0.1)) + vec3(0.0, 0.33, 0.67)));
     vec3 refl = skyBase(normalize(vec3(Rm.x, abs(Rm.y) * 0.8 + 0.05, Rm.z)));
     col = mix(col, refl * (0.55 + 0.6 * alb) + irid * 0.06, uTech.z * (0.18 + 0.82 * frm));
-    col += uSunColor * pow(max(dot(Rm, uSunDir), 0.0), 140.0) * uTech.z * 1.4;
-    techEm = uTechCol * tline * detail * uTech.y * (0.22 + glowT * 1.3);
+    col += uSunColor * pow(max(dot(Rm, uSunDir), 0.0), 140.0) * uTech.z * 0.35;
+    techEm = uTechCol * tline * detail * uTech.y * (0.2 + glowT * 0.75);
   }
 #endif
 #ifdef USE_FACADE
@@ -260,7 +260,7 @@ void main() {
     vec3 skyR = skyBase(normalize(vec3(Rg.x, abs(Rg.y) * 0.7 + 0.03, Rg.z)));
     float frs = 0.1 + 0.9 * pow(1.0 - max(dot(N, V), 0.0), 4.0);
     vec3 tint = mix(vec3(0.025, 0.06, 0.09), vec3(0.07, 0.1, 0.12), vSeed) + hash12(vec2(id.y, vSeed * 91.0)) * 0.025;
-    vec3 glass = tint + skyR * mix(0.32, 1.0, frs) + uSunColor * pow(max(dot(Rg, uSunDir), 0.0), 240.0) * 2.4;
+    vec3 glass = tint + skyR * mix(0.2, 0.78, frs) + uSunColor * pow(max(dot(Rg, uSunDir), 0.0), 240.0) * 0.6;
     float room = hash12(vec2(floor(id.x / 2.0), id.y) + vSeed * 37.0);
     float floorOn = step(0.84, hash12(vec2(id.y, vSeed * 13.0))) * step(0.25, room);
     float glowK = clamp(uGlow, 0.0, 1.0);
@@ -282,7 +282,24 @@ void main() {
     }
     vline *= clamp(1.6 - max(fw.x, fw.y) * 3.0, 0.0, 1.0);
     vec3 accC = mix(vec3(0.5, 0.95, 0.9), vec3(1.0, 0.8, 0.45), step(0.8, vSeed));
-    em += accC * vline * (0.2 + glowK * 0.9);
+    em += accC * vline * (0.18 + glowK * 0.5);
+    // 1층: 상점 — 넓은 유리 너머 불 켜진 가게와 간판 띠 (낮에도 은은하게)
+    float hb = vWorld.y - vBase - 1.5;
+    if (hb > -0.5 && hb < 6.4 && ftype < 3.5) {
+      vec2 sc = vec2(vFac.x / 3.4, hb / 5.2);
+      vec2 sf = fract(sc);
+      vec2 sfw = max(fwidth(sc), vec2(1e-4));
+      float saa = clamp(1.3 - max(sfw.x, sfw.y) * 2.0, 0.0, 1.0);
+      float sg = smoothstep(0.035, 0.035 + sfw.x, sf.x) * (1.0 - smoothstep(0.965 - sfw.x, 0.965, sf.x)) * smoothstep(0.02, 0.05, sc.y) * (1.0 - smoothstep(0.76, 0.79, sc.y));
+      sg = mix(0.62, sg, saa);
+      float sh = hash12(vec2(floor(sc.x), vSeed * 17.0));
+      vec3 shop = mix(vec3(1.0, 0.82, 0.6), mix(vec3(0.6, 0.9, 1.0), vec3(1.0, 0.7, 0.85), step(0.62, sh)), step(0.35, sh));
+      col = mix(col, shop * 0.22 + skyR * 0.12, sg);
+      em += shop * sg * (0.2 + glowK * 0.45);
+      float signB = step(0.83, sc.y) * step(sc.y, 0.96);
+      em += shop * signB * step(0.45, hash12(vec2(floor(sc.x / 3.0), vSeed))) * (0.3 + glowK * 0.7);
+      glassMaskF = max(glassMaskF, sg);
+    }
   }
 #endif
   em += techEm * (1.0 - glassMaskF); // 문양 빛은 유리 위에는 그리지 않는다
@@ -292,6 +309,9 @@ void main() {
   float ln2 = smoothstep(0.05, 0.0, abs(fract(atan(vLocal.z, vLocal.x) * 3.0) - 0.5) - 0.46);
   em += uLineColor * max(ln, ln2 * 0.6) * (0.5 + uGlow);
 #endif
+  // 햇빛 받은 흰 벽이 블룸 문턱을 넘어 「빛나는」 것처럼 보이지 않게: 반사광만 부드럽게 눌러 준다 (빛은 em 으로 따로)
+  float litL = dot(col, vec3(0.2126, 0.7152, 0.0722));
+  col *= 1.0 / (1.0 + max(litL - 0.72, 0.0) * 1.15);
   col += em;
   col = applySilence(col, silenceAt(vWorld.xz));
   col = applyFog(col, vWorld);

@@ -44,13 +44,17 @@ src/
            farlands(먼 땅의 구조물) colossus(걷는 도시 거신) hologram(글자 홀로그램) lights(점광원 무리)
            ── 쓰임이 있는 건물 (v0.3) ──
            facilities(시설 9종 모델·자리·간판·움직임) boats(나룻배·연락선 모델)
+           ── 도시의 살 (v0.4) ──
+           cityfabric(구역 격자·필지·건물·기단·공중다리·거리·소품·광장·공원·문·인스턴스 그리기)
+           city-arch(건물 모양 27가지 hi/lo + 문 + 거리 소품 모델) streams(호버 차·걷는 아웬, GPU 차선)
   player/  player(이동 상태기계) avatar(모델·절차 애니메이션) camera-rig
   game/    game(중심·모드·입력·저장) state(저장 형식) quests dialogue actions language npcs resonance discovery
            services(시설의 쓰임: 시설지기 카드·연락선·나룻배·온실·날씨·탐지기)
+           interiors(건물 들어가기: 로비·사람·빛 승강기·하늘 전망대, 충돌체 갈아 끼우기)
            world-events(일식·별비·축제·부탁) director(연출 카메라)
   ui/      ui(HUD·대화·카드·메뉴·타이틀·터치) map(지도·안개) journal settings
   data/    places(장소·평탄화) currents(해류 경로) story(인물·대사·대화·퀘스트·메아리·글자돌·도감·모아) lexicon(아웬어 사전)
-           facilities(시설 목록·종류·옛 책)
+           facilities(시설 목록·종류·옛 책) city(도시 구역·양식·색조·포장 pavedAt)
 ```
 - 좌표: 1 = 1 m, Y 위, **−Z 가 북쪽**(우르 방향), +X 동쪽. 플레이어 yaw 는 `atan2(dx, dz)`, 카메라 yaw 0 은 북쪽을 봄.
 - 모든 지형 높이는 `heightAt(x, z)` 하나에서 나옵니다(렌더·충돌·배치·지도 공통). 지형을 바꾸면 `node tools/heightmap.mjs` 로 확인하세요. 장소 주변은 `places.js` 의 `flat` 으로 평탄화됩니다.
@@ -69,6 +73,9 @@ src/
 - **저장 항목**: `game/state.js` 의 `defaultState()` 에 추가(불러올 때 빠진 항목은 기본값으로 채워짐).
 - **시설**: `data/facilities.js` 의 `FACILITIES` 에 한 줄(`at` 장소 + `off`/`polar`/`toward`). 자리에 다른 구조물이 있으면 빌더가 나선으로 밀어서 빈 곳을 찾습니다. 새 종류는 `FACILITY_TYPES` + `world/facilities.js` 의 `_종류` 모델 + `game/services.js` 의 `_종류` 카드. 시설지기는 `npcs` 에 `service` 가 붙은 인물(`fac-시설id`)이라 `_findTarget` 이 「시설지기 · 하는 일」로 보여 줍니다.
 - **옛 책**: `data/facilities.js` 의 `BOOKS` (`at` = 서고 id, `word` = 읽으면 배우는 단어).
+- **도시 구역**: `data/city.js` 의 `ZONES` 에 한 줄(머리 주석에 항목 설명). `style`/`sectors` 는 `STYLES` 의 양식(모양 → 가중치). 새 건물 모양은 `city-arch.js` 의 `cityArchetypes()` 에 `A.이름 = { hi, lo }`(단위 상자 −1..1 × 0..1, `loft`/`cap`/`solid` 로) + `SIZE.이름`(필지 반지름·높이 → 배율·충돌) + 땅에 닿는 평면이 원이 아니면 `cityfabric.js` 의 `PLAN`. 들어갈 수 있게 하려면 `ENTER` 에, 낮은 건물이면 `LOWKIND` 에.
+- **거리 소품**: `city-arch.js` 의 `propArchetypes()` (미터 단위) + `cityfabric.js` 의 `_streetProps`/`_plaza`/`_park` 에서 배치. 바닥판(옆으로만 키움)은 `FLAT` 에.
+- **실내 쓰임**: `game/interiors.js` 의 `PURPOSE`(가구·사람·안내지기 대사)와 `BY_STYLE`(양식 → 쓰임).
 
 ## 큰 세계에서 알아 둘 것 (v0.2)
 - 세계는 ±60 km (지형 쿼드트리 뿌리 131 km). 먼 땅은 `regions.js` 의 `far: true` 지역 + `heightfield.js` 의 `farMask` 로 바다 위에 올라옵니다.
@@ -86,7 +93,17 @@ src/
 - `engine.adapt()` 가 프레임 시간에 따라 해상도 배율을 0.55~1.0 으로 조절합니다.
 - `?debug=1` 로 calls/tris 를 보며 작업하세요. v0.2 기준 낮음 품질 약 63~83만 삼각형, 330~560 그리기 (도시·배·먼 땅이 늘어남). v0.3 시설을 더한 뒤 하모네아 지상 360~390 그리기·74~89만 삼각형, 이슬터 280 그리기.
 - 시설(`facilities.js`)은 4.5 km 밖에서 숨기고, 1.4 km 밖에서는 합친 본체만(움직이는 장치·유리·배는 가까이서만), 간판은 900 m 안에서만. 매 프레임 44곳 거리만 계산합니다.
+- v0.4 도시를 더한 뒤 보통 품질 하모네아 거리 높이에서 그리기 290~420회·삼각형 200~230만. 도시 생성 약 3초, 충돌체 약 4만. 품질은 `cityfabric` 의 `nearR`·`farR`·`propR`·`density`, `streams` 의 `cap`·`wcap` 으로 조절.
 - 배·돌보미·다리는 모두 인스턴스(그리기 1회). 하모네아 구역은 THREE.LOD(4.2 km 밖은 단순 모델), 큰 탑·안쪽 탑만 움직이는 관/홀로그램을 따로 그리고 나머지는 합친 모델에 굳혀 둡니다.
+
+## 도시 (v0.4)에서 알아 둘 것
+- 건물은 모양마다 그리기 2회: `hi`(카메라 둘레 `nearR` 안, 카메라가 45 m 움직이면 다시 고름) + `lo`(모든 인스턴스, 정점 셰이더 `USE_CUT` 이 `nearR` 안·`farR` 밖을 접어 버림). 두 경계의 중심은 같은 점(`_last`)이어야 틈이 생기지 않는다.
+- 건물 외벽은 `litMaterial({ facade: true, tech })` — 정점 `fac` = [단면 둘레 길이, 외벽 종류(0 없음 1 커튼월 2 띠창 3 점창 4 첨탑)], `base`(땅 높이). 문양 빛은 유리 위에 그리지 않는다(`glassMaskF`).
+- 모든 `litMaterial` 은 반사광의 밝기가 0.72 를 넘으면 부드럽게 누른다(블룸 문턱 1.1 아래). 빛나야 하는 것은 em(emissive·정점 emit·창 불빛)으로 넣을 것.
+- 피할 곳: 장소·인물·글자돌·메아리·시설·빛길 역은 `_excl`(원), 빛길 관·낮은 해류 밑은 `_corr`(높이 제한 통로, `_under(x, z, R)` = 그 아래로만 지을 수 있는 높이).
+- 도시 충돌체에는 `city: true`. 들어간 건물은 `openShell` 이 문 뚫린 모델로 바꾸고 `interiors` 가 충돌체를 바닥·벽·승강기로 갈아 끼우며, 나오면 되돌린다.
+- 지형 정점의 `glow.w` = 포장 정도(`pavedAt`). 지형 셰이더가 돌판 줄눈·띠·빛 새김을 그린다.
+- 점유 지도를 보고 싶으면 페이지 안에서 `SEREN.game.city.list`(모양 → [x, y, z, sx, sy, sz, rot, r, g, b]…)·`plist`(소품 → [x, y, z, 배율, 방향]…)를 읽으면 된다.
 
 ## 지켜야 할 것
 - 기존 저장 파일이 깨지지 않게: 저장 형식을 바꾸면 `state.js` 의 `migrate()` 를 손보세요.
