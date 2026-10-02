@@ -107,6 +107,13 @@ export const WORDS = [
   { id: 'tired', ko: '지치다', notes: [7, 0] },
   { id: 'gift', ko: '선물', notes: [9, 3] },
   { id: 'rest', ko: '쉬다', notes: [4, 2] },
+  // 도시의 일 (v0.7: 건물마다 실제로 하는 일에서 배운다)
+  { id: 'share', ko: '나누다', notes: [0, 3, 1] },
+  { id: 'old', ko: '옛', notes: [4, 1, 3] },
+  { id: 'story', ko: '이야기', notes: [6, 2, 0] },
+  { id: 'heal', ko: '낫다', notes: [2, 6, 4] },
+  { id: 'build', ko: '짓다', notes: [3, 0, 5] },
+  { id: 'carry', ko: '나르다', notes: [0, 5, 2] },
 ];
 
 export const WORD = Object.fromEntries(WORDS.map((w) => [w.id, w]));

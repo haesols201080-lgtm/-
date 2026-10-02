@@ -308,14 +308,27 @@ export class UI {
   }
 
   // ── 카드 ─────────────────────────────
-  _card(inner, onClose) {
+  // 한 번에 하나: 새 카드를 열면 앞의 카드는 닫힌다(앞 카드의 onClose 도 불린다).
+  // opts.keys === false 면 E·스페이스·엔터로 닫히지 않는다 — 그 키를 쓰는 놀이 카드. wrap.close() 는 그 카드만 닫는다.
+  _card(inner, onClose, opts = {}) {
+    if (this._cardWrap) { this.closeCard(); if (this._cardWrap) this._cardWrap.close(); }
     const wrap = $(`<div class="card-wrap"><div class="card glass">${inner}<div><button class="btn" data-close-card>닫기</button></div></div></div>`);
-    const close = () => { wrap.remove(); this.game.setMode('play'); onClose && onClose(); };
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      wrap.remove();
+      if (this._cardWrap === wrap) { this._cardWrap = null; this._cardClose = null; this.cardKeys = true; this.game.setMode('play'); }
+      onClose && onClose();
+    };
     wrap.querySelector('[data-close-card]').addEventListener('click', close);
     wrap.addEventListener('pointerdown', (e) => { if (e.target === wrap) close(); });
     this.root.appendChild(wrap);
     this.game.setMode('card');
+    this._cardWrap = wrap;
     this._cardClose = close;
+    this.cardKeys = opts.keys !== false;
+    wrap.close = close;
     return wrap;
   }
 
@@ -338,10 +351,11 @@ export class UI {
   /**
    * 시설 카드: 할 수 있는 일을 단추로.
    * items: [{ label, sub, disabled, primary, onClick, stay }] — stay 면 누른 뒤에도 카드를 닫지 않는다
+   * opts: { onClose, keys } (_card 참고)
    */
-  serviceCard(kicker, title, body, items, extra = '') {
+  serviceCard(kicker, title, body, items, extra = '', opts = {}) {
     const html = `<div class="kicker">${kicker}</div><h2>${title}</h2>${body ? `<p>${body}</p>` : ''}${extra}<div class="svc">${items.map((it, i) => it.head ? `<div class="svc-h">${it.head}</div>` : `<button class="btn svc-b${it.primary ? ' primary' : ''}" data-i="${i}" ${it.disabled ? 'disabled' : ''}><b>${it.label}</b>${it.sub ? `<small>${it.sub}</small>` : ''}</button>`).join('')}</div>`;
-    const wrap = this._card(html);
+    const wrap = this._card(html, opts.onClose, opts);
     wrap.querySelector('.card').classList.add('svc-card');
     wrap.querySelectorAll('[data-i]').forEach((b) => b.addEventListener('click', (e) => {
       e.stopPropagation();

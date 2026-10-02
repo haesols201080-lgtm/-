@@ -42,6 +42,7 @@ export const INDOOR = {
   garden: { label: '정원지기', verb: '꽃을 돌보는 중' },
   work: { label: '일꾼', verb: '일하는 중' },
   guest: { label: '손님', verb: '둘러보는 중' },
+  curator: { label: '전시 해설사', verb: '전시를 안내하는 중', play: 'tour' },
 };
 
 // 주민의 말 (단어 id 배열 + 한국어) — 하는 일마다, 그리고 시각·친한 정도에 따라
@@ -132,6 +133,7 @@ export const CIT_LINES = {
   garden: [{ words: ['flower', 'grow', 'here', '.'], ko: '여기서 꽃이 자라.' }],
   work: [{ words: ['work', 'good', '.', 'make', 'all'], ko: '일은 좋아. 모두를 빚지.' }],
   guest: [{ words: ['day', 'good', '.'], ko: '좋은 날이야.' }],
+  curator: [{ words: ['old', 'story', 'here', '.'], ko: '옛 이야기가 여기 있어요.' }, { words: ['see', 'memory', '.'], ko: '기억을 보세요.' }],
   // 친한 사이
   friend: [
     { words: ['friend', '!', 'you', 'come', 'again'], ko: '벗이여! 또 왔구나.' },

@@ -73,6 +73,15 @@ export class WorldEvents {
     if (g.state.flags.festival && g.world.atmos.state.night > 0.6) this._fireworks(dt);
   }
 
+  /** 하늘 일정 (별귀 탑): 오늘 밤 별비가 오는가 · 일식이 가까운가 */
+  forecast() {
+    const g = this.game, c = g.world.clock, day = c.day;
+    const rnd = mulberry32(day * 977 + 5);
+    const stars = g.state.flags.wxStars || (day >= 1 && (rnd() < 0.45 || g.state.flags.forceStars));
+    const ecl = c.eclipseNear > 0.05 ? ' · 우르가 해에 다가가고 있다 — 곧 일식' : '';
+    return (stars ? '오늘 밤 별비가 내린다 · 떨어진 별씨를 찾아가 보자' : '오늘 밤은 별비가 없다') + ecl;
+  }
+
   /** 별씨가 떨어진다 */
   starfall(rnd = Math.random) {
     const g = this.game;

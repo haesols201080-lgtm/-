@@ -405,6 +405,7 @@ export class Citizens {
       meal: { label: '함께 먹기', sub: '식탁에 앉아 저녁을 나눈다 (조금 쉰다)', fn: () => this.meal(p) },
       kidplay: { label: '같이 놀기', sub: '아이들과 빙글빙글', fn: () => this.kidPlay(p) },
       lesson: { label: '수업 듣기', sub: '선생님에게 새 말을 배운다 (하루 한 번)', fn: () => this.lesson(p) },
+      tour: { label: '안내 받기', sub: '해설사가 전시를 차례로 이야기해 준다', fn: () => this.game.venues && this.game.venues.tour() },
       heal: { label: '울림 고르기', sub: '치유사가 마음의 울림을 고른다', fn: () => this.heal(p) },
       trade: null,
     }[R.play];
@@ -412,6 +413,7 @@ export class Citizens {
   }
 
   talk(p) {
+    if (this.game.venues) this.game.venues.onTalk(p);
     const g = this.game;
     const day = Math.floor(g.world.clock.time);
     const first = this.S.talked[p.key] !== day;
@@ -791,6 +793,8 @@ export class Citizens {
       case 'sing': armL = armR = 0.7 + Math.sin(ph * 2) * 0.5; a.speak = 0.7; head = -0.15; break;
       case 'garden': kneel = 0.9; armL = 0.9; armR = 0.85; head = 0.35; hold = 7; break;
       case 'work': armL = armR = 0.9; hold = Math.sin(ph * 0.4) > 0 ? 5 : 0; break;
+      case 'guest': if (A.loop) { const [lx, lz, lr, dir, p0, slow] = A.loop; const ang = p0 + dir * T * (slow || 1) / Math.max(2, lr); x = lx + Math.cos(ang) * lr; z = lz + Math.sin(ang) * lr; yaw = Math.atan2(-Math.sin(ang) * dir, Math.cos(ang) * dir); armL = 0.15 + Math.sin(ph * 6) * 0.25; armR = 0.15 - Math.sin(ph * 6) * 0.25; if (slow && Math.sin(T * 0.4 + p0) > 0.3) { x = p.pos.x; z = p.pos.z; head = 0.25; armL = armR = 0.1; } } break;
+      case 'curator': armR = 0.3 + Math.max(0, Math.sin(ph * 0.9)) * 1.2; head = -0.05; if (Math.sin(ph * 0.9) > 0.8) a.speak = 0.5; break;
       default: break;
     }
     if (p.engaged) { yaw = Math.atan2(this.game.player.pos.x - p.pos.x, this.game.player.pos.z - p.pos.z); }

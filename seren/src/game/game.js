@@ -45,6 +45,8 @@ import { WorldEvents, Requests } from './world-events.js';
 import { Director } from './director.js';
 import { Services } from './services.js';
 import { Interiors } from './interiors.js';
+import { Venues } from './venues.js';
+import { Outdoors } from './outdoors.js';
 import { Citizens } from './citizens.js';
 import { UI } from '../ui/ui.js';
 import { MapData } from '../ui/map.js';
@@ -105,7 +107,9 @@ export class Game {
     this.mapData = new MapData(this);
     this.requests = new Requests(this);
     this.services = new Services(this);
+    this.venues = new Venues(this);
     this.interiors = new Interiors(this);
+    this.outdoors = new Outdoors(this);
     this.citizens = new Citizens(this);
 
     this.particles = new Particles(this.engine.scene);
@@ -344,7 +348,7 @@ export class Game {
         this.rig._applyOverride();
         this.rig.override = null;
       }
-      this.avatar.root.visible = this.player.state !== 'ride';
+      this.avatar.root.visible = this.player.state !== 'ride' || !!(this.player.ride && this.player.ride.showAvatar);
       this.director.update(dt);
       this._effects(dt);
       this.dialogue.update(dt);
@@ -356,6 +360,8 @@ export class Game {
       this.requests.update(dt);
       this.services.update(dt);
       this.interiors.update(dt);
+      this.venues.update(dt);
+      this.outdoors.update(dt);
       this.citizens.update(dt);
       if ((this._scanT = (this._scanT || 0) - dt) < 0) { this._scanT = 0.5; this._techScan(); }
       this._hud(dt);
@@ -394,7 +400,7 @@ export class Game {
       if (i.pressed('interact') || i.pressed('jump') || i.pressed('confirm') || i.pressed('click')) this.dialogue.next();
       return;
     }
-    if (m === 'card') { if (i.pressed('interact') || i.pressed('confirm') || i.pressed('jump')) this.ui.closeCard(); return; }
+    if (m === 'card') { if (this.ui.cardKeys !== false && (i.pressed('interact') || i.pressed('confirm') || i.pressed('jump'))) this.ui.closeCard(); return; }
     if (m !== 'play' || this.director.active) return;
     if (this.player.state === 'down') {
       if (i.move.x || i.move.y || i.pressed('jump') || i.pressed('interact') || i.pressed('tap') || i.pressed('click')) {
@@ -425,6 +431,10 @@ export class Game {
     if (act) return act;
     const inside = this.interiors.target(p);
     if (inside && inside.kind !== 'door') return inside;
+    const ven = this.venues.target(p);
+    if (ven) return ven;
+    const out = this.interiors.cur && this.interiors._inside(p.x, p.z) ? null : this.outdoors.target(p);
+    if (out) return out;
     const npc = this.npcs.nearest(p, 5.5, (n) => !n.ambient);
     if (npc && npc.service === 'lobby') return { kind: 'lobby', o: npc, label: '안내지기 · 이 건물 이야기', short: '안내' };
     if (npc && npc.service) { const F = this.facilities.byId.get(npc.service); return { kind: 'facility', o: F, label: `${F.info.keeper} · ${F.info.verb}`, short: F.info.name }; }
@@ -448,6 +458,8 @@ export class Game {
     if (t.kind === 'facility') { this.focusOn(t.o.npc); return this.services.open(t.o); }
     if (t.kind === 'unfly') return this.services.endFly();
     if (t.kind === 'door') return this.interiors.enter(t.o);
+    if (t.kind === 'venue') return this.venues.use(t);
+    if (t.kind === 'outdoor') return this.outdoors.use(t);
     if (t.kind === 'exit') return this.interiors.exit();
     if (t.kind === 'lift') return this.interiors.up();
     if (t.kind === 'liftdown') return this.interiors.down();

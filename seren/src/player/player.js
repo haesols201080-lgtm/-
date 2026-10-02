@@ -56,6 +56,7 @@ export class Player {
     this.canGlide = true;
     this.canSkim = true;
     this.upgrades = { glide: 0, skim: 0, rise: 0 };
+    this.mods = { speed: 1, glide: 1 }; // 먹은 것·치유의 기운 (game/venues.js)
     this.current = null; // 해류 타는 중
     this.events = []; // 'land', 'jump', 'glideStart' 등 이번 프레임 사건
     this.impact = 0;
@@ -174,7 +175,7 @@ export class Player {
     this._carry(dt);
     const sprint = ctl && (ctl.isHeld('sprint') || (ctl.lastDevice === 'touch' && wishLen > 0.95 && this._fullTilt > 1.0));
     this._fullTilt = wishLen > 0.95 ? (this._fullTilt || 0) + dt : 0;
-    let maxS = (sprint ? TUNING.sprintSpeed : TUNING.runSpeed) * wishLen;
+    let maxS = (sprint ? TUNING.sprintSpeed : TUNING.runSpeed) * wishLen * this.mods.speed;
     if (this.stumble > 0) maxS *= 0.3;
 
     // 경사
@@ -328,7 +329,7 @@ export class Player {
     // 높은 곳: 공기가 옅어 저항이 줄고, 최고 속도가 올라간다 (궤도 낙하)
     const rho = airDensity(this.pos.y);
     const vmax = Math.min(620, T.glideMax / Math.sqrt(rho));
-    const a = -G * gs * Math.sin(this.pitch) - (T.glideDrag * (1 - up * 0.15)) * rho * this.glideSpeed * this.glideSpeed;
+    const a = -G * gs * Math.sin(this.pitch) - (T.glideDrag * (1 - up * 0.15) / this.mods.glide) * rho * this.glideSpeed * this.glideSpeed;
     this.glideSpeed = Math.max(T.glideMin, Math.min(vmax, this.glideSpeed + a * dt));
     if (this.glideSpeed > T.glideMax * 1.2 && rho > 0.5) this.glideSpeed -= (this.glideSpeed - T.glideMax) * Math.min(1, dt * 0.6);
 

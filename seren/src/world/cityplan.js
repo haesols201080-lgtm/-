@@ -255,7 +255,7 @@ T[U.CIV] = (B, P) => {
   const { L, D } = B, r = P.rnd;
   const kinds = ['hall', 'school', 'observatory', 'hall', 'gate'];
   const kind = kinds[B.variant % kinds.length];
-  const purpose = kind === 'school' ? 'school' : kind === 'observatory' ? (B.variant % 2 ? 'heal' : 'library') : 'hall';
+  const purpose = kind === 'school' ? 'school' : kind === 'observatory' ? (B.variant % 2 ? 'heal' : 'library') : B.variant % 3 === 0 ? 'museum' : 'hall';
   const hw = Math.min(30, L * 0.32), hd = Math.min(19, D * 0.27);
   const bv = D - 4 - hd;
   P.bldg(B, kind, L / 2, bv, hw, hd, kind === 'observatory' ? Math.max(24, hw * 1.0) : kind === 'gate' ? 34 + r() * 22 : 16 + r() * 10, { door: -1, use: purpose });
@@ -312,7 +312,7 @@ T[U.ENE] = (B, P) => {
   const { L, D } = B, r = P.rnd;
   const rr = Math.min(17, D * 0.28, L * 0.18);
   if (B.variant % 3 === 0) P.bldg(B, 'coiltower', L * 0.36, D / 2, rr * 1.1, rr * 1.1, 60 + r() * 50, { use: 'none' });
-  else P.bldg(B, 'reactor', L * 0.36, D / 2, rr, rr, rr * 1.3, { use: 'plant' });
+  else P.bldg(B, 'reactor', L * 0.36, D / 2, rr, rr, rr * 1.3, { use: 'plant', door: 1 });
   const cr = Math.min(11, D * 0.17);
   P.bldg(B, 'cooler', L * 0.68, D * 0.28, cr, cr, 30 + r() * 14, { use: 'none' });
   P.bldg(B, 'cooler', L * 0.68, D * 0.72, cr, cr, 30 + r() * 14, { use: 'none' });
@@ -488,7 +488,7 @@ export function layoutCore(B, P, NK) {
     const ty = (kr * 7 + slot * 3 + B.s) % 4;
     if (outer && slot === Math.floor(nS / 2)) {
       const cafe = (B.s + kr) % 2 === 0;
-      P.bldg(B, cafe ? 'dome' : 'hall', u, v, cafe ? 9 : 11, cafe ? 9 : 9, cafe ? 9 : 12, { door: -1, use: cafe ? 'market' : 'hall' });
+      P.bldg(B, cafe ? 'dome' : 'hall', u, v, cafe ? 9 : 11, cafe ? 9 : 9, cafe ? 9 : 12, { door: -1, use: cafe ? 'cafe' : (B.s % 3 === 0 ? 'museum' : 'hall') });
       continue;
     }
     if (ty === 0 || ty === 3) {

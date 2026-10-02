@@ -1,10 +1,11 @@
-// 일지: 이야기 · 단어 · 들은 말 · 메아리 · 도감 · 기록
+// 일지: 이야기 · 가방 · 단어 · 들은 말 · 메아리 · 도감 · 기록
 import { QUESTS, ECHOES, CODEX, LINES } from '../data/story.js';
 import { WORDS, WORD } from '../data/lexicon.js';
 import { glyphSVG } from '../game/language.js';
 import { NOTE_COLORS } from '../core/audio.js';
+import { ITEMS, BUFFS, BAG_ORDER } from '../data/venues.js';
 
-const TABS = [['quests', '이야기'], ['words', '단어'], ['heard', '들은 말'], ['echoes', '메아리'], ['codex', '도감'], ['log', '기록']];
+const TABS = [['quests', '이야기'], ['bag', '가방'], ['words', '단어'], ['heard', '들은 말'], ['echoes', '메아리'], ['codex', '도감'], ['log', '기록']];
 
 export class Journal {
   constructor(game) { this.game = game; this.tab = 'quests'; }
@@ -91,6 +92,30 @@ export class Journal {
       h += `<div class="c ${k ? '' : 'locked'}"><h4>${k ? e.name : '???'} <small style="color:var(--ink-faint);font-size:11px">${e.cat}</small></h4><p>${k ? e.text : '아직 가까이서 보지 못했어요.'}</p></div>`;
     }
     c.innerHTML = h + '</div>';
+  }
+
+  /** 가방: 가진 물건과 쓰기 (먹기·지도 결정·기록 읽기), 몸의 기운, 맡은 일 */
+  _bag(c) {
+    const g = this.game, inv = g.state.inv, V = g.state.venue || {};
+    let h = '<div class="section-title">가진 것</div><div class="bag">';
+    let any = false;
+    for (const id of BAG_ORDER) {
+      const n = inv[id] || 0;
+      if (!n && id !== 'starseed') continue;
+      any = true;
+      const I = ITEMS[id];
+      const can = I.use === 'eat' || I.use === 'map' || I.use === 'read';
+      h += `<div class="bag-item"><span class="ic">${I.icon}</span><div class="tx"><b>${I.name} <small>× ${n}</small></b><small>${I.tag} · ${I.desc}</small></div>${can && n ? `<button class="btn" data-use="${id}">${I.use === 'eat' ? '먹기' : I.use === 'read' ? '읽기' : '쓰기'}</button>` : ''}</div>`;
+    }
+    h += '</div>';
+    if (!any) h += '<p class="muted">아직 아무것도 없어요.</p>';
+    const bs = Object.entries(V.buffs || {});
+    if (bs.length) h += `<div class="section-title">몸의 기운</div>${bs.map(([id, t]) => `<p>${BUFFS[id].name} · ${Math.floor(t / 60)}분 ${Math.floor(t % 60)}초 남음</p>`).join('')}`;
+    if (V.job) h += `<div class="section-title">맡은 일</div><p>${V.job.label} · 별씨 ${V.job.reward}</p>`;
+    h += `<div class="section-title">도시에서</div><p>일해서 번 별씨 ${V.earned || 0} · 쓴 별씨 ${V.spent || 0} · 본 전시 ${Object.keys(V.exhibits || {}).length} · 읽은 기록 ${Object.keys(V.archives || {}).length}</p>`;
+    h += '<p class="muted">별씨는 공방(생산 줄)·창고(짐 나누기·배달)·발전소(출력 맞추기)·사무탑(일거리)에서 벌고, 가게·찻집·터미널에서 써요.</p>';
+    c.innerHTML = h;
+    c.querySelectorAll('[data-use]').forEach((b) => b.addEventListener('click', () => { g.venues.useItem(b.dataset.use); const body = c.parentElement; body.innerHTML = ''; this.render(body); }));
   }
 
   _log(c) {

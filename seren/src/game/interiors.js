@@ -27,7 +27,10 @@ const PURPOSE = {
   library: { name: '마을 서고', desc: '결정에 담긴 옛 노래를 빌려 가는 곳.', npc: 3 },
   factory: { name: '빚음 공방', desc: '물질을 노래로 설득해 쓸 것을 빚는다. 공정마다 다른 음이 울린다.', npc: 5 },
   depot: { name: '물류 창고', desc: '도시 곳곳으로 갈 짐을 모으고 나누는 곳.', npc: 5 },
-  terminal: { name: '교통 터미널', desc: '호버 차와 하늘배를 갈아타는 곳.', npc: 7 },
+  terminal: { name: '교통 터미널', desc: '호버 차와 하늘배를 갈아타는 곳. 표를 사면 다른 구역 터미널로 바로 간다.', npc: 7 },
+  cafe: { name: '울림 찻집', desc: '김이 노래하는 차와 든든한 한 상을 짓는 곳. 주문하면 부엌에서 지어 내어 준다.', npc: 6 },
+  museum: { name: '기억 박물관', desc: '아웬의 옛 물건과 노래를 모아 둔 곳. 전시를 살펴보면 옛말을 배운다.', npc: 5 },
+  plant: { name: '공명 발전소', desc: '도시의 빛을 만드는 핵. 일꾼들이 출력을 맞추며 노래한다.', npc: 4 },
 };
 const BY_STYLE = {
   civic: ['hall', 'lab', 'garden', 'school'],
@@ -90,7 +93,7 @@ export class Interiors {
   info(r) {
     if (r.info) return r.info;
     const rnd = mulberry32(Math.floor(r.seed * 1e9));
-    const byUse = { home: ['home'], office: ['office', 'office', 'lab'], market: ['market'], school: ['school'], heal: ['heal'], library: ['library'], hall: ['hall'], factory: ['factory'], depot: ['depot'], lab: ['lab'], terminal: ['terminal'], garden: ['garden'] };
+    const byUse = { home: ['home'], office: ['office', 'office', 'lab'], market: ['market', 'market', 'cafe'], school: ['school'], heal: ['heal'], library: ['library'], hall: ['hall', 'museum'], factory: ['factory'], depot: ['depot'], lab: ['lab'], terminal: ['terminal'], garden: ['garden'], cafe: ['cafe'], museum: ['museum'], plant: ['plant'] };
     const list = byUse[r.use] || BY_STYLE[r.style] || BY_STYLE.capital;
     const pid = list[Math.floor(rnd() * list.length)];
     const P = PURPOSE[pid];
@@ -245,20 +248,24 @@ export class Interiors {
     // 화분 나무
     const tree = (x, z, s = 1) => {
       cur.cols.push(this.game.world.colliders.add({ type: 'cyl', x, z, r: 0.7 * s, y0: fy - 1, y1: fy + 0.8 * s, city: true }));
+      // 실내 화분: 빛 웅덩이 그릇에서 휘어 오르는 결정 깃과 떠 있는 씨앗 구슬 (세렌의 식물)
       put(new THREE.CylinderGeometry(0.7 * s, 0.55 * s, 0.8 * s, 10), GOLD, 0, x, fy + 0.4 * s, z);
-      put(new THREE.CylinderGeometry(0.08 * s, 0.12 * s, 2.2 * s, 5), 0x6a5a50, 0, x, fy + 1.6 * s, z);
-      put(new THREE.IcosahedronGeometry(1.1 * s, 0).scale(1, 0.8, 1), LEAF, 0.25, x, fy + 2.9 * s, z);
-      put(new THREE.IcosahedronGeometry(0.7 * s, 0), 0x7fdca0, 0.35, x + 0.5 * s, fy + 2.4 * s, z - 0.3 * s);
+      put(new THREE.CircleGeometry(0.64 * s, 10).rotateX(-Math.PI / 2), 0x5fd8d0, 0.8, x, fy + 0.81 * s, z);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2, h = (1.6 + (i % 2) * 0.7) * s;
+        put(new THREE.OctahedronGeometry(0.25 * s, 0).scale(0.38, h / (0.25 * s) * 0.5, 0.13).translate(0, h * 0.42, 0).rotateZ(-(0.3 + (i % 3) * 0.12)).rotateY(-a), [0x8ff0ff, 0xc8a8ff, 0xff9fd0][i % 3], 0.7, x, fy + 0.8 * s, z);
+      }
+      put(new THREE.IcosahedronGeometry(0.2 * s, 0), 0xbffcff, 2.2, x + 0.15 * s, fy + 3.1 * s, z);
     };
     const pid = info.pid;
-    const nTrees = pid === 'garden' ? 9 : 4;
+    const nTrees = pid === 'garden' ? 9 : pid === 'factory' || pid === 'depot' || pid === 'plant' ? 0 : 4;
     for (let i = 0; i < nTrees; i++) {
       const ang = Math.PI * 0.35 + (i / nTrees) * Math.PI * 1.3;
       const [x, z] = toward(pid === 'garden' ? 0.4 + (i % 3) * 0.18 : 0.78, ang);
       if (rin > 5) tree(x, z, pid === 'garden' ? 1.2 : 0.9);
     }
-    // 의자
-    for (let i = 0; i < 3; i++) {
+    // 의자 (자기 가구 고리가 있는 쓰임은 빼고)
+    if (!['museum', 'cafe', 'plant', 'factory', 'depot', 'market'].includes(pid)) for (let i = 0; i < 3; i++) {
       const ang = Math.PI * 0.6 + i * 0.5;
       const [x, z] = toward(0.62, ang);
       put(new THREE.BoxGeometry(2.4, 0.45, 0.7), PEARL, 0, x, fy + 0.4, z, Math.atan2(cx - x, cz - z));
@@ -384,6 +391,8 @@ export class Interiors {
       put(new THREE.BoxGeometry(2.6, 3, 0.1), 0x7ff3e6, 1.6, dx2, fy + 2.4, dz2, face(dx2, dz2, cx, cz));
       if (work) anchor(dx2 + 1, dz2, 'clerk', face(dx2, dz2, cx, cz));
     }
+    // 건물이 실제로 하는 일: 시설(진열대·계산대·전시대·생산 줄…)과 움직이는 장치 (game/venues.js)
+    if (this.game.venues) this.game.venues.build(cur, { put, sBox, sCyl, anchor, toward, face, rnd, cx, cz, rin, fy, LH, work, evening, night, t, faceDoor, dn, group: g, table, tree });
     // 합치기
     const base = new THREE.BufferGeometry();
     base.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
@@ -533,8 +542,14 @@ export class Interiors {
     for (const c of cur.r.cols) C.add(c);
     for (const n of cur.npcs) g.npcs.remove(n);
     if (g.citizens) g.citizens.clearIndoor();
+    if (g.venues) g.venues.clear();
     this.guest = null;
-    if (cur.group) g.engine.scene.remove(cur.group);
+    if (cur.group) {
+      g.engine.scene.remove(cur.group);
+      // GPU 버퍼 풀기 (공용 재질은 두고, 이 실내에서 만든 것만)
+      const keep = new Set([this.mat, this.floorMat, this.deckMat, this.winMat]);
+      cur.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && !keep.has(o.material) && o.material.dispose) o.material.dispose(); });
+    }
     this.city.closeShell(cur.r);
     this.cur = null;
   }

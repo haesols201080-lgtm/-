@@ -55,11 +55,13 @@ src/
            services(시설의 쓰임: 시설지기 카드·연락선·나룻배·온실·날씨·탐지기)
            interiors(건물 들어가기: 로비·사람·빛 승강기·하늘 전망대, 충돌체 갈아 끼우기)
            citizens(도시 주민: 자리·일과·걷기·말 걸기·함께 놀기·집 안 사람들)
+           venues(건물의 일 — 실내 쓰임마다 시설·돈·물건·기운·일거리) outdoors(바깥 조작대·승강판·하늘배·드론·충전·부탁함)
            world-events(일식·별비·축제·부탁) director(연출 카메라)
   ui/      ui(HUD·대화·카드·메뉴·타이틀·터치) map(지도·안개) journal settings
   data/    places(장소·평탄화) currents(해류 경로) story(인물·대사·대화·퀘스트·메아리·글자돌·도감·모아) lexicon(아웬어 사전)
            facilities(시설 목록·종류·옛 책) city(도시 구역·쓰임 USE·비율 MIX·양식·색조)
            citizens(주민 이름·역할 ROLES·실내 역할 INDOOR·대사·장터 물건)
+           venues(물건 ITEMS·기운 BUFFS·진열대·차림표·전시·기록·바깥 조작대 OUTDOOR·주민 부탁 WISHES)
 ```
 - 좌표: 1 = 1 m, Y 위, **−Z 가 북쪽**(우르 방향), +X 동쪽. 플레이어 yaw 는 `atan2(dx, dz)`, 카메라 yaw 0 은 북쪽을 봄.
 - 모든 지형 높이는 `heightAt(x, z)` 하나에서 나옵니다(렌더·충돌·배치·지도 공통). 지형을 바꾸면 `node tools/heightmap.mjs` 로 확인하세요. 장소 주변은 `places.js` 의 `flat` 으로 평탄화됩니다. 도시 구역은 `LEVEL`(구역별 땅 맞추기)로 높이를 맞춥니다 — 평평한 단(수도·구역·지방 도시: 중앙값 한 높이 + 바깥 둑), 계단 단(교외: 블록마다 평평, 길은 경사로, 이웃 차는 길 폭 × 0.3 까지), 높이 창(`grade: false`·`water`: 바닥 ±35 m 만). 구역을 옮기거나 키우면 지형도 바뀝니다. 계획(`cityplan.buildPlan`)은 둑 범위까지를 덮인 곳으로 봅니다(heightfield 와 같은 수치).
@@ -84,6 +86,9 @@ src/
 - **거리 소품**: `city-arch.js` 의 `propArchetypes()`(미터 단위) + `PROPCOL`(충돌체 모양). 템플릿에서 `P.prop(B, '이름', u, v, face)` 로 놓는다.
 - **주민 역할**: `data/citizens.js` 의 `ROLES`(자리 종류 → 일하는 시각·사람 수·함께 할 것) + `CIT_LINES` 대사. 템플릿에서 `P.spot(B, '역할', u, v, face)` 로 자리를 놓는다. 실내는 `INDOOR` + `game/interiors.js` 의 가구 `anchors`. 새 놀이는 `game/citizens.js` 의 `_playOption`.
 - **실내 쓰임**: `game/interiors.js` 의 `PURPOSE`(가구·사람·안내지기 대사)와 `BY_STYLE`(양식 → 쓰임).
+- **건물의 일(실내 시설)**: `game/venues.js` 의 `_b_쓰임id(cur, K)` 가 실내가 열릴 때 시설을 놓는다 — `this._station({ x, z, r, label, short, use })`(다가가면 E), 모양은 `K.put`·`this._glow`, 움직임은 `this._anim(t => …)`, 실내 사람 자리는 `K.anchor`. 돈은 `_pay`/`_wage`, 물건은 `_add`, 기운은 `buff(id)`(`data/venues.js` 의 `BUFFS`). 새 물건은 `ITEMS` + `BAG_ORDER` + `state.inv` 기본값.
+- **바깥 조작대(들어갈 수 없는 건물)**: `data/venues.js` 의 `OUTDOOR[모양] = { fn, name, label, short }` + `game/outdoors.js` 의 `_fn(c)`(`c.rec` 건물 기록, `c.x/z/y` 조작대 자리, `c.nx/nz` 바깥 방향, `c.key` 하루 한 번 열쇠 — `_doneToday`/`_markToday`). 자리는 `cityfabric.consolePos`(블록이 깨어날 때 소품 `console`).
+- **카드**: 한 번에 하나(`ui._card` 가 앞 카드를 닫는다). E·스페이스·엔터를 쓰는 놀이는 `_card(html, onClose, { keys: false })`, 놀이가 끝나면 `wrap.close()`(남의 카드를 닫지 않게). 시간은 `performance.now()` 벽시계로.
 
 ## 큰 세계에서 알아 둘 것 (v0.2)
 - 세계는 ±60 km (지형 쿼드트리 뿌리 131 km). 먼 땅은 `regions.js` 의 `far: true` 지역 + `heightfield.js` 의 `farMask` 로 바다 위에 올라옵니다.
@@ -127,6 +132,13 @@ src/
 - 흐름: `streams.js` 의 `fleets`(차·하늘배 / 전차 / 드론, 각각 그리기 1회) — 차선 kind 'ground' 'sky' 'tram' 'drone' 'walk'. 새 생활 차선은 `_lifeLanes`.
 - 모델의 색·외벽 종류는 삼각형마다 한 값(가운데 점으로 판정)이다(`paint`). 꼭짓점마다 다르게 하고 싶으면 단면을 더 나눌 것.
 - 점유 지도를 보고 싶으면 페이지 안에서 `SEREN.game.city.list`(모양 → [x, y, z, sx, sy, sz, rot, r, g, b]…)·`plist`(활성 블록의 소품 → [x, y, z, 배율, 방향, x배율]…)를 읽으면 된다.
+
+## 건물의 일 (v0.7)에서 알아 둘 것
+- 실내 15가지 쓰임마다 `venues._b_*` 가 시설을 둔다. 시험: 실내를 열고(`SEREN.game.interiors.open(rec)`) `SEREN.game.venues.stations` 의 `use()`.
+- 들어갈 수 없는 건물(약 6800채)은 `city.outRecs` 에 있고, 조작대는 블록이 깨어날 때만 소품으로 놓인다(`B.ext`). `outdoors.target` 이 둘레 블록의 조작대 + 하모네아 거대 탑 20채의 조작대(`outdoors.mega`, `_megaInit`)를 찾는다.
+- 승강판·하늘배는 `player.enterRide(ride)`(빛길 캡슐과 같은 틀): `ride.step(dt, player)`·`ride.cam`·`ride.skip()`, `ride.showAvatar` 면 아바타를 보인다. 승강판 길은 구조물 밖(Rs)에서 수직으로 오르고(`_clear` 로 빈 기둥을 찾음), 꼭대기에 닿으면 `outdoors.tops` 에 넣어 「내려가기」 표적이 된다.
+- 하늘배 길은 `_route`(거대 탑·척추·별항구를 옆으로 돌아감) + `_cruise`(길 아래 땅·도시의 높은 탑 위, 하늘바퀴 갑판 높이는 비킴).
+- 저장: `state.venue`(전시·기록·박물관·기운·하루 한 번 `days`·맡은 일 `job`·번 별씨). 물 위 집(`stilt`)은 깊이와 상관없이 제 키(마루가 물 위 1.2 m).
 
 ## 지켜야 할 것
 - 기존 저장 파일이 깨지지 않게: 저장 형식을 바꾸면 `state.js` 의 `migrate()` 를 손보세요.

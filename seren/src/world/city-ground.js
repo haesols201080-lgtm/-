@@ -72,79 +72,105 @@ float cBox(vec2 p, vec2 c, vec2 h) { vec2 q = abs(p - c) - h; return max(q.x, q.
 
 struct CityS { float kind; vec2 q; float fw; float var; float line; float glow; };
 
+// 육각 격자: xy = 칸 안 좌표, z = 가장자리까지 거리(0 = 테두리, 0.5 = 가운데), w = 칸 해시
+vec4 hexCell(vec2 p) {
+  const vec2 r = vec2(1.0, 1.7320508);
+  vec2 h = r * 0.5;
+  vec2 a = mod(p, r) - h;
+  vec2 b = mod(p - h, r) - h;
+  vec2 gv = dot(a, a) < dot(b, b) ? a : b;
+  vec2 ag = abs(gv);
+  float e = 0.5 - max(ag.x * 0.5 + ag.y * 0.8660254, ag.x);
+  return vec4(gv, e, hash12(floor((p - gv) * 4.0 + 0.5)));
+}
+
 // 바닥 종류 → 색 (선형). q = 무늬 좌표(m), fw = 화소 크기(m)
+// 세렌의 길은 지구의 아스팔트·페인트가 아니다: 짙은 쪽빛 합성 석판에 빛 안내줄, 육각 판석, 이끼·결정 모래
 vec3 citySurface(CityS S, out vec3 em, out float spec) {
   em = vec3(0.0); spec = 0.0;
   vec2 q = S.q; float fw = S.fw;
   float fade = clamp(1.4 - fw * 2.2, 0.0, 1.0);
-  float n1 = hash12(floor(q * 1.0));
   vec3 c;
   int k = int(S.kind + 0.5);
-  if (k == 1) { // 보도판: 1.2 × 0.6 m 엇갈림 쌓기
-    vec2 t = q / vec2(1.2, 0.6); t.x += 0.5 * mod(floor(t.y), 2.0);
-    vec2 f = fract(t), id = floor(t);
-    float seam = 1.0 - smoothstep(0.0, 0.05 + fw * 1.5, min(min(f.x, 1.0 - f.x) * 1.2, min(f.y, 1.0 - f.y) * 0.6));
-    c = vec3(0.50, 0.48, 0.55) * (0.92 + 0.12 * hash12(id)) * (1.0 - seam * 0.28 * fade);
-    spec = 0.15;
-  } else if (k == 2) { // 광장판: 3 m 판 + 동심 무늬 + 금빛 새김
-    vec2 f = fract(q / 3.0), id = floor(q / 3.0);
-    float seam = 1.0 - smoothstep(0.0, 0.02 + fw * 0.6, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
-    c = mix(vec3(0.58, 0.55, 0.6), vec3(0.47, 0.45, 0.52), step(0.5, hash12(id))) * (1.0 - seam * 0.25 * fade);
+  if (k == 1) { // 보도: 1.1 m 육각 판석, 이음매에 희미한 빛
+    vec4 hx = hexCell(q / 1.1);
+    float seam = (1.0 - smoothstep(0.0, 0.04 + fw * 1.4, hx.z)) * fade;
+    c = vec3(0.53, 0.51, 0.59) * (0.93 + 0.1 * hx.w) * (1.0 - seam * 0.3);
+    em += vec3(0.35, 0.85, 0.85) * seam * uGlow * 0.08;
+    spec = 0.2;
+  } else if (k == 2) { // 광장: 2.4 m 육각 + 동심 빛 새김
+    vec4 hx = hexCell(q / 2.4);
+    float seam = (1.0 - smoothstep(0.0, 0.02 + fw * 0.5, hx.z)) * fade;
+    c = mix(vec3(0.6, 0.57, 0.64), vec3(0.5, 0.48, 0.56), step(0.55, hx.w)) * (1.0 - seam * 0.25);
     float ringL = cLine(fract(S.line / 6.0) - 0.5, 0.025, fw / 6.0) * fade;
-    c = mix(c, vec3(0.62, 0.5, 0.3), ringL * 0.8);
-    em += vec3(1.0, 0.75, 0.4) * ringL * uGlow * 0.35;
+    c = mix(c, vec3(0.62, 0.52, 0.34), ringL * 0.7);
+    em += mix(vec3(1.0, 0.75, 0.4), vec3(0.4, 0.95, 0.9), step(0.5, fract(S.line / 12.0))) * ringL * (0.08 + uGlow * 0.4);
     spec = 0.3;
-  } else if (k == 3) { // 잔디: 2 m 깎은 줄무늬
-    float stripe = step(0.5, fract(q.x / 4.0));
-    c = mix(vec3(0.10, 0.27, 0.12), vec3(0.13, 0.32, 0.14), stripe * fade) * (0.9 + 0.2 * vnoise(q * 0.7));
-  } else if (k == 4) { // 꽃밭: 흙 + 꽃 점
+  } else if (k == 3) { // 이끼밭: 청록·보랏빛 낮은 이끼 + 밤에 빛나는 홀씨 점
+    float n = vnoise(q * 0.35) * 0.6 + vnoise(q * 1.7) * 0.4;
+    c = mix(vec3(0.05, 0.2, 0.17), vec3(0.16, 0.11, 0.24), smoothstep(0.35, 0.75, n)) * (0.9 + 0.2 * vnoise(q * 3.0));
+    vec2 g = q * 1.6; vec2 id = floor(g), f = fract(g) - 0.5;
+    float sp = (1.0 - smoothstep(0.05, 0.12, length(f))) * step(0.86, hash12(id)) * fade;
+    vec3 sc = mix(vec3(0.5, 1.0, 0.9), vec3(1.0, 0.6, 0.9), hash12(id + 2.3));
+    c = mix(c, sc * 0.6, sp * 0.5);
+    em += sc * sp * (0.04 + uGlow * 0.5);
+  } else if (k == 4) { // 꽃밭: 짙은 흙 + 빛 꽃 점
     vec2 g = q * 2.2; vec2 id = floor(g), f = fract(g) - 0.5;
     float h = hash12(id);
-    vec3 fl = h < 0.33 ? vec3(0.9, 0.35, 0.6) : h < 0.66 ? vec3(0.95, 0.75, 0.25) : vec3(0.55, 0.45, 0.95);
+    vec3 fl = h < 0.33 ? vec3(0.95, 0.4, 0.75) : h < 0.66 ? vec3(0.45, 0.95, 0.9) : vec3(0.65, 0.5, 1.0);
     float dot1 = (1.0 - smoothstep(0.18, 0.3, length(f))) * fade;
-    c = mix(vec3(0.07, 0.16, 0.08), fl, dot1 * step(0.35, hash12(id + 3.1)));
-    em += fl * dot1 * uGlow * 0.25 * step(0.8, h);
-  } else if (k == 5) { // 길: 밝은 모래 자갈
-    c = vec3(0.56, 0.5, 0.42) * (0.9 + 0.15 * vnoise(q * 3.0));
-  } else if (k == 6) { // 물: 얕은 연못
+    c = mix(vec3(0.07, 0.08, 0.12), fl, dot1 * step(0.35, hash12(id + 3.1)));
+    em += fl * dot1 * (0.05 + uGlow * 0.35) * step(0.5, h);
+  } else if (k == 5) { // 길: 빻은 결정 모래 (낮엔 반짝, 밤엔 희미한 빛)
+    c = vec3(0.62, 0.58, 0.7) * (0.9 + 0.15 * vnoise(q * 3.0));
+    float sp = step(0.93, hash12(floor(q * 5.0))) * fade;
+    c += sp * 0.12;
+    em += vec3(0.7, 0.8, 1.0) * sp * uGlow * 0.25;
+    spec = 0.4;
+  } else if (k == 6) { // 물: 얕은 빛물
     float w = vnoise(q * 0.8 + uTime * 0.3) * 0.5 + vnoise(q * 2.3 - uTime * 0.5) * 0.5;
-    c = mix(vec3(0.02, 0.09, 0.12), vec3(0.06, 0.2, 0.24), w);
-    em += vec3(0.2, 0.7, 0.8) * (0.04 + 0.1 * uGlow) * w;
+    c = mix(vec3(0.02, 0.08, 0.14), vec3(0.06, 0.2, 0.28), w);
+    em += vec3(0.2, 0.75, 0.85) * (0.05 + 0.12 * uGlow) * w;
     spec = 1.2;
-  } else if (k == 7) { // 작업장 콘크리트 6 m 판 + 칠한 선
+  } else if (k == 7) { // 작업 마당: 청회색 합성판 6 m + 호박빛 빛줄 (칠한 선이 아니다)
     vec2 f = fract(q / 6.0), id = floor(q / 6.0);
     float seam = 1.0 - smoothstep(0.0, 0.01 + fw * 0.3, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
-    c = vec3(0.36, 0.36, 0.38) * (0.9 + 0.12 * hash12(id)) * (1.0 - seam * 0.3 * fade) * (0.92 + 0.12 * vnoise(q * 0.4));
-    c = mix(c, vec3(0.75, 0.6, 0.15), S.line * fade);
-    em += vec3(0.4, 0.95, 0.9) * S.glow * uGlow * 0.6;
-  } else if (k == 8) { // 자갈
-    c = vec3(0.3, 0.29, 0.3) * (0.75 + 0.4 * hash12(floor(q * 6.0))) ;
-  } else if (k == 9) { // 철망 바닥
+    c = vec3(0.3, 0.32, 0.38) * (0.9 + 0.12 * hash12(id)) * (1.0 - seam * 0.3 * fade) * (0.92 + 0.12 * vnoise(q * 0.4));
+    c = mix(c, vec3(0.7, 0.5, 0.2), S.line * fade * 0.8);
+    em += vec3(1.0, 0.68, 0.3) * S.line * fade * (0.15 + uGlow * 0.6) + vec3(0.4, 0.95, 0.9) * S.glow * uGlow * 0.6;
+  } else if (k == 8) { // 결정 자갈
+    c = vec3(0.3, 0.29, 0.36) * (0.75 + 0.4 * hash12(floor(q * 6.0)));
+  } else if (k == 9) { // 격자 바닥 (빛 궤도)
     vec2 f = fract(q / 0.5);
     float g = (1.0 - smoothstep(0.0, 0.12 + fw * 3.0, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)))) * fade;
-    c = mix(vec3(0.05, 0.05, 0.06), vec3(0.42, 0.44, 0.48), g * 0.8 + (1.0 - fade) * 0.4);
-    c = mix(c, vec3(0.7, 0.72, 0.76), S.glow);
-    em += vec3(0.4, 0.95, 0.9) * S.glow * (0.12 + uGlow * 0.6);
+    c = mix(vec3(0.05, 0.05, 0.08), vec3(0.42, 0.44, 0.52), g * 0.8 + (1.0 - fade) * 0.4);
+    c = mix(c, vec3(0.7, 0.72, 0.8), S.glow);
+    em += vec3(0.4, 0.95, 0.9) * S.glow * (0.15 + uGlow * 0.65);
     spec = 0.6;
-  } else if (k == 10) { // 이랑: 18 m 밭마다 다른 작물, 0.9 m 줄
+  } else if (k == 10) { // 밭: 18 m 마다 다른 세렌 작물 (청록 잎·보라 줄기·호박 열매·산호 잎), 0.9 m 이랑
     float field = floor(q.y / 18.0);
     float h = hash12(vec2(field, S.var));
-    vec3 crop = h < 0.25 ? vec3(0.14, 0.32, 0.1) : h < 0.5 ? vec3(0.42, 0.34, 0.08) : h < 0.75 ? vec3(0.22, 0.12, 0.3) : vec3(0.06, 0.26, 0.22);
-    float row = smoothstep(0.25, 0.45, abs(fract(q.y / 0.9) - 0.5)) ;
-    c = mix(crop, vec3(0.16, 0.11, 0.07), row * fade * 0.85 + (1.0 - fade) * 0.3);
-    em += crop * uGlow * 0.12 * step(0.75, h);
-  } else if (k == 11) { // 놀이 바닥: 부드러운 고무 + 동그라미
-    c = mix(vec3(0.6, 0.22, 0.2), vec3(0.12, 0.42, 0.42), step(0.5, fract(length(q) / 2.4)));
-  } else if (k == 12) { // 차도
-    c = vec3(0.075, 0.075, 0.09) * (0.9 + 0.2 * vnoise(q * 2.5)) ;
-    c = mix(c, vec3(0.75, 0.75, 0.78), S.line * fade);
-    em += vec3(0.35, 0.95, 0.88) * S.glow * (0.15 + uGlow * 0.6);
-    spec = 0.35;
+    vec3 crop = h < 0.25 ? vec3(0.05, 0.28, 0.26) : h < 0.5 ? vec3(0.42, 0.3, 0.08) : h < 0.75 ? vec3(0.26, 0.1, 0.32) : vec3(0.4, 0.14, 0.18);
+    float row = smoothstep(0.25, 0.45, abs(fract(q.y / 0.9) - 0.5));
+    c = mix(crop, vec3(0.1, 0.08, 0.11), row * fade * 0.85 + (1.0 - fade) * 0.3);
+    em += crop * (0.03 + uGlow * 0.18) * step(0.5, h);
+  } else if (k == 11) { // 놀이 바닥: 말랑한 빛 젤, 동심 무늬
+    c = mix(vec3(0.24, 0.12, 0.36), vec3(0.08, 0.34, 0.4), step(0.5, fract(length(q) / 2.4)));
+    em += c * (0.08 + uGlow * 0.3);
+  } else if (k == 12) { // 호버 차로: 짙은 쪽빛 합성 석판 + 빛 안내줄(흐른다)
+    vec4 hx = hexCell(q / 2.0);
+    c = vec3(0.07, 0.075, 0.11) * (0.9 + 0.14 * hx.w) * (1.0 - (1.0 - smoothstep(0.0, 0.03 + fw * 0.6, hx.z)) * 0.25 * fade);
+    float flow = 0.55 + 0.45 * sin(uTime * 2.4 - (q.x + q.y) * 0.18);
+    c = mix(c, vec3(0.3, 0.55, 0.6), S.line * fade * 0.6);
+    em += vec3(0.35, 0.95, 0.9) * (S.line * fade * flow * (0.35 + uGlow * 0.9) + S.glow * (0.15 + uGlow * 0.6));
+    spec = 0.5;
   } else if (k == 13) { // 연석 + 빛줄
-    c = vec3(0.62, 0.6, 0.66);
+    c = vec3(0.64, 0.62, 0.7);
     em += vec3(0.4, 0.95, 0.9) * S.glow * (0.1 + uGlow * 0.7);
-  } else { // 14 생울타리
-    c = vec3(0.04, 0.13, 0.06) * (0.8 + 0.4 * vnoise(q * 4.0));
+  } else { // 14 생울타리: 보랏빛 덤불 + 청록 점
+    c = vec3(0.12, 0.07, 0.18) * (0.8 + 0.4 * vnoise(q * 4.0));
+    float sp = step(0.9, hash12(floor(q * 3.0)));
+    em += vec3(0.4, 0.95, 0.85) * sp * uGlow * 0.3;
   }
   return c;
 }

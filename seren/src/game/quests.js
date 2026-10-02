@@ -193,6 +193,11 @@ export class Quests {
 
   /** 현재 목표의 위치들 (나침반·지도·빛기둥 표시) */
   targets() {
+    const base = this._targets0();
+    const v = this.game.venues ? this.game.venues.targets() : [];
+    return v.length ? v.concat(base) : base;
+  }
+  _targets0() {
     const id = this.tracked();
     if (!id) return this._requestTargets();
     const st = this.step(id);
