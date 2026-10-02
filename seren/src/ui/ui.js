@@ -161,6 +161,7 @@ export class UI {
 
   /** 지나가는 아웬의 말 (왼쪽 아래) */
   say(name, html) {
+    if (name === null) { this.sayEl.style.opacity = 0; clearTimeout(this._sayT); return; }
     this.sayEl.querySelector('.who').textContent = name;
     this.sayEl.querySelector('.l').innerHTML = html;
     this.sayEl.style.opacity = 1;

@@ -1,0 +1,442 @@
+// 도시의 바닥: 지형 셰이더가 블록 계획(쓰임 표 텍스처)을 읽어 그 자리의 바닥을 그린다.
+//  · 차도(아스팔트·차선·건널목) · 보도 · 연석 빛줄 · 골목(가운데 화단) · 블록마다 쓰임에 맞는 마당
+//    (주거 안뜰 정원·놀이터, 상가 광장, 작업장 마당의 하역 칸, 변전 자갈·철망, 공원 길·연못·꽃밭, 농지 이랑, 집 마당·생울타리 …)
+//  · cityplan.js 의 템플릿과 같은 식(u, v, 길이, 깊이)이라 건물·소품이 바닥 무늬와 맞물린다.
+//  · 지오메트리를 하나도 더하지 않으므로 겹침·깜빡임이 없고, 어느 거리에서나 같은 바닥이 보인다.
+import * as THREE from 'three';
+import { ZGEO } from '../data/city.js';
+
+export const CITY_NZ = 16;
+export const PLAN_W = 1024;
+
+/** 계획 → 텍스처 + uniform 값 */
+export function planUniforms(plan) {
+  let rows = 0;
+  const rowOf = [];
+  for (const P of plan.zones) { rowOf.push(rows); rows += Math.ceil(P.size / PLAN_W); }
+  const H = Math.max(1, rows);
+  const data = new Uint8Array(PLAN_W * H * 4);
+  const put = (row0, idx, r, g, b, a) => { const x = idx % PLAN_W, y = row0 + Math.floor(idx / PLAN_W); const o = (y * PLAN_W + x) * 4; data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = a; };
+  const Z0 = [], Z1 = [], Z2 = [], Z3 = [];
+  plan.zones.forEach((P, i) => {
+    const G = P.G, row0 = rowOf[i];
+    P.rings.forEach((R, k) => put(row0, k, R.m, R.start & 255, R.start >> 8, R.street ? 1 : 0));
+    for (const B of P.blocks) put(row0, B.idx, B.type, B.variant, (B.stilt ? 1 : 0) + (B.natural ? 2 : 0) + (P.Z.mix === 'suburb' ? 4 : 0), 255);
+    Z0.push(new THREE.Vector4(G.cx, G.cz, G.r0, G.ring));
+    Z1.push(new THREE.Vector4(G.street, G.nb, G.avenues, G.aOff));
+    Z2.push(new THREE.Vector4(row0, G.every, G.lane, G.avH));
+    Z3.push(new THREE.Vector4(G.rOut, P.Z.core === 'plaza' ? 1 : 0, 0, 0));
+  });
+  while (Z0.length < CITY_NZ) { const z = new THREE.Vector4(0, 0, 0, 0); Z0.push(z); Z1.push(z); Z2.push(z); Z3.push(z); }
+  const tex = new THREE.DataTexture(data, PLAN_W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
+  tex.minFilter = tex.magFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return { uCityPlan: tex, uCityN: plan.zones.length, uCZ0: Z0, uCZ1: Z1, uCZ2: Z2, uCZ3: Z3 };
+}
+
+/** 지형 재질에 붙일 uniform (값은 도시가 만들어지면 채운다) */
+export function cityGroundUniforms() {
+  const v = () => Array.from({ length: CITY_NZ }, () => new THREE.Vector4());
+  const t = new THREE.DataTexture(new Uint8Array(4), 1, 1);
+  t.needsUpdate = true;
+  return { uCityPlan: { value: t }, uCityN: { value: 0 }, uCZ0: { value: v() }, uCZ1: { value: v() }, uCZ2: { value: v() }, uCZ3: { value: v() } };
+}
+export function applyPlanUniforms(material, U) {
+  for (const [k, v] of Object.entries(U)) {
+    if (!material.uniforms[k]) continue;
+    if (Array.isArray(v)) material.uniforms[k].value.forEach((q, i) => q.copy(v[i]));
+    else material.uniforms[k].value = v;
+  }
+  material.uniformsNeedUpdate = true;
+}
+
+// 바닥 종류: 0 자연 1 보도판 2 광장판 3 잔디 4 꽃밭 5 길(모래) 6 물 7 작업장 8 자갈 9 철망 10 이랑 11 놀이 바닥 12 차도 13 연석 14 생울타리
+export const CITY_GLSL = /* glsl */ `
+#define CITY_NZ ${CITY_NZ}
+uniform sampler2D uCityPlan;
+uniform int uCityN;
+uniform vec4 uCZ0[CITY_NZ];
+uniform vec4 uCZ1[CITY_NZ];
+uniform vec4 uCZ2[CITY_NZ];
+uniform vec4 uCZ3[CITY_NZ];
+
+vec4 cityTexel(float row0, float idx) {
+  float x = mod(idx, ${PLAN_W}.0), y = row0 + floor(idx / ${PLAN_W}.0);
+  return texelFetch(uCityPlan, ivec2(int(x), int(y)), 0) * 255.0;
+}
+
+// 선 하나의 덮임 (AA): d = 선까지 거리, w = 반폭, fw = 화소 크기
+float cLine(float d, float w, float fw) { return 1.0 - smoothstep(w - fw, w + fw, abs(d)); }
+float cBox(vec2 p, vec2 c, vec2 h) { vec2 q = abs(p - c) - h; return max(q.x, q.y); }
+
+struct CityS { float kind; vec2 q; float fw; float var; float line; float glow; };
+
+// 바닥 종류 → 색 (선형). q = 무늬 좌표(m), fw = 화소 크기(m)
+vec3 citySurface(CityS S, out vec3 em, out float spec) {
+  em = vec3(0.0); spec = 0.0;
+  vec2 q = S.q; float fw = S.fw;
+  float fade = clamp(1.4 - fw * 2.2, 0.0, 1.0);
+  float n1 = hash12(floor(q * 1.0));
+  vec3 c;
+  int k = int(S.kind + 0.5);
+  if (k == 1) { // 보도판: 1.2 × 0.6 m 엇갈림 쌓기
+    vec2 t = q / vec2(1.2, 0.6); t.x += 0.5 * mod(floor(t.y), 2.0);
+    vec2 f = fract(t), id = floor(t);
+    float seam = 1.0 - smoothstep(0.0, 0.05 + fw * 1.5, min(min(f.x, 1.0 - f.x) * 1.2, min(f.y, 1.0 - f.y) * 0.6));
+    c = vec3(0.50, 0.48, 0.55) * (0.92 + 0.12 * hash12(id)) * (1.0 - seam * 0.28 * fade);
+    spec = 0.15;
+  } else if (k == 2) { // 광장판: 3 m 판 + 동심 무늬 + 금빛 새김
+    vec2 f = fract(q / 3.0), id = floor(q / 3.0);
+    float seam = 1.0 - smoothstep(0.0, 0.02 + fw * 0.6, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
+    c = mix(vec3(0.58, 0.55, 0.6), vec3(0.47, 0.45, 0.52), step(0.5, hash12(id))) * (1.0 - seam * 0.25 * fade);
+    float ringL = cLine(fract(S.line / 6.0) - 0.5, 0.025, fw / 6.0) * fade;
+    c = mix(c, vec3(0.62, 0.5, 0.3), ringL * 0.8);
+    em += vec3(1.0, 0.75, 0.4) * ringL * uGlow * 0.35;
+    spec = 0.3;
+  } else if (k == 3) { // 잔디: 2 m 깎은 줄무늬
+    float stripe = step(0.5, fract(q.x / 4.0));
+    c = mix(vec3(0.10, 0.27, 0.12), vec3(0.13, 0.32, 0.14), stripe * fade) * (0.9 + 0.2 * vnoise(q * 0.7));
+  } else if (k == 4) { // 꽃밭: 흙 + 꽃 점
+    vec2 g = q * 2.2; vec2 id = floor(g), f = fract(g) - 0.5;
+    float h = hash12(id);
+    vec3 fl = h < 0.33 ? vec3(0.9, 0.35, 0.6) : h < 0.66 ? vec3(0.95, 0.75, 0.25) : vec3(0.55, 0.45, 0.95);
+    float dot1 = (1.0 - smoothstep(0.18, 0.3, length(f))) * fade;
+    c = mix(vec3(0.07, 0.16, 0.08), fl, dot1 * step(0.35, hash12(id + 3.1)));
+    em += fl * dot1 * uGlow * 0.25 * step(0.8, h);
+  } else if (k == 5) { // 길: 밝은 모래 자갈
+    c = vec3(0.56, 0.5, 0.42) * (0.9 + 0.15 * vnoise(q * 3.0));
+  } else if (k == 6) { // 물: 얕은 연못
+    float w = vnoise(q * 0.8 + uTime * 0.3) * 0.5 + vnoise(q * 2.3 - uTime * 0.5) * 0.5;
+    c = mix(vec3(0.02, 0.09, 0.12), vec3(0.06, 0.2, 0.24), w);
+    em += vec3(0.2, 0.7, 0.8) * (0.04 + 0.1 * uGlow) * w;
+    spec = 1.2;
+  } else if (k == 7) { // 작업장 콘크리트 6 m 판 + 칠한 선
+    vec2 f = fract(q / 6.0), id = floor(q / 6.0);
+    float seam = 1.0 - smoothstep(0.0, 0.01 + fw * 0.3, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)));
+    c = vec3(0.36, 0.36, 0.38) * (0.9 + 0.12 * hash12(id)) * (1.0 - seam * 0.3 * fade) * (0.92 + 0.12 * vnoise(q * 0.4));
+    c = mix(c, vec3(0.75, 0.6, 0.15), S.line * fade);
+    em += vec3(0.4, 0.95, 0.9) * S.glow * uGlow * 0.6;
+  } else if (k == 8) { // 자갈
+    c = vec3(0.3, 0.29, 0.3) * (0.75 + 0.4 * hash12(floor(q * 6.0))) ;
+  } else if (k == 9) { // 철망 바닥
+    vec2 f = fract(q / 0.5);
+    float g = (1.0 - smoothstep(0.0, 0.12 + fw * 3.0, min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)))) * fade;
+    c = mix(vec3(0.05, 0.05, 0.06), vec3(0.42, 0.44, 0.48), g * 0.8 + (1.0 - fade) * 0.4);
+    spec = 0.6;
+  } else if (k == 10) { // 이랑: 18 m 밭마다 다른 작물, 0.9 m 줄
+    float field = floor(q.y / 18.0);
+    float h = hash12(vec2(field, S.var));
+    vec3 crop = h < 0.25 ? vec3(0.14, 0.32, 0.1) : h < 0.5 ? vec3(0.42, 0.34, 0.08) : h < 0.75 ? vec3(0.22, 0.12, 0.3) : vec3(0.06, 0.26, 0.22);
+    float row = smoothstep(0.25, 0.45, abs(fract(q.y / 0.9) - 0.5)) ;
+    c = mix(crop, vec3(0.16, 0.11, 0.07), row * fade * 0.85 + (1.0 - fade) * 0.3);
+    em += crop * uGlow * 0.12 * step(0.75, h);
+  } else if (k == 11) { // 놀이 바닥: 부드러운 고무 + 동그라미
+    c = mix(vec3(0.6, 0.22, 0.2), vec3(0.12, 0.42, 0.42), step(0.5, fract(length(q) / 2.4)));
+  } else if (k == 12) { // 차도
+    c = vec3(0.075, 0.075, 0.09) * (0.9 + 0.2 * vnoise(q * 2.5)) ;
+    c = mix(c, vec3(0.75, 0.75, 0.78), S.line * fade);
+    em += vec3(0.35, 0.95, 0.88) * S.glow * (0.15 + uGlow * 0.6);
+    spec = 0.35;
+  } else if (k == 13) { // 연석 + 빛줄
+    c = vec3(0.62, 0.6, 0.66);
+    em += vec3(0.4, 0.95, 0.9) * S.glow * (0.1 + uGlow * 0.7);
+  } else { // 14 생울타리
+    c = vec3(0.04, 0.13, 0.06) * (0.8 + 0.4 * vnoise(q * 4.0));
+  }
+  return c;
+}
+
+// 블록 안 (u: 고리 방향, v: 바깥 방향, L·D: 길이·깊이)
+CityS cityBlock(float type, float vari, float stilt, float u, float v, float L, float D, float j, float m, float fw) {
+  CityS S; S.q = vec2(u, v); S.fw = fw; S.var = vari; S.line = 0.0; S.glow = 0.0; S.kind = 1.0;
+  int t = int(type + 0.5);
+  vec2 p = vec2(u, v);
+  float edge = min(min(u, L - u), min(v, D - v));
+  float cu = L * 0.5, cv = D * 0.5;
+  float natural = mod(floor(stilt / 2.0), 2.0), sparse = floor(stilt / 4.0);
+  stilt = mod(stilt, 2.0);
+  if (t == 1) { // 주거
+    if (D < 58.0) {
+      float hd = min(10.0, D * 0.3);
+      S.kind = (v < hd * 2.0 + 4.0 || v > D - hd * 2.0 - 4.0) ? 1.0 : 3.0;
+      if (length(p - vec2(cu, cv)) < 6.0) S.kind = 11.0;
+      return S;
+    }
+    S.kind = 1.0;
+    if (v > 20.0 && v < D - 20.0 && u > 28.0 && u < L - 28.0) {
+      S.kind = 3.0;
+      if (abs(abs(v - cv) - 7.5) < 1.25) S.kind = 5.0;
+      if (abs(abs(v - cv) - 10.5) < 1.1) S.kind = 4.0;
+      if (abs(v - cv) < 1.5) S.kind = 5.0;
+      if (length(p - vec2(cu - 13.0, cv)) < 6.5) S.kind = 11.0;
+      if (length(p - vec2(cu + 14.0, cv)) < 5.5) S.kind = 1.0;
+    }
+    return S;
+  }
+  if (t == 2) { // 상업
+    float pl = (j < 0.5 || j > m - 1.5) ? 26.0 : 18.0;
+    bool atStart = j < m - 1.5 || m < 1.5;
+    float pc = atStart ? pl * 0.5 : L - pl * 0.5;
+    S.kind = 1.0;
+    if ((atStart && u < pl) || (!atStart && u > L - pl)) { S.kind = 2.0; S.q = p - vec2(pc, cv); S.line = length(S.q); }
+    return S;
+  }
+  if (t == 3) { // 공공
+    float hw = min(30.0, L * 0.32), hd = min(19.0, D * 0.27), bv = D - 4.0 - hd;
+    float fv = (bv - hd) * 0.5;
+    S.kind = 1.0;
+    if (v < bv - hd - 1.0) { S.kind = 2.0; S.q = p - vec2(cu, fv); S.line = length(S.q); }
+    else if (abs(u - cu) > hw + 4.0) S.kind = 3.0;
+    if (v < bv - hd - 1.0 && abs(u - cu) > hw + 6.0) S.kind = 3.0;
+    return S;
+  }
+  if (t == 4) { // 산업
+    float hd = min(D * 0.18, 13.0);
+    S.kind = 7.0;
+    float l1 = cLine(v - (hd * 2.0 + 8.0), 0.12, fw) + cLine(v - (D * 0.62 - 4.5), 0.12, fw) + cLine(v - (D * 0.62 + 4.5), 0.12, fw);
+    float bay = step(L * 0.36, u) * step(u, L * 0.74) * step(abs(v - D * 0.62), 4.5) * cLine(fract((u - L * 0.38 + 4.5) / 9.0) - 0.5, 0.012, fw / 9.0);
+    S.line = clamp(l1 + bay, 0.0, 1.0);
+    S.glow = cLine(edge - 1.0, 0.08, fw);
+    if (length(p - vec2(L * 0.2, D - 14.0)) < 13.0) S.kind = 9.0;
+    return S;
+  }
+  if (t == 5) { // 물류
+    float hd = min(D * 0.2, 14.0), v0 = 2.0 * hd + 12.0;
+    S.kind = 7.0;
+    if (v > v0 - 4.0 && u < min(L - 30.0, 100.0) + 4.0) S.line = max(cLine(fract((u - 8.0 + 3.75) / 7.5) - 0.5, 0.008, fw / 7.5), cLine(fract((v - v0 + 4.5) / 9.0) - 0.5, 0.01, fw / 9.0)) * 0.8;
+    else if (v > 2.0 * hd + 5.0) S.line = cLine(fract(u / 6.0) - 0.5, 0.04, fw / 6.0) * cLine(v - (hd * 2.0 + 8.5), 0.15, fw);
+    float pd = min(length(p - vec2(L - 24.0, D - 9.0)), length(p - vec2(L - 24.0, D - 22.0)));
+    if (pd < 4.5) { S.kind = 9.0; }
+    S.glow = cLine(pd - 4.2, 0.12, fw) + cLine(edge - 1.0, 0.08, fw);
+    return S;
+  }
+  if (t == 6) { // 에너지
+    float rr = min(min(17.0, D * 0.28), L * 0.18);
+    S.kind = 8.0;
+    if (u < min(L * 0.16, 24.0) + 3.0 || u > max(L * 0.84, L - 26.0) - 3.0) S.kind = 9.0;
+    if (length(p - vec2(L * 0.36, cv)) < rr + 4.0) S.kind = 7.0;
+    float cr = min(11.0, D * 0.17);
+    if (length(p - vec2(L * 0.68, D * 0.28)) < cr + 3.0 || length(p - vec2(L * 0.68, D * 0.72)) < cr + 3.0) S.kind = 7.0;
+    S.glow = cLine(edge - 1.2, 0.1, fw);
+    if (S.kind == 7.0) S.glow += cLine(length(p - vec2(L * 0.36, cv)) - rr - 3.2, 0.1, fw);
+    return S;
+  }
+  if (t == 7) { // 연구
+    S.kind = 1.0;
+    vec2 qd = abs(p - vec2(cu, cv));
+    if (qd.x < L * 0.22 && qd.y < D * 0.2) {
+      S.kind = 3.0;
+      float k1 = abs((p.x - cu) * (D * 0.2) - (p.y - cv) * (L * 0.22)) / length(vec2(D * 0.2, L * 0.22));
+      float k2 = abs((p.x - cu) * (D * 0.2) + (p.y - cv) * (L * 0.22)) / length(vec2(D * 0.2, L * 0.22));
+      if (min(k1, k2) < 1.3) S.kind = 5.0;
+      if (length(p - vec2(cu, cv)) < 5.0) S.kind = 2.0;
+    }
+    return S;
+  }
+  if (t == 8) { // 교통
+    S.kind = 2.0; S.q = p; S.line = 1000.0;
+    if (v > D * 0.6 && v < D * 0.72 && u < L * 0.78) { S.kind = 7.0; S.line = cLine(fract(u / 6.0) - 0.5, 0.025, fw / 6.0) + cLine(v - D * 0.6, 0.08, fw); }
+    if (v > D - 10.0) { S.kind = 1.0; }
+    if (abs(v - (D - 10.0)) < 0.25) { S.kind = 13.0; S.glow = 0.7; }
+    return S;
+  }
+  if (t == 9) { // 인공 환경
+    if (mod(vari, 2.0) < 0.5) {
+      float rr = min(min(28.0, D * 0.4), L * 0.34);
+      float d = length(p - vec2(cu, cv));
+      S.kind = d < rr + 5.0 ? 1.0 : (d < rr + 9.0 && d > rr + 7.0) ? 6.0 : 3.0;
+      if (d > rr + 9.0 && d < rr + 10.5) S.kind = 4.0;
+    } else {
+      S.kind = 1.0;
+      if (u > L * 0.3) { S.kind = 10.0; S.q = vec2(u, v * 0.5); }
+      if (abs(u - L * 0.62) < L * 0.3 + 1.0) S.kind = 1.0;
+    }
+    return S;
+  }
+  if (t == 10) { // 계획 녹지
+    float pr = min(L, D) * 0.2;
+    if (natural > 0.5) { // 보존 공원: 자연 그대로 + 둘레 길 + 정자 마당
+      S.kind = (edge > 4.0 && edge < 7.0) ? 5.0 : 0.0;
+      if (length(p - vec2(cu, cv)) < 6.5) S.kind = 1.0;
+      return S;
+    }
+    S.kind = 3.0;
+    if (edge > 3.0 && edge < 6.0) S.kind = 5.0;
+    float dl = length(vec2(L, D));
+    float d1 = abs((p.x) * D - (p.y) * L) / dl, d2 = abs((p.x) * D + (p.y - D) * L) / dl;
+    if (min(d1, d2) < 1.6) S.kind = 5.0;
+    vec2 e = (p - vec2(cu, cv)) / vec2(pr, pr * 0.8);
+    float de = length(e) * pr;
+    if (de < pr + 4.0) S.kind = de < pr ? 6.0 : de < pr + 2.5 ? 5.0 : 4.0;
+    if (length(p - vec2(cu + pr + 12.0, cv)) < 6.5) S.kind = 1.0;
+    if (length(p - vec2(cu - pr - 14.0, cv)) < 7.0) S.kind = 11.0;
+    if (edge < 1.5) S.kind = 1.0;
+    return S;
+  }
+  if (t == 11) { // 광장
+    float R = min(L, D) * 0.36;
+    S.kind = 2.0; S.q = p - vec2(cu, cv); S.line = length(S.q);
+    float d = length(S.q);
+    if (d < 7.0 && d > 3.0) S.kind = 6.0;
+    if (abs(d - R) < 1.0) S.kind = 4.0;
+    return S;
+  }
+  if (t == 12) { // 농지
+    S.kind = 10.0; S.q = vec2(u, v);
+    if (edge < 3.0 || abs(fract(u / 40.0) - 0.5) * 40.0 > 18.5) S.kind = 5.0;
+    float fk = mod(vari, 3.0);
+    if (fk < 0.5 && abs(u - L * 0.5) < L * 0.36 + 1.0 && v > 10.0 && v < D - 10.0) S.kind = 1.0;
+    if (fk > 0.5 && fk < 1.5 && edge > 3.0) S.kind = 3.0;
+    if (u < 30.0 && v > D - 30.0) S.kind = 3.0;
+    if (u > L - 26.0 && v > D - 26.0) S.kind = 8.0;
+    return S;
+  }
+  if (t == 13) { // 주택가
+    float lotW = 26.0 + mod(vari, 4.0) * 2.0;
+    float n = max(1.0, floor(L / lotW)), w = L / n;
+    float depth = min(D * 0.42, 34.0);
+    float li = floor(u / w), lu = u - li * w;
+    bool inLot = v < depth || v > D - depth;
+    if (inLot) {
+      bool inner = v < depth;
+      float vv = inner ? v : D - v; // 거리에서 잰 깊이
+      float hd = min(8.0, depth * 0.5 - 3.0), hw = min(10.0, w * 0.5 - 3.0);
+      S.kind = 3.0;
+      if (abs(lu - w * 0.5) < hw + 2.0 && abs(vv - (hd + 5.0)) < hd + 2.0) S.kind = 1.0;
+      if (abs(lu - w * 0.22) < 1.5 && vv < hd + 5.0) S.kind = 5.0;
+      if (min(lu, w - lu) < 0.45 || abs(vv - depth) < 0.45) S.kind = 14.0;
+      float hp = hash12(vec2(li, inner ? 1.0 : 2.0) + vari);
+      if (hp < 0.35 && cBox(vec2(lu, vv), vec2(w * 0.72, depth - 7.0), vec2(2.6, 1.8)) < 0.0) S.kind = 6.0;
+      if (stilt > 0.5) S.kind = S.kind == 1.0 ? 1.0 : 0.0;
+    } else {
+      S.kind = abs(v - cv) < 2.0 ? 5.0 : 3.0;
+      if (length(p - vec2(cu, cv)) < 6.0) S.kind = 11.0;
+    }
+    return S;
+  }
+  S.kind = 0.0;
+  return S;
+}
+
+// 그 자리의 도시 바닥. cov 0 이면 자연 그대로
+vec3 cityGround(vec3 wp, out float cov, out vec3 em, out float spec) {
+  cov = 0.0; em = vec3(0.0); spec = 0.0;
+  if (uCityN == 0 || wp.y < 0.3) return vec3(0.0);
+  vec2 xz = wp.xz;
+  for (int i = 0; i < CITY_NZ; i++) {
+    if (i >= uCityN) break;
+    vec4 A = uCZ0[i];
+    vec2 d = xz - A.xy;
+    float r = length(d);
+    vec4 Bz = uCZ1[i]; vec4 Cz = uCZ2[i]; float rOut = uCZ3[i].x;
+    float street = Bz.x;
+    if (r > rOut + street) continue;
+    if (r < A.z - street) {
+      // 중심 광장 (수도·네 구역의 큰 탑 둘레): 풀밭 대신 동심 판석 광장 + 대로를 잇는 방사 산책로 + 둥근 화단
+      if (uCZ3[i].y < 0.5) continue;
+      float fwc = max(fwidth(r), 0.002);
+      CityS C; C.fw = fwc; C.var = 0.0; C.line = r; C.glow = 0.0; C.kind = 2.0; C.q = d;
+      float ac = atan(d.y, d.x);
+      float SAc = 6.2831853 / max(Bz.z, 4.0);
+      float relc = mod(ac - Bz.w, 6.2831853);
+      float fsc = relc - floor(relc / SAc) * SAc;
+      float dAvc = min(fsc, SAc - fsc) * r;
+      float step32 = 34.0, rf = mod(r, step32);
+      if (dAvc < 4.5) { C.kind = 1.0; C.q = vec2(dAvc, r); }
+      else if (dAvc < 4.75) { C.kind = 13.0; C.glow = 0.8; }
+      else if (abs(rf - 1.8) < 1.8 && r > 40.0) { C.kind = 1.0; C.q = vec2(ac * r, rf); }
+      else {
+        float kr = floor(r / step32);
+        float rc = (kr + 0.5) * step32 + 1.8;
+        float nC = max(6.0, floor(6.2831853 * rc / 30.0));
+        float slot = floor(fsc / SAc * max(2.0, floor(nC / max(Bz.z, 4.0))));
+        float nS = max(2.0, floor(nC / max(Bz.z, 4.0)));
+        float acc = Bz.w + floor(relc / SAc) * SAc + (slot + 0.5) / nS * SAc;
+        float dc = length(xz - (A.xy + vec2(cos(acc), sin(acc)) * rc));
+        if (dc < 5.2 && kr > 0.5) { C.kind = dc < 4.9 ? (dc < 1.6 ? 4.0 : 3.0) : 13.0; C.glow = dc >= 4.9 ? 1.0 : 0.0; C.q = xz; }
+      }
+      cov = 1.0;
+      return citySurface(C, em, spec);
+    }
+    float ring = A.w, r0 = A.z, nb = Bz.y, avn = Bz.z, aOff = Bz.w, row0 = Cz.x, lane = Cz.z, avH = Cz.w;
+    float a = atan(d.y, d.x);
+    float SA = 6.2831853 / avn;
+    float rel = mod(a - aOff, 6.2831853);
+    float s = floor(rel / SA);
+    float fs = rel - s * SA;
+    float dAv = min(fs, SA - fs) * r;
+    float fw = max(fwidth(r), 0.002);
+    CityS S; S.q = xz; S.fw = fw; S.var = 0.0; S.line = 0.0; S.glow = 0.0; S.kind = 0.0;
+    float kf = floor((r - r0) / ring);
+    float along = a * r;
+    // 고리 거리 위치 (차도 가운데선까지)
+    float vbS = -1.0, sw = min(4.6, street * 0.225 - 0.4), rw = street * 0.55;
+    bool onStreet = false;
+    if (kf >= nb) { vbS = r - rOut; onStreet = vbS < street; }
+    else if (kf >= 0.0) {
+      vec4 RT = cityTexel(row0, kf);
+      float vb = r - (r0 + kf * ring);
+      bool hasSt = RT.a > 0.5;
+      float bs = hasSt ? street : lane;
+      if (vb < bs) {
+        if (hasSt) { vbS = vb; onStreet = true; }
+        else { // 골목 (차도 없는 고리 경계)
+          S.kind = abs(vb - bs * 0.5) < 0.8 ? 4.0 : 1.0; S.q = vec2(along, vb);
+        }
+      } else if (dAv >= avH) {
+        float m = RT.r, start = RT.g + RT.b * 256.0;
+        float j = min(m - 1.0, floor(fs / SA * m));
+        float threl = fs - j * SA / m;
+        float t0 = j < 0.5 ? avH : lane * 0.5, t1 = j > m - 1.5 ? avH : lane * 0.5;
+        float u = threl * r - t0;
+        float Lr = (SA / m) * r - t0 - t1;
+        float v = vb - bs, D = ring - bs;
+        if (u < 0.0 || u > Lr) { // 블록 사이 골목: 가운데 화단(가로수) + 판석
+          float x = u < 0.0 ? -u : u - Lr;
+          float cx = lane * 0.5 - x;
+          S.kind = abs(cx) < 0.8 ? 4.0 : 1.0; S.q = vec2(vb, along);
+          S.glow = cLine(abs(cx) - 1.2, 0.05, fw) * 0.6;
+        } else {
+          vec4 BT = cityTexel(row0, start + s * m + j);
+          if (BT.a < 0.5 || BT.r < 0.5) { cov = 0.0; return vec3(0.0); }
+          S = cityBlock(BT.r, BT.g, BT.b, u, v, Lr, D, j, m, fw);
+          if (S.kind < 0.5) { cov = 0.0; return vec3(0.0); }
+        }
+      }
+    } else if (dAv >= avH) { continue; }
+    // 대로 (가장 위)
+    if (dAv < avH && r > r0 - street) {
+      float x = dAv;
+      float hw2 = street * 0.35;
+      if (x < hw2) {
+        S.kind = 12.0; S.q = vec2(x, r);
+        S.line = cLine(x - hw2 + 0.35, 0.08, fw) + cLine(fract(r / 9.0) - 0.5, 0.25, fw / 9.0) * cLine(x - hw2 * 0.5, 0.08, fw);
+        S.glow = cLine(x, 0.12, fw);
+        if (x < 1.4) { S.kind = 4.0; S.glow = 0.0; } // 가운데 화단
+        // 건널목: 고리 거리 바로 바깥
+        float vbn = mod(r - r0, ring);
+        if (vbn > street && vbn < street + 4.5 && x >= 1.4) { S.line = max(S.line, step(0.5, fract(x / 1.1))); }
+      } else if (x < hw2 + 0.25) { S.kind = 13.0; S.glow = 1.0; S.q = vec2(x, r); }
+      else { S.kind = 1.0; S.q = vec2(x, r); }
+      onStreet = false;
+    } else if (onStreet) {
+      float x = vbS - street * 0.5, ax = abs(x);
+      S.q = vec2(along, x);
+      if (ax < rw * 0.5) {
+        S.kind = 12.0;
+        S.line = cLine(ax - rw * 0.5 + 0.35, 0.08, fw) + cLine(fract(along / 9.0) - 0.5, 0.25, fw / 9.0) * cLine(ax - rw * 0.25, 0.08, fw);
+        S.glow = cLine(ax, 0.1, fw);
+        // 건널목: 대로 바로 옆
+        if (dAv > avH && dAv < avH + 4.5) S.line = max(S.line, step(0.5, fract(x / 1.1)));
+      } else if (ax < rw * 0.5 + 0.25) { S.kind = 13.0; S.glow = 1.0; }
+      else if (ax < rw * 0.5 + 0.25 + sw) { S.kind = 1.0; S.q = vec2(along, ax); }
+      else S.kind = 1.0;
+    }
+    if (S.kind < 0.5) return vec3(0.0);
+    cov = 1.0;
+    return citySurface(S, em, spec);
+  }
+  return vec3(0.0);
+}
+`;

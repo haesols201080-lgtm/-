@@ -1,57 +1,73 @@
 import { PLACE } from './places.js';
 
-// 도시의 살: 큰 구조물 사이를 채우는 건물·거리·떠다니는 차의 배치 표 (world/cityfabric.js 가 읽음).
-// 도시는 「고리 거리 + 방사 대로」로 짜여 있다 — 아웬은 소리가 퍼지는 모양(동심원)으로 도시를 짓는다.
+// 도시의 살: 구역마다 「고리 거리 + 방사 대로 + 골목」으로 블록을 나누고, 블록마다 쓰임(토지 이용)을 정한다.
+// (world/cityplan.js 가 배정·배치, world/cityfabric.js 가 그리기, 지형 셰이더가 블록 바닥을 그린다)
+// 아웬은 소리가 퍼지는 모양(동심원)으로 도시를 짓는다. 가운데는 모이는 곳(공공·광장), 바깥으로 갈수록 만들고 나르는 곳.
 //
-// at: 장소 id 또는 [x, z]   r0~r1: 채울 반지름(m)   ring: 고리 한 칸(거리 + 건물 줄)의 폭   street: 거리 폭
-// rows: 한 칸에 건물 줄 수   lot: 필지 간격(고리를 따라)   foot: 건물 반지름 [최소, 최대]
-// avenues: 방사 대로 수   h: 높이 [최소, 최대]   tall: 1 이면 안쪽(r0)일수록 높아진다   fill: 채우는 비율(나머지는 공원)
-// clump: 동네 단위로 뭉치게 하는 노이즈 크기(m, 0 이면 고르게)   style: STYLES 의 양식   sectors: 대로 사이 부채꼴마다 양식   tint: 색조 목록
-// streetEvery: 고리 몇 개마다 거리를 그릴지(0 = 대로만)   lanes: 거리 위를 달리는 차   sky: 지붕 위 하늘 차선 [높이…]
-// pave: 땅을 포장하는 정도(0..1, 지형 색에 반영 — terrain-mesher)   water: 물 위에도 기둥 집을 짓는다   podium: 탑 밑을 잇는 낮은 블록(기단) 높이 [최소, 최대]
+// at: 장소 id 또는 [x, z]   r0~r1: 채울 반지름(m)   ring: 고리 한 칸(거리 + 블록)의 폭   street: 고리 거리 폭
+// avenues: 방사 대로 수   blockLen: 블록 길이(고리를 따라, m)   lane: 블록 사이 골목 폭
+// h: 높은 건물 높이 [최소, 최대]   tall: 1 이면 안쪽(r0)일수록 높아진다   style: 건물 양식(STYLE_KINDS)
+// sectors: 대로 사이 부채꼴마다 쓰임 묶음(MIX) — 없으면 mix 하나   tint: 색조
+// streetEvery: 고리 몇 개마다 차도를 둘지(나머지 고리 경계는 골목)   lanes: 차도 위 차   sky: 지붕 위 하늘 차선 [높이…]
+// water: 물 위에도 기둥 집을 짓는다   podium: 상업 블록 기단 높이 [최소, 최대]
+// core: 'plaza' 면 r0 안쪽(큰 탑 둘레)을 풀밭 대신 판석 광장으로 덮는다(지형 셰이더)
 export const ZONES = [
   // ── 하모네아: 척추 고원 (해발 390 m, 반지름 약 1.6 km) ──
-  { id: 'cap-core', at: 'harmonea', r0: 470, r1: 1560, ring: 96, street: 24, rows: 2, lot: 36, foot: [9, 16], avenues: 8, h: [40, 240], tall: 0.3, fill: 0.95, style: 'civic', sectors: ['civic', 'commerce', 'transit', 'residential', 'commerce', 'civic', 'residential', 'transit'], tint: 'pearl', podium: [8, 22], pave: 0.9, streetEvery: 1, lanes: true, sky: [70, 150, 260] },
-  // ── 하모네아의 네 구역: 큰 탑 둘레의 고층 밀집 ──
-  { id: 'dist-east', at: 'd-east', r0: 380, r1: 1350, ring: 100, street: 26, rows: 2, lot: 38, foot: [10, 17], avenues: 6, h: [35, 420], tall: 1, fill: 0.9, style: 'research', sectors: ['research', 'research', 'commerce'], tint: 'cool', podium: [8, 26], pave: 0.85, streetEvery: 2, lanes: true, sky: [120, 300] },
-  { id: 'dist-sw', at: 'd-sw', r0: 380, r1: 1300, ring: 100, street: 26, rows: 2, lot: 38, foot: [10, 17], avenues: 6, h: [30, 360], tall: 1, fill: 0.9, style: 'residential', sectors: ['residential', 'residential', 'commerce'], tint: 'warm', podium: [8, 24], pave: 0.85, streetEvery: 2, lanes: true, sky: [110, 260] },
-  { id: 'dist-west', at: 'd-west', r0: 400, r1: 1300, ring: 100, street: 26, rows: 2, lot: 40, foot: [10, 17], avenues: 6, h: [30, 300], tall: 1, fill: 0.88, style: 'bioindustry', sectors: ['bioindustry', 'bioindustry', 'residential'], tint: 'rose', podium: [6, 16], pave: 0.6, streetEvery: 2, lanes: true, sky: [100, 230] },
-  { id: 'dist-north', at: 'd-north', r0: 360, r1: 1300, ring: 100, street: 26, rows: 2, lot: 38, foot: [10, 16], avenues: 6, h: [35, 380], tall: 1, fill: 0.9, style: 'energy', sectors: ['energy', 'energy', 'research'], tint: 'violet', podium: [8, 24], pave: 0.85, streetEvery: 2, lanes: true, sky: [120, 280] },
-  // ── 고원 아래 넓은 교외: 동네마다 뭉친 낮은 집들 ──
-  { id: 'cap-suburb', at: 'harmonea', r0: 1760, r1: 6400, ring: 120, street: 30, rows: 1, lot: 58, foot: [12, 24], avenues: 12, h: [12, 70], tall: 0, fill: 0.62, clump: 900, style: 'suburb', tint: 'pearl', streetEvery: 0, lanes: false },
+  { id: 'cap-core', core: 'plaza', at: 'harmonea', r0: 470, r1: 1560, ring: 96, street: 24, avenues: 8, blockLen: 118, lane: 9, h: [40, 240], tall: 0.3, style: 'capital', sectors: ['civic', 'commerce', 'transit', 'residential', 'commerce', 'civic', 'residential', 'transit'], tint: 'pearl', podium: [8, 22], streetEvery: 1, lanes: true, sky: [70, 150, 260] },
+  // ── 하모네아의 네 구역: 큰 탑 둘레 ──
+  { id: 'dist-east', core: 'plaza', at: 'd-east', r0: 380, r1: 1350, ring: 100, street: 26, avenues: 6, blockLen: 128, lane: 9, h: [35, 420], tall: 1, style: 'capital', sectors: ['research', 'research', 'commerce', 'residential', 'research', 'civic'], tint: 'cool', podium: [8, 26], streetEvery: 1, lanes: true, sky: [120, 300] },
+  { id: 'dist-sw', core: 'plaza', at: 'd-sw', r0: 380, r1: 1300, ring: 100, street: 26, avenues: 6, blockLen: 128, lane: 9, h: [30, 360], tall: 1, style: 'capital', sectors: ['residential', 'residential', 'commerce', 'residential', 'civic', 'residential'], tint: 'warm', podium: [8, 24], streetEvery: 1, lanes: true, sky: [110, 260] },
+  { id: 'dist-west', core: 'plaza', at: 'd-west', r0: 400, r1: 1300, ring: 100, street: 26, avenues: 6, blockLen: 128, lane: 9, h: [30, 300], tall: 1, style: 'capital', sectors: ['bioindustry', 'bioindustry', 'residential', 'bioindustry', 'transit', 'residential'], tint: 'rose', podium: [6, 16], streetEvery: 1, lanes: true, sky: [100, 230] },
+  { id: 'dist-north', core: 'plaza', at: 'd-north', r0: 360, r1: 1300, ring: 100, street: 26, avenues: 6, blockLen: 128, lane: 9, h: [35, 380], tall: 1, style: 'capital', sectors: ['energy', 'energy', 'research', 'energy', 'transit', 'residential'], tint: 'violet', podium: [8, 24], streetEvery: 1, lanes: true, sky: [120, 280] },
+  // ── 고원 아래 넓은 교외: 동네(주택) · 농지 · 인공 환경 · 물류 ──
+  { id: 'cap-suburb', at: 'harmonea', r0: 1760, r1: 6400, ring: 120, street: 22, avenues: 12, blockLen: 230, lane: 12, h: [10, 40], tall: 0, style: 'suburb', mix: 'suburb', tint: 'pearl', streetEvery: 2, lanes: false },
   // ── 지방 도시: 각자 다른 양식 ──
-  { id: 'town-dew', at: 'dewfold', r0: 200, r1: 760, ring: 62, street: 16, rows: 1, lot: 34, foot: [8, 15], avenues: 5, h: [8, 26], tall: 0.4, fill: 0.85, clump: 380, style: 'village', tint: 'warm', streetEvery: 1, lanes: true, pave: 0.45 },
-  { id: 'town-yun', at: 'yunseul', r0: 420, r1: 1150, ring: 74, street: 18, rows: 1, lot: 38, foot: [9, 17], avenues: 6, h: [25, 170], tall: 0.8, fill: 0.85, style: 'glass', tint: 'crystal', podium: [5, 12], pave: 0.6, streetEvery: 1, lanes: true, sky: [90] },
-  { id: 'town-gat', at: 'gatmaeul', r0: 460, r1: 1200, ring: 76, street: 18, rows: 1, lot: 40, foot: [10, 18], avenues: 6, h: [15, 70], tall: 0.5, fill: 0.85, clump: 420, style: 'bloom', tint: 'bloom', pave: 0.4, streetEvery: 1, lanes: true },
-  { id: 'town-tte', at: 'tteodol', r0: 640, r1: 1300, ring: 70, street: 18, rows: 1, lot: 38, foot: [9, 16], avenues: 5, h: [14, 80], tall: 0.5, fill: 0.85, style: 'canyon', tint: 'sand', podium: [5, 12], pave: 0.55, streetEvery: 1, lanes: true },
-  { id: 'town-mul', at: 'mulnorae', r0: 520, r1: 1150, ring: 68, street: 18, rows: 1, lot: 36, foot: [9, 15], avenues: 6, h: [8, 40], tall: 0.4, fill: 0.85, style: 'sea', tint: 'sea', streetEvery: 1, lanes: true, water: true },
-  { id: 'town-obs', at: 'array', r0: 340, r1: 700, ring: 60, street: 16, rows: 1, lot: 34, foot: [8, 14], avenues: 4, h: [10, 50], tall: 0.5, fill: 0.8, style: 'frost', tint: 'frost', streetEvery: 1, lanes: false },
+  { id: 'town-dew', at: 'dewfold', r0: 200, r1: 760, ring: 62, street: 16, avenues: 5, blockLen: 88, lane: 7, h: [8, 26], tall: 0.4, style: 'village', mix: 'village', tint: 'warm', streetEvery: 1, lanes: true },
+  { id: 'town-yun', at: 'yunseul', r0: 420, r1: 1150, ring: 74, street: 18, avenues: 6, blockLen: 100, lane: 8, h: [25, 170], tall: 0.8, style: 'glass', mix: 'town', tint: 'crystal', podium: [5, 12], streetEvery: 1, lanes: true, sky: [90] },
+  { id: 'town-gat', at: 'gatmaeul', r0: 460, r1: 1200, ring: 76, street: 18, avenues: 6, blockLen: 100, lane: 8, h: [15, 70], tall: 0.5, style: 'bloom', mix: 'town', tint: 'bloom', streetEvery: 1, lanes: true },
+  { id: 'town-tte', at: 'tteodol', r0: 640, r1: 1300, ring: 70, street: 18, avenues: 5, blockLen: 100, lane: 8, h: [14, 80], tall: 0.5, style: 'canyon', mix: 'town', tint: 'sand', podium: [5, 12], streetEvery: 1, lanes: true },
+  { id: 'town-mul', at: 'mulnorae', r0: 520, r1: 1150, ring: 68, street: 18, avenues: 6, blockLen: 96, lane: 8, h: [8, 40], tall: 0.4, style: 'sea', mix: 'village', tint: 'sea', streetEvery: 1, lanes: true, water: true },
+  { id: 'town-obs', at: 'array', r0: 340, r1: 700, ring: 60, street: 16, avenues: 4, blockLen: 90, lane: 7, h: [10, 50], tall: 0.5, style: 'frost', mix: 'village', tint: 'frost', streetEvery: 1, lanes: false },
   // ── 바다 건너 ──
-  { id: 'far-rift', at: 'rift-core', r0: 460, r1: 1300, ring: 72, street: 18, rows: 1, lot: 38, foot: [9, 16], avenues: 6, h: [20, 140], tall: 0.6, fill: 0.8, style: 'canyon', tint: 'sand', streetEvery: 1, lanes: true },
-  { id: 'far-plains', at: 'bones', r0: 560, r1: 1250, ring: 80, street: 20, rows: 1, lot: 46, foot: [10, 18], avenues: 6, h: [10, 40], tall: 0.3, fill: 0.7, clump: 500, style: 'village', tint: 'warm', streetEvery: 1, lanes: false },
-  { id: 'far-ice', at: 'great-ear', r0: 560, r1: 1150, ring: 70, street: 18, rows: 1, lot: 40, foot: [9, 16], avenues: 5, h: [10, 60], tall: 0.5, fill: 0.75, style: 'frost', tint: 'frost', streetEvery: 1, lanes: false, water: true },
-  { id: 'far-falls', at: 'sky-forge', r0: 640, r1: 1350, ring: 76, street: 20, rows: 1, lot: 42, foot: [10, 17], avenues: 6, h: [20, 120], tall: 0.6, fill: 0.8, style: 'glass', tint: 'cool', streetEvery: 1, lanes: true, pave: 0.5 },
+  { id: 'far-rift', at: 'rift-core', r0: 460, r1: 1300, ring: 72, street: 18, avenues: 6, blockLen: 100, lane: 8, h: [20, 140], tall: 0.6, style: 'canyon', mix: 'town', tint: 'sand', streetEvery: 1, lanes: true },
+  { id: 'far-plains', at: 'bones', r0: 560, r1: 1250, ring: 80, street: 20, avenues: 6, blockLen: 120, lane: 9, h: [10, 40], tall: 0.3, style: 'village', mix: 'village', tint: 'warm', streetEvery: 1, lanes: false },
+  { id: 'far-ice', at: 'great-ear', r0: 560, r1: 1150, ring: 70, street: 18, avenues: 5, blockLen: 100, lane: 8, h: [10, 60], tall: 0.5, style: 'frost', mix: 'village', tint: 'frost', streetEvery: 1, lanes: false, water: true },
+  { id: 'far-falls', at: 'sky-forge', r0: 640, r1: 1350, ring: 76, street: 20, avenues: 6, blockLen: 104, lane: 8, h: [20, 120], tall: 0.6, style: 'glass', mix: 'town', tint: 'cool', streetEvery: 1, lanes: true },
 ];
 
-// 양식: 건물 모양별 가중치
-export const STYLES = {
-  // 하모네아 중심의 네 갈래 (대로 사이 부채꼴마다 번갈아)
-  civic: { stack: 3, twist: 2, slab: 2, arcology: 1.5, observatory: 1, blade: 1 },
-  commerce: { blade: 3, twist: 3, slab: 2, spire: 1.5, twin: 1.2, stack: 1 },
-  transit: { hangar: 3, padtower: 3.5, slab: 1.5, blade: 1, conduit: 0.6 },
-  residential: { balcony: 4, bubbles: 2.5, ovoid: 2, arcology: 2, twist: 1 },
-  // 구역의 쓰임
-  research: { observatory: 3, antenna: 3, podlab: 3, spire: 1.5, blade: 1.5, slab: 1 },
-  energy: { reactor: 3, conduit: 3, cooler: 2.5, spire: 1, slab: 1.2 },
-  bioindustry: { fabricator: 3.5, tanks: 3, cooler: 1.5, cap: 1.5, arcology: 1.5, ovoid: 1 },
-  // 교외·지방
-  suburb: { villa: 5, arcology: 2, bubbles: 1.5, dome: 1.5, slab: 1 },
-  village: { dome: 4, villa: 3, bubbles: 1, arcology: 1 },
-  glass: { crystal: 5, spire: 2, blade: 2, antenna: 1 },
-  bloom: { cap: 6, ovoid: 2, bubbles: 2, dome: 1 },
-  canyon: { stack: 3, arcology: 3, villa: 2, padtower: 1, stilt: 1 },
-  sea: { stilt: 5, villa: 2, dome: 2, bubbles: 1 },
-  frost: { villa: 3, slab: 2, dome: 3, observatory: 1.5, antenna: 1 },
+// ── 토지 이용 (블록의 쓰임) — 지형 셰이더와 같은 번호 ──
+export const USE = { NONE: 0, RES: 1, COM: 2, CIV: 3, IND: 4, LOG: 5, ENE: 6, RSC: 7, TRN: 8, ENV: 9, GRN: 10, PLZ: 11, FARM: 12, VILLA: 13 };
+export const USE_NAME = { 1: '주거', 2: '상업', 3: '공공', 4: '산업', 5: '물류', 6: '에너지', 7: '연구', 8: '교통', 9: '인공 환경', 10: '계획 녹지', 11: '광장', 12: '농지', 13: '주택가' };
+
+// 부채꼴(쓰임 묶음)마다 블록 쓰임의 비율
+export const MIX = {
+  civic: { CIV: 3, PLZ: 1.6, GRN: 1.6, COM: 2, RES: 1.6, RSC: 0.5, ENV: 0.4 },
+  commerce: { COM: 5, PLZ: 1.2, RES: 1.6, CIV: 0.6, TRN: 0.6, GRN: 0.8 },
+  transit: { TRN: 3, LOG: 2.2, COM: 1.5, PLZ: 0.8, IND: 0.6, GRN: 0.6, RES: 0.6 },
+  residential: { RES: 6, GRN: 1.6, CIV: 1, COM: 1, ENV: 0.7, PLZ: 0.5 },
+  research: { RSC: 5, CIV: 0.8, GRN: 1.2, RES: 1.4, ENV: 1 },
+  energy: { ENE: 4, IND: 1.6, LOG: 1.1, RSC: 0.6, GRN: 0.7, RES: 0.8 },
+  bioindustry: { IND: 3, ENV: 3, LOG: 1.6, RES: 1.2, GRN: 0.7 },
+  suburb: { FARM: 6, VILLA: 2.4, ENV: 1.6, GRN: 1.2, ENE: 1, LOG: 0.8, IND: 0.6, CIV: 0.3, COM: 0.3 },
+  town: { RES: 3, VILLA: 1.5, COM: 1.6, PLZ: 0.8, GRN: 1.2, CIV: 0.8, ENV: 1, IND: 0.5, LOG: 0.4, RSC: 0.5 },
+  village: { VILLA: 4, RES: 0.8, PLZ: 0.6, GRN: 1.2, ENV: 1, COM: 0.7, FARM: 1.6, CIV: 0.5 },
+};
+
+// 쓰임마다 들어서는 건물 모양 (양식마다 바꿔 낄 수 있다)
+export const STYLE_KINDS = {
+  capital: {
+    tower: { balcony: 3, bubbles: 1.2, ovoid: 1.4, twist: 1.2, arcology: 1 },
+    office: { blade: 3, twist: 3, slab: 2.2, spire: 1.5, stack: 1.5, twin: 1 },
+    lab: { podlab: 3, observatory: 2, antenna: 2, spire: 0.8 },
+    house: { villa: 3, dome: 1 },
+  },
+  suburb: { tower: { arcology: 2, bubbles: 1.5, balcony: 1 }, office: { slab: 2, stack: 1 }, lab: { observatory: 1, podlab: 1 }, house: { villa: 5, dome: 1.5, bubbles: 0.6 } },
+  village: { tower: { dome: 2, arcology: 1 }, office: { villa: 2, stack: 1 }, lab: { observatory: 1 }, house: { dome: 3, villa: 3 } },
+  glass: { tower: { crystal: 4, spire: 1.5 }, office: { crystal: 3, blade: 2, spire: 1.5 }, lab: { antenna: 1, crystal: 1 }, house: { crystal: 1, villa: 2 } },
+  bloom: { tower: { cap: 4, ovoid: 1.5, bubbles: 1.5 }, office: { cap: 3, ovoid: 1 }, lab: { podlab: 1 }, house: { cap: 3, dome: 1 } },
+  canyon: { tower: { stack: 3, arcology: 3 }, office: { stack: 2, slab: 1, arcology: 1 }, lab: { observatory: 1, antenna: 1 }, house: { villa: 3, stack: 0.5 } },
+  sea: { tower: { stilt: 2, dome: 1 }, office: { villa: 2, dome: 1 }, lab: { observatory: 1 }, house: { stilt: 4, villa: 2, dome: 1 } },
+  frost: { tower: { dome: 2, slab: 1 }, office: { slab: 2, dome: 1 }, lab: { observatory: 2, antenna: 1 }, house: { villa: 3, dome: 3 } },
 };
 
 // 색조 (건물 바탕색에 곱해짐 — 진주빛을 크게 벗어나지 않게)
@@ -68,22 +84,29 @@ export const TINTS = {
   frost: [0xeef4ff, 0xe4ecff, 0xffffff, 0xe8f8ff],
 };
 
-// ── 포장된 땅 (지형 색): 워커에서도 쓰므로 순수 함수 ──
-const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-const PAVE = ZONES.filter((Z) => Z.pave).map((Z) => {
+// ── 구역의 기하 (cityplan·지형 셰이더·지도·식물이 함께 쓴다 — 워커에서도 쓰므로 순수) ──
+const TAU = Math.PI * 2;
+export const ZGEO = ZONES.map((Z) => {
   const [cx, cz] = Array.isArray(Z.at) ? Z.at : PLACE[Z.at].pos;
-  const rOut = Z.r0 + Math.floor((Z.r1 - Z.r0) / Z.ring) * Z.ring;
-  return { cx, cz, a: Z.r0 - Z.street - 20, b: rOut + 30, k: Z.pave };
+  const nb = Math.floor((Z.r1 - Z.r0) / Z.ring);
+  return {
+    id: Z.id, cx, cz, r0: Z.r0, ring: Z.ring, street: Z.street, nb, rOut: Z.r0 + nb * Z.ring,
+    avenues: Z.avenues, aOff: (cx % 7) * 0.1, every: Z.streetEvery || 0, lane: Z.lane, blockLen: Z.blockLen,
+    avH: Z.street * 0.35 + 4.2, // 대로 반폭 (차도 + 보도)
+  };
 });
-/** 0..1: 이 자리가 얼마나 포장되었나 */
+/** 고리 k 의 시작에 차도가 있나 (k = nb 는 바깥 가장자리 거리) */
+export const hasStreet = (G, k) => k === G.nb || (G.every > 0 && k % G.every === 0);
+/** 고리 k 의 블록이 시작하는 반지름까지의 띠 폭 (차도면 차도 폭, 아니면 골목) */
+export const bandStart = (G, k) => (hasStreet(G, k) ? G.street : G.lane);
+
+/** 0..1: 이 자리가 도시 구역(블록·거리)인가 — 지형 정점색·지도·식물이 쓴다 */
 export function pavedAt(x, z) {
-  let p = 0;
-  for (const Q of PAVE) {
-    const dx = x - Q.cx, dz = z - Q.cz, r2 = dx * dx + dz * dz;
-    const lo = Math.max(0, Q.a - 50), hi = Q.b + 50;
-    if (r2 > hi * hi || r2 < lo * lo) continue;
-    const r = Math.sqrt(r2);
-    p = Math.max(p, Q.k * sm(Q.a - 50, Q.a, r) * (1 - sm(Q.b, Q.b + 50, r)));
+  for (const G of ZGEO) {
+    const dx = x - G.cx, dz = z - G.cz, r2 = dx * dx + dz * dz;
+    const lo = G.r0 - G.street, hi = G.rOut + G.street;
+    if (r2 < lo * lo || r2 > hi * hi) continue;
+    return 1;
   }
-  return p;
+  return 0;
 }

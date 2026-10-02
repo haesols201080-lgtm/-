@@ -10,7 +10,7 @@ import { litMaterial, glowMaterial } from '../world/materials.js';
 import { hologramMaterial } from '../world/hologram.js';
 import { CURVE_GLSL, ATMOS_PARS, NOISE_GLSL } from '../world/shaders.js';
 import { atmosUniforms } from '../world/atmosphere.js';
-import { PLAN } from '../world/cityfabric.js';
+import { SPEC } from '../world/city-arch.js';
 import { audio } from '../core/audio.js';
 
 const TAU = Math.PI * 2;
@@ -23,6 +23,11 @@ const PURPOSE = {
   heal: { name: '치유원', desc: '지친 울림을 고르게 다듬어 주는 곳. 부드러운 빛 속에서 쉰다.', npc: 3 },
   garden: { name: '하늘 정원', desc: '건물 한가운데를 숲으로 채운 정원.', npc: 4 },
   hall: { name: '작은 공연장', desc: '동네 합창단이 저녁마다 노래한다.', npc: 6 },
+  office: { name: '울림 사무탑', desc: '도시의 일을 노래로 나누어 맡는 곳. 층마다 작은 모임이 열린다.', npc: 5 },
+  library: { name: '마을 서고', desc: '결정에 담긴 옛 노래를 빌려 가는 곳.', npc: 3 },
+  factory: { name: '빚음 공방', desc: '물질을 노래로 설득해 쓸 것을 빚는다. 공정마다 다른 음이 울린다.', npc: 5 },
+  depot: { name: '물류 창고', desc: '도시 곳곳으로 갈 짐을 모으고 나누는 곳.', npc: 5 },
+  terminal: { name: '교통 터미널', desc: '호버 차와 하늘배를 갈아타는 곳.', npc: 7 },
 };
 const BY_STYLE = {
   civic: ['hall', 'lab', 'garden', 'school'],
@@ -85,7 +90,8 @@ export class Interiors {
   info(r) {
     if (r.info) return r.info;
     const rnd = mulberry32(Math.floor(r.seed * 1e9));
-    const list = BY_STYLE[r.style] || BY_STYLE.capital;
+    const byUse = { home: ['home'], office: ['office', 'office', 'lab'], market: ['market'], school: ['school'], heal: ['heal'], library: ['library'], hall: ['hall'], factory: ['factory'], depot: ['depot'], lab: ['lab'], terminal: ['terminal'], garden: ['garden'] };
+    const list = byUse[r.use] || BY_STYLE[r.style] || BY_STYLE.capital;
     const pid = list[Math.floor(rnd() * list.length)];
     const P = PURPOSE[pid];
     const floors = Math.max(2, Math.floor((r.top - r.gy) / 3.6));
@@ -97,9 +103,9 @@ export class Interiors {
   _plan(r) {
     const pts = [];
     let rot, sx, sz, k, A, B, n;
-    if (r.podium) { rot = r.podium.rot; sx = r.podium.hl * 0.96; sz = r.podium.hd * 0.96; k = 12; A = 1; B = 1; n = 28; }
+    if (r.kind === 'podium' || r.kind === 'midrise' || r.kind === 'warehouse') { rot = r.rot; sx = r.sx * 0.96; sz = r.sz * 0.96; k = 12; A = 1; B = 1; n = 28; }
     else {
-      [k, A, B] = PLAN[r.kind];
+      [k, A, B] = SPEC[r.kind].plan;
       const inset = r.kind === 'dome' ? 0.8 : r.kind === 'cap' ? 0.86 : 0.9;
       rot = r.rot; sx = r.sx * A * inset; sz = r.sz * B * inset; n = 22;
     }
@@ -133,15 +139,15 @@ export class Interiors {
     const g = this.game, C = g.world.colliders;
     const info = this.info(r);
     const plan = this._plan(r);
-    const LH = r.podium ? Math.max(4.6, Math.min(8, r.podium.top - r.floorY - 0.6)) : Math.max(4.4, Math.min(7.5, (r.top - r.floorY) * (r.kind === 'dome' ? 0.42 : r.kind === 'villa' || r.kind === 'cap' ? 0.45 : 0.3)));
+    const low = SPEC[r.kind].low || r.kind === 'podium';
+    const LH = Math.max(4.4, Math.min(low ? 8 : 7.5, (r.top - r.floorY) * (r.kind === 'dome' || r.kind === 'biodome' ? 0.42 : low ? 0.5 : 0.3)));
     const cur = { r, info, plan, LH, cols: [], meshes: [], npcs: [], anims: [], deck: null };
     this.cur = cur;
     const fy = r.floorY;
     const dn = [r.door.nx, r.door.nz];
     const doorIn = [r.door.x - dn[0] * 0.6, r.door.z - dn[1] * 0.6];
     // 충돌: 단단한 건물 대신 바닥·벽(문 자리 비움)·로비 위의 몸통
-    C.remove(r.col);
-    if (r.podium) C.remove(r.podium.col);
+    for (const c of r.cols) C.remove(c);
     const add = (c) => cur.cols.push(C.add({ ...c, city: true }));
     const cx = r.x, cz = r.z;
     let maxR = 0;
@@ -157,10 +163,8 @@ export class Interiors {
       const L = Math.hypot(x1 - x0, z1 - z0);
       add({ type: 'box', x: mx, z: mz, hx: L / 2 + 0.25, hz: 0.35, rot: -Math.atan2(z1 - z0, x1 - x0), y0: fy - 2, y1: fy + LH, walk: false });
     }
-    const top = r.col.y1;
-    if (r.col.type === 'cyl') add({ type: 'cyl', x: cx, z: cz, r: r.col.r, y0: fy + LH, y1: top, dome: r.col.dome });
-    else add({ type: 'box', x: cx, z: cz, hx: r.col.hx, hz: r.col.hz, rot: r.col.rot, y0: fy + LH, y1: top });
-    if (r.podium) add({ type: 'box', x: cx, z: cz, hx: r.podium.hl, hz: r.podium.hd, rot: r.podium.rot, y0: fy + LH, y1: r.podium.top });
+    // 로비 위의 몸통: 겹 충돌체를 로비 천장 위로 잘라서
+    for (const c of r.cols) if (c.y1 > fy + LH + 0.2) { const k2 = { ...c, y0: Math.max(c.y0, fy + LH) }; delete k2._mark; add(k2); }
     add({ type: 'cyl', x: cx, z: cz, r: 1.8, y0: fy, y1: fy + LH - 0.2, walk: false }); // 빛 승강기
     // 문 앞이 땅보다 높으면 경사로
     const ground = heightAt(r.door.x + dn[0] * 2, r.door.z + dn[1] * 2);
@@ -231,8 +235,8 @@ export class Interiors {
     const faceDoor = Math.atan2(dn[0], dn[1]);
     // 승강기 받침·고리, 안내대
     put(new THREE.CylinderGeometry(2.2, 2.4, 0.18, 24), PEARL, 0, cx, fy + 0.09, cz);
-    put(new THREE.TorusGeometry(2.0, 0.07, 4, 32).rotateX(Math.PI / 2), ACC, 2.0, cx, fy + 0.2, cz);
-    put(new THREE.TorusGeometry(2.0, 0.07, 4, 32).rotateX(Math.PI / 2), ACC, 2.0, cx, fy + LH - 0.25, cz);
+    put(new THREE.TorusGeometry(2.0, 0.05, 4, 32).rotateX(Math.PI / 2), ACC, 1.0, cx, fy + 0.2, cz);
+    put(new THREE.TorusGeometry(2.0, 0.05, 4, 32).rotateX(Math.PI / 2), ACC, 1.0, cx, fy + LH - 0.25, cz);
     const [ddx, ddz] = toward(0.52);
     if (rin > 6) {
       put(new THREE.CylinderGeometry(2.6, 2.6, 1.05, 16, 1, false, -0.7, 1.4), PEARL, 0, ddx, fy + 0.52, ddz, faceDoor + Math.PI);
@@ -240,6 +244,7 @@ export class Interiors {
     }
     // 화분 나무
     const tree = (x, z, s = 1) => {
+      cur.cols.push(this.game.world.colliders.add({ type: 'cyl', x, z, r: 0.7 * s, y0: fy - 1, y1: fy + 0.8 * s, city: true }));
       put(new THREE.CylinderGeometry(0.7 * s, 0.55 * s, 0.8 * s, 10), GOLD, 0, x, fy + 0.4 * s, z);
       put(new THREE.CylinderGeometry(0.08 * s, 0.12 * s, 2.2 * s, 5), 0x6a5a50, 0, x, fy + 1.6 * s, z);
       put(new THREE.IcosahedronGeometry(1.1 * s, 0).scale(1, 0.8, 1), LEAF, 0.25, x, fy + 2.9 * s, z);
@@ -257,49 +262,127 @@ export class Interiors {
       const ang = Math.PI * 0.6 + i * 0.5;
       const [x, z] = toward(0.62, ang);
       put(new THREE.BoxGeometry(2.4, 0.45, 0.7), PEARL, 0, x, fy + 0.4, z, Math.atan2(cx - x, cz - z));
+      cur.cols.push(this.game.world.colliders.add({ type: 'box', x, z, hx: 1.2, hz: 0.35, rot: Math.atan2(cx - x, cz - z), y0: fy - 1, y1: fy + 0.62, city: true }));
     }
-    // 쓰임별
+    // 쓰임별: 가구 + 그 둘레에서 사람이 하는 일 (anchors → citizens.setIndoor)
+    const AN = cur.anchors = [];
+    const t = this.game.world.clock.time % 1;
+    const work = t > 0.27 && t < 0.76, evening = t >= 0.7 && t < 0.9, night = t >= 0.9 || t < 0.24;
+    const anchor = (x, z, act, yaw, o = {}) => AN.push({ x, z, y: fy, yaw, act, ...o });
+    const face = (x, z, tx, tz) => Math.atan2(tx - x, tz - z);
+    const rnd = mulberry32(Math.floor(r.seed * 3e8) + 5);
+    // 가구는 단단하다 (닫을 때 함께 치운다)
+    const solidC = (c) => cur.cols.push(this.game.world.colliders.add({ y0: fy - 1, city: true, ...c }));
+    const sBox = (x, z, hx, hz, rot, h) => solidC({ type: 'box', x, z, hx, hz, rot, y1: fy + h });
+    const sCyl = (x, z, rr, h) => solidC({ type: 'cyl', x, z, r: rr, y1: fy + h });
+    const table = (x, z, R = 1.3, n = 4, act = 'eat') => {
+      put(new THREE.CylinderGeometry(R, R * 0.9, 0.08, 16), PEARL, 0, x, fy + 0.85, z);
+      put(new THREE.CylinderGeometry(0.15, 0.3, 0.85, 8), GOLD, 0, x, fy + 0.42, z);
+      put(new THREE.TorusGeometry(R * 0.6, 0.04, 3, 18).rotateX(Math.PI / 2), ACC, 1.2, x, fy + 0.9, z);
+      sCyl(x, z, R, 0.9);
+      for (let i = 0; i < n; i++) { const a = (i / n) * TAU; const sx = x + Math.cos(a) * (R + 0.9), sz = z + Math.sin(a) * (R + 0.9); put(new THREE.CylinderGeometry(0.45, 0.4, 0.45, 10), 0xc8c2d2, 0, sx, fy + 0.22, sz); sCyl(sx, sz, 0.42, 0.45); if (act) anchor(sx, sz, act, face(sx, sz, x, z)); }
+    };
     if (pid === 'home') {
+      // 책장 · 식탁 · 부엌대 · 잠자리 셋 · 아이 놀이 자리
       const [x, z] = toward(0.9, Math.PI);
       const ry = Math.atan2(cx - x, cz - z);
       for (let a = 0; a < 6; a++) for (let b = 0; b < 4; b++) put(new THREE.BoxGeometry(0.5, 0.4, 0.06), [ACC, GOLD, 0xff9fd0][(a + b) % 3], 0.8 + ((a * 7 + b) % 3) * 0.4, x + Math.cos(ry) * (a - 2.5) * 0.65, fy + 1.2 + b * 0.55, z - Math.sin(ry) * (a - 2.5) * 0.65, ry);
+      const [tx, tz] = toward(0.42, Math.PI * 0.72);
+      const fam = 2 + Math.floor(rnd() * 3), kids = rnd() < 0.6 ? 1 + Math.floor(rnd() * 2) : 0;
+      table(tx, tz, 1.3, 4, null);
+      const [kx, kz] = toward(0.74, Math.PI * 1.3);
+      const kry = face(kx, kz, cx, cz);
+      put(new THREE.BoxGeometry(3.4, 0.95, 0.9), 0xd8d2e0, 0, kx, fy + 0.48, kz, kry);
+      sBox(kx, kz, 1.7, 0.45, kry, 0.97);
+      put(new THREE.BoxGeometry(3.42, 0.05, 0.92), ACC, 1.2, kx, fy + 0.97, kz, kry);
+      put(new THREE.CylinderGeometry(0.3, 0.3, 0.25, 12), 0xffc46a, 1.6, kx + Math.sin(kry) * 0.1, fy + 1.1, kz + Math.cos(kry) * 0.1);
+      for (let i = 0; i < 3; i++) { const [bx, bz] = toward(0.8, Math.PI * 0.25 + i * 0.32); put(new THREE.CapsuleGeometry(0.55, 1.6, 3, 10).rotateZ(Math.PI / 2), 0xe8e0f0, 0.3, bx, fy + 0.45, bz, face(bx, bz, cx, cz) + Math.PI / 2); sBox(bx, bz, 1.35, 0.55, face(bx, bz, cx, cz) + Math.PI / 2, 0.9); if (night) anchor(bx, bz, 'sleep', face(bx, bz, cx, cz) + Math.PI / 2); }
+      if (!night) {
+        if (evening || !work) { anchor(kx - Math.sin(kry) * 1.0, kz - Math.cos(kry) * 1.0, 'cook', kry); for (let i = 0; i < Math.min(4, fam - 1); i++) { const a = (i / 4) * TAU; const sx = tx + Math.cos(a) * 2.2, sz = tz + Math.sin(a) * 2.2; anchor(sx, sz, 'eat', face(sx, sz, tx, tz)); } }
+        else { anchor(kx - Math.sin(kry) * 1.0, kz - Math.cos(kry) * 1.0, 'cook', kry, { age: 'elder' }); const [rx, rz] = toward(0.62, Math.PI * 0.85); anchor(rx, rz, 'read', face(rx, rz, x, z), { age: 'elder' }); }
+        const [px, pz] = toward(0.3, Math.PI * 1.65);
+        for (let i = 0; i < kids; i++) anchor(px, pz, 'kidplay', 0, { r: 1.6 + i * 0.5 });
+      }
     } else if (pid === 'lab') {
       for (let i = 0; i < 3; i++) {
         const [x, z] = toward(0.6, Math.PI * 0.75 + i * 0.45);
         put(new THREE.CylinderGeometry(1.1, 0.9, 1.0, 14), PEARL, 0, x, fy + 0.5, z);
+        sCyl(x, z, 1.1, 1.0);
         put(new THREE.OctahedronGeometry(0.4, 0), [ACC, 0xb9a6ff, 0xff9fd0][i], 2.2, x, fy + 2.0, z);
         put(new THREE.TorusGeometry(0.9, 0.03, 3, 20).rotateX(Math.PI / 2), ACC, 1.8, x, fy + 1.05, z);
+        if (work || rnd() < 0.3) { const ax = x + (cx - x) * 0.3, az = z + (cz - z) * 0.3; anchor(ax, az, 'research', face(ax, az, x, z)); }
       }
     } else if (pid === 'market') {
       for (let i = 0; i < 6; i++) {
         const [x, z] = toward(0.68, Math.PI * 0.45 + i * 0.37);
         const c = [0xff9fd0, 0xffc46a, 0x7ff3e6, 0xb9a6ff][i % 4];
         put(new THREE.BoxGeometry(2.2, 0.9, 1.1), PEARL, 0, x, fy + 0.45, z, Math.atan2(cx - x, cz - z));
+        sBox(x, z, 1.1, 0.55, Math.atan2(cx - x, cz - z), 0.9);
         put(new THREE.ConeGeometry(1.7, 0.7, 4).rotateY(Math.PI / 4), c, 0.4, x, fy + 2.7, z);
         put(new THREE.CylinderGeometry(0.05, 0.05, 2.3, 4), GOLD, 0, x, fy + 1.4, z);
         for (let k = 0; k < 4; k++) put(new THREE.IcosahedronGeometry(0.2, 0), [c, 0xffffff, GOLD][k % 3], 1.0, x + (k - 1.5) * 0.4, fy + 1.05, z);
+        if (work || evening) {
+          const bx = x + (x - cx) * 0.12, bz = z + (z - cz) * 0.12;
+          anchor(bx, bz, 'shop', face(bx, bz, cx, cz));
+          if (rnd() < 0.6) { const qx = x + (cx - x) * 0.28, qz = z + (cz - z) * 0.28; anchor(qx, qz, 'guest', face(qx, qz, x, z)); }
+        }
       }
     } else if (pid === 'school') {
       for (let i = 0; i < 8; i++) {
         const ang = (i / 8) * TAU;
         const [x, z] = [cx + Math.cos(ang) * rin * 0.55, cz + Math.sin(ang) * rin * 0.55];
         put(new THREE.BoxGeometry(1.6, 0.4, 0.6), [0xffc46a, 0x7ff3e6, 0xff9fd0, 0xb9a6ff][i % 4], 0.2, x, fy + 0.3, z, ang + Math.PI / 2);
+        if (work && t < 0.62) anchor(x + Math.cos(ang) * 0.8, z + Math.sin(ang) * 0.8, 'student', face(x, z, cx, cz) + Math.PI, { age: 'child' });
       }
       put(new THREE.RingGeometry(rin * 0.3, rin * 0.32, 32).rotateX(-Math.PI / 2), 0xffd27a, 1.6, cx, fy + 0.03, cz);
+      if (work) { const [x, z] = toward(0.22, Math.PI * 0.5); anchor(x, z, 'teach', face(x, z, cx, cz) + Math.PI); }
     } else if (pid === 'heal') {
       for (let i = 0; i < 4; i++) {
         const [x, z] = toward(0.66, Math.PI * 0.6 + i * 0.5);
-        put(new THREE.CapsuleGeometry(0.7, 1.8, 4, 10).rotateZ(Math.PI / 2), 0xe8f4ff, 0.5, x, fy + 0.9, z, Math.atan2(cx - x, cz - z) + Math.PI / 2);
-        put(new THREE.BoxGeometry(2.8, 0.4, 1.2), PEARL, 0, x, fy + 0.2, z, Math.atan2(cx - x, cz - z) + Math.PI / 2);
+        const ry = Math.atan2(cx - x, cz - z) + Math.PI / 2;
+        put(new THREE.CapsuleGeometry(0.7, 1.8, 4, 10).rotateZ(Math.PI / 2), 0xe8f4ff, 0.5, x, fy + 0.9, z, ry);
+        put(new THREE.BoxGeometry(2.8, 0.4, 1.2), PEARL, 0, x, fy + 0.2, z, ry);
+        sBox(x, z, 1.4, 0.6, ry, 1.0);
+        if (rnd() < 0.6) anchor(x, z, 'patient', ry);
+        if (i % 2 === 0) { const hx = x + (cx - x) * 0.25, hz = z + (cz - z) * 0.25; anchor(hx, hz, 'heal', face(hx, hz, x, z)); }
       }
     } else if (pid === 'garden') {
       const [x, z] = toward(0.5, Math.PI);
       put(new THREE.CircleGeometry(Math.min(4, rin * 0.3), 24).rotateX(-Math.PI / 2), 0x3a8ab8, 0.5, x, fy + 0.05, z);
       put(new THREE.TorusGeometry(Math.min(4, rin * 0.3), 0.15, 4, 28).rotateX(Math.PI / 2), PEARL, 0, x, fy + 0.1, z);
+      for (let i = 0; i < 3; i++) { const [gx, gz] = toward(0.55, Math.PI * 0.4 + i * 0.6); anchor(gx, gz, 'garden', face(gx, gz, cx, cz)); }
     } else if (pid === 'hall') {
       const [x, z] = toward(0.62, Math.PI);
       put(new THREE.CylinderGeometry(rin * 0.32, rin * 0.34, 0.6, 24, 1, false, 0, Math.PI), PEARL, 0, x, fy + 0.3, z, faceDoor + Math.PI / 2);
       for (let k = 0; k < 3; k++) put(new THREE.TorusGeometry(rin * 0.3 + k * 0.6, 0.04, 3, 24, Math.PI).rotateX(Math.PI / 2), 0xff9fd0, 1.5, x, fy + 0.65 + k * 0.02, z, faceDoor + Math.PI / 2);
+      const sing = t > 0.45 && t < 0.92;
+      const n = sing ? 5 : 2;
+      for (let i = 0; i < n; i++) { const a = (i - (n - 1) / 2) * 0.28; const sx = x + Math.cos(Math.atan2(cz - z, cx - x) + a) * 1.6, sz = z + Math.sin(Math.atan2(cz - z, cx - x) + a) * 1.6; AN.push({ x: sx, z: sz, y: fy + 0.6, yaw: face(sx, sz, cx, cz), act: 'sing' }); }
+      if (sing) for (let i = 0; i < 4; i++) { const [ax, az] = toward(0.1 + (i % 2) * 0.18, Math.PI * (0.8 + (i >> 1) * 0.4)); anchor(ax, az, 'eat', face(ax, az, x, z)); }
+    } else if (pid === 'office' || pid === 'library') {
+      // 책상 줄 (서고는 책장 줄)
+      for (let i = 0; i < 6; i++) {
+        const [x, z] = toward(0.5 + (i % 2) * 0.22, Math.PI * 0.55 + Math.floor(i / 2) * 0.45);
+        const ry = face(x, z, cx, cz);
+        sBox(x, z, 0.9, 0.45, ry, pid === 'office' ? 1.0 : 2.4);
+        if (pid === 'office') { put(new THREE.BoxGeometry(1.8, 0.08, 0.9), 0xd8d2e0, 0, x, fy + 0.95, z, ry); put(new THREE.BoxGeometry(0.9, 0.6, 0.05), ACC, 1.4, x, fy + 1.4, z, ry); put(new THREE.BoxGeometry(0.2, 0.95, 0.2), GOLD, 0, x, fy + 0.48, z, ry); }
+        else for (let b = 0; b < 4; b++) put(new THREE.BoxGeometry(1.8, 0.06, 0.5), [ACC, GOLD, 0xff9fd0, 0xb9a6ff][b], 0.9, x, fy + 0.5 + b * 0.6, z, ry);
+        if (work || rnd() < 0.2) anchor(x + Math.sin(ry) * 1.0, z + Math.cos(ry) * 1.0, pid === 'office' ? 'clerk' : 'read', ry + Math.PI);
+      }
+    } else if (pid === 'factory' || pid === 'depot') {
+      for (let i = 0; i < 4; i++) {
+        const [x, z] = toward(0.6, Math.PI * 0.55 + i * 0.32);
+        const ry = face(x, z, cx, cz);
+        sBox(x, z, pid === 'factory' ? 1.1 : 0.75, pid === 'factory' ? 0.8 : 0.65, ry, pid === 'factory' ? 1.4 : 2.3);
+        if (pid === 'factory') { put(new THREE.BoxGeometry(2.2, 1.4, 1.6), 0x9aa4b2, 0, x, fy + 0.7, z, ry); put(new THREE.TorusGeometry(0.6, 0.06, 4, 18), [ACC, 0xffc46a][i % 2], 2.0, x, fy + 1.9, z, ry); }
+        else for (let k = 0; k < 2; k++) put(new THREE.BoxGeometry(1.5, 1.1, 1.3), [0x6f8fb0, 0xc89060][(i + k) % 2], 0, x, fy + 0.55 + k * 1.12, z, ry);
+        if (work) anchor(x + Math.sin(ry) * 1.6, z + Math.cos(ry) * 1.6, 'work', ry + Math.PI);
+      }
+    } else if (pid === 'terminal') {
+      for (let i = 0; i < 3; i++) { const [x, z] = toward(0.55, Math.PI * 0.6 + i * 0.4); put(new THREE.BoxGeometry(4, 0.45, 0.8), 0xc8c2d2, 0, x, fy + 0.4, z, face(x, z, cx, cz)); sBox(x, z, 2, 0.4, face(x, z, cx, cz), 0.62); anchor(x, z, 'eat', face(x, z, cx, cz) + Math.PI); }
+      const [dx2, dz2] = toward(0.3, Math.PI * 1.4);
+      put(new THREE.BoxGeometry(2.6, 3, 0.1), 0x7ff3e6, 1.6, dx2, fy + 2.4, dz2, face(dx2, dz2, cx, cz));
+      if (work) anchor(dx2 + 1, dz2, 'clerk', face(dx2, dz2, cx, cz));
     }
     // 합치기
     const base = new THREE.BufferGeometry();
@@ -332,9 +415,9 @@ export class Interiors {
       g.add(wm);
     }
     // 빛 승강기: 유리 관 + 빛기둥
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(1.75, 1.75, LH - 0.3, 24, 1, true), glowMaterial({ color: 0xbff8ff, intensity: 0.28, fresnel: 0.95, side: THREE.DoubleSide }));
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(1.75, 1.75, LH - 0.3, 24, 1, true), glowMaterial({ color: 0xbff8ff, intensity: 0.18, fresnel: 0.95, side: THREE.DoubleSide }));
     tube.position.set(cx, fy + (LH - 0.3) / 2 + 0.15, cz);
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, LH - 0.3, 12, 1, true), glowMaterial({ color: 0x9ff6ff, intensity: 0.8 }));
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, LH - 0.3, 12, 1, true), glowMaterial({ color: 0x9ff6ff, intensity: 0.45 }));
     beam.position.copy(tube.position);
     g.add(tube, beam);
     // 안내 홀로그램 (문 안쪽) + 떠 있는 조형물
@@ -389,28 +472,22 @@ export class Interiors {
     return g;
   }
 
-  /** 로비의 사람들: 안내지기 + 쓰임에 따라 오가는 아웬 */
+  /** 로비의 사람들: 안내지기(인물) + 가구 둘레에서 일하고 쉬는 주민 (citizens 가 그리고 말을 건다) */
   _people(cur) {
-    const { r, info, plan } = cur;
+    const { r, plan } = cur;
     const g = this.game, N = g.npcs;
     const rnd = mulberry32(Math.floor(r.seed * 7e8));
     const cx = r.x, cz = r.z, dn = [r.door.nx, r.door.nz];
     const rin = Math.min(...plan.map(([x, z]) => Math.hypot(x - cx, z - cz)));
-    if (rin > 6) {
+    if (rin > 6 && cur.info.pid !== 'home') {
       const k = rin * 0.52 + 1.2;
       const desk = N._spawn({ id: 'in-desk', name: '안내지기', service: 'lobby', indoor: true, x: cx + dn[0] * (k - 2.6), z: cz + dn[1] * (k - 2.6), y: r.floorY, hue: rnd(), glow: 0x7ff3e6, scale: 0.95, home: { x: cx, z: cz, r: 0.3 } });
       desk.fig.yaw = Math.atan2(dn[0], dn[1]);
       cur.npcs.push(desk);
     }
-    const cnt = Math.min(info.P.npc, Math.max(1, Math.floor(rin / 3)));
-    for (let i = 0; i < cnt; i++) {
-      const a = rnd() * TAU, d = 2.8 + rnd() * Math.max(0.5, rin * 0.6 - 2.8);
-      cur.npcs.push(N._spawn({
-        id: `in-${i}`, name: '아웬', ambient: true, indoor: true, x: cx + Math.cos(a) * d, z: cz + Math.sin(a) * d, y: r.floorY,
-        hue: rnd(), glow: [0x7ff3e6, 0xffc46a, 0xff9fd0, 0xb9a6ff][Math.floor(rnd() * 4)], scale: info.P.small && i > 0 ? 0.62 + rnd() * 0.1 : 0.85 + rnd() * 0.3,
-        home: { x: cx, z: cz, r: Math.max(3, rin * 0.62), minR: 2.6 },
-      }));
-    }
+    // 바닥 높이로 맞춘 자리
+    for (const A of cur.anchors || []) A.y = Math.max(A.y, r.floorY);
+    if (g.citizens) g.citizens.setIndoor(r, cur.anchors || [], cur.info);
   }
 
   // ── 하늘 전망대 (지붕 위에 떠 있는 원반) ─────────
@@ -453,9 +530,10 @@ export class Interiors {
     const g = this.game, C = g.world.colliders;
     for (const c of cur.cols) C.remove(c);
     if (cur.deck) { for (const c of cur.deck.cols) C.remove(c); g.engine.scene.remove(cur.deck.grp); }
-    C.add(cur.r.col);
-    if (cur.r.podium) C.add(cur.r.podium.col);
+    for (const c of cur.r.cols) C.add(c);
     for (const n of cur.npcs) g.npcs.remove(n);
+    if (g.citizens) g.citizens.clearIndoor();
+    this.guest = null;
     if (cur.group) g.engine.scene.remove(cur.group);
     this.city.closeShell(cur.r);
     this.cur = null;

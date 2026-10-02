@@ -35,6 +35,7 @@ uniform float uFarCut;
 #endif
 #ifdef USE_FACADE
 attribute vec2 fac;   // x: 둘레를 따라 잰 거리(단위 모양 기준), y: 외벽 종류
+attribute vec3 anc;   // 미터 고정 장식: x 켬, y 기준 높이에서 위로(m), z 바깥으로(m)
 varying vec2 vFac;
 varying float vSeed;
 varying float vBase;
@@ -57,6 +58,15 @@ void main() {
   // 도시의 먼 모델: 가까운 것(자세한 모델이 대신 그림)과 너무 먼 것은 그리지 않는다
   float cutD = distance((modelMatrix * im * vec4(0.0, 0.0, 0.0, 1.0)).xyz, uCutCenter);
   if (cutD < uNearCut || cutD > uFarCut) { gl_Position = vec4(0.0, 0.0, -2.0, 1.0); return; }
+#endif
+#ifdef USE_FACADE
+  // 로비·차양·난간·옥상 장비는 실제 미터로: 건물이 아무리 높거나 넓어도 같은 크기
+  if (anc.x > 0.5) {
+    float isx = max(length(im[0].xyz), 0.01), isy = max(length(im[1].xyz), 0.01), isz = max(length(im[2].xyz), 0.01);
+    p.y += anc.y / isy;
+    vec2 hz = p.xz;
+    if (abs(anc.z) > 1e-4 && dot(hz, hz) > 1e-8) { vec2 w = normalize(vec2(hz.x * isx, hz.y * isz)); p.xz += vec2(w.x / isx, w.y / isz) * anc.z; }
+  }
 #endif
   vec4 wp = modelMatrix * im * vec4(p, 1.0);
 #ifdef USE_WIND
@@ -118,6 +128,7 @@ varying vec3 vIColor;
 varying float vWin;
 #endif
 uniform float uWinGlow;
+float cLineF(float d, float w, float fw) { return 1.0 - smoothstep(w - fw, w + fw, abs(d)); }
 #ifdef USE_TECH
 uniform vec4 uTech;    // x 무늬 크기(m), y 빛줄 세기, z 금속감, w 방식(0 판·회로, 1 동심원)
 uniform vec3 uTechC;   // 동심원 중심
@@ -164,30 +175,37 @@ void main() {
   em *= vColor;
 #endif
 #endif
+  vec3 techEm = vec3(0.0);
+  float glassMaskF = 0.0;
 #ifdef USE_WINDOWS
-  // 고층 건물 외벽: 유리창 격자 — 낮에는 하늘을 비추고, 밤에는 집집마다 불이 켜진다
+  // 고층 건물 외벽: 유리창 격자 — 낮에는 하늘을 비추고(코팅 유리, 비스듬할수록 거울), 밤에는 집집마다 불이 켜진다
   if (abs(vWin) > 0.001) {
     vec3 Nw = normalize(vNormal);
     float cc = vWin > 0.0 ? atan(Nw.z, Nw.x) * vWin : dot(vWorld.xz, normalize(vec2(-Nw.z, Nw.x) + 1e-5)) / (-vWin);
     vec2 cell = vec2(cc, vWorld.y / 4.2);
     vec2 f = fract(cell);
     vec2 id = floor(cell);
-    float frame = step(0.16, f.x) * step(f.x, 0.84) * step(0.22, f.y) * step(f.y, 0.8);
-    vec2 fw = fwidth(cell);
+    vec2 fw = max(fwidth(cell), vec2(1e-4));
     float aa = clamp(1.6 - max(fw.x, fw.y) * 2.2, 0.0, 1.0);
-    float glassF = mix(0.45, frame, aa);
+    float frame = smoothstep(0.07 - fw.x, 0.07 + fw.x, f.x) * (1.0 - smoothstep(0.93 - fw.x, 0.93 + fw.x, f.x))
+      * smoothstep(0.16 - fw.y, 0.16 + fw.y, f.y) * (1.0 - smoothstep(0.97 - fw.y, 0.97 + fw.y, f.y));
+    float glassF = mix(0.7, frame, aa);
     float r = hash12(id + vec2(floor(vWin * 7.0), 0.0));
     float litP = mix(0.1, 0.55, clamp(uGlow, 0.0, 1.0)) * mix(0.6, 1.0, uWinGlow);
     float lit = mix(litP, step(1.0 - litP, r), aa);
     vec3 warm = mix(vec3(1.0, 0.76, 0.45), vec3(0.55, 0.95, 1.0), step(0.72, hash12(id + 3.1)));
     vec3 R = reflect(-V, N);
-    vec3 glass = skyBase(vec3(R.x, abs(R.y), R.z)) * 0.5 + vec3(0.015, 0.03, 0.06);
-    col = mix(col, glass, glassF * 0.88);
+    float frw = 0.06 + 0.94 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+    // 방 안: 바닥 쪽이 어둡고, 블라인드가 내려온 창이 섞인다
+    vec3 inside = mix(vec3(0.05, 0.06, 0.07), vec3(0.2, 0.19, 0.18), smoothstep(0.1, 0.9, f.y) * (0.4 + 0.6 * r));
+    inside = mix(inside, vec3(0.62, 0.6, 0.57), step(0.7, hash12(id + 9.3)) * step(1.0 - 0.5 * hash12(id + 4.4), f.y) * aa);
+    vec3 glass = mix(inside, skyBase(normalize(vec3(R.x, abs(R.y) * 0.7 + 0.03, R.z))) * 0.9, clamp(0.38 + frw * 0.8, 0.0, 1.0)) + vec3(0.01, 0.02, 0.035);
+    glass += uSunColor * pow(max(dot(R, uSunDir), 0.0), 200.0) * 0.5;
+    col = mix(col * (1.0 - 0.12 * (1.0 - frame) * aa), glass, glassF * 0.92);
     em += warm * lit * glassF * (0.18 + uGlow * 1.5) * uWinGlow;
+    glassMaskF = glassF;
   }
 #endif
-  vec3 techEm = vec3(0.0);
-  float glassMaskF = 0.0;
 #ifdef USE_TECH
   {
     // 미래 문양: 새긴 판 이음매 + 흐르는 회로 빛 + 원 문양, 그리고 진주빛 금속 광택
@@ -229,7 +247,7 @@ void main() {
       tline = (1.0 - smoothstep(0.018, 0.018 + rw * 1.5, abs(rf - (0.3 + hs * 0.4)))) * step(0.55, hs);
       tline *= 0.6 + 0.4 * sin(uTime * 1.6 - rad * 2.2);
     }
-    col *= 1.0 - engr * 0.4 * detail;
+    col *= 1.0 - engr * 0.4 * detail * (1.0 - glassMaskF);
     vec3 Rm = reflect(-V, N);
     float frm = 0.05 + 0.95 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
     vec3 irid = 0.5 + 0.5 * cos(6.2831853 * (frm * 1.3 + dot(N, vec3(0.3, 0.2, 0.1)) + vec3(0.0, 0.33, 0.67)));
@@ -240,41 +258,128 @@ void main() {
   }
 #endif
 #ifdef USE_FACADE
-  // 도시 건물 외벽: 1 커튼월(가는 멀리언·층 띠·반사 유리) 2 띠창 3 점창 4 첨탑(나선 빛)
+  // 도시 건물 외벽: 1 커튼월 2 띠창 3 점창 4 첨탑(나선 빛) 5 발코니 집 6 유리 격자(온실·돔) 7 수직 농장
   float ftype = vFac.y;
-  float ao = mix(0.66, 1.0, smoothstep(1.0, 9.0, vWorld.y - vBase));
+  float ao = mix(0.62, 1.0, smoothstep(1.0, 9.0, vWorld.y - vBase));
   col *= ao;
-  if (ftype > 0.5) {
-    float bay = ftype < 1.5 ? 1.6 : ftype < 2.5 ? 2.2 : ftype < 3.5 ? 2.6 : 1.4;
-    float flH = ftype < 1.5 ? 3.6 : ftype < 3.5 ? 3.9 : 3.3;
-    vec2 cell = vec2(vFac.x / bay, vWorld.y / flH);
+  float glowK = clamp(uGlow, 0.0, 1.0);
+  vec3 Nf = normalize(vNormal);
+  vec3 Vv = normalize(cameraPosition - vWorld);
+  vec3 Rg = reflect(-Vv, Nf);
+  vec3 skyR = skyBase(normalize(vec3(Rg.x, abs(Rg.y) * 0.7 + 0.03, Rg.z)));
+  float frs = 0.06 + 0.94 * pow(1.0 - max(dot(Nf, Vv), 0.0), 5.0);
+  if (ftype > 5.5 && ftype < 6.5) {
+    // 유리 격자: 마름모 골조 + 그 너머의 숲 (낮엔 초록·노을빛, 밤엔 생장등)
+    vec2 g = vec2(vFac.x * 0.5 + vWorld.y * 0.35, vFac.x * 0.5 - vWorld.y * 0.35) / 3.2;
+    vec2 gf = fract(g), gw = fwidth(g);
+    float frame = 1.0 - smoothstep(0.035, 0.035 + max(gw.x, gw.y) * 1.5, min(min(gf.x, 1.0 - gf.x), min(gf.y, 1.0 - gf.y)));
+    float faded = clamp(1.3 - max(gw.x, gw.y) * 2.0, 0.0, 1.0);
+    float leaf = vnoise(vWorld.xz * 0.35 + vWorld.y * 0.4) * 0.6 + vnoise(vWorld.xz * 1.3 - vWorld.y) * 0.4;
+    vec3 inside = mix(vec3(0.03, 0.12, 0.06), vec3(0.16, 0.42, 0.18), leaf) * (0.55 + 0.45 * smoothstep(0.0, 18.0, vWorld.y - vBase));
+    inside += vec3(0.9, 0.35, 0.7) * step(0.82, hash12(floor(vWorld.xz * 0.5) + floor(vWorld.y * 0.5))) * 0.25;
+    vec3 glassC = mix(inside, skyR * 0.9 + vec3(0.04, 0.08, 0.07), frs * 0.85 + 0.12);
+    col = mix(glassC, vec3(0.86, 0.88, 0.9) * ao, frame * faded);
+    em += (vec3(0.55, 1.0, 0.7) * leaf * 0.12 + vec3(0.9, 0.4, 0.95) * 0.06) * (1.0 - frame * faded) * (0.2 + glowK * 1.2) * uWinGlow;
+    glassMaskF = 1.0 - frame;
+  } else if (ftype > 6.5) {
+    // 수직 농장: 층마다 재배 띠(잎·꽃) + 유리 띠(보랏빛 생장등)
+    float fl = (vWorld.y - vBase) / 4.2;
+    float ff = fract(fl), fwv = fwidth(fl);
+    float slab = 1.0 - smoothstep(0.06, 0.06 + fwv * 1.5, ff);
+    float planted = step(0.5, ff) * (1.0 - slab);
+    float leaf = vnoise(vec2(vFac.x * 0.9, vWorld.y * 0.9)) * 0.6 + vnoise(vec2(vFac.x * 3.1, vWorld.y * 2.7)) * 0.4;
+    vec3 plant = mix(vec3(0.04, 0.14, 0.05), vec3(0.16, 0.38, 0.15), leaf);
+    float bloom = smoothstep(0.78, 0.86, vnoise(vec2(vFac.x * 2.3, vWorld.y * 2.3) + 7.0));
+    plant = mix(plant, vec3(0.8, 0.5, 0.65), bloom * 0.6);
+    // 유리 띠: 안쪽 선반과 보랏빛 생장등이 비친다
+    float rack = step(0.5, fract(vFac.x / 1.4)) * 0.15;
+    vec3 glassC = mix(vec3(0.06, 0.05, 0.09) + vec3(0.05, 0.12, 0.05) * rack, skyR * 0.8, frs * 0.85 + 0.12);
+    col = mix(mix(glassC, plant, planted), vec3(0.82, 0.82, 0.86) * ao, slab);
+    em += vec3(0.7, 0.35, 0.95) * (1.0 - planted) * (1.0 - slab) * (0.015 + glowK * 0.45) * uWinGlow;
+    glassMaskF = 1.0 - slab;
+  } else if (ftype > 0.5) {
+    bool balc = ftype > 4.5;
+    float bay = ftype < 1.5 ? 1.6 : ftype < 2.5 ? 2.2 : ftype < 3.5 ? 2.6 : balc ? 3.0 : 1.4;
+    float flH = ftype < 1.5 ? 3.6 : ftype < 3.5 ? 3.9 : balc ? 3.2 : 3.3;
+    vec2 cell = vec2(vFac.x / bay, (vWorld.y - vBase) / flH);
     vec2 f = fract(cell), id = floor(cell);
     vec2 fw = max(fwidth(cell), vec2(1e-4));
     float aa = clamp(1.3 - max(fw.x, fw.y) * 2.2, 0.0, 1.0);
-    float spandH = ftype < 1.5 ? 0.18 : ftype < 2.5 ? 0.46 : ftype < 3.5 ? 0.38 : 0.12;
-    float mullW = ftype < 1.5 ? 0.035 : ftype < 2.5 ? 0.012 : ftype < 3.5 ? 0.24 : 0.05;
+    float spandH = ftype < 1.5 ? 0.18 : ftype < 2.5 ? 0.46 : ftype < 3.5 ? 0.38 : balc ? 0.12 : 0.12;
+    float mullW = ftype < 1.5 ? 0.035 : ftype < 2.5 ? 0.012 : ftype < 3.5 ? 0.24 : balc ? 0.06 : 0.05;
     float gx = smoothstep(mullW - fw.x, mullW + fw.x, f.x) * (1.0 - smoothstep(1.0 - mullW - fw.x, 1.0 - mullW + fw.x, f.x));
     float gy = smoothstep(spandH - fw.y, spandH + fw.y, f.y) * (1.0 - smoothstep(1.0 - fw.y * 1.5, 1.0, f.y));
     float gm = mix((1.0 - 2.0 * mullW) * (1.0 - spandH), gx * gy, aa);
-    vec3 Rg = reflect(-V, N);
-    vec3 skyR = skyBase(normalize(vec3(Rg.x, abs(Rg.y) * 0.7 + 0.03, Rg.z)));
-    float frs = 0.1 + 0.9 * pow(1.0 - max(dot(N, V), 0.0), 4.0);
-    vec3 tint = mix(vec3(0.025, 0.06, 0.09), vec3(0.07, 0.1, 0.12), vSeed) + hash12(vec2(id.y, vSeed * 91.0)) * 0.025;
-    vec3 glass = tint + skyR * mix(0.2, 0.78, frs) + uSunColor * pow(max(dot(Rg, uSunDir), 0.0), 240.0) * 0.6;
-    float room = hash12(vec2(floor(id.x / 2.0), id.y) + vSeed * 37.0);
+    // ── 방 들여다보기 (interior mapping): 창마다 깊이 있는 방 — 뒷벽·옆벽·바닥·천장, 가구 그림자, 블라인드 ──
+    vec3 Tt = normalize(vec3(-Nf.z, 0.0, Nf.x) + 1e-5);
+    vec3 dIn = -Vv;
+    vec3 rd = vec3(dot(dIn, Tt), dIn.y, -dot(dIn, Nf));
+    rd.z = max(rd.z, 0.04);
+    float room = hash12(vec2(floor(id.x / (balc ? 1.0 : 2.0)), id.y) + vSeed * 37.0);
+    float W = bay * (balc ? 1.0 : 2.0), Hh = flH, Dd = bay * 2.2;
+    vec3 ro = vec3((fract(cell.x / (balc ? 1.0 : 2.0))) * W, f.y * Hh, 0.0);
+    float tx = rd.x > 0.0 ? (W - ro.x) / rd.x : -ro.x / min(rd.x, -1e-4);
+    float ty = rd.y > 0.0 ? (Hh - ro.y) / rd.y : -ro.y / min(rd.y, -1e-4);
+    float tz = Dd / rd.z;
+    // 어느 면에 닿았나 (같음 비교 대신 순서로 — 화소마다 깜빡이지 않게)
+    float hitBack = step(tz, tx) * step(tz, ty);
+    float hitY = (1.0 - hitBack) * step(ty, tx);
+    float tt = hitBack > 0.5 ? tz : hitY > 0.5 ? ty : tx;
+    vec3 hp = ro + rd * tt;
+    vec3 wallC = mix(vec3(0.62, 0.58, 0.52), mix(vec3(0.45, 0.55, 0.6), vec3(0.6, 0.48, 0.55), step(0.5, room)), step(0.3, room));
+    vec3 rc;
+    if (hitBack > 0.5) {
+      rc = wallC * 0.8;
+      float shelf = step(0.3, hash12(vec2(room * 17.0, 2.0))) * step(0.15, hp.y / Hh) * step(hp.y / Hh, 0.55) * step(0.15, hp.x / W) * step(hp.x / W, 0.6);
+      rc = mix(rc, vec3(0.25, 0.2, 0.18), shelf * 0.8);
+      float art = step(0.6, hash12(vec2(room * 31.0, 5.0))) * step(0.5, hp.y / Hh) * step(hp.y / Hh, 0.8) * step(0.62, hp.x / W) * step(hp.x / W, 0.86);
+      rc = mix(rc, vec3(0.5, 0.75, 0.85), art);
+    } else if (hitY > 0.5) rc = rd.y > 0.0 ? vec3(0.78, 0.76, 0.72) : vec3(0.3, 0.26, 0.24) * (0.85 + 0.25 * hp.z / Dd);
+    else rc = wallC * 0.62;
+    // 방 안의 사람·화분 그림자 (뒷벽 앞)
+    float fig = step(0.72, hash12(vec2(room * 7.0, 9.0))) * (1.0 - smoothstep(0.0, 0.18, abs(hp.x / W - 0.35 - 0.3 * hash12(vec2(room, 3.0))))) * step(hp.y, 1.7) * step(Dd * 0.55, hp.z);
+    rc = mix(rc, vec3(0.12, 0.1, 0.12), fig * 0.7);
+    float depthDim = 1.0 - 0.35 * clamp(hp.z / Dd, 0.0, 1.0);
     float floorOn = step(0.84, hash12(vec2(id.y, vSeed * 13.0))) * step(0.25, room);
-    float glowK = clamp(uGlow, 0.0, 1.0);
-    float litP = mix(0.1, 0.45, glowK) * uWinGlow;
-    float lit = mix(litP, max(step(1.0 - litP, room), floorOn * glowK), aa);
-    vec3 warm = mix(vec3(1.0, 0.76, 0.48), vec3(0.62, 0.92, 1.0), step(0.68, hash12(id + 5.3 + vSeed * 3.0)));
+    float litP = mix(0.12, 0.5, glowK) * uWinGlow;
+    float lit = max(step(1.0 - litP, room), floorOn * glowK);
+    vec3 warm = mix(vec3(1.0, 0.78, 0.5), vec3(0.65, 0.92, 1.0), step(0.68, hash12(id + 5.3 + vSeed * 3.0)));
+    // 낮: 실내는 바깥보다 어둡다 / 밤: 불 켜진 방은 따뜻하게
+    float dayIn = 0.22 + 0.1 * room;
+    vec3 interior = rc * depthDim * (dayIn * (1.0 - glowK * 0.85) + lit * warm * (0.25 + glowK * 0.9) * uWinGlow);
+    // 블라인드: 방마다 내려온 정도가 다르다
+    float blind = step(0.55, hash12(vec2(room * 13.0, 1.0))) * step(1.0 - 0.6 * hash12(vec2(room * 5.0, 4.0)), (f.y - spandH) / (1.0 - spandH));
+    interior = mix(interior, mix(vec3(0.72, 0.7, 0.66), warm, lit * glowK) * (0.35 + lit * glowK * 0.5), blind * 0.85);
+    vec3 tint = mix(vec3(0.025, 0.05, 0.07), vec3(0.06, 0.08, 0.09), vSeed);
+    // 낮에는 하늘을 꽤 비추고(코팅 유리), 밤에는 안이 더 잘 보인다
+    float refl = clamp(mix(0.34, 0.14, glowK) + frs * 0.8, 0.0, 1.0);
+    vec3 glass = mix(interior + tint, skyR * 0.92 + tint, refl) + uSunColor * pow(max(dot(Rg, uSunDir), 0.0), 240.0) * 0.6;
+    glass = mix(skyR * 0.55 + tint, glass, aa); // 멀리서는 반사만
+    // 멀리언·층판의 깊이: 모서리 그늘
+    float edgeSh = (1.0 - smoothstep(0.0, 0.12, f.y - spandH)) * 0.35 + (1.0 - smoothstep(0.0, 0.05, min(f.x - mullW, 1.0 - mullW - f.x))) * 0.2;
+    col *= 1.0 - (1.0 - gm) * 0.15 * aa;
     col = mix(col, glass * mix(0.75, 1.0, ao), gm);
+    col *= 1.0 - edgeSh * gm * aa;
     glassMaskF = gm;
-    em += warm * lit * gm * (0.06 + glowK * 0.85) * uWinGlow;
+    em += warm * lit * gm * (1.0 - blind * 0.6) * (0.02 + glowK * 0.55) * uWinGlow * depthDim;
+    if (balc) {
+      // 발코니: 층판 끝(밝은 띠) + 그 아래 그늘 + 유리 난간 + 난간의 화분
+      float slab = 1.0 - smoothstep(0.1, 0.1 + fw.y * 1.5, f.y);
+      float under = (1.0 - smoothstep(0.1, 0.3, f.y)) * (1.0 - slab);
+      float rail = step(0.1, f.y) * (1.0 - smoothstep(0.42 - fw.y, 0.42 + fw.y, f.y));
+      col = mix(col, vec3(0.86, 0.84, 0.88) * ao, slab * aa + slab * (1.0 - aa) * 0.5);
+      col *= 1.0 - under * 0.35 * aa;
+      col = mix(col, col * 0.75 + vec3(0.12, 0.22, 0.24), rail * 0.55 * aa);
+      col = mix(col, vec3(0.6, 0.62, 0.66), cLineF(f.y - 0.42, 0.02, fw.y) * aa);
+      float pot = step(0.7, hash12(vec2(id.x, id.y * 3.0) + vSeed)) * rail * (1.0 - smoothstep(0.0, 0.18, abs(f.x - 0.2))) * step(f.y, 0.36);
+      col = mix(col, vec3(0.12, 0.38, 0.16), pot * aa);
+      glassMaskF *= 1.0 - slab;
+    }
     // 빛줄: 몇 칸마다 세로 빛 (건물마다 다르게) / 첨탑은 나선
     float kx = fract(cell.x / (8.0 + floor(vSeed * 8.0)));
     float dl = min(kx, 1.0 - kx) * (8.0 + floor(vSeed * 8.0));
-    float vline = (1.0 - smoothstep(0.04, 0.04 + fw.x * 1.5, dl)) * step(0.5, vSeed);
-    if (ftype > 3.5) {
+    float vline = (1.0 - smoothstep(0.04, 0.04 + fw.x * 1.5, dl)) * step(0.5, vSeed) * (balc ? 0.0 : 1.0);
+    if (ftype > 3.5 && ftype < 4.5) {
       float hq = vFac.x * 0.012 + vLocal.y * 5.0;
       float hf = fract(hq);
       float hw = fwidth(hq);
@@ -285,8 +390,8 @@ void main() {
     em += accC * vline * (0.18 + glowK * 0.5);
     // 1층: 상점 — 넓은 유리 너머 불 켜진 가게와 간판 띠 (낮에도 은은하게)
     float hb = vWorld.y - vBase - 1.5;
-    if (hb > -0.5 && hb < 6.4 && ftype < 3.5) {
-      vec2 sc = vec2(vFac.x / 3.4, hb / 5.2);
+    if (hb > -0.5 && hb < 6.4 && ftype < 3.5 || (balc && hb > -0.5 && hb < 4.2)) {
+      vec2 sc = vec2(vFac.x / 3.4, hb / (balc ? 3.6 : 5.2));
       vec2 sf = fract(sc);
       vec2 sfw = max(fwidth(sc), vec2(1e-4));
       float saa = clamp(1.3 - max(sfw.x, sfw.y) * 2.0, 0.0, 1.0);
@@ -294,10 +399,14 @@ void main() {
       sg = mix(0.62, sg, saa);
       float sh = hash12(vec2(floor(sc.x), vSeed * 17.0));
       vec3 shop = mix(vec3(1.0, 0.82, 0.6), mix(vec3(0.6, 0.9, 1.0), vec3(1.0, 0.7, 0.85), step(0.62, sh)), step(0.35, sh));
-      col = mix(col, shop * 0.22 + skyR * 0.12, sg);
+      // 가게 안: 진열대·사람 그림자
+      float shelfS = step(0.4, sf.y) * step(sf.y, 0.55) * step(0.3, hash12(vec2(floor(sc.x * 3.0), 2.0)));
+      vec3 shopIn = shop * (0.25 + 0.1 * shelfS) + skyR * 0.1;
+      shopIn = mix(shopIn, vec3(0.1, 0.09, 0.1), step(0.8, hash12(floor(vec2(sc.x * 5.0, 1.0)) + floor(uTime * 0.2))) * step(sf.y, 0.45) * 0.6);
+      col = mix(col, shopIn, sg);
       em += shop * sg * (0.2 + glowK * 0.45);
       float signB = step(0.83, sc.y) * step(sc.y, 0.96);
-      em += shop * signB * step(0.45, hash12(vec2(floor(sc.x / 3.0), vSeed))) * (0.3 + glowK * 0.7);
+      em += shop * signB * step(0.45, hash12(vec2(floor(sc.x / 3.0), vSeed))) * (0.3 + glowK * 0.7) * (balc ? 0.0 : 1.0);
       glassMaskF = max(glassMaskF, sg);
     }
   }

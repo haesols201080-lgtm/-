@@ -19,6 +19,15 @@ export class Dialogue {
     this.next();
   }
 
+  /** 즉석 대화: entries = [{ lineObj }, { s: 'moa', t }] (주민과의 이야기 등). onEnd: 끝나면 */
+  startCustom(entries, npc = null, onEnd = null) {
+    if (this.active) return;
+    this.active = { id: 'custom', convo: entries, i: -1, npc, wait: 0, onEnd };
+    this.game.setMode('dialogue');
+    if (npc) this.game.focusOn(npc);
+    this.next();
+  }
+
   _speaker(s) {
     const g = this.game;
     if (s === '$keeper' && this.active.npc) return this.active.npc;
@@ -45,7 +54,7 @@ export class Dialogue {
       g.audio.blip({ hz: 900, to: 1200, dur: 0.08, gain: 0.05 });
     } else {
       const npc = this._speaker(e.speaker || e.s);
-      const line = { id: e.line, ...LINES[e.line] };
+      const line = e.lineObj || { id: e.line, ...LINES[e.line] };
       const dur = g.say(npc, line, false);
       g.ui.dialogue.line(npc ? npc.name : '아웬', npc ? npc.title : '', line);
       a.wait = Math.min(1.2, dur * 0.5);
@@ -62,7 +71,8 @@ export class Dialogue {
     this.active = null;
     this.game.ui.dialogue.hide();
     this.game.setMode('play');
-    if (a) bus.emit('convoDone', { convo: a.id, npc: a.npc && a.npc.id });
+    if (a && a.onEnd) a.onEnd();
+    if (a && a.id !== 'custom') bus.emit('convoDone', { convo: a.id, npc: a.npc && a.npc.id });
   }
 }
 

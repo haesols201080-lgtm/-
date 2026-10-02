@@ -1,7 +1,6 @@
 // 식생 배치: 세 층의 흩뿌리기(가까운 풀 / 중간 덤불·수정 / 먼 거대 식물).
 // 모든 배치는 좌표 해시로 결정되어, 같은 자리에는 언제나 같은 풀이 납니다.
 import * as THREE from 'three';
-import { pavedAt } from '../data/city.js';
 import { heightAt, regionWeights, RC } from './heightfield.js';
 import { mulberry32, hash2 } from '../core/noise.js';
 import { litMaterial } from './materials.js';
@@ -241,7 +240,6 @@ export class Flora {
           const sl = s.slope(x, z);
           if (sl > 0.9) continue;
           if (world.city && world.city.blocks(x, z)) continue;
-          if (pavedAt(x, z) > 0.5 && rng() < 0.92) continue;
           const reg = pickRegion((i) => s.weight(x, z, i), rng);
           const pick = rng();
           let k = -1, sc = 1;
@@ -279,7 +277,6 @@ export class Flora {
           const h = s.height(x, z);
           const sl = s.slope(x, z);
           if (world.city && world.city.blocks(x, z)) continue;
-          if (pavedAt(x, z) > 0.5 && rng() < 0.85) continue;
           const reg = pickRegion((i) => s.weight(x, z, i), rng);
           const ry = rng() * 6.28;
           const push = (k, sc, extra) => out.push({ k, x, y: h - 0.1, z, ry, s: sc, ...extra });
@@ -334,7 +331,6 @@ export class Flora {
           const h = s.height(x, z);
           if (h < 0.8 || s.slope(x, z) > 0.8) continue;
           if (world.city && world.city.blocks(x, z)) continue;
-          if (pavedAt(x, z) > 0.4 && rng() < 0.8) continue;
           const reg = pickRegion((i) => s.weight(x, z, i), rng);
           const pick = rng();
           const ry = rng() * 6.28;

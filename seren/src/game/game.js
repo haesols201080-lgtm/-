@@ -45,6 +45,7 @@ import { WorldEvents, Requests } from './world-events.js';
 import { Director } from './director.js';
 import { Services } from './services.js';
 import { Interiors } from './interiors.js';
+import { Citizens } from './citizens.js';
 import { UI } from '../ui/ui.js';
 import { MapData } from '../ui/map.js';
 
@@ -105,6 +106,7 @@ export class Game {
     this.requests = new Requests(this);
     this.services = new Services(this);
     this.interiors = new Interiors(this);
+    this.citizens = new Citizens(this);
 
     this.particles = new Particles(this.engine.scene);
     this.trails = [new Trail(this.engine.scene, 0xbffcff), new Trail(this.engine.scene, 0xbffcff)];
@@ -322,6 +324,8 @@ export class Game {
       this._frameEvents = [];
       for (let i = 0; i < steps; i++) {
         if (this.player.state !== 'down') this.player.update(h, free ? input : NO_INPUT, this.rig);
+        this.citizens.pushPlayer(this.player.pos);
+        this.npcs.pushPlayer(this.player.pos);
         if (i < steps - 1) input.down.clear();
         this._playerEvents();
         this._frameEvents.push(...this.player.events);
@@ -352,6 +356,7 @@ export class Game {
       this.requests.update(dt);
       this.services.update(dt);
       this.interiors.update(dt);
+      this.citizens.update(dt);
       if ((this._scanT = (this._scanT || 0) - dt) < 0) { this._scanT = 0.5; this._techScan(); }
       this._hud(dt);
       this.mapData.reveal(this.player.pos.x, this.player.pos.z, 450 + Math.max(0, this.player.pos.y - this.player.groundH) * 2);
@@ -416,12 +421,16 @@ export class Game {
       const dock = this.facilities.list.some((F) => F.type === 'dock' && Math.hypot(F.x - p.x, F.z - p.z) < 60 && Math.abs(F.y + F.padY - p.y) < 30);
       return { kind: 'unfly', label: dock ? '나룻배 돌려주기' : '나룻배에서 내리기', short: '내리기' };
     }
+    const act = this.citizens.activityTarget(p);
+    if (act) return act;
     const inside = this.interiors.target(p);
     if (inside && inside.kind !== 'door') return inside;
     const npc = this.npcs.nearest(p, 5.5, (n) => !n.ambient);
     if (npc && npc.service === 'lobby') return { kind: 'lobby', o: npc, label: '안내지기 · 이 건물 이야기', short: '안내' };
     if (npc && npc.service) { const F = this.facilities.byId.get(npc.service); return { kind: 'facility', o: F, label: `${F.info.keeper} · ${F.info.verb}`, short: F.info.name }; }
     if (npc) return { kind: 'npc', o: npc, label: `${npc.name}와(과) 마주하기`, short: '말 걸기' };
+    const cit = this.citizens.target(p);
+    if (cit) return cit;
     if (inside) return inside;
     const el = this.anchor.stopNear(p);
     if (el) return { kind: 'elevator', o: el, label: el.up ? (this.elevatorOpen() ? '승강차 · 하늘닻으로 오르기 (30 km)' : '승강차 (아직 멈춰 있다)') : '승강차 · 척추 전망대로 내려가기', short: '승강차' };
@@ -434,6 +443,8 @@ export class Game {
 
   _interact(t) {
     if (t.kind === 'npc') return this.talkTo(t.o);
+    if (t.kind === 'citizen') return this.citizens.open(t.o);
+    if (t.kind === 'cit-act') return this.citizens.activityInteract(t);
     if (t.kind === 'facility') { this.focusOn(t.o.npc); return this.services.open(t.o); }
     if (t.kind === 'unfly') return this.services.endFly();
     if (t.kind === 'door') return this.interiors.enter(t.o);

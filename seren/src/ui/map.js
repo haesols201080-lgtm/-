@@ -3,11 +3,17 @@ import { heightAt, regionWeights, RC } from '../world/heightfield.js';
 import { REGIONS } from '../world/regions.js';
 import { PLACES } from '../data/places.js';
 import { pavedAt } from '../data/city.js';
+import { locate } from '../world/cityplan.js';
 
 const RANGE = 60000; // 지도 반경 (m)
 const N = 768; // 바탕 해상도
 const FOG_N = 384; // 안개 해상도
 const OLD = { range: 24000, n: 256 }; // 옛 저장(대륙만 있던 지도)
+
+// 도시 땅의 쓰임 색 (data/city.js 의 USE 순서: 0 자연 1 주거 2 상업 3 공공 4 산업 5 물류 6 에너지 7 연구 8 교통 9 인공 환경 10 녹지 11 광장 12 농장 13 교외 집)
+const USE_COL = [null, [226, 204, 168], [240, 178, 116], [186, 198, 244], [168, 158, 172], [200, 178, 146], [246, 224, 118],
+  [150, 214, 236], [214, 214, 226], [140, 214, 186], [104, 168, 104], [236, 232, 240], [172, 192, 106], [214, 200, 168]];
+const ROAD_COL = [196, 192, 208];
 
 const lin = (h) => [(h >> 16) & 255, (h >> 8) & 255, h & 255];
 const PAL = REGIONS.map((r) => ({ g: lin(r.pal.grass), r: lin(r.pal.rock) }));
@@ -73,10 +79,25 @@ export class MapData {
       if (h < 3) c = [214, 196, 150];
     }
     if (h > 1) {
-      // 도시: 포장된 땅은 밝은 돌색
       const x = -RANGE + (i + 0.5) * cell, z = -RANGE + (j + 0.5) * cell;
-      const p = pavedAt(x, z);
-      if (p > 0) c = c.map((v, k) => v + ([214, 208, 226][k] * shade - v) * p * 0.85);
+      const plan = this.game.city && this.game.city.plan;
+      if (plan) {
+        // 도시: 칸 안 네 점의 쓰임을 섞어 그린다 (길은 밝은 돌색)
+        const acc = [0, 0, 0];
+        let n = 0;
+        for (let q = 0; q < 4; q++) {
+          const L = locate(plan, x + ((q & 1) - 0.5) * cell * 0.5, z + ((q >> 1) - 0.5) * cell * 0.5);
+          if (!L) { if (this.game.city._inCore(x, z)) { for (let k = 0; k < 3; k++) acc[k] += USE_COL[11][k]; n++; } continue; }
+          const col = L.kind === 'block' ? USE_COL[L.B.type] : ROAD_COL;
+          if (!col || (L.kind === 'block' && L.B.natural)) continue;
+          for (let k = 0; k < 3; k++) acc[k] += col[k];
+          n++;
+        }
+        if (n) c = c.map((v, k) => v + ((acc[k] / n) * shade - v) * (n / 4) * 0.9);
+      } else {
+        const p = pavedAt(x, z);
+        if (p > 0) c = c.map((v, k) => v + ([214, 208, 226][k] * shade - v) * p * 0.85);
+      }
     }
     d[o] = Math.min(255, c[0]); d[o + 1] = Math.min(255, c[1]); d[o + 2] = Math.min(255, c[2]); d[o + 3] = 255;
   }
@@ -174,7 +195,7 @@ export class MapView {
     parent.appendChild(c);
     const legend = document.createElement('div');
     legend.className = 'map-legend glass';
-    legend.innerHTML = `<span style="color:#ffd89a">◆</span> 목표 &nbsp; <span style="color:#7ff3e6">●</span> 노래하는 탑 &nbsp; <span style="color:#8a8aa0">●</span> 잠든 탑 &nbsp; <span style="color:#fff">✦</span> 표식 &nbsp; <span style="color:#7fb8ff">◯</span> 시설 &nbsp; ${g.ui.touch ? '눌러서 표식' : '클릭해서 표식 · 휠로 확대'}`;
+    legend.innerHTML = `<span style="color:#ffd89a">◆</span> 목표 &nbsp; <span style="color:#7ff3e6">●</span> 노래하는 탑 &nbsp; <span style="color:#8a8aa0">●</span> 잠든 탑 &nbsp; <span style="color:#fff">✦</span> 표식 &nbsp; <span style="color:#7fb8ff">◯</span> 시설<br><span style="color:#e2cca8">■</span> 주거 <span style="color:#f0b274">■</span> 상업 <span style="color:#bac6f4">■</span> 공공 <span style="color:#96d6ec">■</span> 연구 <span style="color:#a89eac">■</span> 산업·물류 <span style="color:#f6e076">■</span> 에너지 <span style="color:#8cd6ba">■</span> 인공 환경 <span style="color:#68a868">■</span> 녹지 <span style="color:#acc06a">■</span> 농장 &nbsp; ${g.ui.touch ? '눌러서 표식' : '클릭해서 표식 · 휠로 확대'}`;
     parent.appendChild(legend);
     const tools = document.createElement('div');
     tools.className = 'map-tools';

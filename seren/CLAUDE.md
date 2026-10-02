@@ -47,14 +47,19 @@ src/
            ── 도시의 살 (v0.4) ──
            cityfabric(구역 격자·필지·건물·기단·공중다리·거리·소품·광장·공원·문·인스턴스 그리기)
            city-arch(건물 모양 27가지 hi/lo + 문 + 거리 소품 모델) streams(호버 차·걷는 아웬, GPU 차선)
+           ── 땅의 쓰임과 주민 (v0.5) ──
+           cityplan(블록 나누기·쓰임 배정·쓰임별 배치 템플릿·locate) city-ground(계획 텍스처 → 지형 셰이더가 그리는 도시 바닥)
+           crowd(주민 인스턴스 그리기: 자세 속성, 그리기 1회)
   player/  player(이동 상태기계) avatar(모델·절차 애니메이션) camera-rig
   game/    game(중심·모드·입력·저장) state(저장 형식) quests dialogue actions language npcs resonance discovery
            services(시설의 쓰임: 시설지기 카드·연락선·나룻배·온실·날씨·탐지기)
            interiors(건물 들어가기: 로비·사람·빛 승강기·하늘 전망대, 충돌체 갈아 끼우기)
+           citizens(도시 주민: 자리·일과·걷기·말 걸기·함께 놀기·집 안 사람들)
            world-events(일식·별비·축제·부탁) director(연출 카메라)
   ui/      ui(HUD·대화·카드·메뉴·타이틀·터치) map(지도·안개) journal settings
   data/    places(장소·평탄화) currents(해류 경로) story(인물·대사·대화·퀘스트·메아리·글자돌·도감·모아) lexicon(아웬어 사전)
-           facilities(시설 목록·종류·옛 책) city(도시 구역·양식·색조·포장 pavedAt)
+           facilities(시설 목록·종류·옛 책) city(도시 구역·쓰임 USE·비율 MIX·양식·색조)
+           citizens(주민 이름·역할 ROLES·실내 역할 INDOOR·대사·장터 물건)
 ```
 - 좌표: 1 = 1 m, Y 위, **−Z 가 북쪽**(우르 방향), +X 동쪽. 플레이어 yaw 는 `atan2(dx, dz)`, 카메라 yaw 0 은 북쪽을 봄.
 - 모든 지형 높이는 `heightAt(x, z)` 하나에서 나옵니다(렌더·충돌·배치·지도 공통). 지형을 바꾸면 `node tools/heightmap.mjs` 로 확인하세요. 장소 주변은 `places.js` 의 `flat` 으로 평탄화됩니다.
@@ -73,8 +78,11 @@ src/
 - **저장 항목**: `game/state.js` 의 `defaultState()` 에 추가(불러올 때 빠진 항목은 기본값으로 채워짐).
 - **시설**: `data/facilities.js` 의 `FACILITIES` 에 한 줄(`at` 장소 + `off`/`polar`/`toward`). 자리에 다른 구조물이 있으면 빌더가 나선으로 밀어서 빈 곳을 찾습니다. 새 종류는 `FACILITY_TYPES` + `world/facilities.js` 의 `_종류` 모델 + `game/services.js` 의 `_종류` 카드. 시설지기는 `npcs` 에 `service` 가 붙은 인물(`fac-시설id`)이라 `_findTarget` 이 「시설지기 · 하는 일」로 보여 줍니다.
 - **옛 책**: `data/facilities.js` 의 `BOOKS` (`at` = 서고 id, `word` = 읽으면 배우는 단어).
-- **도시 구역**: `data/city.js` 의 `ZONES` 에 한 줄(머리 주석에 항목 설명). `style`/`sectors` 는 `STYLES` 의 양식(모양 → 가중치). 새 건물 모양은 `city-arch.js` 의 `cityArchetypes()` 에 `A.이름 = { hi, lo }`(단위 상자 −1..1 × 0..1, `loft`/`cap`/`solid` 로) + `SIZE.이름`(필지 반지름·높이 → 배율·충돌) + 땅에 닿는 평면이 원이 아니면 `cityfabric.js` 의 `PLAN`. 들어갈 수 있게 하려면 `ENTER` 에, 낮은 건물이면 `LOWKIND` 에.
-- **거리 소품**: `city-arch.js` 의 `propArchetypes()` (미터 단위) + `cityfabric.js` 의 `_streetProps`/`_plaza`/`_park` 에서 배치. 바닥판(옆으로만 키움)은 `FLAT` 에.
+- **도시 구역**: `data/city.js` 의 `ZONES` 에 한 줄(머리 주석에 항목 설명). `sectors` 는 부채꼴마다의 쓰임 비율, `mix` 는 `MIX` 의 비율 묶음.
+- **쓰임(토지 이용)**: `data/city.js` 의 `USE` 에 번호 + `world/cityplan.js` 의 `SCORE`(어디에 오기 좋은가) + `T[U.이름]` 템플릿(블록 좌표 u·v 미터로 `P.bldg`·`P.prop`·`P.spot`) + `world/city-ground.js` 의 `cityBlock()` 에 바닥 무늬 + `ui/map.js` 의 `USE_COL`.
+- **건물 모양**: `city-arch.js` 의 `cityArchetypes()` 에 `A.이름 = { hi, lo }`(단위 상자 −1..1 × 0..1, `loft`/`cap`/`solid`) + `SPEC.이름`(`plan` 땅 평면, `enter` 들어갈 수 있음, `low` 낮은 건물, `cols` 겹친 충돌체) + 키와 상관없는 미터 부속은 `kit('이름', [...])`(`pin` 으로 높이 고정). 양식별 후보는 `data/city.js` 의 `STYLE_KINDS`.
+- **거리 소품**: `city-arch.js` 의 `propArchetypes()`(미터 단위) + `PROPCOL`(충돌체 모양). 템플릿에서 `P.prop(B, '이름', u, v, face)` 로 놓는다.
+- **주민 역할**: `data/citizens.js` 의 `ROLES`(자리 종류 → 일하는 시각·사람 수·함께 할 것) + `CIT_LINES` 대사. 템플릿에서 `P.spot(B, '역할', u, v, face)` 로 자리를 놓는다. 실내는 `INDOOR` + `game/interiors.js` 의 가구 `anchors`. 새 놀이는 `game/citizens.js` 의 `_playOption`.
 - **실내 쓰임**: `game/interiors.js` 의 `PURPOSE`(가구·사람·안내지기 대사)와 `BY_STYLE`(양식 → 쓰임).
 
 ## 큰 세계에서 알아 둘 것 (v0.2)
@@ -98,12 +106,18 @@ src/
 
 ## 도시 (v0.4)에서 알아 둘 것
 - 건물은 모양마다 그리기 2회: `hi`(카메라 둘레 `nearR` 안, 카메라가 45 m 움직이면 다시 고름) + `lo`(모든 인스턴스, 정점 셰이더 `USE_CUT` 이 `nearR` 안·`farR` 밖을 접어 버림). 두 경계의 중심은 같은 점(`_last`)이어야 틈이 생기지 않는다.
-- 건물 외벽은 `litMaterial({ facade: true, tech })` — 정점 `fac` = [단면 둘레 길이, 외벽 종류(0 없음 1 커튼월 2 띠창 3 점창 4 첨탑)], `base`(땅 높이). 문양 빛은 유리 위에 그리지 않는다(`glassMaskF`).
+- 건물 외벽은 `litMaterial({ facade: true, tech })` — 정점 `fac` = [단면 둘레 길이, 외벽 종류(0 없음 1 커튼월 2 띠창 3 점창 4 첨탑 5 발코니 6 유리 격자 7 수직 농장)], `base`(땅 높이), `anc`(미터 부속의 고정: 켜짐·기준 위 높이·바깥 거리). 창은 실내 매핑(방 들여다보기)으로 그린다. 문양 빛은 유리 위에 그리지 않는다(`glassMaskF`).
 - 모든 `litMaterial` 은 반사광의 밝기가 0.72 를 넘으면 부드럽게 누른다(블룸 문턱 1.1 아래). 빛나야 하는 것은 em(emissive·정점 emit·창 불빛)으로 넣을 것.
 - 피할 곳: 장소·인물·글자돌·메아리·시설·빛길 역은 `_excl`(원), 빛길 관·낮은 해류 밑은 `_corr`(높이 제한 통로, `_under(x, z, R)` = 그 아래로만 지을 수 있는 높이).
 - 도시 충돌체에는 `city: true`. 들어간 건물은 `openShell` 이 문 뚫린 모델로 바꾸고 `interiors` 가 충돌체를 바닥·벽·승강기로 갈아 끼우며, 나오면 되돌린다.
-- 지형 정점의 `glow.w` = 포장 정도(`pavedAt`). 지형 셰이더가 돌판 줄눈·띠·빛 새김을 그린다.
-- 점유 지도를 보고 싶으면 페이지 안에서 `SEREN.game.city.list`(모양 → [x, y, z, sx, sy, sz, rot, r, g, b]…)·`plist`(소품 → [x, y, z, 배율, 방향]…)를 읽으면 된다.
+- 도시 바닥은 지형 셰이더의 `cityGround()`(city-ground.js)가 계획 텍스처(`uPlan`, 구역마다 한 줄: 고리 표 + 블록 쓰임·변형·플래그)를 읽어 그린다. JS(`cityplan.js`)와 GLSL 의 블록 좌표식이 같아야 템플릿과 바닥이 맞는다.
+
+## 땅의 쓰임과 주민 (v0.5)에서 알아 둘 것
+- 블록 = 고리 띠 하나 × 대로 사이 부채꼴을 골목으로 나눈 조각. `city.where(x, z)` → `{kind: 'block'|'street'|'avenue'|'lane', B, u, v}`.
+- 소품·주민 자리는 블록마다 목록(`B.raw`)만 들고 있다가, 플레이어 둘레 블록에 들어설 때 `_activate` 가 인스턴스·충돌체를 채운다(프레임 예산). 소품 충돌체는 `stream: true`(전역 목록 `all` 에 넣지 않음).
+- `city.noFlora(x, z)` 가 참인 곳(자연 블록이 아닌 계획 블록·도로)에는 식생을 흩뿌리지 않는다.
+- 주민은 자리 id + 순번에서 결정되고(이름·얼굴·일과), 저장은 `state.cit`(친한 정도·이야기 횟수)뿐. `citizens.pushPlayer` 가 플레이어를 밀어낸다. 테스트: `SEREN.game.citizens.vis`(보이는 사람), `startTag/startGarden/...`.
+- 점유 지도를 보고 싶으면 페이지 안에서 `SEREN.game.city.list`(모양 → [x, y, z, sx, sy, sz, rot, r, g, b]…)·`plist`(활성 블록의 소품 → [x, y, z, 배율, 방향, x배율]…)를 읽으면 된다.
 
 ## 지켜야 할 것
 - 기존 저장 파일이 깨지지 않게: 저장 형식을 바꾸면 `state.js` 의 `migrate()` 를 손보세요.

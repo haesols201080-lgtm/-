@@ -179,6 +179,17 @@ export class NPCs {
     }
   }
 
+  /** 인물은 단단하다: 플레이어를 밀어낸다 */
+  pushPlayer(pos) {
+    for (const n of this.list) {
+      if (!n.fig.root.visible || n.walker) continue;
+      const dx = pos.x - n.pos.x, dz = pos.z - n.pos.z;
+      if (Math.abs(dx) > 2 || Math.abs(dz) > 2 || Math.abs(pos.y - n.pos.y) > 2.6) continue;
+      const d = Math.hypot(dx, dz), R = 0.5 * (n.scale || 1) + 0.42;
+      if (d < R && d > 1e-4) { pos.x = n.pos.x + (dx / d) * R; pos.z = n.pos.z + (dz / d) * R; }
+    }
+  }
+
   nearest(p, r, filter = () => true) {
     let best = null, bd = r * r;
     for (const n of this.list) {

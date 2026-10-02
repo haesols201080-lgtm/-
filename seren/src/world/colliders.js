@@ -29,7 +29,7 @@ export class Colliders {
     c.solid = c.solid !== false;
     c._mark = 0;
     if (c.type !== 'cyl') { c.cos = Math.cos(c.rot || 0); c.sin = Math.sin(c.rot || 0); }
-    this.all.push(c);
+    if (!c.stream) this.all.push(c); // 흘려 넣는 소품 충돌체는 목록에 두지 않는다 (자주 넣고 빼므로)
     if (c.obj) { this.dynamic.push(c); this._initDynamic(c); return c; }
     const [x0, z0, x1, z1] = this._bounds(c);
     for (let i = Math.floor(x0 / CELL); i <= Math.floor(x1 / CELL); i++) {
@@ -44,8 +44,7 @@ export class Colliders {
   }
 
   remove(c) {
-    const i = this.all.indexOf(c);
-    if (i >= 0) this.all.splice(i, 1);
+    if (!c.stream) { const i = this.all.indexOf(c); if (i >= 0) this.all.splice(i, 1); }
     const d = this.dynamic.indexOf(c);
     if (d >= 0) { this.dynamic.splice(d, 1); return; }
     // 그 충돌체가 걸친 칸만 본다

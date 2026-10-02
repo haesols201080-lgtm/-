@@ -18,6 +18,8 @@ ${CURVE_GLSL}
 uniform sampler2D uLanes;
 uniform float uT;
 uniform float uFar;
+uniform float uNearHide;
+uniform vec4 uAvoid; // 플레이어 (x, y, z, 켜짐) — 호버 차는 그 위로 비켜 오른다
 attribute vec4 aPod;   // 차선 번호, 시작 위치(0..1), 속도(1/초), 옆 간격(m)
 attribute vec3 aTint;
 attribute vec3 aVCol;
@@ -47,11 +49,14 @@ void main() {
   float d = distance(P, cameraPosition);
   if (d > uFar) { gl_Position = vec4(0.0, 0.0, -2.0, 1.0); return; }
 #ifdef WALK
-  // 걷는 사람: 크기 그대로, 걸음에 맞춰 살짝 들썩
+  // 걷는 사람: 크기 그대로, 걸음에 맞춰 살짝 들썩. 가까이(주민이 직접 다니는 곳)는 그리지 않는다
+  if (d < uNearHide) { gl_Position = vec4(0.0, 0.0, -2.0, 1.0); return; }
   float s = 1.0;
   P.y += abs(sin(uT * 5.2 + aPod.y * 97.0)) * 0.07 - 0.25 * sin(uT * 1.7 + aPod.y * 61.0);
 #else
   float s = clamp(d * 0.0014, 1.0, 7.0);
+  float da = length(P.xz - uAvoid.xz);
+  P.y += uAvoid.w * (1.0 - smoothstep(2.0, 7.0, da)) * (1.0 - smoothstep(4.0, 9.0, abs(P.y - uAvoid.y))) * 2.6;
 #endif
   vec3 wp = P + (Rt * position.x + U * position.y + F * position.z) * s;
   vWorld = wp;
@@ -280,7 +285,7 @@ export class Streams {
     this.total = this.lanes.reduce((s, L) => s + L.n, 0);
     this._at = new THREE.Vector3(1e9, 0, 1e9);
     this.mat = new THREE.ShaderMaterial({
-      uniforms: { ...atmosUniforms, uLanes: { value: this.tex }, uT: { value: 0 }, uFar: { value: this.cap < 3000 ? 5000 : 8000 } },
+      uniforms: { ...atmosUniforms, uLanes: { value: this.tex }, uT: { value: 0 }, uFar: { value: this.cap < 3000 ? 5000 : 8000 }, uNearHide: { value: 0 }, uAvoid: { value: new THREE.Vector4() } },
       vertexShader: vert, fragmentShader: frag, side: THREE.DoubleSide,
     });
     this.mesh = new THREE.Mesh(g, this.mat);
@@ -297,7 +302,7 @@ export class Streams {
     wg.instanceCount = 0;
     this.wgeo = wg;
     this.wmat = new THREE.ShaderMaterial({ uniforms: this.mat.uniforms, vertexShader: vert, fragmentShader: frag, side: THREE.DoubleSide, defines: { WALK: '' } });
-    this.wmat.uniforms = { ...this.mat.uniforms, uFar: { value: this.wreach + 60 } };
+    this.wmat.uniforms = { ...this.mat.uniforms, uFar: { value: this.wreach + 60 }, uNearHide: { value: 110 } };
     this.wmesh = new THREE.Mesh(wg, this.wmat);
     this.wmesh.frustumCulled = false;
     this.world.scene.add(this.wmesh);
@@ -358,6 +363,8 @@ export class Streams {
     this.t += dt;
     this.mat.uniforms.uT.value = this.t;
     const cam = ctx && ctx.game ? ctx.game.engine.camera.position : null;
+    const pl = ctx && ctx.game && ctx.game.player;
+    if (pl) this.mat.uniforms.uAvoid.value.set(pl.pos.x, pl.pos.y, pl.pos.z, 1);
     if (cam && Math.hypot(cam.x - this._at.x, cam.z - this._at.z) > 250) this._fill(cam);
     this._wT -= dt;
     if (cam && (this._wT <= 0 || Math.hypot(cam.x - this._wat.x, cam.z - this._wat.z) > 40)) this._fillWalk(cam);

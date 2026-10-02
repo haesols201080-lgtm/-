@@ -2,7 +2,6 @@
 import { heightAt, RC } from './heightfield.js';
 import { REGIONS } from './regions.js';
 import { createNoise2D, hash2, smoothstep } from '../core/noise.js';
-import { pavedAt } from '../data/city.js';
 
 const nV = createNoise2D(2024);
 const nS = createNoise2D(1999);
@@ -74,7 +73,7 @@ export function surfaceColor(x, z, h, ny, w, col, glow) {
     c0 += (SNOW[0] - c0) * snow; c1 += (SNOW[1] - c1) * snow; c2 += (SNOW[2] - c2) * snow;
   }
   // 도시: 포장된 땅 (돌판 무늬, 군데군데 공원)
-  let pave = h > 1 ? pavedAt(x, z) : 0;
+  let pave = 0; // 도시 바닥은 지형 셰이더가 계획을 읽어 그린다 (city-ground.js)
   if (pave > 0) {
     // 공원·잔디 마당: 큰 공원(노이즈) + 작은 마당 조각
     pave *= smoothstep(-0.62, -0.45, nV(x / 520 + 3, z / 520 - 5)) * (1 - rockAmt * 0.6);

@@ -4,6 +4,7 @@ import workerSrc from 'worker:./terrain-worker.js';
 import { buildChunk, buildChunkIndex } from './terrain-mesher.js';
 import { NOISE_GLSL, ATMOS_PARS, CURVE_GLSL } from './shaders.js';
 import { atmosUniforms } from './atmosphere.js';
+import { CITY_GLSL, cityGroundUniforms } from './city-ground.js';
 
 const ROOT = 131072; // 세계 ±65 km (먼 땅까지)
 const RES = 32;
@@ -30,6 +31,7 @@ void main() {
 const frag = /* glsl */ `
 ${NOISE_GLSL}
 ${ATMOS_PARS}
+${CITY_GLSL}
 varying vec3 vWorld;
 varying vec3 vNormal;
 varying vec3 vColor;
@@ -82,7 +84,15 @@ void main() {
     alb = mix(alb, uWaterDeep * 0.4, k);
   }
 
+  // 계획된 도시: 블록 쓰임에 맞는 바닥 (차도·보도·안뜰·마당·연못·이랑…)
+  float cityCov, citySpec; vec3 cityEm;
+  vec3 cityAlb = cityGround(vWorld, cityCov, cityEm, citySpec);
+  if (cityCov > 0.0) { alb = cityAlb * (0.94 + 0.08 * macro); paveEm = cityEm; ao = 1.0; }
   vec3 col = shadeLit(alb, N, ao) + paveEm;
+  if (cityCov > 0.0 && citySpec > 0.0) {
+    vec3 Vc = normalize(cameraPosition - vWorld);
+    col += uSunColor * pow(max(dot(N, normalize(uSunDir + Vc)), 0.0), 48.0) * citySpec * 0.25;
+  }
 
   // 물가의 거품
   float wave = sin(uTime * 0.9 + dot(xz, vec2(0.08, 0.05))) * 0.35;
@@ -90,7 +100,7 @@ void main() {
   col += vec3(0.85, 0.95, 1.0) * foam * 0.35 * (uAmbTop + uSunColor * 0.3) * near;
 
   // 생물발광: 땅속을 흐르는 공명의 결
-  if (dot(vGlow, vec3(1.0)) > 0.001) {
+  if (cityCov < 0.5 && dot(vGlow, vec3(1.0)) > 0.001) {
     vec2 q = xz * 0.028;
     float vein = abs(vnoise(q + vec2(uTime * 0.006, 0.0)) - 0.5);
     float line = smoothstep(0.035, 0.0, vein);
@@ -112,6 +122,7 @@ export function createTerrainMaterial() {
   return new THREE.ShaderMaterial({
     uniforms: {
       ...atmosUniforms,
+      ...cityGroundUniforms(),
       uWaterDeep: { value: new THREE.Color(0x0a3550) },
       uWaterShallow: { value: new THREE.Color(0x2fb5b0) },
     },
