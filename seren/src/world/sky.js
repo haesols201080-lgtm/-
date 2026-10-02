@@ -101,7 +101,7 @@ void main() {
   vec3 rd = normalize(vDir);
   vec3 col = skyBase(rd);
 
-  float starVis = clamp(uNight * 1.15 + uEclipse * 0.9, 0.0, 1.0) * smoothstep(-0.02, 0.18, rd.y);
+  float starVis = clamp(uNight * 1.15 + uEclipse * 0.9 + smoothstep(6000.0, 30000.0, uAlt) * 0.85, 0.0, 1.0) * smoothstep(-0.02, 0.18, rd.y);
   if (starVis > 0.001) {
     col += (stars(rd) + galaxy(rd)) * starVis;
     col += aurora(rd) * uNight;
@@ -120,7 +120,7 @@ void main() {
     vec2 q = uv * vec2(0.9, 2.6) + vec2(uTime * 0.004, 0.0);
     float c = fbm2(q * 1.4 + fbm2(q * 0.7) * 1.3);
     float cov = smoothstep(1.0 - uCloudCover, 1.18 - uCloudCover * 0.6, c);
-    cov *= smoothstep(0.0, 0.25, rd.y);
+    cov *= smoothstep(0.0, 0.25, rd.y) * (1.0 - smoothstep(4000.0, 12000.0, uAlt));
     vec3 lit = uAmbTop * 1.6 + uSunColor * 0.75 + uHorizonGlow * 0.7 + uUrLight * 1.1;
     col = mix(col, lit, cov * 0.75);
   }

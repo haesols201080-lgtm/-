@@ -97,7 +97,24 @@ export class Engine {
     renderer.clear(true, true, false);
     if (this.sky) renderer.render(this.sky.scene, this.sky.camera);
     renderer.clearDepth();
-    renderer.render(this.scene, this.camera);
+    const cam = this.camera;
+    const alt = cam.position.y;
+    if (alt > 2500) {
+      // 높은 곳: 먼 곳(수백 km)과 가까운 곳을 깊이 범위를 나눠 두 번 그린다 (깊이 정밀도)
+      const n = cam.near, f = cam.far;
+      const split = Math.min(900, 120 + alt * 0.01);
+      cam.near = split;
+      cam.far = 70000 + Math.sqrt(2 * 1600000 * alt) * 1.2;
+      cam.updateProjectionMatrix();
+      renderer.render(this.scene, cam);
+      renderer.clearDepth();
+      cam.near = n;
+      cam.far = split * 1.05;
+      cam.updateProjectionMatrix();
+      renderer.render(this.scene, cam);
+      cam.far = f;
+      cam.updateProjectionMatrix();
+    } else renderer.render(this.scene, cam);
   }
 
   render() {

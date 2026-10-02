@@ -58,6 +58,7 @@ uniform float uFogFalloff;
 uniform float uCurv;
 #endif
 uniform vec4 uSilence[6];
+uniform float uAlt;
 
 vec3 skyBase(vec3 rd) {
   float y = rd.y;
@@ -73,6 +74,12 @@ vec3 skyBase(vec3 rd) {
   col += uHorizonGlow * (pow(az, 3.0) * 0.8 + 0.2) * pow(hor, 7.0);
   float ud = max(dot(rd, uUrDir), 0.0);
   col += uUrLight * (0.07 * pow(ud, 4.0) + 0.14 * pow(ud, 30.0));
+  // 높은 하늘: 공기층 위로 오르면 위쪽이 검푸른 우주로
+  float space = smoothstep(2500.0, 26000.0, uAlt);
+  if (space > 0.0) {
+    float up = pow(clamp(rd.y * 2.2, 0.0, 1.0), 0.35);
+    col = mix(col, vec3(0.004, 0.008, 0.03) + col * 0.06, space * up);
+  }
   return col;
 }
 

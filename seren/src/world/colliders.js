@@ -129,6 +129,8 @@ export class Colliders {
     const list = this.near(x, z, pad + 1, _list);
     for (const c of list) {
       if (!c.walk) continue;
+      // 하늘 높이 있는 것(하늘닻 등)은 그 근처에서 찾을 때만 — "맨 위 땅"을 찾는 질의(y=1e5)에서는 빼기
+      if (c.sky && Math.abs(y - c.y1) > 2000) continue;
       const top = this._topAt(c, x, z, pad);
       if (top === null) continue;
       if (top <= y + step && top > h) { h = top; hit = c; }

@@ -42,6 +42,8 @@ export class UI {
     this.compass = $(`<div class="compass"><div class="strip"></div><div class="center"></div></div>`);
     this.hud.appendChild(this.compass);
     this.compassStrip = this.compass.firstElementChild;
+    this.alti = $(`<div class="alti hidden"></div>`);
+    this.hud.appendChild(this.alti);
     const tb = $(`<div class="topbtns"></div>`);
     for (const [k, tab] of [['map', 'map'], ['book', 'journal'], ['menu', 'settings']]) {
       const b = $(`<button class="icobtn" aria-label="${tab}">${ICON[k]}</button>`);
@@ -200,6 +202,15 @@ export class UI {
   }
 
   // ── 나침반 ───────────────────────────
+  /** 고도·속도 (높은 곳에서만) */
+  altimeter(y, speed) {
+    const on = y > 1800;
+    this.alti.classList.toggle('hidden', !on);
+    if (!on) return;
+    const t = `고도 ${y >= 10000 ? (y / 1000).toFixed(1) + ' km' : Math.round(y).toLocaleString() + ' m'} · ${Math.round(speed)} m/s`;
+    if (t !== this._altiT) { this.alti.textContent = t; this._altiT = t; }
+  }
+
   updateCompass(camYaw, markers) {
     // 화면 정면 = 카메라 방위 (북쪽 0, 시계방향 +)
     const heading = ((-camYaw * 180) / Math.PI + 360) % 360;

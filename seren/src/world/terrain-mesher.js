@@ -18,7 +18,8 @@ const SNOW = hexLin(0xf1f5ff);
 const VIOLET = hexLin(0x7a62c0);
 const STRATA = [hexLin(0xc0603f), hexLin(0xe0a070), hexLin(0x9a4636), hexLin(0xefc694), hexLin(0x8a4a42), hexLin(0xd27f52)];
 const GSTRATA = [hexLin(0xd98f7a), hexLin(0xf0c4a8), hexLin(0xc06f78), hexLin(0xf6dcc4), hexLin(0xb46a80)];
-const I_CANYON = 4, I_GLASS = 2, I_FROST = 5, I_MEADOW = 1;
+const RSTRATA = [hexLin(0x6a4a66), hexLin(0x9a6a7a), hexLin(0x4e3a58), hexLin(0xb88a98), hexLin(0x5e4060), hexLin(0x8a5a72)];
+const I_CANYON = 4, I_GLASS = 2, I_FROST = 5, I_MEADOW = 1, I_RIFT = 7, I_FALLS = 10;
 
 /** 한 정점의 표면 색(선형)과 발광색을 계산 */
 export function surfaceColor(x, z, h, ny, w, col, glow) {
@@ -39,8 +40,8 @@ export function surfaceColor(x, z, h, ny, w, col, glow) {
     }
     gr += wi * g0; gg += wi * g1; gb += wi * g2;
     let r;
-    if (i === I_CANYON || i === I_GLASS) {
-      const S = i === I_CANYON ? STRATA : GSTRATA;
+    if (i === I_CANYON || i === I_GLASS || i === I_RIFT) {
+      const S = i === I_CANYON ? STRATA : i === I_RIFT ? RSTRATA : GSTRATA;
       const band = Math.floor(h / 6.5 + 1.2 * nS(x / 260, z / 260));
       r = S[Math.floor(hash2(band, 7) * S.length)];
     } else {
@@ -65,7 +66,7 @@ export function surfaceColor(x, z, h, ny, w, col, glow) {
   }
   // 눈
   const sn = w[I_FROST] * smoothstep(880, 1180, h + 160 * nS(x / 400, z / 400)) * smoothstep(0.5, 0.72, ny);
-  const snowHigh = smoothstep(1500, 1700, h) * smoothstep(0.35, 0.5, ny);
+  const snowHigh = smoothstep(1500, 1700, h) * smoothstep(0.35, 0.5, ny) * (1 - (w[I_FALLS] || 0));
   const snow = Math.max(sn, snowHigh);
   if (snow > 0) {
     c0 += (SNOW[0] - c0) * snow; c1 += (SNOW[1] - c1) * snow; c2 += (SNOW[2] - c2) * snow;

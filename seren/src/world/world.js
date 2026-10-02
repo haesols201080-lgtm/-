@@ -37,7 +37,8 @@ export class World {
 
   /** 지형 + 구조물을 고려한 지면 높이 */
   groundAt(x, z, y = 1e5) {
-    return this.colliders.ground(x, z, y, 1e5).h;
+    // y 를 주면 그 높이에서 조금 위까지만 (머리 위의 떠 있는 발판으로 튀어 오르지 않게)
+    return this.colliders.ground(x, z, y, y >= 1e5 ? 1e5 : 4).h;
   }
 
   /** 지형/물 중 높은 쪽 */
@@ -77,8 +78,9 @@ export class World {
 
   update(dt, camera, ctx) {
     this.elapsed += dt;
+    this.atmos.u.uAlt.value = camera.position.y;
     this.clock.update(dt);
-    this.atmos.update(this.clock, this.elapsed);
+    this.atmos.update(this.clock, this.elapsed, camera.position.y);
     this.colliders.update();
     for (const m of this.modules) m.update && m.update(dt, ctx);
     this.terrain.update(camera.position);

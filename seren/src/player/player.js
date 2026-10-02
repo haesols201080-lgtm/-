@@ -3,6 +3,8 @@
 import * as THREE from 'three';
 
 const G = 19;
+/** 공기 밀도 (해수면 = 1, 8.5 km 마다 1/e) */
+export const airDensity = (y) => Math.exp(-Math.max(0, y) / 8500);
 const RADIUS = 0.35;
 const HEIGHT = 1.75;
 const STEP = 0.55;
@@ -72,7 +74,8 @@ export class Player {
   }
 
   teleport(x, y, z) {
-    const g = this.world.colliders.ground(x, z, y ?? 1e5, 1e5);
+    // y 를 주면 그 높이 바로 아래의 바닥에, 안 주면 그 자리의 맨 위 바닥에
+    const g = y === undefined ? this.world.colliders.ground(x, z, 1e5, 1e5) : this.world.colliders.ground(x, z, y, 3);
     this.pos.set(x, y ?? g.h, z);
     if (y === undefined || y < g.h) this.pos.y = g.h;
     this.vel.set(0, 0, 0);
@@ -247,6 +250,12 @@ export class Player {
     }
     const gs = this._gravityScale();
     v.y -= G * gs * dt;
+    // 공기 저항: 높을수록 공기가 옅어 더 빨리 떨어진다 (해수면 끝속도 ≈ 55 m/s, 30 km ≈ 320 m/s)
+    const sp3 = v.length();
+    if (sp3 > 20) {
+      const k = 0.0063 * airDensity(this.pos.y) * sp3 * dt;
+      v.multiplyScalar(1 / (1 + k));
+    }
     // 공중 조작
     const maxS = Math.max(TUNING.runSpeed, Math.hypot(v.x, v.z));
     v.x += wish.x * TUNING.airAccel * dt * wishLen;
@@ -315,8 +324,12 @@ export class Player {
     if (this.glideSpeed < 8) target = Math.min(target, -0.35 * (1 - (this.glideSpeed - 5) / 3)); // 실속
     this.pitch += (target - this.pitch) * Math.min(1, dt * 2.6);
     const gs = this._gravityScale();
-    const a = -G * gs * Math.sin(this.pitch) - (T.glideDrag * (1 - up * 0.15)) * this.glideSpeed * this.glideSpeed;
-    this.glideSpeed = Math.max(T.glideMin, Math.min(T.glideMax, this.glideSpeed + a * dt));
+    // 높은 곳: 공기가 옅어 저항이 줄고, 최고 속도가 올라간다 (궤도 낙하)
+    const rho = airDensity(this.pos.y);
+    const vmax = Math.min(620, T.glideMax / Math.sqrt(rho));
+    const a = -G * gs * Math.sin(this.pitch) - (T.glideDrag * (1 - up * 0.15)) * rho * this.glideSpeed * this.glideSpeed;
+    this.glideSpeed = Math.max(T.glideMin, Math.min(vmax, this.glideSpeed + a * dt));
+    if (this.glideSpeed > T.glideMax * 1.2 && rho > 0.5) this.glideSpeed -= (this.glideSpeed - T.glideMax) * Math.min(1, dt * 0.6);
 
     // 방향: 입력 방향으로 선회
     let turn = 0;

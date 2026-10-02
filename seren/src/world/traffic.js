@@ -421,7 +421,7 @@ export class Traffic {
         s.v += a * dt;
         s.y += s.v * dt;
         on = true;
-        if (s.y > sp.y + 26000) { s.mode = 'wait'; s.t = 70 + Math.random() * 50; s.trail.update(dt, this._p, false, cam || this._p); }
+        if (s.y > sp.y + 19000) { s.mode = 'wait'; s.t = 70 + Math.random() * 50; s.trail.update(dt, this._p, false, cam || this._p); }
       } else if (s.mode === 'descend') {
         const h = s.y - sp.y;
         const target = Math.max(6, Math.min(700, h * 0.28));
@@ -430,14 +430,15 @@ export class Traffic {
         on = h < 3000;
         if (s.y <= sp.y + 1) { s.y = sp.y + 1; s.mode = 'land'; s.t = 12; }
       } else if (s.mode === 'land') {
-        if (s.t <= 0) { s.mode = 'descend'; s.y = sp.y + 26000; s.v = 700; }
+        if (s.t <= 0) { s.mode = 'descend'; s.y = sp.y + 19000; s.v = 700; }
       }
       // 하강선은 발사대 옆 착륙장에 내려앉는다
       const off = s === this.shuttles[1] ? 90 : 0;
       s.m.position.set(sp.x + off, s.y, sp.z + (off ? 40 : 0));
       s.m.visible = s.mode !== 'land' || true;
       this._p.set(s.m.position.x, s.y - 2, s.m.position.z);
-      s.trail.update(dt, this._p, on && s.mode === 'launch', cam || this._p);
+      s.trail.update(dt, this._p, on && s.mode === 'launch' && s.y < sp.y + 15000, cam || this._p);
+      s.m.visible = s.y < sp.y + 18000;
       if (on || s.mode === 'wait' || s.mode === 'land') this.lights.set(s.light, this._p.x, this._p.y - 2, this._p.z);
       else this.lights.set(s.light, 0, -1e5, 0);
       this.lights.color(s.light, s.mode === 'launch' ? 0xffe6b0 : 0xbffcff, s.mode === 'launch' ? 1.6 : 0.6);

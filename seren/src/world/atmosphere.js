@@ -37,6 +37,7 @@ export const atmosUniforms = {
   uFogDensity: { value: 0.0001 },
   uFogFalloff: { value: 1 / 1100 },
   uCurv: { value: 1 / (2 * 1600000) },
+  uAlt: { value: 0 }, // 카메라 높이 (m) — 높이 오르면 하늘이 우주처럼 어두워진다
   uSilence: { value: Array.from({ length: 6 }, () => new THREE.Vector4(0, 0, 1, 0)) },
 };
 
@@ -49,7 +50,7 @@ export class Atmosphere {
     this.state = { night: 0, sunVisible: 1 };
   }
 
-  update(clock, elapsed) {
+  update(clock, elapsed, alt = 0) {
     const u = this.u;
     const s = clock.sunDir;
     u.uSunDir.value.copy(s);
@@ -91,8 +92,10 @@ export class Atmosphere {
     u.uHorizonGlow.value.copy(tmp.glow);
     // 조명 세기 보정: ACES 톤매핑이 중간톤을 밝히므로 직접광·환경광을 낮춰 색이 바래지 않게 한다
     u.uSunColor.value.copy(tmp.sun).multiplyScalar(sunI * LIGHT);
-    u.uAmbTop.value.copy(tmp.ambT).multiplyScalar(ambI * LIGHT);
-    u.uAmbBottom.value.copy(tmp.ambB).multiplyScalar(ambI * LIGHT);
+    // 높은 곳: 하늘빛(환경광)이 줄고 햇빛만 남는다
+    const space = smooth(2500, 34000, alt);
+    u.uAmbTop.value.copy(tmp.ambT).multiplyScalar(ambI * LIGHT * (1 - 0.6 * space));
+    u.uAmbBottom.value.copy(tmp.ambB).multiplyScalar(ambI * LIGHT * (1 - 0.3 * space));
     u.uFogDensity.value = fog * this.fogScale;
 
     // 우르의 반사광: 위상(보름일수록 밝음) × 하늘이 어두울수록 두드러짐

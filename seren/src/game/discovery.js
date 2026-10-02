@@ -196,7 +196,9 @@ export class Discovery {
     if (this.regionCheckT > 0) return;
     this.regionCheckT = 0.5;
     const pp = g.player.pos;
+    const high = pp.y - g.world.heightAt(pp.x, pp.z) > 3000;
     for (const p of PLACES) {
+      if (high) break;
       if (g.state.discovered[p.id] || p.type === 'lift' || p.type === 'none') continue;
       const r = Math.min(p.radius || 60, 400);
       if (Math.hypot(pp.x - p.pos[0], pp.z - p.pos[1]) < r + 30) {
@@ -205,7 +207,7 @@ export class Discovery {
         g.audio.chime('discover');
       }
     }
-    const reg = g.world.regionAt(pp.x, pp.z);
+    const reg = pp.y - g.world.heightAt(pp.x, pp.z) < 4000 ? g.world.regionAt(pp.x, pp.z) : null;
     if (reg && reg.id !== this.lastRegion) {
       const prev = this.lastRegion;
       this.lastRegion = reg.id;

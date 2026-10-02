@@ -21,7 +21,7 @@ void main() {
   float size = length(vec3(instanceMatrix[0][0], instanceMatrix[0][1], instanceMatrix[0][2]));
   center.xz += uDrift;
   // 세계를 넘어가면 반대편으로
-  center.xz = mod(center.xz + uWrap, uWrap * 2.0) - uWrap;
+  center.xz = cameraPosition.xz + mod(center.xz - cameraPosition.xz + uWrap, uWrap * 2.0) - uWrap;
   vec3 camR = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
   vec3 camU = vec3(viewMatrix[0][1], viewMatrix[1][1], viewMatrix[2][1]);
   vec3 wp = center + (camR * position.x + camU * position.y) * size;

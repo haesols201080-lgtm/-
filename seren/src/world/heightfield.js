@@ -87,8 +87,51 @@ function regionHeight(i, x, z, base) {
       const isl = fbm(nC, x / 2600 + 5, z / 2600 - 2, 4);
       return -80 + 260 * smoothstep(0.16, 0.6, isl) + 18 * fbm(nA, x / 500, z / 500, 2);
     }
+    case 7: { // 깊은목: 1 km 대지를 남북으로 가르는 균열
+      const cx = 40000 + 1300 * Math.sin(z / 6500) + 400 * fbm(nB, z / 3000, 3.3, 2);
+      const along = Math.abs(z - 2000);
+      const w = (700 + 260 * fbm(nE, z / 2500, 1.7, 3)) * (1 - smoothstep(9000, 12500, along));
+      const d = Math.abs(x - cx);
+      const plateau = 980 + 140 * fbm(nC, x / 2200, z / 2200, 4) + 40 * ridged(nA, x / 900, z / 900, 3);
+      const carve = 1 - smoothstep(w, w + 320, d);
+      const floor = 70 + 25 * fbm(nD, x / 400, z / 400, 2);
+      const wall = terrace(plateau * (1 - carve) + floor * carve, 70, 0.18);
+      return carve > 0.98 ? floor : wall;
+    }
+    case 8: { // 느린땅: 넓고 평평한 금빛 초원 + 오래된 언덕 줄기
+      const sw = fbm(nC, x / 4200, z / 4200, 4);
+      const ridge = Math.pow(ridged(nA, x / 7000 + 1.1, z / 7000 - 4.2, 3), 3);
+      return 55 + 45 * sw + 160 * ridge + 6 * fbm(nE, x / 600, z / 600, 2);
+    }
+    case 9: { // 흰 숨: 얼음 평원 + 압력 능선 + 갈라진 틈 + 얼음 봉우리
+      const ridgeL = Math.pow(ridged(nB, x / 1800, z / 1800, 3), 6) * 26;
+      const crack = smoothstep(0.035, 0.0, Math.abs(fbm(nE, x / 2600, z / 2600, 3)));
+      const nun = Math.pow(Math.max(0, fbm(nA, x / 5200 + 9.1, z / 5200 - 3.3, 4) - 0.18), 1.4) * 1900;
+      return 14 + 6 * fbm(nC, x / 900, z / 900, 2) + ridgeL + nun - crack * 22;
+    }
+    case 10: { // 천 폭포 고원: 높은 대지 + 굽이치는 골짜기
+      const v = Math.abs(fbm(nB, x / 3600 + 2.2, z / 3600 - 7.7, 3));
+      const valley = 1 - smoothstep(0.02, 0.07, v);
+      const top = 1620 + 120 * fbm(nC, x / 2400, z / 2400, 4);
+      return terrace(top - valley * 140, 45, 0.15);
+    }
   }
   return base;
+}
+
+// 먼 땅의 바다 경계: 중심에서의 거리에 노이즈를 섞은 해안선 (0 = 바다, 1 = 땅)
+const FAR = REGIONS.map((r, i) => (r.far ? { i, x: r.center[0], z: r.center[1], R: r.landR, ax: r.ax || 1, az: r.az || 1 } : null)).filter(Boolean);
+function farMask(x, z) {
+  let m = 0;
+  for (const f of FAR) {
+    const dx = (x - f.x) / f.ax, dz = (z - f.z) / f.az;
+    const d2 = dx * dx + dz * dz;
+    const lim = f.R + 7000;
+    if (d2 > lim * lim) continue;
+    const d = Math.sqrt(d2) + 4200 * fbm(nE, x / 9000 + f.i * 3.1, z / 9000 - f.i * 1.7, 4) + 1400 * fbm(nD, x / 2600 - f.i, z / 2600, 3);
+    m = Math.max(m, smoothstep(f.R + 1600, f.R - 900, d));
+  }
+  return m;
 }
 
 function rawHeight(x, z, detail, wOut) {
@@ -105,7 +148,8 @@ function rawHeight(x, z, detail, wOut) {
   const r = Math.sqrt(x * x + z * z);
   const rw = r + 3600 * fbm(nE, x / 9000, z / 9000, 4) + 900 * nD(x / 2600, z / 2600);
   let land = smoothstep(WORLD.landRadius + 2400, WORLD.landRadius - 1400, rw);
-  land = Math.max(land, wOut[6] * smoothstep(WORLD.limitRadius, WORLD.limitRadius - 4000, r));
+  land = Math.max(land, wOut[6] * smoothstep(WORLD.archRadius, WORLD.archRadius - 4000, r));
+  if (r > 20000) land = Math.max(land, farMask(x, z));
   if (land < 1) {
     const isl = fbm(nD, x / 1900, z / 1900, 4);
     const floor = -170 + 30 * fbm(nB, x / 3000, z / 3000, 2) + 420 * Math.max(0, isl - 0.42);

@@ -103,5 +103,9 @@ export class Water {
 
   update(camPos) {
     this.mesh.position.set(camPos.x, 0, camPos.z);
+    // 높이 올라가면 수평선이 멀어진다 → 바다를 넓힌다
+    const horizon = Math.sqrt(2 * 1600000 * Math.max(0, camPos.y));
+    const k = Math.max(1, (horizon * 1.15) / 60000);
+    this.mesh.scale.set(k, 1, k);
   }
 }

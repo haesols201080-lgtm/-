@@ -15,6 +15,7 @@ import { Traffic } from '../world/traffic.js';
 import { Transit } from '../world/transit.js';
 import { Landmarks } from '../world/landmarks.js';
 import { Drones } from '../world/drones.js';
+import { SkyAnchor } from '../world/anchor.js';
 import { Currents } from '../world/currents.js';
 import { Creatures } from '../world/creatures.js';
 import { Clouds } from '../world/clouds.js';
@@ -66,6 +67,7 @@ export class Game {
     this.traffic = this.world.add(new Traffic(this.world, this.megacity, this.engine.q));
     this.transit = this.world.add(new Transit(this.world, this.engine.q));
     this.landmarks = this.world.add(new Landmarks(this.world, this.structures));
+    this.anchor = this.world.add(new SkyAnchor(this.world, this.structures));
     this.transit.isOpen = (u) => (!u ? true : u.startsWith('quest:') ? this.quests.isDone(u.slice(6)) : !!this.state.pylons[u]);
     this.flora = this.world.add(new Flora(this.world, this.engine.q));
     this.currents = this.world.add(new Currents(this.world, CURRENTS));
@@ -163,7 +165,7 @@ export class Game {
     this.mode = 'intro';
     this.world.clock.frozen = false;
     this.world.clock.time = 0.655;
-    this.player.teleport(this.state.player.x, undefined, this.state.player.z);
+    this.player.teleport(this.state.player.x, this.state.player.y ?? undefined, this.state.player.z);
     this.player.state = 'down';
     this.player.yaw = Math.PI * 0.9;
     this.player.canSkim = false;
@@ -205,7 +207,7 @@ export class Game {
     this.world.clock.frozen = false;
     this.world.clock.time = s.clock;
     const p = s.player;
-    this.player.teleport(p.x, undefined, p.z);
+    this.player.teleport(p.x, p.y ?? undefined, p.z);
     this.player.yaw = p.yaw || 0;
     this.rig.yaw = (p.yaw || 0) + Math.PI;
     this._applyState();
@@ -242,7 +244,7 @@ export class Game {
     if (this.mode === 'title' || this.mode === 'boot' || this.mode === 'intro') return;
     const s = this.state;
     const p = this.player;
-    if (p.state !== 'current' && p.state !== 'lift' && p.state !== 'down' && p.state !== 'ride') s.player = { x: p.pos.x, y: null, z: p.pos.z, yaw: p.yaw };
+    if (p.state !== 'current' && p.state !== 'lift' && p.state !== 'down' && p.state !== 'ride') s.player = { x: p.pos.x, y: p.pos.y > 20000 && p.state === 'ground' ? p.pos.y + 0.5 : null, z: p.pos.z, yaw: p.yaw };
     s.clock = this.world.clock.time;
     s.upgrades = { ...p.upgrades };
     s.reveal = this.mapData.serialize();
@@ -386,6 +388,8 @@ export class Game {
     const p = this.player.pos;
     const npc = this.npcs.nearest(p, 5.5, (n) => !n.ambient);
     if (npc) return { kind: 'npc', o: npc, label: `${npc.name}와(과) 마주하기`, short: '말 걸기' };
+    const el = this.anchor.stopNear(p);
+    if (el) return { kind: 'elevator', o: el, label: el.up ? (this.elevatorOpen() ? '승강차 · 하늘닻으로 오르기 (30 km)' : '승강차 (아직 멈춰 있다)') : '승강차 · 척추 전망대로 내려가기', short: '승강차' };
     const d = this.discovery.nearestInteract(p);
     if (d) return d;
     const st = this.transit.nearest(p);
@@ -396,6 +400,7 @@ export class Game {
   _interact(t) {
     if (t.kind === 'npc') return this.talkTo(t.o);
     if (t.kind === 'station') return this.stationCard(t.o);
+    if (t.kind === 'elevator') return this.rideElevator(t.o.up);
     if (t.kind === 'deck' && this.quests.step('mq4')?.type === 'compose') {
       if (this.world.atmos.state.night > 0.5) return this.startCompose();
       this.ui.moa('하우는 밤에 노래를 보내라고 했어요. 메뉴에서 쉬면서 밤을 기다려요.');
@@ -457,6 +462,26 @@ export class Game {
       this.ui.closeCard();
       this.startRide(S, D);
     }));
+  }
+
+  elevatorOpen() { return this.quests.isDone('mq3') || !!this.state.flags.elevator; }
+
+  /** 척추의 승강차: 전망대 ↔ 하늘닻(30 km) */
+  rideElevator(up) {
+    if (up && !this.elevatorOpen()) { this.ui.toast('승강차가 멈춰 있다', { kind: 'muted', sub: '하모네아의 노래지기를 먼저 만나 보자' }); return; }
+    const ride = this.anchor.makeRide(up, (wentUp) => {
+      this.rig.override = null;
+      if (wentUp) {
+        const first = !this.state.discovered.anchor;
+        this.state.discovered.anchor = Date.now();
+        this.ui.regionTitle('하늘닻', '고도 30 km · 공기가 거의 없다. 세렌이 둥글게 휘어 보인다.', first);
+        if (first) setTimeout(() => this.ui.moa(MOA.anchor || '고도 30킬로미터. 저 아래 조각들이 전부 우리가 걸어온 곳이에요. 그리고 바다 건너… 땅이 더 있어요.'), 3500);
+      }
+      this.save();
+    });
+    this.player.enterRide(ride);
+    audio.noise({ freq: 120, q: 0.6, dur: 4, gain: 0.8, type: 'lowpass', attack: 0.8 });
+    audio.chime('soft');
   }
 
   startRide(A, B) {
@@ -741,6 +766,7 @@ export class Game {
     }
     if (Math.hypot(pos.x, pos.z) > 1200) markers.push({ bearing: bearing(0, 0), cls: 'p', label: '척추' });
     this.ui.updateCompass(this.rig.yaw, markers);
+    this.ui.altimeter(p.pos.y, p.state === 'glide' ? p.glideSpeed : p.vel.length());
     const t0 = tg[0];
     if (t0) {
       const d = Math.hypot(t0.x - pos.x, t0.z - pos.z);

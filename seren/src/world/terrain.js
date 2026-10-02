@@ -5,7 +5,7 @@ import { buildChunk, buildChunkIndex } from './terrain-mesher.js';
 import { NOISE_GLSL, ATMOS_PARS, CURVE_GLSL } from './shaders.js';
 import { atmosUniforms } from './atmosphere.js';
 
-const ROOT = 65536;
+const ROOT = 131072; // 세계 ±65 km (먼 땅까지)
 const RES = 32;
 const RES_LOW = 16; // 먼 청크(2 km 이상)는 성기게
 

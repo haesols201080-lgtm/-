@@ -3,9 +3,10 @@ import { heightAt, regionWeights, RC } from '../world/heightfield.js';
 import { REGIONS } from '../world/regions.js';
 import { PLACES } from '../data/places.js';
 
-const RANGE = 24000; // 지도 반경 (m)
-const N = 512; // 바탕 해상도
-const FOG_N = 256; // 안개 해상도
+const RANGE = 60000; // 지도 반경 (m)
+const N = 768; // 바탕 해상도
+const FOG_N = 384; // 안개 해상도
+const OLD = { range: 24000, n: 256 }; // 옛 저장(대륙만 있던 지도)
 
 const lin = (h) => [(h >> 16) & 255, (h >> 8) & 255, h & 255];
 const PAL = REGIONS.map((r) => ({ g: lin(r.pal.grass), r: lin(r.pal.rock) }));
@@ -109,9 +110,9 @@ export class MapData {
     return this.fogCanvas;
   }
 
-  /** 저장: 0/1 비트 → 길이 부호화 문자열 */
+  /** 저장: 0/1 비트 → 길이 부호화 문자열 (앞에 지도 크기 표시) */
   serialize() {
-    let out = '', cur = this.fog[0] > 60 ? 1 : 0, run = 0;
+    let out = `R${RANGE / 1000}N${FOG_N}:`, cur = this.fog[0] > 60 ? 1 : 0, run = 0;
     for (let k = 0; k < this.fog.length; k++) {
       const b = this.fog[k] > 60 ? 1 : 0;
       if (b === cur && run < 35000) run++;
@@ -124,12 +125,26 @@ export class MapData {
   load(str) {
     if (!str) return;
     try {
+      const head = /^R(\d+)N(\d+):/.exec(str);
+      const range = head ? +head[1] * 1000 : OLD.range;
+      const n = head ? +head[2] : OLD.n;
+      const body = head ? str.slice(head[0].length) : str;
+      const src = new Uint8Array(n * n);
       let k = 0;
       const re = /([0-9a-z]+)([+-])/g;
       let m;
-      while ((m = re.exec(str))) {
-        const n = parseInt(m[1], 36), v = m[2] === '+' ? 255 : 0;
-        for (let i = 0; i < n && k < this.fog.length; i++) this.fog[k++] = v;
+      while ((m = re.exec(body))) {
+        const c = parseInt(m[1], 36), v = m[2] === '+' ? 255 : 0;
+        for (let i = 0; i < c && k < src.length; i++) src[k++] = v;
+      }
+      if (range === RANGE && n === FOG_N) this.fog.set(src);
+      else {
+        // 크기가 다른 옛 지도 → 새 격자로 옮겨 담기
+        for (let j = 0; j < FOG_N; j++) for (let i = 0; i < FOG_N; i++) {
+          const x = -RANGE + ((i + 0.5) / FOG_N) * 2 * RANGE, z = -RANGE + ((j + 0.5) / FOG_N) * 2 * RANGE;
+          const si = Math.floor(((x + range) / (2 * range)) * n), sj = Math.floor(((z + range) / (2 * range)) * n);
+          if (si >= 0 && sj >= 0 && si < n && sj < n) this.fog[j * FOG_N + i] = Math.max(this.fog[j * FOG_N + i], src[sj * n + si]);
+        }
       }
       this.fogDirty = true;
     } catch { /* 무시 */ }
@@ -162,7 +177,7 @@ export class MapView {
     tools.querySelector('[data-clear]').addEventListener('click', () => { g.state.waypoint = null; g.updateWaypoint(); this.draw(); });
     this.canvas = c;
     this.cx = g.player.pos.x; this.cz = g.player.pos.z;
-    if (!this._zoomed) { this.zoom = 1.7; this._zoomed = true; }
+    if (!this._zoomed) { this.zoom = 3.8; this._zoomed = true; }
     const resize = () => {
       const r = parent.getBoundingClientRect();
       const dpr = Math.min(2, devicePixelRatio || 1);
@@ -183,7 +198,7 @@ export class MapView {
       if (pts.size === 2) {
         p.x = e.clientX; p.y = e.clientY;
         const [a, b] = [...pts.values()];
-        this.zoom = Math.max(0.6, Math.min(12, zoom0 * Math.hypot(a.x - b.x, a.y - b.y) / Math.max(1, pinch0)));
+        this.zoom = Math.max(0.8, Math.min(30, zoom0 * Math.hypot(a.x - b.x, a.y - b.y) / Math.max(1, pinch0)));
         moved = 99;
         this.draw();
         return;
@@ -209,7 +224,7 @@ export class MapView {
     };
     c.addEventListener('pointerup', up);
     c.addEventListener('pointercancel', (e) => pts.delete(e.pointerId));
-    c.addEventListener('wheel', (e) => { e.preventDefault(); this.zoom = Math.max(0.6, Math.min(12, this.zoom * (e.deltaY > 0 ? 0.87 : 1.15))); this.draw(); }, { passive: false });
+    c.addEventListener('wheel', (e) => { e.preventDefault(); this.zoom = Math.max(0.8, Math.min(30, this.zoom * (e.deltaY > 0 ? 0.87 : 1.15))); this.draw(); }, { passive: false });
     this._timer = setInterval(() => this.draw(), 500);
   }
 
@@ -292,7 +307,7 @@ export class MapView {
       ctx.beginPath();
       ctx.arc(sx, sy, (p.type === 'pylon' ? 5 : p.type === 'vista' ? 3.5 : 4) * dpr, 0, Math.PI * 2);
       ctx.fill();
-      if (this.zoom > 1.6 || ['capital', 'village', 'glasscity', 'bloomcity', 'canyoncity', 'seacity', 'observatory', 'crash', 'district', 'starport'].includes(p.type) || (p.type === 'landmark' && this.zoom > 1.1)) {
+      if (this.zoom > 4 || ['capital', 'village', 'glasscity', 'bloomcity', 'canyoncity', 'seacity', 'observatory', 'crash', 'district', 'starport'].includes(p.type) || (p.type === 'landmark' && this.zoom > 2.7)) {
         ctx.fillStyle = 'rgba(243,239,230,0.9)';
         ctx.shadowColor = '#000'; ctx.shadowBlur = 4 * dpr;
         ctx.fillText(p.name, sx, sy - 9 * dpr);
