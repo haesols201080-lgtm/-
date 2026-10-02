@@ -30,7 +30,7 @@ const talkThrough = async () => {
     await run(0.2);
   }
 };
-const step = async (label, fn) => { try { await fn(); } catch (e) { logs.push(`[step ${label}] ${e.message}`); } console.log(label.padEnd(26), JSON.stringify(await q())); };
+const step = async (label, fn) => { let r; try { r = await fn(); } catch (e) { logs.push(`[step ${label}] ${e.message}`); } console.log(label.padEnd(26), JSON.stringify(await q()), r !== undefined && r !== true ? JSON.stringify(r) : ''); };
 
 await step('시작', async () => {});
 await step('움직이기', () => run(3, "g.player.state='ground'; g.input.held.add('up')"));
@@ -61,6 +61,18 @@ await step('노래 짓기', async () => { await ev(() => { const g = SEREN.game;
 await step('하우(노래 후)', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('hau'); g.player.teleport(n.pos.x + 3, undefined, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
 await step('남은 탑', async () => { for (const id of ['frost-pylon', 'sea-pylon']) { await ev((id) => { const g = SEREN.game; g.awakenPylon(id); g.director.skip(); }, id); await run(0.3); } });
 await step('하우(마지막)', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('hau'); g.player.teleport(n.pos.x + 3, undefined, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
+// ── 2부: 바다 건너 ──
+await step('하우(하늘닻 이야기)', async () => { await run(0.3); await ev(() => { const g = SEREN.game; const n = g.npcs.get('hau'); g.player.teleport(n.pos.x + 3, undefined, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
+await step('승강차로 하늘닻', async () => {
+  await ev(() => { const g = SEREN.game; const d = g.anchor.deckStop; g.player.teleport(d.x, d.y + 1, d.z); g.rideElevator(true); });
+  await ev(() => { const g = SEREN.game; for (let i = 0; i < 900 && g.player.state === 'ride'; i++) g.updateSim(0.05); });
+  await run(0.5);
+});
+await step('솔과 대화', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('sol'); g.player.teleport(n.pos.x + 3, n.pos.y + 1, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
+await step('큰 해류 열림?', () => ev(() => SEREN.game.currents.list.filter((c) => c.def.great && c.enabled).length));
+await step('큰 공명탑 넷', async () => { for (const id of ['rift-pylon', 'plains-pylon', 'ice-pylon', 'falls-pylon']) { await ev((id) => { const g = SEREN.game; const P = g.structures.pylons.get(id); g.player.teleport(P.x + 30, P.y + 5, P.z + 30); g.awakenPylon(id); g.director.skip(); }, id); await run(0.3); } });
+await step('솔(마지막)', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('sol'); g.player.teleport(n.pos.x + 3, n.pos.y + 1, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); await run(0.5); });
+await step('온 세계의 노래?', () => ev(() => ({ chorus: !!SEREN.game.state.flags.worldChorus, done: SEREN.game.quests.isDone('mq8'), lanes: SEREN.game.traffic.lanes.filter((l) => l.unlock && l.enabled).length })));
 await step('저장', () => ev(() => { SEREN.game.save(true); return localStorage.getItem('seren.save.v1').length; }));
 console.log('save bytes', await ev(() => localStorage.getItem('seren.save.v1').length));
 console.log('understood iel_1?', await ev(() => SEREN.game.lang.isUnderstood(SEREN.game.lines.iel_1)));

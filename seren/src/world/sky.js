@@ -329,13 +329,14 @@ void main() {
 const tetherFrag = /* glsl */ `
 ${NOISE_GLSL}
 ${ATMOS_PARS}
+uniform float uBright;
 varying float vT;
 varying vec3 vWorld;
 void main() {
   vec3 rd = normalize(vWorld - cameraPosition);
   vec3 col = vec3(0.75, 0.78, 0.85) * (uSunColor * 0.6 + uAmbTop * 1.0);
   float pulse = smoothstep(0.02, 0.0, abs(fract(vT * 6.0 - uTime * 0.05) - 0.5) - 0.48);
-  col += vec3(0.6, 0.95, 1.0) * (0.25 + pulse * 1.5) * (0.4 + uNight);
+  col += vec3(0.6, 0.95, 1.0) * (0.25 + pulse * 1.5) * (0.4 + uNight) * (1.0 + uBright * 2.0);
   col = mix(col, skyBase(rd), 0.35 * (1.0 - uNight));
   gl_FragColor = vec4(col, smoothstep(1.0, 0.92, vT) * 0.9);
   ${OUT}
@@ -407,7 +408,7 @@ export class Sky {
     this.tetherA = new THREE.Vector3();
     this.tetherB = new THREE.Vector3();
     this.tetherMat = new THREE.ShaderMaterial({
-      uniforms: { ...u, uA: { value: this.tetherA }, uB: { value: this.tetherB }, uPix: { value: 0.002 } },
+      uniforms: { ...u, uA: { value: this.tetherA }, uB: { value: this.tetherB }, uPix: { value: 0.002 }, uBright: { value: 0 } },
       vertexShader: tetherVert, fragmentShader: tetherFrag,
       transparent: true, depthWrite: false, side: THREE.DoubleSide,
     });
@@ -422,7 +423,7 @@ export class Sky {
       const th = (deg * Math.PI) / 180;
       const A = new THREE.Vector3(), B = new THREE.Vector3();
       const mat = new THREE.ShaderMaterial({
-        uniforms: { ...u, uA: { value: A }, uB: { value: B }, uPix: { value: 0.002 } },
+        uniforms: { ...u, uA: { value: A }, uB: { value: B }, uPix: { value: 0.002 }, uBright: { value: 0 } },
         vertexShader: tetherVert, fragmentShader: tetherFrag,
         transparent: true, depthWrite: false, side: THREE.DoubleSide,
       });
@@ -472,6 +473,9 @@ export class Sky {
     this._qz = new THREE.Quaternion();
     this._m3 = new THREE.Matrix3();
   }
+
+  /** 먼 척추들의 밝기 (0 = 잠듦, 1 = 노래, 1.5 = 온 세계의 노래) */
+  setFarBright(k) { for (const f of this.farTethers) f.mat.uniforms.uBright.value = k; }
 
   /** 세계 카메라와 방향을 맞추고 하늘 물체를 갱신 */
   update(worldCam, tetherTopY) {

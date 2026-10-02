@@ -3,7 +3,11 @@
 //   move(dist) · near(npc,r) · reach(place,r) · talk(npc,convo) · glyphs(ids) · tone(n,place,r)
 //   pickup(set,count) · skim(dist) · vista(id) · awaken(count) · night · compose · scan(id) · flag(k)
 import { QUESTS, ECHOES, GLYPH_STONES } from '../data/story.js';
-import { PLACE } from '../data/places.js';
+import { PLACE, GREAT_PYLONS } from '../data/places.js';
+
+const GREAT = new Set(GREAT_PYLONS);
+/** 깨운 공명탑 수 (great: 큰 공명탑만 / 아니면 대륙의 공명탑만) */
+export function awakenedCount(state, great = false) { return Object.keys(state.pylons).filter((id) => GREAT.has(id) === great).length; }
 import { bus } from '../core/events.js';
 
 export class Quests {
@@ -130,7 +134,7 @@ export class Quests {
         case 'pickup': done = (g.state.quests.data[id].picked || 0) >= st.count; break;
         case 'skim': if (pl.state === 'skim') d.skimmed = (d.skimmed || 0) + (moved < 30 ? moved : 0); done = d.skimmed >= st.dist; break;
         case 'vista': done = !!g.state.vistas[st.id]; break;
-        case 'awaken': done = Object.keys(g.state.pylons).length >= st.count; break;
+        case 'awaken': done = awakenedCount(g.state, !!st.great) >= st.count; break;
         case 'night': done = g.world.atmos.state.night > 0.75; break;
         case 'compose': done = !!g.state.nameSong; break;
         case 'scan': done = !!g.state.codex[st.id]; break;
@@ -154,7 +158,7 @@ export class Quests {
     const st = this.step(id);
     if (!st) return null;
     let t = st.text;
-    if (st.type === 'awaken') t += ` (${Object.keys(this.game.state.pylons).length}/${st.count})`;
+    if (st.type === 'awaken') t += ` (${awakenedCount(this.game.state, !!st.great)}/${st.count})`;
     if (st.type === 'pickup') t += ` (${this.s.data[id].picked || 0}/${st.count})`;
     if (st.type === 'glyphs') t += ` (${st.ids.filter((x) => this.game.state.glyphs[x]).length}/${st.ids.length})`;
     return { title: q.title, text: t, kind: q.kind };
@@ -181,6 +185,8 @@ export class Quests {
     if (r.kind === 'glyph') { const s = g.discovery.glyph(r.glyph); return s ? [{ x: s.x, y: s.y + 2, z: s.z, label: '글자돌' }] : []; }
     if (r.kind === 'tone') { const p = PLACE[r.place]; return p ? [{ x: p.pos[0], y: null, z: p.pos[1], label: p.name }] : []; }
     if (r.kind === 'ride') { const c = g.currents.byId.get(r.current); if (c) { const p = c.samples[0]; return [{ x: p.x, y: p.y, z: p.z, label: c.def.name }]; } }
+    if (r.kind === 'walker' && g.colossi && g.colossi.town) { const w = g.colossi.town; return [{ x: w.pos.x, y: w.pos.y, z: w.pos.z, label: '거신' }]; }
+    if (r.kind === 'dive' && g.anchor && g.player.pos.y < 20000) { const d = g.anchor.deckStop; return [{ x: d.x, y: d.y, z: d.z, label: '승강차' }]; }
     return [];
   }
 
@@ -192,16 +198,23 @@ export class Quests {
     if (!st) return [];
     const g = this.game;
     const out = [];
-    const npcPos = (nid) => { const n = g.npcs.get(nid); if (n) out.push({ x: n.pos.x, y: n.pos.y + 3, z: n.pos.z, label: n.name }); };
+    const npcPos = (nid) => {
+      const n = g.npcs.get(nid);
+      if (!n) return;
+      // 하늘닻 위의 솔: 땅에 있으면 승강차를 가리킨다
+      if (n.pos.y > 20000 && g.player.pos.y < 20000 && g.anchor) { const d = g.anchor.deckStop; out.push({ x: d.x, y: d.y, z: d.z, label: '승강차 → ' + n.name }); return; }
+      out.push({ x: n.pos.x, y: n.pos.y + 3, z: n.pos.z, label: n.name });
+    };
     switch (st.type) {
       case 'near': case 'talk': npcPos(st.npc); break;
       case 'reach': case 'tone': { const p = PLACE[st.place]; if (p) out.push({ x: p.pos[0], y: null, z: p.pos[1], label: p.name }); break; }
       case 'vista': { const v = g.structures.vistas.get(st.id); if (v) out.push({ x: v.x, y: v.y, z: v.z, label: v.place.name }); else if (st.id === 'spine-deck') out.push({ x: 0, y: g.structures.deckY, z: 0, label: '전망대' }); break; }
       case 'glyphs': for (const gid of st.ids) if (!g.state.glyphs[gid]) { const s = g.discovery.glyph(gid); if (s) out.push({ x: s.x, y: s.y + 2, z: s.z, label: '글자돌' }); } break;
       case 'pickup': for (const p of g.discovery.pickups) if (!p.taken && p.set === st.set) out.push({ x: p.x, y: p.y + 1, z: p.z, label: '부품' }); break;
-      case 'awaken': for (const P of g.structures.pylons.values()) if (!P.alive) out.push({ x: P.x, y: P.y + P.h, z: P.z, label: P.place.name }); break;
+      case 'awaken': for (const P of g.structures.pylons.values()) if (!P.alive && P.great === !!st.great) out.push({ x: P.x, y: P.y + P.h, z: P.z, label: P.place.name }); break;
       case 'compose': out.push({ x: 0, y: g.structures.deckY, z: 0, label: '전망대' }); break;
       case 'scan': if (st.id === 'skywhale' && g.creatures) { const w = g.creatures.nearestWhale(g.player.pos); if (w) out.push({ x: w.x, y: w.y, z: w.z, label: '하늘고래' }); } break;
+      case 'flag': if (st.marker === 'anchor' && g.anchor && g.player.pos.y < 20000) { const d = g.anchor.deckStop; out.push({ x: d.x, y: d.y, z: d.z, label: '승강차' }); } break;
     }
     return out;
   }

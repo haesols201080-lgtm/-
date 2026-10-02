@@ -28,17 +28,22 @@ const ROUTES = [
   { to: 'tteodol', unlock: 'canyon-pylon', above: 220 },
   { to: 'observatory', unlock: 'frost-pylon', above: 200 },
   { to: 'mulnorae', unlock: 'sea-pylon', above: 180 },
+  // 바다 건너 (큰 공명탑이 깨어나면)
+  { to: 'hyeon', unlock: 'rift-pylon', above: 1050, far: true },
+  { to: 'bones', unlock: 'plains-pylon', above: 420, far: true },
+  { to: 'great-ear', unlock: 'ice-pylon', above: 480, far: true },
+  { to: 'sky-forge', unlock: 'falls-pylon', above: 900, far: true },
 ];
 
 // ── 배 모델 (앞 = +Z) ─────────────────────────
 function skiffGeo() {
   const parts = [];
-  const hull = lathe([[0.0001, -4.6], [0.9, -4], [1.5, -2], [1.6, 0.5], [1.2, 3], [0.5, 4.4], [0.0001, 4.8]], 10);
+  const hull = lathe([[0.0001, -4.6], [1.2, -3.5], [1.6, 0.5], [0.9, 3.6], [0.0001, 4.8]], 8);
   hull.rotateX(Math.PI / 2);
   hull.scale(1, 0.62, 1);
   parts.push(part(hull, (x, y, z) => (y > 0.25 ? PAL.pearl : 0xd6d0e2), 0));
-  parts.push(part(xf(new THREE.SphereGeometry(0.9, 8, 6), { z: 1.4, y: 0.55, sx: 0.9, sy: 0.55, sz: 1.6 }), 0x2a5a78, 0.25));
-  parts.push(part(xf(new THREE.TorusGeometry(1.3, 0.16, 4, 16), { y: -0.75, rx: Math.PI / 2 }), PAL.teal, 1.8));
+  parts.push(part(xf(new THREE.SphereGeometry(0.9, 6, 4), { z: 1.4, y: 0.55, sx: 0.9, sy: 0.55, sz: 1.6 }), 0x2a5a78, 0.25));
+  parts.push(part(xf(new THREE.TorusGeometry(1.3, 0.16, 3, 10), { y: -0.75, rx: Math.PI / 2 }), PAL.teal, 1.8));
   for (const s of [-1, 1]) parts.push(part(xf(new THREE.BoxGeometry(2.2, 0.12, 1.4), { x: s * 1.8, z: -2.6, rz: s * 0.25 }), PAL.gold, 0.2));
   return merge(parts);
 }
@@ -66,7 +71,7 @@ export function linerGeo() {
   const parts = [];
   const L = 320;
   const prof = [[0.0001, -L * 0.5], [10, -L * 0.48], [16, -L * 0.4], [24, -L * 0.15], [27, L * 0.05], [24, L * 0.25], [15, L * 0.4], [6, L * 0.48], [0.0001, L * 0.5]];
-  const hull = lathe(prof, 20);
+  const hull = lathe(prof, 16);
   hull.rotateX(Math.PI / 2);
   hull.scale(1.35, 0.55, 1);
   parts.push(part(hull, (x, y) => (y > 2 ? PAL.pearl : 0xd2cce0), (x, y) => (Math.abs(y - 1.0) < 1.4 ? 1.4 : 0)));
@@ -76,13 +81,14 @@ export function linerGeo() {
   parts.push(part(xf(new THREE.BoxGeometry(34, 2, L * 0.62), { y: 13.6 }), 0xece6f2, 0));
   parts.push(part(xf(new THREE.BoxGeometry(30, 0.2, L * 0.6), { y: 14.7 }), 0x3f8f76, 0));
   for (const s of [-1, 1]) parts.push(part(xf(new THREE.BoxGeometry(0.4, 1.2, L * 0.62), { x: s * 16.8, y: 15.4 }), 0xbffcff, 1.5));
-  for (let i = 0; i < 5; i++) {
-    const z = -L * 0.24 + i * L * 0.12;
-    A.place(parts, A.domeHouse({ r: 6 + (i % 2) * 3, h: 8 + (i % 2) * 4, seed: i + 70, glow: i % 2 ? PAL.amber : PAL.teal }), { x: (i % 2 ? 7 : -7), y: 14.6, z });
+  for (let i = 0; i < 3; i++) {
+    const z = -L * 0.2 + i * L * 0.16;
+    parts.push(part(xf(lathe([[8, 0], [7.4, 4], [4.5, 8.5], [0.0001, 10]], 10), { x: (i % 2 ? 7 : -7), y: 14.6, z }), (x, y) => (y > 14.6 + 9 ? PAL.gold : PAL.pearl), (x, y) => (y < 14.6 + 2 ? 0.8 : 0)));
   }
-  A.place(parts, A.spireTower({ h: 46, r: 3.6, seed: 77, glow: PAL.teal }), { x: 0, y: 14.6, z: L * 0.22 });
+  parts.push(part(xf(lathe([[4, 0], [2.6, 20], [1.2, 40], [0.0001, 48]], 8), { y: 14.6, z: L * 0.22 }), PAL.pearl2, (x, y) => (y > 14.6 + 44 ? 1.4 : 0)));
+  parts.push(part(xf(new THREE.TorusGeometry(5, 0.4, 3, 16), { y: 14.6 + 36, z: L * 0.22, rx: Math.PI / 2 }), PAL.teal, 1.6));
   // 꼬리 엔진 고리
-  for (let i = 0; i < 3; i++) parts.push(part(xf(new THREE.TorusGeometry(10 - i * 2.4, 1.1, 6, 28), { z: -L * 0.5 - 6 - i * 7 }), PAL.teal, 2.0 - i * 0.4));
+  for (let i = 0; i < 3; i++) parts.push(part(xf(new THREE.TorusGeometry(10 - i * 2.4, 1.1, 4, 18), { z: -L * 0.5 - 6 - i * 7 }), PAL.teal, 2.0 - i * 0.4));
   parts.push(part(xf(new THREE.BoxGeometry(2, 2, L * 0.8), { y: -14.5 }), PAL.violet, 1.6));
   // 지느러미
   for (const s of [-1, 1]) parts.push(part(xf(new THREE.BoxGeometry(46, 1.6, 30), { x: s * 46, y: 0, z: -L * 0.3, rz: s * 0.12 }), PAL.pearl2, 0));
@@ -115,7 +121,7 @@ export class Traffic {
     this.types = {
       skiff: { geo: skiffGeo(), max: 420, len: 9, lights: [[0, 0, 4.6, 0xffffff, 3], [0, -0.8, -4.4, 0, 3]] },
       barge: { geo: bargeGeo(), max: 60, len: 64, lights: [[0, 7, 28, 0xffffff, 7], [-7, -2, -30, 0xff5a4a, 6, 1], [7, -2, -30, 0x7fffb0, 6, 1], [0, -5, 0, PAL.amber, 9]] },
-      liner: { geo: linerGeo(), max: 14, len: 320, lights: [[0, 0, 162, 0xffffff, 18], [-60, 0, -96, 0xff5a4a, 14, 0.7], [60, 0, -96, 0x7fffb0, 14, 0.7], [0, 0, -175, PAL.teal, 30], [0, 20, 60, 0xffd8a0, 10], [0, 20, -40, 0xffd8a0, 10]] },
+      liner: { geo: linerGeo(), max: 24, len: 320, lights: [[0, 0, 162, 0xffffff, 18], [-60, 0, -96, 0xff5a4a, 14, 0.7], [60, 0, -96, 0x7fffb0, 14, 0.7], [0, 0, -175, PAL.teal, 30], [0, 20, 60, 0xffd8a0, 10], [0, 20, -40, 0xffd8a0, 10]] },
     };
     for (const T of Object.values(this.types)) {
       T.mesh = new THREE.InstancedMesh(T.geo, mat, T.max);
@@ -231,9 +237,9 @@ export class Traffic {
       const a = Math.atan2(bz, bx);
       const lane = this._route(Math.cos(a) * 1600, Math.sin(a) * 1600, 1000, bx, bz, by, { clear: 340, unlock: R.unlock, to: R.to });
       const L = lane.length;
-      add(lane, 'skiff', Math.round(L / 1400), 95);
-      add(lane, 'barge', Math.max(1, Math.round(L / 9000)), 50);
-      if (L > 40000) add(lane, 'liner', 1, 40);
+      add(lane, 'skiff', R.far ? Math.min(10, Math.round(L / 3000)) : Math.round(L / 1400), R.far ? 140 : 95);
+      add(lane, 'barge', Math.max(1, Math.round(L / (R.far ? 20000 : 9000))), R.far ? 70 : 50);
+      if (L > 40000 || R.far) add(lane, 'liner', R.far ? 2 : 1, 45);
       lane.enabled = !R.unlock;
       lane.vis = lane.enabled ? 1 : 0;
     }

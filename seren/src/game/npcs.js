@@ -52,7 +52,8 @@ export class NPCs {
 
   _spawn(d) {
     const fig = new AwenFigure({ hue: d.hue, glow: d.glow, scale: d.scale || 1 });
-    const y = this.game.world.groundAt(d.x, d.z, 1e5);
+    // y 가 있으면 그 높이의 바닥에 (하늘닻·하늘 주조소처럼 높은 곳)
+    const y = d.y !== undefined ? this.game.world.groundAt(d.x, d.z, d.y + 3) : this.game.world.groundAt(d.x, d.z, 1e5);
     fig.root.position.set(d.x, y, d.z);
     fig.yaw = Math.random() * 6.28;
     this.scene.add(fig.root);
@@ -89,7 +90,13 @@ export class NPCs {
       const dx = n.pos.x - pp.x, dz = n.pos.z - pp.z;
       const d2 = dx * dx + dz * dz;
       const lim = n.ambient ? g.engine.q.npcDist || 320 : 650;
-      const near = d2 < lim * lim;
+      // 걷는 거신의 등에 사는 이: 갑판 위 한 점을 따라간다
+      if (n.walker && g.colossi && g.colossi.town) {
+        g.colossi.deckPoint(g.colossi.town, n.walker[0], n.walker[1], n.pos);
+        n.home = { x: n.pos.x, z: n.pos.z, r: 1 };
+        n.target = null;
+      }
+      const near = d2 < lim * lim && Math.abs(n.pos.y - pp.y) < 3000;
       n.fig.root.visible = near;
       n.mark.visible = false;
       if (!near) continue;
@@ -121,8 +128,10 @@ export class NPCs {
           n.wait = 2;
         }
       }
-      const gy = g.world.groundAt(n.pos.x, n.pos.z, n.pos.y + 3);
-      n.pos.y += (gy - n.pos.y) * Math.min(1, dt * 6);
+      if (!n.walker) {
+        const gy = g.world.groundAt(n.pos.x, n.pos.z, n.pos.y + 3);
+        n.pos.y += (gy - n.pos.y) * Math.min(1, dt * 6);
+      }
       // 플레이어 바라보기
       n.fig.look = d2 < 14 * 14 && !n.target ? pp : null;
       if (night && n.ambient && !n.target) n.fig.gesture = 0.4 + Math.sin(g.time * 1.2 + n.pos.x) * 0.2;

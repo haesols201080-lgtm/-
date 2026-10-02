@@ -57,7 +57,7 @@ uniform float uFogFalloff;
 #define CURV_DECL
 uniform float uCurv;
 #endif
-uniform vec4 uSilence[6];
+uniform vec4 uSilence[10];
 uniform float uAlt;
 
 vec3 skyBase(vec3 rd) {
@@ -109,7 +109,7 @@ vec3 applyFog(vec3 col, vec3 wpos) {
 // 공명이 멈춘 지역(침묵 구역): 채도·밝기를 낮춘다
 float silenceAt(vec2 xz) {
   float s = 0.0;
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < 10; i++) {
     vec4 z = uSilence[i];
     if (z.w <= 0.0) continue;
     float d = length(xz - z.xy);

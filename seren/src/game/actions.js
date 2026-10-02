@@ -25,6 +25,7 @@ const HANDLERS = {
   wellAwake: (g) => { g.state.flags.wellAwake = true; g.structures.wellAwake && g.structures.wellAwake(); g.audio.chime('discover'); },
   startQuest: (g, a) => g.quests.start(a.id),
   festival: (g) => g.events.festival(),
+  worldChorus: (g) => g.worldChorus(),
 };
 
 export class Actions {

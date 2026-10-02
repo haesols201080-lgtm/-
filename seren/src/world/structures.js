@@ -452,9 +452,11 @@ export class Structures {
   _pylon(p) {
     const [x, z] = p.pos;
     const y = this._ground(x, z);
+    const S = p.great ? 2.4 : 1; // 큰 공명탑
     const h = 95;
     const g = new THREE.Group();
     g.position.set(x, y, z);
+    g.scale.setScalar(S);
     this.group.add(g);
     const body = new THREE.Mesh(merge(A.pylonBody({ h })), this.mats.crystal);
     g.add(body);
@@ -469,19 +471,21 @@ export class Structures {
     g.add(core);
     const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 4, 2400, 12, 1, true).translate(0, 1200 + h + 10, 0), glowMaterial({ color: 0x7ff3e6, intensity: 0.55, fresnel: 0.6, side: THREE.DoubleSide }));
     g.add(beam);
-    this._col({ type: 'cyl', x, z, r: 16, y0: y - 3, y1: y + 2.5 });
-    this._col({ type: 'cyl', x, z, r: 11.5, y0: y + 2.5, y1: y + 5 });
-    this._col({ type: 'cyl', x, z, r: 4.2, y0: y + 5, y1: y + h * 0.85, walk: false });
+    if (!p.mobile) {
+      this._col({ type: 'cyl', x, z, r: 16 * S, y0: y - 3, y1: y + 2.5 * S });
+      this._col({ type: 'cyl', x, z, r: 11.5 * S, y0: y + 2.5 * S, y1: y + 5 * S });
+      this._col({ type: 'cyl', x, z, r: 4.2 * S, y0: y + 5 * S, y1: y + h * 0.85 * S, walk: false });
+    }
     const slot = p.alive ? -1 : this.silenceSlot++;
     const P = {
-      id: p.id, place: p, x, y, z, h, rings, core, beam, body,
-      alive: !!p.alive, k: p.alive ? 1 : 0, slot,
-      updraft: { x, z, r: 26, y0: y, y1: y + 260, strength: 20, enabled: !!p.alive },
-      well: { x, z, r: 120, scale: 0.55 },
+      id: p.id, place: p, x, y, z, h: h * S, S, group: g, rings, core, beam, body, great: !!p.great, mobile: !!p.mobile,
+      alive: !!p.alive, k: p.alive ? 1 : 0, slot, silenceR: p.great ? 3600 : 1400, silenceMax: p.great ? 0.65 : 1,
+      updraft: { x, z, r: 26 * S, y0: y, y1: y + 260 * S, strength: 20, enabled: !!p.alive },
+      well: { x, z, r: 120 * S, scale: 0.55 },
     };
     this.world.updrafts.push(P.updraft);
     if (P.alive) this.world.gravityWells.push(P.well);
-    if (slot >= 0) this.world.atmos.setSilence(slot, x, z, 1400, 1);
+    if (slot >= 0) this.world.atmos.setSilence(slot, x, z, P.silenceR, P.silenceMax);
     this.pylons.set(p.id, P);
     this._posePylon(P, 0);
     this.markers.push({ id: p.id, x, y: y + h, z });
@@ -513,7 +517,7 @@ export class Structures {
     P.updraft.enabled = true;
     this.world.gravityWells.push(P.well);
     P.waking = instant ? 0 : 1; // 깨어나는 중
-    if (instant) { P.k = 1; if (P.slot >= 0) this.world.atmos.setSilence(P.slot, P.x, P.z, 1400, 0); }
+    if (instant) { P.k = 1; if (P.slot >= 0) this.world.atmos.setSilence(P.slot, P.x, P.z, P.silenceR, 0); }
   }
 
   // ── 조망점 ─────────────────────────────
@@ -774,7 +778,7 @@ export class Structures {
     for (const P of this.pylons.values()) {
       if (P.waking) {
         P.k = Math.min(1, P.k + dt / 7);
-        if (P.slot >= 0) this.world.atmos.setSilence(P.slot, P.x, P.z, 1400, 1 - P.k);
+        if (P.slot >= 0) this.world.atmos.setSilence(P.slot, P.x, P.z, P.silenceR, (1 - P.k) * P.silenceMax);
         if (P.k >= 1) P.waking = 0;
       }
       this._posePylon(P, t);

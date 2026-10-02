@@ -16,6 +16,8 @@ import { Transit } from '../world/transit.js';
 import { Landmarks } from '../world/landmarks.js';
 import { Drones } from '../world/drones.js';
 import { SkyAnchor } from '../world/anchor.js';
+import { Farlands } from '../world/farlands.js';
+import { Colossi } from '../world/colossus.js';
 import { Currents } from '../world/currents.js';
 import { Creatures } from '../world/creatures.js';
 import { Clouds } from '../world/clouds.js';
@@ -31,7 +33,7 @@ import { UR_DIR } from '../world/sky-clock.js';
 import { defaultState, loadState, saveState, hasSave, loadSettings, deleteSave } from './state.js';
 import { Language } from './language.js';
 import { NPCs } from './npcs.js';
-import { Quests } from './quests.js';
+import { Quests, awakenedCount } from './quests.js';
 import { Dialogue } from './dialogue.js';
 import { Actions } from './actions.js';
 import { Resonance } from './resonance.js';
@@ -68,6 +70,8 @@ export class Game {
     this.transit = this.world.add(new Transit(this.world, this.engine.q));
     this.landmarks = this.world.add(new Landmarks(this.world, this.structures));
     this.anchor = this.world.add(new SkyAnchor(this.world, this.structures));
+    this.farlands = this.world.add(new Farlands(this.world, this.structures));
+    this.colossi = this.world.add(new Colossi(this.world, this.structures, this));
     this.transit.isOpen = (u) => (!u ? true : u.startsWith('quest:') ? this.quests.isDone(u.slice(6)) : !!this.state.pylons[u]);
     this.flora = this.world.add(new Flora(this.world, this.engine.q));
     this.currents = this.world.add(new Currents(this.world, CURRENTS));
@@ -230,10 +234,14 @@ export class Game {
     if (s.flags.wellAwake && this.structures.wellAwake) this.structures.wellAwake(true);
     if (s.nameSong) { music.nameSong = s.nameSong; music.nameSongChance = 0.3; }
     if (s.flags.festival) this.world.sky.hoopMat.uniforms.uLights.value = 2.4;
+    this.world.sky.setFarBright(awakenedCount(s, true) / 4);
+    if (s.flags.worldChorus) this.worldChorus(true);
     this.mapData.load(s.reveal);
     if (s.flags['pickups:sled']) this.discovery.spawnPickups('sled');
     for (const [id, pos] of Object.entries(s.flags.npcPos || {})) this.npcs.goTo(id, pos[0], pos[1], { instant: true });
     this.requests.active = s.flags.requests || [];
+    // 1부를 끝낸 옛 저장: 2부(바다 건너)를 이어서 시작
+    if (this.quests.isDone('mq5') && !this.quests.isActive('mq6') && !this.quests.isDone('mq6')) this.quests.start('mq6', true);
     this.transit.refresh();
     this.ui.refreshButtons();
     this.ui.refreshObjective();
@@ -327,6 +335,7 @@ export class Game {
       if (mode === 'play' || mode === 'dialogue') this.quests.update(dt);
       this.events.update(dt);
       this.requests.update(dt);
+      if ((this._scanT = (this._scanT || 0) - dt) < 0) { this._scanT = 0.5; this._techScan(); }
       this._hud(dt);
       this.mapData.reveal(this.player.pos.x, this.player.pos.z, 450 + Math.max(0, this.player.pos.y - this.player.groundH) * 2);
       this.state.playTime += dt;
@@ -424,10 +433,13 @@ export class Game {
     }
     if (checkOnly) return id === 'mir' && !this.quests.isActive('sq_mir') && !this.quests.isDone('sq_mir') && this.quests.isDone('mq2');
     if (keeperPylon) {
-      const own = { soel: 'soel-1', ruon: 'ruon-1', tar: s.pylons[keeperPylon] ? 'tar-2' : 'tar-1', vei: 'vei-1', narin: 'narin-1' }[id];
+      const own = { soel: 'soel-1', ruon: 'ruon-1', tar: s.pylons[keeperPylon] ? 'tar-2' : 'tar-1', vei: 'vei-1', narin: 'narin-1', kael: 'kael-1', moru: 'moru-1', yuha: 'yuha-1', peon: 'peon-1' }[id];
       if (!s.flags['met:' + id]) { s.flags['met:' + id] = true; return own; }
+      const far = ['kael', 'moru', 'yuha', 'peon'].includes(id);
+      if (far) return s.pylons[keeperPylon] ? 'farkeeper-awake' : own;
       return s.pylons[keeperPylon] ? 'keeper-awake' : 'keeper-silent';
     }
+    if (id === 'sol') return this.quests.isDone('mq8') ? 'sol-idle' : 'sol-wait';
     if (id === 'mir') {
       if (!this.quests.isActive('sq_mir') && !this.quests.isDone('sq_mir')) { this.quests.start('sq_mir'); return this.quests.talkFor('mir'); }
       return 'mir-1';
@@ -464,7 +476,7 @@ export class Game {
     }));
   }
 
-  elevatorOpen() { return this.quests.isDone('mq3') || !!this.state.flags.elevator; }
+  elevatorOpen() { return this.quests.isDone('mq2') || !!this.state.flags.elevator; }
 
   /** 척추의 승강차: 전망대 ↔ 하늘닻(30 km) */
   rideElevator(up) {
@@ -474,6 +486,9 @@ export class Game {
       if (wentUp) {
         const first = !this.state.discovered.anchor;
         this.state.discovered.anchor = Date.now();
+        this.state.flags.anchorVisit = true;
+        bus.emit('flag', 'anchorVisit');
+        this.scan('anchor');
         this.ui.regionTitle('하늘닻', '고도 30 km · 공기가 거의 없다. 세렌이 둥글게 휘어 보인다.', first);
         if (first) setTimeout(() => this.ui.moa(MOA.anchor || '고도 30킬로미터. 저 아래 조각들이 전부 우리가 걸어온 곳이에요. 그리고 바다 건너… 땅이 더 있어요.'), 3500);
       }
@@ -493,6 +508,42 @@ export class Game {
     this.player.enterRide(ride);
     audio.noise({ freq: 500, q: 0.6, dur: 2.5, gain: 0.5, type: 'bandpass', sweep: 1600, attack: 0.6 });
     audio.chime('soft');
+  }
+
+  /** 온 세계의 노래: 고리 전체에 불이 켜지고, 먼 척추들이 빛나고, 하늘길이 모두 열린다 */
+  worldChorus(instant = false) {
+    this.state.flags.worldChorus = true;
+    const sky = this.world.sky;
+    sky.hoopMat.uniforms.uLights.value = 3.4;
+    sky.setFarBright(1.5);
+    for (const l of this.traffic.lanes) if (l.unlock) l.enabled = true;
+    if (instant) return;
+    music.setMood('night');
+    audio.chime('quest');
+    this.rig.shake(0.2);
+    const notes = this.state.nameSong || [0, 2, 4, 2, 0, 4];
+    notes.forEach((n, i) => setTimeout(() => audio.tone(n, { gain: 0.7, wet: 0.9, octave: -1 }), 1500 + i * 700));
+    setTimeout(() => this.ui.regionTitle('온 세계의 노래', '고리의 끝에서 끝까지, 네 이름이 울린다.', true), 1200);
+  }
+
+  /** 아웬의 기술을 처음 가까이서 볼 때: 도감 + 모아의 말 */
+  _techScan() {
+    const p = this.player.pos, s = this.state;
+    const seen = (id, moaKey) => { if (s.codex[id]) return; this.scan(id); if (moaKey && MOA[moaKey]) setTimeout(() => this.ui.moa(MOA[moaKey]), 1600); };
+    for (const v of this.traffic.vessels) {
+      if (v.type !== 'liner' || v.lane.vis < 0.5) continue;
+      if (v.pos.distanceToSquared(p) < 900 * 900) { seen('liner', 'seeLiner'); break; }
+    }
+    const sp = this.megacity.starport;
+    if (sp && Math.hypot(p.x - sp.x, p.z - sp.z) < 1800 && this.traffic.shuttles.some((x) => x.mode === 'launch')) seen('shuttle', 'seeLaunch');
+    for (const d of this.megacity.districts) if (Math.hypot(p.x - d.x, p.z - d.z) < 1400) { seen('arcology', 'seeArcology'); break; }
+    if (this.transit.nearest(p, 60)) seen('lightrail');
+    for (const d of this.drones.list) if (d.curious > 0 && d.pos.distanceToSquared(p) < 15 * 15) { seen('drone', 'seeDrone'); break; }
+    for (const w of this.colossi.list) if (Math.hypot(p.x - w.pos.x, p.z - w.pos.z) < 1500) { seen('colossus', 'seeColossus'); break; }
+    const fl = this.farlands;
+    if (fl.core && Math.hypot(p.x - fl.core.x, p.z - fl.core.z) < 900) seen('core', 'seeCore');
+    if (fl.ear && Math.hypot(p.x - fl.ear.x, p.z - fl.ear.z) < 900) seen('greatear');
+    if (fl.forge && Math.hypot(p.x - fl.forge.x, p.z - fl.forge.z) < 900 && p.y > 1500) seen('forge');
   }
 
   upgradeCard() {
@@ -580,7 +631,7 @@ export class Game {
     const P = this.structures.pylons.get(id);
     if (!P || this.state.pylons[id]) return;
     this.state.pylons[id] = true;
-    const count = Object.keys(this.state.pylons).length;
+    const count = awakenedCount(this.state, !!P.great);
     this.structures.awakenPylon(id);
     audio.chime('pylon');
     this.setMode('cinematic');
@@ -588,10 +639,10 @@ export class Game {
       this.setMode('play');
       this.ui.regionTitle(P.place.name, '탑이 다시 노래한다. 색이 돌아온다.', true);
       for (const c of this.currents.list) if (c.def.unlock === id) { c.setEnabled(true); this.ui.toast(`해류가 다시 흐른다 · ${c.def.name}`, { kind: 'done' }); }
-      if (count <= PYLON_TONES.length) this.giveTone(PYLON_TONES[count - 1]);
+      if (!P.great && count <= PYLON_TONES.length) this.giveTone(PYLON_TONES[count - 1]);
       const keeper = KEEPERS[id];
       const kn = keeper && this.npcs.get(keeper);
-      if (kn) { this.npcs.goTo(keeper, P.x + 18, P.z + 12); kn.moved = true; }
+      if (kn && !P.great) { this.npcs.goTo(keeper, P.x + 18, P.z + 12); kn.moved = true; }
       this.state.harmony[P.place.region] = Math.max(this.state.harmony[P.place.region] || 0, 60);
       const lines = [
         '탑이 깨어났어요! 주변의 색이 돌아오고… 척추 쪽으로 해류가 다시 흘러요.',
@@ -600,8 +651,15 @@ export class Game {
         '네 번째. 세렌이 조금씩 더 크게 울려요.',
         '다섯 탑이 모두 노래해요! 하우에게 가요.',
       ];
-      this.ui.moa(lines[Math.min(count, lines.length) - 1]);
-      bus.emit('awaken', { id, count });
+      const greatLines = [
+        '큰 탑이 깨어났어요! 저 빛기둥… 고리까지 닿았어요. 척추 하나가 다시 숨을 쉬어요.',
+        '두 번째 큰 탑. 바다 건너 하늘길이 다시 열려요. 배들이 오는 게 보여요.',
+        '세 번째예요. 고리의 불빛이 점점 이어져요.',
+        '네 큰 탑이 모두 노래해요! 하늘닻의 솔에게 가요.',
+      ];
+      if (P.great) this.world.sky.setFarBright(count / 4);
+      this.ui.moa(P.great ? greatLines[Math.min(count, 4) - 1] : lines[Math.min(count, lines.length) - 1]);
+      bus.emit('awaken', { id, count, great: !!P.great });
       this.save(true);
     });
   }

@@ -6,6 +6,8 @@ import { heightAt } from '../world/heightfield.js';
 import { mulberry32 } from '../core/noise.js';
 import { PLACE, PLACES } from '../data/places.js';
 import { NPCS, MOA, GLYPH_STONES } from '../data/story.js';
+
+const FAR_NPCS = ['kael', 'moru', 'yuha', 'peon'];
 import { WORDS } from '../data/lexicon.js';
 import { bus } from '../core/events.js';
 
@@ -132,9 +134,11 @@ export class WorldEvents {
 // ── 부탁: 날마다 새로 생기는 작은 목표 ─────────────────────────
 const TEMPLATES = [
   (g, rnd) => { // 안부 전하기
-    const keepers = NPCS.filter((n) => n.id !== 'iel' && g.npcs.get(n.id));
+    const reach = (n) => (FAR_NPCS.includes(n.id) ? !!g.state.flags.greatOpen : n.id === 'sol' ? !!g.state.flags.anchorVisit : true);
+    const keepers = NPCS.filter((n) => n.id !== 'iel' && g.npcs.get(n.id) && reach(n));
     const n = keepers[Math.floor(rnd() * keepers.length)];
-    const from = NPCS[Math.floor(rnd() * NPCS.length)];
+    const pool = NPCS.filter(reach);
+    const from = pool[Math.floor(rnd() * pool.length)];
     if (!n || n.id === from.id) return null;
     return { kind: 'visit', npc: n.id, title: `${from.name}의 안부`, text: `${PLACE[n.place].name}의 ${n.name}에게 ${from.name}의 노래를 전하기`, reward: 2 };
   },
@@ -157,6 +161,16 @@ const TEMPLATES = [
     const p = cands[Math.floor(rnd() * cands.length)];
     return { kind: 'tone', n: 3, place: p.id, title: '어둠 밝히기', text: `${p.name}에서 밤에 「빛」 연주하기`, night: true, reward: 2 };
   },
+  (g, rnd) => { // 거신에 오르기
+    if (!g.state.flags.greatOpen) return null;
+    return { kind: 'walker', title: '걷는 마을', text: '느린땅의 거신 등에 올라 보기 (배 밑의 기류를 타요)', reward: 3 };
+  },
+  (g, rnd) => { // 하늘닻에서 뛰어내리기
+    if (!g.state.flags.greatOpen) return null;
+    const lands = ['깊은목', '느린땅', '흰 숨', '천 폭포 고원'];
+    const k = Math.floor(rnd() * 4);
+    return { kind: 'dive', region: ['rift', 'plains', 'icesea', 'falls'][k], title: '하늘에서 먼 땅으로', text: `하늘닻에서 뛰어내려 ${lands[k]}에 내리기`, reward: 4 };
+  },
   (g, rnd) => { // 해류 타기
     const list = g.currents.list.filter((c) => c.enabled);
     const c = list[Math.floor(rnd() * list.length)];
@@ -177,9 +191,21 @@ export class Requests {
     bus.on('currentDone', (e) => this._check('ride', e));
   }
 
-  update() {
+  update(dt = 0) {
     const g = this.game;
     if (!g.quests.isDone('mq2')) return;
+    // 거신 갑판 위에 섰는가, 하늘닻에서 뛰어내려 먼 땅에 내렸는가
+    const p = g.player;
+    if (p.pos.y > 25000) this._dived = true;
+    if (this.active.length && p.state === 'ground') {
+      const onWalker = p.groundC && p.groundC.obj && g.colossi && g.colossi.list.some((w) => w.deck === p.groundC.obj);
+      if (onWalker) this._check('walker');
+      if (this._dived && p.pos.y < 20000) {
+        const reg = g.world.regionAt(p.pos.x, p.pos.z);
+        this._check('dive', { region: reg && reg.id });
+        this._dived = false;
+      }
+    }
     const day = g.world.clock.day;
     if (day !== this.day && g.world.clock.hour > 6) {
       this.day = day;
@@ -211,6 +237,8 @@ export class Requests {
       if (r.kind === 'whale' && type === 'whale') ok = true;
       if (r.kind === 'glyph' && type === 'glyph' && e.id === r.glyph) ok = true;
       if (r.kind === 'ride' && type === 'ride' && e.id === r.current) ok = true;
+      if (r.kind === 'walker' && type === 'walker') ok = true;
+      if (r.kind === 'dive' && type === 'dive' && e.region === r.region) ok = true;
       if (ok) this._complete(r);
     }
   }

@@ -14,6 +14,12 @@ export const NPCS = [
   { id: 'tar', name: '타르', title: '떠돌섬의 섬지기', place: 'tteodol', offset: [10, 20], hue: 0.07, glow: 0xffc86a },
   { id: 'vei', name: '베이', title: '별듣는 탑의 관측자', place: 'observatory', offset: [12, 8], hue: 0.6, glow: 0xa8c8ff },
   { id: 'narin', name: '나린', title: '물노래의 물결 가수', place: 'mulnorae', offset: [0, 25], hue: 0.5, glow: 0x7ff0ff },
+  // 2부: 바다 건너
+  { id: 'sol', name: '솔', title: '하늘닻의 고리지기', place: 'anchor', offset: [70, -36], y: 30001, hue: 0.58, glow: 0xbffcff, scale: 1.2 },
+  { id: 'kael', name: '카엘', title: '깊은목의 기관지기', place: 'rift-core', offset: [40, 196], hue: 0.92, glow: 0xff7ad0 },
+  { id: 'moru', name: '모루', title: '걸음마을의 길잡이', place: 'plains-pylon', offset: [0, 0], walker: [18, -40], hue: 0.12, glow: 0xffd27a, scale: 1.1 },
+  { id: 'yuha', name: '유하', title: '큰 귀의 듣는 이', place: 'great-ear', offset: [10, 152], hue: 0.55, glow: 0x9fd8ff },
+  { id: 'peon', name: '페온', title: '하늘 주조소의 장인', place: 'sky-forge', offset: [70, 20], y: 2351, hue: 0.4, glow: 0x7fe8ff },
 ];
 
 export const LINES = {
@@ -62,6 +68,27 @@ export const LINES = {
   narin_1: { words: ['sea', 'sing', 'always', '.', 'listen'], ko: '바다는 언제나 노래해. 들어 봐.' },
   // 탑
   pylon_sing: { words: ['song', 'again', '?'], ko: '노래를, 다시?' },
+  // ── 2부: 바다 건너 ──
+  hau_11: { words: ['ring', 'keeper', 'listen', 'you', '.', 'go', 'up'], ko: '고리지기가 너를 들었다. 위로 가거라.' },
+  hau_12: { words: ['spine', 'up', '.', '@솔', 'wait', 'long', 'time'], ko: '척추 위에서 솔이 아주 오래 기다렸다.' },
+  sol_1: { words: ['small', 'star', '.', 'i', 'listen', 'you', 'song'], ko: '작은 별. 네 노래를 들었다.' },
+  sol_2: { words: ['see', 'far', 'land', '.', 'great', 'tower', 'sleep'], ko: '먼 땅을 보아라. 큰 탑들이 잠들어 있다.' },
+  sol_3: { words: ['great', 'tower', 'keep', 'spine', '.', 'spine', 'keep', 'ring'], ko: '큰 탑이 척추를 붙들고, 척추가 고리를 붙든다.' },
+  sol_4: { words: ['silence', 'come', '.', 'ring', 'sleep', '.', 'we', 'wait'], ko: '침묵이 왔고, 고리가 잠들었다. 우리는 기다렸다.' },
+  sol_5: { words: ['you', 'fall', '.', 'you', 'flow', '.', 'go', 'far'], ko: '너는 떨어지고, 흐른다. 멀리 가거라.' },
+  sol_6: { words: ['all', 'tower', 'sing', '!', 'world', 'chorus'], ko: '모든 탑이 노래한다! 온 세계의 합창이다.' },
+  sol_7: { words: ['ring', 'wake', '.', 'ship', 'return', '.', 'we', 'return'], ko: '고리가 깨어났다. 배들이 돌아온다. 우리가 돌아온다.' },
+  sol_8: { words: ['you', 'name', 'ring', 'sing', 'always'], ko: '고리는 언제나 네 이름을 노래할 것이다.' },
+  kael_1: { words: ['core', 'heart', 'world', '.', 'listen'], ko: '핵은 세계의 마음이야. 들어 봐.' },
+  kael_2: { words: ['we', 'make', 'spine', 'core', 'song'], ko: '우리는 핵의 노래로 척추를 빚었어.' },
+  moru_1: { words: ['we', 'walk', 'always', '.', 'land', 'long'], ko: '우리는 언제나 걸어. 땅은 길거든.' },
+  moru_2: { words: ['walk', 'long', 'see', 'all'], ko: '오래 걸으면 모든 걸 봐.' },
+  yuha_1: { words: ['ear', 'listen', '@우르', '.', 'far', 'star', 'listen'], ko: '귀는 우르를 듣고, 먼 별을 들어.' },
+  yuha_2: { words: ['you', 'star', 'answer', '.', 'ear', 'listen', 'first'], ko: '네 별의 대답을 귀가 처음 들었어.' },
+  peon_1: { words: ['i', 'make', 'ship', '.', 'song', 'make', 'ship'], ko: '나는 배를 빚어. 노래가 배를 빚지.' },
+  peon_2: { words: ['waterfall', 'light', 'flow', 'always'], ko: '빛의 폭포는 언제나 흘러.' },
+  farkeeper_1: { words: ['great', 'tower', 'sleep', '.', 'you', 'wake', '?'], ko: '큰 탑이 잠들었어. 네가 깨울래?' },
+  farkeeper_2: { words: ['spine', 'up', 'sing', '!', 'thanks'], ko: '척추 위로 노래가 오른다! 고마워.' },
 };
 
 // 지나가는 아웬의 말 (들을수록 모아가 단어를 추정)
@@ -187,6 +214,64 @@ export const CONVOS = {
   'on-seeds': [
     { s: 'on', line: 'on_4' },
   ],
+  // ── 2부: 바다 건너 ──
+  'hau-far': [
+    { s: 'hau', line: 'hau_11' },
+    { s: 'moa', t: '축제 동안 승강줄을 타고 신호가 내려왔대요. 30킬로미터 위, 「하늘닻」이라는 곳에서요.' },
+    { s: 'hau', line: 'hau_12' },
+    { s: 'moa', t: '전망대에 승강차 정류장이 있어요. 금빛 원 안에 서서 상호작용하면 올라가요. …30킬로미터. 마음의 준비를 해 둘게요.' },
+  ],
+  'sol-first': [
+    { s: 'sol', line: 'sol_1', act: [{ do: 'gesture', npc: 'sol', v: 0.9 }] },
+    { s: 'moa', t: '이분… 몸의 절반이 빛이에요. 아웬이 오래 살면 울림이 된다던데, 그 중간쯤에 있는 것 같아요.' },
+    { s: 'sol', line: 'sol_2' },
+    { s: 'moa', t: '바다 건너 네 곳에 땅이 있어요. 지도에 표시할게요 — 동쪽 균열, 남쪽 초원, 북쪽 얼음, 서쪽 고원.' },
+    { s: 'sol', line: 'sol_3' },
+    { s: 'moa', t: '그러니까… 고리를 붙들고 있는 다른 척추들의 뿌리가 그 큰 탑들이에요. 그게 잠들어서 고리의 절반이 꺼져 있던 거예요.' },
+    { s: 'sol', line: 'sol_4' },
+    { s: 'sol', line: 'sol_5', act: [{ do: 'enableCurrent', id: 'great-east' }, { do: 'enableCurrent', id: 'great-south' }, { do: 'enableCurrent', id: 'great-north' }, { do: 'enableCurrent', id: 'great-west' }, { do: 'flag', k: 'greatOpen' }] },
+    { s: 'moa', t: '대륙 해안에서 바다를 건너는 큰 해류가 흐르기 시작했어요. 아니면… 여기 가장자리의 문에서 뛰어내려 활공해도 돼요. 공기가 옅어서 엄청 빨라질 거예요.' },
+  ],
+  'sol-wait': [
+    { s: 'sol', line: 'sol_5' },
+  ],
+  'sol-final': [
+    { s: 'sol', line: 'sol_6' },
+    { s: 'moa', t: '조종사님, 위를 보세요. 고리가… 끝에서 끝까지 불이 켜지고 있어요.', act: [{ do: 'worldChorus' }] },
+    { s: 'sol', line: 'sol_7' },
+    { s: 'sol', line: 'sol_8' },
+    { s: 'moa', t: '우리가 받은 첫 신호는 「오라」였어요. 이제 이 별이 온 하늘에 「다시」라고 노래해요.' },
+  ],
+  'sol-idle': [
+    { s: 'sol', line: 'sol_8' },
+  ],
+  'kael-1': [
+    { s: 'kael', line: 'kael_1' },
+    { s: 'kael', line: 'kael_2' },
+    { s: 'moa', t: '저 고리 기관이 세렌의 핵과 함께 진동해요. 행성 하나를 악기로 쓴 거예요.' },
+    { s: 'kael', line: 'farkeeper_1' },
+  ],
+  'moru-1': [
+    { s: 'moru', line: 'moru_1' },
+    { s: 'moru', line: 'moru_2' },
+    { s: 'moa', t: '이 마을은 한 번도 멈춘 적이 없대요. 거신이 걸음을 멈추면 마을도 잠든다고.' },
+    { s: 'moru', line: 'farkeeper_1' },
+  ],
+  'yuha-1': [
+    { s: 'yuha', line: 'yuha_1' },
+    { s: 'yuha', line: 'yuha_2' },
+    { s: 'moa', t: '…라르크 호의 신호를 처음 받은 게 이 귀였대요. 우리가 오는 걸 여기서 먼저 알았던 거예요.' },
+    { s: 'yuha', line: 'farkeeper_1' },
+  ],
+  'peon-1': [
+    { s: 'peon', line: 'peon_1' },
+    { s: 'peon', line: 'peon_2' },
+    { s: 'moa', t: '하모네아의 탑도, 하늘을 나는 배도 여기서 노래로 빚었대요. 쇠를 녹이는 게 아니라 물질을 노래로 「설득」한대요.' },
+    { s: 'peon', line: 'farkeeper_1' },
+  ],
+  'farkeeper-awake': [
+    { s: '$keeper', line: 'farkeeper_2' },
+  ],
 };
 
 // 퀘스트. kind: main | side | request
@@ -257,6 +342,31 @@ export const QUESTS = {
       { type: 'talk', npc: 'hau', convo: 'hau-all', text: '하우에게 돌아가기' },
     ],
     onDone: [{ do: 'festival' }],
+    next: 'mq6',
+  },
+  // ── 2부: 바다 건너 ──
+  mq6: {
+    title: '하늘닻', kind: 'main',
+    steps: [
+      { type: 'talk', npc: 'hau', convo: 'hau-far', text: '하우의 이야기 듣기' },
+      { type: 'flag', k: 'anchorVisit', text: '승강차를 타고 하늘닻(30 km)으로', hint: '척추 전망대의 금빛 정류장', marker: 'anchor' },
+      { type: 'talk', npc: 'sol', convo: 'sol-first', text: '고리지기 솔 만나기' },
+    ],
+    next: 'mq7',
+  },
+  mq7: {
+    title: '바다 건너', kind: 'main',
+    steps: [
+      { type: 'awaken', great: true, count: 4, text: '먼 땅의 큰 공명탑 깨우기', marker: 'pylons', hint: '하늘닻에서 뛰어내리거나, 해안의 큰 해류를 타요' },
+    ],
+    next: 'mq8',
+  },
+  mq8: {
+    title: '온 세계의 노래', kind: 'main',
+    steps: [
+      { type: 'talk', npc: 'sol', convo: 'sol-final', text: '하늘닻의 솔에게 돌아가기' },
+    ],
+    reward: { starseed: 8 },
   },
   sq_mir: {
     title: '별이 궁금한 아이', kind: 'side',
@@ -275,6 +385,7 @@ export const PYLON_ORDER_LENGTH = [3, 4, 5, 6, 7];
 // 지역 지기와 공명탑
 export const KEEPERS = {
   'glass-pylon': 'soel', 'bloom-pylon': 'ruon', 'canyon-pylon': 'tar', 'frost-pylon': 'vei', 'sea-pylon': 'narin',
+  'rift-pylon': 'kael', 'plains-pylon': 'moru', 'ice-pylon': 'yuha', 'falls-pylon': 'peon',
 };
 // 처음 두 공명탑을 깨울 때 주는 음
 export const PYLON_TONES = [3, 4];
@@ -358,6 +469,17 @@ export const CODEX = {
   crystalspire: { name: '노래수정', cat: '광물', text: '유리 황야의 거대 수정. 들은 소리를 저장했다가 되돌려 보낸다.' },
   ur: { name: '우르', cat: '천체', word: 'ur', text: '세렌이 도는 거대 가스행성. 세렌은 늘 같은 면을 우르에게 보인다. 밤마다 보름처럼 차올라 땅을 호박색으로 비춘다.' },
   ring: { name: '궤도 고리', cat: '천체', word: 'ring', text: '아웬이 세렌 둘레에 건설한 인공 고리. 척추의 승강줄로 땅과 이어져 있다. 별을 향한 귀.' },
+  // 아웬의 기술
+  arcology: { name: '울림탑', cat: '기술', text: '하모네아의 거대한 유리 탑. 높은 것은 2 km 를 넘는다. 벽은 소리로 굳힌 유리이고, 층마다 하늘정원이 있다. 허리에 두른 「하늘바퀴」는 아무것도 붙들지 않고 공명만으로 떠 있다.' },
+  liner: { name: '하늘배', cat: '기술', word: 'ship', text: '길이 300 m 의 큰배부터 아홉 걸음짜리 나룻배까지. 바닥의 공명 고리가 세렌의 울림을 밀어내 뜬다. 큰배의 갑판은 공원이라, 활공해서 내려앉으면 함께 실려 간다.' },
+  lightrail: { name: '빛길', cat: '기술', word: 'path', text: '유리관 속을 캡슐이 시속 2,000 km 넘게 달린다. 하모네아를 도는 고리선과 여섯 갈래. 갈래선은 그 지방의 탑이 노래해야 움직인다.' },
+  drone: { name: '돌보미', cat: '기술', word: 'keep', text: '정원과 거리를 돌보는 작은 떠다니는 기계. 낯선 것을 보면 다가와 살핀다. 공명 음을 들으면 그 색으로 빛나며 따라 부른다.' },
+  shuttle: { name: '별항구의 왕복선', cat: '기술', text: '820 m 가속 고리탑을 지나며 소리로 떠밀려 궤도까지 오른다. 고리에서 내려오는 배는 별항구 옆 착륙장에 내린다.' },
+  anchor: { name: '하늘닻', cat: '기술', word: 'up', text: '척추의 승강줄 30 km 높이의 역. 공기가 거의 없어 하늘이 검고, 세렌이 둥글게 휜다. 가장자리의 문에서 뛰어내리면 공기가 옅어 아주 빠르게 활공할 수 있다.' },
+  core: { name: '세렌의 심장 기관', cat: '기술', word: 'core', text: '깊은목 바닥의 자이로 고리 셋과 결정 심장. 세렌의 핵이 우르의 조석에 울리는 박동을 받아 모든 척추로 보낸다. 아웬은 행성 하나를 악기로 만들었다.' },
+  colossus: { name: '거신', cat: '기술', word: 'walk', text: '느린땅을 걸어 다니는 도시 기계. 다리 여섯, 키 300 m. 가장 큰 거신의 등에는 마을과 큰 공명탑이 실려 있다. 배 밑에서 오르는 기류를 타면 올라갈 수 있다.' },
+  greatear: { name: '큰 귀', cat: '기술', word: 'ear', text: '우르를 향해 기울어 선 지름 420 m 의 고리. 막이 별빛의 떨림까지 듣는다. 라르크 호의 신호를 처음 들은 곳.' },
+  forge: { name: '하늘 주조소', cat: '기술', word: 'make', text: '고원 위 하늘에 뜬 공방. 물질을 노래로 「설득」해 모양을 바꾼다. 하늘배와 탑의 뼈대가 이곳에서 빚어졌다.' },
 };
 
 // 모아의 혼잣말 (상황별)
@@ -372,4 +494,12 @@ export const MOA = {
   firstSkim: '썰매가 공명을 타고 떠요. 내리막에서는 더 빨라지고, 물 위도 달릴 수 있어요.',
   firstJump: '공중에서 점프를 한 번 더 누르면 등의 날개가 펴져요. 높은 곳에서 뛰어내려 보세요.',
   firstWord: '단어를 하나 알게 됐어요. 예전에 들었던 말도 다시 읽어 볼 수 있어요 — 일지의 「들은 말」을 보세요.',
+  anchor: '고도 30킬로미터. 하늘이 검어요… 저 아래 조각들이 전부 우리가 걸어온 곳이고, 바다 건너에 땅이 더 있어요.',
+  // 아웬 기술을 처음 볼 때
+  seeLiner: '저 배… 길이가 300미터는 돼요. 엔진 소리가 없어요. 세렌의 울림을 밀어내서 떠 있어요.',
+  seeLaunch: '방금 저 고리탑에서 뭔가 쏘아 올려졌어요! 궤도로 가는 왕복선이에요. 이 문명은… 우주를 오가고 있어요.',
+  seeArcology: '2킬로미터짜리 유리 탑이에요. 그 허리에 도는 고리는 아무것도 붙들고 있지 않아요. 공명만으로 떠 있어요.',
+  seeDrone: '작은 기계가 우리를 살펴봐요. 해치진 않을 것 같아요. 호기심이 많네요.',
+  seeColossus: '…걸어요. 저 산만 한 게 걸어요. 등에 마을이 있어요!',
+  seeCore: '행성의 핵과 같이 울리는 기관이래요. 이 문명은 별 하나를 통째로 악기로 만들었어요.',
 };

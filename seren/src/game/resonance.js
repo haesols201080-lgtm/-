@@ -5,6 +5,7 @@
 //  3 빛   — 빛 구슬, 빛나방을 부름
 //  4 고요 — 생물을 진정시키고 하늘고래를 부름
 // 수정은 소리를 기억했다가 거리만큼 늦게(음속) 되돌려 보냅니다.
+import { awakenedCount } from './quests.js';
 import * as THREE from 'three';
 import { audio, NOTE_COLORS, NOTE_NAMES } from '../core/audio.js';
 import { bus } from '../core/events.js';
@@ -124,8 +125,8 @@ export class Resonance {
     const g = this.game;
     if (P.alive) return;
     const tones = this.unlocked.length ? this.unlocked : [0];
-    const awakened = Object.keys(g.state.pylons).length;
-    const len = PYLON_ORDER_LENGTH[Math.min(awakened, PYLON_ORDER_LENGTH.length - 1)];
+    const awakened = awakenedCount(g.state, false);
+    const len = P.great ? 8 : PYLON_ORDER_LENGTH[Math.min(awakened, PYLON_ORDER_LENGTH.length - 1)];
     const rnd = mulberry32(hashStr(P.id) + awakened * 17);
     const melody = Array.from({ length: len }, () => tones[Math.floor(rnd() * tones.length)]);
     this.puzzle = { P, melody, i: 0, listen: 0, playing: true, t: 0, tries: 0 };

@@ -307,7 +307,7 @@ export class MapView {
       ctx.beginPath();
       ctx.arc(sx, sy, (p.type === 'pylon' ? 5 : p.type === 'vista' ? 3.5 : 4) * dpr, 0, Math.PI * 2);
       ctx.fill();
-      if (this.zoom > 4 || ['capital', 'village', 'glasscity', 'bloomcity', 'canyoncity', 'seacity', 'observatory', 'crash', 'district', 'starport'].includes(p.type) || (p.type === 'landmark' && this.zoom > 2.7)) {
+      if (this.zoom > 4 || ['capital', 'village', 'glasscity', 'bloomcity', 'canyoncity', 'seacity', 'observatory', 'crash', 'district', 'starport', 'riftcity', 'riftcore', 'bones', 'greatear', 'skyforge'].includes(p.type) || (p.type === 'landmark' && this.zoom > 2.7)) {
         ctx.fillStyle = 'rgba(243,239,230,0.9)';
         ctx.shadowColor = '#000'; ctx.shadowBlur = 4 * dpr;
         ctx.fillText(p.name, sx, sy - 9 * dpr);

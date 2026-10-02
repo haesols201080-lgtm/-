@@ -21,6 +21,8 @@ export const PLACES = [
     desc: '빛기둥을 따라 원반 층들이 떠 있는 뜬층탑의 구역.' },
   { id: 'd-north', type: 'district', name: '별바라기 구역', region: 'spine', pos: [1600, -4300], radius: 700,
     desc: '북쪽 하늘의 우르를 마주한 탑들의 구역.' },
+  { id: 'anchor', type: 'none', name: '하늘닻', region: 'spine', pos: [0, 0], y: 30000,
+    desc: '척추의 승강줄 30 km 높이에 걸린 역. 고리지기 솔이 300년 동안 홀로 지켜 왔다.' },
   { id: 'starport', type: 'starport', name: '별항구', region: 'spine', pos: [2300, 2700], radius: 230, flat: { r: 175, blend: 140 },
     desc: '궤도 고리로 오르는 왕복선이 780 m 가속 고리탑을 지나 하늘로 쏘아 올려지는 곳.' },
 
@@ -81,7 +83,33 @@ export const PLACES = [
     desc: '바다에 반쯤 잠긴 세 개의 고리. 우르가 끌어당기는 물의 힘을 노래로 바꾼다.' },
   { id: 'sea-pylon', type: 'pylon', name: '바다의 공명탑', region: 'sea', pos: [12050, 6950], flat: { r: 40, blend: 60 },
     desc: '해안 절벽 위의 공명탑.' },
+
+  // ── 바다 건너 먼 땅 ─────────────────────
+  // 깊은목 (동)
+  { id: 'hyeon', type: 'riftcity', name: '현', region: 'rift', pos: [40440, 2000], radius: 900,
+    desc: '깊은목의 양쪽 절벽에 매달린 도시. 이름은 「줄」 — 협곡을 가로지르는 빛다리가 현처럼 울린다.' },
+  { id: 'rift-core', type: 'riftcore', name: '세렌의 심장 기관', region: 'rift', pos: [39460, -2500], radius: 400,
+    desc: '균열 바닥에서 세렌의 핵과 함께 울리는 거대한 고리 기관. 모든 척추가 이곳의 박동을 받는다.' },
+  { id: 'rift-pylon', type: 'pylon', great: true, name: '깊은목의 큰 공명탑', region: 'rift', pos: [39040, -4200], flat: { r: 70, blend: 90 },
+    desc: '균열 바닥에 선 큰 공명탑. 심장 기관의 박동을 하늘로 올려 보낸다.' },
+  // 느린땅 (남)
+  { id: 'bones', type: 'bones', name: '옛 거신의 뼈', region: 'plains', pos: [-4000, 41000], radius: 500,
+    desc: '수천 년 전 멈춘 거신의 뼈대. 갈비뼈 사이로 바람이 노래한다.' },
+  { id: 'plains-pylon', type: 'pylon', great: true, mobile: true, name: '느린땅의 큰 공명탑', region: 'plains', pos: [2000, 43000],
+    desc: '걷는 도시의 등에 실려 다니는 큰 공명탑.' },
+  // 흰 숨 (북)
+  { id: 'great-ear', type: 'greatear', name: '큰 귀', region: 'icesea', pos: [-6000, -45500], radius: 500, flat: { r: 260, h: 16, blend: 200 },
+    desc: '얼음 바다 위에 우르를 향해 선 지름 420 m 의 고리. 아웬은 이것으로 우르 너머의 소리를 들었다.' },
+  { id: 'ice-pylon', type: 'pylon', great: true, name: '흰 숨의 큰 공명탑', region: 'icesea', pos: [-3500, -44000], flat: { r: 70, h: 18, blend: 120 },
+    desc: '얼음에 갇힌 큰 공명탑.' },
+  // 천 폭포 고원 (서)
+  { id: 'sky-forge', type: 'skyforge', name: '하늘 주조소', region: 'falls', pos: [-42000, 6000], radius: 600,
+    desc: '고원 위 하늘에 떠 있는 주조소. 아웬의 배와 탑의 뼈대가 이곳에서 노래로 빚어졌다.' },
+  { id: 'falls-pylon', type: 'pylon', great: true, name: '천 폭포의 큰 공명탑', region: 'falls', pos: [-40500, 8500], flat: { r: 70, blend: 90 },
+    desc: '빛의 폭포가 시작되는 고원의 큰 공명탑.' },
 ];
+
+export const GREAT_PYLONS = PLACES.filter((p) => p.great).map((p) => p.id);
 
 export const PLACE = Object.fromEntries(PLACES.map((p) => [p.id, p]));
 

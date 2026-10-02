@@ -16,8 +16,8 @@ const PAL = A.PAL;
 
 function droneGeo() {
   const parts = [];
-  parts.push(part(new THREE.SphereGeometry(0.62, 12, 8), (x, y) => (y > 0.1 ? PAL.pearl : 0xd2cce0), 0));
-  parts.push(part(xf(new THREE.TorusGeometry(0.95, 0.07, 4, 20), { rx: Math.PI / 2 }), 0xffffff, 1.8));
+  parts.push(part(new THREE.SphereGeometry(0.62, 8, 6), (x, y) => (y > 0.1 ? PAL.pearl : 0xd2cce0), 0));
+  parts.push(part(xf(new THREE.TorusGeometry(0.95, 0.07, 3, 12), { rx: Math.PI / 2 }), 0xffffff, 1.8));
   parts.push(part(xf(new THREE.CircleGeometry(0.22, 10), { z: 0.6 }), 0x0a1a28, 0));
   parts.push(part(xf(new THREE.CircleGeometry(0.11, 8), { z: 0.62 }), 0xffffff, 2.2));
   for (let k = 0; k < 3; k++) {

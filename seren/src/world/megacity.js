@@ -148,7 +148,8 @@ export class Megacity {
     const { x, z, h, r } = T;
     const g0 = heightAt(x, z);
     const rnd = mulberry32(Math.floor(Math.abs(x) * 3 + Math.abs(z) * 7 + h));
-    const rec = { ...T, g0, top: g0 + h, tiers: [], linkY: T.linkY || [] };
+    // 큰 탑·안쪽 탑만 움직이는 관과 홀로그램을 따로 그린다 (나머지는 합친 모델에 굳혀 그리기 횟수를 줄임)
+    const rec = { ...T, g0, top: g0 + h, tiers: [], linkY: T.linkY || [], showcase: !!T.grand || T.id.startsWith('t-in') };
     if (T.kind === 'fork') this._fork(rec, hi, lo, rnd);
     else if (T.kind === 'stack') this._stack(rec, hi, lo, rnd);
     else this._spire(rec, hi, lo, rnd);
@@ -158,7 +159,7 @@ export class Megacity {
     hi.push(xf(part(new THREE.RingGeometry(pr * 0.86, pr * 0.9, 36), T.glow, 1.2), { x, y: g0 + 0.45, z, rx: -Math.PI / 2 }));
     this._col({ type: 'cyl', x, z, r: pr, y0: g0 - 5, y1: g0 + 0.4 });
     // 홀로그램 띠 (글자가 흘러간다)
-    if (T.kind !== 'stack') {
+    if (T.kind !== 'stack' && rec.showcase) {
       const hy = g0 + h * (T.grand ? 0.66 : 0.6);
       const hr = (rec.radAt ? rec.radAt(hy - g0) : r) * 1.35 + (T.kind === 'fork' ? r : 0);
       const holo = new THREE.Mesh(new THREE.CylinderGeometry(hr, hr, T.grand ? 60 : 30, 48, 1, true), hologramMaterial({ color: T.glow, color2: 0xffffff, intensity: 1.1, scroll: 0.008 * (rnd() < 0.5 ? 1 : -1), repeat: [T.grand ? 6 : 3, 1], seed: Math.floor(h) }));
@@ -254,7 +255,7 @@ export class Megacity {
       lo.push(xf(part(new THREE.CylinderGeometry(TR, ra, 12, 14), PAL.gold, 0.5), { x, y: g0 + ty - 6, z }));
     }
     // 관
-    this._crown(rec, Math.floor(rnd() * 3));
+    this._crown(rec, Math.floor(rnd() * 3), hi, lo);
     this._col({ type: 'cyl', x, z, r: radAt(h * 0.03) * 1.02, y0: g0 - 5, y1: g0 + h * 0.8, walk: false });
     this._col({ type: 'cyl', x, z, r: radAt(h * 0.85), y0: g0 + h * 0.8, y1: g0 + h * 0.9 });
   }
@@ -296,6 +297,10 @@ export class Megacity {
     place(lo, mk(8, 12, false));
     // 빛 구슬
     const orbY = g0 + sh + gap * 0.15;
+    if (!rec.showcase) {
+      const q = xf(part(new THREE.IcosahedronGeometry(gap * 0.3, 1), rec.glow, 1.8), { x, y: orbY, z });
+      hi.push(q); lo.push(q);
+    } else {
     const orb = new THREE.Mesh(new THREE.IcosahedronGeometry(gap * 0.42, 2), glowMaterial({ color: rec.glow, intensity: 1.2 }));
     orb.position.set(x, orbY, z);
     const core = new THREE.Mesh(new THREE.IcosahedronGeometry(gap * 0.26, 2), litMaterial({ color: 0xffffff, emissive: rec.glow, emissiveIntensity: 1.6, emissiveNight: 0.4, rim: 1.5, rimColor: 0xffffff }));
@@ -306,6 +311,7 @@ export class Megacity {
       orb.scale.setScalar(k);
       orb.material.uniforms.uIntensity.value = 0.8 + Math.sin(t * 2.6 + z) * 0.25;
     });
+    }
     rec.top = g0 + sh + gap;
     // 다리층 = 하늘정원 대신 / 이어지는 층이 필요하면 원형 층을 하나 둘레에
     for (const ay of rec.linkY) {
@@ -367,8 +373,21 @@ export class Megacity {
     // 이어지는 층이 필요하면 가장 가까운 원반 높이를 그 높이로 쓴다 (다리는 _bridge 가 처리)
   }
 
-  _crown(rec, kind) {
+  _crown(rec, kind, hi, lo) {
     const { x, z, g0, h, r } = rec;
+    if (!rec.showcase) {
+      // 굳힌 관: 움직이지 않는 부품으로
+      const parts = [];
+      if (kind === 0) parts.push(part(xf(new THREE.TorusGeometry(r * 1.4, r * 0.035 + 0.6, 4, 40), { y: h * 0.9, rx: Math.PI / 2 + 0.1 }), rec.glow, 1.6));
+      else if (kind === 1) parts.push(part(xf(new THREE.TorusGeometry(r * 1.3, r * 0.08, 5, 32), { y: h * 0.96 + r * 1.1 }), PAL.gold, 0.2), part(xf(new THREE.TorusGeometry(r * 1.16, r * 0.025, 3, 32), { y: h * 0.96 + r * 1.1 }), rec.glow, 1.8));
+      else {
+        parts.push(part(xf(new THREE.IcosahedronGeometry(r * 0.6, 2), { y: h * 1.04 + r * 1.2 }), 0xf6eeff, 0.7));
+        for (let i = 0; i < 2; i++) parts.push(part(xf(new THREE.TorusGeometry(r * (0.85 + i * 0.25), r * 0.012 + 0.4, 3, 32), { y: h * 1.04 + r * 1.2, rx: 0.6 + i, rz: i }), rec.glow, 1.4));
+        rec.top = g0 + h * 1.04 + r * 1.8;
+      }
+      for (const p of parts) { const q = xf(p, { x, y: g0, z }); hi.push(q); lo.push(q); }
+      return;
+    }
     const crown = new THREE.Group();
     crown.position.set(x, g0, z);
     this.group.add(crown);

@@ -38,7 +38,7 @@ export const atmosUniforms = {
   uFogFalloff: { value: 1 / 1100 },
   uCurv: { value: 1 / (2 * 1600000) },
   uAlt: { value: 0 }, // 카메라 높이 (m) — 높이 오르면 하늘이 우주처럼 어두워진다
-  uSilence: { value: Array.from({ length: 6 }, () => new THREE.Vector4(0, 0, 1, 0)) },
+  uSilence: { value: Array.from({ length: 10 }, () => new THREE.Vector4(0, 0, 1, 0)) },
 };
 
 const tmp = { top: new THREE.Color(), hor: new THREE.Color(), glow: new THREE.Color(), sun: new THREE.Color(), ambT: new THREE.Color(), ambB: new THREE.Color() };

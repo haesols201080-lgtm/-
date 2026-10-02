@@ -81,7 +81,7 @@ export class Transit {
     this.ring = polyline(pts);
     this.ring.closed = true;
     this._tubeMesh(pts, 0xffd27a, true, true);
-    this._supports(pts, 6);
+    this._supports(pts, 8);
     // 갈림역(하모네아 쪽)
     LINES.forEach((L, i) => {
       const a = juncA[i];
@@ -125,7 +125,7 @@ export class Transit {
     for (let i = 0; i <= N; i++) { const t = i / N; pts.push(new THREE.Vector3(x0 + (sx - x0) * t, ys[i], z0 + (sz - z0) * t)); }
     const line = { ...L, path: polyline(pts), open: true };
     line.meshes = this._tubeMesh(pts, L.color, false, false);
-    this._supports(pts, 3);
+    this._supports(pts, 5);
     this.lines.push(line);
     this._station({ id: L.id + ':end', name: L.station, line: L.id, x: sx, z: sz, y: yB, dir: [ux, uz], color: L.color });
   }
@@ -133,12 +133,12 @@ export class Transit {
   _tubeMesh(pts, color, closed, bright) {
     const curve = new THREE.CatmullRomCurve3(pts, closed, 'centripetal');
     const L = curve.getLength();
-    const segs = Math.min(1600, Math.max(60, Math.round(L / 30)));
-    const glass = new THREE.Mesh(new THREE.TubeGeometry(curve, segs, 5.5, 10, closed), glowMaterial({ color: 0x9feaff, intensity: 0.32, fresnel: 1, side: THREE.DoubleSide }));
+    const segs = Math.min(420, Math.max(40, Math.round(L / 70)));
+    const glass = new THREE.Mesh(new THREE.TubeGeometry(curve, segs, 5.5, 8, closed), glowMaterial({ color: 0x9feaff, intensity: 0.32, fresnel: 1, side: THREE.DoubleSide }));
     const down = pts.map((p) => p.clone().add(_v.set(0, -6.4, 0)));
     const keelCurve = new THREE.CatmullRomCurve3(down, closed, 'centripetal');
-    const keel = merge([part(new THREE.TubeGeometry(keelCurve, segs, 1.5, 6, closed), 0xece8f2, 0)]);
-    const rail = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => p.clone().add(_v.set(0, -4.6, 0))), closed, 'centripetal'), segs, 0.35, 4, closed), glowMaterial({ color, intensity: 1.4 }));
+    const keel = merge([part(new THREE.TubeGeometry(keelCurve, segs, 1.5, 4, closed), 0xece8f2, 0)]);
+    const rail = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => p.clone().add(_v.set(0, -4.6, 0))), closed, 'centripetal'), segs, 0.35, 3, closed), glowMaterial({ color, intensity: 1.4 }));
     const keelM = new THREE.Mesh(keel, this.mat);
     this.group.add(glass, keelM, rail);
     return { glass, rail, keel: keelM };
@@ -152,13 +152,13 @@ export class Transit {
       const h = p.y - 7.6 - g;
       if (h < 4) continue;
       const base = Math.max(g, -4);
-      parts.push(part(xf(lathe([[3.2, -2], [2.4, 0], [1.6, h * 0.5], [1.3, h]], 8), { x: p.x, y: base, z: p.z }), (x, y) => (y < base + 1 ? PAL.gold : 0xe8e4ee), 0));
+      parts.push(part(xf(lathe([[3.2, -2], [2.4, 0], [1.6, h * 0.5], [1.3, h]], 6), { x: p.x, y: base, z: p.z }), (x, y) => (y < base + 1 ? PAL.gold : 0xe8e4ee), 0));
       // Y 자 팔
       const nx = i + 1 < pts.length ? pts[i + 1].x - p.x : p.x - pts[i - 1].x;
       const nz = i + 1 < pts.length ? pts[i + 1].z - p.z : p.z - pts[i - 1].z;
       const yaw = Math.atan2(nx, nz);
       for (const s of [-1, 1]) parts.push(part(xf(new THREE.BoxGeometry(0.9, 6.5, 0.9), { x: p.x + Math.cos(yaw) * s * 1.6, y: p.y - 9, z: p.z - Math.sin(yaw) * s * 1.6, rz: 0, ry: yaw }), 0xe8e4ee, 0));
-      parts.push(part(xf(new THREE.TorusGeometry(1.7, 0.18, 4, 12), { x: p.x, y: base + h * 0.92, z: p.z, rx: Math.PI / 2 }), PAL.teal, 1.2));
+      parts.push(part(xf(new THREE.TorusGeometry(1.7, 0.18, 3, 8), { x: p.x, y: base + h * 0.92, z: p.z, rx: Math.PI / 2 }), PAL.teal, 1.2));
     }
     if (parts.length) { const m = new THREE.Mesh(merge(parts), this.mat); m.matrixAutoUpdate = false; this.group.add(m); }
   }

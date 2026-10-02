@@ -23,6 +23,7 @@ npm run watch        # 저장할 때마다 다시 빌드
 | `node tools/check.mjs move` | 이동 물리(걷기·활공·썰매) 수치 확인 |
 | `node tools/heightmap.mjs 900 20000 shots/map.png` | 지형 전체 지도(2 km 격자) |
 | `node tools/survey.mjs` | 지역별 높은 곳·평지 찾기 (장소 배치용) |
+| `node tools/views.mjs '[{"name":"a","pos":[x,y,z],"look":[x,y,z],"t":0.7,"rel":true}]'` | 카메라를 원하는 자리에 두고 여러 장 (`rel`: 지면 기준 높이, `after`: 지형이 다 그려진 뒤 실행할 JS) |
 
 유용한 쿼리: `play=new`(타이틀 건너뜀) · `play=continue` · `nowake=1`(오프닝 연출 생략) · `q=low|medium|high|ultra` · `bloom=0` · `debug=1`(FPS 표시) · `t=0.9`(시각).
 페이지 안에서는 `SEREN.game` 으로 모든 시스템에 접근할 수 있습니다 (예: `SEREN.game.player.teleport(x, undefined, z)`, `SEREN.game.world.clock.time = 0.9`).
@@ -36,6 +37,10 @@ src/
            sky(돔·우르·고리·궤도 고리·승강줄 윗부분) sky-clock(해·계절·일식) atmosphere(팔레트·공용 uniform)
            shaders(공용 GLSL: 안개·곡률·조명) materials(litMaterial/glowMaterial) water flora(+flora-geo: 3층 흩뿌리기)
            structures(+arch: 장소 빌더) currents(해류) clouds creatures(고래·긴다리·빛나방) awen(아웬 모델) colliders(2.5D 충돌)
+           ── 고등 문명·스케일 (v0.2) ──
+           megacity(하모네아 구역·울림탑·하늘바퀴·하늘고리·빛다리·별항구) traffic(하늘배·하늘길·왕복선)
+           transit(빛길 철도·역·캡슐 타기) landmarks(지방 기술 시설) drones(돌보미) anchor(하늘닻·승강차)
+           farlands(먼 땅의 구조물) colossus(걷는 도시 거신) hologram(글자 홀로그램) lights(점광원 무리)
   player/  player(이동 상태기계) avatar(모델·절차 애니메이션) camera-rig
   game/    game(중심·모드·입력·저장) state(저장 형식) quests dialogue actions language npcs resonance discovery
            world-events(일식·별비·축제·부탁) director(연출 카메라)
@@ -58,12 +63,22 @@ src/
 - **메아리·글자돌·도감**: `story.js` 의 `ECHOES`, `GLYPH_STONES`, `CODEX`.
 - **저장 항목**: `game/state.js` 의 `defaultState()` 에 추가(불러올 때 빠진 항목은 기본값으로 채워짐).
 
+## 큰 세계에서 알아 둘 것 (v0.2)
+- 세계는 ±60 km (지형 쿼드트리 뿌리 131 km). 먼 땅은 `regions.js` 의 `far: true` 지역 + `heightfield.js` 의 `farMask` 로 바다 위에 올라옵니다.
+- 카메라가 2.5 km 보다 높으면 `engine._drawScenes` 가 깊이 범위를 둘로 나눠 두 번 그립니다(먼 곳 / 가까운 곳). 30 km 에서도 깊이 정밀도가 유지됩니다.
+- `atmosUniforms.uAlt` 로 높이에 따라 하늘이 검어지고 환경광이 줄어듭니다. 공기 밀도 `airDensity(y)`(player.js)가 낙하·활공 속도를 정합니다.
+- 하늘 높이의 충돌체에는 `sky: true` 를 붙이세요. 「그 자리의 맨 위 땅」을 찾는 질의(y=1e5)에서 빠져서, 땅 위의 인물이 30 km 위로 튀어 오르지 않습니다.
+- 침묵 구역(`uSilence`)은 10칸. 큰 공명탑(`great: true`)은 반지름 3.6 km, 최대 0.65 로 색을 덜 뺍니다. `mobile: true` 탑(거신 등)은 정적 충돌체 없이 `colossus.js` 가 매 프레임 옮깁니다.
+- 움직이는 발판(큰배·짐배·거신 갑판·주조소 섬)은 `colliders` 의 `obj` 충돌체. 옮긴 뒤 `updateDynamic` 을 불러 주고, 플레이어는 `_carry` 로 한 번만 실려 갑니다.
+- 퀘스트 `awaken` 단계는 `great: true` 면 큰 공명탑만, 아니면 대륙의 탑만 셉니다.
+
 ## 성능 메모
 - 가장 무거운 것: 지형 청크(그리기 1회/청크), 거대 식물 인스턴스, 블룸. 품질 단계는 `core/quality.js`.
 - 먼 지형 청크(2 km 이상)는 16×16, 가까운 청크는 32×32. 깊은 바다 밑 청크는 멀면 생략.
 - 거대 버섯·노래수정은 1.2~1.4 km 너머에서 단순 모델(LOD)로 바뀝니다.
 - `engine.adapt()` 가 프레임 시간에 따라 해상도 배율을 0.55~1.0 으로 조절합니다.
-- `?debug=1` 로 calls/tris 를 보며 작업하세요. 보통 품질 기준 대략 25~75만 삼각형, 150~340 그리기.
+- `?debug=1` 로 calls/tris 를 보며 작업하세요. v0.2 기준 낮음 품질 약 63~83만 삼각형, 330~560 그리기 (도시·배·먼 땅이 늘어남).
+- 배·돌보미·다리는 모두 인스턴스(그리기 1회). 하모네아 구역은 THREE.LOD(4.2 km 밖은 단순 모델), 큰 탑·안쪽 탑만 움직이는 관/홀로그램을 따로 그리고 나머지는 합친 모델에 굳혀 둡니다.
 
 ## 지켜야 할 것
 - 기존 저장 파일이 깨지지 않게: 저장 형식을 바꾸면 `state.js` 의 `migrate()` 를 손보세요.

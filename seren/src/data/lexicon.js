@@ -82,6 +82,17 @@ export const WORDS = [
   { id: 'here', ko: '여기', notes: [1, 5] },
   { id: 'gone', ko: '사라진', notes: [9, 7, 4] },
   { id: 'answer', ko: '대답', notes: [4, 9, 4] },
+  // 바다 건너 (2부)
+  { id: 'keeper', ko: '지기', notes: [3, 0] },
+  { id: 'walk', ko: '걷다', notes: [2, 0, 2] },
+  { id: 'ear', ko: '귀', notes: [8, 4] },
+  { id: 'waterfall', ko: '폭포', notes: [8, 6, 4] },
+  { id: 'make', ko: '빚다', notes: [1, 5, 1] },
+  { id: 'world', ko: '세계', notes: [0, 4, 8] },
+  { id: 'chorus', ko: '합창', notes: [2, 4, 6, 8] },
+  { id: 'up', ko: '위', notes: [5, 9] },
+  { id: 'core', ko: '핵', notes: [6, 0, 6] },
+  { id: 'ship', ko: '배', notes: [7, 3] },
 ];
 
 export const WORD = Object.fromEntries(WORDS.map((w) => [w.id, w]));
