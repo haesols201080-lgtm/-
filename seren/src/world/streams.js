@@ -20,6 +20,7 @@ uniform float uT;
 uniform float uFar;
 uniform float uNearHide;
 uniform vec4 uAvoid; // 플레이어 (x, y, z, 켜짐) — 호버 차는 그 위로 비켜 오른다
+uniform vec2 uScale; // 멀수록 크게: (거리당 배율, 최대) — 위에서 내려다봐도 흐름이 읽히게
 attribute vec4 aPod;   // 차선 번호, 시작 위치(0..1), 속도(1/초), 옆 간격(m)
 attribute vec3 aTint;
 attribute vec3 aVCol;
@@ -51,10 +52,10 @@ void main() {
 #ifdef WALK
   // 걷는 사람: 크기 그대로, 걸음에 맞춰 살짝 들썩. 가까이(주민이 직접 다니는 곳)는 그리지 않는다
   if (d < uNearHide) { gl_Position = vec4(0.0, 0.0, -2.0, 1.0); return; }
-  float s = 1.0;
+  float s = clamp(d * uScale.x, 1.0, uScale.y);
   P.y += abs(sin(uT * 5.2 + aPod.y * 97.0)) * 0.07 - 0.25 * sin(uT * 1.7 + aPod.y * 61.0);
 #else
-  float s = clamp(d * 0.0014, 1.0, 7.0);
+  float s = clamp(d * uScale.x, 1.0, uScale.y);
   float da = length(P.xz - uAvoid.xz);
   P.y += uAvoid.w * (1.0 - smoothstep(2.0, 7.0, da)) * (1.0 - smoothstep(4.0, 9.0, abs(P.y - uAvoid.y))) * 2.6;
 #endif
@@ -104,6 +105,35 @@ function podGeo() {
   return g;
 }
 
+/** 빛 궤도 전차 (길이 약 16 m): 둥근 몸통 + 양옆 창 띠 + 앞뒤 등 + 궤도 빛 */
+function tramGeo() {
+  const g = merge([
+    part(xf(new THREE.CapsuleGeometry(1.25, 13, 3, 8), { rx: Math.PI / 2, sy: 0.9 }), 0xf2eef8, 0),
+    part(xf(new THREE.BoxGeometry(0.06, 0.55, 11.5), { x: 1.16, y: 0.25 }), 0x9ff6ff, 1.3),
+    part(xf(new THREE.BoxGeometry(0.06, 0.55, 11.5), { x: -1.16, y: 0.25 }), 0x9ff6ff, 1.3),
+    part(xf(new THREE.PlaneGeometry(1.4, 0.3), { y: 0.1, z: 7.85 }), 0xffffff, 2.4),
+    part(xf(new THREE.PlaneGeometry(1.4, 0.3), { y: 0.1, z: -7.85, ry: Math.PI }), 0xff5a6a, 2.0),
+    part(xf(new THREE.PlaneGeometry(1.2, 13), { y: -1.15, rx: Math.PI / 2 }), 0x7ff3e6, 1.8),
+  ]);
+  g.setAttribute('aVCol', g.attributes.color); g.setAttribute('aEmit', g.attributes.emit);
+  g.deleteAttribute('color'); g.deleteAttribute('emit');
+  return g;
+}
+
+/** 짐 드론 (폭 약 3 m): 짐 상자 + 네 날개 고리 + 아래 빛 */
+function droneGeo() {
+  const parts = [
+    part(xf(new THREE.BoxGeometry(1.4, 0.9, 1.8), { y: -0.5 }), 0xd8c9a8, 0),
+    part(xf(new THREE.BoxGeometry(1.6, 0.25, 2.0), { y: 0.05 }), 0xeae6f0, 0),
+    part(xf(new THREE.PlaneGeometry(1.0, 1.4), { y: -0.97, rx: Math.PI / 2 }), 0xffc46a, 1.8),
+  ];
+  for (const [x, z] of [[1.3, 1.3], [-1.3, 1.3], [1.3, -1.3], [-1.3, -1.3]]) parts.push(part(xf(new THREE.TorusGeometry(0.55, 0.06, 3, 10), { x, y: 0.12, z, rx: Math.PI / 2 }), 0x7ff3e6, 1.2));
+  const g = merge(parts);
+  g.setAttribute('aVCol', g.attributes.color); g.setAttribute('aEmit', g.attributes.emit);
+  g.deleteAttribute('color'); g.deleteAttribute('emit');
+  return g;
+}
+
 /** 걷는 아웬 (키 약 1.9 m): 긴 옷자락 몸, 어깨, 머리, 빛나는 띠 */
 function walkerGeo() {
   const g = merge([
@@ -136,6 +166,7 @@ export class Streams {
       this._w = Z.traffic ?? (Z.id.startsWith('cap') ? 1 : Z.id.startsWith('dist') ? 0.7 : Z.id.startsWith('town') ? 0.4 : 0.28);
       if (Z.lanes) this._groundLanes(Z);
       if (Z.sky) this._skyLanes(Z, rnd);
+      this._lifeLanes(Z, rnd);
     }
     this._w = 0.9;
     this._highways();
@@ -182,6 +213,17 @@ export class Streams {
         this._lane((t) => { const a = dir * t * TAU; const x = Z.cx + Math.cos(a) * r, z = Z.cz + Math.sin(a) * r; return [x, hov(x, z), z]; }, 'ground');
       }
     });
+    // 큰 대로(짝수 번째) 가운데 빛 궤도: 전차가 나갔다가 돌아온다 (지형 셰이더의 궤도와 같은 자리)
+    if (Z.id.startsWith('cap') || Z.id.startsWith('dist')) Z.avA.forEach((a, i) => {
+      if (i % 2) return;
+      const r0 = Z.r0 - Z.street, r1 = Z.rOut, ca = Math.cos(a), sa = Math.sin(a);
+      this._lane((t) => {
+        const out = t < 0.5, k = out ? t * 2 : (1 - t) * 2;
+        const r = r0 + (r1 - r0) * k, side = out ? 0.72 : -0.72;
+        const x = Z.cx + ca * r - sa * side, z = Z.cz + sa * r + ca * side;
+        return [x, Math.max(heightAt(x, z), 0) + 1.3, z];
+      }, 'tram');
+    });
     // 방사 대로: 나갔다가 반대편 차선으로 돌아온다
     for (const a of Z.avA) {
       const r0 = Z.r0 - Z.street, r1 = Z.rOut, ca = Math.cos(a), sa = Math.sin(a), off = Z.street * 0.22;
@@ -192,6 +234,75 @@ export class Streams {
         return [x, hov(x, z), z];
       }, 'ground');
     }
+  }
+
+  /**
+   * 위에서 보이는 생활: 짐 드론(물류·산업·교통·인공 환경 블록 사이를 수직으로 떠서 오간다),
+   * 착륙대 사이 왕복선(교통 블록의 착륙탑 꼭대기끼리), 광장의 사람 무리(광장·중심 광장·랜드마크 둘레를 도는 걸음).
+   */
+  _lifeLanes(Z, rnd) {
+    const P = Z.P;
+    if (!P) return;
+    const C = this.world.colliders;
+    const roof = (x, z) => { let top = Math.max(heightAt(x, z), 0); for (const c of C.near(x, z, 24)) if (!c.sky && !c.obj && c.y1 < top + 900) top = Math.max(top, c.y1); return top; };
+    const big = Z.id.startsWith('cap') || Z.id.startsWith('dist');
+    const W0 = this._w;
+    // 짐 드론
+    const work = P.blocks.filter((B) => B.type === 4 || B.type === 5 || B.type === 8 || B.type === 9 || B.type === 12);
+    const hubs = P.blocks.filter((B) => B.type === 5 || B.type === 8);
+    const nD = Math.min(work.length, big ? 26 : Z.mix === 'suburb' ? 30 : 8);
+    for (let i = 0; i < nD; i++) {
+      const A = work[Math.floor(rnd() * work.length)];
+      let Bb = null, bd = 1e9;
+      for (const H of hubs) { if (H === A) continue; const d = Math.hypot(H.cx - A.cx, H.cz - A.cz); if (d > 250 && d < 1800 && d < bd) { bd = d; Bb = H; } }
+      if (!Bb) continue;
+      const ax = A.cx, az = A.cz, bx = Bb.cx, bz = Bb.cz;
+      const ga = Math.max(heightAt(ax, az), 0) + 6, gb = Math.max(heightAt(bx, bz), 0) + 6;
+      const len = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / len, uz = (bz - az) / len;
+      let cruise = 0;
+      for (let k = 0; k <= 12; k++) cruise = Math.max(cruise, roof(ax + (bx - ax) * k / 12, az + (bz - az) * k / 12));
+      cruise += 24 + rnd() * 30;
+      this._w = 0.5;
+      this._lane((t) => {
+        const back = t >= 0.5, k = back ? (t - 0.5) * 2 : t * 2;
+        const f = back ? 1 - k : k, side = back ? -7 : 7;
+        const hk = k < 0.1 ? k / 0.1 : k > 0.9 ? (1 - k) / 0.1 : 1; // 수직으로 떠서 나가고 수직으로 내려앉는다
+        const s = Math.min(1, Math.max(0, (k - 0.1) / 0.8)), fs = back ? 1 - s : s;
+        const x = ax + (bx - ax) * fs - uz * side, z = az + (bz - az) * fs + ux * side;
+        const yb = (back ? gb + (ga - gb) * s : ga + (gb - ga) * s);
+        void f;
+        return [x, yb + (cruise - yb) * (hk * hk * (3 - 2 * hk)), z];
+      }, 'drone');
+    }
+    // 착륙탑 꼭대기끼리 왕복선
+    if (big) {
+      const tops = [];
+      for (const B of P.blocks) if (B.type === 8 && B.recs) for (const r of B.recs) if (r.kind === 'padtower' || r.kind === 'branchport') tops.push([r.x, r.top + 4, r.z]);
+      for (let i = 0; i + 1 < tops.length; i += 2) {
+        const [ax, ay, az] = tops[i], [bx, by, bz] = tops[i + 1];
+        let cruise = Math.max(ay, by);
+        for (let k = 0; k <= 12; k++) cruise = Math.max(cruise, roof(ax + (bx - ax) * k / 12, az + (bz - az) * k / 12));
+        cruise += 40;
+        this._w = 0.25;
+        this._lane((t) => {
+          const back = t >= 0.5, k = back ? (t - 0.5) * 2 : t * 2;
+          const hk = k < 0.15 ? k / 0.15 : k > 0.85 ? (1 - k) / 0.15 : 1;
+          const s = Math.min(1, Math.max(0, (k - 0.15) / 0.7)), fs = back ? 1 - s : s;
+          const yb = back ? by + (ay - by) * s : ay + (by - ay) * s;
+          return [ax + (bx - ax) * fs, yb + (cruise - yb) * hk, az + (bz - az) * fs];
+        }, 'sky');
+      }
+    }
+    // 광장의 사람 무리: 둥글게 거닐며 모인다
+    const circ = (x, z, R, dir) => { this._w = 1.3; this._lane((t) => { const a = dir * t * TAU; const px = x + Math.cos(a) * R, pz = z + Math.sin(a) * R; return [px, Math.max(heightAt(px, pz), 0) + 0.5, pz]; }, 'walk'); };
+    for (const B of P.blocks) {
+      if (!(B.type === 11 || B.landmark || (B.type === 2 && big && rnd() < 0.5))) continue;
+      if (B.wet > 0.3 || B.covered) continue;
+      const R = B.landmark ? 44 : 9 + rnd() * 5;
+      circ(B.cx, B.cz, R, 1); if (B.type === 11) circ(B.cx, B.cz, R * 0.6, -1);
+    }
+    if (P.core) P.core.forEach((B, i) => { if (i % 2 === 0) circ(B.cx, B.cz, 8 + (i % 3) * 3, i % 4 ? 1 : -1); });
+    this._w = W0;
   }
 
   /** 지붕 위 하늘 차선: 가까운 건물보다 늘 높게 */
@@ -251,11 +362,11 @@ export class Streams {
     const tints = [[1, 1, 1], [0.75, 0.95, 1], [1, 0.9, 0.75], [0.95, 0.8, 1], [0.8, 1, 0.9], [1, 0.82, 0.88]];
     const people = [[0.46, 0.62, 0.8], [0.74, 0.48, 0.62], [0.84, 0.62, 0.36], [0.52, 0.46, 0.76], [0.4, 0.68, 0.6], [0.82, 0.78, 0.86], [0.66, 0.36, 0.42], [0.36, 0.5, 0.56]]; // 옷자락 색
     this.lanes.forEach((L, i) => {
-      const sky = L.kind === 'sky', walk = L.kind === 'walk';
-      const gap = walk ? 7 / L.w : (sky ? 90 : 34) / L.w;
-      const n = Math.max(2, Math.floor(L.len / gap));
+      const sky = L.kind === 'sky', walk = L.kind === 'walk', tram = L.kind === 'tram', drone = L.kind === 'drone';
+      const gap = walk ? 7 / L.w : (sky ? 90 : tram ? 320 : drone ? 160 : 34) / L.w;
+      const n = Math.max(tram ? 1 : 2, Math.floor(L.len / gap));
       const r = mulberry32(i * 7919 + 17);
-      const sp = walk ? 1.25 : sky ? 45 + r() * 40 : 15 + r() * 14; // m/s
+      const sp = walk ? 1.25 : sky ? 45 + r() * 40 : tram ? 13 + r() * 4 : drone ? 16 + r() * 8 : 15 + r() * 14; // m/s
       if (walk) {
         L.pod = new Float32Array(n * 4); L.tint = new Float32Array(n * 3); L.n = n;
         for (let k = 0; k < n; k++) {
@@ -268,29 +379,34 @@ export class Streams {
       L.tint = new Float32Array(n * 3);
       L.n = n;
       for (let k = 0; k < n; k++) {
-        L.pod.set([i, (k + r() * 0.7) / n, (sp * (0.85 + r() * 0.3)) / L.len, sky ? (r() - 0.5) * 8 : (r() - 0.5) * 2], k * 4);
+        L.pod.set([i, (k + r() * 0.7) / n, (sp * (0.85 + r() * 0.3)) / L.len, sky ? (r() - 0.5) * 8 : tram ? 0 : drone ? (r() - 0.5) * 4 : (r() - 0.5) * 2], k * 4);
         L.tint.set(tints[Math.floor(r() * tints.length)], k * 3);
       }
     });
-    const base = podGeo();
-    const g = new THREE.InstancedBufferGeometry();
-    for (const k of ['position', 'normal', 'aVCol', 'aEmit']) g.setAttribute(k, base.attributes[k]);
-    this.aPod = new THREE.InstancedBufferAttribute(new Float32Array(this.cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
-    this.aTint = new THREE.InstancedBufferAttribute(new Float32Array(this.cap * 3), 3).setUsage(THREE.DynamicDrawUsage);
-    g.setAttribute('aPod', this.aPod);
-    g.setAttribute('aTint', this.aTint);
-    g.instanceCount = 0;
-    this.geo = g;
     this.count = 0;
     this.total = this.lanes.reduce((s, L) => s + L.n, 0);
     this._at = new THREE.Vector3(1e9, 0, 1e9);
-    this.mat = new THREE.ShaderMaterial({
-      uniforms: { ...atmosUniforms, uLanes: { value: this.tex }, uT: { value: 0 }, uFar: { value: this.cap < 3000 ? 5000 : 8000 }, uNearHide: { value: 0 }, uAvoid: { value: new THREE.Vector4() } },
-      vertexShader: vert, fragmentShader: frag, side: THREE.DoubleSide,
-    });
-    this.mesh = new THREE.Mesh(g, this.mat);
-    this.mesh.frustumCulled = false;
-    this.world.scene.add(this.mesh);
+    // 무리(fleet)마다 모양 하나 · 그리기 1회: 호버 차·하늘배(차·하늘) / 전차 / 짐 드론
+    const shared = { ...atmosUniforms, uLanes: { value: this.tex }, uT: { value: 0 }, uFar: { value: this.cap < 3000 ? 5000 : 8000 }, uNearHide: { value: 0 }, uAvoid: { value: new THREE.Vector4() } };
+    const fleet = (kinds, geo, cap, scale) => {
+      const g = new THREE.InstancedBufferGeometry();
+      for (const k of ['position', 'normal', 'aVCol', 'aEmit']) g.setAttribute(k, geo.attributes[k]);
+      const aPod = new THREE.InstancedBufferAttribute(new Float32Array(cap * 4), 4).setUsage(THREE.DynamicDrawUsage);
+      const aTint = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3).setUsage(THREE.DynamicDrawUsage);
+      g.setAttribute('aPod', aPod); g.setAttribute('aTint', aTint);
+      g.instanceCount = 0;
+      const mat = new THREE.ShaderMaterial({ uniforms: { ...shared, uScale: { value: new THREE.Vector2(...scale) } }, vertexShader: vert, fragmentShader: frag, side: THREE.DoubleSide });
+      const mesh = new THREE.Mesh(g, mat);
+      mesh.frustumCulled = false;
+      this.world.scene.add(mesh);
+      return { kinds, g, aPod, aTint, cap, mat, mesh, count: 0 };
+    };
+    this.fleets = [
+      fleet(['ground', 'sky'], podGeo(), this.cap, [0.0014, 7]),
+      fleet(['tram'], tramGeo(), 300, [0.0009, 3]),
+      fleet(['drone'], droneGeo(), Math.round(this.cap / 6), [0.0016, 6]),
+    ];
+    this.mat = this.fleets[0].mat; this.geo = this.fleets[0].g; this.mesh = this.fleets[0].mesh;
     // 걷는 사람들 (같은 차선 텍스처, 다른 모양)
     const wb = walkerGeo();
     const wg = new THREE.InstancedBufferGeometry();
@@ -302,7 +418,7 @@ export class Streams {
     wg.instanceCount = 0;
     this.wgeo = wg;
     this.wmat = new THREE.ShaderMaterial({ uniforms: this.mat.uniforms, vertexShader: vert, fragmentShader: frag, side: THREE.DoubleSide, defines: { WALK: '' } });
-    this.wmat.uniforms = { ...this.mat.uniforms, uFar: { value: this.wreach + 60 }, uNearHide: { value: 110 } };
+    this.wmat.uniforms = { ...this.mat.uniforms, uFar: { value: 1700 }, uNearHide: { value: 110 }, uScale: { value: new THREE.Vector2(0.0018, 3.5) } };
     this.wmesh = new THREE.Mesh(wg, this.wmat);
     this.wmesh.frustumCulled = false;
     this.world.scene.add(this.wmesh);
@@ -315,11 +431,13 @@ export class Streams {
   _fillWalk(cam) {
     this._wat.copy(cam);
     this._wT = 6;
-    const P = this.wPod.array, T = this.wTint.array, R2 = (this.wreach + 40) ** 2;
+    // 높이 올라갈수록 더 멀리까지 (위에서 내려다보면 광장의 무리가 점처럼 읽힌다)
+    const reach = Math.min(1600, this.wreach + Math.max(0, cam.y - Math.max(heightAt(cam.x, cam.z), 0) - 20) * 1.6);
+    const P = this.wPod.array, T = this.wTint.array, R2 = (reach + 40) ** 2;
     let k = 0;
     for (let li = 0; li < this.lanes.length && k < this.wcap; li++) {
       const L = this.lanes[li];
-      if (L.kind !== 'walk' || Math.max(0, Math.hypot(cam.x - L.cx, cam.z - L.cz) - L.rad) > this.wreach) continue;
+      if (L.kind !== 'walk' || Math.max(0, Math.hypot(cam.x - L.cx, cam.z - L.cz) - L.rad) > reach) continue;
       for (let j = 0; j < L.n && k < this.wcap; j++) {
         const u = ((L.pod[j * 4 + 1] + this.t * L.pod[j * 4 + 2]) % 1 + 1) % 1;
         const s = Math.floor(u * NS) % NS;
@@ -338,25 +456,29 @@ export class Streams {
   /** 카메라 가까운 차선부터 차를 채운다 */
   _fill(cam) {
     this._at.copy(cam);
-    const sel = [];
-    for (const L of this.lanes) {
-      if (L.kind === 'walk') continue;
-      const d = Math.max(0, Math.hypot(cam.x - L.cx, cam.z - L.cz) - L.rad);
-      if (d < this.reach) sel.push([d, L]);
+    this.count = 0;
+    for (const F of this.fleets) {
+      const sel = [];
+      for (const L of this.lanes) {
+        if (!F.kinds.includes(L.kind)) continue;
+        const d = Math.max(0, Math.hypot(cam.x - L.cx, cam.z - L.cz) - L.rad);
+        if (d < this.reach) sel.push([d, L]);
+      }
+      sel.sort((a, b) => a[0] - b[0]);
+      let k = 0;
+      const P = F.aPod.array, T = F.aTint.array;
+      for (const [, L] of sel) {
+        const n = Math.min(L.n, F.cap - k);
+        if (n <= 0) break;
+        P.set(L.pod.subarray(0, n * 4), k * 4);
+        T.set(L.tint.subarray(0, n * 3), k * 3);
+        k += n;
+      }
+      F.count = F.g.instanceCount = k;
+      this.count += k;
+      F.aPod.clearUpdateRanges(); F.aPod.addUpdateRange(0, k * 4); F.aPod.needsUpdate = true;
+      F.aTint.clearUpdateRanges(); F.aTint.addUpdateRange(0, k * 3); F.aTint.needsUpdate = true;
     }
-    sel.sort((a, b) => a[0] - b[0]);
-    let k = 0;
-    const P = this.aPod.array, T = this.aTint.array;
-    for (const [, L] of sel) {
-      const n = Math.min(L.n, this.cap - k);
-      if (n <= 0) break;
-      P.set(L.pod.subarray(0, n * 4), k * 4);
-      T.set(L.tint.subarray(0, n * 3), k * 3);
-      k += n;
-    }
-    this.count = this.geo.instanceCount = k;
-    this.aPod.clearUpdateRanges(); this.aPod.addUpdateRange(0, k * 4); this.aPod.needsUpdate = true;
-    this.aTint.clearUpdateRanges(); this.aTint.addUpdateRange(0, k * 3); this.aTint.needsUpdate = true;
   }
 
   update(dt, ctx) {
@@ -367,6 +489,6 @@ export class Streams {
     if (pl) this.mat.uniforms.uAvoid.value.set(pl.pos.x, pl.pos.y, pl.pos.z, 1);
     if (cam && Math.hypot(cam.x - this._at.x, cam.z - this._at.z) > 250) this._fill(cam);
     this._wT -= dt;
-    if (cam && (this._wT <= 0 || Math.hypot(cam.x - this._wat.x, cam.z - this._wat.z) > 40)) this._fillWalk(cam);
+    if (cam && (this._wT <= 0 || Math.hypot(cam.x - this._wat.x, cam.z - this._wat.z) > 40 || Math.abs(cam.y - this._wat.y) > 60)) this._fillWalk(cam);
   }
 }

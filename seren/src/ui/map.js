@@ -365,6 +365,19 @@ export class MapView {
         ctx.globalAlpha = 1;
       }
     }
+    // 구역의 보조 랜드마크 (밝혀진 곳만)
+    if (g.city && g.city.marks && this.zoom > 2) {
+      ctx.font = `${10 * dpr}px sans-serif`;
+      for (const M of g.city.marks) {
+        if (md.revealedAt(M.x, M.z) < 0.5) continue;
+        const [sx, sy] = this._toScreen(M.x, M.z);
+        ctx.save(); ctx.translate(sx, sy); ctx.rotate(Math.PI / 4);
+        ctx.fillStyle = 'rgba(12,13,34,0.75)'; ctx.strokeStyle = M.color; ctx.lineWidth = 1.4 * dpr;
+        ctx.fillRect(-4.5 * dpr, -4.5 * dpr, 9 * dpr, 9 * dpr); ctx.strokeRect(-4.5 * dpr, -4.5 * dpr, 9 * dpr, 9 * dpr);
+        ctx.restore();
+        if (this.zoom > 3.5) { ctx.fillStyle = 'rgba(243,239,230,0.85)'; ctx.fillText(M.name, sx, sy - 9 * dpr); }
+      }
+    }
     // 목표
     for (const t of g.quests.targets()) {
       const [sx, sy] = this._toScreen(t.x, t.z);

@@ -147,11 +147,20 @@ export function buildPlan(env) {
       if (B.wet > 0.5 && Z.water) { B.type = U.VILLA; B.stilt = true; continue; }
       if (B.slope > 0.55) { B.type = B.type === U.FARM || B.type === U.VILLA ? 0 : U.GRN; B.steep = true; continue; }
       // 다른(앞선) 구역 안이면 그 구역이 우선 — 이 블록은 비운다
+      // (지형의 구역 단 둘레 둑 160~200 m 까지 — heightfield 의 땅 맞추기와 같은 범위: 비탈 위에 짓지 않게)
       for (const Q of zones) {
         const d = Math.hypot(cx - Q.G.cx, cz - Q.G.cz);
-        if (d > Q.G.r0 - Q.G.street - 40 && d < Q.G.rOut + Q.G.street + 40) { B.type = 0; B.covered = true; break; }
+        const inner = Q.Z.mix === 'suburb' ? Q.G.r0 - Q.G.street - 40 : -1;
+        if (d > inner && d < Q.G.rOut + Q.G.street + (Q.Z.grade === false ? 40 : 175) + Math.max(B.L, B.D) * 0.3) { B.type = 0; B.covered = true; break; }
       }
       if (B.type && env.bigPlace(cx, cz, Math.min(B.L, B.D) * 0.5)) B.type = Z.podium ? U.PLZ : U.GRN;
+    }
+    // 보조 랜드마크 자리: ZONES.marks [[모양, 부채꼴, 안쪽~바깥 0..1]…] → 가장 가까운 멀쩡한 블록을 광장으로 비우고 가운데에
+    for (const [kind, s, t] of Z.marks || []) {
+      const G = P.G, a = G.aOff + (s + 0.5) * ((Math.PI * 2) / G.avenues), rr = G.r0 + t * (G.rOut - G.r0);
+      const x = G.cx + Math.cos(a) * rr, z = G.cz + Math.sin(a) * rr;
+      const cand = P.blocks.filter((B) => B.type && !B.covered && !B.steep && B.wet < 0.1 && B.D > 66 && B.L > 90).sort((A, B) => Math.hypot(A.cx - x, A.cz - z) - Math.hypot(B.cx - x, B.cz - z));
+      if (cand[0]) { cand[0].type = U.PLZ; cand[0].landmark = kind; cand[0].markAlt = cand.slice(1, 4); }
     }
     zones.push(P);
   });
@@ -163,25 +172,23 @@ export function buildPlan(env) {
 // face: 'out'(바깥 거리 쪽) | 'in' | 'u+' | 'u-' | 숫자(바깥 기준 회전)
 const T = {};
 
-/** 주거: 둘레 판상 + 모서리 탑 + 안뜰(정원·놀이터·의자·화단) */
+/** 주거: 안뜰을 둘러싼 고층 주거 탑들(안쪽·바깥쪽 거리를 따라) + 안뜰(정원·놀이터·의자·화단) */
 T[U.RES] = (B, P) => {
   const { L, D } = B, r = P.rnd;
   if (D < 58) return T.smallRes(B, P);
-  const bar = 7; // 판상 반 깊이 (14 m)
-  const midH = 18 + r() * 18;
-  // 둘레 판상: 안쪽·바깥쪽 거리를 따라, 8 m 통로를 두고 끊는다
-  for (const [v, door] of [[3 + bar, -1], [D - 3 - bar, 1]]) {
-    let u = 4;
-    while (u < L - 30) {
-      const len = Math.min(L - 4 - u, 30 + r() * 14);
-      if (len < 18) break;
-      P.bldg(B, 'midrise', u + len / 2, v, len / 2, bar, midH * (0.85 + r() * 0.3), { door, use: 'home' });
-      u += len + 8;
+  // 둘레 탑: 거리마다 2~4 채, 키를 조금씩 달리해 스카이라인이 출렁이게. 안뜰(v 20 ~ D-20)은 비운다
+  let first = true;
+  for (const [v, door] of [[12, -1], [D - 12, 1]]) {
+    const n = Math.max(2, Math.min(4, Math.floor((L - 16) / 34)));
+    for (let i = 0; i < n; i++) {
+      const u = 8 + ((L - 16) * (i + 0.5)) / n;
+      const big = B.peak && first;
+      const w = big ? Math.min(14, (L - 16) / n / 2 - 2) : Math.min(11, (L - 16) / n / 2 - 3);
+      const kind = big ? ['skygarden', 'terrace', 'triad', 'setback'][B.variant % 4] : P.pick(B, 'tower');
+      P.bldg(B, kind, u, big ? 14 : v, w, big ? w : Math.min(w, 8), P.towerH(B, big ? 1 : 0.75 + r() * 0.5), { door, use: 'home' });
+      first = false;
     }
   }
-  // 모서리 탑 둘 (안뜰 양 끝)
-  const tr = Math.min(12.5, (D - 2 * (3 + 2 * bar)) / 2 - 1.5);
-  if (tr > 7) for (const u of [tr + 6, L - tr - 6]) P.bldg(B, P.pick(B, 'tower'), u, D / 2, tr, tr, P.towerH(B), { door: u < L / 2 ? 'u-' : 'u+', use: 'home' });
   // 안뜰: 놀이터 + 의자 + 정원수 줄 + 화단
   const cu = L / 2, cv = D / 2;
   P.prop(B, 'play', cu - 13, cv, 'out', { col: { r: 3.2, h: 2.4 } });
@@ -216,14 +223,22 @@ T[U.COM] = (B, P) => {
   const atStart = B.edgeAv <= 0; // 광장을 대로(또는 골목) 쪽 끝에
   const u0 = atStart ? pl : 4, u1 = atStart ? L - 4 : L - pl;
   const pod = B.G && P.podium(B);
-  const nT = Math.max(1, Math.min(3, Math.floor((u1 - u0) / 38)));
+  if (B.peak) {
+    // 높은 군집의 한가운데: 넓은 발의 초고층 하나 + 양옆의 낮은 탑
+    const tw = Math.min(26, (u1 - u0) * 0.3, D * 0.36);
+    const kind = ['crown', 'setback', 'skygarden', 'cantilever'][B.variant % 4];
+    P.bldg(B, kind, (u0 + u1) / 2, D / 2, tw, tw * (kind === 'crown' ? 0.85 : 1), P.towerH(B), { door: -1, use: 'office' });
+    for (const fu of [0.12, 0.88]) { const u = u0 + (u1 - u0) * fu; const w = Math.min(10, (u1 - u0) * 0.1); P.bldg(B, P.pick(B, 'office'), u, D / 2, w, w, P.towerH(B, 0.35), { door: fu < 0.5 ? 'u-' : 'u+', use: 'office' }); }
+    if (pod) P.bldg(B, 'podium', (u0 + u1) / 2, D / 2, (u1 - u0) / 2, D / 2 - 4, pod, { door: -1, use: 'market', podium: true });
+  }
+  const nT = B.peak ? 0 : Math.max(1, Math.min(3, Math.floor((u1 - u0) / 38)));
   for (let i = 0; i < nT; i++) {
     const u = u0 + ((u1 - u0) * (i + 0.5)) / nT, tw = Math.min(15, (u1 - u0) / nT / 2 - 3);
     const kind = P.pick(B, 'office');
-    const dims = kind === 'blade' || kind === 'slab' || kind === 'twin' ? [tw, Math.min(D * 0.32, tw * 0.75)] : [Math.min(tw, D * 0.3), Math.min(tw, D * 0.3)];
+    const dims = kind === 'blade' || kind === 'slab' || kind === 'twin' || kind === 'setback' || kind === 'crown' ? [tw, Math.min(D * 0.32, tw * 0.8)] : [Math.min(tw, D * 0.3), Math.min(tw, D * 0.3)];
     P.bldg(B, kind, u, D / 2, dims[0], dims[1], P.towerH(B), { door: i % 2 ? 1 : -1, use: 'office' });
   }
-  if (pod) P.bldg(B, 'podium', (u0 + u1) / 2, D / 2, (u1 - u0) / 2, D / 2 - 4, pod, { door: -1, use: 'market', podium: true });
+  if (pod && !B.peak) P.bldg(B, 'podium', (u0 + u1) / 2, D / 2, (u1 - u0) / 2, D / 2 - 4, pod, { door: -1, use: 'market', podium: true });
   // 상가 광장
   const pc = atStart ? pl / 2 : L - pl / 2;
   P.prop(B, 'kiosk', pc, D * 0.3, 'u+', { col: { r: 2.4, h: 3.2 } }); P.spot(B, 'sell', pc, D * 0.3 - 2.6, 'in');
@@ -238,12 +253,12 @@ T[U.COM] = (B, P) => {
 /** 공공: 큰 공공 건물(회관·학교·치유원·서고) + 앞마당 광장(분수·빛 기둥·나무) */
 T[U.CIV] = (B, P) => {
   const { L, D } = B, r = P.rnd;
-  const kinds = ['hall', 'school', 'observatory', 'hall'];
+  const kinds = ['hall', 'school', 'observatory', 'hall', 'gate'];
   const kind = kinds[B.variant % kinds.length];
   const purpose = kind === 'school' ? 'school' : kind === 'observatory' ? (B.variant % 2 ? 'heal' : 'library') : 'hall';
   const hw = Math.min(30, L * 0.32), hd = Math.min(19, D * 0.27);
   const bv = D - 4 - hd;
-  P.bldg(B, kind, L / 2, bv, hw, hd, kind === 'observatory' ? Math.max(24, hw * 1.0) : 16 + r() * 10, { door: -1, use: purpose });
+  P.bldg(B, kind, L / 2, bv, hw, hd, kind === 'observatory' ? Math.max(24, hw * 1.0) : kind === 'gate' ? 34 + r() * 22 : 16 + r() * 10, { door: -1, use: purpose });
   // 앞마당 (안쪽 거리 쪽)
   const fv = (bv - hd) / 2;
   if (fv > 8) {
@@ -267,7 +282,8 @@ T[U.IND] = (B, P) => {
   P.bldg(B, 'fabricator', L * 0.27, hd + 5, hw, hd, 14 + r() * 8, { door: 1, use: 'factory' });
   P.bldg(B, 'fabricator', L * 0.73, hd + 5, hw, hd, 14 + r() * 8, { door: 1, use: 'factory' });
   P.bldg(B, 'tanks', L * 0.2, D - 14, 10, 10, 16 + r() * 8, { use: 'none' });
-  P.bldg(B, r() < 0.5 ? 'cooler' : 'conduit', L * 0.85, D - 13, r() < 0.5 ? 9 : 5, r() < 0.5 ? 9 : 5, 26 + r() * 14, { use: 'none' });
+  if (P.mix === 'bioindustry' || P.mix === 'suburb') P.bldg(B, 'treeform', L * 0.84, D - 15, Math.min(14, D * 0.2), Math.min(14, D * 0.2), 34 + r() * 26, { use: 'none' });
+  else P.bldg(B, r() < 0.5 ? 'cooler' : 'conduit', L * 0.85, D - 13, r() < 0.5 ? 9 : 5, r() < 0.5 ? 9 : 5, 26 + r() * 14, { use: 'none' });
   // 마당
   for (let u = L * 0.38; u < L * 0.72; u += 9) { P.prop(B, 'crates', u, D * 0.62, 'u+', { s: 0.9 + r() * 0.3, col: { r: 1.9, h: 2.6 } }); }
   P.prop(B, 'piperack', L / 2, hd + 5, 'u+', { s: Math.max(1, (L * 0.46 - 2 * hw) / 10), col: { r: 0.6, h: 7, walk: false } });
@@ -295,7 +311,8 @@ T[U.LOG] = (B, P) => {
 T[U.ENE] = (B, P) => {
   const { L, D } = B, r = P.rnd;
   const rr = Math.min(17, D * 0.28, L * 0.18);
-  P.bldg(B, 'reactor', L * 0.36, D / 2, rr, rr, rr * 1.3, { use: 'plant' });
+  if (B.variant % 3 === 0) P.bldg(B, 'coiltower', L * 0.36, D / 2, rr * 1.1, rr * 1.1, 60 + r() * 50, { use: 'none' });
+  else P.bldg(B, 'reactor', L * 0.36, D / 2, rr, rr, rr * 1.3, { use: 'plant' });
   const cr = Math.min(11, D * 0.17);
   P.bldg(B, 'cooler', L * 0.68, D * 0.28, cr, cr, 30 + r() * 14, { use: 'none' });
   P.bldg(B, 'cooler', L * 0.68, D * 0.72, cr, cr, 30 + r() * 14, { use: 'none' });
@@ -326,7 +343,8 @@ T[U.TRN] = (B, P) => {
   const { L, D } = B, r = P.rnd;
   const hw = Math.min(L * 0.3, 34), hd = Math.min(D * 0.22, 16);
   P.bldg(B, 'hangar', L * 0.42, hd + 5, hw, hd, 16 + r() * 8, { door: 1, use: 'terminal' });
-  P.bldg(B, 'padtower', L * 0.88, D * 0.3, 8, 8, 40 + r() * 30, { use: 'none' });
+  if (B.variant % 2) P.bldg(B, 'branchport', L * 0.86, D * 0.36, Math.min(16, D * 0.24), Math.min(16, D * 0.24), 60 + r() * 50, { use: 'none' });
+  else P.bldg(B, 'padtower', L * 0.88, D * 0.3, 8, 8, 40 + r() * 30, { use: 'none' });
   for (let u = 10; u < L * 0.75; u += 16) P.prop(B, 'platform', u, D - 7, 'out', { col: { r: 0.4, h: 3.2 } });
   for (let u = 8; u < L * 0.75; u += 6) P.prop(B, 'pod', u, D * 0.66, 'in');
   for (let u = 12; u < L * 0.75; u += 16) P.spot(B, 'wait', u, D - 9, 'out');
@@ -446,6 +464,75 @@ T[U.VILLA] = (B, P) => {
 
 /** 블록 하나 배치 */
 export function layoutBlock(B, P) {
+  if (B.landmark) return T.landmark(B, P);
   const f = T[B.type];
   if (f) f(B, P);
 }
+
+/**
+ * 중심 광장의 한 칸 (34 m 고리 띠 × 대로 사이 부채꼴). city-ground.js 의 중심 광장과 같은 칸 나눔:
+ *  칸마다 고리 가운데 줄(rc)에 nS 개 자리 — 자리 종류 ty = (kr·7 + slot·3 + 부채꼴) % 4
+ *  0·3 나무 화단(둘레 의자) · 1 물의 정원(분수 + 둘레 앉는 자리) · 2 작은 시설(정자 / 기념탑·악사 / 노점 둘)
+ *  가장 바깥 띠: 부채꼴마다 대로 쪽 끝에 정류장(승강장·꼬투리 차·기다리는 이), 가운데에 작은 건물(카페 또는 회관)
+ */
+export function layoutCore(B, P, NK) {
+  const G = B.G, kr = B.kr, r = P.rnd;
+  const rc = (kr + 0.5) * 34 + 1.8, v = rc - B.R0;
+  const nC = Math.max(6, Math.floor((Math.PI * 2 * rc) / 30));
+  const nS = Math.max(2, Math.floor(nC / Math.max(G.avenues, 4)));
+  const SA = (Math.PI * 2) / G.avenues;
+  const outer = kr === NK - 1;
+  for (let slot = 0; slot < nS; slot++) {
+    const u = ((slot + 0.5) / nS) * SA * rc - B.t0;
+    if (u < 6 || u > B.L - 6) continue;
+    const ty = (kr * 7 + slot * 3 + B.s) % 4;
+    if (outer && slot === Math.floor(nS / 2)) {
+      const cafe = (B.s + kr) % 2 === 0;
+      P.bldg(B, cafe ? 'dome' : 'hall', u, v, cafe ? 9 : 11, cafe ? 9 : 9, cafe ? 9 : 12, { door: -1, use: cafe ? 'market' : 'hall' });
+      continue;
+    }
+    if (ty === 0 || ty === 3) {
+      P.prop(B, 'tree', u, v, 0, { s: 1.15 + r() * 0.3 });
+      for (const [du, dv, f] of [[0, -7, 'in'], [0, 7, 'out']]) { P.prop(B, 'bench', u + du, v + dv, f); if (r() < 0.6) P.spot(B, 'sit', u + du, v + dv, f); }
+    } else if (ty === 1) {
+      P.prop(B, 'fountain', u, v, 0, { s: 0.8, col: { r: 4.4, h: 0.8 } });
+      P.spot(B, 'chat', u, v + 9.5, 'out', { r: 2.4 });
+      for (const su of [-1, 1]) { P.prop(B, 'bench', u + su * 9.5, v, su < 0 ? 'u+' : 'u-'); P.spot(B, 'sit', u + su * 9.5, v, su < 0 ? 'u+' : 'u-'); }
+    } else {
+      const f = (slot + kr + B.s) % 3;
+      if (f === 0) { P.prop(B, 'pavilion', u, v, 0, { col: { r: 5, h: 0.3 } }); P.spot(B, 'meditate', u, v, 0, { r: 3.5 }); }
+      else if (f === 1) { P.prop(B, 'monument', u, v, 'in', { col: { r: 2.6, h: 9 } }); P.spot(B, 'music', u + 6, v, 'u-', { r: 5 }); }
+      else { P.prop(B, 'stall', u - 4, v, 'u+', { col: { r: 1.8, h: 2.6 } }); P.spot(B, 'sell', u - 4, v - 2.4, 'in'); P.prop(B, 'stall', u + 4, v, 'u-', { col: { r: 1.8, h: 2.6 } }); P.spot(B, 'sell', u + 4, v + 2.4, 'out'); P.prop(B, 'planter', u, v + 6, 0, { col: { r: 0.9, h: 0.75 } }); }
+    }
+  }
+  // 바깥 띠의 정류장: 대로 산책길 옆 (호버 차·꼬투리 차를 기다린다)
+  if (outer && B.s % 2 === 0) {
+    for (let i = 0; i < 3; i++) P.prop(B, 'pod', 5 + i * 5, B.D - 6, 'in');
+    P.prop(B, 'shelter', 9, 6, 'out', { col: { r: 1.8, h: 3 } });
+    P.spot(B, 'wait', 9, 8.5, 'out');
+    P.prop(B, 'platform', 18, B.D - 3, 'out', { col: { r: 0.4, h: 3.2 } });
+  }
+  // 산책하는 이 (칸 가운데)
+  if (r() < 0.5) P.spot(B, 'stroll', B.L / 2, v + 12, 'u+');
+}
+
+/** 보조 랜드마크 블록: 가운데 랜드마크 + 둘레 광장(의자·나무·노점·악사·관광객) */
+const FOOT = { lm_coil: [36, 36], lm_ear: [31, 31], lm_port: [30, 30], lm_garden: [40, 13], lm_tree: [33, 33] };
+T.landmark = (B, P) => {
+  const { L, D } = B, r = P.rnd;
+  const [hw, hd] = FOOT[B.landmark] || [30, 30];
+  P.bldg(B, B.landmark, L / 2, D / 2, hw, hd, 0, { use: 'none' });
+  const ring = Math.max(hw, hd) + 6;
+  for (const su of [-1, 1]) {
+    const u = L / 2 + su * (ring + 6);
+    if (u < 6 || u > L - 6) continue;
+    P.prop(B, 'stall', u, D * 0.3, su < 0 ? 'u+' : 'u-', { col: { r: 1.8, h: 2.6 } }); P.spot(B, 'sell', u, D * 0.3 - 2.4, 'in');
+    P.prop(B, 'kiosk', u, D * 0.72, su < 0 ? 'u+' : 'u-', { col: { r: 2.4, h: 3.2 } });
+    for (let v = 8; v < D - 6; v += 10) P.prop(B, 'tree', u + su * 7, v, 0, { s: 0.9 + r() * 0.3 });
+    P.prop(B, 'bench', u, D / 2, su < 0 ? 'u+' : 'u-'); P.spot(B, 'sit', u, D / 2, su < 0 ? 'u+' : 'u-');
+  }
+  P.spot(B, 'music', L / 2 - ring, D / 2 + 4, 'u+', { r: 5 });
+  P.spot(B, 'stroll', L / 2 + ring, D / 2 - 6, 'u-');
+  P.spot(B, 'chat', L / 2, Math.min(D - 5, D / 2 + ring), 'out', { r: 2.6 });
+  P.spot(B, 'observe', L / 2, Math.max(5, D / 2 - ring), 'in');
+};

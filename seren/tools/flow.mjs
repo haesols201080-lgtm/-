@@ -48,7 +48,7 @@ await step('온과 대화', async () => { await ev(() => { const g = SEREN.game;
 await step('부품 줍기', () => ev(() => { const g = SEREN.game; for (const p of g.discovery.pickups) g.discovery.take(p); }));
 await run(0.3);
 await step('온에게 부품', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('on'); g.player.teleport(n.pos.x + 3, undefined, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
-await step('썰매 타기', () => run(8, "g.player.teleport(300, undefined, 8000); g.input.down.add('skimmer'); g.input.held.add('up')"));
+await step('썰매 타기', () => run(8, "g.player.teleport(500, undefined, 8000); g.input.down.add('skimmer'); g.input.held.add('up')"));
 await ev(() => SEREN.game.input.held.clear());
 await step('이엘(척추로)', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('iel'); g.player.state = 'ground'; g.player.teleport(n.pos.x + 3, undefined, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
 await step('척추 도착', () => run(1, "g.player.teleport(0, undefined, 150)"));

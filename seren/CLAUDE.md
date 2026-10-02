@@ -62,7 +62,7 @@ src/
            citizens(주민 이름·역할 ROLES·실내 역할 INDOOR·대사·장터 물건)
 ```
 - 좌표: 1 = 1 m, Y 위, **−Z 가 북쪽**(우르 방향), +X 동쪽. 플레이어 yaw 는 `atan2(dx, dz)`, 카메라 yaw 0 은 북쪽을 봄.
-- 모든 지형 높이는 `heightAt(x, z)` 하나에서 나옵니다(렌더·충돌·배치·지도 공통). 지형을 바꾸면 `node tools/heightmap.mjs` 로 확인하세요. 장소 주변은 `places.js` 의 `flat` 으로 평탄화됩니다.
+- 모든 지형 높이는 `heightAt(x, z)` 하나에서 나옵니다(렌더·충돌·배치·지도 공통). 지형을 바꾸면 `node tools/heightmap.mjs` 로 확인하세요. 장소 주변은 `places.js` 의 `flat` 으로 평탄화됩니다. 도시 구역은 `LEVEL`(구역별 땅 맞추기)로 높이를 맞춥니다 — 평평한 단(수도·구역·지방 도시: 중앙값 한 높이 + 바깥 둑), 계단 단(교외: 블록마다 평평, 길은 경사로, 이웃 차는 길 폭 × 0.3 까지), 높이 창(`grade: false`·`water`: 바닥 ±35 m 만). 구역을 옮기거나 키우면 지형도 바뀝니다. 계획(`cityplan.buildPlan`)은 둑 범위까지를 덮인 곳으로 봅니다(heightfield 와 같은 수치).
 - 하늘은 별도 장면(카메라 원점, 하늘 단위 = 0.05 m)을 먼저 그리고 깊이를 지운 뒤 세계를 그립니다.
 - 모든 세계 셰이더는 `shaders.js` 의 `applyFog`(높이 안개 = 하늘색)와 `curveWorld`(행성 곡률)를 씁니다. 새 셰이더도 같은 걸 써야 공기 속에 섞입니다.
 - 셰이더 마지막에 `#include <tonemapping_fragment>`, `#include <colorspace_fragment>` 를 넣으세요. engine.js 가 이 조각에 NaN/무한대 방지를 끼워 넣습니다(블룸이 검게 번지는 문제 예방).
@@ -102,6 +102,7 @@ src/
 - `?debug=1` 로 calls/tris 를 보며 작업하세요. v0.2 기준 낮음 품질 약 63~83만 삼각형, 330~560 그리기 (도시·배·먼 땅이 늘어남). v0.3 시설을 더한 뒤 하모네아 지상 360~390 그리기·74~89만 삼각형, 이슬터 280 그리기.
 - 시설(`facilities.js`)은 4.5 km 밖에서 숨기고, 1.4 km 밖에서는 합친 본체만(움직이는 장치·유리·배는 가까이서만), 간판은 900 m 안에서만. 매 프레임 44곳 거리만 계산합니다.
 - v0.4 도시를 더한 뒤 보통 품질 하모네아 거리 높이에서 그리기 290~420회·삼각형 200~230만. 도시 생성 약 3초, 충돌체 약 4만. 품질은 `cityfabric` 의 `nearR`·`farR`·`propR`·`density`, `streams` 의 `cap`·`wcap` 으로 조절.
+- v0.6(보통 품질): 하모네아 거리·중간 높이에서 그리기 300~460회, 삼각형 200~270만. 도시 생성 약 2.7초(계획 0.6 · 배치 1.7), 건물 약 2만 9천, 충돌체 약 7만 5천(소품 충돌체는 둘레 블록만 따로). 흐름은 무리마다 그리기 1회(차·전차·드론·사람 = 4회).
 - 배·돌보미·다리는 모두 인스턴스(그리기 1회). 하모네아 구역은 THREE.LOD(4.2 km 밖은 단순 모델), 큰 탑·안쪽 탑만 움직이는 관/홀로그램을 따로 그리고 나머지는 합친 모델에 굳혀 둡니다.
 
 ## 도시 (v0.4)에서 알아 둘 것
@@ -117,6 +118,14 @@ src/
 - 소품·주민 자리는 블록마다 목록(`B.raw`)만 들고 있다가, 플레이어 둘레 블록에 들어설 때 `_activate` 가 인스턴스·충돌체를 채운다(프레임 예산). 소품 충돌체는 `stream: true`(전역 목록 `all` 에 넣지 않음).
 - `city.noFlora(x, z)` 가 참인 곳(자연 블록이 아닌 계획 블록·도로)에는 식생을 흩뿌리지 않는다.
 - 주민은 자리 id + 순번에서 결정되고(이름·얼굴·일과), 저장은 `state.cit`(친한 정도·이야기 횟수)뿐. `citizens.pushPlayer` 가 플레이어를 밀어낸다. 테스트: `SEREN.game.citizens.vis`(보이는 사람), `startTag/startGarden/...`.
+
+## 스카이라인 (v0.6)에서 알아 둘 것
+- 높이: `ZONES.peaks`(높은 군집) + `cityfabric._height`(묶음별 기본 높이 HB, 군집 영향, 군집 한가운데 블록 `B.peak` 의 초고층 하나). 템플릿은 `P.towerH(B, 배율)` 만 부른다.
+- 보조 랜드마크: `ZONES.marks` → `buildPlan` 이 블록을 골라 `B.landmark`, `T.landmark` 가 가운데에 `lm_*`. 모델은 `city-arch.js` 의 `landmarkArchetypes()`(실제 미터), `SPEC.lm_*.fixed` = 높이(배율 1, 충돌체도 미터). 목록은 `city.marks`(지도).
+- 중심 광장: `ZONES.core: 'plaza'` → `cityfabric._core` 가 가짜 블록(`B.core`, idx 50000+)을 만들고 `cityplan.layoutCore` 로 채운다. 셰이더(`city-ground.js` 의 중심 광장)와 칸 나눔·자리 종류 식이 같아야 한다.
+- 골목 모양: `city-ground.js` 의 `laneStyle(tA, tB, mid)` / `laneSurface` — 양쪽 블록 쓰임에서 정해지므로 JS 쪽 데이터는 없다.
+- 흐름: `streams.js` 의 `fleets`(차·하늘배 / 전차 / 드론, 각각 그리기 1회) — 차선 kind 'ground' 'sky' 'tram' 'drone' 'walk'. 새 생활 차선은 `_lifeLanes`.
+- 모델의 색·외벽 종류는 삼각형마다 한 값(가운데 점으로 판정)이다(`paint`). 꼭짓점마다 다르게 하고 싶으면 단면을 더 나눌 것.
 - 점유 지도를 보고 싶으면 페이지 안에서 `SEREN.game.city.list`(모양 → [x, y, z, sx, sy, sz, rot, r, g, b]…)·`plist`(활성 블록의 소품 → [x, y, z, 배율, 방향, x배율]…)를 읽으면 된다.
 
 ## 지켜야 할 것

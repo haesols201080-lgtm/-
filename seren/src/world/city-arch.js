@@ -9,6 +9,8 @@ const GOLD = 0xc9a86c, PEARL = 0xd4cfd8, PEARL2 = 0xbfbac8, STEEL = 0xa9b4c2, GA
 const ACC = 0x7ff3e6;
 const TAU = Math.PI * 2;
 const _c = new THREE.Color();
+/** 보조 랜드마크의 자리 정보(착륙판·데크·꼬투리) — cityArchetypes() 가 채운다 */
+export let LANDMARKS = {};
 
 // ── 모양 만들기 도구 ─────────────────────────────
 /** 둥근 사각형(초타원) 둘레 n 점: k=2 원, 4 둥근 네모, 8 거의 네모 */
@@ -793,6 +795,239 @@ export function cityArchetypes() {
     A.greenhouse = { hi: make(true), lo: make(false) };
   }
 
+  // ══ v0.6 실루엣 ══════════════════════════════════════════
+  // 주거·상업은 익숙한 고층 문법(후퇴·왕관·테라스·돌출·하늘정원·세 쌍둥이)을 유지하되 머리·옆선·연결이 저마다 다르고,
+  // 연구·에너지·교통·생체 산업·공공은 쓰임에서 나온 외계의 형태(관측 고리·코일 고리·가지 친 부두·나무 반응로·울림 문)를 쓴다.
+  /** 미터 두께의 수평 고리(상자 단면): 단위 반지름 base.s, 높이 h m, 두께 t m (안쪽으로) */
+  const aRing = (pts, base, anchorY, h, t, color, emit = 0, glow = ACC) => [
+    aStrip(pts, base, anchorY, 0, h, 0, 0, color, emit),
+    aStrip(pts, base, anchorY, 0, h, -t, -t, color, emit),
+    aStrip(pts, base, anchorY, h, h, -t, 0, color),
+    aStrip(pts, base, anchorY, 0, 0, -t, 0, color, 0, true),
+    aStrip(pts, base, anchorY, h * 0.42, h * 0.58, 0.05, 0.05, glow, 1.6),
+  ];
+  /** 미터 굵기의 들보: 단위 (x0,z0)→(x1,z1), 폭 w(단위), 높이 y0m~y1m (anchorY 기준) */
+  const aBeam = (x0, z0, x1, z1, w, anchorY, y0m, y1m, color, emit = 0) => {
+    const len = Math.hypot(x1 - x0, z1 - z0), ang = Math.atan2(z1 - z0, x1 - x0);
+    const g = new THREE.BoxGeometry(len, y1m - y0m, w).translate(0, (y0m + y1m) / 2, 0).rotateY(-ang).translate((x0 + x1) / 2, 0, (z0 + z1) / 2).toNonIndexed();
+    pin(g, anchorY);
+    return solid(g, color, emit);
+  };
+  /** 단(段) 하나: 둥근 네모 벽 + 지붕 + 처마 띠 */
+  const tier = (P, n, w, d, y0, y1, type, o = {}, roof = PEARL2) => {
+    const pts = squircle(n, w, d, o.k || 10);
+    const b = { rot: o.rot || 0, dx: o.dx || 0, dz: o.dz || 0 };
+    P.push(loft([ring(y0, pts, b), ring(y1, pts, b)], { color: PEARL, type, smooth: n > 8 && (o.k || 10) < 8 }));
+    P.push(cap(ring(y1, pts, b), { color: roof }));
+    if (y0 > 0) P.push(cap(ring(y0, pts, b), { color: PEARL2, down: true }));
+    return pts;
+  };
+
+  // [상업·사무] 후퇴 탑: 네 단으로 물러나는 고전적 마천루 + 모서리 기둥 + 첨침
+  {
+    const T4 = [[0, 0.42, 1, 0.8, 1], [0.42, 0.68, 0.82, 0.66, 2], [0.68, 0.86, 0.62, 0.5, 1], [0.86, 0.95, 0.4, 0.34, 3]];
+    const make = (hi) => {
+      const P = [];
+      for (const [y0, y1, w, d, t] of hi ? T4 : [T4[0], [0.42, 0.86, 0.72, 0.58, 2], T4[3]]) {
+        tier(P, hi ? 16 : 4, w, d, y0, y1, t, {}, hi && y1 < 0.9 ? GARDEN : PEARL2);
+        if (hi) {
+          P.push(band(squircle(16, w, d, 10), y1 - 0.006, 0.008, 1.02, y1 > 0.9 ? ACC : GOLD, y1 > 0.9 ? 1.6 : 0.2));
+          for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) P.push(solid(new THREE.BoxGeometry(0.05, y1 - y0, 0.05).translate(sx * w * 0.93, (y0 + y1) / 2, sz * d * 0.93), PEARL2));
+        }
+      }
+      P.push(solid(new THREE.CylinderGeometry(0.004, 0.03, 0.06, 4).translate(0, 0.98, 0), STEEL, 0));
+      if (hi) P.push(solid(new THREE.OctahedronGeometry(0.012, 0).translate(0, 1.01, 0), 0xff6a5a, 3));
+      return mergeF(P);
+    };
+    A.setback = { hi: make(true), lo: make(false) };
+  }
+
+  // [상업·사무] 왕관 탑: 곧은 몸통 + 하늘 로비 띠 + 위가 열린 지느러미 왕관과 빛 고리
+  {
+    const make = (hi) => {
+      const n = hi ? 16 : 4, pts = squircle(n, 1, 0.85, 6);
+      const P = [loft([ring(0, pts), ring(0.48, pts)], { color: PEARL, type: 1, smooth: hi })];
+      P.push(loft([ring(0.48, pts, { s: 0.9 }), ring(0.52, pts, { s: 0.9 })], { color: PEARL2, type: 2, smooth: hi }));
+      P.push(loft([ring(0.52, pts), ring(0.86, pts)], { color: PEARL, type: 1, smooth: hi }));
+      P.push(cap(ring(0.48, pts), { color: GARDEN }), cap(ring(0.86, pts), { color: PEARL2 }));
+      const core = squircle(hi ? 12 : 4, 0.5, 0.42, 6);
+      P.push(loft([ring(0.86, core), ring(0.93, core)], { color: STEEL, type: 0, smooth: false }), cap(ring(0.93, core)));
+      if (hi) {
+        const nf = 14;
+        for (let i = 0; i < nf; i++) {
+          const [x, z] = squircle(nf, 0.98, 0.83, 6)[i];
+          P.push(solid(new THREE.BoxGeometry(0.035, 0.14, 0.035).translate(x, 0.93, z), i % 2 ? PEARL : GOLD, 0));
+        }
+      }
+      return mergeF(P);
+    };
+    A.crown = { hi: make(true), lo: make(false) };
+  }
+
+  // [주거] 테라스 탑: 한쪽(+z)이 층층이 물러나며 단마다 정원이 놓인다
+  {
+    const make = (hi) => {
+      const P = [], N = hi ? 6 : 3;
+      for (let i = 0; i < N; i++) {
+        const y0 = i / N, y1 = (i + 1) / N, d = 1 - (i / N) * 0.62;
+        tier(P, hi ? 14 : 4, 1, d, y0, y1, 5, { dz: -(1 - d), k: 8 }, GARDEN);
+      }
+      return mergeF(P);
+    };
+    A.terrace = { hi: make(true), lo: make(false) };
+  }
+
+  // [사무] 돌출 탑: 곧은 몸통 허리에서 한쪽으로 튀어나온 하늘 로비 덩어리, 비껴 돌린 머리
+  {
+    const make = (hi) => {
+      const P = [], n = hi ? 14 : 4;
+      tier(P, n, 0.72, 0.72, 0, 0.92, 1, { k: 8 });
+      tier(P, n, 0.6, 0.66, 0.52, 0.68, 2, { k: 8, dx: 0.4 }, GARDEN);
+      tier(P, n, 0.5, 0.46, 0.92, 1.0, 3, { k: 8, rot: 0.35, dx: -0.1 });
+      if (hi) P.push(band(squircle(16, 0.6, 0.66, 8), 0.515, 0.006, 1.02, ACC, 1.6, { dx: 0.4 }));
+      return mergeF(P);
+    };
+    A.cantilever = { hi: make(true), lo: make(false) };
+  }
+
+  // [주거·사무] 하늘정원 탑: 몸통을 두 번 끊어 기둥만 남긴 정원 층 (속이 트인 층)
+  {
+    const SEG = [[0, 0.36, 5], [0.41, 0.7, 1], [0.75, 0.96, 5]];
+    const make = (hi) => {
+      const P = [], n = hi ? 14 : 4;
+      for (const [y0, y1, t] of SEG) tier(P, n, 0.9, 0.9, y0, y1, t, { k: 6 }, y1 < 0.9 ? GARDEN : PEARL2);
+      for (const [g0, g1] of [[0.36, 0.41], [0.7, 0.75]]) {
+        P.push(solid(new THREE.CylinderGeometry(0.3, 0.3, g1 - g0, hi ? 12 : 5).translate(0, (g0 + g1) / 2, 0), 0x9fd8e8, 0.15));
+        if (hi) for (const [x, z] of squircle(8, 0.8, 0.8, 6)) P.push(solid(new THREE.CylinderGeometry(0.025, 0.025, g1 - g0, 5).translate(x, (g0 + g1) / 2, z), PEARL2));
+        if (hi) for (const [x, z] of squircle(6, 0.6, 0.6, 2)) P.push(solid(new THREE.IcosahedronGeometry(0.09, 0).scale(1, 0.25, 1).translate(x, g0 + 0.015, z), 0x3f8f5a, 0.15));
+      }
+      return mergeF(P);
+    };
+    A.skygarden = { hi: make(true), lo: make(false) };
+  }
+
+  // [주거] 세 쌍둥이: 높이가 다른 가는 탑 셋이 두 층의 고리 다리로 이어진다
+  {
+    const TW = [[0, 1.0], [2.094, 0.84], [4.189, 0.7]];
+    const make = (hi) => {
+      const P = [], n = hi ? 12 : 4;
+      const pos = TW.map(([a, h]) => [Math.cos(a) * 0.56, Math.sin(a) * 0.56, h]);
+      for (const [x, z, h] of pos) {
+        const pts = squircle(n, 0.38, 0.38, 2.6);
+        P.push(loft([ring(0, pts, { dx: x, dz: z }), ring(h * 0.96, pts, { dx: x, dz: z, s: 0.9 })], { color: PEARL, type: 2, smooth: hi }));
+        P.push(loft([ring(h * 0.96, pts, { dx: x, dz: z, s: 0.9 }), ring(h, pts, { dx: x, dz: z, s: 0.5 })], { color: PEARL2, type: 0 }), cap(ring(h, pts, { dx: x, dz: z, s: 0.5 })));
+      }
+      if (hi) for (const y of [0.34, 0.62]) for (let i = 0; i < 3; i++) {
+        const [x0, z0] = pos[i], [x1, z1] = pos[(i + 1) % 3];
+        P.push(aBeam(x0 * 0.8, z0 * 0.8, x1 * 0.8, z1 * 0.8, 0.12, y, 0, 4.2, 0x9fd8e8, 0.2));
+        P.push(aBeam(x0 * 0.8, z0 * 0.8, x1 * 0.8, z1 * 0.8, 0.13, y, -0.5, 0, PEARL2));
+        P.push(aBeam(x0 * 0.8, z0 * 0.8, x1 * 0.8, z1 * 0.8, 0.135, y, 4.2, 4.6, ACC, 1.4));
+      }
+      return mergeF(P);
+    };
+    A.triad = { hi: make(true), lo: make(false) };
+  }
+
+  // [연구] 관측 고리 탑: 가는 몸통을 높이마다 어긋난 관측 고리가 감싸고, 꼭대기에 유리 관측실
+  {
+    const RINGS = [[0.34, 1.0, 0.08], [0.55, 0.82, -0.1], [0.74, 1.08, 0.05]];
+    const make = (hi) => {
+      const P = [], n = hi ? 16 : 5;
+      const sh = squircle(n, 1, 1, 2);
+      P.push(loft([ring(0, sh, { s: 0.5 }), ring(0.2, sh, { s: 0.42 }), ring(0.86, sh, { s: 0.36 })], { color: PEARL, type: 2, smooth: true }));
+      P.push(loft([ring(0.86, sh, { s: 0.36 }), ring(0.9, sh, { s: 0.6 }), ring(0.96, sh, { s: 0.55 }), ring(0.99, sh, { s: 0.2 })], { color: 0xcfeef4, type: 6, smooth: true }));
+      for (const [y, s, dx] of RINGS) {
+        if (hi) {
+          P.push(...aRing(squircle(32, 1, 1, 2), { s, dx }, y, 2.6, 2.2, PEARL2, 0));
+          for (let i = 0; i < 3; i++) { const a = (i / 3) * TAU + y * 5; P.push(aBeam(Math.cos(a) * 0.3, Math.sin(a) * 0.3, Math.cos(a) * s + dx, Math.sin(a) * s, 0.04, y, 0.8, 1.8, STEEL)); }
+        } else P.push(band(squircle(8, 1, 1, 2), y, 0.01, 1, PEARL2, 0.3, { s, dx }));
+      }
+      return mergeF(P);
+    };
+    A.halolab = { hi: make(true), lo: make(false) };
+  }
+
+  // [에너지] 코일 탑: 빛나는 심(心) 기둥을 층층의 공명 코일 고리가 감싼다 (고리 = 에너지를 모으는 구조)
+  {
+    const make = (hi) => {
+      const P = [], n = hi ? 16 : 6;
+      const c = squircle(n, 1, 1, 2);
+      P.push(loft([ring(0, c), ring(0.08, c), ring(0.1, c, { s: 0.7 })], { color: PEARL2, type: 0, smooth: true }));
+      P.push(loft([ring(0.1, c, { s: 0.2 }), ring(0.94, c, { s: 0.16 })], { color: 0xbff8ff, emit: 1.4, type: 0, smooth: true }));
+      P.push(loft([ring(0.94, c, { s: 0.16 }), ring(1.0, c, { s: 0.02 })], { color: GOLD, type: 0 }));
+      const NC = hi ? 6 : 3;
+      for (let i = 0; i < NC; i++) {
+        const y = 0.16 + (i / (NC - 1)) * 0.7, s = 0.82 - i * (0.3 / (NC - 1));
+        if (hi) P.push(...aRing(squircle(28, 1, 1, 2), { s }, y, 5, 3.4, i % 2 ? PEARL : STEEL, 0, i % 2 ? ACC : 0xffc46a));
+        else P.push(band(squircle(8, 1, 1, 2), y, 0.02, 1, PEARL, 0.4, { s }));
+        if (hi) for (let k = 0; k < 4; k++) { const a = (k / 4) * TAU + i; P.push(aBeam(Math.cos(a) * 0.16, Math.sin(a) * 0.16, Math.cos(a) * (s - 0.03), Math.sin(a) * (s - 0.03), 0.03, y, 2, 3, STEEL)); }
+      }
+      return mergeF(P);
+    };
+    A.coiltower = { hi: make(true), lo: make(false) };
+  }
+
+  // [교통] 가지 부두: 가운데 돛대에서 가지가 뻗어 높이가 다른 착륙판을 받친다 (하늘배가 내려앉는 공중 연결망)
+  {
+    const PADS = [[0.4, 0.0, 0.85], [0.58, 2.1, 0.8], [0.76, 4.2, 0.75], [0.5, 3.15, 0.55]];
+    const make = (hi) => {
+      const P = [], n = hi ? 10 : 4;
+      const m = squircle(n, 1, 1, 2);
+      P.push(loft([ring(0, m, { s: 0.34 }), ring(0.12, m, { s: 0.24 }), ring(1.0, m, { s: 0.14 })], { color: PEARL, type: 3, smooth: true }));
+      P.push(solid(new THREE.ConeGeometry(0.06, 0.06, 6).translate(0, 1.03, 0), GOLD, 0.4));
+      for (const [y, a, d] of hi ? PADS : PADS.slice(0, 3)) {
+        const x = Math.cos(a) * d, z = Math.sin(a) * d;
+        const arm = squircle(hi ? 6 : 4, 0.07, 0.07, 2);
+        P.push(loft([ring(y - 0.16, arm, { dx: x * 0.15, dz: z * 0.15 }), ring(y - 0.05, arm, { dx: x * 0.6, dz: z * 0.6 }), ring(y - 0.012, arm, { dx: x, dz: z })], { color: PEARL2, type: 0, smooth: true }));
+        if (hi) {
+          const pad = squircle(20, 0.32, 0.32, 2);
+          P.push(aStrip(pad, { dx: x, dz: z }, y, 0, 0, 0, 0, PEARL2), aStrip(pad, { dx: x, dz: z }, y, -0.8, 0, 0, 0, PEARL2), aStrip(pad, { dx: x, dz: z }, y, -0.8, -0.8, 0, 0, PEARL2, 0, true));
+          P.push(aStrip(squircle(20, 0.24, 0.24, 2), { dx: x, dz: z }, y, 0.02, 0.02, 0, 0.35, ACC, 1.8));
+        } else P.push(solid(new THREE.CylinderGeometry(0.32, 0.3, 0.012, 8).translate(x, y - 0.006, z), PEARL2));
+      }
+      return mergeF(P);
+    };
+    A.branchport = { hi: make(true), lo: make(false) };
+  }
+
+  // [생체 산업] 나무 반응로: 굵은 줄기가 셋으로 갈라져 생장 꼬투리(유리 격자)를 받친다
+  {
+    const BR = [[0.0, 0.92, 0.95], [2.1, 0.8, 0.88], [4.2, 0.86, 0.72]];
+    const make = (hi) => {
+      const P = [], n = hi ? 12 : 5;
+      const c = squircle(n, 1, 1, 2);
+      P.push(loft([ring(0, c, { s: 0.5 }), ring(0.08, c, { s: 0.36 }), ring(0.4, c, { s: 0.3 }), ring(0.5, c, { s: 0.36 })], { color: 0xd8d0c4, type: 0, smooth: true }));
+      for (const [a, d, h] of BR) {
+        const x = Math.cos(a) * d * 0.7, z = Math.sin(a) * d * 0.7;
+        const b = squircle(n, 0.16, 0.16, 2);
+        P.push(loft([ring(0.46, b, { dx: x * 0.15, dz: z * 0.15 }), ring(0.6, b, { dx: x * 0.55, dz: z * 0.55, s: 0.9 }), ring(h * 0.72, b, { dx: x, dz: z, s: 0.8 })], { color: 0xd8d0c4, type: 0, smooth: true }));
+        const pod = new THREE.SphereGeometry(0.34, hi ? 14 : 6, hi ? 10 : 4).scale(1, 0.32 / 0.34 * 0.6, 1).translate(x, h * 0.72 + 0.12, z);
+        P.push(solidT(pod, 0xcff2dc, 0.05, 6));
+        P.push(band(squircle(n, 0.33, 0.33, 2), h * 0.72 + 0.005, 0.01, 1.0, ACC, 1.4, { dx: x, dz: z }));
+      }
+      if (hi) for (let i = 0; i < 5; i++) { const a = i * 1.3; P.push(solid(new THREE.CylinderGeometry(0.02, 0.04, 0.1, 4).translate(Math.cos(a) * 0.45, 0.05, Math.sin(a) * 0.45), 0xd8d0c4)); }
+      return mergeF(P);
+    };
+    A.treeform = { hi: make(true), lo: make(false) };
+  }
+
+  // [공공] 울림 문: 두 다리와 위 들보로 된 속 빈 문 건물, 그 빈 곳에 떠 있는 울림 구
+  {
+    const make = (hi) => {
+      const P = [], n = hi ? 10 : 4;
+      for (const x of [-0.72, 0.72]) {
+        const leg = squircle(n, 0.28, 0.8, 8);
+        P.push(loft([ring(0, leg, { dx: x }), ring(0.78, leg, { dx: x, s: 0.92 })], { color: PEARL, type: 2, smooth: false }));
+      }
+      const top = squircle(n, 1, 0.82, 8);
+      P.push(loft([ring(0.78, top), ring(1, top, { s: 0.94 })], { color: PEARL, type: 1, smooth: false }), cap(ring(1, top, { s: 0.94 }), { color: GARDEN }), cap(ring(0.78, top), { color: PEARL2, down: true }));
+      P.push(solid(new THREE.IcosahedronGeometry(0.2, hi ? 2 : 0).scale(1, 0.24, 1).translate(0, 0.46, 0), 0xf6eeff, 0.9));
+      if (hi) P.push(band(squircle(16, 0.3, 0.3, 2), 0.455, 0.006, 1.6, ACC, 1.8));
+      return mergeF(P);
+    };
+    A.gate = { hi: make(true), lo: make(false) };
+  }
+
   // ══ 기존 모양에 실제 크기 장식 (가까이서만) ══════════
   const kit = (k, parts) => { if (A[k]) A[k].hi = mergeF([A[k].hi, ...parts]); };
   kit('twist', [...baseKit(squircle(16, 1, 1, 4), { h: 5.8, d: 3, cols: 8 }), ...parapet(squircle(16, 1, 1, 4), 0.92, { base: { s: 1 - 0.24 * 0.92, rot: 0.92 * 1.25 }, glass: true }), ...roofGear(0.97, 0.3, null, { pv: false })]);
@@ -811,7 +1046,16 @@ export function cityArchetypes() {
   kit('podlab', baseKit(squircle(14, 0.4, 0.4, 2), { h: 4.6, d: 2.6, cols: 6 }));
   kit('fabricator', [...[-0.6, -0.2, 0.2, 0.6].flatMap((x) => [aBox(x, 0.62, 0.12, 0.005, 0, 0.4, 6, 0x3a4458, 0.05, 0.02), aBox(x, 0.62, 0.125, 0.005, 0, 6.05, 6.2, 0xffc46a, 1.6, 0.04)]), aBox(0, 0.62, 0.96, 0.001, 0, 0, 1.2, PEARL2, 0, 1.3)]);
   kit('hangar', baseKit(squircle(14, 1, 1, 12), { h: 5, d: 2.6 }));
+  kit('setback', [...baseKit(squircle(16, 1, 0.8, 10), { h: 6, d: 3.2, cols: 12 }), ...parapet(squircle(16, 0.82, 0.66, 10), 0.68, { glass: true }), ...parapet(squircle(16, 0.62, 0.5, 10), 0.86, { glass: true })]);
+  kit('crown', [...baseKit(squircle(16, 1, 0.85, 6), { h: 6.4, d: 3.4, cols: 12 }), ...parapet(squircle(16, 1, 0.85, 6), 0.48, { glass: true }), aStrip(squircle(16, 1, 0.85, 6), { s: 1.0 }, 1.0, -2.2, 0, 0, 0, ACC, 1.6)]);
+  kit('terrace', [...baseKit(squircle(14, 1, 1, 8), { h: 5, d: 2.8, cols: 10 }), ...[1, 2, 3, 4, 5].flatMap((i) => parapet(squircle(14, 1, 1 - (i / 6) * 0.62, 8), i / 6, { base: { dz: -(i / 6) * 0.62 }, glass: true }))]);
+  kit('cantilever', [...baseKit(squircle(14, 0.72, 0.72, 8), { h: 6, d: 3, cols: 8 }), ...parapet(squircle(14, 0.6, 0.66, 8), 0.68, { base: { dx: 0.4 }, glass: true }), ...roofGear(1.0, 0.4, null, { pv: false })]);
+  kit('skygarden', [...baseKit(squircle(14, 0.9, 0.9, 6), { h: 5.6, d: 3, cols: 10 }), ...parapet(squircle(14, 0.9, 0.9, 6), 0.36, { glass: true }), ...parapet(squircle(14, 0.9, 0.9, 6), 0.7, { glass: true }), ...roofGear(0.96, 0.7, null, { pv: true })]);
+  kit('triad', [0, 2.094, 4.189].flatMap((a) => baseKit(squircle(12, 0.38, 0.38, 2.6), { base: { dx: Math.cos(a) * 0.56, dz: Math.sin(a) * 0.56 }, h: 5, d: 2.4, cols: 6 })));
+  kit('halolab', baseKit(squircle(14, 0.5, 0.5, 2), { h: 4.6, d: 2.6, cols: 6 }));
+  kit('gate', [-0.72, 0.72].flatMap((x) => baseKit(squircle(10, 0.28, 0.8, 8), { base: { dx: x }, h: 5.4, d: 2.6, cols: 4 })));
   kit('dome', [aBox(0, 1.0, 0.16, 0.02, 0, 0, 3.4, 0x9fd8e8, 0.2, 0.2), aBox(0, 1.0, 0.2, 0.02, 0, 3.4, 3.6, PEARL2, 0, 0.6)]);
+  LANDMARKS = landmarkArchetypes(A);
   return A;
 }
 
@@ -843,6 +1087,139 @@ export const SIZE = {
   cap: (rr, h, r) => [rr, Math.max(10, rr * (1.0 + r() * 0.7)), 0, 0.95, 1.0],
   stilt: (rr, h, r) => [rr * 0.85, 8 + r() * 10, 0, 0.9, 0.92],
 };
+
+// ══ 구역의 보조 랜드마크 (v0.6) ══════════════════════════════
+// 실제 미터로 짓는 하나뿐인 건물(배율 1). 중앙의 척추·하모네아보다 낮게(280~420 m), 저마다 구역의 쓰임을 형태로 보인다.
+//  lm_coil   에너지 — 「울림 코일 탑」: 세 다리가 감싼 빛 심지를 층층의 코일 고리가 두른다
+//  lm_ear    연구  — 「별귀 탑」: 세 발 위 가는 몸통, 관측 고리 둘, 꼭대기의 속 빈 구 틀(하늘을 듣는 귀)
+//  lm_port   교통  — 「하늘 나루」: 돛대에서 여섯 팔이 높이마다 뻗어 하늘배 착륙판을 받치고, 위에 고리 부두
+//  lm_garden 주거  — 「매달린 정원」: 서로 기댄 두 탑 사이에 층층이 매달린 정원 데크
+//  lm_tree   생체 산업 — 「생명나무」: 뿌리·줄기·가지 끝의 생장 꼬투리
+function landmarkArchetypes(A) {
+  const solidT = (geo, color, emit, type) => { const g = geo.index ? geo.toNonIndexed() : geo; if (!g.attributes.normal) g.computeVertexNormals(); return paint(g, color, emit, type); };
+  const tubeAlong = (pts, r, color, emit = 0, segs = 40, radial = 8) => solid(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))), segs, r, radial, false), color, emit);
+  const torus = (R, r, y, color, emit = 0, rx = Math.PI / 2, ry = 0, seg = 72) => solid(new THREE.TorusGeometry(R, r, 8, seg).rotateX(rx).rotateY(ry).translate(0, y, 0), color, emit);
+  const C = (n) => squircle(n, 1, 1, 2);
+  const lathe = (prof, n, color, type = 0, emit = 0) => loft(prof.map(([r, y]) => ring(y, C(n), { s: r })), { color, type, emit, smooth: true });
+  const AMBER = 0xffc46a, PINK = 0xff9fd0, POD = 0xcff2dc;
+  const M = {};
+
+  // ── 에너지: 울림 코일 탑 (360 m) ──
+  {
+    const P = [];
+    const R = (y) => 18 + 34 * Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, y / 340))), 0.9);
+    P.push(lathe([[34, 0], [33, 6], [26, 10]], 48, PEARL2), cap(ring(10, C(48), { s: 26 }), { color: PEARL2 }));
+    P.push(lathe([[9, 10], [7.5, 330]], 24, 0xbff8ff, 0, 1.1));
+    for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU; P.push(solid(new THREE.CylinderGeometry(0.45, 0.45, 320, 5).translate(Math.cos(a) * 11, 170, Math.sin(a) * 11), STEEL)); }
+    for (let k = 0; k < 3; k++) {
+      const a = (k / 3) * TAU + 0.3, pts = [];
+      for (let y = 0; y <= 340; y += 34) { const r = Math.max(10, R(y) + 4) + (y < 30 ? 10 - y / 3 : 0); pts.push([Math.cos(a) * r, y, Math.sin(a) * r]); }
+      P.push(tubeAlong(pts, 2.6, PEARL, 0, 60, 8));
+      P.push(tubeAlong(pts.map(([x, y, z]) => [x * 1.06, y, z * 1.06]), 0.5, AMBER, 1.5, 60, 4));
+    }
+    for (let i = 0; i < 8; i++) {
+      const y = 40 + i * 37, r = R(y);
+      P.push(torus(r, 2.3, y, i % 2 ? PEARL : STEEL), torus(r - 2.6, 0.5, y, i % 2 ? ACC : AMBER, 1.6));
+      for (let k = 0; k < 4; k++) { const a = (k / 4) * TAU + i * 0.4; const g = new THREE.BoxGeometry(r - 9, 1.2, 1.2).translate((r + 9) / 2, y, 0).rotateY(-a); P.push(solid(g, STEEL)); }
+    }
+    P.push(solid(new THREE.CylinderGeometry(22, 4, 14, 32, 1, true).translate(0, 340, 0), GOLD, 0.2));
+    P.push(solid(new THREE.SphereGeometry(6, 16, 12).translate(0, 352, 0), 0xfff0d0, 2.0));
+    P.push(torus(34, 0.4, 6.3, ACC, 1.6));
+    const g = mergeF(P); M.lm_coil = { hi: g, lo: g };
+  }
+
+  // ── 연구: 별귀 탑 (420 m) ──
+  {
+    const P = [];
+    for (let k = 0; k < 3; k++) { const a = (k / 3) * TAU; P.push(tubeAlong([[Math.cos(a) * 30, 0, Math.sin(a) * 30], [Math.cos(a) * 22, 50, Math.sin(a) * 22], [Math.cos(a) * 10, 110, Math.sin(a) * 10], [Math.cos(a) * 6, 150, Math.sin(a) * 6]], 2.4, PEARL, 0, 40, 8)); }
+    P.push(lathe([[18, 0], [18, 8]], 32, PEARL, 1), cap(ring(8, C(32), { s: 18 }), { color: GARDEN }));
+    P.push(lathe([[7, 120], [6, 200], [5.5, 330]], 20, PEARL, 2));
+    P.push(lathe([[5.5, 330], [9, 336], [9, 342], [4, 348]], 20, PEARL2));
+    for (const [R, y, t] of [[26, 190, 0.12], [20, 250, -0.1]]) {
+      P.push(torus(R, 1.6, 0, PEARL2, 0, Math.PI / 2 + t).translate(0, y, 0));
+      P.push(torus(R - 1.8, 0.35, 0, ACC, 1.8, Math.PI / 2 + t).translate(0, y, 0));
+      for (let k = 0; k < 3; k++) { const a = (k / 3) * TAU + y; P.push(solid(new THREE.BoxGeometry(R - 6, 0.8, 0.8).translate((R + 6) / 2, y, 0).rotateY(-a), STEEL)); }
+    }
+    for (let i = 0; i < 6; i++) P.push(solid(new THREE.TorusGeometry(34, 0.9, 6, 64).rotateY((i / 6) * Math.PI).translate(0, 372, 0), i % 2 ? PEARL : GOLD, 0.1));
+    P.push(torus(34, 1.4, 372, GOLD, 0.2));
+    P.push(solid(new THREE.SphereGeometry(9, 20, 14).translate(0, 372, 0), 0xbffcff, 1.8));
+    P.push(solid(new THREE.CylinderGeometry(0.5, 1.2, 40, 6).translate(0, 420, 0), STEEL), solid(new THREE.OctahedronGeometry(1.4, 0).translate(0, 441, 0), 0xff6a5a, 3));
+    const g = mergeF(P); M.lm_ear = { hi: g, lo: g };
+  }
+
+  // ── 교통: 하늘 나루 (300 m) ──
+  {
+    const P = [];
+    P.push(lathe([[30, 0], [30, 14]], 40, PEARL, 1), cap(ring(14, C(40), { s: 30 }), { color: PEARL2 }), torus(24, 0.4, 14.2, ACC, 1.6));
+    P.push(lathe([[10, 14], [8, 150], [6, 300]], 20, PEARL, 3));
+    const pads = [];
+    [90, 90, 150, 150, 210, 210].forEach((y, i) => {
+      const a = (i % 2) * Math.PI + Math.floor(i / 2) * 1.05, d = 62 - Math.floor(i / 2) * 6;
+      const ex = Math.cos(a) * d, ez = Math.sin(a) * d;
+      P.push(tubeAlong([[Math.cos(a) * 7, y - 6, Math.sin(a) * 7], [Math.cos(a) * d * 0.5, y + 2, Math.sin(a) * d * 0.5], [ex, y + 10, ez]], 1.8, PEARL, 0, 24, 8));
+      P.push(tubeAlong([[Math.cos(a) * 8, y - 16, Math.sin(a) * 8], [Math.cos(a) * d * 0.6, y - 4, Math.sin(a) * d * 0.6], [ex, y + 8, ez]], 0.9, STEEL, 0, 24, 5));
+      P.push(solid(new THREE.CylinderGeometry(14, 12.5, 1.6, 36).translate(ex, y + 10, ez), PEARL2));
+      P.push(solid(new THREE.TorusGeometry(10, 0.35, 4, 40).rotateX(Math.PI / 2).translate(ex, y + 10.85, ez), ACC, 2.0));
+      pads.push([ex, y + 10.8, ez]);
+    });
+    P.push(torus(48, 2.4, 255, PEARL2), torus(45.4, 0.5, 255, ACC, 1.8));
+    for (let k = 0; k < 4; k++) { const a = (k / 4) * TAU + 0.4; P.push(tubeAlong([[Math.cos(a) * 7, 248, Math.sin(a) * 7], [Math.cos(a) * 48, 255, Math.sin(a) * 48]], 1.2, STEEL, 0, 8, 6)); }
+    P.push(solid(new THREE.ConeGeometry(3, 18, 8).translate(0, 309, 0), GOLD, 0.3), solid(new THREE.OctahedronGeometry(1.2, 0).translate(0, 320, 0), 0xff6a5a, 3));
+    const g = mergeF(P); M.lm_port = { hi: g, lo: g, pads };
+  }
+
+  // ── 주거: 매달린 정원 (340 m) ──
+  {
+    const P = [];
+    const X = (y) => 26 - 10 * Math.sin((Math.PI * y) / 340);
+    for (const sd of [-1, 1]) {
+      const pts = squircle(24, 12, 11, 4);
+      const secs = [];
+      for (let y = 0; y <= 340; y += 34) secs.push(ring(y, pts, { dx: sd * X(y), s: 1 - (y / 340) * 0.25 }));
+      P.push(loft(secs, { color: PEARL, type: 5, smooth: true }), cap(secs[secs.length - 1], { color: GARDEN }));
+    }
+    const decks = [];
+    let seed = 7;
+    const rr = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    for (const y of [40, 85, 130, 175, 220, 265, 305]) {
+      const hx = X(y) - 6;
+      P.push(solid(new THREE.BoxGeometry(hx * 2, 1.4, 18).translate(0, y - 0.7, 0), PEARL2), solid(new THREE.BoxGeometry(hx * 2 - 1, 0.2, 17).translate(0, y + 0.1, 0), GARDEN));
+      for (const sz of [-1, 1]) P.push(solid(new THREE.BoxGeometry(hx * 2, 1.1, 0.12).translate(0, y + 0.65, sz * 8.9), 0x9fd8e8, 0.25), solid(new THREE.BoxGeometry(hx * 2, 0.1, 0.16).translate(0, y + 1.25, sz * 8.9), ACC, 1.4));
+      for (let i = 0; i < 3; i++) { const x = (rr() - 0.5) * hx * 1.4, z = (rr() - 0.5) * 10; P.push(solid(new THREE.CylinderGeometry(0.25, 0.35, 3, 5).translate(x, y + 1.6, z), 0x6a5a50), solid(new THREE.IcosahedronGeometry(2.8 + rr() * 1.2, 0).scale(1, 0.85, 1).translate(x, y + 4.4, z), 0x3f8f5a, 0.12)); }
+      for (let i = 0; i < 6; i++) { const x = (rr() - 0.5) * hx * 1.8, l = 6 + rr() * 9; P.push(solid(new THREE.CylinderGeometry(0.18, 0.08, l, 4).translate(x, y - 1.4 - l / 2, (rr() < 0.5 ? -1 : 1) * 8.6), 0x4fa86a, 0.25)); }
+      decks.push([y, hx]);
+    }
+    P.push(tubeAlong([[-X(340) * 0.75, 340, 0], [-10, 362, 0], [0, 368, 0], [10, 362, 0], [X(340) * 0.75, 340, 0]], 2.2, GOLD, 0.2, 40, 8));
+    P.push(tubeAlong([[-X(340) * 0.75, 342, 0], [0, 370.5, 0], [X(340) * 0.75, 342, 0]], 0.4, ACC, 1.8, 40, 4));
+    const g = mergeF(P); M.lm_garden = { hi: g, lo: g, decks, X };
+  }
+
+  // ── 생체 산업: 생명나무 (280 m) ──
+  {
+    const P = [];
+    const BARK = 0xd8d0c4;
+    for (let k = 0; k < 5; k++) { const a = (k / 5) * TAU + 0.2; P.push(tubeAlong([[Math.cos(a) * 32, -2, Math.sin(a) * 32], [Math.cos(a) * 22, 14, Math.sin(a) * 22], [Math.cos(a) * 12, 40, Math.sin(a) * 12]], 3.2, BARK, 0, 20, 8)); }
+    P.push(lathe([[16, 0], [12, 60], [14, 110], [10, 150], [8, 170]], 28, BARK));
+    for (let k = 0; k < 3; k++) { const pts = []; for (let y = 0; y <= 160; y += 8) { const a = y * 0.05 + (k / 3) * TAU; const r = (y < 60 ? 16 - y / 15 : y < 110 ? 12 + (y - 60) / 25 : 14 - (y - 110) / 12) + 0.4; pts.push([Math.cos(a) * r, y, Math.sin(a) * r]); } P.push(tubeAlong(pts, 0.6, k % 2 ? PINK : ACC, 1.4, 80, 4)); }
+    const pods = [];
+    for (let k = 0; k < 6; k++) {
+      const a = (k / 6) * TAU + 0.5, d = 52 + (k % 3) * 9, top = 205 + (k % 3) * 22;
+      const ex = Math.cos(a) * d, ez = Math.sin(a) * d;
+      P.push(tubeAlong([[Math.cos(a) * 6, 140, Math.sin(a) * 6], [Math.cos(a) * d * 0.45, top - 40, Math.sin(a) * d * 0.45], [ex, top - 14, ez]], 3.0, BARK, 0, 28, 8));
+      const pr = 14 + (k % 2) * 4;
+      P.push(solidT(new THREE.SphereGeometry(pr, 20, 14).translate(ex, top, ez), POD, 0.05, 6));
+      P.push(solid(new THREE.TorusGeometry(pr * 0.85, 0.4, 4, 40).rotateX(Math.PI / 2).translate(ex, top - pr * 0.55, ez), k % 2 ? PINK : ACC, 1.6));
+      const mx = Math.cos(a) * d * 0.55, mz = Math.sin(a) * d * 0.55;
+      P.push(solidT(new THREE.SphereGeometry(7, 12, 10).translate(mx, top - 34, mz), POD, 0.05, 6));
+      pods.push([ex, top, ez, pr], [mx, top - 34, mz, 7]);
+    }
+    P.push(solidT(new THREE.SphereGeometry(20, 22, 16).translate(0, 190, 0), POD, 0.05, 6), torus(17, 0.5, 178, PINK, 1.8));
+    const g = mergeF(P); M.lm_tree = { hi: g, lo: g, pods };
+  }
+
+  for (const [k, v] of Object.entries(M)) A[k] = { hi: v.hi, lo: v.lo };
+  return M;
+}
 
 // ── 모양별 성질: 땅에 닿은 평면(초타원 [k, 가로, 세로]) · 겹 충돌체 · 들어갈 수 있나 · 둥근가 ──
 // 충돌체(단위): ['c', x, z, r, y0, y1, dome?] 원통 / ['b', x, z, hx, hz, y0, y1, rot?] 상자.  y 는 높이 비율.
@@ -883,6 +1260,23 @@ export const SPEC = {
   biodome: { plan: [2, 1, 1], round: true, enter: true, low: true, cols: [cy(1, 0, 1, 0, 0, 0.92)] },
   vfarm: { plan: [6, 0.95, 0.95], enter: true, cols: [bx(0.97, 0.97, 0, 0.94)] },
   greenhouse: { plan: [30, 1, 0.9], enter: true, low: true, cols: [bx(1, 0.92, 0, 0.55), bx(1, 0.62, 0.55, 0.86), bx(1, 0.3, 0.86, 1)] },
+  setback: { plan: [10, 1, 0.8], enter: true, cols: [bx(1, 0.8, 0, 0.42), bx(0.82, 0.66, 0.42, 0.68), bx(0.62, 0.5, 0.68, 0.86), bx(0.4, 0.34, 0.86, 0.95)] },
+  crown: { plan: [6, 1, 0.85], enter: true, cols: [bx(1, 0.85, 0, 0.86), bx(0.5, 0.42, 0.86, 0.93)] },
+  terrace: { plan: [8, 1, 1], enter: true, cols: [0, 1, 2, 3, 4, 5].map((i) => { const d = 1 - (i / 6) * 0.62; return bx(1, d, i / 6, (i + 1) / 6, 0, -(1 - d)); }) },
+  cantilever: { plan: [8, 0.72, 0.72], enter: true, cols: [bx(0.72, 0.72, 0, 0.92), bx(0.6, 0.66, 0.52, 0.68, 0.4, 0), bx(0.5, 0.46, 0.92, 1, -0.1, 0, 0.35)] },
+  skygarden: { plan: [6, 0.9, 0.9], enter: true, cols: [bx(0.9, 0.9, 0, 0.36), cy(0.3, 0.36, 0.41), bx(0.9, 0.9, 0.41, 0.7), cy(0.3, 0.7, 0.75), bx(0.9, 0.9, 0.75, 0.96)] },
+  triad: { plan: [2.6, 0.38, 0.38], round: true, cols: [[0, 1.0], [2.094, 0.84], [4.189, 0.7]].map(([a, h]) => cy(0.36, 0, h, Math.cos(a) * 0.56, Math.sin(a) * 0.56)) },
+  halolab: { plan: [2, 0.5, 0.5], round: true, enter: true, cols: [cy(0.5, 0, 0.2), cy(0.4, 0.2, 0.86), cy(0.6, 0.86, 0.97)] },
+  coiltower: { plan: [2, 1, 1], round: true, cols: [cy(1, 0, 0.09), cy(0.84, 0.09, 0.9, 0, 0, 0)] },
+  branchport: { plan: [2, 0.34, 0.34], round: true, cols: [cy(0.34, 0, 0.12), cy(0.22, 0.12, 1), cy(0.32, 0.4 - 0.01, 0.4, 0.85, 0), cy(0.32, 0.58 - 0.01, 0.58, Math.cos(2.1) * 0.8, Math.sin(2.1) * 0.8), cy(0.32, 0.76 - 0.01, 0.76, Math.cos(4.2) * 0.75, Math.sin(4.2) * 0.75), cy(0.32, 0.5 - 0.01, 0.5, Math.cos(3.15) * 0.55, Math.sin(3.15) * 0.55)] },
+  treeform: { plan: [2, 0.5, 0.5], round: true, cols: [cy(0.5, 0, 0.08), cy(0.34, 0.08, 0.5), ...[[0, 0.92, 0.95], [2.1, 0.8, 0.88], [4.2, 0.86, 0.72]].map(([a, d, h]) => cy(0.34, h * 0.72, h * 0.72 + 0.22, Math.cos(a) * d * 0.7, Math.sin(a) * d * 0.7))] },
+  // 보조 랜드마크: 실제 미터(배율 1). 충돌체도 미터
+  lm_coil: { plan: [2, 34, 34], round: true, fixed: 360, cols: [cy(34, 0, 10), cy(9.5, 10, 345), ...[0, 1, 2].map((k) => { const a = (k / 3) * TAU + 0.3; return cy(3.5, 0, 60, Math.cos(a) * 34, Math.sin(a) * 34); })] },
+  lm_ear: { plan: [2, 18, 18], round: true, fixed: 420, cols: [cy(18, 0, 8), cy(7, 8, 348), ...[0, 1, 2].map((k) => { const a = (k / 3) * TAU; return cy(3, 0, 40, Math.cos(a) * 28, Math.sin(a) * 28); })] },
+  lm_port: { plan: [2, 30, 30], round: true, fixed: 300, cols: [cy(30, 0, 14), cy(10, 14, 305), ...[90, 90, 150, 150, 210, 210].map((y, i) => { const a = (i % 2) * Math.PI + Math.floor(i / 2) * 1.05, d = 62 - Math.floor(i / 2) * 6; return cy(14, y + 9.2, y + 10.8, Math.cos(a) * d, Math.sin(a) * d); })] },
+  lm_garden: { plan: [4, 40, 12], fixed: 340, cols: [...[-1, 1].flatMap((sd) => [0, 120, 240].map((y) => cy(12, y, y + 120, sd * (26 - 10 * Math.sin((Math.PI * (y + 60)) / 340)), 0))), ...[40, 85, 130, 175, 220, 265, 305].map((y) => bx(26 - 10 * Math.sin((Math.PI * y) / 340) - 6, 9, y - 1.4, y + 0.2))] },
+  lm_tree: { plan: [2, 16, 16], round: true, fixed: 280, cols: [cy(16, 0, 150), cy(20, 172, 208), ...[0, 1, 2, 3, 4].map((k) => { const a = (k / 5) * TAU + 0.2; return cy(3.5, 0, 30, Math.cos(a) * 26, Math.sin(a) * 26); }), ...[0, 1, 2, 3, 4, 5].map((k) => { const a = (k / 6) * TAU + 0.5, d = 52 + (k % 3) * 9, top = 205 + (k % 3) * 22, pr = 14 + (k % 2) * 4; return cy(pr * 0.85, top - pr * 0.7, top + pr * 0.7, Math.cos(a) * d, Math.sin(a) * d); })] },
+  gate: { plan: [8, 1, 0.8], cols: [bx(0.28, 0.8, 0, 0.78, -0.72), bx(0.28, 0.8, 0, 0.78, 0.72), bx(1, 0.82, 0.78, 1), cy(0.2, 0.4, 0.52)] },
 };
 
 /** 건물 입구: 빛의 막이 드리운 문틀 + 차양 + 문턱 (로컬: x 가 벽을 따라, +z 가 바깥) */

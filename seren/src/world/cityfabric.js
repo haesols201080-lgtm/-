@@ -9,7 +9,7 @@ import * as THREE from 'three';
 import { heightAt } from './heightfield.js';
 import { mulberry32 } from '../core/noise.js';
 import { cityArchetypes, SPEC, PROPCOL, doorGeo, propArchetypes } from './city-arch.js';
-import { buildPlan, layoutBlock, uvToWorld, locate } from './cityplan.js';
+import { buildPlan, layoutBlock, layoutCore, uvToWorld, locate } from './cityplan.js';
 import { planUniforms, applyPlanUniforms } from './city-ground.js';
 import { litMaterial } from './materials.js';
 import { PointLights } from './lights.js';
@@ -78,6 +78,10 @@ export class CityFabric {
     this._holograms();
     this.timing.meshes = performance.now() - t1;
     this.count = Object.values(this.list).reduce((s, l) => s + l.length / 10, 0);
+    // 보조 랜드마크 목록 (지도·안내용)
+    const MARK = { lm_coil: ['울림 코일 탑', '#ffc46a'], lm_ear: ['별귀 탑', '#7ff3e6'], lm_port: ['하늘 나루', '#9fd8ff'], lm_garden: ['매달린 정원', '#8fe0a0'], lm_tree: ['생명나무', '#ff9fd0'] };
+    this.marks = [];
+    for (const [k, [name, color]] of Object.entries(MARK)) { const L = this.list[k]; if (L && L.length) this.marks.push({ kind: k, name, color, x: L[0], y: L[1], z: L[2] }); }
     this.rawProps = this.plan.zones.reduce((s, P) => s + P.blocks.reduce((a, B) => a + (B.raw ? B.raw.length : 0), 0), 0);
     this.buildMs = performance.now() - t0;
     this._last = new THREE.Vector3(0, -1e6, 0);
@@ -128,9 +132,10 @@ export class CityFabric {
     }
   }
 
-  _excluded(x, z, R) {
+  _excluded(x, z, R, core = false) {
     const arr = this._exGrid.get(Math.floor(x / 200) * 100003 + Math.floor(z / 200));
-    if (arr) for (const e of arr) if (Math.hypot(x - e[0], z - e[1]) < e[2] + R) return true;
+    // 중심 광장 칸은 큰 장소(하모네아 자체) 원은 건너뛴다 — 인물·글자돌·시설 같은 작은 원과 구조물 충돌체(_clearAll)만 피한다
+    if (arr) for (const e of arr) { if (core && e[3] && e[2] > 60) continue; if (Math.hypot(x - e[0], z - e[1]) < e[2] + R) return true; }
     return false;
   }
   /** 큰 장소(반지름 60 m 넘는) 한가운데인가 — 블록 전체를 광장·녹지로 */
@@ -180,6 +185,7 @@ export class CityFabric {
     const tints = (TINTS[Z.tint] || TINTS.pearl).map((h) => new THREE.Color(h));
     const kinds = STYLE_KINDS[Z.style] || STYLE_KINDS.capital;
     const pickFrom = (tab, r) => { const e = Object.entries(tab); let t = r() * e.reduce((s, [, w]) => s + w, 0); for (const [k, w] of e) if ((t -= w) <= 0) return k; return e[0][0]; };
+    const peaks = this._peaks(P);
     for (const B of P.blocks) {
       B.zone = zone;
       B.act = 0;
@@ -192,13 +198,10 @@ export class CityFabric {
       B.raw = [];
       const api = {
         rnd,
+        mix: Z.sectors ? Z.sectors[B.s % Z.sectors.length] : Z.mix,
         sparse: Z.mix === 'suburb',
         pick: (Bk, cat) => pickFrom(kinds[cat] || kinds.tower, rnd),
-        towerH: (Bk, f = 1) => {
-          let h = Z.h[0] + (Z.h[1] - Z.h[0]) * Math.pow(rnd(), 1.7) * (1 - Z.tall + Z.tall * inner);
-          if (rnd() < 0.05) h *= 1.4;
-          return h * f;
-        },
+        towerH: (Bk, f = 1) => this._height(P, B, peaks, inner, rnd) * f,
         podium: () => (Z.podium ? Z.podium[0] + rnd() * (Z.podium[1] - Z.podium[0]) : 0),
         bldg: (Bk, kind, u, v, hw, hd, h, o = {}) => this._bldg(zone, B, kind, u, v, hw, hd, h, o, tints[Math.floor(rnd() * tints.length)], rnd),
         prop: (Bk, kind, u, v, face, o = {}) => { B.raw.push(0, kind, u, v, face, o); },
@@ -207,12 +210,83 @@ export class CityFabric {
       layoutBlock(B, api);
       this.uses[B.type] = (this.uses[B.type] || 0) + 1;
     }
+    if (Z.core === 'plaza') this._core(P, zone, tints, peaks);
     this.timing.layout += performance.now() - tl;
     const ts = performance.now();
     this._bridges(zone, mulberry32((G.cx * 7 + G.cz * 3) | 0));
     this._lampPoints(zone);
     this.timing.street += performance.now() - ts;
     this.zones.push(zone);
+  }
+
+  /**
+   * 중심 광장(core: 'plaza'): 지형 셰이더의 동심 판석 광장과 같은 칸(34 m 고리 띠 × 대로 사이 부채꼴)을 가짜 블록으로 만들어,
+   * 칸마다 나무 화단·물의 정원(분수)·작은 시설(정자·기념탑·노점)·정류장·작은 건물(카페·회관)을 놓는다.
+   * 블록과 똑같이 다가갈 때 깨어나고(소품·주민 자리·충돌체), 거대 구조물·장소와 겹치는 것은 놓지 않는다.
+   */
+  _core(P, zone, tints, peaks) {
+    const G = P.G, SA = TAU / G.avenues, STEP = 34;
+    const NK = Math.floor((G.r0 - G.street) / STEP);
+    P.core = [];
+    for (let kr = 1; kr < NK; kr++) for (let s = 0; s < G.avenues; s++) {
+      const R0 = kr * STEP + 3.6, D = STEP - 3.6, th0 = G.aOff + s * SA, th1 = th0 + SA;
+      const B = { zi: P.zi, G, k: -1 - kr, s, j: 0, m: 1, idx: 50000 + kr * 64 + s, R0, D, Rm: R0 + D / 2, th0, th1, t0: 4.75, t1: 4.75, type: 11, variant: (kr * 31 + s * 7) & 255, seed: ((kr * 977 + s * 131) % 1000) / 1000, core: true, kr, zone, act: 0 };
+      B.L = (th1 - th0) * B.Rm - B.t0 - B.t1;
+      B.cx = G.cx + Math.cos((th0 + th1) / 2) * B.Rm; B.cz = G.cz + Math.sin((th0 + th1) / 2) * B.Rm;
+      this._gridBlock(B);
+      B.spots = []; B.recs = []; B.raw = [];
+      const rnd = mulberry32(B.idx * 2654435761 + P.zi * 97);
+      layoutCore(B, {
+        rnd, mix: 'civic', sparse: false, pick: () => 'dome', towerH: () => 12, podium: () => 0,
+        bldg: (Bk, kind, u, v, hw, hd, h, o = {}) => this._bldg(zone, B, kind, u, v, hw, hd, h, o, tints[Math.floor(rnd() * tints.length)], rnd),
+        prop: (Bk, kind, u, v, face, o = {}) => { B.raw.push(0, kind, u, v, face, o); },
+        spot: (Bk, type, u, v, face, o = {}) => { B.raw.push(1, type, u, v, face, o); },
+      }, NK);
+      P.core.push(B);
+    }
+    void peaks;
+  }
+
+  /**
+   * 높이 계층: 구역마다 「높은 군집」(peaks) 몇 곳을 두고, 군집에서 멀어질수록 묶음(부채꼴 쓰임)의 기본 높이대로 내려간다.
+   * 저층 밀집(공장·연구 캠퍼스·주거 둘레동) → 중층(주거 탑·상가) → 고층 군집 → 군집 한가운데 초고층 하나 → 거대 랜드마크(megacity).
+   * ZONES.peaks: [[부채꼴, 안쪽~바깥 0..1, 반지름 m, 세기]…] — 없으면 상업·교통 부채꼴 안쪽에 하나.
+   */
+  _peaks(P) {
+    const Z = P.Z, G = P.G, SA = TAU / G.avenues;
+    let list = Z.peaks;
+    if (!list) {
+      if (Z.mix === 'suburb' || Z.mix === 'village') return [];
+      const secs = Z.sectors || [];
+      const s = Math.max(0, secs.findIndex((m) => m === 'commerce' || m === 'transit'));
+      list = [[s, 0.12, (G.rOut - G.r0) * 0.45, 0.85]];
+    }
+    return list.map(([s, t, R, k]) => {
+      const a = G.aOff + (s + 0.5) * SA, r = G.r0 + t * (G.rOut - G.r0);
+      const x = G.cx + Math.cos(a) * r, z = G.cz + Math.sin(a) * r;
+      let best = null, bd = 1e9;
+      // 초고층은 상업(먼저)·주거·교통 블록에만
+      for (const B of P.blocks) { if (!B.type || B.covered || B.peak) continue; const pen = B.type === 2 ? 0 : B.type === 1 ? 60 : B.type === 8 ? 90 : 1e9; const d = Math.hypot(B.cx - x, B.cz - z) + pen; if (d < bd) { bd = d; best = B; } }
+      if (best) best.peak = k;
+      return { x, z, R, k };
+    });
+  }
+  _height(P, B, peaks, inner, rnd) {
+    const Z = P.Z;
+    const mixName = Z.sectors ? Z.sectors[B.s % Z.sectors.length] : Z.mix;
+    const HB = { commerce: [70, 140], civic: [50, 100], transit: [45, 95], residential: [50, 115], research: [32, 70], energy: [28, 60], bioindustry: [28, 60], suburb: [8, 16], town: [10, 28], village: [6, 14] }[mixName] || [12, 30];
+    const lim = (v) => Math.min(v, Z.h[1]);
+    let c = 0;
+    for (const q of peaks) { const d = Math.hypot(B.cx - q.x, B.cz - q.z) / q.R; c = Math.max(c, q.k * Math.exp(-d * d * 2.2)); }
+    c = Math.max(c, Z.tall * inner * 0.35);
+    const base = lim(HB[0] + (HB[1] - HB[0]) * Math.pow(rnd(), 1.3));
+    const high = Z.h[0] + (Z.h[1] - Z.h[0]) * (0.3 + 0.7 * Math.pow(rnd(), 0.8));
+    const w = Math.max(0, Math.min(1, (c - 0.18) / 0.62));
+    let h = base + (Math.max(high, base) - base) * w * w * (3 - 2 * w);
+    // 군집 한가운데 블록: 초고층 하나 (첫 번째 탑에만)
+    if (B.peak && !B.superDone) { B.superDone = true; h = Z.h[1] * (1.25 + 0.4 * B.peak * rnd()); }
+    else if (c < 0.2 && rnd() < 0.05) h *= 1.7; // 낮은 동네의 드문 중층 탑
+    return h;
   }
 
   /** 블록 좌표의 방향(바깥 기준) → 세계 방향(yaw = atan2(dx, dz)) */
@@ -237,7 +311,7 @@ export class CityFabric {
     if (!S || !this.list[kind]) return null;
     const [x, z, a] = uvToWorld(B, u, v);
     const R = Math.max(hw, hd);
-    if (this._excluded(x, z, R * 0.85)) return null;
+    if (this._excluded(x, z, R * 0.85, B.core)) return null;
     // 땅: 가운데와 네 귀퉁이
     const rot = -a + Math.PI / 2 + (o.rot || 0);
     const c = Math.cos(rot), s = Math.sin(rot);
@@ -254,11 +328,17 @@ export class CityFabric {
     if (room < 0) return null;
     const base = (wet ? Math.min(mn, 0) : mn) - 1.2;
     let sy = h + (gy - base);
-    if (base + sy > room) sy = room - base;
-    if (sy < 5) return null;
     let sx, sz;
-    if (S.round) sx = sz = Math.min(hw, hd);
-    else { sx = hw; sz = hd; }
+    if (S.fixed) {
+      // 실제 미터로 지은 하나뿐인 건물(보조 랜드마크): 배율 1, 자리가 모자라면 짓지 않는다
+      if (base + S.fixed + 10 > room) return null;
+      sx = sy = sz = 1;
+    } else {
+      if (base + sy > room) sy = room - base;
+      if (sy < 5) return null;
+      if (S.round) sx = sz = Math.min(hw, hd);
+      else { sx = hw; sz = hd; }
+    }
     this.list[kind].push(x, base, z, sx, sy, sz, rot, tint.r, tint.g, tint.b);
     const idx = this.list[kind].length / 10 - 1;
     // 겹 충돌체
@@ -411,6 +491,28 @@ export class CityFabric {
     this._blockStreet(B);
   }
 
+  /** 중심 광장 칸: 고리 산책로를 따라 가로등 */
+  _coreLamps(B) {
+    for (let u = 9; u < B.L - 4; u += 22) {
+      const [x, z, a] = uvToWorld(B, u, 0.6);
+      if (!this._excluded(x, z, 0.6, true) && this._clearAll(x, z, 0.6)) this._prop(B, 'lamp', x, z, this._yaw(a, 'in'));
+    }
+  }
+  /** 도시 밖 구조물(거대 구조물의 발·장소 건물)과도 겹치지 않는가 */
+  _clearAll(x, z, r) {
+    const h = heightAt(x, z);
+    for (const c of this.world.colliders.near(x, z, r + 3)) {
+      if (c.sky || c.stream || c.obj) continue;
+      if (c.y0 > h + 6 || c.y1 < h - 1) continue;
+      let d;
+      if (c.type === 'cyl') d = Math.hypot(x - c.x, z - c.z) - c.r;
+      else if (c.type === 'box') { const dx = x - c.x, dz = z - c.z; const lx = Math.abs(dx * c.cos - dz * c.sin) - c.hx, lz = Math.abs(dx * c.sin + dz * c.cos) - c.hz; d = Math.hypot(Math.max(lx, 0), Math.max(lz, 0)); }
+      else continue;
+      if (d < r) return false;
+    }
+    return true;
+  }
+
   /** 소품 하나 (세계 좌표) → 블록의 소품 목록 */
   _prop(B, kind, x, z, yaw = 0, { s = 1, y, sx = 1 } = {}) {
     const gy = y ?? Math.max(heightAt(x, z), 0) + 0.02;
@@ -426,9 +528,10 @@ export class CityFabric {
     const [x, z, a] = uvToWorld(B, u, v);
     const h = heightAt(x, z);
     if (h < 0.8 && !B.stilt) return null;
-    if (this._excluded(x, z, 1.5)) return null;
+    if (this._excluded(x, z, 1.5, B.core)) return null;
     // 건물과 겹치면 놓지 않는다 (소품끼리는 템플릿이 피한다)
     const rr = o.col ? o.col.r * (o.s || 1) : 0.5;
+    if (B.core && !this._clearAll(x, z, rr + 0.5)) return null;
     for (const c of this.world.colliders.near(x, z, rr + 2)) {
       if (!c.city || c.stream) continue;
       if (c.y0 > h + 6) continue;
@@ -446,7 +549,8 @@ export class CityFabric {
     const [x, z, a] = uvToWorld(B, u, v);
     const h = heightAt(x, z);
     if (h < 0.8) return null;
-    if (this._excluded(x, z, 1)) return null;
+    if (this._excluded(x, z, 1, B.core)) return null;
+    if (B.core && !this._clearAll(x, z, 1.2 + (o.r || 0))) return null;
     const yaw = typeof face === 'number' && o.rel ? this._yawUV(a, face) : this._yaw(a, face);
     const sp = { type, x, z, y: Math.max(h, 0), yaw, B, r: o.r || 0, dawn: !!o.dawn, id: `${B.zi}:${B.idx}:${B.spots.length}` };
     if (o.to) { const [tx, tz] = uvToWorld(B, o.to[0], o.to[1]); sp.to = { x: tx, z: tz }; }
@@ -473,6 +577,7 @@ export class CityFabric {
 
   /** 블록 둘레의 거리 소품: 안쪽·바깥쪽 거리의 보도(가로수·가로등·의자·정거장·키오스크…), 골목 화단, 대로 가운데 화단, 교차로 */
   _blockStreet(B) {
+    if (B.core) return this._coreLamps(B);
     const zone = B.zone, G = zone.G;
     const rnd = mulberry32(B.idx * 7919 + B.zi * 104729 + 13);
     const city = zone.id.startsWith('cap') || zone.id.startsWith('dist');

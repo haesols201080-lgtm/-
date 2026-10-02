@@ -259,7 +259,7 @@ void main() {
 #endif
 #ifdef USE_FACADE
   // 도시 건물 외벽: 1 커튼월 2 띠창 3 점창 4 첨탑(나선 빛) 5 발코니 집 6 유리 격자(온실·돔) 7 수직 농장
-  float ftype = vFac.y;
+  float ftype = gl_FrontFacing ? vFac.y : 0.0; // 안쪽(뒷면)에서는 창·방을 그리지 않는다 — 실내에서 다른 층이 비쳐 보이지 않게
   float ao = mix(0.62, 1.0, smoothstep(1.0, 9.0, vWorld.y - vBase));
   col *= ao;
   float glowK = clamp(uGlow, 0.0, 1.0);

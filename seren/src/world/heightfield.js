@@ -2,6 +2,8 @@
 import { createNoise2D, fbm, ridged, smoothstep } from '../core/noise.js';
 import { REGIONS, WORLD } from './regions.js';
 import { FLATTEN } from '../data/places.js';
+import { ZONES, ZGEO } from '../data/city.js';
+import { zoneBlocks } from './cityplan.js';
 
 const nA = createNoise2D(1337);
 const nB = createNoise2D(4242);
@@ -173,12 +175,160 @@ function rawHeight(x, z, detail, wOut) {
     h = 1 + 7 * (u - (s * Math.sin(Math.PI * u)) / (2 * Math.PI) - (s * Math.sin(2 * Math.PI * u)) / (4 * Math.PI));
   }
 
-  if (detail >= 1) h += 2.4 * nD(x / 70, z / 70) + 1.1 * nE(x / 31, z / 31);
-  if (detail >= 2) h += 0.35 * nC(x / 9, z / 9);
+  // 도시 땅 맞추기: 구역마다 높이를 맞춘다 (아래 LEVEL) — 작은 굴곡도 없앤다
+  let flat = 1;
+  if (LEVEL) flat = 1 - levelCity(x, z, h);
+  if (flat < 1) h = _lvH;
+  if (detail >= 1 && flat > 0) {
+    h += (2.4 * nD(x / 70, z / 70) + 1.1 * nE(x / 31, z / 31)) * flat;
+    if (detail >= 2) h += 0.35 * nC(x / 9, z / 9) * flat;
+  }
   return h;
 }
 
-// 장소 주변 평탄화 — 목표 높이가 없으면 그 자리의 원래 높이(중심점)를 쓴다
+// ── 도시 땅 맞추기 ─────────────────────────────
+// 「구역별로 높이를 맞춘다」: 건물·길·소품이 모두 같은 평평한 바닥에 놓이게.
+//  · 평평한 단(flat): 수도·네 구역·지방 도시 — 구역 전체(가운데 장소 포함)를 한 높이(구역 땅의 중앙값)로. 바깥 160 m 는 둑으로 원래 지형에 잇는다.
+//  · 계단 단(terrace): 넓은 교외 — 블록마다 평평한 단, 길(고리 거리·골목·대로)이 이웃 단 사이의 완만한 경사로가 된다.
+//    이웃 블록의 높이 차는 길 폭의 0.3 배까지로 눌러(반복 이완) 걸어 오를 수 있게 한다.
+//  · 맞추지 않음(grade: false): 협곡·균열이 곧 도시의 모습인 곳 — 작은 굴곡만 없앤다.
+//  · 바다·물가(원래 높이 2.5 m 아래)는 그대로. 넓은 구역부터 적용하고 그 위에 좁은 구역을 덮어, 겹치는 둑도 끊기지 않는다.
+let LEVEL = null;
+let _lvH = 0;
+const TAU = Math.PI * 2;
+const ss01 = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+/** 계단 단: 고리 띠 k 의 각 θ, 반지름 r 에서의 높이 (블록 안은 평평, 골목·대로는 이웃 블록 사이 경사) */
+function bandLevel(Z, k, r, ang) {
+  const B = Z.bands[k], m = B.m, SA = Z.SA, n = Z.avenues;
+  const rel = ((((ang - Z.aOff) % TAU) + TAU) % TAU);
+  const s = Math.min(n - 1, Math.floor(rel / SA)), fs = rel - s * SA;
+  const j = Math.min(m - 1, Math.floor((fs / SA) * m));
+  const half = Z.lane / 2, av = Z.avH;
+  const t0 = j === 0 ? av : half, t1 = j === m - 1 ? av : half;
+  const a0 = (j * SA) / m + t0 / r, a1 = ((j + 1) * SA) / m - t1 / r;
+  const lv = Z.levels, o = B.off;
+  let L = lv[o + s * m + j];
+  if (fs < a0) {
+    const prev = j > 0 ? lv[o + s * m + j - 1] : lv[o + ((s - 1 + n) % n) * m + m - 1];
+    const g0 = (j * SA) / m - (j > 0 ? half : av) / r;
+    L = prev + (L - prev) * ss01((fs - g0) / Math.max(1e-6, a0 - g0));
+  } else if (fs > a1) {
+    const next = j < m - 1 ? lv[o + s * m + j + 1] : lv[o + ((s + 1) % n) * m];
+    const g1 = ((j + 1) * SA) / m + (j < m - 1 ? half : av) / r;
+    L = L + (next - L) * ss01((fs - a1) / Math.max(1e-6, g1 - a1));
+  }
+  return L;
+}
+function terraceAt(Z, r, ang) {
+  const nb = Z.bands.length;
+  const k = Math.floor((r - Z.r0) / Z.ring);
+  if (k < 0) return bandLevel(Z, 0, Math.max(r, Z.r0), ang);
+  if (k >= nb) return bandLevel(Z, nb - 1, r, ang);
+  const vb = r - (Z.r0 + k * Z.ring), bs = Z.bands[k].bs;
+  if (vb >= bs || k === 0) return bandLevel(Z, k, r, ang);
+  const lo = bandLevel(Z, k - 1, r, ang), hi = bandLevel(Z, k, r, ang);
+  return lo + (hi - lo) * ss01(vb / bs);
+}
+/** 구역들을 차례로 덮어 높이를 맞춘다. 결과는 _lvH, 돌려주는 값은 맞춘 정도(0..1, 가장 큰 것) */
+function levelCity(x, z, hNat) {
+  let h = hNat, mMax = 0;
+  for (const Z of LEVEL) {
+    const dx = x - Z.cx, dz = z - Z.cz, d2 = dx * dx + dz * dz;
+    if (d2 > Z.R2) continue;
+    const d = Math.sqrt(d2);
+    let m = smoothstep(Z.hi + Z.E, Z.hi, d);
+    if (Z.lo > 0) m *= smoothstep(Z.lo - Z.Ein, Z.lo, d);
+    if (m <= 0) continue;
+    if (m > mMax) mMax = m;
+    if (Z.mode === 0) continue;
+    const target = Z.mode === 2 ? terraceAt(Z, d, Math.atan2(dz, dx)) : Z.level;
+    if (Z.water || target < 12) m *= smoothstep(0.5, 2.5, hNat); // 물가 도시·낮은 땅: 바다·물은 그대로 (높은 단은 좁은 물길을 메운다)
+    if (Z.mode === 3) m *= smoothstep(Z.level + 60, Z.level + 35, hNat) * smoothstep(Z.level - 60, Z.level - 35, hNat); // 협곡 도시: 바닥 높이 둘레만 고르고 절벽·골은 그대로
+    if (m <= 0) continue;
+    h += (target - h) * m;
+  }
+  _lvH = h;
+  return mMax;
+}
+{
+  const w = new Float32Array(RC);
+  const nat = (x, z) => rawHeight(x, z, 0, w);
+  const list = ZGEO.map((G, i) => {
+    const Z = ZONES[i];
+    // 물가 도시(water)는 물 바로 위 낮은 단만 고르고 언덕·바다는 그대로 (협곡 도시처럼 높이 창으로)
+    const mode = Z.grade === false || Z.water ? 3 : Z.mix === 'suburb' ? 2 : 1;
+    const hi = G.rOut + G.street;
+    // 교외의 안쪽 가장자리는 가운데 구역(수도)의 단 끝에 바로 붙인다 — 그 사이로 원래 지형(고원 벼랑의 계단)이 새지 않게
+    let lo = 0, Ein = 120, E = mode === 2 ? 200 : 160;
+    if (mode === 2) {
+      const inner = ZGEO.find((H, j) => j !== i && H.cx === G.cx && H.cz === G.cz && H.rOut + H.street < G.r0);
+      lo = inner ? inner.rOut + inner.street + 8 : G.r0 - G.street;
+      Ein = inner ? 40 : 120;
+    } else {
+      // 이 구역을 둘러싼 교외가 있으면 둑이 교외 첫 블록에 닿지 않게
+      const outer = ZGEO.find((H, j) => j !== i && H.cx === G.cx && H.cz === G.cz && H.r0 > G.rOut);
+      if (outer) E = Math.max(60, outer.r0 - outer.street - hi - 6);
+    }
+    const L = { mode, water: !!Z.water, cx: G.cx, cz: G.cz, lo, hi, E, Ein, R2: (hi + E) * (hi + E), prio: mode === 2 ? 0 : 1 };
+    if (mode === 1 || mode === 3) {
+      // 구역 땅(가운데 포함)의 높이 중앙값 — 물(2.5 m 아래)은 빼고
+      const hs = [];
+      for (let r = 20; r <= hi; r += 50) {
+        const na = Math.max(6, Math.round((TAU * r) / 60));
+        for (let a = 0; a < na; a++) { const t = (a / na) * TAU; const v = nat(G.cx + Math.cos(t) * r, G.cz + Math.sin(t) * r); if (v >= 2.5) hs.push(v); }
+      }
+      hs.sort((p, q) => p - q);
+      L.level = hs.length ? Math.max(3.5, hs[Math.floor(hs.length * (Z.water ? 0.2 : 0.5))]) : 3.5;
+      if (Z.water) L.level = Math.min(12, L.level);
+    } else if (mode === 2) {
+      const zb = zoneBlocks(i);
+      Object.assign(L, { r0: G.r0, ring: G.ring, avenues: G.avenues, SA: TAU / G.avenues, aOff: G.aOff, avH: G.avH, lane: G.lane });
+      L.bands = zb.rings.map((R, k) => ({ m: R.m, bs: R.street ? G.street : G.lane, off: 0 }));
+      let off = 0;
+      for (const b of L.bands) { b.off = off; off += b.m * G.avenues; }
+      const lv = new Float32Array(off);
+      const at = (B, fu, fv) => { const r = B.R0 + B.D * fv, a = B.th0 + (B.L * fu + B.t0) / r; return nat(G.cx + Math.cos(a) * r, G.cz + Math.sin(a) * r); };
+      const idxOf = (k, s, j) => L.bands[k].off + s * L.bands[k].m + j;
+      for (const B of zb.blocks) {
+        let sum = 0, n = 0;
+        for (const fu of [0.2, 0.5, 0.8]) for (const fv of [0.2, 0.5, 0.8]) { sum += at(B, fu, fv); n++; }
+        lv[idxOf(B.k, B.s, B.j)] = sum / n;
+      }
+      // 이웃: 같은 띠의 옆 블록(골목·대로), 안쪽 띠에서 각이 겹치는 블록(고리 거리·골목)
+      const edges = [];
+      for (const B of zb.blocks) {
+        const m = L.bands[B.k].m, me = idxOf(B.k, B.s, B.j);
+        const nj = B.j + 1 < m ? idxOf(B.k, B.s, B.j + 1) : idxOf(B.k, (B.s + 1) % G.avenues, 0);
+        edges.push([me, nj, (B.j + 1 < m ? G.lane : 2 * G.avH) * 0.3]);
+        if (B.k > 0) {
+          const mi = L.bands[B.k - 1].m, bsK = L.bands[B.k].bs;
+          const j0 = Math.floor((B.j / m) * mi), j1 = Math.min(mi - 1, Math.floor(((B.j + 1) / m) * mi - 1e-6));
+          for (let jj = j0; jj <= j1; jj++) edges.push([me, idxOf(B.k - 1, B.s, jj), bsK * 0.3]);
+        }
+      }
+      // 한 번 고르게 한 뒤, 이웃 차가 경사로 한도를 넘지 않게 반복 이완
+      for (let it = 0; it < 80; it++) {
+        let worst = 0;
+        for (const [a, b, mx] of edges) {
+          const dlt = lv[a] - lv[b], ad = Math.abs(dlt);
+          if (ad <= mx) continue;
+          const e = ((ad - mx) / 2) * Math.sign(dlt);
+          lv[a] -= e; lv[b] += e;
+          worst = Math.max(worst, ad - mx);
+        }
+        if (worst < 0.05) break;
+      }
+      L.levels = lv;
+    }
+    return L;
+  });
+  // 넓은 구역(교외)부터, 그 위에 좁은 구역
+  LEVEL = list.filter((L) => L.mode !== 0 || true).sort((a, b) => a.prio - b.prio);
+}
+/** 0..1: 도시 땅 맞추기가 얼마나 걸린 자리인가 */
+export function cityMask(x, z) { return LEVEL ? levelCity(x, z, rawHeight(x, z, 0, new Float32Array(RC))) : 0; }
+
+// 장소 주변 평탄화 — 목표 높이가 없으면 그 자리의 원래 높이(중심점)를 쓴다 (도시 안이면 고른 바닥 높이)
 for (const f of FLATTEN) if (f.h === undefined) f.h = rawHeight(f.x, f.z, 1, new Float32Array(RC));
 
 /**

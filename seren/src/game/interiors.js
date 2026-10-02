@@ -642,6 +642,19 @@ export class Interiors {
     const cur = this.cur;
     if (!cur) return;
     for (const f of cur.anims) f(this.t);
+    // 로비 천장: 점프·활공으로 머리가 천장을 뚫지 않게 (승강기는 순간 이동이라 걸리지 않는다)
+    {
+      const r = cur.r, ceil = r.floorY + cur.LH;
+      if (p.y > r.floorY - 1 && p.y < ceil + 1.5 && this._inside(p.x, p.z, -0.2)) {
+        const maxY = ceil - 1.75 - 0.12;
+        if (p.y > maxY) { p.y = maxY; if (g.player.vel.y > 0) g.player.vel.y = 0; }
+      }
+      // 실내 사람도 방 안·천장 아래에
+      if (g.citizens) for (const q of g.citizens.indoor) {
+        if (!this._inside(q.pos.x, q.pos.z, 0.5)) { q.pos.x += (r.x - q.pos.x) * 0.2; q.pos.z += (r.z - q.pos.z) * 0.2; }
+        q.pos.y = Math.min(q.pos.y, ceil - 2.0 * q.scale - 0.1);
+      }
+    }
     // 멀어지면 닫는다
     const r = cur.r;
     const dc = Math.hypot(p.x - r.x, p.z - r.z);
@@ -649,18 +662,29 @@ export class Interiors {
     if (!onDeck && dc > r.ext + 45) this.close();
   }
 
-  /** 실내에서는 카메라가 벽 밖으로 나가지 않게 */
+  /** 실내에서는 카메라가 벽·바닥·천장 밖으로 나가지 않게 (좁은 방에서 다른 층·바깥이 비쳐 보이는 것을 막는다) */
   clampCamera(cam, target) {
     const cur = this.cur;
     if (!cur) return;
     const p = this.game.player.pos, r = cur.r;
-    if (p.y > r.floorY + cur.LH || p.y < r.floorY - 2 || !this._inside(p.x, p.z, 0.3)) return;
-    const top = r.floorY + cur.LH - 0.35;
-    const ok = (x, y, z) => y < top && y > r.floorY + 0.3 && this._inside(x, z, 0.6);
+    if (p.y > r.floorY + cur.LH + 1 || p.y < r.floorY - 2 || !this._inside(p.x, p.z, -0.8)) return;
+    const top = r.floorY + cur.LH - 0.45, bot = r.floorY + 0.35;
+    const ok = (x, y, z) => y < top && y > bot && this._inside(x, z, 0.55);
+    // 벽에 가까워도 화면 가장자리가 벽을 뚫고 보이지 않게 가까운 면을 당긴다
+    if (cam.near !== 0.15) { cam.near = 0.15; cam.updateProjectionMatrix(); }
+    // 안전한 기준점: 목표(머리 둘레)를 방 안으로 끌어들인 점
+    const a = target.clone();
+    a.y = Math.min(top - 0.05, Math.max(bot + 0.05, a.y));
+    if (!this._inside(a.x, a.z, 0.55)) {
+      const c = new THREE.Vector3(r.x, a.y, r.z);
+      let lo = 0, hi = 1;
+      for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2; const q = c.clone().lerp(a, m); if (this._inside(q.x, q.z, 0.55)) lo = m; else hi = m; }
+      a.copy(c.lerp(a, lo));
+    }
     if (ok(cam.position.x, cam.position.y, cam.position.z)) return;
-    const a = target.clone(), b = cam.position.clone();
+    const b = cam.position.clone();
     let lo = 0, hi = 1;
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 12; i++) {
       const m = (lo + hi) / 2;
       const q = a.clone().lerp(b, m);
       if (ok(q.x, q.y, q.z)) lo = m; else hi = m;

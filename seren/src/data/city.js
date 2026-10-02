@@ -10,29 +10,32 @@ import { PLACE } from './places.js';
 // sectors: 대로 사이 부채꼴마다 쓰임 묶음(MIX) — 없으면 mix 하나   tint: 색조
 // streetEvery: 고리 몇 개마다 차도를 둘지(나머지 고리 경계는 골목)   lanes: 차도 위 차   sky: 지붕 위 하늘 차선 [높이…]
 // water: 물 위에도 기둥 집을 짓는다   podium: 상업 블록 기단 높이 [최소, 최대]
+// grade: false 면 지형 땅고르기를 하지 않는다(협곡·균열처럼 지형이 곧 도시의 모습인 곳 — 작은 굴곡만 없앰)
 // core: 'plaza' 면 r0 안쪽(큰 탑 둘레)을 풀밭 대신 판석 광장으로 덮는다(지형 셰이더)
+// marks: 보조 랜드마크 [[모양(lm_*), 부채꼴, 안쪽~바깥 0..1]…] — 그 블록은 광장이 되고 가운데에 하나뿐인 건물 (city-arch 의 landmarkArchetypes)
+// peaks: 높은 군집 [[부채꼴, 안쪽~바깥 0..1, 반지름 m, 세기]…] — 한가운데 블록에 초고층 하나, 멀어질수록 묶음의 기본 높이로 (cityfabric._height)
 export const ZONES = [
   // ── 하모네아: 척추 고원 (해발 390 m, 반지름 약 1.6 km) ──
-  { id: 'cap-core', core: 'plaza', at: 'harmonea', r0: 470, r1: 1560, ring: 96, street: 24, avenues: 8, blockLen: 118, lane: 9, h: [40, 240], tall: 0.3, style: 'capital', sectors: ['civic', 'commerce', 'transit', 'residential', 'commerce', 'civic', 'residential', 'transit'], tint: 'pearl', podium: [8, 22], streetEvery: 1, lanes: true, sky: [70, 150, 260] },
+  { id: 'cap-core', core: 'plaza', marks: [['lm_port', 7, 0.78]], at: 'harmonea', r0: 470, r1: 1560, ring: 96, street: 24, avenues: 8, blockLen: 118, lane: 9, h: [70, 270], tall: 0.3, peaks: [[1, 0.08, 460, 1], [4, 0.14, 420, 0.95], [2, 0.55, 300, 0.72], [6, 0.38, 260, 0.6]], style: 'capital', sectors: ['civic', 'commerce', 'transit', 'residential', 'commerce', 'civic', 'residential', 'transit'], tint: 'pearl', podium: [8, 22], streetEvery: 1, lanes: true, sky: [70, 150, 260] },
   // ── 하모네아의 네 구역: 큰 탑 둘레 ──
-  { id: 'dist-east', core: 'plaza', at: 'd-east', r0: 380, r1: 1350, ring: 100, street: 26, avenues: 6, blockLen: 128, lane: 9, h: [35, 420], tall: 1, style: 'capital', sectors: ['research', 'research', 'commerce', 'residential', 'research', 'civic'], tint: 'cool', podium: [8, 26], streetEvery: 1, lanes: true, sky: [120, 300] },
-  { id: 'dist-sw', core: 'plaza', at: 'd-sw', r0: 380, r1: 1300, ring: 100, street: 26, avenues: 6, blockLen: 128, lane: 9, h: [30, 360], tall: 1, style: 'capital', sectors: ['residential', 'residential', 'commerce', 'residential', 'civic', 'residential'], tint: 'warm', podium: [8, 24], streetEvery: 1, lanes: true, sky: [110, 260] },
-  { id: 'dist-west', core: 'plaza', at: 'd-west', r0: 400, r1: 1300, ring: 100, street: 26, avenues: 6, blockLen: 128, lane: 9, h: [30, 300], tall: 1, style: 'capital', sectors: ['bioindustry', 'bioindustry', 'residential', 'bioindustry', 'transit', 'residential'], tint: 'rose', podium: [6, 16], streetEvery: 1, lanes: true, sky: [100, 230] },
-  { id: 'dist-north', core: 'plaza', at: 'd-north', r0: 360, r1: 1300, ring: 100, street: 26, avenues: 6, blockLen: 128, lane: 9, h: [35, 380], tall: 1, style: 'capital', sectors: ['energy', 'energy', 'research', 'energy', 'transit', 'residential'], tint: 'violet', podium: [8, 24], streetEvery: 1, lanes: true, sky: [120, 280] },
+  { id: 'dist-east', core: 'plaza', marks: [['lm_ear', 1, 0.45]], at: 'd-east', r0: 380, r1: 1350, ring: 100, street: 26, avenues: 6, blockLen: 128, lane: 9, h: [60, 380], tall: 0.4, peaks: [[2, 0.06, 360, 1], [5, 0.45, 220, 0.55]], style: 'capital', sectors: ['research', 'research', 'commerce', 'residential', 'research', 'civic'], tint: 'cool', podium: [8, 26], streetEvery: 1, lanes: true, sky: [120, 300] },
+  { id: 'dist-sw', core: 'plaza', marks: [['lm_garden', 1, 0.55]], at: 'd-sw', r0: 380, r1: 1300, ring: 100, street: 26, avenues: 6, blockLen: 128, lane: 9, h: [50, 300], tall: 0.5, peaks: [[2, 0.1, 380, 1], [0, 0.5, 260, 0.65], [4, 0.3, 220, 0.55]], style: 'capital', sectors: ['residential', 'residential', 'commerce', 'residential', 'civic', 'residential'], tint: 'warm', podium: [8, 24], streetEvery: 1, lanes: true, sky: [110, 260] },
+  { id: 'dist-west', core: 'plaza', marks: [['lm_tree', 0, 0.5]], at: 'd-west', r0: 400, r1: 1300, ring: 100, street: 26, avenues: 6, blockLen: 128, lane: 9, h: [40, 220], tall: 0.3, peaks: [[4, 0.12, 300, 0.85]], style: 'capital', sectors: ['bioindustry', 'bioindustry', 'residential', 'bioindustry', 'transit', 'residential'], tint: 'rose', podium: [6, 16], streetEvery: 1, lanes: true, sky: [100, 230] },
+  { id: 'dist-north', core: 'plaza', marks: [['lm_coil', 1, 0.5]], at: 'd-north', r0: 360, r1: 1300, ring: 100, street: 26, avenues: 6, blockLen: 128, lane: 9, h: [40, 260], tall: 0.3, peaks: [[4, 0.1, 280, 0.85], [5, 0.5, 200, 0.5]], style: 'capital', sectors: ['energy', 'energy', 'research', 'energy', 'transit', 'residential'], tint: 'violet', podium: [8, 24], streetEvery: 1, lanes: true, sky: [120, 280] },
   // ── 고원 아래 넓은 교외: 동네(주택) · 농지 · 인공 환경 · 물류 ──
   { id: 'cap-suburb', at: 'harmonea', r0: 1760, r1: 6400, ring: 120, street: 22, avenues: 12, blockLen: 230, lane: 12, h: [10, 40], tall: 0, style: 'suburb', mix: 'suburb', tint: 'pearl', streetEvery: 2, lanes: false },
   // ── 지방 도시: 각자 다른 양식 ──
   { id: 'town-dew', at: 'dewfold', r0: 200, r1: 760, ring: 62, street: 16, avenues: 5, blockLen: 88, lane: 7, h: [8, 26], tall: 0.4, style: 'village', mix: 'village', tint: 'warm', streetEvery: 1, lanes: true },
   { id: 'town-yun', at: 'yunseul', r0: 420, r1: 1150, ring: 74, street: 18, avenues: 6, blockLen: 100, lane: 8, h: [25, 170], tall: 0.8, style: 'glass', mix: 'town', tint: 'crystal', podium: [5, 12], streetEvery: 1, lanes: true, sky: [90] },
   { id: 'town-gat', at: 'gatmaeul', r0: 460, r1: 1200, ring: 76, street: 18, avenues: 6, blockLen: 100, lane: 8, h: [15, 70], tall: 0.5, style: 'bloom', mix: 'town', tint: 'bloom', streetEvery: 1, lanes: true },
-  { id: 'town-tte', at: 'tteodol', r0: 640, r1: 1300, ring: 70, street: 18, avenues: 5, blockLen: 100, lane: 8, h: [14, 80], tall: 0.5, style: 'canyon', mix: 'town', tint: 'sand', podium: [5, 12], streetEvery: 1, lanes: true },
+  { id: 'town-tte', grade: false, at: 'tteodol', r0: 640, r1: 1300, ring: 70, street: 18, avenues: 5, blockLen: 100, lane: 8, h: [14, 80], tall: 0.5, style: 'canyon', mix: 'town', tint: 'sand', podium: [5, 12], streetEvery: 1, lanes: true },
   { id: 'town-mul', at: 'mulnorae', r0: 520, r1: 1150, ring: 68, street: 18, avenues: 6, blockLen: 96, lane: 8, h: [8, 40], tall: 0.4, style: 'sea', mix: 'village', tint: 'sea', streetEvery: 1, lanes: true, water: true },
   { id: 'town-obs', at: 'array', r0: 340, r1: 700, ring: 60, street: 16, avenues: 4, blockLen: 90, lane: 7, h: [10, 50], tall: 0.5, style: 'frost', mix: 'village', tint: 'frost', streetEvery: 1, lanes: false },
   // ── 바다 건너 ──
-  { id: 'far-rift', at: 'rift-core', r0: 460, r1: 1300, ring: 72, street: 18, avenues: 6, blockLen: 100, lane: 8, h: [20, 140], tall: 0.6, style: 'canyon', mix: 'town', tint: 'sand', streetEvery: 1, lanes: true },
+  { id: 'far-rift', grade: false, at: 'rift-core', r0: 460, r1: 1300, ring: 72, street: 18, avenues: 6, blockLen: 100, lane: 8, h: [20, 140], tall: 0.6, style: 'canyon', mix: 'town', tint: 'sand', streetEvery: 1, lanes: true },
   { id: 'far-plains', at: 'bones', r0: 560, r1: 1250, ring: 80, street: 20, avenues: 6, blockLen: 120, lane: 9, h: [10, 40], tall: 0.3, style: 'village', mix: 'village', tint: 'warm', streetEvery: 1, lanes: false },
   { id: 'far-ice', at: 'great-ear', r0: 560, r1: 1150, ring: 70, street: 18, avenues: 5, blockLen: 100, lane: 8, h: [10, 60], tall: 0.5, style: 'frost', mix: 'village', tint: 'frost', streetEvery: 1, lanes: false, water: true },
-  { id: 'far-falls', at: 'sky-forge', r0: 640, r1: 1350, ring: 76, street: 20, avenues: 6, blockLen: 104, lane: 8, h: [20, 120], tall: 0.6, style: 'glass', mix: 'town', tint: 'cool', streetEvery: 1, lanes: true },
+  { id: 'far-falls', grade: false, at: 'sky-forge', r0: 640, r1: 1350, ring: 76, street: 20, avenues: 6, blockLen: 104, lane: 8, h: [20, 120], tall: 0.6, style: 'glass', mix: 'town', tint: 'cool', streetEvery: 1, lanes: true },
 ];
 
 // ── 토지 이용 (블록의 쓰임) — 지형 셰이더와 같은 번호 ──
@@ -55,17 +58,18 @@ export const MIX = {
 
 // 쓰임마다 들어서는 건물 모양 (양식마다 바꿔 낄 수 있다)
 export const STYLE_KINDS = {
+  // 주거·상업: 익숙한 고층 문법(후퇴·왕관·테라스·돌출·하늘정원·세 쌍둥이) / 연구: 관측 고리·꼬투리·관측동
   capital: {
-    tower: { balcony: 3, bubbles: 1.2, ovoid: 1.4, twist: 1.2, arcology: 1 },
-    office: { blade: 3, twist: 3, slab: 2.2, spire: 1.5, stack: 1.5, twin: 1 },
-    lab: { podlab: 3, observatory: 2, antenna: 2, spire: 0.8 },
+    tower: { balcony: 2.2, terrace: 1.8, skygarden: 1.6, setback: 1.4, triad: 1.2, twist: 1, arcology: 0.6, ovoid: 0.5 },
+    office: { setback: 2.4, crown: 2.2, slab: 2, cantilever: 1.8, blade: 1.8, skygarden: 1.1, twist: 1.2, stack: 1, twin: 0.8, spire: 0.5 },
+    lab: { halolab: 2.6, podlab: 2, observatory: 2, antenna: 1.4 },
     house: { villa: 3, dome: 1 },
   },
   suburb: { tower: { arcology: 2, bubbles: 1.5, balcony: 1 }, office: { slab: 2, stack: 1 }, lab: { observatory: 1, podlab: 1 }, house: { villa: 5, dome: 1.5, bubbles: 0.6 } },
   village: { tower: { dome: 2, arcology: 1 }, office: { villa: 2, stack: 1 }, lab: { observatory: 1 }, house: { dome: 3, villa: 3 } },
-  glass: { tower: { crystal: 4, spire: 1.5 }, office: { crystal: 3, blade: 2, spire: 1.5 }, lab: { antenna: 1, crystal: 1 }, house: { crystal: 1, villa: 2 } },
-  bloom: { tower: { cap: 4, ovoid: 1.5, bubbles: 1.5 }, office: { cap: 3, ovoid: 1 }, lab: { podlab: 1 }, house: { cap: 3, dome: 1 } },
-  canyon: { tower: { stack: 3, arcology: 3 }, office: { stack: 2, slab: 1, arcology: 1 }, lab: { observatory: 1, antenna: 1 }, house: { villa: 3, stack: 0.5 } },
+  glass: { tower: { crystal: 4, spire: 1.5, triad: 1 }, office: { crystal: 3, blade: 2, spire: 1.5, crown: 1 }, lab: { antenna: 1, crystal: 1, halolab: 1.5 }, house: { crystal: 1, villa: 2 } },
+  bloom: { tower: { cap: 4, ovoid: 1.5, bubbles: 1.5, treeform: 1 }, office: { cap: 3, ovoid: 1 }, lab: { podlab: 1 }, house: { cap: 3, dome: 1 } },
+  canyon: { tower: { stack: 3, arcology: 3, terrace: 2 }, office: { stack: 2, slab: 1, arcology: 1, setback: 2 }, lab: { observatory: 1, antenna: 1 }, house: { villa: 3, stack: 0.5 } },
   sea: { tower: { stilt: 2, dome: 1 }, office: { villa: 2, dome: 1 }, lab: { observatory: 1 }, house: { stilt: 4, villa: 2, dome: 1 } },
   frost: { tower: { dome: 2, slab: 1 }, office: { slab: 2, dome: 1 }, lab: { observatory: 2, antenna: 1 }, house: { villa: 3, dome: 3 } },
 };
