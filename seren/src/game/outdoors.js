@@ -171,7 +171,7 @@ export class Outdoors {
           pod.position.set(A.x, A.y + 1.0 + (1 - e) * 40, A.z);
           pod.rotation.set(0, Math.atan2(dir.x, dir.z), 0);
           pod.visible = true;
-          player.pos.set(A.x - dir.x * 3.2, A.y, A.z - dir.z * 3.2);
+          player.pos.set(A.x - dir.x * 2.0, A.y, A.z - dir.z * 2.0);
           player.vel.set(0, 0, 0);
           player.yaw = Math.atan2(dir.x, dir.z);
           cam.pos.set(A.x - dir.x * 14 + dir.z * 6, A.y + 6, A.z - dir.z * 14 - dir.x * 6);
@@ -195,7 +195,7 @@ export class Outdoors {
         if (k >= 1) {
           ride.done = true;
           pod.visible = false;
-          player.pos.set(B.x - dir.x * 3.2, B.y + 0.1, B.z - dir.z * 3.2);
+          player.pos.set(B.x - dir.x * 2.0, B.y + 0.1, B.z - dir.z * 2.0);
           player.vel.set(0, 0, 0);
           g.rig.override = null;
           g.ui.regionTitle(name, '하늘배에서 내렸다', false);
@@ -622,6 +622,24 @@ export class Outdoors {
       g.world.colliders.add({ type: 'cyl', x: c.x, z: c.z, r: 0.42, y0: c.y - 0.3, y1: c.y + 1.5, city: true });
       mats.push(new THREE.Matrix4().compose(V3(c.x, c.y, c.z), new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), c.yaw), V3(1, 1, 1)));
     }
+    // 발치 마을·하늘바퀴·하늘고리 위의 집: 주민 부탁함 (갑판 위 집은 고리를 따라 옆에)
+    (M.homes || []).forEach((H, k) => {
+      // 갑판 위 집은 고리를 따라(접선) 양옆, 땅 위 집은 척추 쪽부터 돌아가며
+      const dirs = H.halo ? [[-Math.sin(H.a), Math.cos(H.a)], [Math.sin(H.a), -Math.cos(H.a)]]
+        : [0, 0.8, -0.8, 1.6, -1.6, 2.4, -2.4, Math.PI].map((da) => { const a = Math.atan2(-H.z, -H.x) + da; return [Math.cos(a), Math.sin(a)]; });
+      for (const [nx, nz] of dirs) {
+        const x = H.x + nx * (H.r + 1.7), z = H.z + nz * (H.r + 1.7);
+        const y = H.halo ? H.y + 0.02 : heightAt(x, z) + 0.02;
+        if (!H.halo && (y < 0.8 || Math.abs(y - H.y) > 3)) continue;
+        if (!this._clear(x, z, y + 0.3, y + 3, 1.0)) continue;
+        const rec = { kind: 'mhome', idx: k, use: 'home', x: H.x, z: H.z, gy: H.y, base: H.y, top: H.y + H.h, sx: H.r, sz: H.r, sy: H.h, rot: 0, zone: 'megacity' };
+        const c = { x, z, y, nx, nz, yaw: Math.atan2(nx, nz), rec, key: 'mhome:' + k, def: { fn: 'tower', name: H.halo === 'halo-crown' ? '하늘고리 집' : H.halo ? '하늘바퀴 집' : '발치 마을 집', short: '부탁함' } };
+        this.mega.push(c);
+        g.world.colliders.add({ type: 'cyl', x, z, r: 0.42, y0: y - 0.3, y1: y + 1.5, city: true, sky: y > 300 });
+        mats.push(new THREE.Matrix4().compose(V3(x, y, z), new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), c.yaw), V3(1, 1, 1)));
+        break;
+      }
+    });
     if (mats.length) {
       const m = new THREE.InstancedMesh(city.parch.console, city.propMat, mats.length);
       mats.forEach((M4, i) => m.setMatrixAt(i, M4));

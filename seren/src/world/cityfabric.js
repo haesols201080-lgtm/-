@@ -386,15 +386,20 @@ export class CityFabric {
 
   /** 입구 자리 정하기 + 찾기용 칸에 넣기. door: -1 안쪽 거리 쪽, 1 바깥, 'u+' / 'u-' 블록 끝 쪽 */
   _addRec(r, a, door) {
-    let nx, nz;
-    if (door === 'u+') { nx = -Math.sin(a); nz = Math.cos(a); }
-    else if (door === 'u-') { nx = Math.sin(a); nz = -Math.cos(a); }
-    else { nx = Math.cos(a) * door; nz = Math.sin(a) * door; }
-    const ext = planExt(r, nx, nz);
-    r.ext = ext;
-    r.door = { x: r.x + nx * (ext + 0.25), z: r.z + nz * (ext + 0.25), nx, nz, yaw: Math.atan2(nx, nz) };
+    // 정한 쪽이 피할 곳(장소·인물·역…)에 막히면 다른 쪽에 문을 낸다 — 모든 건물이 쓰임을 갖게
+    const sides = [door, typeof door === 'number' ? -door : door === 'u+' ? 'u-' : 'u+', 1, -1, 'u+', 'u-'];
+    let nx, nz, ok = false;
+    for (const sd of sides) {
+      if (sd === 'u+') { nx = -Math.sin(a); nz = Math.cos(a); }
+      else if (sd === 'u-') { nx = Math.sin(a); nz = -Math.cos(a); }
+      else { nx = Math.cos(a) * sd; nz = Math.sin(a) * sd; }
+      const ext = planExt(r, nx, nz);
+      r.ext = ext;
+      r.door = { x: r.x + nx * (ext + 0.25), z: r.z + nz * (ext + 0.25), nx, nz, yaw: Math.atan2(nx, nz) };
+      if (!this._excluded(r.door.x, r.door.z, 3)) { ok = true; break; }
+    }
     r.floorY = Math.max(r.gy, r.mx, heightAt(r.door.x, r.door.z)) + 0.15;
-    if (this._excluded(r.door.x, r.door.z, 3)) return;
+    if (!ok) return;
     r.id = this.recs.length;
     this.recs.push(r);
     const k = Math.floor(r.door.x / 80) * 100003 + Math.floor(r.door.z / 80);

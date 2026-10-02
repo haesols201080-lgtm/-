@@ -953,7 +953,7 @@ export function cityArchetypes() {
       const P = [], n = hi ? 16 : 6;
       const c = squircle(n, 1, 1, 2);
       P.push(loft([ring(0, c), ring(0.08, c), ring(0.1, c, { s: 0.7 })], { color: PEARL2, type: 0, smooth: true }));
-      P.push(loft([ring(0.1, c, { s: 0.2 }), ring(0.94, c, { s: 0.16 })], { color: 0xbff8ff, emit: 1.4, type: 0, smooth: true }));
+      P.push(loft([ring(0.1, c, { s: 0.2 }), ring(0.94, c, { s: 0.16 })], { color: 0x9fefff, emit: 0.95, type: 0, smooth: true }));
       P.push(loft([ring(0.94, c, { s: 0.16 }), ring(1.0, c, { s: 0.02 })], { color: GOLD, type: 0 }));
       const NC = hi ? 6 : 3;
       for (let i = 0; i < NC; i++) {
@@ -1352,15 +1352,23 @@ export function propArchetypes() {
     solid(new THREE.CylinderGeometry(0.75, 0.6, 0.6, 8).translate(0, 0.3, 0), 0xb8b2c6),
     ...[0, 1, 2, 3, 4].map((i) => solid(new THREE.OctahedronGeometry(0.35, 0).scale(0.6, 3.2, 0.25).rotateZ(0.45 + (i % 2) * 0.2).rotateY(i * 1.26).translate(0, 1.6, 0), [0xffa8d8, 0xc8a8ff, 0x9ff0ff][i % 3], 0.7)),
   ]);
-  // 빛 방울 등: 갈대처럼 휜 줄기 끝에 닿지 않고 떠 있는 빛 방울과 그 둘레를 도는 고리
-  P.lamp = mergeF([
-    solid(new THREE.CylinderGeometry(0.24, 0.34, 0.3, 6).translate(0, 0.15, 0), 0x8e8a9c),
-    solid(new THREE.CylinderGeometry(0.05, 0.1, 4.6, 4).translate(0, 2.3, 0), 0xd0cad8),
-    solid(new THREE.CylinderGeometry(0.035, 0.05, 1.9, 4).translate(0, 0.95, 0).rotateX(0.62).translate(0, 4.55, 0), 0xd0cad8),
-    solid(new THREE.IcosahedronGeometry(0.3, 0).translate(0, 6.05, 1.35), 0xfff0d8, 2.6),
-    solid(new THREE.TorusGeometry(0.5, 0.025, 3, 12).rotateX(1.2).translate(0, 6.05, 1.35), ACC, 2.0),
-    solid(new THREE.TorusGeometry(0.12, 0.02, 3, 8).rotateX(Math.PI / 2).translate(0, 2.0, 0), 0xff9fd0, 2.0),
-  ]);
+  // 빛 방울 등: 갈대처럼 휘어 오른 줄기(빛 실이 감아 오름) 끝 위에, 닿지 않고 떠 있는 빛 씨앗과 그 둘레를 도는 고리 둘
+  {
+    const V = (x, y, z) => new THREE.Vector3(x, y, z);
+    const curve = new THREE.CatmullRomCurve3([V(0, 0.2, 0), V(0.03, 1.8, -0.06), V(0, 3.5, 0.04), V(-0.05, 4.7, 0.32), V(0, 5.35, 0.95)]);
+    const fil = [];
+    for (let i = 0; i <= 24; i++) { const t = i / 24, p = curve.getPoint(t), a = t * 14; fil.push(p.add(V(Math.cos(a) * 0.1, 0, Math.sin(a) * 0.1))); }
+    P.lamp = mergeF([
+      solid(new THREE.CylinderGeometry(0.24, 0.34, 0.24, 6).translate(0, 0.12, 0), 0x8e8a9c),
+      solid(new THREE.TorusGeometry(0.3, 0.025, 3, 12).rotateX(Math.PI / 2).translate(0, 0.25, 0), ACC, 1.6),
+      solid(new THREE.TubeGeometry(curve, 16, 0.075, 5, false), 0xd8d0e4, 0.03),
+      solid(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(fil), 30, 0.022, 3, false), ACC, 1.8),
+      ...[0, 1, 2].map((i) => solid(new THREE.ConeGeometry(0.06, 0.95, 3).translate(0, 0.47, 0).rotateZ(0.5).rotateY(i * 2.1 + 0.4).translate(0, 0.2, 0), 0x8ff0e0, 0.3)),
+      solid(new THREE.OctahedronGeometry(0.28, 1).scale(1, 1.45, 1).translate(0, 6.05, 1.25), 0xfff0d8, 2.6),
+      solid(new THREE.TorusGeometry(0.56, 0.022, 3, 16).rotateX(1.25).translate(0, 6.05, 1.25), ACC, 2.0),
+      solid(new THREE.TorusGeometry(0.42, 0.018, 3, 14).rotateX(1.9).rotateY(0.8).translate(0, 6.05, 1.25), 0xff9fd0, 1.8),
+    ]);
+  }
   // 떠 있는 쉼돌: 빛나는 받침 위에 떠 있는 매끈한 조약돌 앉음판 + 휜 등 지느러미
   P.bench = mergeF([
     solid(new THREE.CylinderGeometry(1.0, 1.05, 0.08, 8).scale(1.15, 1, 0.45).translate(0, 0.04, 0), 0x9a96aa),

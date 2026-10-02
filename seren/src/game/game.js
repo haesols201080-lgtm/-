@@ -862,6 +862,10 @@ export class Game {
   _hud() {
     const p = this.player;
     this._target = this.mode === 'play' && p.state !== 'down' && p.state !== 'ride' && !this.director.active ? this._findTarget() : null;
+    // 처음 만나는 건물의 일: 모아가 한 번 알려 준다
+    const tk = this._target && this._target.kind, fl = this.state.flags;
+    if (tk === 'venue' && !fl.moaVenue) { fl.moaVenue = true; this.ui.moa('이 건물의 시설은 장식이 아니에요. 가게에서 사고, 공방·창고에서 일해 별씨를 벌 수 있어요. 가방은 일지에 있어요.'); }
+    if (tk === 'outdoor' && !fl.moaConsole) { fl.moaConsole = true; this.ui.moa('발치의 빛 기둥은 바깥 조작대예요. 들어갈 수 없는 건물도 여기서 그 건물의 일을 할 수 있어요.'); }
     this.ui.prompt(this._target ? this._target.label : null, this._target ? this._target.short : null);
     const markers = [];
     const pos = p.pos;

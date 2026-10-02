@@ -68,6 +68,8 @@ vec4 cityTexel(float row0, float idx) {
 
 // 선 하나의 덮임 (AA): d = 선까지 거리, w = 반폭, fw = 화소 크기
 float cLine(float d, float w, float fw) { return 1.0 - smoothstep(w - fw, w + fw, abs(d)); }
+// 차선 빛 징: 칠한 줄 대신 3 m 마다 마름모 빛 징 (a: 길을 따라, x: 차선 가운데로부터)
+float studs(float a, float x, float fw) { float d = abs(fract(a / 3.0) - 0.5) * 3.0 * 0.55 + abs(x); return 1.0 - smoothstep(0.17, 0.19 + fw * 1.5, d); }
 float cBox(vec2 p, vec2 c, vec2 h) { vec2 q = abs(p - c) - h; return max(q.x, q.y); }
 
 struct CityS { float kind; vec2 q; float fw; float var; float line; float glow; };
@@ -114,13 +116,21 @@ vec3 citySurface(CityS S, out vec3 em, out float spec) {
     vec3 sc = mix(vec3(0.5, 1.0, 0.9), vec3(1.0, 0.6, 0.9), hash12(id + 2.3));
     c = mix(c, sc * 0.6, sp * 0.5);
     em += sc * sp * (0.04 + uGlow * 0.5);
-  } else if (k == 4) { // 꽃밭: 짙은 흙 + 빛 꽃 점
-    vec2 g = q * 2.2; vec2 id = floor(g), f = fract(g) - 0.5;
-    float h = hash12(id);
-    vec3 fl = h < 0.33 ? vec3(0.95, 0.4, 0.75) : h < 0.66 ? vec3(0.45, 0.95, 0.9) : vec3(0.65, 0.5, 1.0);
-    float dot1 = (1.0 - smoothstep(0.18, 0.3, length(f))) * fade;
-    c = mix(vec3(0.07, 0.08, 0.12), fl, dot1 * step(0.35, hash12(id + 3.1)));
-    em += fl * dot1 * (0.05 + uGlow * 0.35) * step(0.5, h);
+  } else if (k == 4) { // 꽃밭: 이끼 덮인 흙 + 흩어진 빛꽃 무리 (두 겹, 칸마다 자리·크기를 흔들어 격자로 보이지 않게)
+    float n = vnoise(q * 0.6);
+    c = mix(vec3(0.05, 0.12, 0.1), vec3(0.12, 0.07, 0.16), n) * (0.85 + 0.25 * vnoise(q * 4.0));
+    for (int l = 0; l < 2; l++) {
+      float fl = float(l);
+      vec2 g = q * (2.6 + fl * 1.5) + fl * 7.31; vec2 id = floor(g), f = fract(g) - 0.5;
+      float h = hash12(id + fl * 3.7);
+      vec2 o = vec2(hash12(id + 1.7), hash12(id + 5.3)) - 0.5;
+      float r = 0.12 + 0.17 * hash12(id + 9.1);
+      float d = length(f - o * 0.55);
+      float on = (1.0 - smoothstep(r * 0.55, r, d)) * step(0.42, hash12(id + 3.1)) * fade;
+      vec3 col = h < 0.33 ? vec3(0.95, 0.4, 0.75) : h < 0.66 ? vec3(0.45, 0.95, 0.9) : vec3(0.65, 0.5, 1.0);
+      c = mix(c, col * (0.55 + 0.45 * (1.0 - d / r)), on * 0.85);
+      em += col * on * (0.03 + uGlow * 0.3) * step(0.4, h);
+    }
   } else if (k == 5) { // 길: 빻은 결정 모래 (낮엔 반짝, 밤엔 희미한 빛)
     c = vec3(0.62, 0.58, 0.7) * (0.9 + 0.15 * vnoise(q * 3.0));
     float sp = step(0.93, hash12(floor(q * 5.0))) * fade;
@@ -167,6 +177,14 @@ vec3 citySurface(CityS S, out vec3 em, out float spec) {
   } else if (k == 13) { // 연석 + 빛줄
     c = vec3(0.64, 0.62, 0.7);
     em += vec3(0.4, 0.95, 0.9) * S.glow * (0.1 + uGlow * 0.7);
+  } else if (k == 15) { // 건널목: 육각 빛판 — 이음매가 호박빛으로 빛나고, 건너는 방향으로 빛이 흐른다 (칠한 줄무늬 대신)
+    vec4 hx = hexCell(q / 0.9);
+    float seam = (1.0 - smoothstep(0.0, 0.05 + fw * 1.2, hx.z)) * fade;
+    float pulse = 0.5 + 0.5 * sin(uTime * 3.0 - q.x * 1.3);
+    c = vec3(0.17, 0.16, 0.22) * (0.9 + 0.15 * hx.w);
+    c = mix(c, vec3(0.78, 0.62, 0.36), seam * 0.75);
+    em += vec3(1.0, 0.75, 0.4) * seam * (0.12 + uGlow * 0.6) * (0.55 + 0.45 * pulse);
+    spec = 0.4;
   } else { // 14 생울타리: 보랏빛 덤불 + 청록 점
     c = vec3(0.12, 0.07, 0.18) * (0.8 + 0.4 * vnoise(q * 4.0));
     float sp = step(0.9, hash12(floor(q * 3.0)));
@@ -361,7 +379,7 @@ float laneStyle(float tA, float tB, bool mid) {
 void laneSurface(inout CityS S, float st, float cx, float al, float w, float fw, float vari) {
   float acx = abs(cx);
   if (st > 3.5) { // 보조 도로: 차도 + 연석 + 좁은 보도
-    if (acx < w * 0.5 - 1.6) { S.kind = 12.0; S.q = vec2(acx, al); S.line = cLine(acx, 0.07, fw) * step(0.5, fract(al / 6.0)); }
+    if (acx < w * 0.5 - 1.6) { S.kind = 12.0; S.q = vec2(acx, al); S.line = studs(al, acx, fw); }
     else if (acx < w * 0.5 - 1.35) { S.kind = 13.0; S.glow = 0.6; }
     else { S.kind = 1.0; S.q = vec2(al, acx); }
   } else if (st > 2.5) { // 상가 거리: 큰 판석 + 가운데 빛 새김
@@ -488,7 +506,7 @@ vec3 cityGround(vec3 wp, out float cov, out vec3 em, out float spec) {
       float hw2 = street * 0.35;
       if (x < hw2) {
         S.kind = 12.0; S.q = vec2(x, r);
-        S.line = cLine(x - hw2 + 0.35, 0.08, fw) + cLine(fract(r / 9.0) - 0.5, 0.25, fw / 9.0) * cLine(x - hw2 * 0.5, 0.08, fw);
+        S.line = cLine(x - hw2 + 0.35, 0.08, fw) + studs(r, x - hw2 * 0.5, fw);
         S.glow = cLine(x, 0.12, fw);
         if (x < 1.4) { // 가운데: 큰 대로(짝수)는 빛 궤도(전차), 작은 대로는 화단
           float avI = mod(floor((rel + SA * 0.5) / SA), avn);
@@ -497,7 +515,7 @@ vec3 cityGround(vec3 wp, out float cov, out vec3 em, out float spec) {
         }
         // 건널목: 고리 거리 바로 바깥
         float vbn = mod(r - r0, ring);
-        if (vbn > street && vbn < street + 4.5 && x >= 1.4) { S.line = max(S.line, step(0.5, fract(x / 1.1))); }
+        if (vbn > street && vbn < street + 4.5 && x >= 1.4) { S.kind = 15.0; S.q = vec2(x, vbn); }
       } else if (x < hw2 + 0.25) { S.kind = 13.0; S.glow = 1.0; S.q = vec2(x, r); }
       else { S.kind = 1.0; S.q = vec2(x, r); }
       onStreet = false;
@@ -507,10 +525,10 @@ vec3 cityGround(vec3 wp, out float cov, out vec3 em, out float spec) {
       if (ax < 1.1 && mod(max(kf, 0.0), 2.0) < 0.5 && street > 19.0) { S.kind = 4.0; S.q = vec2(along, x); } // 큰 고리 거리: 가운데 꽃 띠
       else if (ax < rw * 0.5) {
         S.kind = 12.0;
-        S.line = cLine(ax - rw * 0.5 + 0.35, 0.08, fw) + cLine(fract(along / 9.0) - 0.5, 0.25, fw / 9.0) * cLine(ax - rw * 0.25, 0.08, fw);
+        S.line = cLine(ax - rw * 0.5 + 0.35, 0.08, fw) + studs(along, ax - rw * 0.25, fw);
         S.glow = cLine(ax, 0.1, fw);
         // 건널목: 대로 바로 옆
-        if (dAv > avH && dAv < avH + 4.5) S.line = max(S.line, step(0.5, fract(x / 1.1)));
+        if (dAv > avH && dAv < avH + 4.5) { S.kind = 15.0; S.q = vec2(x, dAv); }
       } else if (ax < rw * 0.5 + 0.25) { S.kind = 13.0; S.glow = 1.0; }
       else if (ax < rw * 0.5 + 0.25 + sw) { S.kind = 1.0; S.q = vec2(along, ax); }
       else S.kind = 1.0;

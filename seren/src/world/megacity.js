@@ -53,6 +53,7 @@ export class Megacity {
     this.docks = []; // 배가 내려앉는 착륙대 {x, y, z, ang}
     this.towers = [];
     this.halos = [];
+    this.homes = []; // 발치 마을·하늘바퀴·하늘고리 위의 집 {x, z, y, r, h, halo} — 바깥 조작대(주민 부탁함)가 쓴다
     this.districts = [];
     this.markers = [];
     this.t = 0;
@@ -137,6 +138,7 @@ export class Megacity {
       const parts = rnd() < 0.6 ? A.domeHouse({ r, h: r * 1.2, seed: i + Dd.seed * 100, glow: GLOWS[i % 4] }) : A.spireTower({ h: 40 + rnd() * 80, r: r * 0.45, seed: i + Dd.seed * 200, glow: GLOWS[(i + 1) % 4] });
       A.place(hi, parts, { x, y, z });
       this._col({ type: 'cyl', x, z, r: r * 0.95, y0: y - 1, y1: y + r * 1.1, dome: r * 0.6 });
+      this.homes.push({ x, z, y: y + 0.5, r: r * 0.95, h: r * 1.2 });
     }
     this._addLOD(hi, lo, cx, cz, 4200);
     this.districts.push({ ...Dd, grand, halo, sats });
@@ -457,10 +459,12 @@ export class Megacity {
         const sh = 30 + rnd() * 70, sr = 3 + rnd() * 2.5;
         A.place(parts, A.spireTower({ h: sh, r: sr, seed: H.seed * 50 + i, glow: GLOWS[i % 4] }), { x: px, y: 0, z: pz });
         this._col({ type: 'cyl', x: cx + px, z: cz + pz, r: sr * 1.2, y0: y - 1, y1: y + sh * 0.42 });
+        this.homes.push({ x: cx + px, z: cz + pz, y, r: sr * 1.2, h: sh, halo: H.id, a, R });
       } else if (k < 0.72) {
         const hr = 5 + rnd() * 5;
         A.place(parts, A.domeHouse({ r: hr, h: hr * 1.15, seed: H.seed * 70 + i, glow: rnd() < 0.6 ? PAL.amber : PAL.teal }), { x: px, y: 0, z: pz });
         this._col({ type: 'cyl', x: cx + px, z: cz + pz, r: hr * 0.95, y0: y - 1, y1: y + hr * 1.1, dome: hr * 0.6 });
+        this.homes.push({ x: cx + px, z: cz + pz, y, r: hr * 0.95, h: hr * 1.15, halo: H.id, a, R });
       } else if (k < 0.9) {
         A.place(parts, A.gardenBed({ r: 5 + rnd() * 3, seed: i }), { x: px, y: 0, z: pz });
       }

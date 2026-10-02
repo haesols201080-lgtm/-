@@ -113,7 +113,7 @@ export class Journal {
     if (bs.length) h += `<div class="section-title">몸의 기운</div>${bs.map(([id, t]) => `<p>${BUFFS[id].name} · ${Math.floor(t / 60)}분 ${Math.floor(t % 60)}초 남음</p>`).join('')}`;
     if (V.job) h += `<div class="section-title">맡은 일</div><p>${V.job.label} · 별씨 ${V.job.reward}</p>`;
     h += `<div class="section-title">도시에서</div><p>일해서 번 별씨 ${V.earned || 0} · 쓴 별씨 ${V.spent || 0} · 본 전시 ${Object.keys(V.exhibits || {}).length} · 읽은 기록 ${Object.keys(V.archives || {}).length}</p>`;
-    h += '<p class="muted">별씨는 공방(생산 줄)·창고(짐 나누기·배달)·발전소(출력 맞추기)·사무탑(일거리)에서 벌고, 가게·찻집·터미널에서 써요.</p>';
+    h += '<p class="muted">별씨는 공방(생산 줄)·창고(짐 나누기·배달)·발전소(출력 맞추기)·사무탑(일거리), 그리고 바깥 조작대(설비 점검·짐 드론 관제·코일 조율·주민 부탁함)에서 벌고, 가게·찻집·터미널·하늘배에서 써요.</p>';
     c.innerHTML = h;
     c.querySelectorAll('[data-use]').forEach((b) => b.addEventListener('click', () => { g.venues.useItem(b.dataset.use); const body = c.parentElement; body.innerHTML = ''; this.render(body); }));
   }
