@@ -47,7 +47,7 @@ export class Megacity {
     this.group = new THREE.Group();
     this.group.name = 'megacity';
     this.scene.add(this.group);
-    this.mat = litMaterial({ vertexColors: true, vertexEmit: true, windows: true, emissive: 0xffffff, emissiveIntensity: 1.5, emissiveNight: 0.8, rim: 0.5, rimColor: 0xe0e8ff, spec: 1.1, side: THREE.DoubleSide });
+    this.mat = litMaterial({ vertexColors: true, vertexEmit: true, windows: true, emissive: 0xffffff, emissiveIntensity: 1.5, emissiveNight: 0.8, rim: 0.5, rimColor: 0xe0e8ff, spec: 1.1, side: THREE.DoubleSide, tech: { scale: 5, glow: 0.45, metal: 0.4, mode: 0 } });
     this.lights = new PointLights(this.scene, 900, { minPx: 2.0, day: 0.3 });
     this.anims = [];
     this.docks = []; // 배가 내려앉는 착륙대 {x, y, z, ang}

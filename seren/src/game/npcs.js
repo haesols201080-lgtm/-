@@ -51,6 +51,8 @@ export class NPCs {
   }
 
   _spawn(d) {
+    // 거리의 아웬은 건물 안이 아니라 거리 위에서
+    if (d.ambient && !d.indoor && this.game.city) { const s = this.game.city.snapStreet(d.x, d.z); if (s) { d.x = s.x; d.z = s.z; } }
     const fig = new AwenFigure({ hue: d.hue, glow: d.glow, scale: d.scale || 1 });
     // y 가 있으면 그 높이의 바닥에 (하늘닻·하늘 주조소처럼 높은 곳)
     const y = d.y !== undefined ? this.game.world.groundAt(d.x, d.z, d.y + 3) : this.game.world.groundAt(d.x, d.z, 1e5);
@@ -71,6 +73,15 @@ export class NPCs {
   }
 
   get(id) { return this.byId.get(id); }
+
+  /** 인물 치우기 (건물 실내를 닫을 때) */
+  remove(n) {
+    this.scene.remove(n.fig.root);
+    this.scene.remove(n.mark);
+    const i = this.list.indexOf(n);
+    if (i >= 0) this.list.splice(i, 1);
+    this.byId.delete(n.id);
+  }
 
   /** 장소로 이동 (퀘스트 동작) */
   goTo(id, x, z, opts = {}) {
@@ -122,8 +133,15 @@ export class NPCs {
             const rr = Math.min(h.r, 60) * 0.5 + (h.minR || 0);
             n.target = { x: h.x + Math.cos(a) * rr, z: h.z + Math.sin(a) * rr };
           } else {
-            const a = Math.random() * 6.28, r = (h.minR || 0) + Math.random() * (h.r - (h.minR || 0));
-            n.target = { x: h.x + Math.cos(a) * r, z: h.z + Math.sin(a) * r };
+            const st = !n.indoor && g.city && g.city.snapStreet(n.pos.x, n.pos.z);
+            if (st) {
+              // 도시에서는 지금 선 고리 거리를 따라 걷는다
+              const a = Math.atan2(n.pos.z - st.zone.cz, n.pos.x - st.zone.cx) + (Math.random() - 0.5) * (90 / st.R);
+              n.target = { x: st.zone.cx + Math.cos(a) * st.R, z: st.zone.cz + Math.sin(a) * st.R };
+            } else {
+              const a = Math.random() * 6.28, r = (h.minR || 0) + Math.random() * (h.r - (h.minR || 0));
+              n.target = { x: h.x + Math.cos(a) * r, z: h.z + Math.sin(a) * r };
+            }
           }
           n.wait = 2;
         }

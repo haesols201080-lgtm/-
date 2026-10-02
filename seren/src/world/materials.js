@@ -28,6 +28,17 @@ varying vec3 vIColor;
 attribute float win;
 varying float vWin;
 #endif
+#ifdef USE_CUT
+uniform vec3 uCutCenter;
+uniform float uNearCut;
+uniform float uFarCut;
+#endif
+#ifdef USE_FACADE
+attribute vec2 fac;   // x: 둘레를 따라 잰 거리(단위 모양 기준), y: 외벽 종류
+varying vec2 vFac;
+varying float vSeed;
+varying float vBase;
+#endif
 void main() {
   vec3 p = position;
 #ifdef USE_WINDOWS
@@ -41,6 +52,11 @@ void main() {
   mat4 im = instanceMatrix;
 #else
   mat4 im = mat4(1.0);
+#endif
+#ifdef USE_CUT
+  // 도시의 먼 모델: 가까운 것(자세한 모델이 대신 그림)과 너무 먼 것은 그리지 않는다
+  float cutD = distance((modelMatrix * im * vec4(0.0, 0.0, 0.0, 1.0)).xyz, uCutCenter);
+  if (cutD < uNearCut || cutD > uFarCut) { gl_Position = vec4(0.0, 0.0, -2.0, 1.0); return; }
 #endif
   vec4 wp = modelMatrix * im * vec4(p, 1.0);
 #ifdef USE_WIND
@@ -59,6 +75,12 @@ void main() {
 #endif
   vWorld = wp.xyz;
   vNormal = normalize(mat3(modelMatrix) * mat3(im) * normal);
+#ifdef USE_FACADE
+  vec3 ipos = (modelMatrix * im * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+  vFac = vec2(fac.x * 0.5 * (length(im[0].xyz) + length(im[2].xyz)), fac.y);
+  vSeed = fract(sin(dot(ipos.xz, vec2(12.9898, 78.233))) * 43758.5453);
+  vBase = ipos.y;
+#endif
 #ifdef USE_VCOLOR
   vColor = color;
 #endif
@@ -95,7 +117,29 @@ varying vec3 vIColor;
 #ifdef USE_WINDOWS
 varying float vWin;
 #endif
+uniform float uWinGlow;
+#ifdef USE_TECH
+uniform vec4 uTech;    // x 무늬 크기(m), y 빛줄 세기, z 금속감, w 방식(0 판·회로, 1 동심원)
+uniform vec3 uTechC;   // 동심원 중심
+uniform vec3 uTechCol; // 빛줄 색
+vec2 techUV(vec3 p, vec3 n) { vec3 a = abs(n); return a.y > max(a.x, a.z) ? p.xz : (a.x > a.z ? p.zy : p.xy); }
+#endif
+#ifdef USE_DOORCUT
+uniform vec3 uDoorP;
+uniform vec3 uDoorN;
+uniform vec2 uDoorS;
+#endif
+#ifdef USE_FACADE
+varying vec2 vFac;
+varying float vSeed;
+varying float vBase;
+#endif
 void main() {
+#ifdef USE_DOORCUT
+  // 들어간 건물: 문 자리의 벽을 뚫는다
+  vec3 dpc = vWorld - uDoorP;
+  if (abs(dot(dpc, vec3(-uDoorN.z, 0.0, uDoorN.x))) < uDoorS.x && dpc.y < uDoorS.y && dpc.y > -3.0 && abs(dot(dpc, uDoorN)) < 7.0) discard;
+#endif
   vec3 N = normalize(vNormal);
   if (!gl_FrontFacing) N = -N;
   vec3 V = normalize(cameraPosition - vWorld);
@@ -133,15 +177,115 @@ void main() {
     float aa = clamp(1.6 - max(fw.x, fw.y) * 2.2, 0.0, 1.0);
     float glassF = mix(0.45, frame, aa);
     float r = hash12(id + vec2(floor(vWin * 7.0), 0.0));
-    float litP = mix(0.1, 0.55, clamp(uGlow, 0.0, 1.0));
+    float litP = mix(0.1, 0.55, clamp(uGlow, 0.0, 1.0)) * mix(0.6, 1.0, uWinGlow);
     float lit = mix(litP, step(1.0 - litP, r), aa);
     vec3 warm = mix(vec3(1.0, 0.76, 0.45), vec3(0.55, 0.95, 1.0), step(0.72, hash12(id + 3.1)));
     vec3 R = reflect(-V, N);
     vec3 glass = skyBase(vec3(R.x, abs(R.y), R.z)) * 0.5 + vec3(0.015, 0.03, 0.06);
     col = mix(col, glass, glassF * 0.88);
-    em += warm * lit * glassF * (0.18 + uGlow * 1.5);
+    em += warm * lit * glassF * (0.18 + uGlow * 1.5) * uWinGlow;
   }
 #endif
+  vec3 techEm = vec3(0.0);
+  float glassMaskF = 0.0;
+#ifdef USE_TECH
+  {
+    // 미래 문양: 새긴 판 이음매 + 흐르는 회로 빛 + 원 문양, 그리고 진주빛 금속 광택
+    float glowT = clamp(uGlow, 0.0, 1.0);
+    float engr = 0.0, tline = 0.0, detail = 1.0;
+    if (uTech.w < 0.5) {
+      vec2 q = techUV(vWorld, N) / uTech.x;
+      vec2 id = floor(q), f = fract(q);
+      vec2 fw = fwidth(q);
+      detail = clamp(1.4 - max(fw.x, fw.y) * 3.0, 0.0, 1.0);
+      if (hash12(id) > 0.55) { q *= 2.0; id = floor(q); f = fract(q); fw *= 2.0; }
+      float e = min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y));
+      float ew = max(fw.x, fw.y);
+      engr = 1.0 - smoothstep(0.014, 0.014 + ew * 1.2, e);
+      float h2 = hash12(id + 7.1), h3 = hash12(id + 3.7);
+      if (h2 > 0.42) {
+        float yl = 0.2 + h3 * 0.6, xl = 0.15 + hash12(id + 1.3) * 0.7;
+        float d1 = abs(f.y - yl) + max(0.0, f.x - xl) * 8.0;
+        float d2 = abs(f.x - xl) + max(0.0, yl - f.y) * 8.0;
+        float d = min(d1, d2);
+        tline = 1.0 - smoothstep(0.01, 0.01 + ew * 1.5, d);
+        tline = max(tline, 1.0 - smoothstep(0.025, 0.035 + ew, length(f - vec2(xl, 0.93))));
+        tline *= 0.55 + 0.45 * sin(uTime * 2.2 + h3 * 31.0 - f.x * 7.0);
+      }
+      if (hash12(id + 9.9) > 0.85) {
+        float rr = length(f - 0.5);
+        tline = max(tline, ((1.0 - smoothstep(0.0, 0.012 + ew, abs(rr - 0.3))) + (1.0 - smoothstep(0.0, 0.01 + ew, abs(rr - 0.21)))) * 0.85);
+      }
+    } else {
+      vec2 c = vWorld.xz - uTechC.xz;
+      float rad = length(c) / uTech.x, ang = atan(c.y, c.x) / 6.2831853;
+      float rf = fract(rad), ri = floor(rad), rw = fwidth(rad);
+      detail = clamp(1.4 - rw * 3.0, 0.0, 1.0);
+      engr = 1.0 - smoothstep(0.02, 0.02 + rw * 1.5, min(rf, 1.0 - rf));
+      float spokes = 6.0 + ri * 6.0;
+      float af = fract(ang * spokes), aw = fwidth(ang * spokes);
+      engr = max(engr, (1.0 - smoothstep(0.02, 0.02 + aw * 1.5, min(af, 1.0 - af))) * step(0.5, hash12(vec2(ri, floor(ang * spokes)))) * 0.8);
+      float hs = hash12(vec2(ri * 3.1, floor(ang * spokes * 2.0)));
+      tline = (1.0 - smoothstep(0.018, 0.018 + rw * 1.5, abs(rf - (0.3 + hs * 0.4)))) * step(0.55, hs);
+      tline *= 0.6 + 0.4 * sin(uTime * 1.6 - rad * 2.2);
+    }
+    col *= 1.0 - engr * 0.4 * detail;
+    vec3 Rm = reflect(-V, N);
+    float frm = 0.05 + 0.95 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+    vec3 irid = 0.5 + 0.5 * cos(6.2831853 * (frm * 1.3 + dot(N, vec3(0.3, 0.2, 0.1)) + vec3(0.0, 0.33, 0.67)));
+    vec3 refl = skyBase(normalize(vec3(Rm.x, abs(Rm.y) * 0.8 + 0.05, Rm.z)));
+    col = mix(col, refl * (0.55 + 0.6 * alb) + irid * 0.06, uTech.z * (0.18 + 0.82 * frm));
+    col += uSunColor * pow(max(dot(Rm, uSunDir), 0.0), 140.0) * uTech.z * 1.4;
+    techEm = uTechCol * tline * detail * uTech.y * (0.22 + glowT * 1.3);
+  }
+#endif
+#ifdef USE_FACADE
+  // 도시 건물 외벽: 1 커튼월(가는 멀리언·층 띠·반사 유리) 2 띠창 3 점창 4 첨탑(나선 빛)
+  float ftype = vFac.y;
+  float ao = mix(0.66, 1.0, smoothstep(1.0, 9.0, vWorld.y - vBase));
+  col *= ao;
+  if (ftype > 0.5) {
+    float bay = ftype < 1.5 ? 1.6 : ftype < 2.5 ? 2.2 : ftype < 3.5 ? 2.6 : 1.4;
+    float flH = ftype < 1.5 ? 3.6 : ftype < 3.5 ? 3.9 : 3.3;
+    vec2 cell = vec2(vFac.x / bay, vWorld.y / flH);
+    vec2 f = fract(cell), id = floor(cell);
+    vec2 fw = max(fwidth(cell), vec2(1e-4));
+    float aa = clamp(1.3 - max(fw.x, fw.y) * 2.2, 0.0, 1.0);
+    float spandH = ftype < 1.5 ? 0.18 : ftype < 2.5 ? 0.46 : ftype < 3.5 ? 0.38 : 0.12;
+    float mullW = ftype < 1.5 ? 0.035 : ftype < 2.5 ? 0.012 : ftype < 3.5 ? 0.24 : 0.05;
+    float gx = smoothstep(mullW - fw.x, mullW + fw.x, f.x) * (1.0 - smoothstep(1.0 - mullW - fw.x, 1.0 - mullW + fw.x, f.x));
+    float gy = smoothstep(spandH - fw.y, spandH + fw.y, f.y) * (1.0 - smoothstep(1.0 - fw.y * 1.5, 1.0, f.y));
+    float gm = mix((1.0 - 2.0 * mullW) * (1.0 - spandH), gx * gy, aa);
+    vec3 Rg = reflect(-V, N);
+    vec3 skyR = skyBase(normalize(vec3(Rg.x, abs(Rg.y) * 0.7 + 0.03, Rg.z)));
+    float frs = 0.1 + 0.9 * pow(1.0 - max(dot(N, V), 0.0), 4.0);
+    vec3 tint = mix(vec3(0.025, 0.06, 0.09), vec3(0.07, 0.1, 0.12), vSeed) + hash12(vec2(id.y, vSeed * 91.0)) * 0.025;
+    vec3 glass = tint + skyR * mix(0.32, 1.0, frs) + uSunColor * pow(max(dot(Rg, uSunDir), 0.0), 240.0) * 2.4;
+    float room = hash12(vec2(floor(id.x / 2.0), id.y) + vSeed * 37.0);
+    float floorOn = step(0.84, hash12(vec2(id.y, vSeed * 13.0))) * step(0.25, room);
+    float glowK = clamp(uGlow, 0.0, 1.0);
+    float litP = mix(0.1, 0.45, glowK) * uWinGlow;
+    float lit = mix(litP, max(step(1.0 - litP, room), floorOn * glowK), aa);
+    vec3 warm = mix(vec3(1.0, 0.76, 0.48), vec3(0.62, 0.92, 1.0), step(0.68, hash12(id + 5.3 + vSeed * 3.0)));
+    col = mix(col, glass * mix(0.75, 1.0, ao), gm);
+    glassMaskF = gm;
+    em += warm * lit * gm * (0.06 + glowK * 0.85) * uWinGlow;
+    // 빛줄: 몇 칸마다 세로 빛 (건물마다 다르게) / 첨탑은 나선
+    float kx = fract(cell.x / (8.0 + floor(vSeed * 8.0)));
+    float dl = min(kx, 1.0 - kx) * (8.0 + floor(vSeed * 8.0));
+    float vline = (1.0 - smoothstep(0.04, 0.04 + fw.x * 1.5, dl)) * step(0.5, vSeed);
+    if (ftype > 3.5) {
+      float hq = vFac.x * 0.012 + vLocal.y * 5.0;
+      float hf = fract(hq);
+      float hw = fwidth(hq);
+      vline = 1.0 - smoothstep(0.015, 0.015 + hw * 1.5, min(hf, 1.0 - hf));
+    }
+    vline *= clamp(1.6 - max(fw.x, fw.y) * 3.0, 0.0, 1.0);
+    vec3 accC = mix(vec3(0.5, 0.95, 0.9), vec3(1.0, 0.8, 0.45), step(0.8, vSeed));
+    em += accC * vline * (0.2 + glowK * 0.9);
+  }
+#endif
+  em += techEm * (1.0 - glassMaskF); // 문양 빛은 유리 위에는 그리지 않는다
 #ifdef USE_LINES
   // 아웬 건축의 빛나는 이음선
   float ln = smoothstep(0.08, 0.0, abs(fract(vLocal.y * uLines) - 0.5) - 0.42);
@@ -173,6 +317,10 @@ export function litMaterial(opts = {}) {
   if (opts.vertexEmit) defines.USE_VEMIT = '';
   if (opts.push) defines.USE_PUSH = '';
   if (opts.windows) defines.USE_WINDOWS = '';
+  if (opts.cut) defines.USE_CUT = '';
+  if (opts.facade) defines.USE_FACADE = '';
+  if (opts.doorCut) defines.USE_DOORCUT = '';
+  if (opts.tech) defines.USE_TECH = '';
   const m = new THREE.ShaderMaterial({
     uniforms: {
       ...atmosUniforms,
@@ -188,6 +336,14 @@ export function litMaterial(opts = {}) {
       uLines: { value: opts.lines ?? 0 },
       uLineColor: { value: new THREE.Color(opts.lineColor ?? 0x9ff6ff) },
       uPlayer: playerUniform,
+      uWinGlow: { value: opts.winGlow ?? 1 },
+      uDoorP: { value: new THREE.Vector3(0, -1e6, 0) },
+      uDoorN: { value: new THREE.Vector3(0, 0, 1) },
+      uDoorS: { value: new THREE.Vector2(1.6, 4.0) },
+      uTech: { value: new THREE.Vector4(...(opts.tech ? [opts.tech.scale ?? 2.4, opts.tech.glow ?? 0.6, opts.tech.metal ?? 0.35, opts.tech.mode ?? 0] : [1, 0, 0, 0])) },
+      uTechC: { value: new THREE.Vector3(...(opts.tech && opts.tech.center ? opts.tech.center : [0, 0, 0])) },
+      uTechCol: { value: new THREE.Color(opts.tech && opts.tech.color !== undefined ? opts.tech.color : 0x7ff3e6) },
+      ...(opts.cut || {}),
     },
     defines,
     vertexShader: vert,

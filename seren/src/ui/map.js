@@ -2,6 +2,7 @@
 import { heightAt, regionWeights, RC } from '../world/heightfield.js';
 import { REGIONS } from '../world/regions.js';
 import { PLACES } from '../data/places.js';
+import { pavedAt } from '../data/city.js';
 
 const RANGE = 60000; // 지도 반경 (m)
 const N = 768; // 바탕 해상도
@@ -70,6 +71,12 @@ export class MapData {
       c = c.map((v) => v * shade);
       if (h > 1050 && sl < 0.5) c = [230 * shade, 236 * shade, 248 * shade];
       if (h < 3) c = [214, 196, 150];
+    }
+    if (h > 1) {
+      // 도시: 포장된 땅은 밝은 돌색
+      const x = -RANGE + (i + 0.5) * cell, z = -RANGE + (j + 0.5) * cell;
+      const p = pavedAt(x, z);
+      if (p > 0) c = c.map((v, k) => v + ([214, 208, 226][k] * shade - v) * p * 0.85);
     }
     d[o] = Math.min(255, c[0]); d[o + 1] = Math.min(255, c[1]); d[o + 2] = Math.min(255, c[2]); d[o + 3] = 255;
   }

@@ -19,6 +19,8 @@ import { SkyAnchor } from '../world/anchor.js';
 import { Farlands } from '../world/farlands.js';
 import { Colossi } from '../world/colossus.js';
 import { Facilities } from '../world/facilities.js';
+import { CityFabric } from '../world/cityfabric.js';
+import { Streams } from '../world/streams.js';
 import { Currents } from '../world/currents.js';
 import { Creatures } from '../world/creatures.js';
 import { Clouds } from '../world/clouds.js';
@@ -42,6 +44,7 @@ import { Discovery } from './discovery.js';
 import { WorldEvents, Requests } from './world-events.js';
 import { Director } from './director.js';
 import { Services } from './services.js';
+import { Interiors } from './interiors.js';
 import { UI } from '../ui/ui.js';
 import { MapData } from '../ui/map.js';
 
@@ -78,6 +81,8 @@ export class Game {
     this.transit.isOpen = (u) => (!u ? true : u.startsWith('quest:') ? this.quests.isDone(u.slice(6)) : !!this.state.pylons[u]);
     this.flora = this.world.add(new Flora(this.world, this.engine.q));
     this.currents = this.world.add(new Currents(this.world, CURRENTS));
+    this.city = this.world.add(new CityFabric(this.world, this.engine.q, { transit: this.transit, facilities: this.facilities, currents: this.currents }));
+    this.streams = this.world.add(new Streams(this.world, this.city, this.engine.q));
     this.player = new Player(this.world);
     this.creatures = this.world.add(new Creatures(this.world, this));
     this.drones = this.world.add(new Drones(this.world, this));
@@ -99,6 +104,7 @@ export class Game {
     this.mapData = new MapData(this);
     this.requests = new Requests(this);
     this.services = new Services(this);
+    this.interiors = new Interiors(this);
 
     this.particles = new Particles(this.engine.scene);
     this.trails = [new Trail(this.engine.scene, 0xbffcff), new Trail(this.engine.scene, 0xbffcff)];
@@ -259,6 +265,8 @@ export class Game {
     const s = this.state;
     const p = this.player;
     if (p.state !== 'current' && p.state !== 'lift' && p.state !== 'down' && p.state !== 'ride') s.player = { x: p.pos.x, y: p.pos.y > 20000 && p.state === 'ground' ? p.pos.y + 0.5 : null, z: p.pos.z, yaw: p.yaw };
+    const safe = this.interiors && this.interiors.safeSpot();
+    if (safe) s.player = { x: safe.x, y: null, z: safe.z, yaw: p.yaw };
     s.clock = this.world.clock.time;
     s.upgrades = { ...p.upgrades };
     s.reveal = this.mapData.serialize();
@@ -322,6 +330,7 @@ export class Game {
       this.avatar.update(dt, this.player);
       playerUniform.value.copy(this.player.pos);
       this.rig.update(dt, free ? input : NO_INPUT, this.player);
+      if (!this.rig.override) this.interiors.clampCamera(this.engine.camera, this.rig.smoothTarget);
       if (mode === 'dialogue' && this.dialogue.active && this.dialogue.active.npc) this._dialogueCam(dt);
       else this._dlgCam = null;
       if (this.player.state === 'ride' && this.player.ride) {
@@ -342,6 +351,7 @@ export class Game {
       this.events.update(dt);
       this.requests.update(dt);
       this.services.update(dt);
+      this.interiors.update(dt);
       if ((this._scanT = (this._scanT || 0) - dt) < 0) { this._scanT = 0.5; this._techScan(); }
       this._hud(dt);
       this.mapData.reveal(this.player.pos.x, this.player.pos.z, 450 + Math.max(0, this.player.pos.y - this.player.groundH) * 2);
@@ -406,9 +416,13 @@ export class Game {
       const dock = this.facilities.list.some((F) => F.type === 'dock' && Math.hypot(F.x - p.x, F.z - p.z) < 60 && Math.abs(F.y + F.padY - p.y) < 30);
       return { kind: 'unfly', label: dock ? '나룻배 돌려주기' : '나룻배에서 내리기', short: '내리기' };
     }
+    const inside = this.interiors.target(p);
+    if (inside && inside.kind !== 'door') return inside;
     const npc = this.npcs.nearest(p, 5.5, (n) => !n.ambient);
+    if (npc && npc.service === 'lobby') return { kind: 'lobby', o: npc, label: '안내지기 · 이 건물 이야기', short: '안내' };
     if (npc && npc.service) { const F = this.facilities.byId.get(npc.service); return { kind: 'facility', o: F, label: `${F.info.keeper} · ${F.info.verb}`, short: F.info.name }; }
     if (npc) return { kind: 'npc', o: npc, label: `${npc.name}와(과) 마주하기`, short: '말 걸기' };
+    if (inside) return inside;
     const el = this.anchor.stopNear(p);
     if (el) return { kind: 'elevator', o: el, label: el.up ? (this.elevatorOpen() ? '승강차 · 하늘닻으로 오르기 (30 km)' : '승강차 (아직 멈춰 있다)') : '승강차 · 척추 전망대로 내려가기', short: '승강차' };
     const d = this.discovery.nearestInteract(p);
@@ -422,6 +436,11 @@ export class Game {
     if (t.kind === 'npc') return this.talkTo(t.o);
     if (t.kind === 'facility') { this.focusOn(t.o.npc); return this.services.open(t.o); }
     if (t.kind === 'unfly') return this.services.endFly();
+    if (t.kind === 'door') return this.interiors.enter(t.o);
+    if (t.kind === 'exit') return this.interiors.exit();
+    if (t.kind === 'lift') return this.interiors.up();
+    if (t.kind === 'liftdown') return this.interiors.down();
+    if (t.kind === 'lobby') { this.focusOn(t.o); return this.interiors.talk(); }
     if (t.kind === 'station') return this.stationCard(t.o);
     if (t.kind === 'elevator') return this.rideElevator(t.o.up);
     if (t.kind === 'deck' && this.quests.step('mq4')?.type === 'compose') {

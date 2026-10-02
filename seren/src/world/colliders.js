@@ -48,9 +48,15 @@ export class Colliders {
     if (i >= 0) this.all.splice(i, 1);
     const d = this.dynamic.indexOf(c);
     if (d >= 0) { this.dynamic.splice(d, 1); return; }
-    for (const arr of this.grid.values()) {
-      const k = arr.indexOf(c);
-      if (k >= 0) arr.splice(k, 1);
+    // 그 충돌체가 걸친 칸만 본다
+    const [x0, z0, x1, z1] = this._bounds(c);
+    for (let i = Math.floor(x0 / CELL); i <= Math.floor(x1 / CELL); i++) {
+      for (let j = Math.floor(z0 / CELL); j <= Math.floor(z1 / CELL); j++) {
+        const arr = this.grid.get(this._key(i, j));
+        if (!arr) continue;
+        const k = arr.indexOf(c);
+        if (k >= 0) arr.splice(k, 1);
+      }
     }
   }
 

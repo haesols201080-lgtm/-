@@ -23,7 +23,7 @@ export class Facilities {
     this.world = world;
     this.structures = structures;
     this.scene = world.scene;
-    this.mat = litMaterial({ vertexColors: true, vertexEmit: true, windows: true, emissive: 0xffffff, emissiveIntensity: 1.5, emissiveNight: 0.8, rim: 0.55, rimColor: 0xe8e0ff, spec: 0.8, side: THREE.DoubleSide });
+    this.mat = litMaterial({ vertexColors: true, vertexEmit: true, windows: true, emissive: 0xffffff, emissiveIntensity: 1.5, emissiveNight: 0.8, rim: 0.55, rimColor: 0xe8e0ff, spec: 0.8, side: THREE.DoubleSide, tech: { scale: 1.4, glow: 0.7, metal: 0.4, mode: 0 } });
     this.glass = litMaterial({ vertexColors: true, vertexEmit: true, emissive: 0xffffff, emissiveIntensity: 1.0, rim: 1.4, rimColor: 0xd8f8ff, spec: 1.6, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false });
     this.lights = new PointLights(this.scene, 400, { minPx: 1.6, day: 0.3 });
     this.list = [];

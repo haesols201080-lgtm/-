@@ -2,6 +2,7 @@
 import { heightAt, RC } from './heightfield.js';
 import { REGIONS } from './regions.js';
 import { createNoise2D, hash2, smoothstep } from '../core/noise.js';
+import { pavedAt } from '../data/city.js';
 
 const nV = createNoise2D(2024);
 const nS = createNoise2D(1999);
@@ -16,6 +17,7 @@ const SAND = hexLin(0xead6a8);
 const WETSAND = hexLin(0xb59a74);
 const SNOW = hexLin(0xf1f5ff);
 const VIOLET = hexLin(0x7a62c0);
+const PAVE1 = hexLin(0xa8a3b4), PAVE2 = hexLin(0x8e899c);
 const STRATA = [hexLin(0xc0603f), hexLin(0xe0a070), hexLin(0x9a4636), hexLin(0xefc694), hexLin(0x8a4a42), hexLin(0xd27f52)];
 const GSTRATA = [hexLin(0xd98f7a), hexLin(0xf0c4a8), hexLin(0xc06f78), hexLin(0xf6dcc4), hexLin(0xb46a80)];
 const RSTRATA = [hexLin(0x6a4a66), hexLin(0x9a6a7a), hexLin(0x4e3a58), hexLin(0xb88a98), hexLin(0x5e4060), hexLin(0x8a5a72)];
@@ -71,9 +73,19 @@ export function surfaceColor(x, z, h, ny, w, col, glow) {
   if (snow > 0) {
     c0 += (SNOW[0] - c0) * snow; c1 += (SNOW[1] - c1) * snow; c2 += (SNOW[2] - c2) * snow;
   }
+  // 도시: 포장된 땅 (돌판 무늬, 군데군데 공원)
+  let pave = h > 1 ? pavedAt(x, z) : 0;
+  if (pave > 0) {
+    pave *= smoothstep(-0.45, -0.2, nV(x / 520 + 3, z / 520 - 5)) * (1 - rockAmt * 0.6);
+    const tile = 0.9 + 0.12 * hash2(Math.floor(x / 14), Math.floor(z / 14), 3);
+    const t = v2;
+    c0 += ((PAVE1[0] + (PAVE2[0] - PAVE1[0]) * t) * tile - c0) * pave;
+    c1 += ((PAVE1[1] + (PAVE2[1] - PAVE1[1]) * t) * tile - c1) * pave;
+    c2 += ((PAVE1[2] + (PAVE2[2] - PAVE1[2]) * t) * tile - c2) * pave;
+  }
   col[0] = c0; col[1] = c1; col[2] = c2;
 
-  const g = ga * (1 - rockAmt) * (1 - sand) * (1 - snow) * (h > 0.5 ? 1 : 0);
+  const g = ga * (1 - rockAmt) * (1 - sand) * (1 - snow) * (1 - pave) * (h > 0.5 ? 1 : 0);
   glow[0] = lr * g; glow[1] = lg * g; glow[2] = lb * g;
 }
 
