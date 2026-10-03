@@ -149,7 +149,7 @@ export const CIT_LINES = {
   tagLose: [{ words: ['no', 'catch', '!', 'again', '?'], ko: '못 잡았지! 다시 할래?' }],
 };
 
-// 장터에서 나누는 것 (별씨로)
+// 장터에서 나누는 것 (울로)
 export const GOODS = [
   { id: 'fruit', name: '빛열매', price: 1, desc: '달콤하게 빛나는 열매. 주민에게 건네면 함께 나눠 먹는다(친해진다).' },
   { id: 'flower', name: '울림꽃', price: 2, desc: '노래에 맞춰 피는 꽃. 선물하면 크게 기뻐한다.' },

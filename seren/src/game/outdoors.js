@@ -5,7 +5,7 @@
 //  · 도관·식힘 탑·탱크: 점검 — 가장 높은 압력부터 풀면 김이 뿜어진다
 //  · 안테나: 먼 신호 듣기 — 노래를 해독하면 말을 배우고 둘레 지도가 밝혀진다
 //  · 생장 나무: 열매 거두기 · 구역의 문: 도시 안내판과 길 찾기(나침반 표식)
-//  · 주거 탑(쌍둥이·세 갈래·물 위 집): 주민 부탁함 — 필요한 물건을 가져다주면 고마움(별씨). 사무 탑은 일거리 게시판
+//  · 주거 탑(쌍둥이·세 갈래·물 위 집): 주민 부탁함 — 필요한 물건을 가져다주면 고마움(울). 사무 탑은 일거리 게시판
 //  · 보조 랜드마크: 승강판(꼭대기 → 뛰어내려 활공) + 랜드마크마다 하는 일 (하늘 나루 출항, 별귀 하늘 듣기, 코일 조율, 정원 열매, 생명나무 별씨)
 // 조작대 자리는 cityfabric.consolePos / _consoles 가 정하고(블록이 깨어날 때 소품 'console'), 여기서는 쓰임과 움직임만.
 import * as THREE from 'three';
@@ -18,6 +18,7 @@ import { LANDMARKS, SPEC } from '../world/city-arch.js';
 import { mulberry32 } from '../core/noise.js';
 import { heightAt } from '../world/heightfield.js';
 import { SYL_A, SYL_B } from '../data/citizens.js';
+import { won } from '../data/money.js';
 
 const TAU = Math.PI * 2;
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -133,10 +134,10 @@ export class Outdoors {
     const pick = dests.filter((q) => q.r.kind === 'padtower').slice(0, 4).concat(dests.filter((q) => q.r.kind.startsWith('lm_')).slice(0, 4));
     if (!pick.length) { g.ui.serviceCard('하늘배 승강탑', '행선지', '지금은 이 둘레에 다른 승강장이 없어요.', []); return; }
     const inv = this.V.inv;
-    g.ui.serviceCard('하늘배 승강탑', '어디로 날아갈까요?', `가진 별씨 ${inv.starseed || 0} · 하늘배가 내려와 태우고 도시 위로 날아가요 (뛰기·E 로 빨리 가기)`, pick.map(({ r, d }) => {
+    g.ui.serviceCard('하늘배 승강탑', '어디로 날아갈까요?', `가진 돈 ${won(inv.starseed || 0)} · 하늘배가 내려와 태우고 도시 위로 날아가요 (뛰기·E 로 빨리 가기)`, pick.map(({ r, d }) => {
       const price = 1 + Math.round(d / 1800);
       const nm = r.kind.startsWith('lm_') ? r.out.name : `${ZONE_NAMES[r.zone] || ''} 승강탑`;
-      return { label: `${nm} · 별씨 ${price}`, sub: `${(d / 1000).toFixed(1)} km`, disabled: (inv.starseed || 0) < price,
+      return { label: `${nm} · ${won(price)}`, sub: `${(d / 1000).toFixed(1)} km`, disabled: (inv.starseed || 0) < price,
         onClick: () => { const to = city.consolePos(r); if (!to) { g.ui.toast('그 승강장은 지금 닫혀 있어요', { kind: 'muted' }); return; } if (!this.V._pay(price)) return; this.V._learn('go'); this._fly(c, to, nm, 1); } };
     }));
   }
@@ -507,7 +508,7 @@ export class Outdoors {
     const W = this._wish(c), I = ITEMS[W.item], have = this.V.inv[W.item] || 0;
     if (this._doneToday(c.key + ':wish')) { g.ui.serviceCard(`${c.def.name} · 주민 부탁함`, '오늘은 다 들어줬어요', `${W.who}: 「고마워요, 덕분에 살았어요.」 내일 또 들러 주세요.`, []); return; }
     g.ui.serviceCard(`${c.def.name} · 주민 부탁함`, `${W.floor}층 ${W.who}의 부탁`, `「${W.why}」<br>필요한 것: <b>${I.icon} ${I.name} ${W.n}개</b> (가진 것 ${have}) · 구하는 곳: ${W.where}`, [
-      { label: `${I.name} ${W.n}개 건네기 · 고마움 별씨 ${W.reward}`, sub: have >= W.n ? '부탁함에 넣으면 드론이 위층으로 올려 준다' : `${W.n - have}개가 모자라요`, primary: true, disabled: have < W.n,
+      { label: `${I.name} ${W.n}개 건네기 · 고마움 ${won(W.reward)}`, sub: have >= W.n ? '부탁함에 넣으면 드론이 위층으로 올려 준다' : `${W.n - have}개가 모자라요`, primary: true, disabled: have < W.n,
         onClick: () => {
           this.V.inv[W.item] -= W.n;
           this._markToday(c.key + ':wish');
@@ -520,7 +521,7 @@ export class Outdoors {
           this.V._learn('share');
           g.setFlag('helpedNeighbor');
           const got = g.econ && g.city ? g.econ.reward(W.reward, `부탁 · ${W.who}`, 'hh') : ((this.V.inv.starseed = (this.V.inv.starseed || 0) + W.reward), W.reward); this.V.S.earned += got;
-          g.ui.toast(`${W.who}: 「정말 고마워요!」 · 별씨 +${W.reward}`, { kind: 'item' });
+          g.ui.toast(`${W.who}: 「정말 고마워요!」 · +${won(W.reward)}`, { kind: 'item' });
           if (Math.random() < 0.25) setTimeout(() => this.V._add('trinket', 1), 900);
         } },
     ]);
@@ -550,7 +551,7 @@ export class Outdoors {
       ]);
     } else if (k === 'lm_coil') {
       g.ui.serviceCard('울림 코일 탑', '코일 조율과 승강판', '구역 전체에 울림을 나눠 주는 코일. 출력이 흔들리면 사람이 붙잡아 준다.', [
-        { label: '코일 조율 · 일하기', sub: '바늘을 띠 안에 붙잡으면 별씨 5 + 구역에 울림 물결', primary: true, onClick: () => this.V.powerWork({ kicker: '울림 코일 탑 · 조율대', title: '코일 조율', pay: 5, onWin: () => this._surge(c) }) },
+        { label: '코일 조율 · 일하기', sub: '바늘을 띠 안에 붙잡으면 5울 + 구역에 울림 물결', primary: true, onClick: () => this.V.powerWork({ kicker: '울림 코일 탑 · 조율대', title: '코일 조율', pay: 5, onWin: () => this._surge(c) }) },
         ...lift,
       ]);
     } else if (k === 'lm_garden') {
@@ -561,8 +562,8 @@ export class Outdoors {
       ]);
     } else if (k === 'lm_tree') {
       const done = this._doneToday(c.key + ':seed');
-      g.ui.serviceCard('생명나무', '별씨와 승강판', '세렌의 돈인 별씨는 이 나무의 씨앗이다. 쓰인 별씨는 언젠가 들에 뿌려져 다시 나무가 된다.', [
-        { label: done ? '오늘 별씨는 거뒀어요' : '별씨 거두기', sub: '별씨 3 (하루 한 번)', primary: true, disabled: done, onClick: () => { this._markToday(c.key + ':seed'); this._orbs(V3(c.rec.x, c.rec.base + 190, c.rec.z), 12, 0xffe2a0); this.V._wage(3, '생명나무의 별씨'); this.V._learn('share'); } },
+      g.ui.serviceCard('생명나무', '별씨와 승강판', '별씨는 이 나무의 빛 씨앗이다(별비의 밤에도 떨어진다). 온실에 심으면 빛꽃이 피고, 장인 온은 별씨를 녹여 장비를 손본다.', [
+        { label: done ? '오늘 별씨는 거뒀어요' : '별씨 거두기', sub: '별씨 3 (하루 한 번)', primary: true, disabled: done, onClick: () => { this._markToday(c.key + ':seed'); this._orbs(V3(c.rec.x, c.rec.base + 190, c.rec.z), 12, 0xffe2a0); { const n = g.giveItem('seedstar', 3); if (n) g.ui.toast(`생명나무의 별씨 +${n}`, { kind: 'item' }); } this.V._learn('share'); } },
         ...lift,
       ]);
     }
@@ -578,10 +579,10 @@ export class Outdoors {
     }
     const list = [...by.values()].sort((a, b) => a.d - b.d).slice(0, 7);
     if (!list.length) { g.ui.serviceCard('하늘 나루', '행선지', '지금은 떠나는 배가 없어요.', []); return; }
-    g.ui.serviceCard('하늘 나루 · 출항', '어느 구역으로?', `가진 별씨 ${inv.starseed || 0} · 큰 하늘배를 타고 도시 위를 건너요 (뛰기·E 로 빨리 가기)`, list.map(({ r, d }) => {
+    g.ui.serviceCard('하늘 나루 · 출항', '어느 구역으로?', `가진 돈 ${won(inv.starseed || 0)} · 큰 하늘배를 타고 도시 위를 건너요 (뛰기·E 로 빨리 가기)`, list.map(({ r, d }) => {
       const price = 2 + Math.round(d / 3000);
       const nm = `${ZONE_NAMES[r.zone] || r.zone} · ${r.kind.startsWith('lm_') ? r.out.name : '승강탑'}`;
-      return { label: `${nm} · 별씨 ${price}`, sub: `${(d / 1000).toFixed(1)} km`, disabled: (inv.starseed || 0) < price,
+      return { label: `${nm} · ${won(price)}`, sub: `${(d / 1000).toFixed(1)} km`, disabled: (inv.starseed || 0) < price,
         onClick: () => { const to = city.consolePos(r); if (!to) return; if (!this.V._pay(price)) return; this.V._learn('go'); this._fly(c, to, nm, 2.2); } };
     }));
   }

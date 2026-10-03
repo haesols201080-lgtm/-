@@ -4,7 +4,8 @@
 import { cityArchetypes, SPEC } from '../src/world/city-arch.js';
 import { makeBuilding } from '../src/interior/program.js';
 import { layoutFloor } from '../src/interior/layout.js';
-import { facadeProfile } from '../src/interior/volume.js';
+import { facadeProfile, sdfAt, cellX, cellZ } from '../src/interior/volume.js';
+import { packB, unpackB, packL, unpackL } from '../src/interior/store.js';
 import { furnishFloor } from '../src/interior/recipes.js';
 import { FIX } from '../src/interior/catalog.js';
 
@@ -109,6 +110,8 @@ if (!cmd || cmd === 'all') {
   const USES = ['home', 'office', 'market', 'cafe', 'school', 'heal', 'library', 'museum', 'hall', 'factory', 'depot', 'lab', 'terminal', 'garden', 'plant', 'hotel', 'admin', 'farm'];
   const SIZES = [[9, 9, 9], [14, 12, 22], [20, 16, 60], [28, 22, 140], [40, 16, 16]];
   let n = 0, fail = 0, floors = 0, rooms = 0, ms = 0, mz = 0;
+  const LK = { stair: '계단', spiral: '나선 계단', lift: '승강기', cargo: '화물 승강기' };
+  const stats = { cells: 0, outside: 0, links: 0, order: 0, special: 0, doorD: 0, noTerrace: 0, persist: 0, byPid: {} };
   const problems = [];
   for (const kind of KINDS) for (const use of USES) for (const [hw, hd, h] of SIZES) {
     const S = SPEC[kind];
@@ -119,6 +122,47 @@ if (!cmd || cmd === 'all') {
       const t0 = performance.now();
       const B = makeBuilding(r, ctxFor());
       if (!B) { problems.push(`${kind}/${use}/${hw}: 짜임 없음`); fail++; continue; }
+      // ── 바깥과 안이 맞는가 ──
+      const tag = `${kind}/${use}/${hw}x${h}`;
+      const Vv = B.V, G = B.G;
+      let outside = 0, cellsN = 0;
+      for (const F of B.floors) {
+        if (F.below || !F.reach || F.dead) continue;
+        const yA = F.y + 0.3, yB = Math.min(F.ceil, F.y + (F.vault ? 2.5 : 2.6)) - 0.3;
+        for (let c = 0; c < F.mask.length; c++) if (F.mask[c]) {
+          cellsN++;
+          const x = cellX(G, c % G.gw), z = cellZ(G, (c / G.gw) | 0);
+          if (sdfAt(Vv, x, z, yA) > 0.05 || sdfAt(Vv, x, z, yB) > 0.05) outside++;
+        }
+      }
+      stats.cells += cellsN; stats.outside += outside;
+      if (outside > cellsN * 0.002) problems.push(`${tag}: 바깥 부피 밖 칸 ${outside}/${cellsN}`);
+      // 층 높이: 차례로 쌓이고 겹치지 않으며 지붕을 넘지 않는다
+      const up = B.floors.filter((F) => !F.below && !F.mezz);
+      for (let k = 1; k < up.length; k++) if (up[k].y < up[k - 1].y + up[k - 1].h - 0.4) problems.push(`${tag}: ${up[k].label}층이 아래층과 겹침`);
+      for (const F of up) if (F.ceil > B.volume.top + 0.05) problems.push(`${tag}: ${F.label}층 천장이 지붕 위`);
+      // 승강기·계단: 이음이 서는 모든 층에서 그 칸이 층 안
+      if (B.core) for (const lk of B.links) {
+        if (lk.part == null || lk.kind === 'roof') continue;
+        const part = B.core.parts[lk.part];
+        for (const fi of lk.floors) { const F = B.floors[fi]; if (part.cells.some(([i, j]) => !F.mask[j * G.gw + i])) { problems.push(`${tag}: ${LK[lk.kind] || lk.kind} 칸이 ${F.label}층 밖`); break; } }
+        stats.links++;
+      }
+      // 쓰임의 차례 (섞인 건물): 가게·상가는 사무·주거·호텔 아래, 주거·호텔이 사무 아래로 내려오지 않는다 (기단·전환층은 예외)
+      if (!B.special) {
+        const idx = (u) => up.map((F, k) => (u.includes(F.use) ? k : -1)).filter((k) => k >= 0);
+        const shop = idx(['mart', 'shops', 'dept']), work = idx(['office', 'research']), live = idx(['residential', 'hotel']);
+        if (shop.length && (work.length || live.length) && Math.max(...shop) > Math.min(...work.concat(live))) problems.push(`${tag}: 가게 층이 사무·주거 위`);
+        stats.order++;
+      } else stats.special++;
+      // 건물 짜임 저장·불러오기
+      {
+        const B3 = unpackB(JSON.parse(JSON.stringify(packB(B))), r);
+        const sg = (b) => JSON.stringify(b.floors.map((F) => [F.use, F.n, F.y.toFixed(2), F.reach, F.dead || false, Array.from(F.mask).join('')]).concat([b.links, b.zones.map((Z) => Z.org), b.special || null]));
+        if (sg(B3) !== sg(B)) problems.push(`${tag}: 건물 짜임 저장·불러오기가 다름`);
+      }
+      const pidB = B.pid;
+      stats.byPid[pidB] = stats.byPid[pidB] || { n: 0, sig: new Set() };
       for (const F of B.floors) {
         const L = layoutFloor(B, F, { door: B.door });
         floors++;
@@ -134,6 +178,27 @@ if (!cmd || cmd === 'all') {
         if (lost.length) problems.push(`${kind}/${use}/${hw}x${h}: ${F.label}층 갇힌 방 ${lost.map((R) => R.name + R.n).join(',')}`);
         if (!roots.length) problems.push(`${kind}/${use}/${hw}x${h}: ${F.label}층 복도·홀 없음`);
         if (F.i === B.ground && !L.ents.main) problems.push(`${kind}/${use}/${hw}x${h}: 정문 없음`);
+        // 정문 = 바깥 문 자리 (3 m 안)
+        // (바깥 문이 실내 부피보다 바깥에 붙은 모양이면 가장 가까운 실내 칸까지의 거리를 기준으로)
+        if (F.i === B.ground && L.ents.main) {
+          const e = L.ents.main.c; const d = Math.hypot(cellX(G, e % G.gw) - B.door.gx, cellZ(G, (e / G.gw) | 0) - B.door.gz);
+          let dmin = 1e9; for (let c = 0; c < F.mask.length; c++) if (F.mask[c]) dmin = Math.min(dmin, Math.hypot(cellX(G, c % G.gw) - B.door.gx, cellZ(G, (c / G.gw) | 0) - B.door.gz));
+          if (d > dmin + 2) problems.push(`${tag}: 정문이 바깥 문에서 ${d.toFixed(1)} m (가장 가까운 칸 ${dmin.toFixed(1)} m)`);
+          stats.doorD = Math.max(stats.doorD, d - dmin);
+        }
+        // 테라스가 있는 층은 테라스 문
+        if (F.terrace && F.terrace.n >= 12 && !L.ents.terrace && !F.mezz) stats.noTerrace++;
+        // 승강기 칸은 그 층 평면에서도 승강기 방
+        for (const R of L.rooms) if ((R.type === 'lift' || R.type === 'cargo') && R.n === 0) problems.push(`${tag}: ${F.label}층 승강기 방이 비었음`);
+        if (F.i === B.ground) stats.byPid[pidB].sig.add(L.rooms.filter((R) => R.n).map((R) => R.type).sort().join(',') + '|' + L.rooms.length);
+        // 저장·불러오기: 층 평면이 그대로 (글자로 바꿨다 되살려도 칸·방·문·가구가 같다)
+        if (F.i === B.ground) {
+          const fx = furnishFloor(B, L).list;
+          const back = unpackL(JSON.parse(JSON.stringify(packL(L, fx))));
+          const same = back.L.room.every((v, k) => v === L.room[k]) && back.L.void.every((v, k) => v === L.void[k]) && back.L.doors.length === L.doors.length && back.fix.length === fx.length && JSON.stringify(back.L.mstair || null) === JSON.stringify(L.mstair || null);
+          if (!same) problems.push(`${tag}: 층 평면 저장·불러오기가 다름`);
+          stats.persist++;
+        }
         // 중2층이 있으면 홀에서 오르는 계단이 있어야 한다
         const up = B.floors[F.i + 1];
         if (up && up.mezz && !up.dead && !F.mezz) { if (!L.mstair) problems.push(`${kind}/${use}/${hw}x${h}: 중2층 계단 없음`); else mz++; }
@@ -146,7 +211,11 @@ if (!cmd || cmd === 'all') {
     } catch (e) { fail++; problems.push(`${kind}/${use}/${hw}x${h}: 오류 ${e.message}\n${e.stack.split('\n').slice(1, 3).join('\n')}`); }
   }
   console.log(`건물 ${n} · 실패 ${fail} · 층 ${floors} · 방 ${rooms} · 평균 ${(ms / n).toFixed(1)} ms · 중2층 계단 ${mz}`);
+  console.log(`바깥 부피 밖 칸 ${stats.outside}/${stats.cells} · 이음 검사 ${stats.links} · 쓰임 차례 검사 ${stats.order} (전문 건물 ${stats.special}) · 정문-바깥 문 (가장 가까운 칸 기준) 최대 ${stats.doorD.toFixed(1)} m · 테라스 문 없는 큰 테라스 ${stats.noTerrace} · 저장 왕복 ${stats.persist}`);
+  console.log('1층 짜임의 가짓수 (같은 쓰임 안에서):', Object.entries(stats.byPid).map(([k, v]) => `${k} ${v.sig.size}`).join(' · '));
   const uniq = [...new Set(problems)];
   console.log(`문제 ${uniq.length}`);
-  console.log(uniq.slice(0, 60).join('\n'));
+  console.log(uniq.slice(0, 60).join("\n"));
+  const cat = {}; for (const p of uniq) { const k = p.split(": ")[1].replace(/[0-9.]+/g, "#"); cat[k] = (cat[k] || 0) + 1; }
+  console.log("종류:", JSON.stringify(cat));
 }

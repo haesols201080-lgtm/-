@@ -22,7 +22,7 @@ const PURPOSE = {
   home: { name: '주거탑', desc: '아웬 가족들이 사는 탑. 층마다 세대와 쉼터가 있다.', npc: 4 },
   hotel: { name: '쉼 호텔', desc: '먼 구역에서 온 이들이 묵어 가는 곳. 위층 객실에서 도시가 내려다보인다.', npc: 6 },
   lab: { name: '울림 연구동', desc: '물질의 노래를 듣고 설득하는 법을 연구한다.', npc: 3 },
-  market: { name: '노래 시장', desc: '먹을 것·쓸 것을 고르고 계산대에서 별씨로 값을 치른다.', npc: 7 },
+  market: { name: '노래 시장', desc: '먹을 것·쓸 것을 고르고 계산대에서 울로 값을 치른다.', npc: 7 },
   school: { name: '노래 학교', desc: '아이들이 처음으로 자기 이름을 노래하는 곳.', npc: 6, small: true },
   heal: { name: '치유원', desc: '지친 울림을 고르게 다듬어 주는 곳. 접수·진료·검사·입원.', npc: 3 },
   garden: { name: '하늘 정원', desc: '건물 한가운데를 숲으로 채운 정원.', npc: 4 },
@@ -130,6 +130,7 @@ export class Interiors {
   }
 
   close() {
+    this._dbgPlan = null;
     const cur = this.cur;
     if (!cur) return;
     const g = this.game, C = g.world.colliders;
@@ -397,6 +398,7 @@ export class Interiors {
 
   // ── 매 프레임 ─────────────────────────────
   update(dt) {
+    if (this._dbgPlan != null && this.cur && this.cur.indoor) for (const [j, o] of this.cur.indoor.built) { if (o.ceilMesh) o.ceilMesh.visible = false; o.group.visible = j === this._dbgPlan; }
     const g = this.game, p = g.player.pos;
     this.t += dt;
     const cur = this.cur;
@@ -503,8 +505,9 @@ export class Interiors {
     if (!cur || !cur.indoor) return null;
     const ind = cur.indoor, i = arg && arg.floor != null ? arg.floor : ind.cur;
     if (arg && arg.floor != null && arg.floor !== ind.cur) ind.setFloor(arg.floor);
+    this._dbgPlan = kind === 'plan' ? i : null; // 새로 그려지는 층도 (update 에서) 천장·다른 층을 감춘다
     for (const out of ind.built.values()) if (out.ceilMesh) out.ceilMesh.visible = kind !== 'plan';
-    if (kind === 'off') { g.rig.override = null; return null; }
+    if (kind === 'off') { g.rig.override = null; for (const o of ind.built.values()) o.group.visible = true; return null; }
     const out = ind.built.get(i), B = cur.B, G = B.G;
     if (!out) return null;
     const y0 = ind.yOf(i);

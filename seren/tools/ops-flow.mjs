@@ -90,6 +90,22 @@ for (const pid of want) {
     }
     return res;
   }, pid);
+  // 모아에게 건물 안 길 묻기 + 안내 길
+  const moa = await page.evaluate(() => {
+    const g = SEREN.game, M = g.moaAI;
+    const out = {};
+    for (const q of ['가까운 엘리베이터', '출구', '계산대', '화장실']) { try { out[q] = M.local(q).slice(0, 90); } catch (e) { out[q] = '오류 ' + e.message; } }
+    out.guide = g.guide.text;
+    g.guide.clear();
+    return out;
+  });
+  if (process.argv.includes('map')) {
+    await page.evaluate(() => { SEREN.game.ui.closeCard(); SEREN.game.ui.openMenu('map', true); });
+    await page.waitForTimeout(1800);
+    await page.screenshot({ path: join(root, 'shots', `ops-${pid}-map.png`), timeout: 240000 });
+    await page.evaluate(() => SEREN.game.ui.closeMenu());
+  }
+  info.moa = moa;
   // 몇 초 돌리기
   await page.waitForTimeout(3500);
   const after = await page.evaluate(() => {
@@ -129,6 +145,25 @@ for (const pid of want) {
   report.push(row);
   console.log(JSON.stringify(row, null, 0));
 }
+// 저장 → 불러오기: 건물 안 자리로 다시
+const sv = await page.evaluate(async () => {
+  const g = SEREN.game, I = g.interiors;
+  const r = window.__r;
+  I.enter(r);
+  await new Promise((res) => { const t = setInterval(() => { if (I.inPocket && !I._busy) { clearInterval(t); res(); } }, 300); });
+  const B = I.cur.B, top = B.floors.filter((F) => F.reach && !F.dead && !F.below).pop();
+  I.placeAt(top.i, g.player.pos.x, g.player.pos.z, 0);
+  await new Promise((res) => setTimeout(res, 800));
+  g.save(true);
+  const before = { floor: I.cur.indoor.cur, inside: g.state.inside };
+  I.exit();
+  await new Promise((res) => { const t = setInterval(() => { if (!I.inPocket && !I._busy) { clearInterval(t); res(); } }, 300); });
+  g.continueGame();
+  await new Promise((res) => setTimeout(res, 1200));
+  await new Promise((res) => { let k = 0; const t = setInterval(() => { if ((I.inPocket && !I._busy) || ++k > 120) { clearInterval(t); res(); } }, 300); });
+  return { before: before.floor, saved: !!before.inside, after: I.inPocket && I.cur && I.cur.indoor ? I.cur.indoor.cur : null };
+});
+console.log('저장·불러오기', JSON.stringify(sv));
 const fin = await page.evaluate(() => ({ total: Math.round((SEREN.game.econ.total() - window.__T0) * 100) / 100, seed: SEREN.game.state.inv.starseed, work: SEREN.game.state.work.done }));
 console.log('끝', JSON.stringify(fin), `${Math.round((Date.now() - t0) / 1000)} s`);
 for (const l of [...new Set(logs)].slice(0, 30)) console.log(l);

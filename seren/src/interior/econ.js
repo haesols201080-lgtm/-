@@ -1,11 +1,12 @@
-// 도시의 살림 (v0.9): 돈(별씨)과 물건이 저절로 생기지 않고 흐른다.
-//  · 구역마다: 가구(주민 살림·지갑) · 회사(가게·공장·농장·물류의 몫) · 공공(학교·병원·행정·교통의 몫) 의 별씨, 그리고 물류 창고 재고·가게 재고.
+// 도시의 살림 (v0.9): 돈(울)과 물건이 저절로 생기지 않고 흐른다.
+//  · 구역마다: 가구(주민 살림·지갑) · 회사(가게·공장·농장·물류의 몫) · 공공(학교·병원·행정·교통의 몫) 의 돈, 그리고 물류 창고 재고·가게 재고.
 //  · 한 시간(게임 시각)마다: 농장·채굴 → 원료 / 발전소 → 빛(연료를 태움) / 공장 → 공정(원료·빛을 써서 물건) / 물류 → 가게 채움 /
-//    주민 → 가게에서 사서 씀(별씨는 가구 → 회사) / 일하는 시간 → 품삯(회사·공공 → 가구) / 세금(가구 → 공공).
-//  · 들어가 본 건물은 「살아 있는 건물(node)」: 제 재고·진열대·금고를 가진다. 처음 열 때 구역의 몫에서 물건과 별씨를 가져온다(새로 만들지 않는다).
-//  · 플레이어도 같은 장부의 한 사람: 사면 플레이어 → 가게 금고, 일하면 고용한 건물 금고 → 플레이어. 모든 별씨의 합은 늘 같다(검사 total()).
+//    주민 → 가게에서 사서 씀(돈는 가구 → 회사) / 일하는 시간 → 품삯(회사·공공 → 가구) / 세금(가구 → 공공).
+//  · 들어가 본 건물은 「살아 있는 건물(node)」: 제 재고·진열대·금고를 가진다. 처음 열 때 구역의 몫에서 물건과 돈를 가져온다(새로 만들지 않는다).
+//  · 플레이어도 같은 장부의 한 사람: 사면 플레이어 → 가게 금고, 일하면 고용한 건물 금고 → 플레이어. 모든 돈의 합은 늘 같다(검사 total()).
 import { GOODS, RECIPES, LINES, CROPS, SHELF_GOODS, DEMAND } from '../data/goods.js';
 import { hashStr } from '../core/noise.js';
+import { won } from '../data/money.js';
 
 const HOUR = 1 / 24;
 const WORK = [0.3, 0.72]; // 일하는 시각 (하루 비율)
@@ -44,7 +45,7 @@ export class Economy {
     for (const id in Z) {
       const z = Z[id];
       z.pop = Math.max(60, Math.round(z.pop));
-      // 첫 살림: 사람 수에 비례한 별씨와 재고 (이것이 그 뒤로 도는 전부)
+      // 첫 살림: 사람 수에 비례한 돈와 재고 (이것이 그 뒤로 도는 전부)
       z.hh = z.pop * 12; z.firms = z.pop * 8; z.commons = z.pop * 4;
       for (const [k, d] of Object.entries(DEMAND)) { z.retail[k] = Math.round(d * z.pop * 1.5); z.depot[k] = Math.round(d * z.pop * 2); }
       for (const k of ['grain', 'tealeaf', 'nectar', 'fiber', 'herb', 'ore', 'resin', 'fuel', 'flour', 'shard', 'panel', 'cloth']) z.depot[k] = Math.round(z.pop * 0.3);
@@ -75,12 +76,12 @@ export class Economy {
     const v = Math.max(0, Math.min(amount, this.get(from)));
     if (v <= 0) return 0;
     this._add(from, -v); this._add(to, v);
-    if (from === 'player') this.S.P.spent += v;
+    if (from === 'player') { this.S.P.spent += v; const V = this.game.venues; if (V && V.S) V.S.spent = (V.S.spent || 0) + v; } // 이야기의 「무언가 사 보기」도 같은 장부로
     if (to === 'player') this.S.P.earned += v;
     if (why && (from === 'player' || to === 'player')) { const L = this.S.log; L.push([Math.round(this.game.world.clock.time * 100) / 100, from === 'player' ? -v : v, why]); if (L.length > 40) L.shift(); }
     return v;
   }
-  /** 모든 별씨의 합 (검사용: 흐름이 닫혀 있으면 늘 같다) */
+  /** 모든 돈의 합 (검사용: 흐름이 닫혀 있으면 늘 같다) */
   total() {
     let t = this.get('player');
     for (const z of Object.values(this.S.Z)) t += z.hh + z.firms + z.commons;
@@ -192,7 +193,9 @@ export class Economy {
       z.sold = sold;
       // 6. 품삯 (일하는 시간): 회사·공공 → 가구 · 세금 (가구 → 공공)
       if (work) {
-        const wf = Math.min(z.firms * 0.04, z.pop * 0.55 * 0.62 / 10), wc = Math.min(z.commons * 0.04, z.pop * 0.15 * 0.62 / 10);
+        // 하루 품삯 ≈ 주민이 하루에 쓰는 값 (번 만큼 쓴다): 회사 85% · 공공 25% (세금 12% 가 공공으로 돌아간다)
+        const spendDay = z.pop * this._spendPP();
+        const wf = Math.min(z.firms * 0.2, (spendDay * 0.85) / 10), wc = Math.min(z.commons * 0.2, (spendDay * 0.25) / 10);
         this.transfer(firms, hh, wf); this.transfer(commons, hh, wc);
         z.wages = wf + wc;
         this.transfer(hh, commons, (wf + wc) * 0.12);
@@ -202,6 +205,8 @@ export class Economy {
     // 살아 있는 건물마다
     for (const n of Object.values(S.N)) this._nodeHour(n, T, work);
   }
+  /** 주민 한 사람이 하루에 쓰는 돈 (수요 × 값) */
+  _spendPP() { if (this._spp == null) { let t = 0; for (const [k, d] of Object.entries(DEMAND)) t += d * this.price(k); this._spp = t; } return this._spp; }
   /** 구역의 가게 수요 가운데 살아 있는 가게가 맡는 몫 */
   _shopShare(zid) {
     let s = 0;
@@ -292,7 +297,7 @@ export class Economy {
   summary(zid) {
     const z = this.S.Z[zid];
     if (!z) return '';
-    return `주민 ${z.pop} · 가구 별씨 ${Math.round(z.hh)} · 회사 ${Math.round(z.firms)} · 공공 ${Math.round(z.commons)} · 이번 시간 만든 것 ${Math.round(z.made)} · 판 것 ${Math.round(z.sold)}`;
+    return `주민 ${z.pop} · 가구 ${won(Math.round(z.hh))} · 회사 ${Math.round(z.firms)} · 공공 ${Math.round(z.commons)} · 이번 시간 만든 것 ${Math.round(z.made)} · 판 것 ${Math.round(z.sold)}`;
   }
   /** 가게 진열대 구역 → 놓을 물건 */
   shelfGood(cat, k) { const L = SHELF_GOODS[cat] || SHELF_GOODS.pantry; return L[k % L.length]; }

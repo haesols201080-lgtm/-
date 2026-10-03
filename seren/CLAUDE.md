@@ -51,13 +51,15 @@ src/
            cityplan(블록 나누기·쓰임 배정·쓰임별 배치 템플릿·locate) city-ground(계획 텍스처 → 지형 셰이더가 그리는 도시 바닥)
            crowd(주민 인스턴스 그리기: 자세 속성, 그리기 1회)
   player/  player(이동 상태기계) avatar(모델·절차 애니메이션) camera-rig
+  interior/ (v0.9 건물 속) volume program core layout recipes furnish render building store ids catalog material geom props
+           ops ops-types agents nav econ apps guide find
   game/    game(중심·모드·입력·저장) state(저장 형식) quests dialogue actions language npcs resonance discovery
            services(시설의 쓰임: 시설지기 카드·연락선·나룻배·온실·날씨·탐지기)
            interiors(건물 들어가기: 로딩 → 바깥과 떨어진 실내 공간(POCKET_Y)·사람·빛 승강기·하늘 전망대) tips(처음 해 보는 일 안내 카드)
            citizens(도시 주민: 자리·일과·걷기·말 걸기·함께 놀기·집 안 사람들)
            venues(건물의 일 — 실내 쓰임마다 시설·돈·물건·기운·일거리) outdoors(바깥 조작대·승강판·하늘배·드론·충전·부탁함)
            world-events(일식·별비·축제·부탁) director(연출 카메라)
-  ui/      ui(HUD·대화·카드·메뉴·타이틀·터치) map(지도·안개) journal settings
+  ui/      ui(HUD·대화·카드·메뉴·타이틀·터치) map(지도·안개) imap(건물 안 지도) journal settings
   data/    places(장소·평탄화) currents(해류 경로) story(인물·대사·대화·퀘스트·메아리·글자돌·도감·모아) lexicon(아웬어 사전)
            facilities(시설 목록·종류·옛 책) city(도시 구역·쓰임 USE·비율 MIX·양식·색조)
            citizens(주민 이름·역할 ROLES·실내 역할 INDOOR·대사·장터 물건)
@@ -89,7 +91,7 @@ src/
 - **거리 소품**: `city-arch.js` 의 `propArchetypes()`(미터 단위) + `PROPCOL`(충돌체 모양). 템플릿에서 `P.prop(B, '이름', u, v, face)` 로 놓는다.
 - **주민 역할**: `data/citizens.js` 의 `ROLES`(자리 종류 → 일하는 시각·사람 수·함께 할 것) + `CIT_LINES` 대사. 템플릿에서 `P.spot(B, '역할', u, v, face)` 로 자리를 놓는다. 실내는 `INDOOR` + `game/interiors.js` 의 가구 `anchors`. 새 놀이는 `game/citizens.js` 의 `_playOption`.
 - **실내 쓰임**: `game/interiors.js` 의 `PURPOSE`(가구·사람·안내지기 대사)와 `BY_STYLE`(양식 → 쓰임).
-- **건물의 일(실내 시설)**: `game/venues.js` 의 `_b_쓰임id(cur, K)` 가 실내가 열릴 때 시설을 놓는다 — `this._station({ x, z, r, label, short, use })`(다가가면 E), 모양은 `K.put`·`this._glow`, 움직임은 `this._anim(t => …)`, 실내 사람 자리는 `K.anchor`. 돈은 `_pay`/`_wage`, 물건은 `_add`, 기운은 `buff(id)`(`data/venues.js` 의 `BUFFS`). 새 물건은 `ITEMS` + `BAG_ORDER` + `state.inv` 기본값.
+- **건물의 일(실내 시설)**: `game/venues.js` 의 `_b_쓰임id(cur, K)` 가 실내가 열릴 때 시설을 놓는다 — `this._station({ x, z, r, label, short, use })`(다가가면 E), 모양은 `K.put`·`this._glow`, 움직임은 `this._anim(t => …)`, 실내 사람 자리는 `K.anchor`. 돈(울)은 `_pay`/`_wage`, 물건은 `_add`, 기운은 `buff(id)`(`data/venues.js` 의 `BUFFS`). 새 물건은 `ITEMS` + `BAG_ORDER` + `state.inv` 기본값.
 - **바깥 조작대(들어갈 수 없는 건물)**: `data/venues.js` 의 `OUTDOOR[모양] = { fn, name, label, short }` + `game/outdoors.js` 의 `_fn(c)`(`c.rec` 건물 기록, `c.x/z/y` 조작대 자리, `c.nx/nz` 바깥 방향, `c.key` 하루 한 번 열쇠 — `_doneToday`/`_markToday`). 자리는 `cityfabric.consolePos`(블록이 깨어날 때 소품 `console`).
 - **카드**: 한 번에 하나(`ui._card` 가 앞 카드를 닫는다). E·스페이스·엔터를 쓰는 놀이는 `_card(html, onClose, { keys: false })`, 놀이가 끝나면 `wrap.close()`(남의 카드를 닫지 않게). 시간은 `performance.now()` 벽시계로.
 
@@ -158,6 +160,22 @@ src/
 - **착륙선 선실**: `game/cabin.js` 의 `buildCabin` + `interiors.enterCabin(lander)`(해치 `lander.hatch` → `structures.landerTarget` → game `landerUse('door')`).
 - **장소 빌더가 지은 집을 들어갈 수 있게**: `world.customRecs.push({x, z, gy, r, h, ux, uz(문 바깥 방향), dz(문까지), use, name})` → `cityfabric._customRecs`.
 - **판석 질감**: `city-ground.js` 의 `paver(hx, q, fw, fade, 색A, 색B, 이음매폭, 칸크기, spec, seam)` — 육각 바닥은 이걸로.
+
+## 건물 속 (v0.9)에서 알아 둘 것
+실내는 이제 「쓰임별 방 하나」가 아니라 **바깥 건물의 실제 부피에서 나온 여러 층**이다. 흐름: `interior/` 의
+`volume`(SPEC.cols → 부피·외벽 모듈) → `program`(층 쌓기·쓰임·조직·빛깔·전문 건물) → `core`(계단·승강기·관, 중2층 계단 자리) →
+`layout`(층 평면: 복도·방·문·출입구) → `recipes`·`furnish`(가구·장비, 0.5 m 점유 격자) → `render`(모양·충돌체) → `building`(층 그리기·문·승강기 문) → `store`(저장).
+- **건물 신분**: `ids.uidOf(r)` = `구역/모양/x*2/z*2`, 씨앗 `seedOf(r)`. 짜임(B)은 처음 들어갈 때 만들고 `PlanStore`(localStorage `seren.bld.v1`, RLE)에 저장. 생성 규칙을 바꾸면 `ids.GEN_VERSION` 을 올릴 것(옛 짜임은 버리고 다시 — 움직이는 상태는 `state.bld`·`state.econ` 에 따로 있어 남는다).
+- **틀 좌표**: 건물 가운데가 원점, +z = 문 바깥 방향, 칸 1 m. `ind.world(gx, gz)` / `ind.grid(x, z)`. 실내 높이 = `POCKET_Y + (층 y − 1층 바닥)`.
+- **쓰임**: `catalog.FUSE`(층 쓰임 → plan·op), `ROOMS`(방 종류: 드나듦·빛·무늬), `FIX`(가구·장비). 층 쓰임을 더하면 `layout.ringProgram` 또는 `openPlan` 의 HALL·뒤쪽 방, `recipes.RECIPE` 에 방 가구, `ops-types.TYPES[op]` 에 운영.
+- **섞인 건물 / 전문 건물**: `program.decideUses` — 섞인 건물은 기단(가게)·사무·주거·호텔·설비층·전망층을 차례로(층마다 다른 조직), 전문 건물(`B.special`, 쓰임마다 확률 `SPECIAL_P`)은 한 기관이 건물 전체(종합 치유원·학교·본사·연구원·대형점 본점·물류 센터·공장 단지·교통 거점·농업 단지·호텔).
+- **운영** (`ops.js` + `ops-types.js`): 쓰임 묶음(B.zones)마다 세입자(tenant) = 조직 + 살림(`econ.node`). 쓰임마다 `setup`(진열대·기계·밭 채우기 — 구역 재고에서), `act`(가구 앞 E), `people`(그 층 사람의 일과 — `agents.js`, 길은 `nav.js`), `tick`, `roles`(일자리와 과제). 물건 칸은 `out.slots` → InstancedMesh(실제 재고 수만큼).
+- **살림** (`econ.js`): 화폐 단위는 「울」(`data/money.js` 의 `CUR`·`won(n)` — 이름을 바꾸려면 거기만, 돈은 `state.inv.starseed` 열쇠 그대로). 「별씨」는 재료(`state.inv.seedstar`: 별비·생명나무 → 온실·장인 온). 구역마다 가구(hh)·회사(firms)·공공(commons) 돈과 창고(depot)·가게(retail) 재고. 돈은 **`transfer` 로만** 옮긴다(플레이어 = `'player'`, 구역 = `'z:구역:hh'`, 건물 = `'n:uid'`). 보상·품삯·값은 `econ.reward/charge`, 가방에 물건을 넣을 때는 `econ.goodsOut`(재고에서), 되팔면 `goodsIn`. `game.giveItem` 도 이 길을 탄다. 검사: `node tools/econ-check.mjs`.
+- **단말** (`apps.js`): 일자리(이 건물+둘레 건물) → 지원 → 한 시간 뒤 면접 안내 → 채용 면접실(`apps.ivSpot`)의 면접관 → 채용(`state.work.jobs`). 출근 단말(`tag 'clock'`)에서 교대 → 과제(`ops.startTask`) → 퇴근 때 품삯(그 회사 금고에서).
+- **길 안내** (`guide.js`) · **찾기** (`find.js`): `game.guide.to({floor, gx, gz, label})` — 층이 다르면 이음(B.links)으로 층 사이 길을 고르고, 지금 층 바닥에 점선·목적지 빛기둥·나침반 표식. 건물 밖 목적지는 `{ world: {x, z} }`(바깥 표식). 실내 지도 `ui/imap.js`(M), 모아 `moa-ai.find` 가 `searchBuilding` 을 먼저 쓴다.
+- **손에 든 것**: `avatar.setHeld({kind})`(바구니·상자·쟁반·결정·시료·책) · `avatar.act(pose, 초)` · 짐을 들면 `player.carrySlow`.
+- **저장**: `state.work`(일자리·지원·교대·과제 수·호텔 방) · `state.bld[uid]`(연구 진척·내 집 칸·맡긴 물건·면접 자리) · `state.econ`(구역 살림·살아 있는 건물의 재고·진열·금고) · `state.inside`(건물 안에서 저장한 층·자리 → 불러오면 다시 들어간다).
+- **확인 도구**: `node tools/interior-gen.mjs`(모든 모양×쓰임×크기: 갇힌 방·정문·바깥 부피 밖 칸·승강기 칸·쓰임 차례·저장 왕복·중2층 계단·결정성·가짓수), `node tools/interior-gen.mjs show slab office 30 22 120 [층들]`(층 평면을 글자로), `node tools/ops-flow.mjs [쓰임들|all] [shots] [map]`(한 번 불러와 쓰임마다 들어가 시설·사람·일자리·과제·모아·지도·저장 확인 + 별씨 합), `node tools/indoor.mjs 이름 '{"pid":"market"}' '[스크립트…]'`(한 건물 스크린샷). 페이지 안: `SEREN.game.interiors.debugView('plan'|'room'|'off')`.
 
 ## 지켜야 할 것
 - 기존 저장 파일이 깨지지 않게: 저장 형식을 바꾸면 `state.js` 의 `migrate()` 를 손보세요.

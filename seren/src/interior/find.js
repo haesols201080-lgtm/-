@@ -5,6 +5,7 @@
 import { GOODS } from '../data/goods.js';
 import { ITEMS } from '../data/venues.js';
 import { FUSE, ROOMS, FIX } from './catalog.js';
+import { won } from '../data/money.js';
 
 /** 이음(계단·승강기)의 문 앞 자리 (틀 좌표) */
 export function partSpot(B, part, out = 1.3) {
@@ -45,8 +46,8 @@ const ALIAS = [
   [/출구|나가는|나가|입구|정문|현관/, { exit: true }],
   [/옥상|지붕/, { roof: true }],
   [/테라스|발코니|바깥 ?단/, { terrace: true }],
-  [/화장실|정화실|씻는/, { room: ['wc', 'bath'] }],
-  [/계산/, { tag: ['checkout'] }],
+  [/화장실|정화실/, { room: ['wc'] }],
+  [/계산/, { tag: ['checkout', 'order', 'pharmacy', 'tickets'] }],
   [/면접/, { tag: ['interview'] }],
   [/출근|퇴근/, { tag: ['clock'] }],
   [/단말|컴퓨터/, { tag: ['terminal', 'catalog', 'analysis'] }],
@@ -110,8 +111,10 @@ export function searchBuilding(game, q, opt = {}) {
   }
   // ── 이음 ──
   if (want.link && B.core) {
+    // 승강기를 찾는데 이 건물엔 화물 승강기뿐이면 그것도
+    const kinds = want.link.includes('lift') && !B.links.some((k) => k.kind === 'lift') ? [...want.link, 'cargo'] : want.link;
     for (const lk of B.links) {
-      if (!want.link.includes(lk.kind)) continue;
+      if (!kinds.includes(lk.kind)) continue;
       if (lk.kind === 'open') {
         const lo = lk.floors[0], pl = ind.plan(lo);
         const sp = pl && mezzSpot(B, pl.L, false);
@@ -179,7 +182,7 @@ export function searchBuilding(game, q, opt = {}) {
       if (sh) for (const [key, st] of Object.entries(sh)) {
         if (!goodKeys.includes(st.g) || !key.startsWith(`${i}:`)) continue;
         const fid = key.split('/')[0], F = fix.find((x) => x.id === fid);
-        if (F) add({ kind: 'good', label: `${GOODS[st.g].name} · 별씨 ${GOODS[st.g].price}`, sub: `${fl(i).label}층 진열대 · 남은 ${st.n}`, floor: i, gx: F.ax, gz: F.az, fix: F.id, n: st.n });
+        if (F) add({ kind: 'good', label: `${GOODS[st.g].name} · ${won(GOODS[st.g].price)}`, sub: `${fl(i).label}층 진열대 · 남은 ${st.n}`, floor: i, gx: F.ax, gz: F.az, fix: F.id, n: st.n });
       }
     }
   }

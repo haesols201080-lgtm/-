@@ -13,6 +13,7 @@ import { audio } from '../core/audio.js';
 import { heightAt } from '../world/heightfield.js';
 import { glowMaterial } from '../world/materials.js';
 import { bus } from '../core/events.js';
+import { won } from '../data/money.js';
 
 const TAU = Math.PI * 2;
 const GLOWS = [0x7ff3e6, 0xffc46a, 0xff9fd0, 0xb9a6ff].map((h) => new THREE.Color(h));
@@ -412,7 +413,7 @@ export class Citizens {
     const items = [{ label: '이야기 나누기', sub: '아웬의 말로 이야기한다', primary: true, onClick: () => this.talk(p) }];
     const play = this._playOption(p);
     if (play) items.push(play);
-    if (p.role === 'sell' || p.role === 'shop') items.push({ label: '장터 물건 보기', sub: '별씨로 나눈다', onClick: () => this.tradeCard(p) });
+    if (p.role === 'sell' || p.role === 'shop') items.push({ label: '장터 물건 보기', sub: '울로 나눈다', onClick: () => this.tradeCard(p) });
     if ((inv.flower || 0) > 0) items.push({ label: '울림꽃 선물하기', sub: `가진 것 ${inv.flower}`, onClick: () => this.gift(p, 'flower') });
     if ((inv.fruit || 0) > 0) items.push({ label: '빛열매 나눠 먹기', sub: `가진 것 ${inv.fruit}`, onClick: () => this.gift(p, 'fruit') });
     if (p.fr >= 3 && p.home && p.home.door) items.push({ label: '집에 놀러 가기', sub: `${p.name}의 집 · 함께 저녁을`, onClick: () => this.visitHome(p) });
@@ -483,7 +484,7 @@ export class Citizens {
   tradeCard(p) {
     const g = this.game, inv = g.state.inv;
     const items = GOODS.map((G) => ({
-      label: `${G.name} · 별씨 ${G.price}`, sub: `${G.desc} (가진 것 ${inv[G.id] || 0})`, disabled: (inv.starseed || 0) < G.price, stay: true,
+      label: `${G.name} · ${won(G.price)}`, sub: `${G.desc} (가진 것 ${inv[G.id] || 0})`, disabled: (inv.starseed || 0) < G.price, stay: true,
       onClick: () => {
         if ((inv.starseed || 0) < G.price) return;
         // 노점의 물건도 구역 가게 재고에서, 값은 그 집(가구) 몫으로
@@ -491,13 +492,13 @@ export class Citizens {
         inv[G.id] = (inv[G.id] || 0) + 1;
         if (G.id === 'trinket') this.S.trinkets = (this.S.trinkets || 0) + 1;
         audio.chime('item');
-        g.ui.toast(`${G.name} +1 (별씨 ${inv.starseed})`, { kind: 'item' });
+        g.ui.toast(`${G.name} +1 (${won(inv.starseed)})`, { kind: 'item' });
         g.say(p, this._line(p, 'thanks'), true);
         this.tradeCard(p);
       },
     }));
     items.push({ label: '돌아가기', onClick: () => this.release(p) });
-    g.ui.serviceCard('장터', `${p.name}의 노점`, `별씨 ${inv.starseed || 0}`, items);
+    g.ui.serviceCard('장터', `${p.name}의 노점`, `${won(inv.starseed || 0)}`, items);
   }
 
   // ── 함께 하기 ─────────────────────────────

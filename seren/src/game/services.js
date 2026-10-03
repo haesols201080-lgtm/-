@@ -10,6 +10,7 @@ import { PLACES } from '../data/places.js';
 import { ferryGeo, boatMaterial } from '../world/boats.js';
 import { atmosUniforms } from '../world/atmosphere.js';
 import { mulberry32, hashStr } from '../core/noise.js';
+import { won } from '../data/money.js';
 
 const UP_COST = [3, 5, 8];
 const DETECT_COST = [[3, 0], [6, 1], [9, 2]];
@@ -92,14 +93,17 @@ export class Services {
 
   _stat() {
     const s = this.game.state;
-    return `<div class="svc-stat"><span>별씨 <b>${s.inv.starseed}</b></span><span>결정 조각 <b>${s.inv.shard || 0}</b></span></div>`;
+    return `<div class="svc-stat"><span>돈 <b>${won(s.inv.starseed || 0)}</b></span><span>별씨 <b>${s.inv.seedstar || 0}</b></span><span>결정 조각 <b>${s.inv.shard || 0}</b></span></div>`;
   }
 
-  _pay(starseed, shard = 0) {
+  /** 값: mat 'money' = 돈(울, 그 구역 공공 몫으로) · 'seed' = 별씨(재료 — 녹이거나 심어서 없어진다) */
+  _pay(cost, shard = 0, mat = 'money') {
     const inv = this.game.state.inv;
-    if (inv.starseed < starseed || (inv.shard || 0) < shard) return false;
+    const have = mat === 'seed' ? inv.seedstar || 0 : inv.starseed || 0;
+    if (have < cost || (inv.shard || 0) < shard) return false;
     const E = this.game.econ;
-    if (E && this.game.city) E.charge(starseed, '시설 이용', 'commons'); else inv.starseed -= starseed;
+    if (mat === 'seed') inv.seedstar = have - cost;
+    else if (E && this.game.city) E.charge(cost, '시설 이용', 'commons'); else inv.starseed -= cost;
     inv.shard = (inv.shard || 0) - shard;
     return true;
   }
@@ -129,8 +133,8 @@ export class Services {
       items.push({
         label: `${o.name} · ${lv}/${o.max}`,
         sub: lv >= o.max ? '최고 단계' : o.need === false ? '썰매를 고친 뒤에 손볼 수 있어요' : `${o.desc} — 별씨 ${c}`,
-        disabled: lv >= o.max || o.need === false || s.inv.starseed < c,
-        onClick: () => { if (!this._pay(c)) return; up[o.k] = lv + 1; this._crafted(F, `${o.name} ${lv + 1}단계`); },
+        disabled: lv >= o.max || o.need === false || (s.inv.seedstar || 0) < c,
+        onClick: () => { if (!this._pay(c, 0, 'seed')) return; up[o.k] = lv + 1; this._crafted(F, `${o.name} ${lv + 1}단계`); },
       });
     }
     const dl = up.detector || 0;
@@ -139,16 +143,16 @@ export class Services {
       items.push({
         label: `울림 탐지기 · ${dl}/3`,
         sub: `읽지 않은 글자돌과 잠긴 메아리를 나침반에 ${km(DETECT_RANGE[dl + 1])}까지 보여 준다 — 별씨 ${c}${sh ? ` · 결정 조각 ${sh}` : ''}`,
-        disabled: s.inv.starseed < c || (s.inv.shard || 0) < sh,
-        onClick: () => { if (!this._pay(c, sh)) return; up.detector = dl + 1; this._crafted(F, `울림 탐지기 ${dl + 1}단계`); if (!dl) g.ui.moa('탐지기가 붙었어요. 나침반에 보라색 점이 뜨면 그쪽에 아직 읽지 않은 것이 있어요.'); },
+        disabled: (s.inv.seedstar || 0) < c || (s.inv.shard || 0) < sh,
+        onClick: () => { if (!this._pay(c, sh, 'seed')) return; up.detector = dl + 1; this._crafted(F, `울림 탐지기 ${dl + 1}단계`); if (!dl) g.ui.moa('탐지기가 붙었어요. 나침반에 보라색 점이 뜨면 그쪽에 아직 읽지 않은 것이 있어요.'); },
       });
     } else items.push({ label: '울림 탐지기 · 3/3', sub: `${km(DETECT_RANGE[3])}까지 듣는다`, disabled: true });
     items.push({ head: '꾸미기' });
     const next = (this.S.cosmetic + 1) % PALETTES.length;
     items.push({
       label: `날개·목도리 빛깔 → 「${PALETTES[next].name}」`, sub: `지금은 「${PALETTES[this.S.cosmetic % PALETTES.length].name}」 — 별씨 1`,
-      disabled: s.inv.starseed < 1,
-      onClick: () => { if (!this._pay(1)) return; this.S.cosmetic = next; this.applyCosmetic(); this._crafted(F, `빛깔 「${PALETTES[next].name}」`); },
+      disabled: (s.inv.seedstar || 0) < 1,
+      onClick: () => { if (!this._pay(1, 0, 'seed')) return; this.S.cosmetic = next; this.applyCosmetic(); this._crafted(F, `빛깔 「${PALETTES[next].name}」`); },
     });
     g.ui.serviceCard(this._kicker(F), F.name, '공명 용광로가 별씨를 녹여, 장비에 새 노래를 새긴다. 결정 조각은 음악당과 온실에서 얻을 수 있어요.', items, this._stat());
   }
@@ -175,7 +179,7 @@ export class Services {
     const unknown = WORDS.filter((w) => !g.lang.known(w.id));
     items.push({ head: '배우기' });
     items.push({
-      label: '서고지기에게 말 배우기', sub: unknown.length ? `모르는 단어 하나를 배운다 — 별씨 2 · 아직 모르는 말 ${unknown.length}개` : '세렌의 말을 모두 알아요',
+      label: '서고지기에게 말 배우기', sub: unknown.length ? `모르는 단어 하나를 배운다 — 2울 · 아직 모르는 말 ${unknown.length}개` : '세렌의 말을 모두 알아요',
       disabled: !unknown.length || s.inv.starseed < 2,
       onClick: () => {
         if (!this._pay(2)) return;
@@ -299,7 +303,7 @@ export class Services {
     const now = g.world.clock.time;
     const items = [];
     G.forEach((t, i) => {
-      if (t === null) items.push({ label: `${i + 1}번 밭 · 비어 있다`, sub: '별씨 1개를 심는다 — 하루가 지나면 꽃이 핀다', disabled: s.inv.starseed < 1, onClick: () => { if (!this._pay(1)) return; G[i] = g.world.clock.time; g.audio.chime('soft'); g.ui.toast(`${i + 1}번 밭에 별씨를 심었다`, { kind: 'item' }); g.save(); } });
+      if (t === null) items.push({ label: `${i + 1}번 밭 · 비어 있다`, sub: '별씨 1개를 심는다 — 하루가 지나면 꽃이 핀다', disabled: (s.inv.seedstar || 0) < 1, onClick: () => { if (!this._pay(1, 0, 'seed')) return; G[i] = g.world.clock.time; g.audio.chime('soft'); g.ui.toast(`${i + 1}번 밭에 별씨를 심었다`, { kind: 'item' }); g.save(); } });
       else {
         const k = (now - t) / GROW;
         if (k >= 1) items.push({ label: `${i + 1}번 밭 · 꽃이 활짝 피었다`, sub: '거두기 — 별씨 3 · 가끔 결정 조각이나 새 말', primary: true, onClick: () => this.harvest(F, i) });
@@ -312,7 +316,7 @@ export class Services {
   harvest(F, i) {
     const g = this.game;
     this._garden(F)[i] = null;
-    g.giveItem('starseed', 3);
+    g.giveItem('seedstar', 3);
     if (Math.random() < 0.3) this.giveShard(1);
     if (Math.random() < 0.15) {
       const unknown = WORDS.filter((w) => !g.lang.known(w.id));
@@ -332,7 +336,7 @@ export class Services {
     const items = [
       {
         label: '오늘의 합창에 끼기', primary: !done && !few,
-        sub: done ? '오늘은 함께 불렀어요 · 내일 다시 와요' : few ? '공명 음을 둘 이상 알아야 해요' : '합창지기의 선율을 듣고 똑같이 연주하기 — 별씨 2 · 결정 조각 1',
+        sub: done ? '오늘은 함께 불렀어요 · 내일 다시 와요' : few ? '공명 음을 둘 이상 알아야 해요' : '합창지기의 선율을 듣고 똑같이 연주하기 — 2울 · 결정 조각 1',
         disabled: done || few, onClick: () => this.choir(F),
       },
       { label: '한 소절 듣기', sub: '합창지기가 노래한다 (자주 들으면 말을 짐작하게 돼요)', onClick: () => { const l = AMBIENT[Math.floor(Math.random() * AMBIENT.length)]; const id = `amb_${AMBIENT.indexOf(l)}`; g.lines[id] = { id, ...l }; g.say(F.npc, g.lines[id], true); F.extra.choir = Math.max(F.extra.choir, 0.5); } },
@@ -367,12 +371,12 @@ export class Services {
   _courier(F) {
     const g = this.game, R = g.requests;
     const board = R.active.length
-      ? `<div style="text-align:left;margin:10px 0">${R.active.map((r) => `<div class="qitem"><div class="qt">${r.title}</div><div class="qs">${r.text} · 별씨 ${r.reward}</div></div>`).join('')}</div>`
+      ? `<div style="text-align:left;margin:10px 0">${R.active.map((r) => `<div class="qitem"><div class="qt">${r.title}</div><div class="qs">${r.text} · ${won(r.reward)}</div></div>`).join('')}</div>`
       : '<p>게시판이 비어 있다.</p>';
     const parcelDone = this.usedToday('parcel:' + F.id);
     const boardDone = this.usedToday('board');
     const items = [
-      { label: '소포 나르기', sub: parcelDone ? '오늘 이 탑의 소포는 다 나갔어요' : '먼 시설로 가는 소포를 맡는다 — 받는 이에게 전하면 별씨', primary: !parcelDone, disabled: parcelDone || R.active.length >= 6, onClick: () => this.parcel(F) },
+      { label: '소포 나르기', sub: parcelDone ? '오늘 이 탑의 소포는 다 나갔어요' : '먼 시설로 가는 소포를 맡는다 — 받는 이에게 전하면 품삯(울)', primary: !parcelDone, disabled: parcelDone || R.active.length >= 6, onClick: () => this.parcel(F) },
       { label: '새 부탁 받기', sub: boardDone ? '오늘 새로 온 부탁은 이미 받았어요' : '게시판에 하나를 더 붙인다', disabled: boardDone || R.active.length >= 6, onClick: () => { const r = R.addOne(); if (r) { this.useToday('board'); g.ui.toast(`새 부탁 · ${r.title}`, { kind: 'quest', sub: r.text }); } else g.ui.toast('지금은 새 부탁이 없어요', { kind: 'muted' }); } },
     ];
     g.ui.serviceCard(this._kicker(F), F.name, `일벌들이 꼭대기 창구에서 세렌 곳곳으로 소식을 나른다. 들어준 부탁 ${g.state.requestsDone}개.`, items, board);

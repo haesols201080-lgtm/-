@@ -1,6 +1,6 @@
 // 건물이 실제로 일한다 — 들어간 건물의 쓰임마다 시설(진열대·계산대·전시대·생산 줄·분류대·표 파는 곳·실험대…)을 두고,
 // 플레이어가 그 사회의 한 사람으로 직접 쓴다. 관찰자가 아니다.
-//  · 돈은 별씨: 공방·창고·발전소·사무탑에서 일하면 받고, 가게·찻집·터미널에서 쓴다. 가게에 물건을 되팔 수도 있다.
+//  · 돈은 울(data/money.js): 공방·창고·발전소·사무탑에서 일하면 받고, 가게·찻집·터미널에서 쓴다. 가게에 물건을 되팔 수도 있다.
 //  · 가방의 물건은 쓸모가 있다: 먹으면 몸의 기운(빨리 달리기·멀리 활공), 선물, 지도 밝히기, 기록 읽기.
 //  · 시설은 눈에 보이게 움직인다: 생산 줄 위로 물건이 흐르고, 분류대로 짐이 가고, 전시물이 돌고, 출발판이 깜박이고,
 //    요리하면 김이 오르고, 발전소 핵이 맥박친다. 일하는 주민도 그 자리에서 일한다.
@@ -12,6 +12,7 @@ import { WORD, WORDS } from '../data/lexicon.js';
 import { glyphSVG } from './language.js';
 import { ITEMS, BUFFS, SHELVES, MENU, EXHIBITS, ARCHIVES, BAG_ORDER, WORK_TUNES, ZONE_NAMES } from '../data/venues.js';
 import { mulberry32 } from '../core/noise.js';
+import { won } from '../data/money.js';
 
 const TAU = Math.PI * 2;
 const NOTE_HEX = ['#ff9f6a', '#ffd27a', '#7ff3e6', '#9fb8ff', '#d8a8ff'];
@@ -46,10 +47,9 @@ export class Venues {
   }
   /** 값 치르기: 플레이어 → 그 구역 회사 몫 (도시 장부) */
   _pay(n, why = '값', to = 'firms') {
-    if ((this.inv.starseed || 0) < n) { this.game.ui.toast(`별씨가 모자라요 (가진 것 ${this.inv.starseed || 0})`, { kind: 'muted' }); return false; }
+    if ((this.inv.starseed || 0) < n) { this.game.ui.toast(`돈이 모자라요 (가진 돈 ${won(this.inv.starseed || 0)})`, { kind: 'muted' }); return false; }
     const E = this.game.econ;
-    if (E && this.game.city) E.charge(n, why, to); else this.inv.starseed -= n;
-    this.S.spent += n;
+    if (E && this.game.city) E.charge(n, why, to); else { this.inv.starseed -= n; this.S.spent += n; }
     audio.chime && audio.chime('soft');
     return true;
   }
@@ -59,7 +59,7 @@ export class Venues {
     const E = this.game.econ;
     const paid = E && this.game.city ? E.reward(n, what, from) : (this.inv.starseed = (this.inv.starseed || 0) + n, n);
     this.S.earned += paid; this.S.worked++;
-    this.game.ui.toast(`${what} · 별씨 +${Math.round(paid * 100) / 100}${paid < n ? ' (구역 금고가 모자라 덜 받음)' : ''} (가진 것 ${this.inv.starseed})`, { kind: 'item' });
+    this.game.ui.toast(`${what} · +${won(Math.round(paid * 100) / 100)}${paid < n ? ' (구역 금고가 모자라 덜 받음)' : ''} (가진 돈 ${won(this.inv.starseed)})`, { kind: 'item' });
     return paid;
   }
   _learn(id) { const L = this.game.lang; if (id && WORD[id] && !L.known(id)) L.learn(id, 'teach'); }
@@ -402,20 +402,20 @@ export class Venues {
     const g = this.game, inv = this.inv;
     const items = sh.items.map((id) => {
       const I = ITEMS[id];
-      return { label: `${I.icon} ${I.name} · 별씨 ${I.price}`, sub: `${I.desc} (가진 것 ${inv[id] || 0})`, disabled: (inv.starseed || 0) < I.price, stay: true,
+      return { label: `${I.icon} ${I.name} · ${won(I.price)}`, sub: `${I.desc} (가진 것 ${inv[id] || 0})`, disabled: (inv.starseed || 0) < I.price, stay: true,
         onClick: (b) => { if (!this._pay(I.price)) return; this._add(id); this._learn('share'); this._say('shop'); b.querySelector('small').textContent = `${I.desc} (가진 것 ${inv[id] || 0})`; } };
     });
-    g.ui.serviceCard('가게', sh.name, `가진 별씨 ${inv.starseed || 0} · 고르면 바로 가방에 들어가요. 먹을 것은 가방(일지 → 가방)에서 꺼내 먹어요.`, items);
+    g.ui.serviceCard('가게', sh.name, `가진 돈 ${won(inv.starseed || 0)} · 고르면 바로 가방에 들어가요. 먹을 것은 가방(일지 → 가방)에서 꺼내 먹어요.`, items);
   }
 
   sellCard() {
     if (this.game.tips && this.game.tips.first('shop', () => this.sellCard())) return;
     const g = this.game, inv = this.inv;
     const sellable = BAG_ORDER.filter((id) => ITEMS[id].sell && (inv[id] || 0) > 0);
-    if (!sellable.length) { g.ui.serviceCard('가게', '계산대', '되팔 물건이 없어요. 공방에서 빚은 손등불·결정 조각·울림꽃은 여기서 별씨로 바꿀 수 있어요.', []); return; }
-    g.ui.serviceCard('가게', '계산대 · 되팔기', `가진 별씨 ${inv.starseed || 0}`, sellable.map((id) => {
+    if (!sellable.length) { g.ui.serviceCard('가게', '계산대', '되팔 물건이 없어요. 공방에서 빚은 손등불·결정 조각·울림꽃은 여기서 돈으로 바꿀 수 있어요.', []); return; }
+    g.ui.serviceCard('가게', '계산대 · 되팔기', `가진 돈 ${won(inv.starseed || 0)}`, sellable.map((id) => {
       const I = ITEMS[id];
-      return { label: `${I.icon} ${I.name} 팔기 · 별씨 ${I.sell}`, sub: `가진 것 ${inv[id]}`, stay: true, onClick: (b) => { if ((inv[id] || 0) <= 0) return; const E = g.econ; const got = E ? E.reward(I.sell, `되팔기 · ${I.name}`, 'firms') : I.sell; if (got <= 0) { g.ui.toast('가게 금고가 비었어요', { kind: 'muted' }); return; } inv[id]--; if (E) E.goodsIn(id, 1); else inv.starseed = (inv.starseed || 0) + I.sell; this._say('shop'); b.querySelector('small').textContent = `가진 것 ${inv[id]}`; g.ui.toast(`${I.name} → 별씨 +${I.sell}`, { kind: 'item' }); } };
+      return { label: `${I.icon} ${I.name} 팔기 · ${won(I.sell)}`, sub: `가진 것 ${inv[id]}`, stay: true, onClick: (b) => { if ((inv[id] || 0) <= 0) return; const E = g.econ; const got = E ? E.reward(I.sell, `되팔기 · ${I.name}`, 'firms') : I.sell; if (got <= 0) { g.ui.toast('가게 금고가 비었어요', { kind: 'muted' }); return; } inv[id]--; if (E) E.goodsIn(id, 1); else inv.starseed = (inv.starseed || 0) + I.sell; this._say('shop'); b.querySelector('small').textContent = `가진 것 ${inv[id]}`; g.ui.toast(`${I.name} → +${won(I.sell)}`, { kind: 'item' }); } };
     }));
   }
 
@@ -431,9 +431,9 @@ export class Venues {
       ]);
       return;
     }
-    g.ui.serviceCard('찻집', '차림표', `가진 별씨 ${this.inv.starseed || 0} · 주문하면 부엌에서 지어 계산대에 내어 줘요`, MENU.map((M) => {
+    g.ui.serviceCard('찻집', '차림표', `가진 돈 ${won(this.inv.starseed || 0)} · 주문하면 부엌에서 지어 계산대에 내어 줘요`, MENU.map((M) => {
       const I = ITEMS[M.id];
-      return { label: `${I.icon} ${I.name} · 별씨 ${I.price}`, sub: `${I.desc} · ${M.cook}초`, disabled: (this.inv.starseed || 0) < I.price,
+      return { label: `${I.icon} ${I.name} · ${won(I.price)}`, sub: `${I.desc} · ${M.cook}초`, disabled: (this.inv.starseed || 0) < I.price,
         onClick: () => { if (!this._pay(I.price)) return; this.order = { id: M.id, ready: this.t + M.cook }; this._lastOrder = M.id; this._say('shop', 'thanks'); audio.chime && audio.chime('soft'); } };
     }));
   }
@@ -460,9 +460,10 @@ export class Venues {
     const g = this.game, first = !this.S.exhibits[e.id];
     this.S.exhibits[e.id] = true;
     if (first) this._learn(e.word);
-    const seen = this.museum.filter((m) => this.S.exhibits[m.e.id]).length;
+    const ids = [...new Set((this.museum || []).map((m) => m.e.id))];
+    const seen = ids.filter((id) => this.S.exhibits[id]).length;
     const w = e.word && WORD[e.word] ? `<div class="mini-glyph">${glyphSVG(e.word, 56)}<span>「${WORD[e.word].ko}」</span></div>` : '';
-    g.ui.serviceCard(`박물관 · ${e.era}`, e.title, e.text, [], `${w}<div class="svc-stat"><span>이 박물관에서 본 전시 <b>${seen}/6</b></span></div>`);
+    g.ui.serviceCard(`박물관 · ${e.era}`, e.title, e.text, [], `${w}<div class="svc-stat"><span>이 박물관에서 본 전시 <b>${seen}/${ids.length || 1}</b></span></div>`);
     this._checkMuseum();
   }
   _checkMuseum() {
@@ -470,7 +471,7 @@ export class Venues {
     if (this.museum.every((m) => this.S.exhibits[m.e.id])) {
       this.S.museums[this.museumKey] = true;
       this._add('trinket', 1, true); if (this.game.econ) this.game.econ.reward(3, '박물관 기념', 'commons'); else this.inv.starseed = (this.inv.starseed || 0) + 3;
-      setTimeout(() => this.game.ui.toast('전시를 모두 보았다 · 기념품 노래 장신구 + 별씨 3', { kind: 'item' }), 600);
+      setTimeout(() => this.game.ui.toast('전시를 모두 보았다 · 기념품 노래 장신구 + 3울', { kind: 'item' }), 600);
     }
   }
   /** 해설사의 안내: 전시대를 차례로 비추며 이야기한다 (카드를 닫으면 안내도 끝) */
@@ -661,7 +662,7 @@ export class Venues {
         wrap.close();
         if (o.pay === 0) { if (inBand >= 7) { this._learn('core'); if (o.onWin) o.onWin(); } else this.game.ui.toast(`띠 안에 ${inBand.toFixed(1)}초 — 7초를 넘겨야 해요`, { kind: 'muted' }); return; }
         if (inBand >= 7) { this._wage(o.pay || 4, `${o.title || '출력 맞추기'} 성공`); this._learn('core'); audio.sing && audio.sing(WORK_TUNES.plant, { gain: 0.25 }); if (o.onWin) o.onWin(); else this._say('work', 'thanks'); }
-        else { this._wage(1, `${o.title || '출력 맞추기'} · 띠 안에 ${inBand.toFixed(1)}초 (7초를 넘기면 별씨 ${o.pay || 4})`); }
+        else { this._wage(1, `${o.title || '출력 맞추기'} · 띠 안에 ${inBand.toFixed(1)}초 (7초를 넘기면 ${won(o.pay || 4)})`); }
         return;
       }
       requestAnimationFrame(tick);
@@ -701,7 +702,7 @@ export class Venues {
   // ── 표·여행 ─────────────────────────────
   tickets() {
     if (this.game.tips && this.game.tips.first('terminal', () => this.tickets())) return;
-    const g = this.game, here = this.cur && this.cur.r;
+    const g = this.game, here = (this.cur && this.cur.r) || (g.interiors.cur && g.interiors.cur.r);
     const by = new Map();
     for (const r of g.city.recs) {
       if (r.use !== 'terminal' || !here || r.zone === here.zone) continue;
@@ -712,9 +713,9 @@ export class Venues {
     const ZN = ZONE_NAMES;
     const list = [...by.values()].sort((a, b) => a.d - b.d).slice(0, 7);
     if (!list.length) { g.ui.serviceCard('터미널', '행선지', '지금은 다른 구역으로 가는 편이 없어요.', []); return; }
-    g.ui.serviceCard('교통 터미널', '어디로 갈까요?', `가진 별씨 ${this.inv.starseed || 0} · 표를 사면 바로 출발해요 (하늘배·빛길 환승)`, list.map(({ r, d }) => {
+    g.ui.serviceCard('교통 터미널', '어디로 갈까요?', `가진 돈 ${won(this.inv.starseed || 0)} · 표를 사면 바로 출발해요 (하늘배·빛길 환승)`, list.map(({ r, d }) => {
       const price = Math.max(1, Math.round(d / 2500) + 1);
-      return { label: `${ZN[r.zone] || r.zone} · 별씨 ${price}`, sub: `${(d / 1000).toFixed(1)} km`, disabled: (this.inv.starseed || 0) < price, onClick: () => { if (!this._pay(price)) return; this._learn('go'); this.travelTo(r, ZN[r.zone] || r.zone); } };
+      return { label: `${ZN[r.zone] || r.zone} · ${won(price)}`, sub: `${(d / 1000).toFixed(1)} km`, disabled: (this.inv.starseed || 0) < price, onClick: () => { if (!this._pay(price)) return; this._learn('go'); this.travelTo(r, ZN[r.zone] || r.zone); } };
     }));
   }
   travelTo(r, name) {
@@ -732,7 +733,7 @@ export class Venues {
   }
 
   // ── 일거리 (사무탑 게시판·창고 배달) ──────────────
-  jobBoard(here = this.cur && this.cur.r) {
+  jobBoard(here = (this.cur && this.cur.r) || (this.game.interiors.cur && this.game.interiors.cur.r)) {
     if (this.game.tips && this.game.tips.first('jobs', () => this.jobBoard(here))) return;
     const g = this.game;
     if (this.S.job) { this._jobStatus(); return; }
@@ -743,15 +744,15 @@ export class Venues {
     const items = [];
     const doc = pickFar(offices);
     if (doc) g.city.fixDoor(doc);
-    if (doc) { const I = g.interiors.info(doc); const d = Math.hypot(doc.x - here.x, doc.z - here.z); items.push({ label: `문서 전하기 → ${I.name}`, sub: `${Math.round(d)} m · 별씨 ${2 + Math.round(d / 300)}`, onClick: () => this._takeJob({ kind: 'deliver', label: `문서 → ${I.name}`, x: doc.door.x, z: doc.door.z, reward: 2 + Math.round(d / 300), word: 'carry' }) }); }
+    if (doc) { const I = g.interiors.info(doc); const d = Math.hypot(doc.x - here.x, doc.z - here.z); items.push({ label: `문서 전하기 → ${I.name}`, sub: `${Math.round(d)} m · ${won(2 + Math.round(d / 300))}`, onClick: () => this._takeJob({ kind: 'deliver', label: `문서 → ${I.name}`, x: doc.door.x, z: doc.door.z, reward: 2 + Math.round(d / 300), word: 'carry' }) }); }
     const mk = g.city.marks && g.city.marks.length ? g.city.marks[Math.floor(rnd() * g.city.marks.length)] : null;
-    if (mk) { const d = Math.hypot(mk.x - here.x, mk.z - here.z); items.push({ label: `측량 · ${mk.name}의 높이 재기`, sub: `${(d / 1000).toFixed(1)} km · 별씨 ${3 + Math.round(d / 800)}`, onClick: () => this._takeJob({ kind: 'visit', label: `측량 → ${mk.name}`, x: mk.x, z: mk.z, r: 60, reward: 3 + Math.round(d / 800), word: 'far' }) }); }
+    if (mk) { const d = Math.hypot(mk.x - here.x, mk.z - here.z); items.push({ label: `측량 · ${mk.name}의 높이 재기`, sub: `${(d / 1000).toFixed(1)} km · ${won(3 + Math.round(d / 800))}`, onClick: () => this._takeJob({ kind: 'visit', label: `측량 → ${mk.name}`, x: mk.x, z: mk.z, r: 60, reward: 3 + Math.round(d / 800), word: 'far' }) }); }
     const roles = [['tend', '정원지기'], ['sell', '장터지기'], ['music', '악사'], ['carry', '짐꾼']];
     const [role, rname] = roles[Math.floor(rnd() * roles.length)];
-    items.push({ label: `안부 전하기 · 아무 ${rname}에게`, sub: '거리에서 그 일을 하는 주민과 이야기하면 끝 · 별씨 2', onClick: () => this._takeJob({ kind: 'greet', role, label: `안부 → ${rname}`, reward: 2, word: 'friend' }) });
+    items.push({ label: `안부 전하기 · 아무 ${rname}에게`, sub: '거리에서 그 일을 하는 주민과 이야기하면 끝 · 2울', onClick: () => this._takeJob({ kind: 'greet', role, label: `안부 → ${rname}`, reward: 2, word: 'friend' }) });
     g.ui.serviceCard('사무탑', '오늘의 일거리', '도시의 일은 노래로 나누어 맡아요. 하나를 맡으면 나침반에 목적지가 보여요.', items);
   }
-  deliveryCard(here = this.cur && this.cur.r) {
+  deliveryCard(here = (this.cur && this.cur.r) || (this.game.interiors.cur && this.game.interiors.cur.r)) {
     if (this.game.tips && this.game.tips.first('delivery', () => this.deliveryCard(here))) return;
     const g = this.game;
     if (this.S.job) { this._jobStatus(); return; }
@@ -763,7 +764,7 @@ export class Venues {
     const I = g.interiors.info(dst), d = Math.hypot(dst.x - here.x, dst.z - here.z);
     const reward = 2 + Math.round(d / 250);
     g.ui.serviceCard('물류 창고', '배달 창구', `${I.name}로 갈 짐이 있어요. ${Math.round(d)} m.`, [
-      { label: `짐 맡기 · 별씨 ${reward}`, sub: '그 건물 문 앞까지 가면 전해져요', primary: true, onClick: () => this._takeJob({ kind: 'deliver', label: `짐 → ${I.name}`, x: dst.door.x, z: dst.door.z, reward, word: 'carry', parcel: true }) },
+      { label: `짐 맡기 · ${won(reward)}`, sub: '그 건물 문 앞까지 가면 전해져요', primary: true, onClick: () => this._takeJob({ kind: 'deliver', label: `짐 → ${I.name}`, x: dst.door.x, z: dst.door.z, reward, word: 'carry', parcel: true }) },
     ]);
   }
   _takeJob(job) {

@@ -52,9 +52,9 @@ export function defaultState() {
     codex: {}, // 도감 id → true
     pylons: {}, // 노래하게 한 공명탑 (듣던 탑이 대답한 것)
     quests: { active: [], done: [], step: {}, data: {} },
-    inv: { starseed: 0, shard: 0, flower: 0, fruit: 0, trinket: 0, tea: 0, cookie: 0, meal: 0, lantern: 0, mapshard: 0, book: 0, parcel: 0 },
+    inv: { starseed: 0, seedstar: 0, shard: 0, flower: 0, fruit: 0, trinket: 0, tea: 0, cookie: 0, meal: 0, lantern: 0, mapshard: 0, book: 0, parcel: 0 },
     venue: { exhibits: {}, archives: {}, museums: {}, buffs: {}, days: {}, job: null, earned: 0, spent: 0, worked: 0 }, // 건물의 일 (v0.7)
-    // 건물 속 (v0.9): 일자리·지원·교대·과제·호텔 방 / 건물마다 바뀐 상태(연구 진척·내 집 칸·맡긴 물건…) / 도시 살림(구역 별씨·재고·살아 있는 건물)
+    // 건물 속 (v0.9): 일자리·지원·교대·과제·호텔 방 / 건물마다 바뀐 상태(연구 진척·내 집 칸·맡긴 물건…) / 도시 살림(구역 돈·재고·살아 있는 건물)
     work: { jobs: [], apps: [], shift: null, done: 0, earned: 0, edu: {}, research: {}, hotel: null },
     bld: {},
     econ: null,

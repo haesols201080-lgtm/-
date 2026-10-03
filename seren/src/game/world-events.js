@@ -120,7 +120,7 @@ export class WorldEvents {
   _take(s) {
     s.taken = true;
     this._remove(s);
-    this.game.giveItem('starseed', 1);
+    this.game.giveItem('seedstar', 1);
     this.game.audio.chime('word');
   }
 

@@ -11,6 +11,7 @@ import { TIPS } from '../data/tips.js';
 import { saveSettings } from './state.js';
 import { searchBuilding } from '../interior/find.js';
 import { FUSE } from '../interior/catalog.js';
+import { won } from '../data/money.js';
 
 const TONE_NAMES = ['솟음', '열림', '흐름', '빛', '고요'];
 const TONE_USE = ['공중에서 한 번 더 솟아오름', '메아리·잠긴 것을 엶', '활공·썰매 중 앞으로 밀어 줌', '빛 구슬·밤길 밝힘', '하늘고래를 부르고 마음을 고름'];
@@ -74,7 +75,7 @@ export class MoaAI {
     el.addEventListener('pointerdown', (e) => e.stopPropagation());
     const chips = [
       ['지금 뭘 하면 돼?', '지금 뭘 하면 돼?'], ['여긴 어디야?', '여기는 어디야?'], ['가까운 가게', '가까운 가게 알려 줘'],
-      ['별씨 버는 법', '별씨는 어떻게 벌어?'], ['방금 들은 말', '방금 들은 아웬의 말은 무슨 뜻이야?'], ['우리 집', '우리 집은 어디야?'],
+      ['돈 버는 법', '돈은 어떻게 벌어?'], ['방금 들은 말', '방금 들은 아웬의 말은 무슨 뜻이야?'], ['우리 집', '우리 집은 어디야?'],
     ];
     const box = el.querySelector('.mp-chips');
     for (const [label, q] of chips) {
@@ -229,7 +230,7 @@ export class MoaAI {
         inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
         execute: (input) => {
           const f = this.find(String(input.query || ''));
-          if (!f) throw new Error('그런 곳을 둘레에서 찾지 못했어요');
+          if (!f || f.none) throw new Error(f && f.none ? '이 건물 안에는 그런 곳이 없어요' : '그런 곳을 둘레에서 찾지 못했어요');
           this.mark(f);
           return { name: f.name, distance_m: f.d, direction: f.dir, floor: f.floor || null, route: f.inside && g.guide ? g.guide.text : null };
         },
@@ -265,6 +266,8 @@ export class MoaAI {
         const B = I.cur.B, fl = B.floors[r.floor];
         return { name: `${r.label}${r.floor !== ind.cur ? ` (${fl.label}층)` : ''}`, x, z, ...this._where(x, z), inside: r, floor: fl.label, sameFloor: r.floor === ind.cur };
       }
+      // 건물 안의 것을 물었는데 없으면 바깥의 엉뚱한 곳(이름 일부가 같은 장소)으로 가지 않는다
+      if (/엘리베이터|승강기|계단|출구|화장실|정화실|계산|단말|안내|진열|창고|교실|진료|약|회의/.test(s)) return { none: true, name: q };
     }
     // 일터·면접 (다른 건물)
     const W = g.state.work;
@@ -329,7 +332,7 @@ export class MoaAI {
     const hh = Math.floor((c.time % 1) * 24);
     L.push(`때: 세렌의 ${c.day + 1}일째 ${hh}시 무렵${g.world.atmos.state.night > 0.6 ? ' (밤)' : ''} · 다음 일식까지 ${Math.ceil(c.daysToEclipse())}일`);
     const inv = Object.entries(s.inv || {}).filter(([k, n]) => n > 0 && k !== 'starseed').map(([k, n]) => `${ITEMS[k] ? ITEMS[k].name : k}×${n}`);
-    L.push(`가진 것: 별씨 ${s.inv.starseed || 0}${inv.length ? ' · ' + inv.join(', ') : ''}`);
+    L.push(`가진 것: ${won(s.inv.starseed || 0)}${inv.length ? ' · ' + inv.join(', ') : ''}`);
     const V = s.venue || {};
     if (V.job) L.push(`맡은 일: ${V.job.label}`);
     // 건물 속 (v0.9): 층·조직·지금 층의 시설, 일자리·교대·과제·바구니·안내
@@ -344,7 +347,7 @@ export class MoaAI {
       if (out && out.fix) { const cnt = {}; for (const q of out.fix) if (q.tag) cnt[q.tag] = (cnt[q.tag] || 0) + 1; L.push(`이 층의 시설: ${Object.entries(cnt).slice(0, 14).map(([k, v]) => `${k}${v}`).join(' ')}`); }
       const ops = g.ops;
       if (ops) {
-        if (ops.basket.length) L.push(`바구니: ${ops.basket.length}개 (별씨 ${Math.round(ops.basketTotal() * 100) / 100}) — 계산대에서 값을 치러야 가방으로`);
+        if (ops.basket.length) L.push(`바구니: ${ops.basket.length}개 (${won(Math.round(ops.basketTotal() * 100) / 100)}) — 계산대에서 값을 치러야 가방으로`);
         if (ops.carry) L.push(`손에 든 것: ${ops.carry.label || ops.carry.g} ×${ops.carry.n || 1}`);
         if (ops.task) L.push(`하는 과제: ${ops.task.title} — 다음: ${(ops.task.steps[ops.task.k] || {}).label || ''}`);
       }
@@ -391,7 +394,7 @@ export class MoaAI {
     const g = this.game, s = g.state, P = g.player.pos;
     const q = text.replace(/\s/g, '');
     const say = (t) => t;
-    if (/안녕|하이|헬로|반가/.test(q)) return say('안녕하세요, 조종사님. 라르크 호에서 잘 들려요. 길을 묻거나, 지금 할 일, 들은 말의 뜻, 별씨 버는 법… 무엇이든 물어보세요.');
+    if (/안녕|하이|헬로|반가/.test(q)) return say('안녕하세요, 조종사님. 라르크 호에서 잘 들려요. 길을 묻거나, 지금 할 일, 들은 말의 뜻, 돈 버는 법… 무엇이든 물어보세요.');
     if (/어디있|어딨|너어디|모아어디|옆에|같이있|내려와|보고싶/.test(q)) { const st = this.game.comm ? this.game.comm.status() : null; return `저는 궤도를 도는 라르크 호에 있어요. ${st && st.up ? '지금 마침 머리 위를 지나는 중이에요 — 밤이면 깜박이는 점으로 보여요.' : '지금은 지평선 너머라 착륙선 안테나가 이어 주고 있어요.'} 조종사님 탐사복 카메라로 같이 보고 있으니 걱정 마세요.`; }
     if (/뭐해|뭘해|뭘하|뭐하|할일|할게|해야|다음|목표|어떻게하|어떻게해|막혔|모르겠|이야기진행/.test(q)) {
       const o = g.quests.objectiveText();
@@ -401,7 +404,7 @@ export class MoaAI {
       const st = g.quests.step(g.quests.tracked());
       return `지금 할 일은 「${o.text}」${yeyo(o.text)} (${o.title}).${st && st.hint ? ' ' + st.hint + '.' : ''}${f ? ` ${f.dir}쪽 ${f.d} m — 나침반에 표시했어요.` : ''}`;
     }
-    if (/별씨|돈|벌|가난|비싸/.test(q)) return `지금 별씨는 ${s.inv.starseed || 0}개예요. 공방 생산 줄·창고 짐 나누기·발전소 출력 맞추기 같은 일터에서 일하거나, 사무탑 일거리·배달, 주민 부탁함으로 벌 수 있어요. 가게·찻집·터미널 표·하늘배에 써요. 「가까운 공방」이라고 물으면 길을 표시해 드릴게요.`;
+    if (/돈|울|벌|가난|비싸|품삯/.test(q) && !/울림/.test(q)) return `지금 가진 돈은 ${won(s.inv.starseed || 0)}이에요. 건물 안 울림판 단말의 「일자리」에서 지원해 일하면(출근 → 과제 → 퇴근 때 그 회사 금고에서 품삯), 또 바깥 조작대의 설비 점검·짐 드론 관제, 주민 부탁함으로도 벌 수 있어요. 마트·식당·터미널·하늘배에서 써요. 별씨는 돈이 아니라 별비·생명나무에서 줍는 재료예요(온실·장인 온).`;
     if (/음|공명|연주|솟음|열림|흐름|고요/.test(q) && !/음식/.test(q)) {
       const T = s.tones;
       if (!T.length) return '아직 공명 음을 하나도 몰라요. 아웬이 가르쳐 줄 거예요 — 먼저 마중 나온 이를 만나 봐요.';
@@ -431,6 +434,7 @@ export class MoaAI {
     }
     // 시설·장소·인물 찾기 (건물 안이면 그 건물 안부터)
     const f = this.find(q);
+    if (f && f.none) return `이 건물 안에서는 「${text.trim()}」을(를) 찾지 못했어요. 지도(M)의 층 목록이나 안내 빛판에서 다른 층을 살펴봐요.`;
     if (f && f.inside) { this.mark(f); return `「${f.name}」 — ${f.sameFloor ? `이 층 ${f.d} m` : `${f.floor}층`}이에요. 바닥에 빛 길을 깔았어요${g.guide && g.guide.text ? ` (${g.guide.text})` : ''}.`; }
     if (f) { this.mark(f); return `「${f.name}」 — ${f.dir}쪽 ${f.d} m 예요. 나침반에 표시했어요.`; }
     if (/어디야|여기|위치|어디에있|어디지|어디인/.test(q)) {
@@ -443,9 +447,9 @@ export class MoaAI {
     }
 
     if (/썰매|활공|날개|날기|빛길|하늘배|탈것|빨리/.test(q)) return '공중에서 점프를 한 번 더 누르면 날개가 펴져요(카메라를 아래로 보면 급강하, 위로 보면 고도). 썰매는 F, 빛길 역과 하늘배 승강장에서는 먼 곳까지 바로 가요.';
-    if (/도움|뭘물|할수있|기능/.test(q)) return '이런 걸 물어보세요: 「지금 뭘 하면 돼?」, 「가까운 찻집」, 「별씨 버는 법」, 「방금 들은 말 뜻」, 「우리 집」, 「이엘 어디 있어?」, 「여긴 어디야?」';
+    if (/도움|뭘물|할수있|기능/.test(q)) return '이런 걸 물어보세요: 「지금 뭘 하면 돼?」, 「가까운 찻집」, 「돈 버는 법」, 「방금 들은 말 뜻」, 「우리 집」, 「이엘 어디 있어?」, 「여긴 어디야?」';
     for (const [id, T] of Object.entries(TIPS)) if (q.includes(T.title.split(' ')[0].replace(/\s/g, ''))) return `${T.title}: ${T.steps.join(' ')}`;
-    return '음… 그건 지금 바로는 모르겠어요. 「지금 뭘 하면 돼?」, 「가까운 가게」, 「별씨 버는 법」처럼 물어봐 주시면 바로 찾아 드릴게요.';
+    return '음… 그건 지금 바로는 모르겠어요. 「지금 뭘 하면 돼?」, 「가까운 가게」, 「돈 버는 법」처럼 물어봐 주시면 바로 찾아 드릴게요.';
   }
 }
 

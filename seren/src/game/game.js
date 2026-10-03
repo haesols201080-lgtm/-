@@ -60,6 +60,7 @@ import { Outdoors } from './outdoors.js';
 import { Citizens } from './citizens.js';
 import { UI } from '../ui/ui.js';
 import { MapData } from '../ui/map.js';
+import { won } from '../data/money.js';
 
 export class Game {
   constructor() {
@@ -120,7 +121,7 @@ export class Game {
     this.services = new Services(this);
     this.venues = new Venues(this);
     this.interiors = new Interiors(this);
-    this.econ = new Economy(this); // 도시 살림 (v0.9): 별씨·물건이 저절로 생기지 않고 흐른다
+    this.econ = new Economy(this); // 도시 살림 (v0.9): 돈(울)·물건이 저절로 생기지 않고 흐른다
     this.ops = new Ops(this); // 건물이 하는 일 (v0.9)
     this.guide = new Guide(this); // 실내 길 안내
     this.tips = new Tips(this);
@@ -725,10 +726,10 @@ export class Game {
     const html = opts.map((o) => {
       const lv = p.upgrades[o.k] || 0;
       const c = cost(lv);
-      const can = lv < o.max && s.inv.starseed >= c;
-      return `<div class="qitem" style="text-align:left"><div class="qt">${o.name} <small style="color:var(--ink-dim)">${lv}/${o.max}</small></div><div class="qs">${o.desc}</div>${lv < o.max ? `<button class="btn" data-up="${o.k}" ${can ? '' : 'disabled'} style="margin-top:8px">별씨 ${c}개로 손보기</button>` : '<div class="qs" style="color:var(--teal)">최고 단계</div>'}</div>`;
+      const can = lv < o.max && (s.inv.seedstar || 0) >= c;
+      return `<div class="qitem" style="text-align:left"><div class="qt">${o.name} <small style="color:var(--ink-dim)">${lv}/${o.max}</small></div><div class="qs">${o.desc}</div>${lv < o.max ? `<button class="btn" data-up="${o.k}" ${can ? '' : 'disabled'} style="margin-top:8px">${won(c)}개로 손보기</button>` : '<div class="qs" style="color:var(--teal)">최고 단계</div>'}</div>`;
     }).join('');
-    this.ui.infoCard('장인 온의 작업대', `가진 별씨 ${s.inv.starseed}개`, '별비가 내리는 밤에 떨어진 별씨를 모아 오세요.');
+    this.ui.infoCard('장인 온의 작업대', `가진 별씨 ${s.inv.seedstar || 0}개`, '별비가 내리는 밤에 떨어진 별씨를 모아 오세요.');
     const card = document.querySelector('.card');
     const box = document.createElement('div');
     box.innerHTML = html;
@@ -736,8 +737,8 @@ export class Game {
     box.querySelectorAll('[data-up]').forEach((b) => b.addEventListener('click', () => {
       const k = b.dataset.up;
       const lv = p.upgrades[k] || 0;
-      if (s.inv.starseed < cost(lv)) return;
-      if (this.econ && this.city) this.econ.charge(cost(lv), '장인 온의 작업대', 'hh'); else s.inv.starseed -= cost(lv);
+      if ((s.inv.seedstar || 0) < cost(lv)) return;
+      s.inv.seedstar -= cost(lv); // 별씨(재료)를 녹여 장비를 손본다
       p.upgrades[k] = lv + 1;
       s.upgrades = { ...p.upgrades };
       audio.chime('quest');
@@ -777,21 +778,22 @@ export class Game {
     bus.emit('flag', k);
   }
 
-  /** 가방에 넣기 (v0.9): 별씨는 그 구역 공공 몫(고마움·보상·들에 뿌려진 별씨)에서, 도시의 물건은 그 구역 재고에서 — 저절로 생기지 않는다 */
+  /** 가방에 넣기 (v0.9): 돈(울)은 그 구역 공공 몫(고마움·보상)에서, 별씨(재료)는 자연에서, 도시의 물건은 그 구역 재고에서 — 저절로 생기지 않는다 */
   giveItem(k, n = 1) {
     const E = this.econ;
     if (E && this.city) {
-      if (k === 'starseed') { const got = E.reward(n, '보상'); if (got > 0) this.ui.toast(`별씨 +${Math.round(got * 100) / 100} (모두 ${this.state.inv.starseed})`, { kind: 'item' }); return got; }
+      if (k === 'starseed') { const got = E.reward(n, '보상'); if (got > 0) this.ui.toast(`+${won(Math.round(got * 100) / 100)} (모두 ${won(this.state.inv.starseed)})`, { kind: 'item' }); return got; }
       n = E.goodsOut(k, n);
       if (n <= 0) return 0;
     }
     this.state.inv[k] = (this.state.inv[k] || 0) + n;
-    if (k === 'starseed') this.ui.toast(`별씨 +${n} (모두 ${this.state.inv.starseed})`, { kind: 'item' });
+    if (k === 'starseed') this.ui.toast(`+${won(n)} (모두 ${won(this.state.inv.starseed)})`, { kind: 'item' });
+    if (k === 'seedstar') this.ui.toast(`별씨 +${n} (모두 ${this.state.inv.seedstar})`, { kind: 'item' });
     return n;
   }
 
   scan(id) {
-    if (this.state.codex[id]) return;
+    if (!id || this.state.codex[id]) return;
     this.state.codex[id] = true;
     const c = CODEX[id];
     if (!c) return;
@@ -991,7 +993,7 @@ export class Game {
     this._target = this.mode === 'play' && p.state !== 'down' && p.state !== 'ride' && !this.director.active ? this._findTarget() : null;
     // 처음 만나는 건물의 일: 모아가 한 번 알려 준다
     const tk = this._target && this._target.kind, fl = this.state.flags;
-    if (tk === 'venue' && !fl.moaVenue) { fl.moaVenue = true; this.ui.moa('이 건물의 시설은 장식이 아니에요. 가게에서 사고, 공방·창고에서 일해 별씨를 벌 수 있어요. 가방은 일지에 있어요.'); }
+    if (tk === 'venue' && !fl.moaVenue) { fl.moaVenue = true; this.ui.moa('이 건물의 시설은 장식이 아니에요. 가게에서 사고, 공방·창고에서 일해 돈(울)을 벌 수 있어요. 가방은 일지에 있어요.'); }
     if (tk === 'outdoor' && !fl.moaConsole) { fl.moaConsole = true; this.ui.moa('발치의 빛 기둥은 바깥 조작대예요. 들어갈 수 없는 건물도 여기서 그 건물의 일을 할 수 있어요.'); }
     this.ui.prompt(this._target ? this._target.label : null, this._target ? this._target.short : null);
     // 다가간 사람·시설지기를 바라본다 (말 걸 수 있다는 걸 몸으로도)

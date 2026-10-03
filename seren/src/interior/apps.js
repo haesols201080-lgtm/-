@@ -14,6 +14,7 @@ import { searchBuilding, roomSpot } from './find.js';
 import { uidOf } from './ids.js';
 import { hashStr, mulberry32 } from '../core/noise.js';
 import { audio } from '../core/audio.js';
+import { won } from '../data/money.js';
 
 const HOUR = 1 / 24;
 const hh = (t) => { const m = Math.round((t % 1) * 24 * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
@@ -29,7 +30,7 @@ const ROLE_REQ = { translator: { words: 12 }, designer: { done: 3 }, analyst: { 
 const CULTURE = [
   ['함께 일하던 이가 지쳐 보이면?', ['잠깐 함께 고요히 노래하고 일을 나눈다', '못 본 척 내 일만 한다', '책임자에게 바로 알린다'], 0],
   ['일을 잘못했다는 걸 알았을 때?', ['바로 말하고 함께 고친다', '아무도 모르게 둔다', '다른 이의 탓으로 돌린다'], 0],
-  ['별씨는 무엇을 세는 씨앗일까요?', ['고마움', '힘', '나이'], 0],
+  ['울(세렌의 돈)은 무엇을 세는 셈일까요?', ['고마움', '힘', '나이'], 0],
   ['일하는 소리(일의 노래)는 왜 부를까요?', ['박자를 맞춰 서로의 일을 듣기 위해', '시끄럽게 하려고', '쉬는 시간을 알리려고'], 0],
 ];
 
@@ -49,6 +50,8 @@ export class Apps {
   open(name = 'home', ctx = {}) {
     if (!this.cur) return;
     if (this.game.tips && this.game.tips.first('osterm', () => this.open(name, ctx))) return;
+    this.game.scan && this.game.scan('c_terminal');
+    if (name === 'econ') this.game.scan && this.game.scan('c_starseed');
     this.ctx = ctx;
     const T = ctx.T || this.ops.byFloor(this.cur.indoor.cur);
     this.T = T;
@@ -182,7 +185,7 @@ export class Apps {
       const ap = S.apps.find((a) => a.uid === p.uid && a.k === p.k && a.role === p.role && a.status !== 'done');
       const miss = this.reqOf(p);
       const st = has ? '맡고 있음' : ap ? (ap.status === 'applied' ? '지원함 · 면접 안내를 기다리는 중' : ap.status === 'interview' ? '면접 안내 받음' : ap.status === 'rejected' ? `다음 기회에 (${ap.retry ? `${Math.max(0, Math.ceil((ap.retry - g.world.clock.time) * 24))}시간 뒤 다시` : ''})` : '') : '';
-      return { label: `${esc(p.title)} · ${esc(p.org)}`, sub: `${esc(p.desc)} · 시간당 별씨 ${p.wage} · ${hh(p.hours[0])}~${hh(p.hours[1])}${p.d ? ` · ${Math.round(p.d)} m` : ''}${st ? ` · <b>${st}</b>` : miss.length ? ` · 필요: ${miss.join(', ')}` : ''}`, disabled: !!has || (ap && ap.status !== 'rejected') || (ap && ap.retry > g.world.clock.time) || miss.length > 0, act: () => this.apply(p) };
+      return { label: `${esc(p.title)} · ${esc(p.org)}`, sub: `${esc(p.desc)} · 시간당 ${won(p.wage)} · ${hh(p.hours[0])}~${hh(p.hours[1])}${p.d ? ` · ${Math.round(p.d)} m` : ''}${st ? ` · <b>${st}</b>` : miss.length ? ` · 필요: ${miss.join(', ')}` : ''}`, disabled: !!has || (ap && ap.status !== 'rejected') || (ap && ap.retry > g.world.clock.time) || miss.length > 0, act: () => this.apply(p) };
     };
     const rows = [{ head: `이 건물 (${here.length})` }, ...here.map(row)];
     if (!here.length) rows.push({ label: '오늘은 이 건물에서 사람을 구하지 않아요', sub: '내일 다시 보거나 둘레 건물을 보세요' });
@@ -267,7 +270,7 @@ export class Apps {
     // 질문 2: 일의 셈 (시간·품삯)
     const h = Math.round((a.hours[1] - a.hours[0]) * 24);
     const pay = Math.round(h * a.wage * 10) / 10;
-    const q2 = [`하루 ${h}시간, 시간당 별씨 ${a.wage}이면 하루 품삯은?`, shuffle([`${pay}`, `${Math.round((pay + a.wage * 2) * 10) / 10}`, `${Math.round(Math.max(1, pay - a.wage * 3) * 10) / 10}`], rnd), null];
+    const q2 = [`하루 ${h}시간, 시간당 ${won(a.wage)}이면 하루 품삯은?`, shuffle([`${pay}`, `${Math.round((pay + a.wage * 2) * 10) / 10}`, `${Math.round(Math.max(1, pay - a.wage * 3) * 10) / 10}`], rnd), null];
     q2[2] = q2[1].indexOf(`${pay}`);
     // 질문 3: 일터 문화
     const c = CULTURE[Math.floor(rnd() * CULTURE.length)];
@@ -287,6 +290,7 @@ export class Apps {
         this.S.jobs.push(job);
         g.ui.serviceCard(`채용 면접 · ${a.org}`, '함께 일해요!', `${score}/3 · 「${a.title}」으로 일하게 됐어요. ${hh(a.hours[0])}~${hh(a.hours[1])} 사이에 이 건물의 출근 단말에서 출근하면 할 일이 나와요. 품삯은 퇴근할 때 일한 시간과 마친 과제만큼 회사 금고에서.`, [{ label: '출근 단말로 길 안내', primary: true, onClick: () => this._guideClock(job) }, { label: '알겠어요' }]);
         g.setFlag && g.setFlag('hiredIndoor');
+        g.scan && g.scan('c_job');
         if (g.lang && WORD.work && !g.lang.known('work')) g.lang.learn('work', 'teach');
       } else {
         a.status = 'rejected';
@@ -320,7 +324,7 @@ export class Apps {
     for (const a of ap) rows.push({ label: `${esc(a.title)} · ${esc(a.org)}`, sub: a.status === 'applied' ? '면접 안내를 기다리는 중' : a.status === 'interview' ? '면접 안내 받음 — 눌러서 길 안내' : '이번엔 안 됐어요 (다시 지원 가능)', act: a.status === 'interview' ? () => this._goInterview(a) : null });
     if (!ap.length) rows.push({ label: '진행 중인 지원 없음' });
     rows.push({ head: '지금까지' });
-    rows.push({ label: `마친 과제 ${S.done} · 번 별씨 ${Math.round(S.earned * 10) / 10}`, sub: g.econ ? `받은 것 ${Math.round(g.econ.S.P.earned)} · 쓴 것 ${Math.round(g.econ.S.P.spent)}` : '' });
+    rows.push({ label: `마친 과제 ${S.done} · 번 ${won(Math.round(S.earned * 10) / 10)}`, sub: g.econ ? `받은 것 ${Math.round(g.econ.S.P.earned)} · 쓴 것 ${Math.round(g.econ.S.P.spent)}` : '' });
     for (const l of (g.econ ? g.econ.S.log : []).slice(-6).reverse()) rows.push({ label: `${l[1] > 0 ? '+' : ''}${Math.round(l[1] * 100) / 100} · ${esc(l[2])}`, sub: `${hh(l[0])}` });
     this._render('내 일', S.shift ? '교대 중이에요. 퇴근은 출근 단말에서.' : '', rows);
   }
@@ -328,6 +332,7 @@ export class Apps {
   // ── 살림 (이 가게·공장의 장부, 구역의 흐름) ─────────────
   _v_econ() {
     const g = this.game, E = g.econ, T = this.T;
+    g.scan && g.scan('c_starseed');
     const rows = [];
     if (T && T.node) {
       const n = T.node;
@@ -344,11 +349,11 @@ export class Apps {
     if (z) {
       rows.push({ head: `구역 살림 · ${zid}` });
       rows.push({ html: `<div class="svc-stat"><span>주민 <b>${z.pop}</b></span><span>가구 <b>${Math.round(z.hh)}</b></span><span>회사 <b>${Math.round(z.firms)}</b></span><span>공공 <b>${Math.round(z.commons)}</b></span><span>빛 <b>${Math.round(z.energy)}</b></span></div>` });
-      rows.push({ label: `이번 시간 · 만든 것 ${Math.round(z.made)} · 판 것 ${Math.round(z.sold)} · 품삯 ${Math.round(z.wages)}`, sub: '농장·채굴 → 공장 → 물류 → 가게 → 주민 (별씨는 가구 ↔ 회사 ↔ 공공으로만 돈다)' });
+      rows.push({ label: `이번 시간 · 만든 것 ${Math.round(z.made)} · 판 것 ${Math.round(z.sold)} · 품삯 ${Math.round(z.wages)}`, sub: '농장·채굴 → 공장 → 물류 → 가게 → 주민 (돈은 가구 ↔ 회사 ↔ 공공으로만 돈다)' });
       const low = Object.entries(DEMAND).map(([k, d]) => [k, (z.retail[k] || 0) / Math.max(1, d * z.pop)]).sort((a, b) => a[1] - b[1]).slice(0, 4);
       rows.push({ label: `가게에 모자란 것 · ${low.map(([k]) => gname(k)).join(' · ')}`, sub: `물류 창고 · ${['grain', 'ore', 'fuel', 'flour', 'shard'].map((k) => `${gname(k)} ${Math.floor(z.depot[k] || 0)}`).join(' · ')}` });
     }
-    this._render('살림', '이 도시의 별씨와 물건은 저절로 생기지 않아요 — 모두 이 장부에서 옮겨 다녀요.', rows);
+    this._render('살림', '이 도시의 돈(울)과 물건은 저절로 생기지 않아요 — 모두 이 장부에서 옮겨 다녀요.', rows);
   }
 
   // ── 안내 (찾기·층) ─────────────────────────────

@@ -1,6 +1,6 @@
 // 도시의 물건과 그 흐름 (v0.9): 원료(농장·채굴) → 공장(공정) → 물류 창고 → 가게·식당 → 주민·플레이어.
 // 물건은 어디서 저절로 생기지 않는다 — 가게 진열대의 빵은 공장이 빛보리 가루와 꽃꿀로 구운 것이고, 그 가루는 재배원의 빛보리다.
-//  · cat: 가게 구역(진열대 cat 과 같은 이름) · price: 가게 값(별씨) · base: 도매 값 · color/shape: 진열 모양
+//  · cat: 가게 구역(진열대 cat 과 같은 이름) · price: 가게 값(울) · base: 도매 값 · color/shape: 진열 모양
 //  · eat/buff: 먹으면 몸의 기운(venues 의 BUFFS) · use: 가방에서 쓰는 법(eat/gift/map/read/heal/craft)
 export const GOODS = {
   // 원료

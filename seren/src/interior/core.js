@@ -35,6 +35,8 @@ function coreOptions(B, nUp) {
     opts.push(['stair', 'lift']);
     opts.push(['spiral', 'liftS']);
   }
+  // 세 층 넘는 건물은 승강기가 꼭 있어야 한다 (병원은 침상 승강기) — 좁으면 작은 나선 계단 + 작은 승강기
+  if (nUp >= 3) { if (B.pid === 'heal') opts.push(['spiral', 'cargo']); opts.push(['spiral2', 'liftS'], ['liftS', 'spiral2']); }
   opts.push(['spiral']);
   opts.push(['spiral2']);
   return opts;

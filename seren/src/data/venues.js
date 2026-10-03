@@ -2,7 +2,7 @@
 // (game/venues.js 가 읽는다. 건물 쓰임은 game/interiors.js 의 PURPOSE, 쓰임마다의 시설은 venues.js 의 BUILD)
 
 // ── 가방에 들어가는 것 ─────────────────────────────
-// use: eat(먹으면 buff) · gift(주민 선물) · map(지도 밝히기) · read(읽으면 말) / price: 가게 값(별씨) / sell: 되팔 값
+// use: eat(먹으면 buff) · gift(주민 선물) · map(지도 밝히기) · read(읽으면 말) / price: 가게 값(울) / sell: 되팔 값
 export const ITEMS = {
   fruit: { name: '빛열매', tag: '먹을 것', desc: '한 입 베어 물면 잠깐 발이 가벼워진다. 주민과 나눠 먹을 수도 있다.', price: 1, sell: 0, use: 'eat', buff: 'quick', icon: '●' },
   cookie: { name: '바람과자', tag: '먹을 것', desc: '바삭한 과자. 먹으면 4분 동안 더 빨리 달린다.', price: 2, use: 'eat', buff: 'quick', icon: '◆' },
@@ -14,9 +14,10 @@ export const ITEMS = {
   mapshard: { name: '지도 결정', tag: '도구', desc: '쓰면 가까운 못 가 본 곳의 지도가 밝혀진다.', price: 4, use: 'map', icon: '◇' },
   book: { name: '빌린 기록 결정', tag: '책', desc: '서고에서 빌린 기록. 읽으면 말 하나를 배우고, 다 읽으면 사라진다.', use: 'read', icon: '▤' },
   shard: { name: '결정 조각', tag: '재료', desc: '장비를 손보는 재료 (울림 공방). 연구동 실험에서 얻는다.', sell: 2, icon: '◈' },
-  starseed: { name: '별씨', tag: '돈', desc: '세렌의 돈이자 씨앗. 일하면 받고, 가게에서 쓴다.', icon: '✶' },
+  starseed: { name: '울', tag: '돈', desc: '세렌의 화폐 단위. 울림판에 새겨 세는 고마움의 셈 — 일하면 받고, 가게에서 쓴다.', icon: '◎' },
+  seedstar: { name: '별씨', tag: '재료', desc: '별비가 내린 밤과 생명나무에서 줍는 빛 씨앗. 온실에 심으면 빛꽃이 피고, 장인 온이 녹여 장비를 손본다.', icon: '✶' },
 };
-export const BAG_ORDER = ['starseed', 'meal', 'tea', 'cookie', 'fruit', 'flower', 'trinket', 'lantern', 'mapshard', 'book', 'shard'];
+export const BAG_ORDER = ['starseed', 'seedstar', 'meal', 'tea', 'cookie', 'fruit', 'flower', 'trinket', 'lantern', 'mapshard', 'book', 'shard'];
 
 // ── 몸의 기운 (먹거나 치유받으면 잠깐) ─────────────
 export const BUFFS = {
@@ -66,7 +67,7 @@ export const EXHIBITS = [
 export const ARCHIVES = [
   { id: 'a-founding', title: '하모네아를 세운 날', text: '첫 합창단이 고원에 모여 사흘 밤낮을 노래하자 땅이 둥글게 솟았다. 그 둥근 땅이 지금의 하모네아다.', word: 'first' },
   { id: 'a-rings', title: '왜 고리 거리인가', text: '소리는 둥글게 퍼진다. 그래서 아웬은 도시를 동심원으로 짓는다. 같은 고리에 사는 이웃은 같은 메아리를 듣는다.', word: 'ring' },
-  { id: 'a-trade', title: '나눔의 법', text: '아웬은 물건을 사고팔지 않고 나눈다. 별씨는 값이 아니라 고마움을 세는 씨앗이다. 쓴 별씨는 언젠가 들에 뿌려진다.', word: 'share' },
+  { id: 'a-trade', title: '나눔의 법', text: '아웬은 물건을 사고팔지 않고 나눈다. 울은 값이 아니라 고마움을 세는 셈이다. 쓴 울은 품삯과 나눔으로 다시 이웃에게 돈다.', word: 'share' },
   { id: 'a-work', title: '일의 노래', text: '공방·창고·발전소의 일꾼은 일하면서 노래한다. 일마다 박자가 달라서, 일하는 소리만 들어도 무슨 일인지 안다.', word: 'work' },
   { id: 'a-sleep', title: '쉬는 탑', text: '오래 노래한 탑은 한동안 귀만 열고 쉰다. 그동안에는 사람들이 대신 노래한다.', word: 'sleep' },
   { id: 'a-ships', title: '하늘배 길잡이', text: '하늘배는 해류를 따라 난다. 길잡이는 바람의 음을 듣고 배를 이끈다.', word: 'wind' },
@@ -106,7 +107,7 @@ export const OUTDOOR = {
   lm_tree: { fn: 'mark', name: '생명나무', label: '생명나무 · 별씨와 승강판', short: '생명나무' },
 };
 
-// ── 주민 부탁함: 탑에 사는 주민이 날마다 하나씩 부탁한다 (가져다주면 고마움 = 별씨) ──
+// ── 주민 부탁함: 탑에 사는 주민이 날마다 하나씩 부탁한다 (가져다주면 고마움 = 울) ──
 // where: 어디서 구하는지 (안내)
 export const WISHES = [
   { item: 'fruit', n: 2, why: '아이 생일이라 빛열매가 모자라요', where: '가게 「먹을 것 칸」', reward: 4 },

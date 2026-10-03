@@ -220,7 +220,7 @@ function decideUses(pid, slots, ctx, rnd) {
       default: done = false;
     }
     if (done) {
-      for (let k = 0; k < N; k++) if (slots[k].n < 24 && uses[k] !== 'house') uses[k] = k === 0 ? 'stem' : 'tech';
+      for (let k = 0; k < N; k++) if (slots[k].n < (k === 0 ? 40 : 24) && uses[k] !== 'house') uses[k] = k === 0 ? 'stem' : 'tech';
       return { uses, basements, atrium, notes, podium, deps, special: notes.special };
     }
   }
@@ -325,7 +325,7 @@ function decideUses(pid, slots, ctx, rnd) {
     default: fill(0, top, 'office');
   }
   // 아주 작은 층(버섯 집의 줄기, 둥근 지붕 아래 다락)은 현관·다락으로
-  for (let k = 0; k < N; k++) if (slots[k].n < 24 && uses[k] !== 'house') uses[k] = k === 0 ? 'stem' : 'tech';
+  for (let k = 0; k < N; k++) if (slots[k].n < (k === 0 ? 40 : 24) && uses[k] !== 'house') uses[k] = k === 0 ? 'stem' : 'tech';
   return { uses, basements, atrium, notes, podium, deps, special: null };
 }
 
@@ -477,7 +477,7 @@ export function makeBuilding(r, ctx) {
   for (let k = 0; k < slots.length; k++) {
     const s = slots[k], use = D.uses[k] || 'office';
     let h = s.h, ceil = s.ceil, mask = s.mask, n = s.n, kk = k, vault = false;
-    const bigHall = k === 0 && (['factory', 'storage', 'transit', 'plant'].includes(use) || (low && ['hall', 'farm', 'garden', 'schoolhall'].includes(use)));
+    const bigHall = k === 0 && s.n >= 60 && (['factory', 'storage', 'transit', 'plant'].includes(use) || (low && ['hall', 'farm', 'garden', 'schoolhall'].includes(use)));
     if (bigHall && slots.length > 1) {
       kk = low ? slots.length - 1 : Math.min(slots.length - 1, k + 2);
       for (let t = k + 1; t <= kk; t++) if (D.uses[t] !== use && !['factory', 'storage', 'transit', 'plant', 'hall', 'farm', 'garden', 'schoolhall', 'office', 'tech', 'stem'].includes(D.uses[t])) { kk = t - 1; break; }

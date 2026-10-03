@@ -133,3 +133,4 @@ export class PlanStore {
     try { localStorage.setItem(KEY, str); } catch (e) { console.warn('[bld] 구조 저장 실패', e); }
   }
 }
+export { packB, unpackB, packL, unpackL };

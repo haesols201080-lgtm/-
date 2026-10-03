@@ -13,6 +13,7 @@ import { TYPES, roleOf } from './ops-types.js';
 import { Apps } from './apps.js';
 import { findPath } from './nav.js';
 import { audio } from '../core/audio.js';
+import { won } from '../data/money.js';
 
 const SHAPE = { box: [0.2, 0.16, 0.16], round: [0.16, 0.16, 0.16], bottle: [0.1, 0.26, 0.1], jar: [0.14, 0.18, 0.14], crystal: [0.1, 0.24, 0.1], flat: [0.3, 0.05, 0.22], sack: [0.28, 0.24, 0.2], flower: [0.1, 0.3, 0.1] };
 
@@ -66,6 +67,11 @@ export class Ops {
   entered(cur) {
     this._floorEntered(cur.indoor.cur);
     this.apps.onEnter(cur);
+    // 도감: 처음 보는 건물의 짜임
+    const B = cur.B, sc = (id) => this.game.scan && setTimeout(() => this.game.scan(id), 2500);
+    if (B.special) sc({ heal: 'c_hospital', office: 'c_hq', school: 'c_campus', market: 'c_mart' }[B.pid] || null);
+    else if (B.orgs.length >= 3) sc('c_mixed');
+    if (['factory', 'depot', 'farm'].includes(B.pid)) sc('c_chain');
   }
   floorChanged(i) { this._floorEntered(i); if (this.task) this._guideTo(); }
   close(cur) {
@@ -232,7 +238,7 @@ export class Ops {
     this._basketVis();
     if (!quiet) this.game.ui.toast('바구니의 물건을 제자리에 돌려놓았다', {});
   }
-  /** 계산: 바구니 → 가방, 별씨 → 그 가게 금고 */
+  /** 계산: 바구니 → 가방, 돈(울) → 그 가게 금고 */
   checkout(T, staffed = true) {
     const g = this.game;
     if (!this.basket.length) { g.ui.toast('바구니가 비어 있어요. 진열대에서 물건을 집어 와요', { kind: 'muted' }); return; }
@@ -241,8 +247,8 @@ export class Ops {
     const rows = {};
     for (const b of this.basket) rows[b.g] = (rows[b.g] || 0) + 1;
     const list = Object.entries(rows).map(([k, n]) => `<div class="svc-row"><b>${(GOODS[k] || ITEMS[k] || {}).name || k}</b> × ${n} · ${Math.round(n * this.econ.price(k) * 100) / 100}</div>`).join('');
-    const wrap = g.ui.serviceCard(staffed ? '계산대' : '셀프 계산대', `모두 별씨 ${total}`, `가진 별씨 ${have}. ${staffed ? '계산원이 물건을 하나씩 빛판에 대고 셉니다.' : '물건을 하나씩 빛판에 대어 세어요.'}`, [
-      { label: `값 치르기 · 별씨 ${total}`, primary: true, disabled: have < total, onClick: () => this._pay(T, staffed) },
+    const wrap = g.ui.serviceCard(staffed ? '계산대' : '셀프 계산대', `모두 ${won(total)}`, `가진 돈 ${won(have)}. ${staffed ? '계산원이 물건을 하나씩 빛판에 대고 셉니다.' : '물건을 하나씩 빛판에 대어 세어요.'}`, [
+      { label: `값 치르기 · ${won(total)}`, primary: true, disabled: have < total, onClick: () => this._pay(T, staffed) },
       { label: '몇 개 내려놓기', sub: '돈이 모자라면 비싼 것부터 진열대로 돌려놓는다', disabled: have >= total, onClick: () => { this._dropExpensive(have); this.checkout(T, staffed); } },
       { label: '그만두기', sub: '바구니는 그대로 들고 있는다' },
     ], `<div class="svc-list">${list}</div>`);
@@ -261,7 +267,7 @@ export class Ops {
   _pay(T, staffed) {
     const g = this.game, total = this.basketTotal();
     const paid = this.econ.transfer('player', `n:${T.uid}`, total, `계산 · ${T.org ? T.org.name : '가게'}`);
-    if (paid < total - 1e-6) { g.ui.toast('별씨가 모자라요', { kind: 'muted' }); return; }
+    if (paid < total - 1e-6) { g.ui.toast('돈이 모자라요', { kind: 'muted' }); return; }
     T.node.sales += paid;
     // 하나씩 세는 동안 (계산원 몸짓 · 삑 소리)
     const items = this.basket.slice();
@@ -269,10 +275,11 @@ export class Ops {
     this._basketVis();
     items.forEach((b, k) => setTimeout(() => audio.blip && audio.blip({ hz: 1200, to: 1400, dur: 0.05, gain: 0.05 }), k * 140));
     for (const b of items) this.game.state.inv[b.g] = (this.game.state.inv[b.g] || 0) + 1;
-    g.ui.toast(`${items.length}개를 샀다 · 별씨 −${Math.round(total * 100) / 100} (남은 ${g.state.inv.starseed})`, { kind: 'item' });
+    g.ui.toast(`${items.length}개를 샀다 · −${won(Math.round(total * 100) / 100)} (남은 ${won(g.state.inv.starseed)})`, { kind: 'item' });
     if (staffed) this.say(T, 'thanks');
     if (this.game.lang) { const L = this.game.lang; if (!L.known('share')) L.learn('share', 'teach'); }
     this.game.setFlag && this.game.setFlag('boughtIndoor');
+    this.game.scan && this.game.scan('c_starseed');
   }
   /** 손에 짐을 든다 (상자·쟁반·짐판·결정…) — 몸이 짐을 드는 자세가 된다 */
   takeCarry(c) {
@@ -377,7 +384,7 @@ export class Ops {
     S.earned += paid;
     if (job) { job.worked = (job.worked || 0) + hours; job.rating = Math.min(5, (job.rating || 3) + (sh.tasks >= 3 ? 0.2 : 0)); }
     this.cancelTask();
-    g.ui.toast(`퇴근 · ${hours.toFixed(1)}시간 · 과제 ${sh.tasks} · 별씨 +${paid}${paid < due ? ` (금고에 ${Math.round((due - paid) * 10) / 10} 모자람)` : ''}`, { kind: 'item' });
+    g.ui.toast(`퇴근 · ${hours.toFixed(1)}시간 · 과제 ${sh.tasks} · +${won(paid)}${paid < due ? ` (금고에 ${Math.round((due - paid) * 10) / 10} 모자람)` : ''}`, { kind: 'item' });
     if (g.venues) { g.venues.S.worked++; g.venues.S.earned += paid; }
     g.setFlag && g.setFlag('helpedNeighbor');
   }
@@ -422,7 +429,7 @@ export class Ops {
     if (!ui.root) return;
     if (!this.hudEl) { this.hudEl = document.createElement('div'); this.hudEl.className = 'ops-hud'; ui.root.appendChild(this.hudEl); }
     const parts = [];
-    if (this.basket.length) parts.push(`<span class="b">바구니 ${this.basket.length}개 · 별씨 ${Math.round(this.basketTotal() * 100) / 100}</span>`);
+    if (this.basket.length) parts.push(`<span class="b">바구니 ${this.basket.length}개 · ${won(Math.round(this.basketTotal() * 100) / 100)}</span>`);
     if (this.carry) parts.push(`<span class="c">손에 든 것 · ${(GOODS[this.carry.g] || ITEMS[this.carry.g] || {}).name || this.carry.label || '짐'}${this.carry.n > 1 ? ` ×${this.carry.n}` : ''}</span>`);
     if (this.task) { const st = this.task.steps[this.task.k]; parts.push(`<span class="t">할 일 · ${this.task.title}${st ? ` — ${st.label}` : ''}</span>`); }
     const gd = this.game.guide;
