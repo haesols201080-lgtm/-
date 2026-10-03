@@ -99,6 +99,8 @@ export function planCore(B) {
     const G0 = B.floors[B.ground];
     let doorJ = 0;
     for (let j = gh - 1; j >= 0; j--) if (G0.mask[j * gw + Math.floor(gw / 2)]) { doorJ = j; break; }
+    const bridgeDirs = [];
+    for (const F of B.floors) for (const b of F.bridges || []) { const [ux, uz] = b.dir; bridgeDirs.push(Math.abs(ux) > Math.abs(uz) ? [Math.sign(ux), 0] : [0, Math.sign(uz)]); }
     for (const list of coreOptions(B, nUp)) {
       const L = layoutComps(list);
       let best = null, bs = Infinity;
@@ -122,6 +124,11 @@ export function planCore(B) {
           }
           // 정문 앞 6 m 는 비운다
           if (j0 + Dd > doorJ - 6 && Math.abs(mx - gw / 2) < W / 2 + 3) s += 60;
+          // 공중다리 쪽 바깥벽을 심이 막지 않게 (심과 그 벽 사이에 두 칸 통로)
+          for (const [di, dj] of bridgeDirs) {
+            const ok = di > 0 ? full(i0 + W, j0, 2, Dd) : di < 0 ? full(i0 - 2, j0, 2, Dd) : dj > 0 ? full(i0, j0 + Dd, W, 2) : full(i0, j0 - 2, W, 2);
+            if (!ok) s += 40;
+          }
           if (s < bs) { bs = s; best = { o, i0, j0, W, Dd }; }
         }
       }

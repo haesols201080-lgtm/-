@@ -1,7 +1,7 @@
 // 건물 속 운영 시험 (헤드리스, 한 번 불러와서 여러 건물): 쓰임마다 건물에 들어가 시설·사람·일자리·살림을 확인한다.
 //   node tools/ops-flow.mjs [쓰임들(쉼표)] [shots]
 //   · 건물마다: 층·세입자·사람(역할)·시설 수(E 로 쓸 수 있는 것)·시설 앞에서 표적이 잡히는가·몇 초 돌려 오류가 없나
-//   · 쓰임마다 짧은 흐름(일자리 맡기 → 출근 → 과제 한 단계 …)과 별씨 합 보존(econ.total)
+//   · 쓰임마다 짧은 흐름(일자리 맡기 → 출근 → 과제 한 단계 …)과 돈(울) 합 보존(econ.total)
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -67,6 +67,10 @@ for (const pid of want) {
       const t = o.target(g.player.pos);
       if (t) hit++; else fails.push(`표적 없음:${F.tag}@${F.ax.toFixed(1)},${F.az.toFixed(1)}`);
     }
+    // 지도가 보여 줄 지금 상태 (진열 남은 수·기계·밭) — 같은 살림 자료
+    const live = [];
+    for (const [i, ob] of ind.built) for (const F of ob.fix) { const st = o.fixState(i, F); if (st) live.push(st); }
+    res.live = `${live.length}${live[0] ? ` 예: ${live[0].text.slice(0, 48)}` : ''}${live.some((x) => x.warn) ? ` · 경고 ${live.filter((x) => x.warn).length}` : ''}`;
     res.acts = Object.entries(acts).map(([k, v]) => `${k}${v}`).join(' ');
     res.target = `${hit}/${tested}`;
     res.fails = fails.slice(0, 6);
@@ -154,14 +158,18 @@ const sv = await page.evaluate(async () => {
   const B = I.cur.B, top = B.floors.filter((F) => F.reach && !F.dead && !F.below).pop();
   I.placeAt(top.i, g.player.pos.x, g.player.pos.z, 0);
   await new Promise((res) => setTimeout(res, 800));
+  // 승강기 타기: 이 층의 승강기로 1층까지
+  let lift = null;
+  const settle = () => new Promise((res) => { let k = 0; const t = setInterval(() => { if ((!I._busy && k > 3) || ++k > 60) { clearInterval(t); res(); } }, 250); });
+  { const ind = I.cur.indoor, out = ind.built.get(ind.cur), L = out && out.lifts.find((q) => q.stops); if (L) { const ground = I.cur.B.ground; const from = ind.cur; I.ride(L, ground); await settle(); lift = { from, to: ind.cur, y: Math.round(g.player.pos.y - 8000) }; const L2 = ind.built.get(ind.cur).lifts.find((q) => q.stops && q.part === L.part) || ind.built.get(ind.cur).lifts.find((q) => q.stops); I.ride(L2, from); await settle(); lift.back = ind.cur; lift.yBack = Math.round(g.player.pos.y - 8000); } }
   g.save(true);
-  const before = { floor: I.cur.indoor.cur, inside: g.state.inside };
+  const before = { floor: I.cur.indoor.cur, inside: g.state.inside, lift };
   I.exit();
   await new Promise((res) => { const t = setInterval(() => { if (!I.inPocket && !I._busy) { clearInterval(t); res(); } }, 300); });
   g.continueGame();
   await new Promise((res) => setTimeout(res, 1200));
   await new Promise((res) => { let k = 0; const t = setInterval(() => { if ((I.inPocket && !I._busy) || ++k > 120) { clearInterval(t); res(); } }, 300); });
-  return { before: before.floor, saved: !!before.inside, after: I.inPocket && I.cur && I.cur.indoor ? I.cur.indoor.cur : null };
+  return { lift: before.lift, before: before.floor, saved: !!before.inside, after: I.inPocket && I.cur && I.cur.indoor ? I.cur.indoor.cur : null };
 });
 console.log('저장·불러오기', JSON.stringify(sv));
 const fin = await page.evaluate(() => ({ total: Math.round((SEREN.game.econ.total() - window.__T0) * 100) / 100, seed: SEREN.game.state.inv.starseed, work: SEREN.game.state.work.done }));

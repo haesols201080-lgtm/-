@@ -259,6 +259,19 @@ const mart = {
           { label: '창고 선반에 내려놓기', short: '놓기', at: (o) => tagged(o, 'stock')[0], do: () => { const x = ops.dropCarry(); if (x) T.node.stock[x.g] = (T.node.stock[x.g] || 0) + x.n; ops.taskDone(T); return true; } },
         ], next: () => roleOf('mart', 'hauler').next(ops, T) };
       } },
+    guide: { title: '안내 담당', wage: 1.4, hours: [0.3, 0.75], desc: '안내 빛판 앞에서 손님의 물음을 받고 찾는 진열대까지 함께 간다',
+      next(ops, T) {
+        const out = ops.cur.indoor.built.get(ops.cur.indoor.cur);
+        const info = tagged(out, 'directory')[0] || tagged(out, 'basket')[0];
+        const sh = tagged(out, 'shelf');
+        if (!info || !sh.length) { toast(ops, '이 층엔 안내할 매장이 없어요', 'muted'); return null; }
+        const F = pick(sh), want = (shelfGoods(T, F, out)[0] || {}).g;
+        const ask = want ? gname(want) : CAT_NAME[catOfMart(F)] || '물건';
+        return { title: `손님 안내 · ${ask}`, steps: [
+          { label: '안내 빛판 앞에서 손님 맞기', short: '맞기', at: () => info, do: () => { toast(ops, `손님: 「${ask}은(는) 어디 있어요?」`); ops.say(T, 'chat'); return true; } },
+          { label: `${ask} 진열대까지 함께 가기`, short: '안내', at: () => F, do: () => { ops.taskDone(T); learn(ops, 'find'); toast(ops, '손님이 고맙다며 바구니에 담는다', 'item'); return true; } },
+        ], next: () => roleOf('mart', 'guide').next(ops, T) };
+      } },
     counter: { title: '재고 담당', wage: 1.4, hours: [0.3, 0.6], desc: '진열대를 돌며 재고를 세어 장부와 맞춘다',
       next(ops, T) {
         const out = ops.cur.indoor.built.get(ops.cur.indoor.cur);
@@ -724,10 +737,12 @@ const lab = {
     ops.taskDone(T);
     if (L.p[P.id] >= 100 && !L[`done_${P.id}`]) {
       L[`done_${P.id}`] = true;
-      ops.game.state.inv[P.reward] = (ops.game.state.inv[P.reward] || 0) + 2;
+      // 성과로 받는 시제품은 연구원이 구역 창고에서 실제로 꺼내 준다 (물건은 저절로 생기지 않는다)
+      const got = ops.econ.take(T.zone, 'depot', P.reward, 2);
+      if (got > 0) ops.game.state.inv[P.reward] = (ops.game.state.inv[P.reward] || 0) + got;
       learn(ops, P.word);
-      ops.econ.transfer(`n:${T.uid}`, 'player', 6, `연구 성과 · ${P.name}`);
-      toast(ops, `연구 「${P.name}」 완성! · ${gname(P.reward)} 2 · 6울`, 'item');
+      const paid = ops.econ.transfer(`n:${T.uid}`, 'player', 6, `연구 성과 · ${P.name}`);
+      toast(ops, `연구 「${P.name}」 완성!${got ? ` · ${gname(P.reward)} ${got}` : ''}${paid ? ` · ${won(paid)}` : ''}`, 'item');
     } else toast(ops, `「${P.name}」 ${L.p[P.id]}%`, 'item');
   },
   people(ops, T, out, i) {

@@ -46,6 +46,7 @@ const ALIAS = [
   [/출구|나가는|나가|입구|정문|현관/, { exit: true }],
   [/옥상|지붕/, { roof: true }],
   [/테라스|발코니|바깥 ?단/, { terrace: true }],
+  [/공중 ?다리|구름 ?다리|건너편|옆 ?탑/, { bridge: true }],
   [/화장실|정화실/, { room: ['wc'] }],
   [/계산/, { tag: ['checkout', 'order', 'pharmacy', 'tickets'] }],
   [/면접/, { tag: ['interview'] }],
@@ -139,6 +140,15 @@ export function searchBuilding(game, q, opt = {}) {
     if (part) { const [gx, gz] = partSpot(B, part); add({ kind: 'roof', label: '옥상 문', sub: `${fl(lk.floors[0]).label}층 계단 위`, floor: lk.floors[0], gx, gz }); }
   }
   if (want.terrace) for (const F of B.floors) if (F.terrace && F.reach) { const pl = ind.plan(F.i); const e = pl && pl.L.ents.terrace; if (e) { const i = e.c % B.G.gw, j = (e.c / B.G.gw) | 0; add({ kind: 'terrace', label: '바깥 단(테라스)', sub: `${F.label}층`, floor: F.i, gx: B.G.ox + i + 0.5 - e.dir[0], gz: B.G.oz + j + 0.5 - e.dir[1] }); } }
+  if (want.bridge) for (const F of B.floors) if (F.bridges && F.reach) {
+    const pl = ind.plan(F.i);
+    for (const e of (pl && pl.L.ents.bridge) || []) {
+      const BL = game.city && game.city.bridgeList ? game.city.bridgeList[e.bi] : null;
+      const other = BL ? (BL.a === cur.r ? BL.b : BL.a) : null;
+      const i = e.c % B.G.gw, j = (e.c / B.G.gw) | 0;
+      add({ kind: 'bridge', label: '공중다리 문', sub: `${F.label}층${other ? ` · 건너편 ${game.interiors.title(other)}` : ''}`, floor: F.i, gx: B.G.ox + i + 0.5 - e.dir[0], gz: B.G.oz + j + 0.5 - e.dir[1] });
+    }
+  }
   // ── 층 쓰임 ──
   for (const F of B.floors) {
     if (!F.reach || F.dead) continue;
@@ -217,6 +227,7 @@ export function floorMarkers(game, i) {
   if (ex && i === B.ground) M.push({ k: 'exit', gx: ex[0], gz: ex[1], label: '정문' });
   if (L.ents.dock) { const d = exitSpot(B, L, 'dock'); if (d) M.push({ k: 'dock', gx: d[0], gz: d[1], label: '하역 문' }); }
   if (L.ents.terrace) { const e = L.ents.terrace, a = e.c % B.G.gw, b = (e.c / B.G.gw) | 0; M.push({ k: 'terrace', gx: B.G.ox + a + 0.5, gz: B.G.oz + b + 0.5, label: '테라스' }); }
+  for (const e of L.ents.bridge || []) { const a = e.c % B.G.gw, b = (e.c / B.G.gw) | 0; M.push({ k: 'bridge', gx: B.G.ox + a + 0.5, gz: B.G.oz + b + 0.5, label: '공중다리' }); }
   const KEY = { checkout: 'pay', clock: 'work', terminal: 'term', directory: 'info', reception: 'info', interview: 'hire', order: 'food', machine: 'mach', exhibit: 'art', pharmacy: 'med', tickets: 'ticket', stock: 'stock', console: 'mach', core: 'mach', sleep: 'bed', crop: 'crop', analysis: 'term', instrument: 'mach', doctor: 'med', catalog: 'term', vending: 'food', civic: 'info' };
   const seen = new Map();
   for (const F of fix) {

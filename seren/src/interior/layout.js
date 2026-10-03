@@ -177,6 +177,61 @@ export function layoutFloor(B, F, ctx = {}) {
     for (const [i, j] of core.lobby) if (g.ok(i, j)) voidM[g.c(i, j)] = 2;
   }
 
+  // ── 1c. 공중다리 통로: 다리 쪽 바깥벽의 문 칸에서 심 앞 홀까지 (홀을 늘린다 — 건너온 사람이 곧장 승강기로) ──
+  //  문 칸 = 다리 줄에 가깝고 다리 쪽을 보는 바깥 칸. 길 = 계단·승강기 칸을 피해 홀까지 가장 짧은 칸 길(넓혀서 세 칸).
+  const bridgeRuns = [];
+  if (F.bridges && F.bridges.length) {
+    const hall = L.lifthall != null ? rooms[L.lifthall] : newRoom('corridor', { circ: true });
+    const hid = hall.id + 1;
+    const coreCell = (c) => room[c] && room[c] !== hid;
+    // 홀에서 (계단·승강기 칸을 피해) 걸어서 닿는 칸 — 심이 바깥벽까지 막은 뒤쪽 자투리에는 문을 내지 않는다
+    const reach = new Uint8Array(g.n);
+    if (L.lifthall != null) {
+      const q0 = [];
+      for (let c = 0; c < g.n; c++) if (room[c] === hid) { reach[c] = 1; q0.push(c); }
+      for (let h = 0; h < q0.length; h++) g.nb(q0[h], (e) => { if (!reach[e] && inside[e] && !coreCell(e)) { reach[e] = 1; q0.push(e); } });
+    } else reach.fill(1);
+    for (const bd of F.bridges) {
+      const [ux, uz] = bd.dir;
+      let best = null, bs = 1e9;
+      for (let c = 0; c < g.n; c++) {
+        if (!inside[c] || coreCell(c) || !reach[c]) continue;
+        const i = g.i(c), j = g.j(c), x = cellX(B.G, i), z = cellZ(B.G, j);
+        const t = x * ux + z * uz, p = -x * uz + z * ux;
+        if (t <= 0) continue;
+        for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const out = !g.ok(i + di, j + dj) || !inside[g.c(i + di, j + dj)];
+          const dot = di * ux + dj * uz;
+          if (!out || dot < 0.35) continue;
+          const sc = Math.abs(p) * 2 + (1 - dot) * 3 - t * 0.05;
+          if (sc < bs) { bs = sc; best = { c, dir: [di, dj] }; }
+        }
+      }
+      if (!best) continue;
+      // 문 칸 → 홀: 칸 너비 우선 찾기
+      const prev = new Int32Array(g.n).fill(-2);
+      const q = [best.c];
+      prev[best.c] = -1;
+      let hit = -1;
+      for (let h = 0; h < q.length && hit < 0; h++) {
+        const c = q[h];
+        if (room[c] === hid && L.lifthall != null) { hit = c; break; }
+        g.nb(c, (e) => { if (prev[e] === -2 && inside[e] && !coreCell(e)) { prev[e] = c; q.push(e); } });
+      }
+      const path = [];
+      if (hit >= 0) for (let c = hit; c !== -1; c = prev[c]) path.push(c);
+      else { // 홀이 없으면 문에서 안쪽으로 네 칸
+        let i = g.i(best.c), j = g.j(best.c);
+        for (let k = 0; k < 5 && g.ok(i, j) && inside[g.c(i, j)] && !coreCell(g.c(i, j)); k++) { path.push(g.c(i, j)); i -= best.dir[0]; j -= best.dir[1]; }
+      }
+      for (const c of path) {
+        if (!room[c]) setCell(c, hall);
+        g.nb(c, (e) => { if (inside[e] && !room[e]) setCell(e, hall); });
+      }
+      bridgeRuns.push({ bd, best, hall });
+    }
+  }
+
   // ── 2. 뚫린 곳(아트리움): 아래층 로비 위로 몇 층이 열려 있다 ──
   const A = B.atrium;
   if (A && B.atriumCells && F.i > B.ground + A.from && F.i <= B.ground + A.to) for (const c of B.atriumCells) if (inside[c] && !room[c]) voidM[c] = 1;
@@ -239,6 +294,12 @@ export function layoutFloor(B, F, ctx = {}) {
       });
     }
     if (best) { doors.push({ a: best.room, b: -2, c: best.c, dir: best.dir, w: 1, kind: 'terrace' }); L.ents.terrace = best; }
+  }
+  // ── 7b. 공중다리 문: 통로 끝 칸의 바깥벽 ──
+  for (const { bd, best, hall } of bridgeRuns) {
+    if (room[best.c] !== hall.id + 1) continue;
+    doors.push({ a: hall.id, b: -3, c: best.c, dir: best.dir, w: 2, kind: 'bridge' });
+    (L.ents.bridge || (L.ents.bridge = [])).push({ c: best.c, dir: best.dir, k: bd.k, bi: bd.bi, room: hall.id });
   }
   // ── 8. 지붕 문 ──
   const roofLink = B.links.find((k) => k.kind === 'roof' && k.floors.includes(F.i));

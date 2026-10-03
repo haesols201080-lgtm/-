@@ -67,6 +67,7 @@ export class CityFabric {
     this.beacons = new PointLights(this.scene, 900, { minPx: 1.6, day: 0.25 });
     this._excl = [];
     this.holo = []; // [x, y, z, 너비, 높이, 방향, 색]
+    this.bridgeList = []; // 공중다리 (두 탑의 기록 · 바닥 높이 · 축)
     this.recs = []; // 들어갈 수 있는 건물 기록 (문·실내·주민이 쓴다)
     this.recGrid = new Map();
     this.outRecs = []; // 들어갈 수 없지만 바깥 조작대로 쓰는 건물 (OUTDOOR)
@@ -412,7 +413,7 @@ export class CityFabric {
     zone.buildings++;
     if (S.enter && o.use !== 'none' && o.door !== undefined) this._addRec(rec, a, o.door);
     if (sy > 110 && rnd() < 0.7) this.beacons.add(x, base + sy + 2, z, rnd() < 0.5 ? 0xff5a4a : 0xfff0e0, 5, 1.2, rnd());
-    if (sy > 100) zone.tall.push([x, z, base, top, Math.min(sx, sz)]);
+    if (sy > 100) zone.tall.push([x, z, base, top, Math.min(sx, sz), rec]);
     // 홀로그램 간판: 높은 사무 탑 몇에 거리 쪽으로
     if (sy > 80 && (o.use === 'office' || o.use === 'market') && rnd() < 0.25) {
       const out = rnd() < 0.5 ? 1 : -1;
@@ -1132,13 +1133,14 @@ export class CityFabric {
     }
   }
 
-  // ── 공중다리: 가까운 높은 탑끼리 (걸어서 건널 수 있다) ──
+  // ── 공중다리: 가까운 높은 탑끼리 — 속이 빈 유리 통로. 두 탑 모두 들어갈 수 있는 건물이고,
+  //    다리 바닥 높이가 두 탑의 한 층 바닥이 된다 (실내 생성기가 그 높이에 층을 맞추고 「공중다리 문」을 낸다: program.js · layout.js)
   _bridges(zone, rnd) {
     const T = zone.tall;
     const used = new Set();
     for (let i = 0; i < T.length; i++) {
       if (used.has(i) || rnd() > 0.55) continue;
-      const [x1, z1, b1, t1, r1] = T[i];
+      const [x1, z1, b1, t1, r1, rec1] = T[i];
       let best = -1, bd = 1e9;
       for (let j = 0; j < T.length; j++) {
         if (j === i || used.has(j)) continue;
@@ -1146,18 +1148,42 @@ export class CityFabric {
         if (d > 40 && d < 120 && d < bd) { bd = d; best = j; }
       }
       if (best < 0) continue;
-      const [x2, z2, b2, t2, r2] = T[best];
+      const [x2, z2, b2, t2, r2, rec2] = T[best];
       const span = bd - (r1 + r2) * 0.55;
       if (span < 12) continue;
       const y = Math.max(b1, b2) + (Math.min(t1, t2) - Math.max(b1, b2)) * (0.4 + rnd() * 0.35);
       const mx = (x1 + x2) / 2, mz = (z1 + z2) / 2, rot = -Math.atan2(z2 - z1, x2 - x1);
       const half = bd / 2 - Math.min(r1, r2) * 0.3;
       if (this._excluded(mx, mz, 4) || this._under(mx, mz, half) < y + 8) continue;
+      // 문이 없는 탑(들어갈 수 없는 건물)과는 잇지 않는다 — 다리 끝이 막힌 벽이 되지 않게
+      if (!rec1 || !rec2 || rec1.id === undefined || rec2.id === undefined) continue;
       this.list.bridge.push(mx, y, mz, half, 5.5, 3.2, rot, 1, 1, 1);
-      this.world.colliders.add({ type: 'box', x: mx, z: mz, hx: half, hz: 3.2, rot, y0: y, y1: y + 5.5, city: true, walk: true });
+      // 충돌체: 바닥판 · 지붕(위로도 걸을 수 있다) · 두 옆 유리벽. 끝은 탑 속이라 탑의 벽이 막는다
+      const ux = (x2 - x1) / bd, uz = (z2 - z1) / bd, px = -uz, pz = ux;
+      const C = this.world.colliders;
+      C.add({ type: 'box', x: mx, z: mz, hx: half, hz: 3.2, rot, y0: y - 0.4, y1: y + 0.02, city: true, walk: true });
+      C.add({ type: 'box', x: mx, z: mz, hx: half, hz: 3.2, rot, y0: y + 5.2, y1: y + 5.5, city: true, walk: true });
+      for (const sg of [-1, 1]) C.add({ type: 'box', x: mx + px * sg * 3.05, z: mz + pz * sg * 3.05, hx: half, hz: 0.15, rot, y0: y, y1: y + 5.2, city: true, walk: false });
+      const bi = this.bridgeList.length;
+      this.bridgeList.push({ y, mx, mz, ux, uz, half, a: rec1, b: rec2 });
+      (rec1.bridges || (rec1.bridges = [])).push({ bi, y, ux, uz });
+      (rec2.bridges || (rec2.bridges = [])).push({ bi, y, ux: -ux, uz: -uz });
       used.add(i); used.add(best);
       if (rnd() < 0.4) this.lamps.add(mx, y - 0.5, mz, 0x9ff6ff, 4, 0, 0);
+      this.lamps.add(mx, y + 4.8, mz, 0xdff6ff, 3, 0, 0);
     }
+  }
+
+  /** 공중다리 위에 서 있나: 그 다리와 끝에 닿은 탑 (탑 바깥벽까지 andR m 안) */
+  bridgeAt(x, y, z) {
+    for (const B of this.bridgeList) {
+      if (Math.abs(y - B.y) > 2.2) continue;
+      const dx = x - B.mx, dz = z - B.mz;
+      const along = dx * B.ux + dz * B.uz, perp = -dx * B.uz + dz * B.ux;
+      if (Math.abs(perp) > 3.4 || Math.abs(along) > B.half + 1) continue;
+      return { B, along, end: along > 0 ? B.b : B.a, from: along > 0 ? B.a : B.b };
+    }
+    return null;
   }
 
   // ── 인스턴스 메시 ─────────────────────────

@@ -44,6 +44,14 @@ export function stackSlots(r, V, G, prof, opt = {}) {
       if (C.y0 > next - 0.05 && C.y0 < next + 1.7 && C.y0 - y > 2.9) next = Math.max(next, C.y0 + 0.02);
       else if (C.y0 > y + 2.55 && C.y0 < next - 0.05) { next = C.y0 + 0.02; snapped = true; }
     }
+    // 공중다리 바닥: 그 높이가 꼭 한 층의 바닥이 되게 (바로 위면 이 층을 늘리고, 층 가운데면 거기서 끊는다)
+    for (const cy of opt.cuts || []) {
+      if (cy > next - 0.05 && cy < next + 1.7 && cy - y > 2.9) next = cy;
+      else if (cy > y + 2.55 && cy < next - 0.05) { next = cy; snapped = true; }
+      else if (cy >= next + 1.7 && cy < next + 2.6) { // 다음 층이 너무 낮아지지 않게: 둘로 나누거나(둘 다 2.65 m 넘으면) 이 층을 높인다
+        if ((cy - y) / 2 >= 2.65) { next = (y + cy) / 2; snapped = true; } else next = cy;
+      }
+    }
     let ceil = next - SLAB;
     if (y + 2.5 > V.top - 0.15) break;
     if (ceil > V.top - 0.15) ceil = V.top - 0.15; // 맨 위층: 지붕 아래까지
@@ -464,12 +472,21 @@ export function makeBuilding(r, ctx) {
   const pid = ctx.pid(r);
   // 1층 높이: 로비·가게·공공 홀은 두 모듈(바깥의 상가 띠), 학교 교실·작은 집은 한 모듈
   const groundMods = pid === 'school' || (pid === 'home' && V.top - V.base < 24) || (pid === 'cafe' && V.top - V.base < 14) || V.top - V.base < 11 ? 1 : 2;
-  const slots = stackSlots(r, V, G, prof, { defMod: pid === 'home' ? 3.3 : 3.6, groundMods });
+  const cuts = (r.bridges || []).map((b) => b.y);
+  const slots = stackSlots(r, V, G, prof, { defMod: pid === 'home' ? 3.3 : 3.6, groundMods, cuts });
   if (!slots.length) return null;
   // 전문 건물인가 (한 기관이 건물 전체): 쓰임마다 비율이 다르다 — 큰 병원·학교·박물관은 대개 전문, 사무·마트는 섞인 건물이 많다
   const SPECIAL_P = { heal: 0.7, school: 0.75, lab: 0.5, office: 0.3, market: 0.35, depot: 0.6, factory: 0.55, terminal: 0.5, farm: 0.6, hotel: 0.55 };
   const special = !r.custom && rngFor(seed, 'special')() < (SPECIAL_P[pid] || 0);
   const D = decideUses(pid, slots, { district: r.style, custom: !!r.custom, special }, rnd);
+  // 공중다리가 닿는 층: 건너온 사람을 받는 공용층(하늘 쉼터)으로 — 이미 누구나 드나드는 층이면 그대로
+  const bridgeSlot = new Set();
+  for (const cy of cuts) {
+    const k = slots.findIndex((s) => Math.abs(s.y - cy) < 0.05);
+    if (k <= 0) continue;
+    bridgeSlot.add(k);
+    if (!(FUSE[D.uses[k]] && FUSE[D.uses[k]].pub && FUSE[D.uses[k]].plan === 'open')) { D.uses[k] = 'amenity'; D.deps[k] = null; }
+  }
   // 층 합치기: 높은 한 공간(공장·창고·대합실·발전동·낮은 공연장·온실 농장)은 위 자리들을 하나로 — 천장은 그 칸의 바깥 지붕 안쪽
   // (둥근 지붕 아래면 칸마다 높이가 다른 둥근 천장 = vault) + 뒤쪽 벽을 따라 중2층(관제·사무·대기)
   const low = !!(SPEC[r.kind] && SPEC[r.kind].low);
@@ -484,7 +501,7 @@ export function makeBuilding(r, ctx) {
       ceil = slots[kk].ceil; h = slots[kk].y + slots[kk].h - s.y;
       const mk = maskOf(V, G, s.y, s.y + 2.7); // 머리 위 2.7 m 가 비면 쓸 수 있는 바닥 (둥근 천장의 가장자리까지)
       mask = mk.m; n = mk.n; vault = true;
-    } else if ((use === 'hall' || use === 'schoolhall') && k > 0 && kk + 1 < slots.length && D.uses[kk + 1] !== 'tech') {
+    } else if ((use === 'hall' || use === 'schoolhall') && k > 0 && kk + 1 < slots.length && D.uses[kk + 1] !== 'tech' && !bridgeSlot.has(kk + 1)) {
       // 건물 가운데의 공연장(영화관·의회실): 두 층 높이
       const t = slots[kk + 1];
       const m2 = new Uint8Array(mask.length);
@@ -536,6 +553,13 @@ export function makeBuilding(r, ctx) {
   }
   const topF = all[all.length - 1];
   const roof = topF && !topF.mezz ? roofOf(V, G, topF) : null;
+  // 공중다리 문: 다리 높이의 층에 (틀 좌표의 방향 = 건너편 탑 쪽)
+  (r.bridges || []).forEach((b, k) => {
+    const F = all.find((q) => !q.mezz && !q.below && Math.abs(q.y - b.y) < 0.05);
+    if (!F) return;
+    const gx = b.ux * V.ex[0] + b.uz * V.ex[1], gz = b.ux * V.ez[0] + b.uz * V.ez[1], l = Math.hypot(gx, gz) || 1;
+    (F.bridges || (F.bridges = [])).push({ k, bi: b.bi, dir: [gx / l, gz / l] });
+  });
   // 외벽 창: 발코니 띠면 집마다 발코니
   for (const F of all) F.balcony = F.ftype === 5 && ['residential', 'hotel', 'house'].includes(F.use);
   // 조직: 같은 쓰임이 이어진 층 묶음마다 (사무층은 층마다 회사가 다를 수 있다)

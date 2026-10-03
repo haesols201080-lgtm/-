@@ -6,7 +6,7 @@ import { FUSE, ROOMS, FIX } from '../interior/catalog.js';
 import { searchBuilding, floorMarkers, roomSpot, LINKNAME } from '../interior/find.js';
 
 const USE_COL = { lobby: '#c8b8f0', stem: '#c8b8f0', mart: '#f0b274', shops: '#f0b274', dept: '#f0b274', food: '#ffc890', cafe: '#ffc890', office: '#9fc0ff', confer: '#9fc0ff', exec: '#b9a6ff', research: '#96d6ec', clinic: '#8ff0c0', ward: '#8ff0c0', care: '#8ff0c0', diag: '#8ff0c0', school: '#ffe08a', schoolhall: '#ffe08a', library: '#e2cca8', museum: '#d8b0ff', hall: '#ff9fd0', admin: '#bac6f4', civic: '#bac6f4', residential: '#e2cca8', house: '#e2cca8', hotel: '#f6dce4', hotelfront: '#f6dce4', factory: '#a89eac', storage: '#a89eac', transit: '#ffd27a', farm: '#acc06a', garden: '#68a868', plant: '#f6e076', tech: '#6a6e80', parking: '#5a6070', supply: '#6a6e80', amenity: '#8cd6ba', observation: '#8cd6ba', mezz: '#9fc0ff' };
-const ICON = { lift: '⇅', cargo: '⇅', stair: '≡', exit: '⇲', dock: '⇲', terrace: '◠', pay: '₩', work: '출', info: 'i', hire: '면', food: '식', mach: '⚙', art: '◇', med: '+', ticket: '표', stock: '▤', bed: '☾', crop: '❦', term: '▣' };
+const ICON = { lift: '⇅', cargo: '⇅', stair: '≡', exit: '⇲', dock: '⇲', terrace: '◠', bridge: '⇄', pay: '₩', work: '출', info: 'i', hire: '면', food: '식', mach: '⚙', art: '◇', med: '+', ticket: '표', stock: '▤', bed: '☾', crop: '❦', term: '▣' };
 const hex = (v) => '#' + (v >>> 0).toString(16).padStart(6, '0');
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -241,9 +241,13 @@ export class InteriorMap {
     }
     // 가구 (작은 사각형)
     ctx.fillStyle = 'rgba(200,205,220,0.28)';
+    const live = g.ops && g.ops.fixState ? (q) => g.ops.fixState(i, q) : () => null;
     for (const q of fix) {
       const odd = q.rot % 2 === 1, w = (odd ? q.d : q.w) * s, d = (odd ? q.w : q.d) * s;
       if (w < 1.5 && d < 1.5) continue;
+      // 지금 상태가 눈에 띄어야 할 시설: 빈 진열·고장 난 기계·목마른 밭 (같은 살림 자료 — 바뀌면 지도도 바뀐다)
+      const st = live(q);
+      if (st && st.warn) { ctx.fillStyle = st.warn === 'broken' ? 'rgba(255,120,80,0.75)' : st.warn === 'dry' ? 'rgba(255,200,90,0.7)' : 'rgba(255,150,170,0.6)'; ctx.fillRect(X(q.x) - w / 2, Y(q.z) - d / 2, w, d); ctx.fillStyle = 'rgba(200,205,220,0.28)'; continue; }
       ctx.fillRect(X(q.x) - w / 2, Y(q.z) - d / 2, w, d);
     }
     // 방 이름
@@ -347,7 +351,8 @@ export class InteriorMap {
     const q = this.pick.fix ? pl.fix.find((f) => f.id === this.pick.fix) : null;
     const acc = ROOMS[R.type] ? ROOMS[R.type].acc : 'public';
     const F = cur.B.floors[this.sel];
-    const html = `<b>${esc(q ? FIX[q.t].name : R.name)}</b><small>${F.label}층 · ${esc(R.name)} · ${acc === 'staff' ? '직원' : acc === 'private' ? '사는 이·묵는 이' : '누구나'} · ${R.n} m²</small><button class="btn" data-guide>여기로 안내</button>`;
+    const st = q && g.ops && g.ops.fixState ? g.ops.fixState(this.sel, q) : null;
+    const html = `<b>${esc(q ? FIX[q.t].name : R.name)}</b><small>${F.label}층 · ${esc(R.name)} · ${acc === 'staff' ? '직원' : acc === 'private' ? '사는 이·묵는 이' : '누구나'} · ${R.n} m²</small>${st ? `<small class="${st.warn ? 'warn' : ''}">지금: ${esc(st.text)}</small>` : ''}<button class="btn" data-guide>여기로 안내</button>`;
     if (box.innerHTML !== html) {
       box.innerHTML = html;
       box.querySelector('[data-guide]').addEventListener('click', () => {

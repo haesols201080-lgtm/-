@@ -5,7 +5,7 @@
 //  · 플레이어: 바구니(산 물건), 손에 든 짐(상자·쟁반·결정), 맡은 일(교대·과제), 일자리 지원·면접·채용.
 //  · 쓰임마다의 규칙은 ops-types.js (시설 쓰기·사람 일과·일자리 과제), 울림판 단말 앱은 apps.js.
 import * as THREE from 'three';
-import { GOODS } from '../data/goods.js';
+import { GOODS, RECIPES } from '../data/goods.js';
 import { ITEMS } from '../data/venues.js';
 import { FUSE, FIX } from './catalog.js';
 import { Agents } from './agents.js';
@@ -136,6 +136,43 @@ export class Ops {
 
   /** 칸 열쇠 → 그 칸의 물건 상태 (node.shelf) */
   slotState(T, key) { return T.node.shelf[key]; }
+  /**
+   * 시설 하나의 지금 상태 — 지도(imap)·안내가 쓰는 같은 살림 자료(node)에서.
+   * 반환: { text, warn('empty'|'broken'|'dry'|null) } 또는 null (상태가 없는 가구)
+   */
+  fixState(i, F) {
+    const T = this.byFloor ? this.byFloor(i) : null;
+    const n = T && T.node;
+    if (!n || !F) return null;
+    const gn = (k) => (GOODS[k] || ITEMS[k] || {}).name || k;
+    const pre = `${F.id}/`;
+    // 진열 칸: 물건마다 남은 수 / 칸 크기
+    const sk = Object.keys(n.shelf).filter((k) => k.startsWith(pre));
+    if (sk.length) {
+      const m = new Map();
+      for (const k of sk) { const st = n.shelf[k]; const e = m.get(st.g) || { n: 0, cap: 0 }; e.n += st.n; e.cap += st.cap; m.set(st.g, e); }
+      const parts = [...m].map(([g, e]) => `${gn(g)} ${e.n}/${e.cap}`);
+      const empty = [...m.values()].some((e) => e.n <= 0);
+      return { text: `진열 ${parts.slice(0, 3).join(' · ')}${parts.length > 3 ? ' …' : ''}${empty ? ' — 빈 칸 (창고에서 채울 차례)' : ''}`, warn: empty ? 'empty' : null };
+    }
+    // 기계: 공정 · 돌아감/멈춤/고장
+    const mc = n.mach && n.mach[F.id];
+    if (mc) {
+      const name = (RECIPES[mc.rec] || {}).name || '공정';
+      return { text: mc.broken ? `${name} — 고장, 정비가 필요해요` : mc.run ? `${name} — 도는 중 ${Math.round((mc.prog || 0) * 100)}% · 지금까지 ${mc.made || 0}` : `${name} — 멈춤 (원료·차례 기다림) · 지금까지 ${mc.made || 0}`, warn: mc.broken ? 'broken' : null };
+    }
+    // 밭: 자람 · 물
+    const ck = Object.keys(n.crop || {}).filter((k) => k.startsWith(pre));
+    if (ck.length) {
+      const cs = ck.map((k) => n.crop[k]);
+      const st = cs.reduce((a, c) => a + c.stage, 0) / cs.length, w = cs.reduce((a, c) => a + c.water, 0) / cs.length;
+      return { text: `${gn(cs[0].g)} 자람 ${Math.round(st * 100)}% · 물 ${Math.round(w * 100)}%${st >= 1 ? ' — 거둘 때' : w < 0.2 ? ' — 목말라요' : ''}`, warn: w < 0.2 ? 'dry' : null };
+    }
+    // 원료 통·완성품 선반
+    const bn = (n.bins || []).filter((b) => b.key.startsWith(pre));
+    if (bn.length) return { text: bn.filter((b) => b.g).map((b) => `${gn(b.g)} ${Math.floor(b.n)}`).join(' · ') || '비어 있음', warn: bn.every((b) => !b.n) ? 'empty' : null };
+    return null;
+  }
   /** 물건 칸 다시 그리기 */
   _drawItems(out) {
     const m = out.items;

@@ -221,6 +221,31 @@ export function buildFloor(ctx) {
       void c;
     }
   }
+  // ── 3b. 바깥벽의 문 (테라스·공중다리): 벽 안쪽 면에 문틀 · 미닫이 · 빛 띠 · 이름판 ──
+  if (!isMezz) for (const d of L.doors) {
+    if (d.b >= 0 || (d.kind !== 'terrace' && d.kind !== 'bridge')) continue;
+    const i = d.c % gw, j = (d.c / gw) | 0, [di, dj] = d.dir;
+    const cx0 = ox + i + 0.5, cz0 = oz + j + 0.5;
+    let t = 0.3;
+    for (; t < 3; t += 0.05) if (sdAt(cx0 + di * t, cz0 + dj * t) >= 0) break;
+    const x = cx0 + di * (t - 0.08), z = cz0 + dj * (t - 0.08);
+    const dv = di !== 0; // 벽이 z 축을 따라 선다
+    const dl = d.kind === 'bridge' ? 2.0 : 1.3;
+    const head = Math.min(2.5, ceilAt(x, z) - 0.25);
+    const frameC = mix(st.wall, st.brand ?? 0x2f8f83, 0.45);
+    for (const sg of [-1, 1]) {
+      const px = dv ? x : x + sg * (dl / 2 + 0.07), pz = dv ? z + sg * (dl / 2 + 0.07) : z;
+      gb.box(px, 0, pz, dv ? 0.16 : 0.14, head, dv ? 0.14 : 0.16, 0, frameC, 0, PAT.metal);
+    }
+    gb.box(x, head, z, dv ? 0.16 : dl + 0.28, 0.14, dv ? dl + 0.28 : 0.16, 0, frameC, 0, PAT.metal);
+    gb.box(x - di * 0.05, head - 0.05, z - dj * 0.05, dv ? 0.04 : dl, 0.04, dv ? dl : 0.04, 0, st.glow ?? 0x7ff3e6, 1.8);
+    gb.box(x - di * 0.02, 0.005, z - dj * 0.02, dv ? 0.6 : dl, 0.012, dv ? dl : 0.6, 0, d.kind === 'bridge' ? 0x9ff6ff : st.glow ?? 0x7ff3e6, 0.9); // 문턱 빛판
+    const panel = new GB();
+    panel.box(0, 0.02, 0, dv ? 0.05 : dl - 0.1, head - 0.06, dv ? dl - 0.1 : 0.05, 0, mix(0xcff4ff, st.wall, 0.25), 0.15, PAT.panel);
+    panel.box(0, 1.0, 0, dv ? 0.07 : 0.06, 0.25, dv ? 0.06 : 0.07, 0, st.glow ?? 0x7ff3e6, 1.5);
+    out.doors.push({ geo: panel, x: x - di * 0.1, z: z - dj * 0.1, slide: dv ? [0, 1] : [1, 0], w: dl - 0.1, door: d, glassy: true });
+    out.signs.push({ text: d.kind === 'bridge' ? '공중다리' : '테라스', sub: d.kind === 'bridge' ? '건너편 탑으로' : '바깥 단', x: x - di * 0.14, z: z - dj * 0.14, y: head + 0.34, ry: dv ? (-di > 0 ? Math.PI / 2 : -Math.PI / 2) : (-dj > 0 ? 0 : Math.PI), staff: false, room: d.a });
+  }
   // ── 4. 칸막이 · 문 · 난간 ──
   partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st);
   // ── 5. 가구·장비 ──

@@ -1,5 +1,5 @@
 // 도시 살림 검사 (브라우저 없이): 구역 살림을 며칠 돌려 보며
-//  1) 별씨 합이 늘 같은가 (사고·팔고·품삯·세금·주문·플레이어 계산이 모두 옮기기뿐인가)
+//  1) 돈(울) 합이 늘 같은가 (사고·팔고·품삯·세금·주문·플레이어 계산이 모두 옮기기뿐인가)
 //  2) 어떤 계정·재고도 음수가 되지 않는가
 //  3) 생산(농장·채굴·공장)을 끄면 물건은 줄기만 하는가 (어디서도 저절로 생기지 않는가)
 //  4) 살아 있는 건물(가게 node)의 주문 → 하역 → 창고 → 진열 흐름이 도는가
@@ -60,14 +60,14 @@ const negatives = (E) => {
     if (st && E.get('player') >= E.price(st.g)) { E.transfer('player', `n:${shop.uid}`, E.price(st.g), '시험 구매'); st.n--; g.state.inv[st.g] = (g.state.inv[st.g] || 0) + 1; }
     if (h % 8 === 3) E.transfer(`n:${shop.uid}`, 'player', 3, '시험 품삯');
     const T = E.total();
-    check(Math.abs(T - T0) < 0.05, `${h}시간: 별씨 합이 달라짐 ${T0} → ${T}`);
+    check(Math.abs(T - T0) < 0.05, `${h}시간: 돈(울) 합이 달라짐 ${T0} → ${T}`);
     const bad = negatives(E);
     check(!bad.length, `${h}시간: 음수 ${bad.slice(0, 4).join(', ')}`);
     if (h === 30) { E.watch.add(shop.uid); } // 플레이어가 들어간 동안: 주문은 하역장에 짐으로
     docked += (shop.dock || []).length;
     if (shop.dock && shop.dock.length) for (const c of shop.dock.splice(0)) shop.stock[c.g] = (shop.stock[c.g] || 0) + c.n; // 하역 담당이 창고로
   }
-  console.log(`살림 ${hours}시간: 별씨 합 ${T0} → ${E.total()} · 플레이어 받은 ${E.S.P.earned.toFixed(1)} 쓴 ${E.S.P.spent.toFixed(1)} · 가게 주문(시간 합) ${orders} · 하역장 도착 ${docked} · 가게 판 값 ${shop.sales.toFixed(1)}`);
+  console.log(`살림 ${hours}시간: 돈(울) 합 ${T0} → ${E.total()} · 플레이어 받은 ${E.S.P.earned.toFixed(1)} 쓴 ${E.S.P.spent.toFixed(1)} · 가게 주문(시간 합) ${orders} · 하역장 도착 ${docked} · 가게 판 값 ${shop.sales.toFixed(1)}`);
   for (const [id, z] of Object.entries(E.S.Z)) console.log(`  ${id}: 주민 ${z.pop} 가구 ${Math.round(z.hh)} 회사 ${Math.round(z.firms)} 공공 ${Math.round(z.commons)} · 이번 시간 만든 것 ${Math.round(z.made)} 판 것 ${Math.round(z.sold)} 품삯 ${Math.round(z.wages)}`);
   check(orders > 0, '가게가 물류 창고에 주문하지 않음');
   check(docked > 0, '들어가 있는 동안 하역장에 짐이 오지 않음');

@@ -324,14 +324,34 @@ export class Interiors {
   }
 
   /** 테라스·옥상으로 나가기: 바깥의 실제 단·지붕 위로 */
-  outTo(kind, F, at) {
+  outTo(kind, F, at, yaw) {
     const cur = this.cur, ind = cur.indoor, B = cur.B, r = cur.r;
     const [x, z] = ind.world(at[0], at[1]);
-    const y = kind === 'roof' ? B.roof.y : F.terrace.y;
-    this.outside = { r, floor: F.i, at: [x, z], kind, y };
-    this.exit({ x, y: y + 0.1, z, title: kind === 'roof' ? '옥상' : '테라스' });
-    setTimeout(() => this.game.ui.toast(`${kind === 'roof' ? '옥상' : '테라스'}로 나왔다 · 다시 들어갈 때는 나온 문 앞에서 E`, {}), 1500);
+    const y = kind === 'roof' ? B.roof.y : kind === 'bridge' ? F.y : F.terrace.y;
+    const name = kind === 'roof' ? '옥상' : kind === 'bridge' ? '공중다리' : '테라스';
+    // 공중다리는 양쪽 끝이 모두 문이라(bridgeAt) 따로 기억하지 않는다
+    this.outside = kind === 'bridge' ? null : { r, floor: F.i, at: [x, z], kind, y };
+    this.exit({ x, y: y + 0.1, z, yaw, title: name });
+    setTimeout(() => this.game.ui.toast(kind === 'bridge' ? '공중다리로 나왔다 · 유리 통로 끝의 문 앞에서 E — 건너편 탑이나 다시 이 탑으로' : `${name}로 나왔다 · 다시 들어갈 때는 나온 문 앞에서 E`, {}), 1500);
     if (kind === 'roof' && this.game.setFlag) this.game.setFlag('liftTop');
+    if (kind === 'bridge') { if (this.game.setFlag) this.game.setFlag('skyBridge'); if (this.game.scan) this.game.scan('c_bridge'); }
+  }
+
+  /** 공중다리 끝에서 들어갈 층과 자리 (그 탑의 짜임에서: 다리 높이 층의 공중다리 문 안쪽) */
+  bridgeEntry(r, bi) {
+    const B = this.store.plan(r);
+    if (!B) return null;
+    const F = B.floors.find((q) => q.bridges && q.bridges.some((b) => b.bi === bi));
+    if (!F || !F.reach || F.dead) return null;
+    const pl = this.store.floor(r, F.i);
+    const e = pl && pl.L.ents.bridge && pl.L.ents.bridge.find((q) => q.bi === bi);
+    if (!e) return null;
+    const G = B.G, V = B.V;
+    const gx = G.ox + (e.c % G.gw) + 0.5 - e.dir[0] * 0.9, gz = G.oz + ((e.c / G.gw) | 0) + 0.5 - e.dir[1] * 0.9;
+    const at = [r.x + gx * V.ex[0] + gz * V.ez[0], r.z + gx * V.ex[1] + gz * V.ez[1]];
+    // 들어서면 탑 안쪽(문 반대쪽)을 본다
+    const wx = -(e.dir[0] * V.ex[0] + e.dir[1] * V.ez[0]), wz = -(e.dir[0] * V.ex[1] + e.dir[1] * V.ez[1]);
+    return { floor: F.i, at, yaw: Math.atan2(wx, wz), label: F.label };
   }
 
   // ── 상호작용 ───────────────────────────────
@@ -361,6 +381,15 @@ export class Interiors {
         const [x, z] = ind.world(L.x + L.front[0] * 0.8, L.z + L.front[1] * 0.8);
         if (Math.hypot(p.x - x, p.z - z) < 1.7) return { kind: 'ilift', o: L, label: `${L.cargo ? '화물 승강기' : '승강기'} · 층 고르기`, short: '승강기' };
       }
+      for (const e of out.L.ents.bridge || []) {
+        const G = B.G, ti = e.c % G.gw, tj = (e.c / G.gw) | 0;
+        const [x, z] = ind.world(G.ox + ti + 0.5 + e.dir[0] * 0.4, G.oz + tj + 0.5 + e.dir[1] * 0.4);
+        if (Math.hypot(p.x - x, p.z - z) < 2.0) {
+          const BL = this.city.bridgeList && this.city.bridgeList[e.bi];
+          const other = BL ? (BL.a === cur.r ? BL.b : BL.a) : null;
+          return { kind: 'bridge', o: { F: B.floors[i], at: [G.ox + ti + 0.5 + e.dir[0] * 2.4, G.oz + tj + 0.5 + e.dir[1] * 2.4], dir: e.dir, BL }, label: `공중다리 · ${other ? `건너편 「${this.title(other)}」` : '건너편 탑'}으로`, short: '공중다리' };
+        }
+      }
       const T = out.L.ents.terrace;
       if (T) {
         const G = B.G, ti = T.c % G.gw, tj = (T.c / G.gw) | 0;
@@ -372,6 +401,15 @@ export class Interiors {
     // 바깥: 테라스·옥상에서 다시 들어가는 문
     const o = this.outside;
     if (o && Math.hypot(p.x - o.at[0], p.z - o.at[1]) < 2.4 && Math.abs(p.y - o.y) < 3) return { kind: 'reenter', o, label: `${o.kind === 'roof' ? '옥상' : '테라스'} 문 · 안으로 들어가기`, short: '들어가기' };
+    // 공중다리 끝: 닿은 탑의 공중다리 문
+    const bd = this.city.bridgeAt && this.city.bridgeAt(p.x, p.y, p.z);
+    if (bd) {
+      const BL = bd.B, r = bd.end;
+      if (Math.abs(bd.along) > BL.half - this._faceIn(r, BL) - 3.2) {
+        const e = this.bridgeEntry(r, this.city.bridgeList.indexOf(BL));
+        if (e) return { kind: 'bridgein', o: { r, e }, label: `공중다리 문 · 「${this.title(r)}」 ${e.label}층으로 들어가기`, short: '들어가기' };
+      }
+    }
     const d = this.city.nearestDoor(p.x, p.z, 3.4);
     if (d && Math.abs(p.y - d.floorY) < 3) return { kind: 'door', o: d, dist: Math.hypot(p.x - d.door.x, p.z - d.door.z), label: `${this.title(d)} · 들어가기`, short: '들어가기' };
     return null;
@@ -381,8 +419,40 @@ export class Interiors {
     if (t.kind === 'ilift') return this.liftPanel(t.o);
     if (t.kind === 'roofdoor') return this.outTo('roof', t.o.F, t.o.S.roofDoor);
     if (t.kind === 'terrace') return this.outTo('terrace', t.o.F, t.o.at);
+    if (t.kind === 'bridge') {
+      const { BL, F } = t.o, r = this.cur.r;
+      if (BL) {
+        // 다리 가운데 줄 위, 이 탑 바깥벽에서 1.6 m — 건너편을 보고 선다
+        const sx = r === BL.a ? -1 : 1, along = sx * Math.max(0, BL.half - this._faceIn(r, BL) - 1.6);
+        const x = BL.mx + BL.ux * along, z = BL.mz + BL.uz * along;
+        const [gx, gz] = this.cur.indoor.grid(x, z);
+        return this.outTo('bridge', F, [gx, gz], Math.atan2(-sx * BL.ux, -sx * BL.uz));
+      }
+      const V = this.cur.indoor.V, [dx, dz] = t.o.dir;
+      return this.outTo('bridge', F, t.o.at, Math.atan2(dx * V.ex[0] + dz * V.ez[0], dx * V.ex[1] + dz * V.ez[1]));
+    }
+    if (t.kind === 'bridgein') { const { r, e } = t.o; return this.enter(r, { floor: e.floor, at: e.at, yaw: e.yaw }); }
     if (t.kind === 'reenter') { const o = t.o; this.outside = null; return this.enter(o.r, { floor: o.floor, at: this._reentryPoint(o) }); }
     return null;
+  }
+  /** 다리 끝이 탑 속으로 들어간 깊이 (다리 가운데에서 끝까지 half 중 탑 바깥벽 안쪽 몫) — 처음 한 번 재 둔다 */
+  _faceIn(r, BL) {
+    const key = r === BL.a ? 'inA' : 'inB';
+    if (BL[key] != null) return BL[key];
+    const sx = r === BL.a ? -1 : 1;
+    const inCol = (c, x, z) => {
+      if (c.type === 'cyl') return Math.hypot(x - c.x, z - c.z) < c.r;
+      const dx = x - c.x, dz = z - c.z, cs = Math.cos(c.rot || 0), sn = Math.sin(c.rot || 0);
+      return Math.abs(dx * cs - dz * sn) < c.hx && Math.abs(dx * sn + dz * cs) < c.hz;
+    };
+    // 다리 끝 쪽으로 걸어가며 탑 충돌체(다리 높이 +1 m) 안에 처음 드는 곳
+    let d = 0;
+    for (let t = 0; t <= BL.half; t += 0.25) {
+      const x = BL.mx + BL.ux * sx * t, z = BL.mz + BL.uz * sx * t;
+      if (r.cols && r.cols.some((c) => c.y0 <= BL.y + 1 && c.y1 >= BL.y + 1 && inCol(c, x, z))) { d = BL.half - t; break; }
+    }
+    BL[key] = d;
+    return d;
   }
   _reentryPoint(o) {
     const B = this.store.plan(o.r);

@@ -111,12 +111,15 @@ if (!cmd || cmd === 'all') {
   const SIZES = [[9, 9, 9], [14, 12, 22], [20, 16, 60], [28, 22, 140], [40, 16, 16]];
   let n = 0, fail = 0, floors = 0, rooms = 0, ms = 0, mz = 0;
   const LK = { stair: '계단', spiral: '나선 계단', lift: '승강기', cargo: '화물 승강기' };
-  const stats = { cells: 0, outside: 0, links: 0, order: 0, special: 0, doorD: 0, noTerrace: 0, persist: 0, byPid: {} };
+  const stats = { cells: 0, outside: 0, links: 0, order: 0, special: 0, doorD: 0, noTerrace: 0, persist: 0, bridges: 0, bridgeNoLift: 0, byPid: {} };
   const problems = [];
   for (const kind of KINDS) for (const use of USES) for (const [hw, hd, h] of SIZES) {
     const S = SPEC[kind];
     if (S.low && h > 40) continue;
     const r = fakeRec(kind, use, hw, hd, h, { x: 1000 + n * 37, z: -2000 + n * 11 });
+    // 높은 탑에는 공중다리 하나 (바깥 cityfabric._bridges 처럼: 높이의 40~75% · 아무 방향)
+    const addBridge = (rr, k) => { if (h >= 100) { const th = k * 2.399; rr.bridges = [{ bi: 0, y: rr.base + rr.sy * (0.4 + ((k * 0.37) % 0.35)), ux: Math.cos(th), uz: Math.sin(th) }]; } };
+    addBridge(r, n);
     n++;
     try {
       const t0 = performance.now();
@@ -186,6 +189,31 @@ if (!cmd || cmd === 'all') {
           if (d > dmin + 2) problems.push(`${tag}: 정문이 바깥 문에서 ${d.toFixed(1)} m (가장 가까운 칸 ${dmin.toFixed(1)} m)`);
           stats.doorD = Math.max(stats.doorD, d - dmin);
         }
+        // 공중다리: 다리 높이 = 이 층 바닥, 다리 쪽 바깥벽에 문, 문은 다리 줄 위에 (바깥벽에서 2.5 m 안), 승강기가 선다
+        if (F.bridges) for (const bd of F.bridges) {
+          stats.bridges++;
+          const e = (L.ents.bridge || []).find((q) => q.bi === bd.bi);
+          if (!e) { problems.push(`${tag}: ${F.label}층 공중다리 문 없음`); continue; }
+          const ex = cellX(G, e.c % G.gw), ez = cellZ(G, (e.c / G.gw) | 0), [ux, uz] = bd.dir;
+          const tc = ex * ux + ez * uz, pc = -ex * uz + ez * ux;
+          let tf = tc; for (; tf < tc + 30; tf += 0.1) if (sdfAt(Vv, tf * ux, tf * uz, F.y + 1) > 0) break;
+          stats.bridgeWall = Math.max(stats.bridgeWall || 0, tf - tc); // 둥근(달걀) 탑은 층 가운데 높이의 바깥벽이 더 불룩하다
+          // 문은 다리 통로 폭(±3.2 m) 안, 다리 쪽을 보고, 바깥 칸에 맞닿는다 · 문에서 홀(승강기 앞)까지 이어진다
+          const out = e.c % G.gw + e.dir[0], outJ = ((e.c / G.gw) | 0) + e.dir[1];
+          const onEdge = out < 0 || outJ < 0 || out >= G.gw || outJ >= G.gh || !F.mask[outJ * G.gw + out];
+          stats.bridgeSide = Math.max(stats.bridgeSide || 0, Math.abs(pc));
+          if (Math.abs(pc) > 3.2) stats.bridgeOff = (stats.bridgeOff || 0) + 1; // 심이 다리 쪽 바깥벽을 막아 옆으로 비킨 문
+          if (Math.abs(pc) > 12 || e.dir[0] * ux + e.dir[1] * uz < 0.3 || !onEdge) problems.push(`${tag}: ${F.label}층 공중다리 문이 다리에서 벗어남 (옆 ${pc.toFixed(1)} m)`);
+          if (L.room[e.c] !== L.lifthall + 1) problems.push(`${tag}: ${F.label}층 공중다리 문이 승강기 홀과 떨어짐`);
+          { // 홀 안에서 문 칸 → 승강기 앞 칸이 이어지나 (같은 방이라도 끊기지 않게)
+            const hid = L.room[e.c], seen = new Set([e.c]), q = [e.c]; let ok = false;
+            const core = B.core ? new Set(B.core.lobby.map(([i, j]) => j * G.gw + i)) : null;
+            while (q.length) { const c = q.pop(); if (!core || core.has(c)) { ok = true; break; } for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const i = c % G.gw + di, j = ((c / G.gw) | 0) + dj; const k = j * G.gw + i; if (i >= 0 && j >= 0 && i < G.gw && j < G.gh && !seen.has(k) && L.room[k] === hid) { seen.add(k); q.push(k); } } }
+            if (!ok) problems.push(`${tag}: ${F.label}층 공중다리 통로가 승강기 앞까지 끊김`);
+          }
+          if (Math.abs(F.y - r.bridges[0].y) > 0.05) problems.push(`${tag}: 공중다리 높이와 층 바닥이 다름`);
+          if (!B.links.some((lk) => lk.kind === 'lift' && lk.floors.includes(F.i))) stats.bridgeNoLift++;
+        }
         // 테라스가 있는 층은 테라스 문
         if (F.terrace && F.terrace.n >= 12 && !L.ents.terrace && !F.mezz) stats.noTerrace++;
         // 승강기 칸은 그 층 평면에서도 승강기 방
@@ -204,14 +232,17 @@ if (!cmd || cmd === 'all') {
         if (up && up.mezz && !up.dead && !F.mezz) { if (!L.mstair) problems.push(`${kind}/${use}/${hw}x${h}: 중2층 계단 없음`); else mz++; }
       }
       // 같은 건물은 늘 같은 짜임
-      const B2 = makeBuilding(fakeRec(kind, use, hw, hd, h, { x: 1000 + (n - 1) * 37, z: -2000 + (n - 1) * 11 }), ctxFor());
+      const r2 = fakeRec(kind, use, hw, hd, h, { x: 1000 + (n - 1) * 37, z: -2000 + (n - 1) * 11 });
+      addBridge(r2, n - 1);
+      const B2 = makeBuilding(r2, ctxFor());
+      if (r.bridges && !B.floors.some((F) => F.bridges)) problems.push(`${tag}: 공중다리 높이에 층이 없음`);
       const sig = (b) => JSON.stringify(b.floors.map((F) => [F.use, F.n, F.y.toFixed(2)]).concat([b.core ? b.core.types : null, b.zones.map((Z) => Z.org)]));
       if (sig(B) !== sig(B2)) problems.push(`${kind}/${use}: 다시 만들면 달라짐`);
       ms += performance.now() - t0;
     } catch (e) { fail++; problems.push(`${kind}/${use}/${hw}x${h}: 오류 ${e.message}\n${e.stack.split('\n').slice(1, 3).join('\n')}`); }
   }
   console.log(`건물 ${n} · 실패 ${fail} · 층 ${floors} · 방 ${rooms} · 평균 ${(ms / n).toFixed(1)} ms · 중2층 계단 ${mz}`);
-  console.log(`바깥 부피 밖 칸 ${stats.outside}/${stats.cells} · 이음 검사 ${stats.links} · 쓰임 차례 검사 ${stats.order} (전문 건물 ${stats.special}) · 정문-바깥 문 (가장 가까운 칸 기준) 최대 ${stats.doorD.toFixed(1)} m · 테라스 문 없는 큰 테라스 ${stats.noTerrace} · 저장 왕복 ${stats.persist}`);
+  console.log(`바깥 부피 밖 칸 ${stats.outside}/${stats.cells} · 이음 검사 ${stats.links} · 쓰임 차례 검사 ${stats.order} (전문 건물 ${stats.special}) · 정문-바깥 문 (가장 가까운 칸 기준) 최대 ${stats.doorD.toFixed(1)} m · 테라스 문 없는 큰 테라스 ${stats.noTerrace} · 저장 왕복 ${stats.persist} · 공중다리 문 ${stats.bridges} (승강기 안 서는 층 ${stats.bridgeNoLift}, 문 → 바깥 외벽 최대 ${(stats.bridgeWall || 0).toFixed(1)} m, 다리 폭 밖으로 비킨 문 ${stats.bridgeOff || 0} · 최대 ${(stats.bridgeSide || 0).toFixed(1)} m)`);
   console.log('1층 짜임의 가짓수 (같은 쓰임 안에서):', Object.entries(stats.byPid).map(([k, v]) => `${k} ${v.sig.size}`).join(' · '));
   const uniq = [...new Set(problems)];
   console.log(`문제 ${uniq.length}`);
