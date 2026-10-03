@@ -74,7 +74,7 @@ src/
 - **해류**: `data/currents.js` (점 = [x, 높이, z, 절대?]). `unlock: 탑id` 면 그 탑을 깨울 때 흐름.
 - **대사**: `data/story.js` 의 `LINES` (단어 id 배열 + 한국어). 새 단어는 `data/lexicon.js` 에 (음 모티프가 겹치지 않게).
 - **대화**: `CONVOS` — `{s: 인물id, line}` / `{s:'moa', t}` / `{choice:[...]}`, `act` 로 동작 실행.
-- **모아 부르기** (`game/moa-ai.js`, T·HUD 빛 구슬): 대화창. claude.ai 아티팩트에서는 `claude.use('sample')`(아티팩트 capabilities `{sample: {}}` 로 발행)로 Claude 가 모아 역(RULES)을 맡고, 매 질문에 `context()`(목표·자리·때·가진 것·음·말·둘레 건물·아는 이·조작)를 붙인다. 도구 `mark_place`(나침반 표식, `find()` 로 시설 종류·장소·인물·집·목표를 찾음). Claude 가 없거나 허락이 없으면 `local()` 이 게임 상태로 바로 답한다. 모아 창이 열린 동안 `game.mode = 'moa'`(입력은 창이 받음). `ui.moa()` 혼잣말은 `moaAI.note()` 로 기록된다. 대화창의 말풍선은 `.mp-msg.from-moa/.from-me`(`.moa` 는 아래 자막 이름이라 쓰지 말 것).
+- **모아 부르기** (`game/moa-ai.js`, T·HUD 빛 구슬): 대화창. 모아는 궤도의 라르크 호에 남은 함선 지능(땅 위에 함께 있지 않다). Claude 사용은 설정 `moaClaude` 로 끄고 켜며, `rate_limited` 면 15분 동안 기본 모드. claude.ai 아티팩트에서는 `claude.use('sample')`(아티팩트 capabilities `{sample: {}}` 로 발행)로 Claude 가 모아 역(RULES)을 맡고, 매 질문에 `context()`(목표·자리·때·가진 것·음·말·둘레 건물·아는 이·조작)를 붙인다. 도구 `mark_place`(나침반 표식, `find()` 로 시설 종류·장소·인물·집·목표를 찾음). Claude 가 없거나 허락이 없으면 `local()` 이 게임 상태로 바로 답한다. 모아 창이 열린 동안 `game.mode = 'moa'`(입력은 창이 받음). `ui.moa()` 혼잣말은 `moaAI.note()` 로 기록된다. 대화창의 말풍선은 `.mp-msg.from-moa/.from-me`(`.moa` 는 아래 자막 이름이라 쓰지 말 것).
 - **처음 해 보는 일 안내**: `data/tips.js` 의 `TIPS[id]`(제목·한 줄·순서) + 그 일을 시작하는 함수 첫 줄에 `if (this.game.tips && this.game.tips.first('id', () => 이함수(인자))) return;`. 본 것은 `state.tips`, 설정 「도움말」 끄면 안 띄움, 일지 → 도움말에서 다시 보기.
 - **공명 음을 요구하는 놀이**: 고를 수 있는 음 = `state.tones`(아는 음)뿐. 아는 음이 모자라면 듣기만 하는 판으로 바꾸거나(연구동 「같다/다르다」), 버튼을 막고 이유를 적는다(주민 「함께 고요해지기」).
 - **퀘스트**: `QUESTS` — 단계 type 은 `game/quests.js` 머리 주석 참고. 동작은 `game/actions.js` 의 `HANDLERS`. 도시의 삶을 본편에 엮을 때는 `stat`(예: `venue.worked`) 단계나 `flag` 단계 + 코드에서 `game.setFlag(k)` 를 씁니다(지금 깃발: `helpedNeighbor`·`rodeSky`·`liftTop`·`homeVisit`). 줄거리: 탐사선 「라르크」가 신호를 따라와 스스로 착륙 → 이웃이 되기 → 이름 노래로 시민(집 `state.home`) → 듣던 탑들이 다시 노래 → 온 하늘에 대답. 탑은 「잠든」 게 아니라 「듣는 쪽」입니다(쇠락한 문명이 아님).
@@ -144,7 +144,20 @@ src/
 - 하늘배 길은 `_route`(거대 탑·척추·별항구를 옆으로 돌아감) + `_cruise`(길 아래 땅·도시의 높은 탑 위, 하늘바퀴 갑판 높이는 비킴).
 - 저장: `state.venue`(전시·기록·박물관·기운·하루 한 번 `days`·맡은 일 `job`·번 별씨). 물 위 집(`stilt`)은 깊이와 상관없이 제 키(마루가 물 위 1.2 m).
 
+## 몸·생물·교신·오프닝 (v0.8)에서 알아 둘 것
+- **오프닝** `game/approach.js`: `playApproach(game, onEnd)` 가 연출 하나(`director.run`)로 우주 → 진입 → 들판 착지를 돌린다. 우주 장면 동안은 `engine.space`(먼 장면 km·가까운 장면 m, 깊이를 나눠 두 번 그림)가 세계 대신 그려지고, 세계 카메라는 들판 첫 장면 자리에 둬서 지형이 미리 만들어진다. 들판에서는 진짜 착륙선(`structures.lander.group`)을 숨기고 닫힌 해치 모습(`landerShell({landed:false})`)이 내려앉는다. 넘기기는 `seq.onSkip`(우주 → 들판 → 끝). 시험: `?play=intro&at=초`(`play=new` 는 오프닝을 건너뜀).
+- **모아의 교신** `game/comm.js`: `comm.status()`(경로·막대), `badgeHTML()`, `pulse()`(무전 소리+안테나 빛). `ui.moa()` 자막은 늘 신호 표시를 단다. 모아는 함께 있지 않다 — 대사·RULES 에서 「같은 자리에 있다」고 말하지 않게.
+- **착륙선** `world/lander.js`: `landerShell()` 이 바깥 모양(로컬 x = 앞, z+ = 해치), `buildLander` 가 선실·충돌체·안테나·쓸 것(`stations` → `structures.landerTarget`, game `landerUse`).
+- **생물** `world/fauna.js`: 종 정의 `SPECIES`(모양+움직임 GLSL), 지역 서식 `HAB`, 마을의 자리는 `world.faunaSites`, 앉을 곳 `world.perches`.
+- **장소의 일 자리** `world.placeSpots`(dewfold 가 채움) → 주민이 그 자리에서 일한다. 식생을 비울 곳은 `world.clearZones`(`world.cleared(x, z)`).
+- **땅 위의 집은 도시의 집으로**: 구조물 빌더가 집을 놓을 때는 돔 모델 대신 `structures._house(x, z, r, {toward, group})`(또는 `world.houseQueue` 에 직접 + 자리 지킴 충돌체) — `cityfabric._extraHouses` 가 들어갈 수 있는 집(빌라·돔·거품 집)으로 짓는다(`_bldgAt` = 세계 좌표 건물). 떠 있는 곳·움직이는 곳은 아직 돔 모델.
+- **문**: `_fillDoors` 는 `doorFixed` 문만 그린다. 문 자리를 새로 잡으면(`_fixedN` 증가) 0.3 초 안에 다시 그린다.
+- **빛길 관 받침 기둥**: `transit.supportPts` → 충돌체 + 도시 피할 곳(7 m).
+- **분수의 물**: `fountainWaterGeo`/`fountainWaterMaterial`(분수 인스턴스 행렬을 나눠 씀), 연못 테 충돌체는 고리 모양 상자 열둘(`PROPCOL` 상자의 8번째 값 = 추가 회전), `city.fountainAt(x, z)` → game `_wading`(플레이어 `wade`).
+- **판석 질감**: `city-ground.js` 의 `paver(hx, q, fw, fade, 색A, 색B, 이음매폭, 칸크기, spec, seam)` — 육각 바닥은 이걸로.
+
 ## 지켜야 할 것
 - 기존 저장 파일이 깨지지 않게: 저장 형식을 바꾸면 `state.js` 의 `migrate()` 를 손보세요.
 - 본편 흐름이 끊기지 않았는지 `node tools/flow.mjs` 로 확인하세요(마지막 줄까지 퀘스트가 진행되어야 함).
+- 이야기를 바꾸면 `state.js` 의 `STORY_VERSION` 을 올리고 `remapStory` 로 옛 저장을 알맞은 장으로 옮기세요.
 - 큰 변경 뒤에는 `docs/DEVLOG.md` 에 무엇을 왜 바꿨는지 적어 주세요.
