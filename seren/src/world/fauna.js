@@ -1,10 +1,10 @@
 // 생물 (작은·중간 크기): 세렌의 생태계와 아웬의 삶에 속한 다섯 종. 종마다 인스턴스 그리기 1회, 관절은 정점 셰이더가 움직인다.
-//   톡톡이(hopper)   : 들판의 작은 초식 동물. 긴 귀지느러미가 빛난다. 무리 지어 풀을 뜯다 폴짝 뛰고, 빠르게 다가오면 달아나고,
+//   톡톡이(hopper)   : 들판의 작은 세발 동물(돔 몸·눈자루의 눈 셋·감각 깃·용수철 다리). 무리 지어 풀을 뜯다 폴짝 뛰고, 빠르게 다가오면 달아나고,
 //                      가만히 있으면 궁금해 다가온다. 마을에선 아이들과 노는 반려(pet).
-//   노래새(bird)     : 꼬리 띠가 긴 작은 새. 무리로 날다 등·돛대·지붕에 앉아 지저귀고, 공명 음을 들으면 같은 음으로 따라 부른다.
-//   등짐소(beast)    : 다리 여섯의 순한 큰 짐승. 들판·느린땅에서 무리로 풀을 뜯고, 마을에선 바구니를 지고 텃밭과 관문 사이를 오간다.
+//   노래새(bird)     : 막 날개의 작은 연(마름모 몸·눈구슬·빛 리본 꼬리). 무리로 날다 등·돛대·지붕에 앉아 지저귀고, 공명 음을 들으면 같은 음으로 따라 부른다.
+//   등짐소(beast)    : 껍데기 판과 마디 다리 여섯의 순한 큰 짐승(얼굴판·덩굴 코). 들판·느린땅에서 무리로 풀을 뜯고, 마을에선 바구니를 지고 텃밭과 관문 사이를 오간다.
 //   포자해파리(jelly): 공기 속을 떠다니는 해파리. 균사 숲엔 늘, 들판엔 해 질 녘부터. 마을 정원엔 줄에 매인 「살아 있는 등」.
-//   유리게(crab)     : 유리 황야·바닷가의 수정 껍데기 게. 옆걸음으로 무리 지어 다니다 놀라면 모래에 숨는다.
+//   유리게(crab)     : 유리 황야·바닷가의 별 모양 보석 걸음이(다리 여섯이 둘레로). 종종걸음으로 무리 지어 다니다 놀라면 모래에 숨는다.
 // 자리: 야생 무리는 256 m 칸마다 해시로(지역 → 종·수), 마을·도시의 자리는 world.faunaSites(장소 빌더가 넣는다).
 // 다가가 E: 쓰다듬기·살펴보기(도감), 공명 음에 반응. labSubject() 는 캐릭터 실험실(tools/lab.mjs)이 쓴다.
 import * as THREE from 'three';
@@ -112,45 +112,46 @@ function tagged(list) {
   return out;
 }
 
-// 톡톡이: 0 몸 1 머리 2·3 귀지느러미 4·5 뒷다리 6 앞발 7 꼬리채
-//   토끼가 아니라 세렌의 동물: 눈 셋(이마의 작은 빛눈), 빛 방울 더듬이 둘, 넓은 반투명 귀지느러미(빛 맥),
-//   등줄기의 빛점, 땅을 차는 넓적한 발판, 끝에 꽃처럼 벌어진 빛 꼬리채
+// 톡톡이: 0 몸 1 눈자루(머리) 2·3 감각 깃 4·5 용수철 다리 6 앞 발판 7 나선 꼬리
+//   지구의 토끼가 아니다: 낮은 물방울 돔 몸(허리에 빛 구멍이 고리로), 몸 앞에서 솟은 눈자루 끝에 세모로 놓인 눈 셋,
+//   등에서 뒤로 휘는 감각 깃 둘(빛 끝), 뒤로 꺾인 칼날 다리 둘과 앞의 발판 하나로 선 세발 몸, 나선으로 말린 꼬리 끝의 빛 주머니
 function hopperGeo() {
   const L = [];
   const add = (g, c, e, id, piv = [0, 0, 0]) => L.push([part(g, c, e), id, piv]);
-  add(lathe([[0.0001, -0.42], [0.2, -0.36], [0.3, -0.12], [0.3, 0.08], [0.22, 0.28], [0.0001, 0.34]], 16).rotateX(Math.PI / 2).translate(0, 0.42, -0.02), W, 0, 0);
-  add(xf(new THREE.SphereGeometry(1, 12, 8), { y: 0.35, z: 0.06, sx: 0.21, sy: 0.17, sz: 0.27 }), 0xf6f0e6, 0, 0); // 배
-  for (let k = 0; k < 5; k++) add(new THREE.SphereGeometry(0.035 - k * 0.003, 6, 4).translate(0, 0.71 - k * 0.012 - Math.abs(k - 1) * 0.02, 0.12 - k * 0.12), 0x9ff6ff, 1.6, 0); // 등줄기 빛점
-  // 머리 (목 = 0, 0.55, 0.22)
-  add(xf(new THREE.SphereGeometry(1, 14, 10), { y: 0.62, z: 0.32, sx: 0.2, sy: 0.17, sz: 0.19 }), W, 0, 1);
-  add(xf(new THREE.SphereGeometry(1, 10, 6), { y: 0.57, z: 0.44, sx: 0.1, sy: 0.07, sz: 0.08 }), 0xf6f0e6, 0, 1); // 주둥이
-  for (const s of [-1, 1]) {
-    add(xf(new THREE.SphereGeometry(0.06, 10, 8), { x: s * 0.11, y: 0.66, z: 0.43 }), 0x23204a, 0.25, 1);
-    add(xf(new THREE.SphereGeometry(0.02, 5, 4), { x: s * 0.125, y: 0.685, z: 0.48 }), 0xffffff, 1.6, 1);
-    add(tube([[s * 0.04, 0.76, 0.38], [s * 0.07, 0.86, 0.42], [s * 0.1, 0.92, 0.48]], 0.008, 4, 5), 0xd8f4ff, 0.2, 1);
-    add(new THREE.SphereGeometry(0.03, 6, 5).translate(s * 0.1, 0.93, 0.49), 0xffd27a, 2.2, 1);
+  add(lathe([[0.0001, 0.16], [0.22, 0.18], [0.33, 0.3], [0.32, 0.44], [0.22, 0.58], [0.08, 0.64], [0.0001, 0.65]], 18), W, 0.05, 0);
+  add(xf(new THREE.SphereGeometry(1, 12, 6), { y: 0.2, sx: 0.24, sy: 0.07, sz: 0.24 }), 0xe8e0f4, 0, 0); // 밑판
+  for (let k = 0; k < 8; k++) { const a = (k / 8) * TAU; add(new THREE.SphereGeometry(0.035, 6, 4).translate(Math.cos(a) * 0.325, 0.38, Math.sin(a) * 0.325), 0x9ff6ff, 1.8, 0); } // 허리의 빛 구멍
+  for (let k = 0; k < 3; k++) { const a = (k / 3) * TAU + 0.5; add(xf(new THREE.ConeGeometry(0.035, 0.12, 5), { x: Math.cos(a) * 0.08, y: 0.68, z: Math.sin(a) * 0.08 - 0.06, rx: Math.sin(a) * 0.4, rz: -Math.cos(a) * 0.4 }), W, 0.3, 0); } // 정수리 돌기
+  // 눈자루 (목 = 0, 0.55, 0.22): 끝에 세모로 놓인 눈 셋
+  add(tube([[0, 0.52, 0.18], [0, 0.68, 0.24], [0, 0.8, 0.3]], 0.04, 6, 6, (t) => 1 - 0.3 * t), W, 0, 1);
+  add(xf(new THREE.SphereGeometry(1, 12, 8), { y: 0.84, z: 0.32, sx: 0.11, sy: 0.09, sz: 0.09 }), W, 0.1, 1);
+  for (const [ex, ey] of [[-0.055, 0.86], [0.055, 0.86], [0, 0.79]]) {
+    add(new THREE.SphereGeometry(0.038, 8, 6).translate(ex, ey, 0.39), 0x1a1638, 0.3, 1);
+    add(new THREE.SphereGeometry(0.014, 5, 4).translate(ex, ey + 0.005, 0.425), 0xbffcff, 2.2, 1);
   }
-  add(xf(new THREE.SphereGeometry(0.03, 8, 6), { y: 0.75, z: 0.46 }), 0x9ff6ff, 2.0, 1); // 이마의 빛눈
-  // 귀지느러미: 넓고 반투명한 잎, 빛 맥 셋, 끝이 빛난다
+  // 감각 깃: 등에서 뒤로 휘는 깃대 + 빛 가시, 끝이 빛난다
   for (const [s, id] of [[-1, 2], [1, 3]]) {
-    const at = { x: s * 0.1, y: 0.73, z: 0.26, rz: -s * 0.32, rx: -0.3 };
-    const g = new THREE.SphereGeometry(1, 12, 10);
-    g.translate(0, 1, 0); g.scale(0.035, 0.2, 0.15);
-    add(xf(g, at), 0xd8f0ff, 0.15, id, [s * 0.1, 0.73, 0.26]);
-    for (const v of [-0.06, 0, 0.06]) add(xf(new THREE.BoxGeometry(0.012, 0.3, 0.008).translate(0, 0.17, v), at), 0x9ff6ff, 1.2, id, [s * 0.1, 0.73, 0.26]);
-    const tip = new THREE.SphereGeometry(1, 8, 6); tip.scale(0.03, 0.06, 0.09); tip.translate(0, 0.37, 0);
-    add(xf(tip, at), 0x9ff6ff, 2.0, id, [s * 0.1, 0.73, 0.26]);
+    const at = { x: s * 0.12, y: 0.6, z: 0.02, rz: -s * 0.35, rx: 0.5 };
+    add(xf(tube([[0, 0, 0], [0, 0.14, -0.04], [0, 0.3, -0.12]], 0.012, 4, 6), at), W, 0.2, id, [s * 0.12, 0.6, 0.02]);
+    for (let k = 1; k < 6; k++) for (const q of [-1, 1]) add(xf(new THREE.BoxGeometry(0.06, 0.008, 0.01).translate(q * 0.035, 0.05 * k, -0.02 * k), at), 0xd8f0ff, 0.6 + k * 0.15, id, [s * 0.12, 0.6, 0.02]);
+    add(xf(new THREE.SphereGeometry(0.03, 6, 5).translate(0, 0.31, -0.13), at), 0xffd27a, 2.2, id, [s * 0.12, 0.6, 0.02]);
   }
-  // 뒷다리: 큰 허벅지 + 땅에 누운 넓적한 발판 (발바닥이 빛난다)
+  // 용수철 다리: 엉덩이 → 뒤로 높이 꺾인 무릎 → 발판 (발바닥 빛)
   for (const [s, id] of [[-1, 4], [1, 5]]) {
-    add(xf(new THREE.SphereGeometry(1, 10, 8), { x: s * 0.21, y: 0.3, z: -0.14, sx: 0.12, sy: 0.17, sz: 0.2 }), W, 0, id, [s * 0.2, 0.34, -0.16]);
-    add(xf(new THREE.SphereGeometry(1, 10, 6), { x: s * 0.23, y: 0.045, z: -0.02, sx: 0.075, sy: 0.04, sz: 0.19 }), 0xf3ece0, 0, id, [s * 0.2, 0.34, -0.16]);
-    add(xf(new THREE.CircleGeometry(0.05, 8).rotateX(Math.PI / 2), { x: s * 0.23, y: 0.004, z: 0.06 }), 0x9ff6ff, 1.2, id, [s * 0.2, 0.34, -0.16]);
+    const hip = [s * 0.27, 0.36, -0.1];
+    add(tube([hip, [s * 0.36, 0.62, -0.34], [s * 0.33, 0.3, -0.24], [s * 0.3, 0.04, -0.08]], 0.035, 5, 10, (t) => 1 - 0.4 * t), W, 0, id, hip);
+    add(new THREE.SphereGeometry(0.045, 6, 5).translate(s * 0.36, 0.62, -0.34), 0xd8f0ff, 0.6, id, hip);
+    add(xf(new THREE.CylinderGeometry(0.09, 0.1, 0.03, 10), { x: s * 0.3, y: 0.02, z: -0.06 }), 0xe8e0f4, 0, id, hip);
+    add(xf(new THREE.CircleGeometry(0.06, 8).rotateX(Math.PI / 2), { x: s * 0.3, y: 0.004, z: -0.06 }), 0x9ff6ff, 1.2, id, hip);
   }
-  for (const s of [-1, 1]) add(xf(new THREE.SphereGeometry(1, 8, 6), { x: s * 0.09, y: 0.06, z: 0.26, sx: 0.045, sy: 0.05, sz: 0.07 }), 0xf3ece0, 0, 6, [0, 0.3, 0.2]);
-  // 꼬리채: 휘어 오른 줄기 끝에 빛꽃
-  add(tube([[0, 0.42, -0.4], [0, 0.55, -0.6], [0, 0.78, -0.66]], 0.025, 5, 8, (t) => 1 - 0.4 * t), W, 0, 7, [0, 0.42, -0.38]);
-  for (let k = 0; k < 5; k++) { const a = (k / 5) * TAU; add(xf(new THREE.SphereGeometry(1, 6, 4).scale(0.02, 0.06, 0.02).translate(0, 0.05, 0), { x: Math.sin(a) * 0.02, y: 0.8, z: -0.66 + Math.cos(a) * 0.02, rx: Math.cos(a) * 0.7, rz: -Math.sin(a) * 0.7 }), 0xffd27a, 1.8, 7, [0, 0.42, -0.38]); }
+  // 앞 발판 하나 (세발로 선다)
+  add(tube([[0, 0.24, 0.18], [0, 0.12, 0.26], [0, 0.03, 0.28]], 0.035, 5, 5), W, 0, 6, [0, 0.3, 0.2]);
+  add(xf(new THREE.CylinderGeometry(0.08, 0.09, 0.03, 10), { y: 0.015, z: 0.29 }), 0xe8e0f4, 0, 6, [0, 0.3, 0.2]);
+  // 나선 꼬리 + 빛 주머니
+  const hp = [];
+  for (let k = 0; k <= 14; k++) { const t = k / 14, a = t * TAU * 1.4; hp.push([Math.sin(a) * 0.07 * (1 - t * 0.4), 0.38 + t * 0.32 + Math.cos(a) * 0.07 * (1 - t * 0.4), -0.32 - t * 0.28]); }
+  add(tube(hp, 0.022, 5, 28, (t) => 1 - 0.5 * t), W, 0.1, 7, [0, 0.42, -0.38]);
+  add(new THREE.SphereGeometry(0.06, 8, 6).translate(hp[14][0], hp[14][1] + 0.03, hp[14][2]), 0xffd27a, 2.0, 7, [0, 0.42, -0.38]);
   return tagged(L);
 }
 const hopperAnim = /* glsl */ `
@@ -176,30 +177,36 @@ const hopperAnim = /* glsl */ `
   rot(p, n, RX(-0.35 * sp * cos(6.2832 * ph) * step(0.01, sp) - 0.35 * alert * (1.0 - sp) + 0.12 * graze * (1.0 - sp)), vec3(0.0, 0.2, -0.2));
 `;
 
-// 노래새: 0 몸 1·2 날개 3 꼬리띠 4 머리
+// 노래새: 0 몸 1·2 날개 3 꼬리띠 4 눈구슬(머리)
+//   깃털 새가 아니다: 납작한 마름모 몸, 빛 맥이 흐르는 얇은 막 날개(끝이 물결진 연), 부리 대신 빛 테를 두른 커다란 눈구슬 하나와
+//   앞으로 뻗은 수염 더듬이, 몸 밑의 갈고리 발(앉을 때 붙잡는다), 길게 나부끼는 빛 리본 꼬리 둘
 function birdGeo() {
   const L = [];
   const add = (g, c, e, id, piv = [0, 0, 0]) => L.push([part(g, c, e), id, piv]);
-  add(xf(new THREE.SphereGeometry(1, 12, 8), { y: 0.13, sx: 0.075, sy: 0.075, sz: 0.15 }), W, 0, 0);
-  add(xf(new THREE.SphereGeometry(1, 10, 6), { y: 0.11, z: 0.03, sx: 0.06, sy: 0.055, sz: 0.1 }), 0xfff2dc, 0, 0);
-  for (const s of [-1, 1]) add(xf(new THREE.CylinderGeometry(0.008, 0.008, 0.08, 3), { x: s * 0.03, y: 0.04 }), 0x3a2a30, 0, 0);
-  // 머리 + 볏 + 부리
-  add(xf(new THREE.SphereGeometry(0.06, 10, 8), { y: 0.21, z: 0.11 }), W, 0, 4);
-  add(xf(new THREE.ConeGeometry(0.018, 0.07, 5).rotateX(Math.PI / 2), { y: 0.205, z: 0.19 }), 0xffc46a, 0.4, 4);
-  add(xf(new THREE.ConeGeometry(0.02, 0.09, 4), { y: 0.28, z: 0.09, rx: -0.5 }), 0xff9fd0, 1.4, 4);
-  for (const s of [-1, 1]) add(xf(new THREE.SphereGeometry(0.012, 5, 4), { x: s * 0.045, y: 0.225, z: 0.155 }), 0x101018, 0, 4);
-  // 날개: 깃 끝이 빛나는 납작한 잎
+  add(xf(new THREE.OctahedronGeometry(1, 1), { y: 0.13, sx: 0.085, sy: 0.04, sz: 0.18 }), W, 0.05, 0);
+  add(xf(new THREE.BoxGeometry(0.012, 0.012, 0.3), { y: 0.17, z: -0.01 }), 0x9ff6ff, 1.6, 0); // 등줄 빛
+  for (const s of [-1, 1]) add(tube([[s * 0.025, 0.1, 0.02], [s * 0.03, 0.05, 0.03], [s * 0.02, 0.03, 0.06]], 0.006, 3, 4), 0x2a2440, 0, 0); // 갈고리 발
+  // 눈구슬 + 빛 테 + 수염 더듬이
+  add(xf(new THREE.SphereGeometry(0.055, 12, 10), { y: 0.16, z: 0.15 }), 0x1c1a34, 0.2, 4);
+  add(xf(new THREE.SphereGeometry(0.022, 6, 5), { y: 0.165, z: 0.2 }), 0xbffcff, 2.4, 4);
+  add(xf(new THREE.TorusGeometry(0.062, 0.008, 4, 18), { y: 0.16, z: 0.15 }), 0xffd27a, 1.8, 4);
+  for (const s of [-1, 1]) add(tube([[s * 0.03, 0.17, 0.17], [s * 0.07, 0.19, 0.25], [s * 0.1, 0.18, 0.32]], 0.004, 3, 5), 0xd8f0ff, 0.8, 4);
+  // 막 날개: 뿌리는 넓고 끝은 물결진 연 (빛 맥 셋)
   for (const [s, id] of [[-1, 1], [1, 2]]) {
-    const g = new THREE.SphereGeometry(1, 10, 6);
-    g.scale(0.26, 0.012, 0.085); g.translate(s * 0.27, 0, -0.02);
-    add(xf(g, { y: 0.16, z: 0.02 }), W, 0, id, [s * 0.05, 0.16, 0.02]);
-    add(xf(new THREE.SphereGeometry(1, 6, 4).scale(0.06, 0.01, 0.05).translate(s * 0.5, 0, -0.05), { y: 0.16, z: 0.02 }), 0x9ff6ff, 1.4, id, [s * 0.05, 0.16, 0.02]);
+    const sh = new THREE.Shape();
+    sh.moveTo(0, 0.07); sh.quadraticCurveTo(0.22, 0.09, 0.48, -0.02);
+    sh.quadraticCurveTo(0.42, -0.05, 0.4, -0.1); sh.quadraticCurveTo(0.3, -0.08, 0.26, -0.14);
+    sh.quadraticCurveTo(0.16, -0.1, 0.1, -0.15); sh.quadraticCurveTo(0.04, -0.1, 0, -0.1); sh.lineTo(0, 0.07);
+    const g = new THREE.ShapeGeometry(sh, 6).rotateX(-Math.PI / 2);
+    if (s < 0) g.scale(-1, 1, 1);
+    add(xf(g, { x: s * 0.05, y: 0.15, z: 0.02 }), W, 0.12, id, [s * 0.05, 0.16, 0.02]);
+    for (const [ex, ez] of [[0.46, -0.02], [0.4, -0.1], [0.26, -0.14]]) add(tube([[s * 0.05, 0.152, 0.03], [s * (0.05 + ex * 0.5), 0.153, 0.03 + ez * 0.4], [s * (0.05 + ex), 0.154, 0.02 + ez]], 0.004, 3, 5), 0x9ff6ff, 1.5, id, [s * 0.05, 0.16, 0.02]);
   }
-  // 꼬리 띠 둘
+  // 빛 리본 꼬리 둘 (길다)
   for (const s of [-1, 1]) {
-    const g = new THREE.PlaneGeometry(0.035, 0.42, 1, 4).rotateX(-Math.PI / 2 + 0.15);
-    g.translate(s * 0.02, 0.12, -0.33);
-    add(g, 0xffd27a, 0.7, 3, [0, 0.13, -0.13]);
+    const g = new THREE.PlaneGeometry(0.03, 0.62, 1, 8).rotateX(-Math.PI / 2 + 0.12);
+    g.translate(s * 0.025, 0.12, -0.45);
+    add(g, 0xffd27a, 1.0, 3, [0, 0.13, -0.13]);
   }
   return tagged(L);
 }
@@ -222,40 +229,42 @@ const birdAnim = /* glsl */ `
 `;
 
 // 등짐소: 0 몸 1 머리 2..7 다리(앞왼·앞오·가왼·가오·뒤왼·뒤오) 8 코 9 짐 10 꼬리
+//   소가 아니다: 겹친 껍데기 판 셋(이음매가 빛난다)과 등에 돋은 결정, 마디진 곤충 다리 여섯(세 갈래 발), 눈 대신 빛 구멍 넷이 줄지은
+//   낮은 얼굴판과 앞으로 뻗은 더듬이 둘, 끝에 빛 봉오리가 달린 긴 덩굴 코, 짐을 지면 양옆에 빛 열매 꼬투리
 function beastGeo() {
   const L = [];
   const add = (g, c, e, id, piv = [0, 0, 0]) => L.push([part(g, c, e), id, piv]);
-  add(xf(new THREE.SphereGeometry(1, 18, 12), { y: 2.0, sx: 0.95, sy: 0.78, sz: 1.85 }), W, 0, 0);
-  add(xf(new THREE.SphereGeometry(1, 16, 8, 0, TAU, 0, Math.PI * 0.42), { y: 2.12, sx: 1.0, sy: 0.82, sz: 1.8 }), 0x6fae8c, 0, 0); // 등의 이끼
-  const rnd = mulberry32(5);
-  for (let i = 0; i < 22; i++) { const a = rnd() * TAU, r = rnd() * 0.8; add(new THREE.SphereGeometry(0.07 + rnd() * 0.06, 5, 4).translate(Math.cos(a) * r * 0.85, 2.85 - r * r * 0.3, Math.sin(a) * r * 1.6), [0x9ff6ff, 0xffd27a, 0xd8ffc8][i % 3], 1.5, 0); }
-  add(xf(new THREE.SphereGeometry(1, 12, 8), { y: 1.62, sx: 0.8, sy: 0.4, sz: 1.5 }), 0xe8dccc, 0, 0); // 배
-  // 머리 (목 = 0, 2.0, 1.55): 낮고 긴 머리, 눈, 귀
-  add(xf(new THREE.SphereGeometry(1, 14, 10), { y: 1.95, z: 2.15, sx: 0.36, sy: 0.33, sz: 0.62 }), W, 0, 1);
-  for (const s of [-1, 1]) {
-    add(xf(new THREE.SphereGeometry(0.07, 6, 5), { x: s * 0.27, y: 2.08, z: 2.45 }), 0x201c28, 0, 1);
-    add(xf(new THREE.SphereGeometry(0.025, 5, 4), { x: s * 0.3, y: 2.11, z: 2.5 }), 0xffffff, 1.4, 1);
-    const ear = new THREE.SphereGeometry(1, 8, 6); ear.scale(0.08, 0.04, 0.22);
-    add(xf(ear, { x: s * 0.36, y: 2.2, z: 1.95, ry: s * 0.6, rz: s * 0.4 }), 0xe8dccc, 0, 1);
+  add(xf(new THREE.SphereGeometry(1, 16, 10), { y: 1.78, sx: 0.85, sy: 0.55, sz: 1.75 }), 0xd8d0dc, 0, 0); // 배
+  for (const [z, sz, sy] of [[1.05, 0.85, 0.72], [0, 1.0, 0.82], [-1.05, 0.9, 0.72]]) {
+    add(xf(new THREE.SphereGeometry(1, 16, 8, 0, TAU, 0, Math.PI * 0.5), { y: 1.9, z, sx: 1.0, sy, sz }), W, 0, 0); // 껍데기 판
+    add(xf(new THREE.TorusGeometry(1, 0.035, 4, 32), { y: 1.9, z: z - sz * 0.92, sx: 0.98, sy: sy * 0.95, rx: 0 }), 0x9ff6ff, 1.4, 0); // 판 이음매의 빛 (세운 고리)
   }
-  // 다리 여섯 (엉덩이 = ±0.72, 1.7, z)
+  const rnd = mulberry32(5);
+  for (let i = 0; i < 9; i++) { const z = -1.3 + rnd() * 2.6, x = (rnd() - 0.5) * 0.7; add(xf(new THREE.ConeGeometry(0.1 + rnd() * 0.08, 0.35 + rnd() * 0.4, 5), { x, y: 2.62 - x * x * 0.4, z, rz: -x * 0.6, rx: (rnd() - 0.5) * 0.4 }), [0xbffcff, 0xd8b4ff, 0xffd0a0][i % 3], 1.2, 0); } // 등의 결정
+  // 얼굴판 (목 = 0, 2.0, 1.55): 낮고 넓은 판 + 빛 구멍 넷 + 더듬이 둘
+  add(xf(new THREE.SphereGeometry(1, 14, 8), { y: 1.82, z: 2.05, sx: 0.5, sy: 0.3, sz: 0.5 }), W, 0, 1);
+  for (let k = 0; k < 4; k++) add(new THREE.SphereGeometry(0.06, 6, 5).translate((k - 1.5) * 0.17, 1.92, 2.5 - Math.abs(k - 1.5) * 0.06), 0xbffcff, 2.0, 1);
+  for (const s of [-1, 1]) add(tube([[s * 0.3, 1.95, 2.3], [s * 0.55, 2.3, 2.7], [s * 0.7, 2.25, 3.2], [s * 0.62, 2.05, 3.45]], 0.035, 4, 10, (t) => 1 - 0.6 * t), 0xd8d0dc, 0.3, 1);
+  // 다리 여섯: 엉덩이 → 바깥으로 벌어진 무릎(마디 구슬) → 세 갈래 발
   const LEG = [[-1, 1.15, 2], [1, 1.15, 3], [-1, 0, 4], [1, 0, 5], [-1, -1.15, 6], [1, -1.15, 7]];
   for (const [s, z, id] of LEG) {
     const hip = [s * 0.72, 1.7, z];
-    add(tube([[hip[0], 1.75, z], [hip[0] * 1.08, 1.0, z + 0.05], [hip[0] * 1.1, 0.12, z + 0.1]], 0.17, 6, 8, (t) => 1 - 0.35 * t), W, 0, id, hip);
-    add(xf(new THREE.CylinderGeometry(0.17, 0.21, 0.14, 8), { x: hip[0] * 1.1, y: 0.07, z: z + 0.1 }), 0x5a4a50, 0, id, hip);
+    add(tube([[s * 0.72, 1.72, z], [s * 1.25, 1.05, z + 0.05], [s * 1.32, 0.95, z + 0.06], [s * 1.38, 0.1, z + 0.1]], 0.1, 6, 12, (t) => 1 - 0.35 * t), W, 0, id, hip);
+    add(new THREE.SphereGeometry(0.15, 8, 6).translate(s * 1.27, 1.0, z + 0.05), 0x9a90a8, 0.2, id, hip);
+    for (let k = 0; k < 3; k++) { const a = (k - 1) * 0.7; add(xf(new THREE.ConeGeometry(0.05, 0.3, 4).rotateX(Math.PI / 2), { x: s * 1.38 + Math.sin(a) * 0.12, y: 0.05, z: z + 0.2 + Math.cos(a) * 0.08, ry: a }), 0x5a4a60, 0, id, hip); }
   }
-  // 부드러운 코 (끝이 말린다)
-  add(tube([[0, 1.8, 2.7], [0, 1.55, 2.95], [0, 1.25, 3.0], [0, 1.08, 2.9]], 0.09, 6, 10, (t) => 1 - 0.4 * t), W, 0, 8, [0, 1.8, 2.7]);
-  // 짐: 양옆 바구니 + 빛열매
+  // 덩굴 코: 끝의 빛 봉오리
+  add(tube([[0, 1.75, 2.5], [0, 1.5, 2.85], [0, 1.2, 2.95], [0, 1.02, 2.85]], 0.07, 6, 10, (t) => 1 - 0.45 * t), W, 0, 8, [0, 1.8, 2.7]);
+  add(new THREE.SphereGeometry(0.09, 8, 6).translate(0, 0.98, 2.82), 0xffd27a, 1.8, 8, [0, 1.8, 2.7]);
+  // 짐: 양옆 빛 열매 꼬투리
   for (const s of [-1, 1]) {
-    add(xf(new THREE.CylinderGeometry(0.42, 0.32, 0.6, 10, 1, true), { x: s * 1.05, y: 2.1 }), 0xc8a070, 0, 9);
-    for (let k = 0; k < 4; k++) add(new THREE.IcosahedronGeometry(0.11, 0).translate(s * 1.05 + (k % 2 - 0.5) * 0.25, 2.42, (k > 1 ? 0.15 : -0.15)), [0xffc46a, 0xff9fd0, 0x9ff6ff][k % 3], 1.4, 9);
+    add(xf(new THREE.CapsuleGeometry(0.3, 0.5, 4, 10).rotateX(Math.PI / 2), { x: s * 1.1, y: 2.05 }), 0xc8b090, 0.1, 9);
+    for (let k = 0; k < 4; k++) add(new THREE.IcosahedronGeometry(0.1, 0).translate(s * 1.1 + (k % 2 - 0.5) * 0.2, 2.38, (k > 1 ? 0.18 : -0.18)), [0xffc46a, 0xff9fd0, 0x9ff6ff][k % 3], 1.4, 9);
   }
-  add(xf(new THREE.BoxGeometry(2.3, 0.08, 0.5), { y: 2.78 }), 0xc8a070, 0, 9);
-  // 꼬리
-  add(tube([[0, 2.1, -1.75], [0, 1.6, -2.05], [0, 1.2, -2.1]], 0.07, 5, 6), W, 0, 10, [0, 2.1, -1.75]);
-  add(xf(new THREE.SphereGeometry(0.14, 6, 5), { y: 1.15, z: -2.1 }), 0x9ff6ff, 1.0, 10, [0, 2.1, -1.75]);
+  add(xf(new THREE.BoxGeometry(2.3, 0.08, 0.4), { y: 2.62 }), 0xc8b090, 0, 9);
+  // 꼬리: 마디진 키 + 빛 주머니
+  add(tube([[0, 2.0, -1.7], [0, 1.75, -2.15], [0, 1.45, -2.35]], 0.12, 6, 8, (t) => 1 - 0.5 * t), W, 0, 10, [0, 2.1, -1.75]);
+  add(xf(new THREE.SphereGeometry(0.16, 8, 6), { y: 1.4, z: -2.38, sy: 1.3 }), 0x9ff6ff, 1.2, 10, [0, 2.1, -1.75]);
   return tagged(L);
 }
 const beastAnim = /* glsl */ `
@@ -292,6 +301,8 @@ function jellyGeo() {
   add(lathe([[0.0001, 0.62], [0.35, 0.58], [0.62, 0.4], [0.8, 0.1], [0.82, -0.05], [0.7, -0.08], [0.4, 0.05], [0.0001, 0.1]], 22), W, 0.45, 0);
   for (let i = 0; i < 10; i++) { const a = (i / 10) * TAU; add(xf(new THREE.SphereGeometry(0.05, 5, 4), { x: Math.sin(a) * 0.78, y: -0.04, z: Math.cos(a) * 0.78 }), 0xffffff, 2.0, 0); }
   add(new THREE.SphereGeometry(0.22, 10, 8).translate(0, 0.2, 0), 0xffffff, 1.8, 2);
+  add(lathe([[0.0001, 0.42], [0.2, 0.4], [0.32, 0.24], [0.3, 0.12]], 14), 0xffffff, 0.9, 2); // 속 갓
+  { const fr = new THREE.TorusGeometry(0.8, 0.05, 4, 40); const pp = fr.attributes.position; for (let i = 0; i < pp.count; i++) { const a = Math.atan2(pp.getY(i), pp.getX(i)); pp.setZ(i, pp.getZ(i) + Math.sin(a * 12) * 0.05); } fr.computeVertexNormals(); add(xf(fr, { y: -0.06, rx: Math.PI / 2 }), W, 0.8, 0); } // 물결 치마
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * TAU + 0.2, r = i % 3 === 0 ? 0.25 : 0.68, len = i % 3 === 0 ? 1.6 : 2.4 + (i % 2) * 0.6;
     const g = new THREE.PlaneGeometry(i % 3 === 0 ? 0.12 : 0.04, len, 1, 10);
@@ -314,23 +325,32 @@ const jellyAnim = /* glsl */ `
   glowK += pulse * 0.7;
 `;
 
-// 유리게: 0 껍데기 1..6 다리 7·8 집게 9 눈자루
+// 유리게: 0 몸 1..6 다리 7·8 더듬 수정 9 눈구슬
+//   게가 아니다: 둥근 보석 돔 몸(속빛이 비친다)과 정수리의 수정 왕관, 둘레로 고르게 뻗은 유리 다리 여섯(별 모양),
+//   집게 대신 앞으로 뻗은 가는 수정 더듬이 둘(끝이 빛난다), 위에 셋으로 놓인 눈구슬
 function crabGeo() {
   const L = [];
   const add = (g, c, e, id, piv = [0, 0, 0]) => L.push([part(g, c, e), id, piv]);
-  add(xf(new THREE.IcosahedronGeometry(1, 0), { y: 0.17, sx: 0.27, sy: 0.12, sz: 0.21 }), W, 0.35, 0);
-  add(xf(new THREE.OctahedronGeometry(1, 0), { y: 0.26, sx: 0.12, sy: 0.06, sz: 0.1 }), 0xffe0f4, 1.4, 0);
-  for (const [x, z, h] of [[0, -0.05, 0.16], [-0.1, 0.02, 0.11], [0.1, 0.02, 0.11], [0.05, -0.12, 0.09], [-0.06, -0.11, 0.1]]) add(xf(new THREE.ConeGeometry(0.035, h, 5), { x, y: 0.27 + h / 2, z, rz: x * 2, rx: z * 2 }), W, 1.0, 0); // 수정 가시
-  for (const s of [-1, 1]) add(xf(new THREE.CylinderGeometry(0.012, 0.012, 0.12, 4), { x: s * 0.07, y: 0.28, z: 0.16 }), 0xd8d0f0, 0, 9), add(xf(new THREE.SphereGeometry(0.028, 6, 4), { x: s * 0.07, y: 0.35, z: 0.16 }), 0x101018, 0.6, 9);
+  add(xf(new THREE.IcosahedronGeometry(1, 0), { y: 0.2, sx: 0.24, sy: 0.17, sz: 0.24 }), W, 0.45, 0); // 각진 보석 돔
+  add(xf(new THREE.OctahedronGeometry(1, 0), { y: 0.28, sx: 0.1, sy: 0.07, sz: 0.1 }), 0xffe0f4, 1.6, 0);
+  for (let k = 0; k < 5; k++) { const a = (k / 5) * TAU; add(xf(new THREE.ConeGeometry(0.03, 0.16, 5), { x: Math.cos(a) * 0.09, y: 0.38, z: Math.sin(a) * 0.09, rz: -Math.cos(a) * 0.5, rx: Math.sin(a) * 0.5 }), W, 1.1, 0); } // 수정 왕관
+  for (const [ex, ez] of [[-0.06, 0.12], [0.06, 0.12], [0, 0.02]]) add(xf(new THREE.SphereGeometry(0.03, 8, 6), { x: ex, y: 0.33, z: ez }), 0x101028, 0.8, 9);
   let id = 1;
-  for (const s of [-1, 1]) for (const z of [-0.1, 0.0, 0.1]) {
-    const hip = [s * 0.2, 0.16, z];
-    add(tube([hip, [s * 0.32, 0.25, z * 1.3], [s * 0.4, 0.0, z * 1.45]], 0.028, 5, 6, (t) => 1 - 0.45 * t), 0xd8d0f0, 0.25, id++, hip);
+  for (let k = 0; k < 6; k++) {
+    const a = ((k + 0.5) / 6) * TAU, ca = Math.sin(a), sa = Math.cos(a); // a=0 → 앞(+z)
+    const hip = [ca * 0.18, 0.17, sa * 0.18];
+    // 다리: 거미 다리가 아니라 굵은 수정 조각 둘 (마디가 빛난다)
+    const knee = [ca * 0.31, 0.22, sa * 0.31], foot = [ca * 0.38, 0.0, sa * 0.38];
+    const shard = (a2, b2, w) => { const dx = b2[0] - a2[0], dy = b2[1] - a2[1], dz = b2[2] - a2[2], len = Math.hypot(dx, dy, dz); const g = new THREE.OctahedronGeometry(1, 0).scale(w, len / 2, w); const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(dx, dy, dz).normalize()); g.applyQuaternion(q); g.translate((a2[0] + b2[0]) / 2, (a2[1] + b2[1]) / 2, (a2[2] + b2[2]) / 2); return g; };
+    add(shard(hip, knee, 0.05), 0xe8e0ff, 0.45, id, hip);
+    add(shard(knee, foot, 0.04), 0xe8e0ff, 0.6, id, hip);
+    add(new THREE.SphereGeometry(0.03, 6, 4).translate(...knee), 0xffe0f4, 1.8, id++, hip);
   }
+  // 몸 위에 떠 있는 수정 고리 (몸빛을 따라 빛난다)
+  add(xf(new THREE.TorusGeometry(0.2, 0.012, 4, 24), { y: 0.48, rx: Math.PI / 2 + 0.2 }), 0xffe0f4, 1.6, 0);
   for (const [s, cid] of [[-1, 7], [1, 8]]) {
-    add(tube([[s * 0.16, 0.16, 0.16], [s * 0.24, 0.2, 0.3], [s * 0.2, 0.18, 0.4]], 0.025, 4, 5), 0xd8d0f0, 0.2, cid, [s * 0.16, 0.16, 0.16]);
-    add(xf(new THREE.OctahedronGeometry(1, 0), { x: s * 0.21, y: 0.2, z: 0.46, sx: 0.11, sy: 0.075, sz: 0.14 }), W, 0.9, cid, [s * 0.16, 0.16, 0.16]);
-    add(xf(new THREE.OctahedronGeometry(1, 0), { x: s * 0.17, y: 0.22, z: 0.56, sx: 0.04, sy: 0.03, sz: 0.08, ry: s * 0.4 }), W, 1.2, cid, [s * 0.16, 0.16, 0.16]);
+    add(tube([[s * 0.06, 0.24, 0.2], [s * 0.1, 0.32, 0.36], [s * 0.12, 0.36, 0.5]], 0.012, 4, 6), 0xe8e0ff, 0.6, cid, [s * 0.06, 0.24, 0.2]);
+    add(xf(new THREE.OctahedronGeometry(1, 0), { x: s * 0.12, y: 0.37, z: 0.52, sx: 0.025, sy: 0.025, sz: 0.05 }), W, 1.8, cid, [s * 0.06, 0.24, 0.2]);
   }
   return tagged(L);
 }
