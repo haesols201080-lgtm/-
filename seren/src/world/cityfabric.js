@@ -6,7 +6,7 @@
 //    한꺼번에 올려 두고 셰이더가 거리로 잘라 낸다(USE_CUT). 소품은 종류마다 1회(가까운 것만).
 //  · 충돌: 건물은 모양에 맞춘 겹 충돌체(탑의 층, 착륙대 원반, 지붕…), 소품은 플레이어 둘레에서만 켠다(흘려 넣기).
 import * as THREE from 'three';
-import { heightAt } from './heightfield.js';
+import { heightAt, setPads } from './heightfield.js';
 import { mulberry32 } from '../core/noise.js';
 import { cityArchetypes, SPEC, PROPCOL, doorGeo, propArchetypes } from './city-arch.js';
 import { buildPlan, layoutBlock, layoutCore, uvToWorld, locate } from './cityplan.js';
@@ -18,7 +18,7 @@ import { CURVE_GLSL, ATMOS_PARS, NOISE_GLSL } from './shaders.js';
 import { atmosUniforms } from './atmosphere.js';
 import { PLACE, PLACES } from '../data/places.js';
 import { NPCS, GLYPH_STONES, ECHOES } from '../data/story.js';
-import { ZONES, STYLE_KINDS, TINTS, USE, hasStreet } from '../data/city.js';
+import { ZONES, STYLE_KINDS, TINTS, USE, hasStreet, isRural } from '../data/city.js';
 import { OUTDOOR } from '../data/venues.js';
 
 const TAU = Math.PI * 2;
@@ -82,7 +82,12 @@ export class CityFabric {
       bigPlace: (x, z, r) => this._bigExcl(x, z, r),
     });
     this.timing = { plan: performance.now() - t0, layout: 0, street: 0 };
+    this.SPEC = SPEC; // (검사 도구가 모양 평면을 본다)
+    this.pads = []; // 시골 집터 [x, z, 반폭x, 반폭z, 방향, 높이] — 다 지은 뒤 지형(메인·워커)에 넘긴다
     for (const P of this.plan.zones) { try { this._zone(P); } catch (e) { console.warn('[city]', P.Z.id, e); } }
+    this.padData = new Float32Array(this.pads);
+    setPads(this.padData);
+    if (world.terrain && world.terrain.setPads) world.terrain.setPads(this.padData);
     const t1 = performance.now();
     this._meshes();
     this._propMeshes();
@@ -191,7 +196,7 @@ export class CityFabric {
     const streets = [];
     for (let k = 0; k <= G.nb; k++) if (hasStreet(G, k)) streets.push(G.r0 + k * G.ring + G.street / 2);
     const avA = Array.from({ length: G.avenues }, (_, i) => (i / G.avenues) * TAU + G.aOff);
-    const zone = { ...Z, P, G, cx: G.cx, cz: G.cz, r0: G.r0, rOut: G.rOut, streets, streetEvery: 1, avA, buildings: 0, tall: [], blocks: P.blocks };
+    const zone = { ...Z, P, G, cx: G.cx, cz: G.cz, r0: G.r0, rOut: G.rOut, streets, streetEvery: 1, avA, buildings: 0, tall: [], blocks: P.blocks, rural: isRural(Z) };
     const tl = performance.now();
     const tints = (TINTS[Z.tint] || TINTS.pearl).map((h) => new THREE.Color(h));
     const kinds = STYLE_KINDS[Z.style] || STYLE_KINDS.capital;
@@ -331,8 +336,19 @@ export class CityFabric {
     for (const [lx, lz] of [[hw, hd], [-hw, hd], [hw, -hd], [-hw, -hd]]) { const h2 = heightAt(x + lx * c + lz * s, z - lx * s + lz * c); mn = Math.min(mn, h2); mx = Math.max(mx, h2); }
     const wet = mn < 1.2;
     if (wet && !(kind === 'stilt' || B.stilt)) return null;
-    if (mx - mn > Math.min(hw, hd) * 1.2 + 4) return null; // 벼랑
-    const gy = Math.max(hc, 0);
+    // 벼랑에 걸치지 않게 (땅을 고른 도시에서는 늘 0 — 협곡 도시·시골에서 건물 한쪽이 흙에 묻히던 것)
+    if (mx - mn > Math.min(Math.min(hw, hd) * 0.5 + 3.5, 6)) return null;
+    // 시골: 땅은 자연 그대로, 건물 자리만 집터로 고른다(가운데와 네 귀퉁이 높이의 평균 — 길가 집은 길 높이 쪽으로)
+    const pad = zone.rural && !wet && kind !== 'stilt' && !S.fixed;
+    let padH = hc;
+    if (pad) {
+      if (mx - mn > Math.min(hw, hd) * 0.35 + 2.5) return null;
+      let sum = hc, n = 1;
+      for (const [lx, lz] of [[hw, hd], [-hw, hd], [hw, -hd], [-hw, -hd]]) { sum += heightAt(x + lx * c + lz * s, z - lx * s + lz * c); n++; }
+      padH = sum / n;
+      mn = mx = padH;
+    }
+    const gy = pad ? padH : Math.max(hc, 0);
     const under = this._under(x, z, R + 2);
     if (under - gy < 14) return null;
     const room = Math.min(this._room(x, z, R, gy), under);
@@ -340,7 +356,7 @@ export class CityFabric {
     let base = (wet ? Math.min(mn, 0) : mn) - 1.2;
     let sy = h + (gy - base);
     // 물 위 집: 깊이와 상관없이 제 키(마루가 물·땅 위 1.2 m), 다리는 물속으로 — 깊은 물에서 늘어나 집이 물에 잠기지 않게
-    if (kind === 'stilt') { sy = h; base = Math.max(mn, 0) + 1.2 - 0.53 * sy; }
+    if (kind === 'stilt') { sy = h; base = Math.max(mx, 0) + 1.2 - 0.53 * sy; } // 마루는 가장 높은 땅·물 위 1.2 m
     let sx, sz;
     if (S.fixed) {
       // 실제 미터로 지은 하나뿐인 건물(보조 랜드마크): 배율 1, 자리가 모자라면 짓지 않는다
@@ -354,6 +370,7 @@ export class CityFabric {
     }
     this.list[kind].push(x, base, z, sx, sy, sz, rot, tint.r, tint.g, tint.b);
     const idx = this.list[kind].length / 10 - 1;
+    if (pad) { const [, A, Bp] = S.plan || [2, 1, 1]; this.pads.push(x, z, A * sx + 1.5, Bp * sz + 1.5, rot, padH); }
     // 겹 충돌체
     const cols = [];
     let top = base;
@@ -368,7 +385,7 @@ export class CityFabric {
         cols.push(col); top = Math.max(top, col.y1);
       }
     }
-    const rec = { kind, idx, x, z, a, base, gy, mx, sx, sy, sz, rot, cols, top, zone: zone.id, B, use: o.use || 'home', style: zone.style, seed: rnd(), podiumKind: !!o.podium };
+    const rec = { kind, idx, x, z, a, base, gy, mx, sx, sy, sz, rot, cols, top, zone: zone.id, B, use: o.use || 'home', style: zone.style, seed: rnd(), podiumKind: !!o.podium, pad };
     B.recs.push(rec);
     if (OUTDOOR[kind] && !S.enter) { rec.out = OUTDOOR[kind]; this.outRecs.push(rec); }
     zone.buildings++;
@@ -398,7 +415,7 @@ export class CityFabric {
       r.door = { x: r.x + nx * (ext + 0.25), z: r.z + nz * (ext + 0.25), nx, nz, yaw: Math.atan2(nx, nz) };
       if (!this._excluded(r.door.x, r.door.z, 3)) { ok = true; break; }
     }
-    r.floorY = Math.max(r.gy, r.mx, heightAt(r.door.x, r.door.z)) + 0.15;
+    r.floorY = r.pad ? r.gy + 0.15 : Math.max(r.gy, r.mx, heightAt(r.door.x, r.door.z)) + 0.15; // 집터 위 건물은 집터 높이
     if (!ok) return;
     r.id = this.recs.length;
     this.recs.push(r);

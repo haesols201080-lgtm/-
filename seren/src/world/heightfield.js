@@ -2,7 +2,7 @@
 import { createNoise2D, fbm, ridged, smoothstep } from '../core/noise.js';
 import { REGIONS, WORLD } from './regions.js';
 import { FLATTEN } from '../data/places.js';
-import { ZONES, ZGEO } from '../data/city.js';
+import { ZONES, ZGEO, isRural, hasStreet, bandStart } from '../data/city.js';
 import { zoneBlocks } from './cityplan.js';
 
 const nA = createNoise2D(1337);
@@ -175,10 +175,11 @@ function rawHeight(x, z, detail, wOut) {
     h = 1 + 7 * (u - (s * Math.sin(Math.PI * u)) / (2 * Math.PI) - (s * Math.sin(2 * Math.PI * u)) / (4 * Math.PI));
   }
 
-  // 도시 땅 맞추기: 구역마다 높이를 맞춘다 (아래 LEVEL) — 작은 굴곡도 없앤다
+  // 도시 땅 맞추기: 구역마다 높이를 맞춘다 (아래 LEVEL) — 작은 굴곡도 없앤다. 시골은 길만(_lvRoad) + 건물 집터(PADS)
   let flat = 1;
   if (LEVEL) flat = 1 - levelCity(x, z, h);
   if (flat < 1) h = _lvH;
+  if (PGRID) { const pw = padAt(x, z, h, _lvRoad); if (pw > 0) { h = _lvH; flat = Math.min(flat, 1 - pw); } }
   if (detail >= 1 && flat > 0) {
     h += (2.4 * nD(x / 70, z / 70) + 1.1 * nE(x / 31, z / 31)) * flat;
     if (detail >= 2) h += 0.35 * nC(x / 9, z / 9) * flat;
@@ -229,9 +230,125 @@ function terraceAt(Z, r, ang) {
   const lo = bandLevel(Z, k - 1, r, ang), hi = bandLevel(Z, k, r, ang);
   return lo + (hi - lo) * ss01(vb / bs);
 }
+// ── 시골 길 (mode 4) ─────────────────────
+// 고리 길(띠마다 경계 + 바깥 가장자리)의 높이는 그 둘레를 따라 자연 높이를 재어 부드럽게 하고(±40 m) 경사를 7.5% 로 누른 줄.
+// 대로·골목은 이웃한 고리 길 높이 사이를 반지름으로 잇는다 — 그래서 교차로에서 높이가 늘 맞는다. 줄은 처음 쓰일 때 만든다.
+let _lvRoad = 0, _rdH = 0, _rdCore = 0;
+const RD_STEP = 12, RD_SH = 7; // 줄의 표본 간격(m), 길 어깨(자연 지형으로 잇는 폭, m)
+function ringProfile(Z, k) {
+  let P = Z.prof[k];
+  if (P) return P;
+  const R = Z.ringR[k], n = Math.max(48, Math.ceil((TAU * R) / RD_STEP)), w = new Float32Array(RC);
+  const a = new Float32Array(n), b = new Float32Array(n);
+  // 자연 높이로 잰다 (땅 맞추기·집터를 잠시 끄고 — 자기 자신을 부르지 않게)
+  const sL = LEVEL, sP = PGRID, sR = _lvRoad, sH = _lvH;
+  LEVEL = null; PGRID = null;
+  for (let i = 0; i < n; i++) { const t = (i / n) * TAU; a[i] = rawHeight(Z.cx + Math.cos(t) * R, Z.cz + Math.sin(t) * R, 0, w); }
+  LEVEL = sL; PGRID = sP; _lvRoad = sR; _lvH = sH;
+  // 부드럽게 (상자 거르기 두 번 ≈ ±40 m)
+  for (let pass = 0; pass < 2; pass++) {
+    const src = pass ? b : a, dst = pass ? a : b;
+    for (let i = 0; i < n; i++) { let sum = 0; for (let j = -3; j <= 3; j++) sum += src[(i + j + n) % n]; dst[i] = sum / 7; }
+  }
+  // 경사 제한 (반복 이완)
+  const mx = 0.075 * ((TAU * R) / n);
+  for (let it = 0; it < 60; it++) {
+    let worst = 0;
+    for (let i = 0; i < n; i++) { const j = (i + 1) % n, dl = a[j] - a[i], ad = Math.abs(dl); if (ad <= mx) continue; const e = ((ad - mx) / 2) * Math.sign(dl); a[i] += e; a[j] -= e; worst = Math.max(worst, ad - mx); }
+    if (worst < 0.02) break;
+  }
+  Z.prof[k] = a;
+  return a;
+}
+function ringH(Z, k, ang) {
+  const P = ringProfile(Z, k), n = P.length;
+  const t = (((ang % TAU) + TAU) % TAU) / TAU * n, i = Math.floor(t), f = t - i;
+  return P[i % n] * (1 - f) + P[(i + 1) % n] * f;
+}
+/** 반지름 r 에서 각 ang 의 고리 길 높이를 이어 잇기 (대로·골목) */
+function radialH(Z, r, ang) {
+  const R = Z.ringR, nk = R.length;
+  if (r <= R[0]) return ringH(Z, 0, ang);
+  if (r >= R[nk - 1]) return ringH(Z, nk - 1, ang);
+  let k = Math.min(nk - 2, Math.max(0, Math.floor((r - Z.r0) / Z.ring)));
+  while (k > 0 && R[k] > r) k--;
+  while (k < nk - 2 && R[k + 1] < r) k++;
+  const t = ss01((r - R[k]) / (R[k + 1] - R[k]));
+  return ringH(Z, k, ang) * (1 - t) + ringH(Z, k + 1, ang) * t;
+}
+/** 시골 길: 0..1 (1 = 길 위) — 높이는 _rdH */
+function ruralRoad(Z, d, ang) {
+  _rdCore = 0;
+  if (d < Z.r0 - Z.street - RD_SH || d > Z.rOut + Z.street + RD_SH) return 0;
+  let W = 0, acc = 0, wsum = 0;
+  const add = (w, h, core) => { if (w <= 0) return; acc += w * h; wsum += w; if (w > W) W = w; if (core > _rdCore) _rdCore = core; };
+  // 고리 길
+  const kf = Math.floor((d - Z.r0) / Z.ring);
+  for (let k = Math.max(0, kf - 1); k <= Math.min(Z.ringR.length - 1, kf + 1); k++) {
+    const dist = Math.abs(d - Z.ringR[k]);
+    if (dist < Z.ringW[k] + RD_SH) add(1 - smoothstep(Z.ringW[k], Z.ringW[k] + RD_SH, dist), ringH(Z, k, ang), 1 - smoothstep(Z.ringW[k], Z.ringW[k] + 0.8, dist));
+  }
+  // 대로
+  const rel = (((ang - Z.aOff) % TAU) + TAU) % TAU;
+  const s = Math.round(rel / Z.SA) % Z.avenues;
+  let da = Math.abs(rel - s * Z.SA); if (da > Math.PI) da = TAU - da;
+  const dAv = da * d;
+  if (dAv < Z.avH + RD_SH) add(1 - smoothstep(Z.avH, Z.avH + RD_SH, dAv), radialH(Z, d, Z.aOff + s * Z.SA), 1 - smoothstep(Z.avH, Z.avH + 0.8, dAv));
+  // 골목 (띠 안 블록 사이)
+  if (kf >= 0 && kf < Z.nb) {
+    const m = Z.bandM[kf], s0 = Math.floor(rel / Z.SA), fs = rel - s0 * Z.SA, jf = Math.round(fs / (Z.SA / m));
+    if (jf >= 1 && jf <= m - 1) {
+      const dl = Math.abs(fs - (jf * Z.SA) / m) * d, hw = Z.lane / 2;
+      if (dl < hw + RD_SH * 0.7) add(1 - smoothstep(hw, hw + RD_SH * 0.7, dl), radialH(Z, d, Z.aOff + s0 * Z.SA + (jf * Z.SA) / m), 1 - smoothstep(hw, hw + 0.8, dl));
+    }
+  }
+  if (wsum <= 0) return 0;
+  _rdH = acc / wsum;
+  return W;
+}
+
+// ── 시골 집터 (cityfabric 이 건물을 놓은 뒤 setPads 로 받는다 — 메인과 지형 워커 모두) ──
+// [x, z, 반폭x, 반폭z, 방향, 높이] × n. 건물 바닥(가장자리 +1.5 m) 은 그 높이로, 둘레 PAD_F m 는 자연 지형으로 잇는다. 길 위는 건드리지 않는다.
+let PADS = null, PGRID = null;
+const PCELL = 64, PAD_F = 8;
+export function setPads(arr) {
+  PADS = arr && arr.length ? arr : null;
+  PGRID = PADS ? new Map() : null;
+  if (!PADS) return;
+  for (let i = 0; i < PADS.length; i += 6) {
+    const R = Math.hypot(PADS[i + 2], PADS[i + 3]) + PAD_F;
+    for (let cx = Math.floor((PADS[i] - R) / PCELL); cx <= Math.floor((PADS[i] + R) / PCELL); cx++) for (let cz = Math.floor((PADS[i + 1] - R) / PCELL); cz <= Math.floor((PADS[i + 1] + R) / PCELL); cz++) {
+      const key = cx * 100003 + cz;
+      let L = PGRID.get(key);
+      if (!L) PGRID.set(key, (L = []));
+      L.push(i);
+    }
+  }
+}
+/** 집터: 0..1 (1 = 건물 바닥) — 결과 높이는 _lvH */
+function padAt(x, z, h, road) {
+  const L = PGRID.get(Math.floor(x / PCELL) * 100003 + Math.floor(z / PCELL));
+  if (!L) return 0;
+  let acc = 0, wsum = 0, W = 0;
+  for (const i of L) {
+    const dx = x - PADS[i], dz = z - PADS[i + 1], c = Math.cos(PADS[i + 4]), sn = Math.sin(PADS[i + 4]);
+    const lx = dx * c - dz * sn, lz = dx * sn + dz * c;
+    const ex = Math.max(Math.abs(lx) - PADS[i + 2], 0), ez = Math.max(Math.abs(lz) - PADS[i + 3], 0);
+    const dist = Math.hypot(ex, ez);
+    if (dist >= PAD_F) continue;
+    const w = 1 - smoothstep(0, PAD_F, dist), w4 = w * w * w * w; // 가까운 집터가 이긴다 (이웃 집터 사이는 부드럽게)
+    acc += w4 * PADS[i + 5]; wsum += w4; if (w > W) W = w;
+  }
+  if (wsum <= 0) return 0;
+  W *= 1 - road;
+  _lvH = h + (acc / wsum - h) * W;
+  return W;
+}
+
 /** 구역들을 차례로 덮어 높이를 맞춘다. 결과는 _lvH, 돌려주는 값은 맞춘 정도(0..1, 가장 큰 것) */
 function levelCity(x, z, hNat) {
   let h = hNat, mMax = 0;
+  _lvRoad = 0;
   for (const Z of LEVEL) {
     const dx = x - Z.cx, dz = z - Z.cz, d2 = dx * dx + dz * dz;
     if (d2 > Z.R2) continue;
@@ -239,6 +356,18 @@ function levelCity(x, z, hNat) {
     let m = smoothstep(Z.hi + Z.E, Z.hi, d);
     if (Z.lo > 0) m *= smoothstep(Z.lo - Z.Ein, Z.lo, d);
     if (m <= 0) continue;
+    if (Z.mode === 4) {
+      // 시골: 자연 지형 그대로 — 길(고리 길·대로·골목)만 가로로 평평하고 세로로 완만하게, 둘레는 자연스럽게 잇는다
+      let w = ruralRoad(Z, d, Math.atan2(dz, dx));
+      if (w <= 0) continue;
+      w *= m * smoothstep(0.5, 2.5, hNat); // 물 위로는 길을 돋우지 않는다
+      if (w <= 0) continue;
+      h += (_rdH - h) * w;
+      if (w > mMax) mMax = w;
+      const core = _rdCore * smoothstep(0.5, 2.5, hNat);
+      if (core > _lvRoad) _lvRoad = core; // 집터는 길 어깨는 덮고 차도·보도는 건드리지 않는다
+      continue;
+    }
     if (m > mMax) mMax = m;
     if (Z.mode === 0) continue;
     const target = Z.mode === 2 ? terraceAt(Z, d, Math.atan2(dz, dx)) : Z.level;
@@ -256,7 +385,8 @@ function levelCity(x, z, hNat) {
   const list = ZGEO.map((G, i) => {
     const Z = ZONES[i];
     // 물가 도시(water)는 물 바로 위 낮은 단만 고르고 언덕·바다는 그대로 (협곡 도시처럼 높이 창으로)
-    const mode = Z.grade === false || Z.water ? 3 : Z.mix === 'suburb' ? 2 : 1;
+    // 시골(교외 농장·마을)은 통째로 고르지 않는다(4: 길만) · 협곡·물가 도시는 높이 창(3) · 나머지 도시는 평평한 단(1)
+    const mode = isRural(Z) ? 4 : Z.grade === false || Z.water ? 3 : Z.mix === 'suburb' ? 2 : 1;
     const hi = G.rOut + G.street;
     // 교외의 안쪽 가장자리는 가운데 구역(수도)의 단 끝에 바로 붙인다 — 그 사이로 원래 지형(고원 벼랑의 계단)이 새지 않게
     let lo = 0, Ein = 120, E = mode === 2 ? 200 : 160;
@@ -269,7 +399,18 @@ function levelCity(x, z, hNat) {
       const outer = ZGEO.find((H, j) => j !== i && H.cx === G.cx && H.cz === G.cz && H.r0 > G.rOut);
       if (outer) E = Math.max(60, outer.r0 - outer.street - hi - 6);
     }
-    const L = { mode, water: !!Z.water, cx: G.cx, cz: G.cz, lo, hi, E, Ein, R2: (hi + E) * (hi + E), prio: mode === 2 ? 0 : 1 };
+    const L = { mode, water: !!Z.water, cx: G.cx, cz: G.cz, lo, hi, E, Ein, R2: (hi + E) * (hi + E), prio: mode === 2 || mode === 4 ? 0 : 1 };
+    if (mode === 4) {
+      // 고리 길: 띠마다 시작 경계(차도 또는 골목) + 바깥 가장자리 차도. 줄(높이)은 처음 쓸 때 만든다
+      const zb = zoneBlocks(i);
+      Object.assign(L, { r0: G.r0, ring: G.ring, nb: G.nb, rOut: G.rOut, street: G.street, avenues: G.avenues, SA: TAU / G.avenues, aOff: G.aOff, avH: G.avH, lane: G.lane, prof: [], lo: 0, E: 0, R2: (G.rOut + G.street + RD_SH + 2) ** 2 });
+      L.hi = G.rOut + G.street + RD_SH + 1; L.E = 1;
+      L.ringR = []; L.ringW = [];
+      for (let k = 0; k < G.nb; k++) { const bs = bandStart(G, k); L.ringR.push(G.r0 + k * G.ring + bs / 2); L.ringW.push(bs / 2); }
+      L.ringR.push(G.rOut + G.street / 2); L.ringW.push(G.street / 2);
+      L.bandM = zb.rings.map((R) => R.m);
+      void hasStreet;
+    }
     if (mode === 1 || mode === 3) {
       // 구역 땅(가운데 포함)의 높이 중앙값 — 물(2.5 m 아래)은 빼고
       const hs = [];

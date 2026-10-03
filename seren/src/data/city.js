@@ -58,20 +58,21 @@ export const MIX = {
 
 // 쓰임마다 들어서는 건물 모양 (양식마다 바꿔 낄 수 있다)
 export const STYLE_KINDS = {
-  // 주거·상업: 익숙한 고층 문법(후퇴·왕관·테라스·돌출·하늘정원·세 쌍둥이) / 연구: 관측 고리·꼬투리·관측동
+  // 주거·상업: 익숙한 고층 문법(후퇴·왕관·테라스·돌출·하늘정원·세 쌍둥이)에 옛 모양(첨탑·결정·쌓은 탑·칼날·뒤틀린 탑·알)을 고루 섞는다
+  // — 기능별 형태(연구·에너지·교통·생체)는 더하는 것이지 다양성을 줄이는 것이 아니다. 연구동에도 보통 탑이 조금씩 섞인다
   capital: {
-    tower: { balcony: 2.2, terrace: 1.8, skygarden: 1.6, setback: 1.4, triad: 1.2, twist: 1, arcology: 0.6, ovoid: 0.5 },
-    office: { setback: 2.4, crown: 2.2, slab: 2, cantilever: 1.8, blade: 1.8, skygarden: 1.1, twist: 1.2, stack: 1, twin: 0.8, spire: 0.5 },
-    lab: { halolab: 2.6, podlab: 2, observatory: 2, antenna: 1.4 },
-    house: { villa: 3, dome: 1 },
+    tower: { balcony: 1.6, terrace: 1.4, skygarden: 1.3, setback: 1.1, triad: 1, twist: 1, spire: 0.9, crystal: 0.9, stack: 0.8, ovoid: 0.7, arcology: 0.7, blade: 0.6, cantilever: 0.5, crown: 0.4 },
+    office: { setback: 1.6, crown: 1.5, blade: 1.4, cantilever: 1.3, slab: 1.2, twist: 1.1, stack: 1, twin: 1, spire: 1, skygarden: 0.9, crystal: 0.9, triad: 0.6, ovoid: 0.4 },
+    lab: { halolab: 2, podlab: 1.6, observatory: 1.6, antenna: 1.2, crystal: 0.6, twist: 0.4, spire: 0.4 },
+    house: { villa: 3, dome: 1, bubbles: 0.5 },
   },
   suburb: { tower: { arcology: 2, bubbles: 1.5, balcony: 1 }, office: { slab: 2, stack: 1 }, lab: { observatory: 1, podlab: 1 }, house: { villa: 5, dome: 1.5, bubbles: 0.6 } },
   village: { tower: { dome: 2, arcology: 1 }, office: { villa: 2, stack: 1 }, lab: { observatory: 1 }, house: { dome: 3, villa: 3 } },
-  glass: { tower: { crystal: 4, spire: 1.5, triad: 1 }, office: { crystal: 3, blade: 2, spire: 1.5, crown: 1 }, lab: { antenna: 1, crystal: 1, halolab: 1.5 }, house: { crystal: 1, villa: 2 } },
+  glass: { tower: { crystal: 4, spire: 1.5, triad: 1, twist: 0.8, balcony: 0.5 }, office: { crystal: 3, blade: 2, spire: 1.5, crown: 1, twin: 0.8, cantilever: 0.6 }, lab: { antenna: 1, crystal: 1, halolab: 1.5 }, house: { crystal: 1, villa: 2 } },
   bloom: { tower: { cap: 4, ovoid: 1.5, bubbles: 1.5, treeform: 1 }, office: { cap: 3, ovoid: 1 }, lab: { podlab: 1 }, house: { cap: 3, dome: 1 } },
-  canyon: { tower: { stack: 3, arcology: 3, terrace: 2 }, office: { stack: 2, slab: 1, arcology: 1, setback: 2 }, lab: { observatory: 1, antenna: 1 }, house: { villa: 3, stack: 0.5 } },
+  canyon: { tower: { stack: 3, arcology: 3, terrace: 2, setback: 1, crown: 0.5 }, office: { stack: 2, slab: 1, arcology: 1, setback: 2, cantilever: 0.8 }, lab: { observatory: 1, antenna: 1 }, house: { villa: 3, stack: 0.5 } },
   sea: { tower: { stilt: 2, dome: 1 }, office: { villa: 2, dome: 1 }, lab: { observatory: 1 }, house: { stilt: 4, villa: 2, dome: 1 } },
-  frost: { tower: { dome: 2, slab: 1 }, office: { slab: 2, dome: 1 }, lab: { observatory: 2, antenna: 1 }, house: { villa: 3, dome: 3 } },
+  frost: { tower: { dome: 2, slab: 1, ovoid: 0.6, crystal: 0.5 }, office: { slab: 2, dome: 1, crystal: 0.6 }, lab: { observatory: 2, antenna: 1 }, house: { villa: 3, dome: 3 } },
 };
 
 // 색조 (건물 바탕색에 곱해짐 — 진주빛을 크게 벗어나지 않게)
@@ -99,6 +100,8 @@ export const ZGEO = ZONES.map((Z) => {
     avH: Z.street * 0.35 + 4.2, // 대로 반폭 (차도 + 보도)
   };
 });
+/** 시골(교외 농장·마을): 땅을 통째로 고르지 않는다 — 자연 지형 그대로, 길과 건물 둘레만 (heightfield 의 시골 땅·cityfabric 의 집터) */
+export const isRural = (Z) => (Z.mix === 'suburb' || Z.mix === 'village') && Z.grade !== false;
 /** 고리 k 의 시작에 차도가 있나 (k = nb 는 바깥 가장자리 거리) */
 export const hasStreet = (G, k) => k === G.nb || (G.every > 0 && k % G.every === 0);
 /** 고리 k 의 블록이 시작하는 반지름까지의 띠 폭 (차도면 차도 폭, 아니면 골목) */

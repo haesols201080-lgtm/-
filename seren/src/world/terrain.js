@@ -185,6 +185,11 @@ export class Terrain {
     }
   }
 
+  /** 시골 집터(도시가 건물을 놓은 뒤, 첫 청크를 부르기 전): 워커의 높이 함수에도 같은 집터를 넣는다 (메시지는 차례대로 처리된다) */
+  setPads(arr) {
+    for (const w of this.workers) w.postMessage({ pads: arr });
+  }
+
   /** 워커가 막힌 환경(엄격한 보안 정책 등): 메인 스레드로 전환하고 대기 중이던 작업을 다시 넣는다 */
   _workerFailed() {
     if (!this.workers.length) return;

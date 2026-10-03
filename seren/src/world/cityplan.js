@@ -430,8 +430,12 @@ T[U.FARM] = (B, P) => {
   const { L, D } = B, r = P.rnd;
   const kind = B.variant % 3;
   if (kind === 0) {
-    const n = Math.max(2, Math.floor((D - 20) / 18));
-    for (let i = 0; i < n; i++) P.bldg(B, 'greenhouse', L * 0.5, 12 + (i + 0.5) * ((D - 24) / n), L * 0.36, Math.min(6.5, (D - 24) / n / 2 - 2), 7, { door: 'u-', use: 'garden' });
+    // 온실 줄: 마지막 줄(농가·탱크 자리 D-32 ~ D)은 비워 둔다 — 작은 마을 블록에서 겹치지 않게
+    const v1 = D - 32;
+    if (v1 - 12 >= 16) {
+      const n = Math.max(1, Math.floor((v1 - 12) / 18)), step = (v1 - 12) / n;
+      for (let i = 0; i < n; i++) P.bldg(B, 'greenhouse', L * 0.5, 12 + (i + 0.5) * step, L * 0.36, Math.min(6.5, step / 2 - 2), 7, { door: 'u-', use: 'garden' });
+    }
   } else if (kind === 1) {
     for (let u = L * 0.45; u < L - 12; u += 12) for (let v = 12; v < D - 34; v += 11) P.prop(B, 'tree', u, v, 0, { s: 0.7 + r() * 0.2 });
   }
