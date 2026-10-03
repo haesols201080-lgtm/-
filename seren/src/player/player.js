@@ -642,8 +642,10 @@ export class Player {
     const v = this.vel;
     const top = L.top;
     if (this.pos.y < top) {
-      const t = Math.min(1, Math.max(0, (this.pos.y - L.y0) / (top - L.y0)));
-      v.y = Math.min(34, v.y + 30 * dt) * (t > 0.92 ? 0.7 : 1);
+      // 남은 높이에 맞춰 부드럽게 늦추되 초속 4 m 아래로는 늦추지 않는다
+      // (전에는 92 % 위에서 매 프레임 0.7 을 곱해 초속 1 m 남짓으로 기어올라, 꼭대기 앞에서 멈춘 것처럼 보였다)
+      const want = Math.min(34, Math.max(4, (top - this.pos.y) * 1.4));
+      v.y += Math.max(-30 * dt, Math.min(30 * dt, want - v.y));
       v.x = 0; v.z = 0;
       this.pos.x += (L.x - this.pos.x) * Math.min(1, dt * 2);
       this.pos.z += (L.z - this.pos.z) * Math.min(1, dt * 2);
