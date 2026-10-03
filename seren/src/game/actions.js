@@ -15,7 +15,9 @@ const HANDLERS = {
     const p = PLACE[a.place];
     if (!p) return;
     const off = a.offset || [0, 0];
-    g.npcs.goTo(a.npc, p.pos[0] + off[0], p.pos[1] + off[1], { instant: a.instant });
+    const n0 = g.npcs.get(a.npc);
+    const via = !a.instant && n0 && g.structures.routeTo ? g.structures.routeTo(a.place, n0.pos) : null; // 마을 둘레 도시는 대로로
+    g.npcs.goTo(a.npc, p.pos[0] + off[0], p.pos[1] + off[1], { instant: a.instant, via });
     const n = g.npcs.get(a.npc);
     if (n) n.lead = a.lead !== false;
   },

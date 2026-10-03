@@ -239,7 +239,7 @@ export class Flora {
           if (h < 0.6) continue;
           const sl = s.slope(x, z);
           if (sl > 0.9) continue;
-          if (world.city && world.city.blocks(x, z)) continue;
+          if ((world.city && world.city.blocks(x, z)) || world.cleared(x, z)) continue;
           const reg = pickRegion((i) => s.weight(x, z, i), rng);
           const pick = rng();
           let k = -1, sc = 1;
@@ -285,7 +285,7 @@ export class Flora {
           const x = x0 + rng() * size, z = z0 + rng() * size;
           const h = s.height(x, z);
           const sl = s.slope(x, z);
-          if (world.city && world.city.blocks(x, z)) continue;
+          if ((world.city && world.city.blocks(x, z)) || world.cleared(x, z)) continue;
           const reg = pickRegion((i) => s.weight(x, z, i), rng);
           const ry = rng() * 6.28;
           const push = (k, sc, extra) => out.push({ k, x, y: h - 0.1, z, ry, s: sc, ...extra, col: midCol(k, x, h - 0.1, z, sc) });
@@ -342,7 +342,7 @@ export class Flora {
           const x = x0 + rng() * size, z = z0 + rng() * size;
           const h = s.height(x, z);
           if (h < 0.8 || s.slope(x, z) > 0.8) continue;
-          if (world.city && world.city.blocks(x, z)) continue;
+          if ((world.city && world.city.blocks(x, z)) || world.cleared(x, z)) continue;
           const reg = pickRegion((i) => s.weight(x, z, i), rng);
           const pick = rng();
           const ry = rng() * 6.28;
@@ -373,7 +373,7 @@ export class Flora {
           const x = x0 + rng() * size, z = z0 + rng() * size;
           const h = heightAt(x, z, 1, _w);
           if (h < 1) continue;
-          if (world.city && (world.city.urban(x, z) || world.city.blocks(x, z))) continue;
+          if ((world.city && (world.city.urban(x, z) || world.city.blocks(x, z))) || world.cleared(x, z)) continue;
           const reg = pickRegion((i) => _w[i], rng);
           const pick = rng();
           const ry = rng() * 6.28;

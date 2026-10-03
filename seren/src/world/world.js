@@ -23,6 +23,7 @@ export class World {
     this.heightAt = (x, z) => heightAt(x, z);
     this.limitRadius = WORLD.limitRadius;
     this.updrafts = []; // {x, z, r, y0, y1, strength, enabled}
+    this.clearZones = []; // 식물이 자라지 않는 곳 {x, z, r} | {seg: [x0, z0, x1, z1], r} (마을 길·광장·집터)
     this.gravityWells = []; // {x, z, r, scale}
     this.modules = [];
     this.elapsed = 0;
@@ -36,6 +37,28 @@ export class World {
   }
 
   /** 지형 + 구조물을 고려한 지면 높이 */
+  /** 식물이 자라면 안 되는 자리인가 (장소의 길·광장·집터) */
+  cleared(x, z) {
+    const Z = this.clearZones;
+    if (!Z.length) return false;
+    if (this._clearN !== Z.length) {
+      this._clearN = Z.length;
+      let x0 = 1e9, z0 = 1e9, x1 = -1e9, z1 = -1e9;
+      for (const c of Z) { const xs = c.seg ? [c.seg[0], c.seg[2]] : [c.x], zs = c.seg ? [c.seg[1], c.seg[3]] : [c.z]; for (const v of xs) { x0 = Math.min(x0, v - c.r); x1 = Math.max(x1, v + c.r); } for (const v of zs) { z0 = Math.min(z0, v - c.r); z1 = Math.max(z1, v + c.r); } }
+      this._clearBB = [x0, z0, x1, z1];
+    }
+    const B = this._clearBB;
+    if (x < B[0] || x > B[2] || z < B[1] || z > B[3]) return false;
+    for (const c of Z) {
+      if (c.seg) {
+        const [ax, az, bx, bz] = c.seg, dx = bx - ax, dz = bz - az;
+        const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)));
+        if ((x - ax - dx * t) ** 2 + (z - az - dz * t) ** 2 < c.r * c.r) return true;
+      } else if ((x - c.x) ** 2 + (z - c.z) ** 2 < c.r * c.r) return true;
+    }
+    return false;
+  }
+
   groundAt(x, z, y = 1e5) {
     // y 를 주면 그 높이에서 조금 위까지만 (머리 위의 떠 있는 발판으로 튀어 오르지 않게)
     return this.colliders.ground(x, z, y, y >= 1e5 ? 1e5 : 4).h;

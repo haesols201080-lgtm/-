@@ -7,6 +7,7 @@ import { part, merge, xf, lathe, tube, jitter } from './geo-utils.js';
 import * as A from './arch.js';
 import { litMaterial, glowMaterial } from './materials.js';
 import { TOWERS } from './megacity.js';
+import { buildDewfold } from './dewfold.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -383,65 +384,27 @@ export class Structures {
     return pts;
   }
 
-  // ── 마을 이슬터 ───────────────────────────
+  // ── 마을 이슬터 (dewfold.js) ───────────────────────────
   _village(p) {
+    const { y0 } = buildDewfold(this, p);
     const [cx, cz] = p.pos;
-    const y0 = this._ground(cx, cz);
-    const rnd = mulberry32(123);
-    const parts = [];
-    // 노래 우물 (중앙)
-    parts.push(part(new THREE.CylinderGeometry(9, 9.6, 0.8, 24).translate(cx, y0 + 0.4, cz), A.PAL.pearl2, 0));
-    parts.push(part(new THREE.CircleGeometry(7.5, 24).rotateX(-Math.PI / 2).translate(cx, y0 + 0.82, cz), 0x3ab0b8, 0.8));
-    A.place(parts, [part(new THREE.CylinderGeometry(0.8, 1.2, 6, 6).translate(0, 3, 0), 0xe0d8f8, 0.4), part(new THREE.OctahedronGeometry(1.4, 0).translate(0, 7.4, 0).scale(1, 1.6, 1), A.PAL.teal, 1.4)], { x: cx, y: y0 + 0.8, z: cz });
-    this._col({ type: 'cyl', x: cx, z: cz, r: 9.3, y0: y0 - 1, y1: y0 + 0.8 });
-    // 이엘의 집 (북쪽 큰 돔)
-    const ih = { x: cx - 8, z: cz - 46 };
-    A.place(parts, A.domeHouse({ r: 9, h: 11, seed: 7, glow: A.PAL.teal }), { x: ih.x, y: y0 - 0.3, z: ih.z });
-    this._col({ type: 'cyl', x: ih.x, z: ih.z, r: 8.8, y0: y0 - 1, y1: y0 + 10.5, dome: 6 });
-    this.ielHouse = { x: ih.x, z: ih.z + 12, y: y0 };
-    this.resonators.push({ x: cx, y: y0 + 7, z: cz });
     // 깨어난 우물: 빛 분수 + 상승 기류 (처음엔 꺼져 있음)
     const fount = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 6.5, 70, 20, 1, true).translate(0, 35, 0), glowMaterial({ color: 0x7ff3e6, intensity: 0.6, fresnel: 1, side: THREE.DoubleSide }));
-    fount.position.set(cx, y0 + 0.8, cz);
+    fount.position.set(cx, y0 + 0.95, cz);
     fount.visible = false;
     this.group.add(fount);
     this.well = { fount, x: cx, y: y0, z: cz, updraft: { x: cx, z: cz, r: 8, y0: y0, y1: y0 + 80, strength: 26, enabled: false } };
     this.world.updrafts.push(this.well.updraft);
-    // 둘레의 집들
-    for (let i = 0; i < 10; i++) {
-      const a = (i / 10) * Math.PI * 2 + rnd() * 0.3;
-      if (Math.abs(a - Math.PI * 1.5) < 0.4) continue;
-      const R = 34 + rnd() * 50;
-      const x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
-      const r = 3.6 + rnd() * 2.6;
-      const y = this._ground(x, z) - 0.3;
-      A.place(parts, A.domeHouse({ r, h: r * 1.25, seed: 20 + i }), { x, y, z });
-      this._col({ type: 'cyl', x, z, r: r * 0.95, y0: y - 1, y1: y + r * 1.25, dome: r * 0.7 });
-    }
-    for (let i = 0; i < 5; i++) {
-      const a = rnd() * Math.PI * 2, R = 16 + rnd() * 26;
-      const x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
-      A.place(parts, A.gardenBed({ r: 3 + rnd() * 2, seed: 60 + i }), { x, y: this._ground(x, z) - 0.2, z });
-    }
-    // 입구 아치 (착륙 지점 쪽, 남동)
-    const ga = Math.atan2(8600 - cz, 600 - cx);
-    const gx = cx + Math.cos(ga) * 100, gz = cz + Math.sin(ga) * 100;
-    A.place(parts, A.archGate({ span: 16, h: 14, glow: A.PAL.amber }), { x: gx, y: this._ground(gx, gz) - 0.5, z: gz, ry: -ga + Math.PI / 2 });
-    this._mesh(parts);
-    // 낮은 꽃잎 둘
-    const pp = [];
-    for (const [dx, dz, h, r] of [[40, -20, 9, 9], [58, -34, 17, 7]]) {
-      const x = cx + dx, z = cz + dz, y = y0 + h;
-      A.place(pp, A.petal({ r, depth: r * 0.5 }), { x, y, z });
-      this._col({ type: 'cyl', x, z, r: r * 0.97, y0: y - 2, y1: y + 0.02 });
-    }
-    for (let i = 0; i < 4; i++) {
-      const x = cx + 26 + i * 4, z = cz - 6 - i * 3.5, y = y0 + 1.6 + i * 1.8;
-      A.place(pp, A.petal({ r: 2.2, depth: 1.2 }), { x, y, z });
-      this._col({ type: 'cyl', x, z, r: 2.1, y0: y - 1, y1: y + 0.02 });
-    }
-    this._mesh(pp);
-    this.markers.push({ id: 'dewfold', x: cx, y: y0, z: cz });
+  }
+
+  /** 인물이 그 장소로 갈 때 따라갈 길 (마을 둘레 도시를 건물 사이로 가로지르지 않게). 없으면 null */
+  routeTo(placeId, from) {
+    if (placeId !== 'dewfold' || !this.dewRoute) return null;
+    const P = this.dewRoute, [wx, wz] = P[P.length - 1];
+    const d = Math.hypot(from.x - wx, from.z - wz);
+    if (d < 120) return null;
+    // 아직 앞에 있는 길목만 (목적지에 지금보다 가까운 것)
+    return P.filter((q) => Math.hypot(q[0] - wx, q[1] - wz) < d - 10);
   }
 
   /** 이슬터 우물이 깨어남 */

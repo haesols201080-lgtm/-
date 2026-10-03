@@ -275,6 +275,9 @@ button { font-family: inherit; color: inherit; }
 /* ───────── 타이틀 ───────── */
 .title-screen { position: absolute; inset: 0; z-index: 25; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: calc(9vh + var(--safe-b)); pointer-events: auto; background: linear-gradient(180deg, rgba(5, 6, 20, 0) 40%, rgba(5, 6, 20, 0.55) 100%); transition: opacity 1.2s; }
 .title-screen.out { opacity: 0; pointer-events: none; }
+.title-screen.behind { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity 0.2s, visibility 0s 0.2s; }
+.menu.title-settings { z-index: 30; }
+.menu.title-settings .body > div { max-width: 760px; margin: 0 auto; }
 .title-logo { position: absolute; top: 18vh; left: 0; right: 0; text-align: center; }
 .title-logo .en { font-family: var(--serif); font-size: clamp(54px, 11vw, 120px); letter-spacing: 0.45em; margin-right: -0.45em; color: #fff7e8; text-shadow: 0 0 40px rgba(255, 216, 154, 0.45), 0 4px 30px rgba(0, 0, 0, 0.4); animation: logoIn 3s ease both; }
 .title-logo .ko { font-family: var(--serif); font-size: clamp(16px, 2.4vw, 22px); letter-spacing: 0.6em; margin-right: -0.6em; color: var(--ink-dim); margin-top: 6px; animation: logoIn 3s 0.8s ease both; }

@@ -175,6 +175,8 @@ export class Citizens {
     if (this.scanT <= 0 || !this.near) {
       this.scanT = 0.5;
       const spots = g.city.spotsNear(pp.x, pp.z, this.R + 20).filter((s) => Math.abs(s.y - pp.y) < 60);
+      // 장소(마을)의 주민 자리 (장소 빌더가 world.placeSpots 에 넣는다)
+      for (const s of g.world.placeSpots || []) if (Math.hypot(s.x - pp.x, s.z - pp.z) < this.R + 20 && Math.abs(s.y - pp.y) < 60) spots.push(s);
       spots.sort((a, b) => Math.hypot(a.x - pp.x, a.z - pp.z) - Math.hypot(b.x - pp.x, b.z - pp.z));
       const list = [];
       for (const s of spots) {

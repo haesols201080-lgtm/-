@@ -93,10 +93,12 @@ export class NPCs {
   goTo(id, x, z, opts = {}) {
     const n = this.get(id);
     if (!n) return;
-    n.target = { x, z };
+    n.via = opts.via && opts.via.length ? opts.via.map(([vx, vz]) => ({ x: vx, z: vz })) : null; // 거쳐 갈 길목
+    n.dest = { x, z };
+    n.target = n.via ? n.via.shift() : n.dest;
     n.home = { x, z, r: 6 };
     n.moved = true;
-    if (opts.instant) { n.pos.set(x, this.game.world.groundAt(x, z), z); n.target = null; }
+    if (opts.instant) { n.pos.set(x, this.game.world.groundAt(x, z), z); n.target = null; n.via = null; n.dest = null; }
   }
 
   update(dt) {
@@ -123,7 +125,9 @@ export class NPCs {
         const d = Math.hypot(tx, tz);
         // 플레이어를 이끄는 중이면 너무 멀어지지 않게 기다림
         const lead = n.lead && d2 > 40 * 40;
-        if (d < 1.5) { n.target = null; n.wait = 3 + Math.random() * 6; n.v = 0; }
+        const mid = n.dest && n.target !== n.dest; // 길목을 지나는 중 (멈추지 않고 다음으로)
+        if (mid && d < 4) n.target = n.via && n.via.length ? n.via.shift() : n.dest;
+        else if (d < 1.5) { n.target = null; n.wait = 3 + Math.random() * 6; n.v = 0; n.dest = null; n.via = null; }
         else if (!lead) {
           // 먼저 그쪽으로 돌아서고(몸이 스스로 천천히), 천천히 출발해 도착할 땐 늦춘다
           const face = Math.atan2(tx, tz);

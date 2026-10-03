@@ -453,6 +453,25 @@ export class UI {
     this.setHud(false);
   }
 
+  /** 타이틀 화면의 설정: 게임 안 메뉴(지도·일지·쉬기·저장)가 아니라 설정만 담은 창을 타이틀 위에 띄운다 */
+  titleSettings() {
+    if (this.titleSetEl) return;
+    const el = $(`<div class="menu title-settings"><div class="head"><div class="title">설정</div><div class="sp"></div><button class="btn" data-close>돌아가기</button></div><div class="body"></div></div>`);
+    this.settingsView.render(el.querySelector('.body'), { title: true });
+    const close = () => {
+      el.remove();
+      this.titleSetEl = null;
+      if (this.titleEl) this.titleEl.classList.remove('behind');
+      removeEventListener('keydown', onKey, true);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); close(); } };
+    el.querySelector('[data-close]').addEventListener('click', close);
+    addEventListener('keydown', onKey, true);
+    this.root.appendChild(el);
+    this.titleSetEl = el;
+    if (this.titleEl) this.titleEl.classList.add('behind'); // 타이틀 글자·단추는 설정 창 뒤로 숨긴다
+  }
+
   /** 페이지 안의 확인 창 (브라우저 confirm 대신 — 일부 환경에서는 confirm 이 막혀 있다) */
   confirm(text, yesLabel, onYes) {
     const el = $(`<div class="card-wrap" style="z-index:40"><div class="card glass"><p style="color:var(--ink);font-size:16px">${text}</p><div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><button class="btn" data-no>그만두기</button><button class="btn primary" data-yes>${yesLabel}</button></div></div></div>`);
@@ -462,6 +481,7 @@ export class UI {
   }
 
   hideTitle() {
+    if (this.titleSetEl) { this.titleSetEl.remove(); this.titleSetEl = null; }
     if (!this.titleEl) return;
     const el = this.titleEl;
     el.classList.add('out');

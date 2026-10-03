@@ -23,6 +23,7 @@ import { CityFabric } from '../world/cityfabric.js';
 import { Streams } from '../world/streams.js';
 import { Currents } from '../world/currents.js';
 import { Creatures } from '../world/creatures.js';
+import { Fauna } from '../world/fauna.js';
 import { Clouds } from '../world/clouds.js';
 import { Particles, Trail } from '../world/particles.js';
 import { REGIONS } from '../world/regions.js';
@@ -91,6 +92,7 @@ export class Game {
     this.streams = this.world.add(new Streams(this.world, this.city, this.engine.q));
     this.player = new Player(this.world);
     this.creatures = this.world.add(new Creatures(this.world, this));
+    this.fauna = this.world.add(new Fauna(this.world, this)); // 톡톡이·노래새·등짐소·포자해파리·유리게
     this.drones = this.world.add(new Drones(this.world, this));
     this.clouds = this.world.add(new Clouds(this.world, this.engine.q));
     this.avatar = new Avatar();
@@ -176,7 +178,7 @@ export class Game {
       hasSave: hasSave(),
       onContinue: () => { audio.unlock(); this.continueGame(); },
       onNew: () => { audio.unlock(); this.newGame(); },
-      onSettings: () => { audio.unlock(); this.ui.openMenu('settings', true); },
+      onSettings: () => { audio.unlock(); this.ui.titleSettings(); },
     });
     const unlock = () => { audio.unlock(); removeEventListener('pointerdown', unlock); removeEventListener('keydown', unlock); };
     addEventListener('pointerdown', unlock);
@@ -458,6 +460,8 @@ export class Game {
     if (npc) return { kind: 'npc', o: npc, label: `${npc.name}와(과) 마주하기`, short: '말 걸기' };
     const cit = this.citizens.target(p);
     if (cit) return cit;
+    const fa = this.fauna && this.fauna.target(p);
+    if (fa) return fa;
     if (inside) return inside;
     const el = this.anchor.stopNear(p);
     if (el) return { kind: 'elevator', o: el, label: el.up ? (this.elevatorOpen() ? '승강차 · 하늘닻으로 오르기 (30 km)' : '승강차 (아직 멈춰 있다)') : '승강차 · 척추 전망대로 내려가기', short: '승강차' };
@@ -471,6 +475,7 @@ export class Game {
   _interact(t) {
     if (t.kind === 'npc') return this.talkTo(t.o);
     if (t.kind === 'citizen') return this.citizens.open(t.o);
+    if (t.kind === 'fauna') return this.fauna.interact(t.o);
     if (t.kind === 'cit-act') return this.citizens.activityInteract(t);
     if (t.kind === 'facility') { this.focusOn(t.o.npc); return this.services.open(t.o); }
     if (t.kind === 'unfly') return this.services.endFly();
