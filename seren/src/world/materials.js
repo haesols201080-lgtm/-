@@ -128,6 +128,16 @@ varying vec3 vIColor;
 varying float vWin;
 #endif
 uniform float uWinGlow;
+// 불빛 색 여러 가지 (h: 0..1) — 따뜻한 등빛이 많고, 푸른 흰빛·장밋빛·라일락·박하·산호가 섞인다
+vec3 lightPal(float h) {
+  if (h < 0.34) return vec3(1.0, 0.78, 0.5);
+  if (h < 0.52) return vec3(1.0, 0.9, 0.76);
+  if (h < 0.64) return vec3(0.65, 0.88, 1.0);
+  if (h < 0.74) return vec3(1.0, 0.62, 0.76);
+  if (h < 0.83) return vec3(0.8, 0.68, 1.0);
+  if (h < 0.92) return vec3(0.62, 1.0, 0.78);
+  return vec3(1.0, 0.6, 0.46);
+}
 float cLineF(float d, float w, float fw) { return 1.0 - smoothstep(w - fw, w + fw, abs(d)); }
 #ifdef USE_TECH
 uniform vec4 uTech;    // x 무늬 크기(m), y 빛줄 세기, z 금속감, w 방식(0 판·회로, 1 동심원)
@@ -193,7 +203,7 @@ void main() {
     float r = hash12(id + vec2(floor(vWin * 7.0), 0.0));
     float litP = mix(0.1, 0.55, clamp(uGlow, 0.0, 1.0)) * mix(0.6, 1.0, uWinGlow);
     float lit = mix(litP, step(1.0 - litP, r), aa);
-    vec3 warm = mix(vec3(1.0, 0.76, 0.45), vec3(0.55, 0.95, 1.0), step(0.72, hash12(id + 3.1)));
+    vec3 warm = lightPal(hash12(id + 3.1));
     vec3 R = reflect(-V, N);
     float frw = 0.06 + 0.94 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
     // 방 안: 바닥 쪽이 어둡고, 블라인드가 내려온 창이 섞인다
@@ -260,6 +270,13 @@ void main() {
 #ifdef USE_FACADE
   // 도시 건물 외벽: 1 커튼월 2 띠창 3 점창 4 첨탑(나선 빛) 5 발코니 집 6 유리 격자(온실·돔) 7 수직 농장
   float ftype = gl_FrontFacing ? vFac.y : 0.0; // 안쪽(뒷면)에서는 창·방을 그리지 않는다 — 실내에서 다른 층이 비쳐 보이지 않게
+  {
+    // 모델에 굳힌 장식 빛(지붕 띠·난간·문틀 — 대부분 청록)을 건물마다 다른 빛깔로: 셋 중 둘은 다른 색
+    float hs = fract(vSeed * 5.31 + 0.17);
+    vec3 alt = hs < 0.2 ? vec3(1.0, 0.78, 0.5) : hs < 0.38 ? vec3(0.8, 0.66, 1.0) : hs < 0.52 ? vec3(1.0, 0.62, 0.8) : hs < 0.64 ? vec3(0.64, 1.0, 0.74) : hs < 0.74 ? vec3(0.72, 0.84, 1.0) : vec3(0.5, 0.95, 0.9);
+    float lum = dot(em, vec3(0.299, 0.587, 0.114));
+    em = mix(em, alt * lum * 1.25, 0.85) * (1.0 - 0.32 * uNight); // 밤에는 장식 빛을 조금 누른다
+  }
   float ao = mix(0.62, 1.0, smoothstep(1.0, 9.0, vWorld.y - vBase));
   col *= ao;
   float glowK = clamp(uGlow, 0.0, 1.0);
@@ -343,7 +360,7 @@ void main() {
     float floorOn = step(0.84, hash12(vec2(id.y, vSeed * 13.0))) * step(0.25, room);
     float litP = mix(0.12, 0.5, glowK) * uWinGlow;
     float lit = max(step(1.0 - litP, room), floorOn * glowK);
-    vec3 warm = mix(vec3(1.0, 0.78, 0.5), vec3(0.65, 0.92, 1.0), step(0.68, hash12(id + 5.3 + vSeed * 3.0)));
+    vec3 warm = lightPal(hash12(id + 5.3 + vSeed * 3.0));
     // 낮: 실내는 바깥보다 어둡다 / 밤: 불 켜진 방은 따뜻하게
     float dayIn = 0.22 + 0.1 * room;
     vec3 interior = rc * depthDim * (dayIn * (1.0 - glowK * 0.85) + lit * warm * (0.25 + glowK * 0.9) * uWinGlow);
@@ -386,7 +403,9 @@ void main() {
       vline = 1.0 - smoothstep(0.015, 0.015 + hw * 1.5, min(hf, 1.0 - hf));
     }
     vline *= clamp(1.6 - max(fw.x, fw.y) * 3.0, 0.0, 1.0);
-    vec3 accC = mix(vec3(0.5, 0.95, 0.9), vec3(1.0, 0.8, 0.45), step(0.8, vSeed));
+    // 건물마다 다른 빛줄 색 (청록 · 호박 · 라일락 · 장밋빛 · 박하 · 푸른 흰빛)
+    float as = fract(vSeed * 7.13);
+    vec3 accC = as < 0.3 ? vec3(0.5, 0.95, 0.9) : as < 0.48 ? vec3(1.0, 0.8, 0.45) : as < 0.62 ? vec3(0.78, 0.66, 1.0) : as < 0.76 ? vec3(1.0, 0.6, 0.78) : as < 0.88 ? vec3(0.6, 1.0, 0.72) : vec3(0.7, 0.85, 1.0);
     em += accC * vline * (0.18 + glowK * 0.5);
     // 1층: 상점 — 넓은 유리 너머 불 켜진 가게와 간판 띠 (낮에도 은은하게)
     float hb = vWorld.y - vBase - 1.5;
@@ -555,7 +574,7 @@ varying vec3 vNormal;
 varying vec3 vIColor;
 #endif
 void main() {
-  vec3 c = uColor * uIntensity;
+  vec3 c = uColor * uIntensity * (1.0 - 0.24 * uNight); // 밤에는 빛을 조금 누른다 (어둠 속에서 너무 눈부시지 않게)
 #ifdef USE_INSTANCING_COLOR
   c *= vIColor;
 #endif

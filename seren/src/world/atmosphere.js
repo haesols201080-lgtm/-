@@ -105,7 +105,7 @@ export class Atmosphere {
     u.uUrLight.value.setRGB(1.0, 0.62, 0.36).multiplyScalar(urI * 0.75);
     u.uNight.value = night;
     u.uEclipse.value = ec;
-    u.uGlow.value = Math.min(1.4, 0.04 + 1.0 * night + 1.1 * ec);
+    u.uGlow.value = Math.min(1.2, 0.04 + 0.7 * night + 0.95 * ec); // 밤빛을 너무 세지 않게 (전 1.0)
     this.state.night = night;
     this.state.sunVisible = Math.max(0, sunI / 2.9);
   }

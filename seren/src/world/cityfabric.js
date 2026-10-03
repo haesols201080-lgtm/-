@@ -22,6 +22,7 @@ import { ZONES, STYLE_KINDS, TINTS, USE, hasStreet, isRural } from '../data/city
 import { OUTDOOR } from '../data/venues.js';
 
 const TAU = Math.PI * 2;
+const LAMP_COLS = [0xffe2b8, 0xffe2b8, 0xfff0dc, 0xffe2b8, 0xd8e6ff, 0xffc8dc, 0xffe2b8, 0xdcd0ff, 0xd0ffe0, 0xfff0dc];
 /** 골목 모양 (city-ground.js 의 laneStyle 과 같은 규칙): 1 작업로 2 녹지 산책길 3 상가 거리 4 보조 도로 0 보통 골목 */
 function laneStyleJS(tA, tB, mid) {
   const ind = (t) => (t >= 4 && t <= 6) || t === 8, green = (t) => t === 10 || t === 11;
@@ -1012,7 +1013,7 @@ export class CityFabric {
         if (Math.min(fs, SA - fs) * Rr < G.avH + 3) continue;
         const x = G.cx + Math.cos(a) * Rr, z = G.cz + Math.sin(a) * Rr, h = heightAt(x, z);
         if (h < 0.8) continue;
-        this.lamps.add(x, h + 6.0, z, 0xffe2b8, 3.2, 0, 0);
+        this.lamps.add(x, h + 6.0, z, LAMP_COLS[(Math.floor(i / 3) + (zone.id.length * 7) + (R | 0)) % LAMP_COLS.length], 3.0, 0, 0); // 길마다 조금씩 다른 등빛
       }
     }
   }

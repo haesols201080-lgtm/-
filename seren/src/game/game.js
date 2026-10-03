@@ -417,6 +417,7 @@ export class Game {
     this.mapData.step(this.mode === 'menu' ? 6 : 1.2);
     this.world.update(dt, this.engine.camera, { game: this, player: this.player });
     this._atmosphereByPlace(dt);
+    if (this.engine.bloom) this.engine.bloom.strength = 0.42 - 0.13 * this.world.atmos.state.night; // 밤 번짐을 덜
     this.world.preRender(this.engine.camera);
     this._audio(dt);
     this.engine.render();

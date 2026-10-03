@@ -426,8 +426,8 @@ export function cityArchetypes() {
   {
     const make = (hi) => {
       const pts = squircle(6, 1, 1, 2);
-      const P = [loft([ring(0, pts), ring(0.8, pts, { s: 0.8 })], { color: (x, y) => (y < 0.01 ? GOLD : 0xf6dcee), emit: (x, y) => (y > 0.7 ? 0.5 : 0.08), type: 1, smooth: false })];
-      P.push(loft([ring(0.8, pts, { s: 0.8 }), ring(1, pts, { s: 0.02 })], { color: 0xffe4f4, emit: 0.9, type: 0, smooth: false }));
+      const P = [loft([ring(0, pts), ring(0.8, pts, { s: 0.8 })], { color: (x, y) => (y < 0.01 ? GOLD : 0xf6dcee), emit: (x, y) => (y > 0.7 ? 0.25 : 0.06), type: 1, smooth: false })];
+      P.push(loft([ring(0.8, pts, { s: 0.8 }), ring(1, pts, { s: 0.02 })], { color: 0xffe4f4, emit: 0.4, type: 0, smooth: false })); // 끝이 밤에 하얗게 번지지 않게 (전 0.9)
       if (hi) P.push(band(pts, 0.79, 0.012, 0.82, 0xff9fd0, 1.8));
       return mergeF(P);
     };

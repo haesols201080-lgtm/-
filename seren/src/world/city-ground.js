@@ -133,7 +133,7 @@ vec3 citySurface(CityS S, out vec3 em, out float spec) {
     vec4 hx = hexCell(q / 1.1);
     float seam;
     c = paver(hx, q, fw, fade, vec3(0.56, 0.54, 0.58), vec3(0.45, 0.44, 0.5), 0.035, 1.1, spec, seam);
-    em += vec3(0.35, 0.85, 0.85) * seam * uGlow * 0.06;
+    em += mix(vec3(0.35, 0.85, 0.85), mix(vec3(0.8, 0.6, 1.0), vec3(1.0, 0.75, 0.45), step(0.5, fract(S.var * 3.7))), step(0.55, fract(S.var * 1.9))) * seam * uGlow * 0.06; // 블록마다 이음매 빛 색이 다르다
   } else if (k == 2) { // 광장: 2.4 m 육각 + 동심 빛 새김
     vec4 hx = hexCell(q / 2.4);
     float seam, sp0;
