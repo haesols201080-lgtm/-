@@ -157,6 +157,7 @@ export class UI {
     clearTimeout(this._moaT);
     this._moaT = setTimeout(() => (el.style.opacity = 0), dur || Math.max(3500, text.length * 85));
     this.game.journalNote && this.game.journalNote(text);
+    this.game.moaAI && this.game.moaAI.note(text);
   }
 
   /** 지나가는 아웬의 말 (왼쪽 아래) */

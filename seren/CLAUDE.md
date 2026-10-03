@@ -74,6 +74,7 @@ src/
 - **해류**: `data/currents.js` (점 = [x, 높이, z, 절대?]). `unlock: 탑id` 면 그 탑을 깨울 때 흐름.
 - **대사**: `data/story.js` 의 `LINES` (단어 id 배열 + 한국어). 새 단어는 `data/lexicon.js` 에 (음 모티프가 겹치지 않게).
 - **대화**: `CONVOS` — `{s: 인물id, line}` / `{s:'moa', t}` / `{choice:[...]}`, `act` 로 동작 실행.
+- **모아 부르기** (`game/moa-ai.js`, T·HUD 빛 구슬): 대화창. claude.ai 아티팩트에서는 `claude.use('sample')`(아티팩트 capabilities `{sample: {}}` 로 발행)로 Claude 가 모아 역(RULES)을 맡고, 매 질문에 `context()`(목표·자리·때·가진 것·음·말·둘레 건물·아는 이·조작)를 붙인다. 도구 `mark_place`(나침반 표식, `find()` 로 시설 종류·장소·인물·집·목표를 찾음). Claude 가 없거나 허락이 없으면 `local()` 이 게임 상태로 바로 답한다. 모아 창이 열린 동안 `game.mode = 'moa'`(입력은 창이 받음). `ui.moa()` 혼잣말은 `moaAI.note()` 로 기록된다. 대화창의 말풍선은 `.mp-msg.from-moa/.from-me`(`.moa` 는 아래 자막 이름이라 쓰지 말 것).
 - **처음 해 보는 일 안내**: `data/tips.js` 의 `TIPS[id]`(제목·한 줄·순서) + 그 일을 시작하는 함수 첫 줄에 `if (this.game.tips && this.game.tips.first('id', () => 이함수(인자))) return;`. 본 것은 `state.tips`, 설정 「도움말」 끄면 안 띄움, 일지 → 도움말에서 다시 보기.
 - **공명 음을 요구하는 놀이**: 고를 수 있는 음 = `state.tones`(아는 음)뿐. 아는 음이 모자라면 듣기만 하는 판으로 바꾸거나(연구동 「같다/다르다」), 버튼을 막고 이유를 적는다(주민 「함께 고요해지기」).
 - **퀘스트**: `QUESTS` — 단계 type 은 `game/quests.js` 머리 주석 참고. 동작은 `game/actions.js` 의 `HANDLERS`. 도시의 삶을 본편에 엮을 때는 `stat`(예: `venue.worked`) 단계나 `flag` 단계 + 코드에서 `game.setFlag(k)` 를 씁니다(지금 깃발: `helpedNeighbor`·`rodeSky`·`liftTop`·`homeVisit`). 줄거리: 탐사선 「라르크」가 신호를 따라와 스스로 착륙 → 이웃이 되기 → 이름 노래로 시민(집 `state.home`) → 듣던 탑들이 다시 노래 → 온 하늘에 대답. 탑은 「잠든」 게 아니라 「듣는 쪽」입니다(쇠락한 문명이 아님).

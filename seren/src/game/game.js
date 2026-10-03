@@ -47,6 +47,7 @@ import { Director } from './director.js';
 import { Services } from './services.js';
 import { Interiors } from './interiors.js';
 import { Tips } from './tips.js';
+import { MoaAI } from './moa-ai.js';
 import { Venues } from './venues.js';
 import { Outdoors } from './outdoors.js';
 import { Citizens } from './citizens.js';
@@ -112,6 +113,7 @@ export class Game {
     this.venues = new Venues(this);
     this.interiors = new Interiors(this);
     this.tips = new Tips(this);
+    this.moaAI = new MoaAI(this);
     this.outdoors = new Outdoors(this);
     this.citizens = new Citizens(this);
 
@@ -398,6 +400,9 @@ export class Game {
   _handleInput() {
     const i = this.input;
     const m = this.mode;
+    // 모아와 이야기하는 중: 글자 입력은 모아 창이 받는다. Esc·T 로 닫기
+    if (m === 'moa') { if (i.pressed('pause') || i.pressed('moa')) this.moaAI.close(); return; }
+    if (i.pressed('moa') && m === 'play' && !this.director.active) { this.moaAI.open(); return; }
     if (i.pressed('pause')) {
       if (this.ui.menuEl) this.ui.closeMenu();
       else if (m === 'card') this.ui.closeCard();
