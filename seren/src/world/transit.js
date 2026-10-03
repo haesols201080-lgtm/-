@@ -52,6 +52,7 @@ export class Transit {
     this.lights = new PointLights(this.scene, 500, { minPx: 1.8, day: 0.3 });
     this.mat = litMaterial({ vertexColors: true, vertexEmit: true, emissive: 0xffffff, emissiveIntensity: 1.4, emissiveNight: 0.7, rim: 0.5, spec: 0.8 });
     this.stations = [];
+    this.supportPts = []; // 관 받침 기둥 [x, z] (도시가 비운다)
     this.lines = [];
     this.capsules = [];
     this.isOpen = () => true; // game 이 바꿔 끼움
@@ -153,6 +154,10 @@ export class Transit {
       if (h < 4) continue;
       const base = Math.max(g, -4);
       parts.push(part(xf(lathe([[3.2, -2], [2.4, 0], [1.6, h * 0.5], [1.3, h]], 6), { x: p.x, y: base, z: p.z }), (x, y) => (y < base + 1 ? PAL.gold : 0xe8e4ee), 0));
+      // 기둥은 단단하다 + 도시가 그 자리를 비운다 (cityfabric 의 피할 곳 — 건물이 기둥을 품지 않게)
+      this.world.colliders.add({ type: 'cyl', x: p.x, z: p.z, r: 2.6, y0: base - 2, y1: base + 1 });
+      this.world.colliders.add({ type: 'cyl', x: p.x, z: p.z, r: 1.7, y0: base + 1, y1: base + h });
+      this.supportPts.push([p.x, p.z]);
       // Y 자 팔
       const nx = i + 1 < pts.length ? pts[i + 1].x - p.x : p.x - pts[i - 1].x;
       const nz = i + 1 < pts.length ? pts[i + 1].z - p.z : p.z - pts[i - 1].z;

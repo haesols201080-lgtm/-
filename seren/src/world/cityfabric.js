@@ -95,6 +95,7 @@ export class CityFabric {
     this.SPEC = SPEC; // (검사 도구가 모양 평면을 본다)
     this.pads = []; // 시골 집터 [x, z, 반폭x, 반폭z, 방향, 높이] — 다 지은 뒤 지형(메인·워커)에 넘긴다
     for (const P of this.plan.zones) { try { this._zone(P); } catch (e) { console.warn('[city]', P.Z.id, e); } }
+    this._extraHouses();
     this.padData = new Float32Array(this.pads);
     setPads(this.padData);
     if (world.terrain && world.terrain.setPads) world.terrain.setPads(this.padData);
@@ -131,6 +132,7 @@ export class CityFabric {
     for (const e of ECHOES) { const p = res(e.at, e.off); if (p) E.push([p[0], p[1], 16]); }
     // 빛길 역은 통째로 비우고, 관·낮은 해류 밑은 「높이만」 막는다 (거리·낮은 건물은 그 밑으로 이어진다)
     if (transit) for (const S of transit.stations) E.push([S.x, S.z, 46]);
+    if (transit) for (const [x, z] of transit.supportPts || []) E.push([x, z, 7]); // 관 받침 기둥 둘레
     this._corr = new Map(); // 40 m 칸 → [ax, az, bx, bz, 바닥 높이, 반폭]
     const seg = (A, B, under, w) => {
       const m = w + 30, x0 = Math.min(A.x, B.x) - m, x1 = Math.max(A.x, B.x) + m, z0 = Math.min(A.z, B.z) - m, z1 = Math.max(A.z, B.z) + m;
@@ -333,11 +335,17 @@ export class CityFabric {
 
   /** 건물 하나: 템플릿의 미터 크기 → 인스턴스 + 겹 충돌체 + 문 */
   _bldg(zone, B, kind, u, v, hw, hd, h, o, tint, rnd) {
+    if (!SPEC[kind] || !this.list[kind]) return null;
+    const [x, z, a] = uvToWorld(B, u, v);
+    return this._bldgAt(zone, B, kind, x, z, a, hw, hd, h, o, tint, rnd);
+  }
+
+  /** 세계 좌표에 건물 하나 (a = 문 쪽 기준 각도: door 1 이면 (cos a, sin a) 쪽에 문) */
+  _bldgAt(zone, B, kind, x, z, a, hw, hd, h, o, tint, rnd) {
     const S = SPEC[kind];
     if (!S || !this.list[kind]) return null;
-    const [x, z, a] = uvToWorld(B, u, v);
     const R = Math.max(hw, hd);
-    if (this._excluded(x, z, R * 0.85, B.core)) return null;
+    if (this._excluded(x, z, R * 0.85, B.core || B.extra)) return null;
     // 땅: 가운데와 네 귀퉁이
     const rot = -a + Math.PI / 2 + (o.rot || 0);
     const c = Math.cos(rot), s = Math.sin(rot);
@@ -411,6 +419,36 @@ export class CityFabric {
     return rec;
   }
 
+  /**
+   * 옛 돔 집 자리 → 새 집: structures·megacity 가 땅 위 집 자리를 world.houseQueue 에 남겨 두면(자리 지킴 충돌체와 함께)
+   * 여기서 도시의 집 모양(빌라·돔·거품 집)으로 짓는다 — 문·실내·주민이 있는, 들어갈 수 있는 집. 자리가 안 맞으면 짓지 않는다.
+   */
+  _extraHouses() {
+    const Q = this.world.houseQueue || [];
+    if (!Q.length) return;
+    const zone = { id: 'old-town', style: 'suburb', rural: true, buildings: 0, tall: [] };
+    const tints = (TINTS.pearl || ['#ffffff']).map((h) => new THREE.Color(h));
+    const groups = new Map();
+    let built = 0;
+    for (const q of Q) {
+      this.world.colliders.remove(q.col);
+      const gk = q.group || 'x';
+      if (!groups.has(gk)) groups.set(gk, { recs: [], spots: [], raw: [], idx: 60000 + groups.size, extra: true, act: 1, zone });
+      const B = groups.get(gk);
+      const rnd = mulberry32(Math.floor((q.x * 73856093) ^ (q.z * 19349663)) >>> 0);
+      const k = rnd();
+      const kind = q.r < 4.2 ? (k < 0.7 ? 'villa' : 'bubbles') : k < 0.62 ? 'villa' : k < 0.85 ? 'dome' : 'bubbles';
+      let hw, hd, h;
+      if (kind === 'villa') { hw = q.r * 1.25; hd = q.r * 1.2; h = 7.5 + rnd() * 3; }
+      else if (kind === 'dome') { hw = hd = q.r * 1.1; h = q.r * 1.15 + 2; }
+      else { hw = hd = q.r * 1.45; h = 9 + rnd() * 3; }
+      const use = q.use || (rnd() < 0.82 ? 'home' : rnd() < 0.5 ? 'cafe' : 'market');
+      const rec = this._bldgAt(zone, B, kind, q.x, q.z, q.fa ?? rnd() * TAU, hw, hd, h, { door: 1, use }, tints[Math.floor(rnd() * tints.length)], rnd);
+      if (rec) built++;
+    }
+    this.extraBuilt = built;
+  }
+
   /** 입구 자리 정하기 + 찾기용 칸에 넣기. door: -1 안쪽 거리 쪽, 1 바깥, 'u+' / 'u-' 블록 끝 쪽 */
   _addRec(r, a, door) {
     // 정한 쪽이 피할 곳(장소·인물·역…)에 막히면 다른 쪽에 문을 낸다 — 모든 건물이 쓰임을 갖게
@@ -459,6 +497,7 @@ export class CityFabric {
   fixDoor(r) {
     if (r.doorFixed || !r.door || !this.sets) return r;
     r.doorFixed = true;
+    this._fixedN = (this._fixedN || 0) + 1;
     const B = r.B, C = this.world.colliders;
     const ray = this._ray || (this._ray = new THREE.Raycaster());
     const pool = this._rayMesh || (this._rayMesh = {});
@@ -1187,24 +1226,27 @@ export class CityFabric {
       }
     }
     if (this.psets) this._fillProps(cam);
-    if (this.doors) {
-      const DR2 = Math.min(this.nearR, 700) ** 2;
-      const m4 = this._dm || (this._dm = new THREE.Matrix4()), q = this._dq || (this._dq = new THREE.Quaternion()), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
-      const sc = this._dsc || (this._dsc = new THREE.Vector3());
-      let k = 0, kc = 0;
-      for (const r of this.recs) {
-        if (k >= this.doorCap || kc >= this.doorCap) break;
-        const dx = r.door.x - cam.x, dy = r.floorY - cam.y, dz = r.door.z - cam.z;
-        if (dx * dx + dy * dy + dz * dz >= DR2 || r.open) continue;
-        q.setFromAxisAngle(up, r.door.yaw);
-        m4.compose(p.set(r.door.x, r.floorY, r.door.z), q, r.door.hs && r.door.hs !== 1 ? sc.set(1, r.door.hs, 1) : one);
-        if (r.door.covered) this.doorsC.setMatrixAt(kc++, m4); else this.doors.setMatrixAt(k++, m4);
-      }
-      this.doors.count = k;
-      this.doors.instanceMatrix.needsUpdate = true;
-      this.doorsC.count = kc;
-      this.doorsC.instanceMatrix.needsUpdate = true;
+    if (this.doors) this._fillDoors(cam);
+  }
+
+  /** 문 인스턴스: 자리를 잡은 문(doorFixed)만 그린다 — 어림 자리의 문이 벽 앞에 떠 있지 않게 */
+  _fillDoors(cam) {
+    const DR2 = Math.min(this.nearR, 700) ** 2;
+    const m4 = this._dm || (this._dm = new THREE.Matrix4()), q = this._dq || (this._dq = new THREE.Quaternion()), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
+    const sc = this._dsc || (this._dsc = new THREE.Vector3());
+    let k = 0, kc = 0;
+    for (const r of this.recs) {
+      if (k >= this.doorCap || kc >= this.doorCap) break;
+      const dx = r.door.x - cam.x, dy = r.floorY - cam.y, dz = r.door.z - cam.z;
+      if (!r.doorFixed || dx * dx + dy * dy + dz * dz >= DR2 || r.open) continue;
+      q.setFromAxisAngle(up, r.door.yaw);
+      m4.compose(p.set(r.door.x, r.floorY, r.door.z), q, r.door.hs && r.door.hs !== 1 ? sc.set(1, r.door.hs, 1) : one);
+      if (r.door.covered) this.doorsC.setMatrixAt(kc++, m4); else this.doors.setMatrixAt(k++, m4);
     }
+    this.doors.count = k;
+    this.doors.instanceMatrix.needsUpdate = true;
+    this.doorsC.count = kc;
+    this.doorsC.instanceMatrix.needsUpdate = true;
   }
 
   /** 아웬이 걷는 길: 구역 안이면 가장 가까운 고리 거리의 보도 위로 */
@@ -1289,9 +1331,13 @@ export class CityFabric {
     {
       const t1 = performance.now();
       if ((this._doorNearT = (this._doorNearT || 0) - dt) < 0) { this._doorNearT = 1; this._doorNear = this.recsNear(cam.x, cam.z, 420).filter((r) => !r.doorFixed); }
+      const n0 = this._fixedN || 0;
       while (this._doorNear && this._doorNear.length && performance.now() - t1 < 1.2) this.fixDoor(this._doorNear.pop());
       this._doorI = this._doorI || 0;
       while (this._doorI < this.recs.length && performance.now() - t1 < 1.2) this.fixDoor(this.recs[this._doorI++]);
+      // 새로 자리 잡은 문이 있으면 곧 다시 그린다 (카메라가 45 m 움직이기를 기다리지 않고)
+      if ((this._fixedN || 0) !== n0) this._doorsDirty = true;
+      if (this._doorsDirty && (this._doorFillT = (this._doorFillT || 0) - dt) < 0) { this._doorFillT = 0.3; this._doorsDirty = false; this._fillDoors(cam); }
     }
     this.lamps.update();
     this.beacons.update();

@@ -135,8 +135,14 @@ export class Megacity {
       if (placed.some(([px, pz, pr]) => Math.hypot(px - x, pz - z) < pr + r + 10)) continue;
       placed.push([x, z, r]);
       const y = heightAt(x, z) - 0.5;
-      const parts = rnd() < 0.6 ? A.domeHouse({ r, h: r * 1.2, seed: i + Dd.seed * 100, glow: GLOWS[i % 4] }) : A.spireTower({ h: 40 + rnd() * 80, r: r * 0.45, seed: i + Dd.seed * 200, glow: GLOWS[(i + 1) % 4] });
-      A.place(hi, parts, { x, y, z });
+      if (rnd() < 0.6) {
+        // 집: 옛 돔 집 대신 도시의 새 집(문·실내) — cityfabric._extraHouses 가 짓는다. 그때까지 자리 지킴 충돌체
+        const hr = Math.min(r, 9);
+        const col = this._col({ type: 'cyl', x, z, r: hr * 1.05, y0: y - 1, y1: y + hr * 1.2 });
+        (this.world.houseQueue || (this.world.houseQueue = [])).push({ x, z, r: hr, fa: Math.atan2(cz - z, cx - x), group: 'foot-' + Dd.id, col });
+        continue;
+      }
+      A.place(hi, A.spireTower({ h: 40 + rnd() * 80, r: r * 0.45, seed: i + Dd.seed * 200, glow: GLOWS[(i + 1) % 4] }), { x, y, z });
       this._col({ type: 'cyl', x, z, r: r * 0.95, y0: y - 1, y1: y + r * 1.1, dome: r * 0.6 });
       this.homes.push({ x, z, y: y + 0.5, r: r * 0.95, h: r * 1.2 });
     }

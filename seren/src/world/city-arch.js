@@ -759,7 +759,7 @@ export function cityArchetypes() {
       const secs = [], rows = hi ? 9 : 3;
       for (let i = 0; i <= rows; i++) { const t = (i / rows) * (Math.PI / 2) * 0.99; secs.push(ring(0.06 + Math.sin(t) * 0.94, pts, { s: Math.max(0.015, Math.cos(t)) })); }
       P.push(loft(secs, { color: 0xd8f4ec, type: 6 }));
-      if (hi) { P.push(solid(new THREE.OctahedronGeometry(0.035, 0).translate(0, 1.02, 0), ACC, 2.5)); P.push(...baseKit(pts, { h: 3.6, d: 2.2 })); }
+      if (hi) { P.push(solid(new THREE.OctahedronGeometry(0.035, 0).translate(0, 1.02, 0), ACC, 2.5)); P.push(...baseKit(pts, { h: 6.1, d: 2.4 })); } // 차양을 문(4.1 m)보다 높게 (건물 밑동은 땅 1.2 m 아래) — 문이 차양을 뚫거나 납작해지지 않게
       return mergeF(P);
     };
     A.biodome = { hi: make(true), lo: make(false) };
@@ -1054,7 +1054,7 @@ export function cityArchetypes() {
   kit('triad', [0, 2.094, 4.189].flatMap((a) => baseKit(squircle(12, 0.38, 0.38, 2.6), { base: { dx: Math.cos(a) * 0.56, dz: Math.sin(a) * 0.56 }, h: 5, d: 2.4, cols: 6 })));
   kit('halolab', baseKit(squircle(14, 0.5, 0.5, 2), { h: 4.6, d: 2.6, cols: 6 }));
   kit('gate', [-0.72, 0.72].flatMap((x) => baseKit(squircle(10, 0.28, 0.8, 8), { base: { dx: x }, h: 5.4, d: 2.6, cols: 4 })));
-  kit('dome', [aBox(0, 1.0, 0.16, 0.02, 0, 0, 3.4, 0x9fd8e8, 0.2, 0.2), aBox(0, 1.0, 0.2, 0.02, 0, 3.4, 3.6, PEARL2, 0, 0.6)]);
+  // (둥근 집의 붙박이 입구 판은 뺐다 — 진짜 문을 fixDoor 가 벽에 붙이는데, 판의 띠가 문을 가로질렀다)
   LANDMARKS = landmarkArchetypes(A);
   return A;
 }

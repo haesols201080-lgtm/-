@@ -223,8 +223,8 @@ export class Structures {
       occupied.push([x, z, r + 2]);
       const y = this._ground(x, z) - 0.3;
       if (rnd() < 0.78) {
-        A.place(parts, A.domeHouse({ r, h: r * (1.1 + rnd() * 0.4), seed: i + 40, glow: rnd() < 0.7 ? A.PAL.amber : A.PAL.teal }), { x, y, z });
-        this._col({ type: 'cyl', x, z, r: r * 0.95, y0: y - 1, y1: y + r * 1.15, dome: r * 0.6 });
+        rnd(); rnd(); // (옛 돔 집의 난수 자리 — 뒤의 배치가 바뀌지 않게)
+        this._house(x, z, r, { toward: [0, 0], group: 'harmonea' });
       } else {
         A.place(parts, A.gardenBed({ r: r + 1, seed: i }), { x, y, z });
         this._col({ type: 'cyl', x, z, r: r + 1, y0: y - 1, y1: y + 0.5 });
@@ -375,6 +375,14 @@ export class Structures {
     this.group.add(fount);
     this.well = { fount, x: cx, y: y0, z: cz, updraft: { x: cx, z: cz, r: 8, y0: y0, y1: y0 + 80, strength: 26, enabled: false } };
     this.world.updrafts.push(this.well.updraft);
+  }
+
+  /** 땅 위의 집 자리: 옛 돔 집 대신 도시의 새 집(문·실내가 있는 집)으로 — cityfabric._extraHouses 가 짓는다. 그때까지 자리 지킴 충돌체 */
+  _house(x, z, r, { toward, group, use } = {}) {
+    const y = this._ground(x, z);
+    const col = this._col({ type: 'cyl', x, z, r: r * 1.05, y0: y - 1, y1: y + r * 1.2 });
+    const fa = toward ? Math.atan2(toward[1] - z, toward[0] - x) : undefined;
+    (this.world.houseQueue || (this.world.houseQueue = [])).push({ x, z, r, fa, group, use, col });
   }
 
   /** 착륙선 선실의 쓸 것 (교신 단말·별지도·표본함·일지) */
@@ -550,8 +558,7 @@ export class Structures {
       const r = 3.5 + rnd() * 3;
       const y = this._ground(x, z) - 0.3;
       if (y < y0 - 10) continue;
-      A.place(pearl, A.domeHouse({ r, h: r * 1.3, seed: 700 + i, glow: A.PAL.rose }), { x, y, z });
-      this._col({ type: 'cyl', x, z, r: r * 0.95, y0: y - 1, y1: y + r * 1.3, dome: r * 0.7 });
+      this._house(x, z, r, { toward: [cx, cz], group: 'pearl-' + p.id });
     }
     this._mesh(crys, this.mats.crystal);
     this._mesh(pearl);
@@ -732,8 +739,7 @@ export class Structures {
         this._col({ type: 'cyl', x, z, r: r * 1.1, y0: y - 2, y1: y + h * 0.45 });
       } else {
         const r = 4 + rnd() * 3;
-        A.place(parts, A.domeHouse({ r, h: r * 1.2, seed: 960 + i, glow: 0x7ff0ff }), { x, y: y - 0.3, z });
-        this._col({ type: 'cyl', x, z, r: r * 0.95, y0: y - 1, y1: y + r * 1.2, dome: r * 0.7 });
+        this._house(x, z, r, { toward: [cx, cz], group: 'sea-' + p.id });
       }
     }
     // 물 위의 꽃잎 발판 (썰매로 건널 수 있는 징검다리)
