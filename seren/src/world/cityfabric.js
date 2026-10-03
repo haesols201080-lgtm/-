@@ -468,6 +468,20 @@ export class CityFabric {
       }
       return best;
     };
+    // 미터로 붙는 장식(1층 차양·차양 기둥·난간): 셰이더가 옮기는 자리 그대로 따로 만들어 본다
+    const ancM = new Map();
+    const ancOf = (q) => { if (!ancM.has(q)) ancM.set(q, this._ancMesh(q, setOf)); return ancM.get(q); };
+    const hitAnc = () => {
+      let best = null;
+      for (const q of near) {
+        const m = ancOf(q);
+        if (!m) continue;
+        const h = ray.intersectObject(m, false)[0];
+        if (h && (!best || h.distance < best.d)) best = { d: h.distance, q };
+      }
+      return best;
+    };
+    const done = () => { for (const m of ancM.values()) if (m) m.geometry.dispose(); };
     const onPodium = (q) => {
       if (!q.podiumKind || r.podiumKind) return false;
       const c = Math.cos(q.rot), s = Math.sin(q.rot), dx = r.x - q.x, dz = r.z - q.z;
@@ -476,12 +490,12 @@ export class CityFabric {
     const n0 = [r.door.nx, r.door.nz];
     const cands = [n0, [-n0[0], -n0[1]], [-n0[1], n0[0]], [n0[1], -n0[0]]];
     const p = new THREE.Vector3();
-    // 한 쪽 벽에 문 자리 찾기. strict: 문 너비와 양옆 여유(±2.45 m)가 고른 벽이어야 — 기둥·지느러미·모서리에 걸치거나 붙지 않게 옆으로 밀어 본다
+    // 한 쪽 벽에 문 자리 찾기. strict: 문 너비와 양옆 여유(±3 m)가 고른 벽이어야 — 기둥·지느러미·모서리에 걸치거나 붙지 않게 옆으로 밀어 본다
     const tryPlace = (nx, nz, strict) => {
       const tx = -nz, tz = nx;
       const e0 = planExt(r, nx, nz);
       const ge = Math.max(heightAt(r.x + nx * (e0 + 2), r.z + nz * (e0 + 2)), 0);
-      for (const sl of strict ? [0, -1.6, 1.6, -3.2, 3.2, -4.8, 4.8] : [0]) {
+      for (const sl of strict ? [0, -1.6, 1.6, -3.2, 3.2, -4.8, 4.8, -6.4, 6.4] : [0]) {
         const ox = r.x + tx * sl, oz = r.z + tz * sl;
         const cast = (lat, dy) => {
           O.set(ox + tx * lat + nx * far, ge + dy, oz + tz * lat + nz * far); D.set(-nx, 0, -nz);
@@ -493,10 +507,16 @@ export class CityFabric {
         if (!best || (best.q !== r && !onPodium(best.q))) continue;
         if (strict) {
           let flat = true;
-          for (const lat of [-1.95, 1.95, -2.45, 2.45]) for (const dy of [1.0, 3.2]) {
+          for (const lat of [-1.95, 1.95, -2.5, 2.5, -3.05, 3.05]) for (const dy of [1.0, 3.2]) {
             const h = cast(lat, dy);
             // 옆이 더 튀어나왔으면(기둥) 문틀과 겹치고, 훨씬 멀면(모서리 밖) 문이 허공에 걸린다
             if (!h || h.q !== best.q || h.d < best.d - 0.12 || h.d > best.d + 1.1) { flat = false; break; }
+          }
+          // 1층 차양의 기둥이 문 앞·옆(±2.4 m)에 서 있으면 기둥 사이로 옮긴다
+          if (flat) for (let lat = -2.4; lat <= 2.41 && flat; lat += 0.6) {
+            O.set(ox + tx * lat + nx * far, ge + 1.5, oz + tz * lat + nz * far); D.set(-nx, 0, -nz);
+            ray.set(O, D); ray.far = best.d + 0.05;
+            if (hitAnc()) flat = false;
           }
           if (!flat) continue;
         }
@@ -511,18 +531,25 @@ export class CityFabric {
         const px = p.x, pz = p.z;
         C.pushOut(p, 0.45, 1.8, 0.6);
         if (Math.hypot(p.x - px, p.z - pz) > 0.25) continue;
-        return { dx, dz, fy };
+        // 문 앞 위가 건물의 처마·1층 차양에 덮였나 (그러면 문에 차양을 따로 달지 않는다)
+        O.set(dx + nx * 1.0, fy + 1.0, dz + nz * 1.0); D.set(0, 1, 0);
+        ray.set(O, D); ray.far = 8;
+        const cover = hitNearest() || hitAnc();
+        return { dx, dz, fy, covered: !!cover, under: cover ? cover.d + 1.0 : 99 };
       }
       return null;
     };
     for (const strict of [true, false]) for (const [nx, nz] of cands) {
       const got = tryPlace(nx, nz, strict);
       if (!got) continue;
-      const { dx, dz, fy } = got;
+      const { dx, dz, fy, covered, under } = got;
       const k0 = Math.floor(r.door.x / 80) * 100003 + Math.floor(r.door.z / 80);
-      r.door = { x: dx, z: dz, nx, nz, yaw: Math.atan2(nx, nz) };
+      // 차양 밑이 문보다 낮으면 문을 그 높이에 맞춰 낮춘다 (문틀 꼭대기 4.25 m)
+      const hs = covered && under < 4.45 ? Math.max(0.62, (under - 0.08) / 4.25) : 1;
+      r.door = { x: dx, z: dz, nx, nz, yaw: Math.atan2(nx, nz), covered, hs };
       r.ext = Math.hypot(dx - r.x, dz - r.z);
       r.floorY = fy;
+      done();
       const k1 = Math.floor(dx / 80) * 100003 + Math.floor(dz / 80);
       if (k1 !== k0) {
         const a = this.recGrid.get(k0);
@@ -532,7 +559,44 @@ export class CityFabric {
       }
       return r;
     }
+    done();
     return r; // 맞는 벽이 없으면 처음 자리 그대로
+  }
+
+  /** 건물 하나의 미터 고정 장식(anc)만 셰이더와 같은 방식으로 옮겨 놓은 메시 (광선 검사용, 쓰고 나면 버린다) */
+  _ancMesh(q, setOf) {
+    const C = this._ancC || (this._ancC = new Map());
+    if (!C.has(q.kind)) {
+      const g = this.arch[q.kind] && this.arch[q.kind].hi;
+      let out = null;
+      if (g && g.attributes.anc) {
+        const P = g.attributes.position, A = g.attributes.anc, I = g.index;
+        const n = I ? I.count : P.count, pos = [], anc = [];
+        for (let t = 0; t + 2 < n; t += 3) {
+          const ids = [0, 1, 2].map((k) => (I ? I.getX(t + k) : t + k));
+          if (!ids.every((i) => A.getX(i) > 0.5)) continue;
+          for (const i of ids) { pos.push(P.getX(i), P.getY(i), P.getZ(i)); anc.push(A.getY(i), A.getZ(i)); }
+        }
+        if (pos.length) out = { pos: new Float32Array(pos), anc: new Float32Array(anc) };
+      }
+      C.set(q.kind, out);
+    }
+    const a = C.get(q.kind);
+    if (!a || !setOf.has(q.kind)) return null;
+    const n = a.pos.length / 3, p = new Float32Array(a.pos.length);
+    for (let i = 0; i < n; i++) {
+      let x = a.pos[i * 3], y = a.pos[i * 3 + 1], z = a.pos[i * 3 + 2];
+      y += a.anc[i * 2] / q.sy;
+      const az = a.anc[i * 2 + 1];
+      if (Math.abs(az) > 1e-4 && x * x + z * z > 1e-8) { const wx = x * q.sx, wz = z * q.sz, L = Math.hypot(wx, wz); x += (wx / L / q.sx) * az; z += (wz / L / q.sz) * az; }
+      p[i * 3] = x; p[i * 3 + 1] = y; p[i * 3 + 2] = z;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    const m = new THREE.Mesh(geo, this._ancMat || (this._ancMat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })));
+    m.matrixAutoUpdate = false;
+    m.matrixWorld.fromArray(setOf.get(q.kind).mats, q.idx * 16);
+    return m;
   }
   /** 블록의 문 앞(문에서 바깥으로 3.4 m)과 겹치나 — 소품·조작대가 문을 막지 않게 */
   _doorBlocked(B, x, z, rr) {
@@ -1034,6 +1098,12 @@ export class CityFabric {
     this.doors.count = 0;
     this.doors.frustumCulled = false;
     this.scene.add(this.doors);
+    // 처마·아케이드 밑의 문 (차양 없이)
+    this.doorsC = new THREE.InstancedMesh(doorGeo({ canopy: false }), this.matHi, this.doorCap);
+    this.doorsC.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.doorsC.count = 0;
+    this.doorsC.frustumCulled = false;
+    this.scene.add(this.doorsC);
   }
 
   /** 홀로그램 간판: 아웬 글자가 흐르는 빛 판 (인스턴스 1회 그리기) */
@@ -1110,17 +1180,20 @@ export class CityFabric {
     if (this.doors) {
       const DR2 = Math.min(this.nearR, 700) ** 2;
       const m4 = this._dm || (this._dm = new THREE.Matrix4()), q = this._dq || (this._dq = new THREE.Quaternion()), up = new THREE.Vector3(0, 1, 0), one = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
-      let k = 0;
+      const sc = this._dsc || (this._dsc = new THREE.Vector3());
+      let k = 0, kc = 0;
       for (const r of this.recs) {
-        if (k >= this.doorCap) break;
+        if (k >= this.doorCap || kc >= this.doorCap) break;
         const dx = r.door.x - cam.x, dy = r.floorY - cam.y, dz = r.door.z - cam.z;
         if (dx * dx + dy * dy + dz * dz >= DR2 || r.open) continue;
         q.setFromAxisAngle(up, r.door.yaw);
-        m4.compose(p.set(r.door.x, r.floorY, r.door.z), q, one);
-        this.doors.setMatrixAt(k++, m4);
+        m4.compose(p.set(r.door.x, r.floorY, r.door.z), q, r.door.hs && r.door.hs !== 1 ? sc.set(1, r.door.hs, 1) : one);
+        if (r.door.covered) this.doorsC.setMatrixAt(kc++, m4); else this.doors.setMatrixAt(k++, m4);
       }
       this.doors.count = k;
       this.doors.instanceMatrix.needsUpdate = true;
+      this.doorsC.count = kc;
+      this.doorsC.instanceMatrix.needsUpdate = true;
     }
   }
 

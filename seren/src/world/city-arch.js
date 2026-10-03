@@ -1286,7 +1286,7 @@ export const SPEC = {
 /** 건물 입구: 빛의 막이 드리운 문틀 + 차양 + 문턱 (로컬: x 가 벽을 따라, +z 가 바깥) */
 // 문: 원점 = 바깥벽에서 0.17 m 앞, +z = 바깥. 벽에 거의 붙은 얇은 문틀(앞으로 0.17 m)과 빛 테두리, 두 짝 유리문,
 // 가벼운 빛 차양과 문턱 판. 문틀은 벽 쪽으로 1 m 숨은 깊이가 있어 위로 들어가는 둥근 벽(돔)에도 틈이 생기지 않는다
-export function doorGeo() {
+export function doorGeo({ canopy = true } = {}) {
   return mergeF([
     solid(new THREE.BoxGeometry(0.3, 4.1, 1.12).translate(-1.75, 2.05, -0.54), PEARL),
     solid(new THREE.BoxGeometry(0.3, 4.1, 1.12).translate(1.75, 2.05, -0.54), PEARL),
@@ -1299,9 +1299,11 @@ export function doorGeo() {
     solid(new THREE.PlaneGeometry(1.54, 3.86).translate(-0.79, 1.95, -0.06), 0x5fb4c8, 0.32),
     solid(new THREE.PlaneGeometry(1.54, 3.86).translate(0.79, 1.95, -0.06), 0x5fb4c8, 0.32),
     solid(new THREE.BoxGeometry(0.04, 3.86, 0.04).translate(0, 1.95, -0.03), PEARL2, 0.4),
-    // 가벼운 빛 차양 (벽에서 1.5 m) + 앞 가장자리 빛
-    solid(new THREE.BoxGeometry(4.4, 0.07, 1.65).translate(0, 4.38, 0.66), PEARL2),
-    solid(new THREE.BoxGeometry(4.3, 0.04, 0.05).translate(0, 4.35, 1.47), ACC, 2.0),
+    // 가벼운 빛 차양 (벽에서 1.5 m) + 앞 가장자리 빛 — 건물의 처마·아케이드 밑이면 빼고
+    ...(canopy ? [
+      solid(new THREE.BoxGeometry(4.4, 0.07, 1.65).translate(0, 4.38, 0.66), PEARL2),
+      solid(new THREE.BoxGeometry(4.3, 0.04, 0.05).translate(0, 4.35, 1.47), ACC, 2.0),
+    ] : []),
     // 문턱 판
     solid(new THREE.BoxGeometry(3.6, 0.05, 1.3).translate(0, 0.025, 0.5), 0xb8b2c4),
     solid(new THREE.BoxGeometry(3.4, 0.02, 0.06).translate(0, 0.055, 1.12), ACC, 1.2),
