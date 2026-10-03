@@ -83,7 +83,7 @@ export class Structures {
     this.spineBase = H0;
     const deckY = H0 + 1300;
     this.deckY = deckY;
-    const parts = [];
+    const parts = [], ribParts = [];
     const ribs = 6;
     const gold = A.PAL.gold, pearl = A.PAL.pearl;
     for (let i = 0; i < ribs; i++) {
@@ -91,11 +91,15 @@ export class Structures {
       // 꽃받침처럼 바깥으로 부풀었다가 위에서 모이는 갈비
       const prof = [[420, -10], [500, 160], [500, 420], [420, 700], [280, 980], [140, 1180], [62, 1290]];
       const pts = prof.map(([r, y]) => V(Math.cos(a) * r, H0 + y, Math.sin(a) * r));
-      const g = tube(pts, 30, 12, 36, (t) => 1.9 - 1.25 * t + 0.6 * Math.max(0, 0.12 - t) * 8);
-      const band = (y) => Math.abs((((y - H0) % 80) + 80) % 80 - 40) < 1.8;
-      parts.push(part(g, (x, y) => (band(y) ? gold : pearl), (x, y) => (band(y) ? 1.3 : 0)));
-      // 밑동 받침
-      parts.push(part(xf(lathe([[95, 0], [80, 25], [62, 60], [56, 90]], 14), { x: Math.cos(a) * 425, y: H0 - 8, z: Math.sin(a) * 425 }), A.PAL.pearl2, 0));
+      const g = tube(pts, 30, 20, 90, (t) => 1.9 - 1.25 * t + 0.6 * Math.max(0, 0.12 - t) * 8);
+      ribParts.push(part(g, pearl, 0)); // 띠·판 이음·빛줄은 외피 셰이더가 (USE_RIBS)
+      // 밑동 받침: 세 단으로 내려앉은 발 + 땅에 닿는 빛 고리
+      const bx = Math.cos(a) * 425, bz = Math.sin(a) * 425;
+      ribParts.push(part(xf(lathe([[95, 0], [80, 25], [62, 60], [56, 90]], 28), { x: bx, y: H0 - 8, z: bz }), A.PAL.pearl2, 0));
+      ribParts.push(part(xf(new THREE.CylinderGeometry(102, 106, 2.2, 48), { x: bx, y: H0 - 0.2, z: bz }), 0xb8b2c4, 0));
+      ribParts.push(part(xf(new THREE.CylinderGeometry(98, 100, 1.4, 48), { x: bx, y: H0 + 1.4, z: bz }), 0xd0cad8, 0));
+      ribParts.push(part(xf(new THREE.TorusGeometry(99.2, 0.35, 4, 96), { x: bx, y: H0 + 2.15, z: bz, rx: Math.PI / 2 }), A.PAL.teal, 1.6));
+      ribParts.push(part(xf(new THREE.TorusGeometry(106.4, 0.3, 4, 96), { x: bx, y: H0 + 0.95, z: bz, rx: Math.PI / 2 }), gold, 1.2));
       this._col({ type: 'cyl', x: Math.cos(a) * 425, z: Math.sin(a) * 425, r: 80, y0: H0 - 10, y1: H0 + 60, walk: true });
       this._col({ type: 'cyl', x: Math.cos(a) * 470, z: Math.sin(a) * 470, r: 55, y0: H0 + 60, y1: H0 + 520, walk: false });
     }
@@ -113,6 +117,7 @@ export class Structures {
     parts.push(part(new THREE.CircleGeometry(100, 48).rotateX(-Math.PI / 2).translate(0, H0 + 0.8, 0), 0x2a7a8a, 0.35));
     this._col({ type: 'cyl', x: 0, z: 0, r: 252, y0: H0 - 5, y1: H0 + 0.7 });
     this._mesh(parts);
+    this._mesh(ribParts, litMaterial({ vertexColors: true, vertexEmit: true, emissive: 0xffffff, emissiveIntensity: 1.8, emissiveNight: 0.9, rim: 0.35, spec: 0.5, ribs: H0 }));
 
     // 승강줄 (구슬 마디가 있는 굵은 줄)
     const tetherH = this.world.tetherTop - deckY;
@@ -267,8 +272,7 @@ export class Structures {
         const b = rnd() * Math.PI * 2, d = rnd() * r * 0.5;
         const hr = 3 + rnd() * 3;
         const hx = x + Math.cos(b) * d, hz = z + Math.sin(b) * d;
-        A.place(pParts, A.domeHouse({ r: hr, h: hr * 1.2, seed: 300 + i * 3 + j }), { x: hx, y, z: hz });
-        this._col({ type: 'cyl', x: hx, z: hz, r: hr * 0.95, y0: y, y1: y + hr * 1.2, dome: hr * 0.6 });
+        this._house(hx, hz, hr, { toward: [x, z], group: 'petal-' + i, deck: y }); // 갑판 위의 새 집 (들어갈 수 있다)
       }
       if (k === 0) A.place(pParts, A.gardenBed({ r: r * 0.4, seed: 50 + i }), { x, y, z });
     }
@@ -378,11 +382,11 @@ export class Structures {
   }
 
   /** 땅 위의 집 자리: 옛 돔 집 대신 도시의 새 집(문·실내가 있는 집)으로 — cityfabric._extraHouses 가 짓는다. 그때까지 자리 지킴 충돌체 */
-  _house(x, z, r, { toward, group, use } = {}) {
-    const y = this._ground(x, z);
-    const col = this._col({ type: 'cyl', x, z, r: r * 1.05, y0: y - 1, y1: y + r * 1.2 });
+  _house(x, z, r, { toward, group, use, deck } = {}) {
+    const y = deck ?? this._ground(x, z);
+    const col = this._col({ type: 'cyl', x, z, r: r * 1.05, y0: deck !== undefined ? y + 0.1 : y - 1, y1: y + r * 1.2 });
     const fa = toward ? Math.atan2(toward[1] - z, toward[0] - x) : undefined;
-    (this.world.houseQueue || (this.world.houseQueue = [])).push({ x, z, r, fa, group, use, col });
+    (this.world.houseQueue || (this.world.houseQueue = [])).push({ x, z, r, fa, group, use, col, deck });
   }
 
   /** 착륙선 선실의 쓸 것 (교신 단말·별지도·표본함·일지) */
@@ -611,8 +615,7 @@ export class Structures {
         const a = rnd() * Math.PI * 2, d = rnd() * capR * 0.35;
         const hx = x + Math.cos(a) * d, hz = z + Math.sin(a) * d, hr = 3.5 + rnd() * 2;
         const hy = top + 8 - 7.5 * (d / capR) ** 2 - 0.5;
-        A.place(parts, A.domeHouse({ r: hr, h: hr * 1.3, seed: 900 + i + dx, glow: A.PAL.teal }), { x: hx, y: hy, z: hz });
-        this._col({ type: 'cyl', x: hx, z: hz, r: hr * 0.95, y0: hy - 1, y1: hy + hr * 1.3, dome: hr * 0.7 });
+        this._house(hx, hz, hr, { toward: [x, z], group: 'cap-' + dx, deck: hy + 0.45 }); // 갓 위의 새 집 (들어갈 수 있다)
       }
     }
     // 갓과 갓을 잇는 다리

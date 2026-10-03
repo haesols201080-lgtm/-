@@ -150,7 +150,7 @@ src/
 - **착륙선** `world/lander.js`: `landerShell()` 이 바깥 모양(로컬 x = 앞, z+ = 해치), `buildLander` 가 선실·충돌체·안테나·쓸 것(`stations` → `structures.landerTarget`, game `landerUse`).
 - **생물** `world/fauna.js`: 종 정의 `SPECIES`(모양+움직임 GLSL), 지역 서식 `HAB`, 마을의 자리는 `world.faunaSites`, 앉을 곳 `world.perches`.
 - **장소의 일 자리** `world.placeSpots`(dewfold 가 채움) → 주민이 그 자리에서 일한다. 식생을 비울 곳은 `world.clearZones`(`world.cleared(x, z)`).
-- **땅 위의 집은 도시의 집으로**: 구조물 빌더가 집을 놓을 때는 돔 모델 대신 `structures._house(x, z, r, {toward, group})`(또는 `world.houseQueue` 에 직접 + 자리 지킴 충돌체) — `cityfabric._extraHouses` 가 들어갈 수 있는 집(빌라·돔·거품 집)으로 짓는다(`_bldgAt` = 세계 좌표 건물). 떠 있는 곳·움직이는 곳은 아직 돔 모델.
+- **땅 위의 집은 도시의 집으로**: 구조물 빌더가 집을 놓을 때는 돔 모델 대신 `structures._house(x, z, r, {toward, group})`(또는 `world.houseQueue` 에 직접 + 자리 지킴 충돌체) — `cityfabric._extraHouses` 가 들어갈 수 있는 집(빌라·돔·거품 집)으로 짓는다(`_bldgAt` = 세계 좌표 건물). 갑판 위는 `deck: 높이`(땅 대신 그 높이가 바닥, 문 앞이 갑판인 벽에만 문). 움직이는 곳(거신·떠다니는 섬)·하늘바퀴 층은 아직 돔 모델.
 - **문**: `_fillDoors` 는 `doorFixed` 문만 그린다. 문 자리를 새로 잡으면(`_fixedN` 증가) 0.3 초 안에 다시 그린다.
 - **빛길 관 받침 기둥**: `transit.supportPts` → 충돌체 + 도시 피할 곳(7 m).
 - **분수의 물**: `fountainWaterGeo`/`fountainWaterMaterial`(분수 인스턴스 행렬을 나눠 씀), 연못 테 충돌체는 고리 모양 상자 열둘(`PROPCOL` 상자의 8번째 값 = 추가 회전), `city.fountainAt(x, z)` → game `_wading`(플레이어 `wade`).

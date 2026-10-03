@@ -418,6 +418,37 @@ void main() {
   float ln2 = smoothstep(0.05, 0.0, abs(fract(atan(vLocal.z, vLocal.x) * 3.0) - 0.5) - 0.46);
   em += uLineColor * max(ln, ln2 * 0.6) * (0.5 + uGlow);
 #endif
+#ifdef USE_RIBS
+  // 척추 갈비의 외피 (가까이서 보면 민무늬 판이던 것): 판 이음(가로 9 m · 둘레 12 m), 판마다 조금씩 다른 진주빛,
+  // 80 m 마다 금빛 띠, 몇 판마다 세로로 흐르는 빛줄, 밑동의 비·흙 얼룩. 둘레 좌표는 노멀 방향으로 섞는다(관을 감싸는 면)
+  {
+    vec2 rdir = normalize(vWorld.xz + vec2(1e-4));
+    vec2 tdir = vec2(-rdir.y, rdir.x);
+    vec2 Nh = N.xz;
+    float wr = abs(dot(Nh, rdir)), wt = abs(dot(Nh, tdir));
+    float u = (dot(vWorld.xz, tdir) * wr + length(vWorld.xz) * wt + vWorld.y * abs(N.y) * 0.6) / max(wr + wt + abs(N.y) * 0.6, 1e-3);
+    float hy = vWorld.y - RIB_H0;
+    vec2 pc = vec2(u / 12.0, hy / 9.0);
+    vec2 pf = fract(pc), pid = floor(pc);
+    vec2 pw = max(fwidth(pc), vec2(1e-4));
+    float aa = clamp(1.5 - max(pw.x, pw.y) * 4.0, 0.0, 1.0);
+    float seam = max(1.0 - smoothstep(0.0, 0.012 + pw.x * 1.2, min(pf.x, 1.0 - pf.x)), 1.0 - smoothstep(0.0, 0.016 + pw.y * 1.2, min(pf.y, 1.0 - pf.y))) * aa;
+    float ph = hash12(pid);
+    col *= (0.93 + 0.12 * ph) * (1.0 - seam * 0.28);
+    // 금빛 띠 (80 m 마다 1.6 m)
+    float bq = hy / 80.0, bw = fwidth(bq) * 2.0;
+    float band = smoothstep(0.98 - bw * 1.5, 0.98, abs(fract(bq) - 0.5) * 2.0); // 띠 가운데 = 80 m 의 배수
+    col = mix(col, col * vec3(1.25, 1.0, 0.62), band * 0.75);
+    em += vec3(1.0, 0.78, 0.42) * band * (0.08 + uGlow * 0.5);
+    // 세로 빛줄: 몇 판마다, 위로 흐른다
+    float vl = step(0.8, hash12(vec2(pid.x, 7.0))) * (1.0 - smoothstep(0.0, 0.03 + pw.x * 1.5, abs(pf.x - 0.5))) * aa;
+    em += vec3(0.45, 1.0, 0.92) * vl * (0.08 + uGlow * 0.55) * (0.6 + 0.4 * sin(uTime * 1.5 - hy * 0.08));
+    // 밑동: 비·흙 얼룩과 이끼 기운
+    float low = 1.0 - smoothstep(0.0, 14.0, hy);
+    col *= 1.0 - low * (0.18 + 0.12 * vnoise(vWorld.xz * 0.2 + vWorld.y * 0.1));
+    col = mix(col, col * vec3(0.82, 0.95, 0.86), low * 0.4 * vnoise(vWorld.xz * 0.05));
+  }
+#endif
   // 햇빛 받은 흰 벽이 블룸 문턱을 넘어 「빛나는」 것처럼 보이지 않게: 반사광만 부드럽게 눌러 준다 (빛은 em 으로 따로)
   float litL = dot(col, vec3(0.2126, 0.7152, 0.0722));
   col *= 1.0 / (1.0 + max(litL - 0.72, 0.0) * 1.15);
@@ -443,6 +474,7 @@ export function litMaterial(opts = {}) {
   if (opts.vertexColors) defines.USE_VCOLOR = '';
   if (opts.wind) defines.USE_WIND = '';
   if (opts.lines) defines.USE_LINES = '';
+  if (opts.ribs !== undefined) { defines.USE_RIBS = ''; defines.RIB_H0 = Number(opts.ribs).toFixed(1); } // 척추 갈비 외피 (값 = 밑동 높이)
   if (opts.vertexEmit) defines.USE_VEMIT = '';
   if (opts.push) defines.USE_PUSH = '';
   if (opts.windows) defines.USE_WINDOWS = '';

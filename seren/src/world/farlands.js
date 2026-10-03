@@ -129,8 +129,7 @@ export class Farlands {
           for (let j = 0; j < k; j++) {
             const hr = 3 + rnd() * 3, b = rnd() * Math.PI * 2, d = rnd() * r * 0.45;
             const hx = px + Math.cos(b) * d, hz = pz + Math.sin(b) * d;
-            A.place(parts, A.domeHouse({ r: hr, h: hr * 1.25, seed: Math.floor(y + z + j), glow: glows[(j + 1) % 4] }), { x: hx, y, z: hz });
-            this._col({ type: 'cyl', x: hx, z: hz, r: hr * 0.95, y0: y, y1: y + hr * 1.2, dome: hr * 0.6 });
+            this.structures._house(hx, hz, hr, { toward: [px, pz], group: 'wallpetal-' + Math.floor(z), deck: y }); // 꽃잎 갑판 위의 새 집 (들어갈 수 있다)
           }
           if (k === 0 && rnd() < 0.5) A.place(parts, A.spireTower({ h: 20 + rnd() * 30, r: 2.4, seed: Math.floor(y * z), glow: glows[k] }), { x: px, y, z: pz });
           this._col({ type: 'cyl', x: px, z: pz, r: r * 0.96, y0: y - r * 0.3, y1: y + 0.02 });
@@ -301,8 +300,7 @@ export class Farlands {
     for (const rr of [120, 160]) parts.push(part(xf(new THREE.RingGeometry(rr - 1.5, rr + 1.5, 64), { y: 2.1, rx: -Math.PI / 2 }), 0x9fd8ff, 1.6));
     for (let i = 0; i < 6; i++) {
       const a = (i / 6) * Math.PI * 2 + 0.3;
-      A.place(parts, A.domeHouse({ r: 8, h: 10, seed: 700 + i, glow: 0x9fd8ff }), { x: Math.cos(a) * 130, y: 2, z: Math.sin(a) * 130 });
-      this._col({ type: 'cyl', x: cx + Math.cos(a) * 130, z: cz + Math.sin(a) * 130, r: 7.6, y0: g, y1: g + 12, dome: 5 });
+      this.structures._house(cx + Math.cos(a) * 130, cz + Math.sin(a) * 130, 7.5, { toward: [cx, cz], group: 'plat-' + Math.floor(cx), deck: g + 2.1 }); // 받침 위의 새 집 (들어갈 수 있다)
     }
     this._add(parts.map((p) => xf(p, { x: cx, y: g, z: cz })));
     this._col({ type: 'cyl', x: cx, z: cz, r: 185, y0: g - 20, y1: g + 2 });

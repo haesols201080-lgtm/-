@@ -468,9 +468,10 @@ export class Megacity {
         this.homes.push({ x: cx + px, z: cz + pz, y, r: sr * 1.2, h: sh, halo: H.id, a, R });
       } else if (k < 0.72) {
         const hr = 5 + rnd() * 5;
-        A.place(parts, A.domeHouse({ r: hr, h: hr * 1.15, seed: H.seed * 70 + i, glow: rnd() < 0.6 ? PAL.amber : PAL.teal }), { x: px, y: 0, z: pz });
-        this._col({ type: 'cyl', x: cx + px, z: cz + pz, r: hr * 0.95, y0: y - 1, y1: y + hr * 1.1, dome: hr * 0.6 });
-        this.homes.push({ x: cx + px, z: cz + pz, y, r: hr * 0.95, h: hr * 1.15, halo: H.id, a, R });
+        rnd(); // (옛 돔 집의 난수 자리)
+        // 하늘고리 갑판 위의 새 집 (들어갈 수 있다) — cityfabric._extraHouses 가 짓는다
+        const col = this._col({ type: 'cyl', x: cx + px, z: cz + pz, r: hr * 1.05, y0: y + 0.1, y1: y + hr * 1.2 });
+        (this.world.houseQueue || (this.world.houseQueue = [])).push({ x: cx + px, z: cz + pz, r: hr, fa: Math.atan2(-pz, -px), group: 'halo-' + H.id, col, deck: y });
       } else if (k < 0.9) {
         A.place(parts, A.gardenBed({ r: 5 + rnd() * 3, seed: i }), { x: px, y: 0, z: pz });
       }

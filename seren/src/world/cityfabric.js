@@ -345,19 +345,20 @@ export class CityFabric {
     const S = SPEC[kind];
     if (!S || !this.list[kind]) return null;
     const R = Math.max(hw, hd);
-    if (this._excluded(x, z, R * 0.85, B.core || B.extra)) return null;
+    const deck = o.deck; // 땅이 아닌 갑판(꽃잎 섬·버섯 갓·하늘고리) 위: 그 높이가 바닥
+    if (deck === undefined && this._excluded(x, z, R * 0.85, B.core || B.extra)) return null;
     // 땅: 가운데와 네 귀퉁이
     const rot = -a + Math.PI / 2 + (o.rot || 0);
     const c = Math.cos(rot), s = Math.sin(rot);
-    const hc = heightAt(x, z);
+    const hc = deck ?? heightAt(x, z);
     let mn = hc, mx = hc;
-    for (const [lx, lz] of [[hw, hd], [-hw, hd], [hw, -hd], [-hw, -hd]]) { const h2 = heightAt(x + lx * c + lz * s, z - lx * s + lz * c); mn = Math.min(mn, h2); mx = Math.max(mx, h2); }
-    const wet = mn < 1.2;
+    if (deck === undefined) for (const [lx, lz] of [[hw, hd], [-hw, hd], [hw, -hd], [-hw, -hd]]) { const h2 = heightAt(x + lx * c + lz * s, z - lx * s + lz * c); mn = Math.min(mn, h2); mx = Math.max(mx, h2); }
+    const wet = deck === undefined && mn < 1.2;
     if (wet && !(kind === 'stilt' || B.stilt)) return null;
     // 벼랑에 걸치지 않게 (땅을 고른 도시에서는 늘 0 — 협곡 도시·시골에서 건물 한쪽이 흙에 묻히던 것)
     if (mx - mn > Math.min(Math.min(hw, hd) * 0.5 + 3.5, 6)) return null;
     // 시골: 땅은 자연 그대로, 건물 자리만 집터로 고른다(가운데와 네 귀퉁이 높이의 평균 — 길가 집은 길 높이 쪽으로)
-    const pad = zone.rural && !wet && kind !== 'stilt' && !S.fixed;
+    const pad = deck === undefined && zone.rural && !wet && kind !== 'stilt' && !S.fixed;
     let padH = hc;
     if (pad) {
       if (mx - mn > Math.min(hw, hd) * 0.35 + 2.5) return null;
@@ -366,12 +367,12 @@ export class CityFabric {
       padH = sum / n;
       mn = mx = padH;
     }
-    const gy = pad ? padH : Math.max(hc, 0);
-    const under = this._under(x, z, R + 2);
+    const gy = pad ? padH : deck ?? Math.max(hc, 0);
+    const under = deck === undefined ? this._under(x, z, R + 2) : Infinity;
     if (under - gy < 14) return null;
-    const room = Math.min(this._room(x, z, R, gy), under);
+    const room = deck === undefined ? Math.min(this._room(x, z, R, gy), under) : Infinity;
     if (room < 0) return null;
-    let base = (wet ? Math.min(mn, 0) : mn) - 1.2;
+    let base = deck !== undefined ? deck - 0.3 : (wet ? Math.min(mn, 0) : mn) - 1.2;
     let sy = h + (gy - base);
     // 물 위 집: 깊이와 상관없이 제 키(마루가 물·땅 위 1.2 m), 다리는 물속으로 — 깊은 물에서 늘어나 집이 물에 잠기지 않게
     if (kind === 'stilt') { sy = h; base = Math.max(mx, 0) + 1.2 - 0.53 * sy; } // 마루는 가장 높은 땅·물 위 1.2 m
@@ -403,7 +404,7 @@ export class CityFabric {
         cols.push(col); top = Math.max(top, col.y1);
       }
     }
-    const rec = { kind, idx, x, z, a, base, gy, mx, sx, sy, sz, rot, cols, top, zone: zone.id, B, use: o.use || 'home', style: zone.style, seed: rnd(), podiumKind: !!o.podium, pad };
+    const rec = { kind, idx, x, z, a, base, gy, mx, sx, sy, sz, rot, cols, top, zone: zone.id, B, use: o.use || 'home', style: zone.style, seed: rnd(), podiumKind: !!o.podium, pad, deck };
     B.recs.push(rec);
     if (OUTDOOR[kind] && !S.enter) { rec.out = OUTDOOR[kind]; this.outRecs.push(rec); }
     zone.buildings++;
@@ -443,7 +444,7 @@ export class CityFabric {
       else if (kind === 'dome') { hw = hd = q.r * 1.1; h = q.r * 1.15 + 2; }
       else { hw = hd = q.r * 1.45; h = 9 + rnd() * 3; }
       const use = q.use || (rnd() < 0.82 ? 'home' : rnd() < 0.5 ? 'cafe' : 'market');
-      const rec = this._bldgAt(zone, B, kind, q.x, q.z, q.fa ?? rnd() * TAU, hw, hd, h, { door: 1, use }, tints[Math.floor(rnd() * tints.length)], rnd);
+      const rec = this._bldgAt(zone, B, kind, q.x, q.z, q.fa ?? rnd() * TAU, hw, hd, h, { door: 1, use, deck: q.deck }, tints[Math.floor(rnd() * tints.length)], rnd);
       if (rec) built++;
     }
     this.extraBuilt = built;
@@ -463,7 +464,7 @@ export class CityFabric {
       r.door = { x: r.x + nx * (ext + 0.25), z: r.z + nz * (ext + 0.25), nx, nz, yaw: Math.atan2(nx, nz) };
       if (!this._excluded(r.door.x, r.door.z, 3)) { ok = true; break; }
     }
-    r.floorY = r.pad ? r.gy + 0.15 : Math.max(r.gy, r.mx, heightAt(r.door.x, r.door.z)) + 0.15; // 집터 위 건물은 집터 높이
+    r.floorY = r.deck !== undefined ? r.deck + 0.15 : r.pad ? r.gy + 0.15 : Math.max(r.gy, r.mx, heightAt(r.door.x, r.door.z)) + 0.15; // 집터 위 건물은 집터 높이, 갑판 위는 갑판 높이
     if (!ok) return;
     r.id = this.recs.length;
     this.recs.push(r);
@@ -543,7 +544,7 @@ export class CityFabric {
     const tryPlace = (nx, nz, strict) => {
       const tx = -nz, tz = nx;
       const e0 = planExt(r, nx, nz);
-      const ge = Math.max(heightAt(r.x + nx * (e0 + 2), r.z + nz * (e0 + 2)), 0);
+      const ge = r.deck !== undefined ? r.deck : Math.max(heightAt(r.x + nx * (e0 + 2), r.z + nz * (e0 + 2)), 0);
       for (const sl of strict ? [0, -1.6, 1.6, -3.2, 3.2, -4.8, 4.8, -6.4, 6.4] : [0]) {
         const ox = r.x + tx * sl, oz = r.z + tz * sl;
         const cast = (lat, dy) => {
@@ -574,7 +575,9 @@ export class CityFabric {
         if (this._excluded(dx, dz, 3)) continue;
         // 이웃 문(같은 기단을 쓰는 탑·기단 자신)과 겹치지 않게
         if (B.recs.some((q) => q !== r && q.doorFixed && q.door && Math.hypot(q.door.x - dx, q.door.z - dz) < 6)) continue;
-        const fy = Math.max(heightAt(dx + nx * 1.3, dz + nz * 1.3), 0) + 0.15;
+        const fy = r.deck !== undefined ? r.deck + 0.15 : Math.max(heightAt(dx + nx * 1.3, dz + nz * 1.3), 0) + 0.15;
+        // 갑판 위 집: 문 앞이 갑판이어야(가장자리 밖이면 떨어진다)
+        if (r.deck !== undefined) { const gg = C.ground(dx + nx * 2.2, dz + nz * 2.2, r.deck + 1, 1.2, 0.1, this._gq || (this._gq = { h: 0, c: null })); if (Math.abs(gg.h - r.deck) > 0.7) continue; }
         // 문 앞에 설 수 있나 (건물·구조물 충돌체에 밀리지 않나)
         p.set(dx + nx * 1.6, fy, dz + nz * 1.6);
         const px = p.x, pz = p.z;
