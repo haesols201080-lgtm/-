@@ -175,7 +175,7 @@ export class Player {
     this._carry(dt);
     const sprint = ctl && (ctl.isHeld('sprint') || (ctl.lastDevice === 'touch' && wishLen > 0.95 && this._fullTilt > 1.0));
     this._fullTilt = wishLen > 0.95 ? (this._fullTilt || 0) + dt : 0;
-    let maxS = (sprint ? TUNING.sprintSpeed : TUNING.runSpeed) * wishLen * this.mods.speed;
+    let maxS = (sprint ? TUNING.sprintSpeed : TUNING.runSpeed) * wishLen * this.mods.speed * (this.carrySlow || 1);
     if (this.stumble > 0) maxS *= 0.3;
     if (this.wade) maxS *= 1 - 0.42 * this.wade; // 분수 연못 속: 물을 헤치며 걷는다
 

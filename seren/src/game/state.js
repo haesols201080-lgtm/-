@@ -54,6 +54,11 @@ export function defaultState() {
     quests: { active: [], done: [], step: {}, data: {} },
     inv: { starseed: 0, shard: 0, flower: 0, fruit: 0, trinket: 0, tea: 0, cookie: 0, meal: 0, lantern: 0, mapshard: 0, book: 0, parcel: 0 },
     venue: { exhibits: {}, archives: {}, museums: {}, buffs: {}, days: {}, job: null, earned: 0, spent: 0, worked: 0 }, // 건물의 일 (v0.7)
+    // 건물 속 (v0.9): 일자리·지원·교대·과제·호텔 방 / 건물마다 바뀐 상태(연구 진척·내 집 칸·맡긴 물건…) / 도시 살림(구역 별씨·재고·살아 있는 건물)
+    work: { jobs: [], apps: [], shift: null, done: 0, earned: 0, edu: {}, research: {}, hotel: null },
+    bld: {},
+    econ: null,
+    inside: null, // 저장할 때 건물 안이면 { rid, x, z, floor, uid } — 불러오면 그 건물 그 층으로
     rooms: {}, // 들어가 본 방: '구역:모양:번호' → { v: 들른 횟수, d: 처음 온 날 } (방마다 따로)
     home: null, // 하모네아가 내어 준 우리 집 (도시 건물 기록 id)
     homeAt: null, // 그 집의 자리 [x, z] (화질이 바뀌어 건물 번호가 달라져도 다시 찾게)

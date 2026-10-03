@@ -1,50 +1,53 @@
-// 건물 안: 도시의 건물 문으로 들어가면 (로딩 화면을 거쳐) 바깥 세계와 떨어진 「실내 공간」으로 간다.
-//  · 실내는 바깥 건물 속이 아니라 건물 바로 위 하늘 높이(POCKET_Y)에 따로 짓는 닫힌 방이다 — 바깥 건물·거리와
-//    카메라가 겹칠 일이 없다. 들어가 있는 동안 바깥 세계는 그리지 않고(engine.isolate), 땅·도시의 세부 단계는
-//    문 앞 거리 기준으로 유지한다(world.viewProxy). 하늘빛·고도 효과도 땅 높이 기준(engine.altOffset)
-//  · 방 크기는 건물 발자국이 아니라 쓰임으로 정한다(가게·박물관·공장은 넓게, 집은 아늑하게). 천장은 7.5~9 m
-//  · 바닥·벽·천장(닫힘)·빛 승강기·안내대·화분·의자·홀로그램·조형물 + 쓰임별 가구와 사람(game/venues.js)
-//  · 가운데 빛 승강기를 타면 실제 건물 지붕 위에 떠 있는 「하늘 전망대」로. 거기서 뛰어내려 활공할 수 있다
+// 건물 안 (v0.9): 도시의 건물 문으로 들어가면 (로딩 화면을 거쳐) 바깥 세계와 떨어진 「실내 공간」으로 간다.
+//  · 실내는 바깥 건물 속이 아니라 건물 바로 위 하늘 높이(POCKET_Y)에 따로 짓는다 — 가로 자리는 바깥 건물과 같은 x, z
+//    (실내의 정문 = 바깥 문 그 자리), 높이는 층마다 실제 높이 차를 그대로 둔다. 들어가 있는 동안 바깥은 그리지 않고(engine.isolate),
+//    땅·도시의 세부 단계는 문 앞 거리 기준(world.viewProxy), 하늘빛·고도 효과는 땅 높이 기준(engine.altOffset).
+//  · 건물마다의 구조: interior/program(바깥 부피 → 층·쓰임·조직·빛깔) · core(계단·승강기) · layout(복도·방·문) ·
+//    recipes/furnish(가구·장비) · render(모양·충돌체) · building(층 그리기·계단·승강기·문) · store(구조 저장)
+//  · 건물이 하는 일(운영·일거리·물건)은 interior/ops, 실내의 사람은 interior/agents, 지도는 ui/imap.
+//  · 착륙선 선실은 따로(cabin.js) — 같은 실내 공간 틀을 쓴다.
 import * as THREE from 'three';
-import { heightAt } from '../world/heightfield.js';
 import { mulberry32 } from '../core/noise.js';
-import { litMaterial, glowMaterial } from '../world/materials.js';
-import { hologramMaterial } from '../world/hologram.js';
-import { CURVE_GLSL, ATMOS_PARS, NOISE_GLSL } from '../world/shaders.js';
-import { atmosUniforms } from '../world/atmosphere.js';
-import { SPEC } from '../world/city-arch.js';
+import { litMaterial } from '../world/materials.js';
 import { audio } from '../core/audio.js';
 import { buildCabin } from './cabin.js';
+import { Indoor } from '../interior/building.js';
+import { PlanStore } from '../interior/store.js';
+import { facadeProfile } from '../interior/volume.js';
+import { FUSE } from '../interior/catalog.js';
+import { uidOf } from '../interior/ids.js';
 
-const TAU = Math.PI * 2;
 const PREFIX = ['새벽', '물결', '은하', '고요', '바람', '윤슬', '별빛', '노을', '이슬', '하늘', '메아리', '푸른', '은빛', '첫눈', '꽃잎', '먼별'];
 const PURPOSE = {
-  home: { name: '주거탑', desc: '아웬 가족들이 사는 탑. 층마다 작은 정원이 있다.', npc: 4 },
+  home: { name: '주거탑', desc: '아웬 가족들이 사는 탑. 층마다 세대와 쉼터가 있다.', npc: 4 },
+  hotel: { name: '쉼 호텔', desc: '먼 구역에서 온 이들이 묵어 가는 곳. 위층 객실에서 도시가 내려다보인다.', npc: 6 },
   lab: { name: '울림 연구동', desc: '물질의 노래를 듣고 설득하는 법을 연구한다.', npc: 3 },
-  market: { name: '노래 시장', desc: '물건 대신 노래를 주고받는다. 좋은 노래는 오래 머문다.', npc: 7 },
+  market: { name: '노래 시장', desc: '먹을 것·쓸 것을 고르고 계산대에서 별씨로 값을 치른다.', npc: 7 },
   school: { name: '노래 학교', desc: '아이들이 처음으로 자기 이름을 노래하는 곳.', npc: 6, small: true },
-  heal: { name: '치유원', desc: '지친 울림을 고르게 다듬어 주는 곳. 부드러운 빛 속에서 쉰다.', npc: 3 },
+  heal: { name: '치유원', desc: '지친 울림을 고르게 다듬어 주는 곳. 접수·진료·검사·입원.', npc: 3 },
   garden: { name: '하늘 정원', desc: '건물 한가운데를 숲으로 채운 정원.', npc: 4 },
-  hall: { name: '작은 공연장', desc: '동네 합창단이 저녁마다 노래한다.', npc: 6 },
-  office: { name: '울림 사무탑', desc: '도시의 일을 노래로 나누어 맡는 곳. 층마다 작은 모임이 열린다.', npc: 5 },
-  library: { name: '마을 서고', desc: '결정에 담긴 옛 노래를 빌려 가는 곳.', npc: 3 },
-  factory: { name: '빚음 공방', desc: '물질을 노래로 설득해 쓸 것을 빚는다. 공정마다 다른 음이 울린다.', npc: 5 },
+  farm: { name: '재배원', desc: '빛잎·열매·꽃꿀을 기르는 실내 농장. 거둔 것은 창고로 간다.', npc: 4 },
+  hall: { name: '공연장', desc: '동네 합창단이 저녁마다 노래한다.', npc: 6 },
+  admin: { name: '행정청', desc: '이웃의 일을 맡아 처리하는 곳. 민원 창구와 의회실.', npc: 5 },
+  office: { name: '사무탑', desc: '도시의 일을 나누어 맡는 회사들이 층마다 있다.', npc: 5 },
+  library: { name: '서고', desc: '결정에 담긴 옛 노래를 빌려 가는 곳.', npc: 3 },
+  factory: { name: '빚음 공방', desc: '원료를 노래로 설득해 쓸 것을 빚는다. 원료 → 공정 → 완성품 → 물류.', npc: 5 },
   depot: { name: '물류 창고', desc: '도시 곳곳으로 갈 짐을 모으고 나누는 곳.', npc: 5 },
-  terminal: { name: '교통 터미널', desc: '호버 차와 하늘배를 갈아타는 곳. 표를 사면 다른 구역 터미널로 바로 간다.', npc: 7 },
-  cafe: { name: '울림 찻집', desc: '김이 노래하는 차와 든든한 한 상을 짓는 곳. 주문하면 부엌에서 지어 내어 준다.', npc: 6 },
-  museum: { name: '기억 박물관', desc: '아웬의 옛 물건과 노래를 모아 둔 곳. 전시를 살펴보면 옛말을 배운다.', npc: 5 },
-  plant: { name: '공명 발전소', desc: '도시의 빛을 만드는 핵. 일꾼들이 출력을 맞추며 노래한다.', npc: 4 },
+  terminal: { name: '교통 터미널', desc: '호버 차와 하늘배를 갈아타는 곳.', npc: 7 },
+  cafe: { name: '찻집', desc: '김이 노래하는 차와 든든한 한 상을 짓는 곳.', npc: 6 },
+  museum: { name: '박물관', desc: '아웬의 옛 물건과 노래를 모아 둔 곳.', npc: 5 },
+  plant: { name: '공명 발전소', desc: '도시의 빛을 만드는 핵. 일꾼들이 출력을 맞춘다.', npc: 4 },
 };
 const BY_STYLE = {
-  civic: ['hall', 'lab', 'garden', 'school'],
-  commerce: ['market', 'market', 'home', 'hall'],
-  transit: ['market', 'lab', 'hall'],
+  civic: ['hall', 'lab', 'garden', 'school', 'admin'],
+  commerce: ['market', 'market', 'home', 'hall', 'hotel'],
+  transit: ['market', 'lab', 'hall', 'hotel'],
   residential: ['home', 'home', 'school', 'garden', 'heal'],
   research: ['lab', 'lab', 'school', 'heal'],
   energy: ['lab', 'lab', 'hall'],
   bioindustry: ['garden', 'lab', 'market', 'heal'],
-  capital: ['lab', 'home', 'market', 'heal', 'hall', 'garden', 'home', 'lab'],
-  highrise: ['home', 'lab', 'home', 'market', 'heal', 'hall'],
+  capital: ['lab', 'home', 'market', 'heal', 'hall', 'garden', 'home', 'lab', 'admin'],
+  highrise: ['home', 'lab', 'home', 'market', 'heal', 'hall', 'hotel'],
   garden: ['garden', 'school', 'home', 'garden'],
   suburb: ['home', 'home', 'school', 'market', 'garden'],
   village: ['home', 'home', 'school', 'market'],
@@ -54,818 +57,108 @@ const BY_STYLE = {
   sea: ['home', 'market', 'heal'],
   frost: ['home', 'lab', 'heal'],
 };
-const PEARL = 0xf1ece4, FLOOR = 0xaaa6ba, ACC = 0x7ff3e6, GOLD = 0xe9c27c, LEAF = 0x5fbf8a;
 /** 실내 공간의 바닥 높이 — 바깥 세계(산 2 km·거대 탑 2.3 km·구름)보다 높고 하늘닻(30 km)보다 낮은 빈 하늘 */
 export const POCKET_Y = 8000;
-/** 쓰임별 방 크기: [안쪽 반지름 m, 천장 높이 m] */
-const ROOM = {
-  home: [12, 7.5], lab: [14, 7.5], market: [17, 8], school: [15, 7.5], heal: [14, 7.5], garden: [18, 9], hall: [18, 9],
-  office: [14, 7.5], library: [15, 8], factory: [18, 9], depot: [18, 9], terminal: [18, 9], cafe: [14, 7.5], museum: [18, 9], plant: [17, 9],
-};
-
-/**
- * 실내 구조 여섯 — 같은 쓰임(찻집·집·연구동…)이라도 건물마다 방의 생김새가 다르다(건물의 씨앗으로 고름).
- *  rotunda 둥근 홀: 둥근 평면, 천창이 뚫린 돔 천장, 벽기둥
- *  gallery 긴 회랑: 문에서 안쪽으로 길게 뻗은 방, 아치 갈비와 천창 띠, 벽기둥
- *  mezz    두 층 홀: 높은 천장, 안쪽 벽을 두른 2층 발코니(걸어 오르는 계단), 위층에도 사람
- *  octagon 팔각 홀: 팔각 평면, 높은 고창, 모서리 기둥, 승강기 둘레의 낮은 단
- *  alcove  꽃잎 방: 꽃잎처럼 벽이 오목볼록, 볼록한 자리마다 붙박이 의자와 등
- *  panorama 전망 방: 넓은 평면, 안쪽 벽 전체가 바닥부터 천장까지 유리, 천장 살
- */
-const LAYOUTS = {
-  rotunda: { name: '둥근 홀', k: 2, asp: 1, dome: 3.4 },
-  gallery: { name: '긴 회랑', k: 8, asp: 1.65, rs: 0.86, arches: true },
-  mezz: { name: '두 층 홀', k: 4, asp: 1.08, lh: 4.6, balcony: 4.4 },
-  octagon: { name: '팔각 홀', poly: 8, asp: 1, lh: 1.2, clerestory: true, dais: true },
-  alcove: { name: '꽃잎 방', lobes: 6, asp: 1 },
-  panorama: { name: '전망 방', k: 6, asp: 1.38, rs: 0.92, glassWall: true, slats: true },
-};
-const LAYOUT_IDS = Object.keys(LAYOUTS);
-/** 방마다 다른 빛깔 (벽·바닥·빛·금빛) */
-const PALETTES = [
-  { wall: 0xf1ece4, floor: 0xaaa6ba, acc: 0x7ff3e6, gold: 0xe9c27c }, // 진주 · 청록
-  { wall: 0xf3e6dc, floor: 0xb39f94, acc: 0xffb36b, gold: 0xf0c890 }, // 모래 · 호박
-  { wall: 0xe6e2f2, floor: 0x9d97b8, acc: 0xc79bff, gold: 0xd8b4ff }, // 라일락 · 보라
-  { wall: 0xe2efe8, floor: 0x93ad9f, acc: 0xb4f07a, gold: 0xd9e889 }, // 민트 · 연두
-  { wall: 0xf4e4ea, floor: 0xb197a4, acc: 0xff8fb8, gold: 0xffc0a0 }, // 장밋빛
-  { wall: 0xdfe6ee, floor: 0x8e9cb0, acc: 0x8fc4ff, gold: 0xc8d8ff }, // 푸른 회색 · 하늘
-  { wall: 0xece8e0, floor: 0x7d7a86, acc: 0xffe6b0, gold: 0xe9c27c }, // 짙은 바닥 · 따뜻한 흰빛
-  { wall: 0xe8ece6, floor: 0xa0a89a, acc: 0xff9f7a, gold: 0xf2b880 }, // 이끼 회색 · 산호
-];
-const fract = (v) => v - Math.floor(v);
-
-// 창 너머 바깥(하늘과 먼 도시)이 보이는 유리 — 낮에는 밝은 하늘, 밤에는 도시 불빛
-const winVert = `${CURVE_GLSL}
-varying vec2 vUv; varying vec3 vWorld;
-void main() { vUv = uv; vec4 wp = modelMatrix * vec4(position, 1.0); vWorld = wp.xyz; gl_Position = projectionMatrix * viewMatrix * vec4(curveWorld(wp.xyz), 1.0); }`;
-const winFrag = `${NOISE_GLSL}${ATMOS_PARS}
-varying vec2 vUv; varying vec3 vWorld;
-void main() {
-  float mx = fract(vUv.x);
-  float frame = step(0.05, mx) * step(mx, 0.95) * step(0.03, vUv.y) * step(vUv.y, 0.97);
-  vec3 sky = mix(uSkyHorizon, uSkyTop, clamp(vUv.y * 0.9, 0.0, 1.0)) * 1.1 + uHorizonGlow * 0.25;
-  float sk = 0.18 + 0.22 * hash12(vec2(floor(vUv.x * 2.5), 7.0));
-  float skyline = step(vUv.y, sk);
-  vec3 city = mix(uSkyHorizon * 0.62, vec3(0.04, 0.05, 0.09), uNight);
-  vec3 c = mix(sky, city, skyline * 0.9);
-  c += vec3(1.0, 0.8, 0.55) * step(0.9, hash12(floor(vec2(vUv.x * 30.0, vUv.y * 40.0)))) * skyline * uNight * 1.4;
-  vec3 fc = vec3(0.86, 0.84, 0.9) * (0.35 + 0.65 * (1.0 - uNight));
-  c = mix(fc, c, frame);
-  gl_FragColor = vec4(c, 1.0);
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}`;
-
-/** 안내지기 자리 (방 가운데에서 문 쪽으로 m): 계산대(rin·0.52, 반지름 2.6 호) 뒤에 설 수 있으면 뒤, 아니면 호 안쪽 */
-const deskKeeper = (rin) => (rin * 0.52 - 3.35 > 3.2 ? rin * 0.52 - 3.35 : rin * 0.52 - 1.4);
-
-/** 바닥 자리 겹침: 원 {x,z,r} · 돌린 상자 {x,z,hx,hz,rot}(rot = three.js rotation.y). m 만큼 파고들어야 겹침 */
-function fpHit(a, b, m = 0.12) {
-  if (a.r != null && b.r != null) return Math.hypot(a.x - b.x, a.z - b.z) < a.r + b.r - m;
-  if (a.r != null || b.r != null) {
-    const c = a.r != null ? a : b, B = a.r != null ? b : a;
-    const dx = c.x - B.x, dz = c.z - B.z, co = Math.cos(B.rot || 0), si = Math.sin(B.rot || 0);
-    const lx = dx * co - dz * si, lz = dx * si + dz * co;
-    return Math.hypot(Math.max(0, Math.abs(lx) - B.hx), Math.max(0, Math.abs(lz) - B.hz)) < c.r - m;
-  }
-  for (const t of [a.rot || 0, (a.rot || 0) + Math.PI / 2, b.rot || 0, (b.rot || 0) + Math.PI / 2]) {
-    const ax = Math.cos(t), az = -Math.sin(t);
-    const pr = (B) => { const r = B.rot || 0, c = B.x * ax + B.z * az, e = B.hx * Math.abs(Math.cos(r) * ax - Math.sin(r) * az) + B.hz * Math.abs(Math.sin(r) * ax + Math.cos(r) * az); return [c - e, c + e]; };
-    const [a0, a1] = pr(a), [b0, b1] = pr(b);
-    if (Math.min(a1, b1) - Math.max(a0, b0) < m) return false;
-  }
-  return true;
-}
 
 export class Interiors {
   constructor(game) {
     this.game = game;
     this.city = game.city;
     this.cur = null;
+    this.store = new PlanStore(game);
+    // 선실·옛 시설이 쓰는 공용 재질
     this.mat = litMaterial({ vertexColors: true, vertexEmit: true, emissive: 0xffffff, emissiveIntensity: 1.3, emissiveNight: 0.45, rim: 0.15, spec: 0.8, side: THREE.DoubleSide, tech: { scale: 1.1, glow: 0.9, metal: 0.35, mode: 0 } });
-    // 바닥·전망대: 가운데에서 퍼지는 동심원 문양이 새겨진 윤나는 바닥 (중심은 열 때마다 바꾼다)
-    this.floorMat = litMaterial({ vertexColors: true, vertexEmit: true, emissive: 0xffffff, emissiveIntensity: 1.3, emissiveNight: 0.4, rim: 0.1, spec: 1.6, side: THREE.DoubleSide, tech: { scale: 1.7, glow: 1.1, metal: 0.6, mode: 1, color: 0x9ff6ff } });
-    this.deckMat = litMaterial({ vertexColors: true, vertexEmit: true, emissive: 0xffffff, emissiveIntensity: 1.3, emissiveNight: 0.4, rim: 0.2, spec: 1.6, side: THREE.DoubleSide, tech: { scale: 1.4, glow: 1.2, metal: 0.42, mode: 1, color: 0xffd9a0 } });
-    this.winMat = new THREE.ShaderMaterial({ uniforms: { ...atmosUniforms }, vertexShader: winVert, fragmentShader: winFrag, side: THREE.DoubleSide });
     this.t = 0;
-    this._auto = 0;
   }
 
   // ── 건물 정보 ─────────────────────────────
   info(r) {
     if (r.info) return r.info;
     const rnd = mulberry32(Math.floor(r.seed * 1e9));
-    const byUse = { home: ['home'], office: ['office', 'office', 'lab'], market: ['market', 'market', 'cafe'], school: ['school'], heal: ['heal'], library: ['library'], hall: ['hall', 'museum'], factory: ['factory'], depot: ['depot'], lab: ['lab'], terminal: ['terminal'], garden: ['garden'], cafe: ['cafe'], museum: ['museum'], plant: ['plant'] };
+    const tall = (r.top - r.gy) > 55;
+    const farmKind = ['vfarm', 'greenhouse', 'biodome'].includes(r.kind);
+    const civic = ['civic', 'capital'].includes(r.style);
+    const byUse = {
+      home: tall && ['commerce', 'capital', 'highrise', 'transit', 'glass'].includes(r.style) ? ['home', 'home', 'hotel'] : ['home'],
+      office: civic ? ['office', 'office', 'lab', 'admin'] : ['office', 'office', 'lab'],
+      market: ['market', 'market', 'cafe'], school: ['school'], heal: ['heal'], library: ['library'],
+      hall: civic ? ['hall', 'museum', 'admin'] : ['hall', 'museum'], factory: ['factory'], depot: ['depot'], lab: ['lab'], terminal: ['terminal'],
+      garden: farmKind ? ['farm', 'farm', 'garden'] : ['garden'], cafe: ['cafe'], museum: ['museum'], plant: ['plant'],
+    };
     const list = byUse[r.use] || BY_STYLE[r.style] || BY_STYLE.capital;
     const pid = list[Math.floor(rnd() * list.length)];
     const P = PURPOSE[pid];
-    const floors = Math.max(2, Math.floor((r.top - r.gy) / 3.6));
+    const floors = Math.max(1, Math.floor((r.top - r.gy) / 3.6));
     r.info = { pid, P, name: r.name || (r.custom && pid === 'home' ? `${PREFIX[Math.floor(rnd() * PREFIX.length)]} 꽃잎 집` : `${PREFIX[Math.floor(rnd() * PREFIX.length)]} ${P.name}`), floors, people: r.custom ? (pid === 'home' ? 3 + Math.floor(rnd() * 4) : 6 + Math.floor(rnd() * 8)) : floors * (pid === 'home' ? 30 + Math.floor(rnd() * 40) : 8 + Math.floor(rnd() * 20)) };
     return r.info;
   }
-
-  // ── 평면 (실내 벽이 서는 선): 건물의 모양(둥근·각진·길쭉한)을 따르고, 크기는 쓰임으로 ─────────
-  _plan(r, R, L) {
-    const pts = [];
-    // 방의 축: 문에서 안쪽으로 (긴 방은 문에서 멀리 뻗는다)
-    const da = Math.atan2(r.door.nz, r.door.nx);
-    const ax = Math.cos(da), az = Math.sin(da), bx = -az, bz = ax;
-    const P = (lx, lz) => pts.push([r.x + ax * lx + bx * lz, r.z + az * lx + bz * lz]);
-    if (L.poly) {
-      // 정다각형: 문이 한 변의 가운데에 오게, 변마다 셋으로 나눈다(창을 나누려고)
-      const n = L.poly, rv = R / Math.cos(Math.PI / n);
-      for (let i = 0; i < n; i++) {
-        const a0 = ((i + 0.5) / n) * TAU, a1 = ((i + 1.5) / n) * TAU;
-        for (let k = 0; k < 3; k++) { const t = k / 3; P(rv * ((1 - t) * Math.cos(a0) + t * Math.cos(a1)), rv * ((1 - t) * Math.sin(a0) + t * Math.sin(a1))); }
-      }
-      return pts;
-    }
-    if (L.lobes) {
-      // 꽃잎: 문은 오목한 자리(평평한 벽)에, 볼록한 곳이 붙박이 의자 자리
-      const n = 48;
-      for (let i = 0; i < n; i++) { const t = (i / n) * TAU; const rr = R * (1 + 0.2 * (0.5 - 0.5 * Math.cos(L.lobes * t))); P(Math.cos(t) * rr, Math.sin(t) * rr); }
-      return pts;
-    }
-    const k = L.k, n = 28, sx = R * L.asp, sz = R;
-    for (let i = 0; i < n; i++) {
-      const t = (i / n) * TAU + Math.PI / n;
-      const ct = Math.cos(t), st = Math.sin(t);
-      P(Math.sign(ct) * Math.pow(Math.abs(ct), 2 / k) * sx, Math.sign(st) * Math.pow(Math.abs(st), 2 / k) * sz);
-    }
-    return pts;
+  /** 모양의 외벽 띠 (창 격자 → 층 높이) */
+  profile(kind) { const A = this.city && this.city.arch; return facadeProfile(kind, A && A[kind] && A[kind].hi); }
+  /** 건물 짜임 (처음이면 만든다) */
+  plan(r) { return this.store.plan(r); }
+  /** 건물의 대표 이름: 짜임이 있으면 조직 이름 */
+  title(r) {
+    const I = this.info(r);
+    if (this.game.state.home === r.id) return '우리 집';
+    const e = this.store.mem.get(uidOf(r));
+    if (e && e.B.mainOrg) { const o = e.B.orgs.find((q) => q.id === e.B.mainOrg); if (o && o.op !== 'home') return o.name; }
+    return I.name;
   }
 
-  /** 이 건물의 실내 구조와 빛깔 (씨앗으로 고정) */
-  layoutOf(r) {
-    const id = LAYOUT_IDS[Math.floor(fract(r.seed * 7.31 + 0.13) * LAYOUT_IDS.length)];
-    return { id, ...LAYOUTS[id], pal: PALETTES[Math.floor(fract(r.seed * 13.7 + 0.41) * PALETTES.length)] };
-  }
-
-  _inside(x, z, pad = 0) {
-    if (!this.cur) return false;
-    const pts = this.cur.plan;
-    // 가운데 쪽으로 pad 만큼 줄인 다각형 안인가 (볼록하지 않아도 되는 짝수 규칙)
-    const cx = this.cur.r.x, cz = this.cur.r.z;
-    let inside = false;
-    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-      const sc = (p) => { const d = Math.hypot(p[0] - cx, p[1] - cz) || 1; const k = Math.max(0, d - pad) / d; return [cx + (p[0] - cx) * k, cz + (p[1] - cz) * k]; };
-      const [xi, zi] = sc(pts[i]), [xj, zj] = sc(pts[j]);
-      if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) inside = !inside;
-    }
-    return inside;
-  }
-
-  // ── 열기: 실내 공간 짓기 (건물 위 하늘 높이의 닫힌 방) ─────────────
+  // ── 열기·닫기 ─────────────────────────────
   open(r) {
     if (this.cur && this.cur.r === r) return;
     if (this.cur) this.close();
-    const g = this.game, C = g.world.colliders;
     const info = this.info(r);
-    const L = this.layoutOf(r);
-    const [R0, LH0] = ROOM[info.pid] || [14, 7.5];
-    const R = R0 * (L.rs || 1), LH = LH0 + (L.lh || 0);
-    const plan = this._plan(r, R, L);
-    const fy = POCKET_Y;
-    const cx = r.x, cz = r.z;
-    // 방 안의 문: 바깥 문과 같은 쪽 벽 (들어오면 건물 안쪽을 보고 선다)
-    const dn = [r.door.nx, r.door.nz];
-    let ext = R;
-    for (let i = 0; i < plan.length; i++) {
-      const [x0, z0] = plan[i], [x1, z1] = plan[(i + 1) % plan.length];
-      const ex = x1 - x0, ez = z1 - z0, den = dn[0] * ez - dn[1] * ex;
-      if (Math.abs(den) < 1e-9) continue;
-      const t = ((x0 - cx) * ez - (z0 - cz) * ex) / den, u = ((x0 - cx) * dn[1] - (z0 - cz) * dn[0]) / den;
-      if (t > 0 && u >= 0 && u <= 1) ext = t;
-    }
-    const door = { x: cx + dn[0] * ext, z: cz + dn[1] * ext, nx: dn[0], nz: dn[1] };
-    const cur = { r, info, plan, LH, fy, door, cols: [], meshes: [], npcs: [], anims: [], deck: null, layout: L, pal: L.pal, key: `${r.zone}:${r.kind}:${r.idx}` };
+    const ind = new Indoor(this, r, POCKET_Y);
+    const B = ind.B;
+    const cur = { r, info, indoor: ind, B, fy: POCKET_Y, cols: [], meshes: [], npcs: [], anims: [], key: uidOf(r), uid: uidOf(r), LH: 3 };
     this.cur = cur;
-    const add = (c) => cur.cols.push(C.add({ ...c, city: true, sky: true }));
-    let maxR = 0;
-    for (const [x, z] of plan) maxR = Math.max(maxR, Math.hypot(x - cx, z - cz));
-    // 바닥 · 천장(점프해도 머리가 닿는 곳) · 닫힌 벽 (문 자리도 막혀 있다 — 나갈 때는 문에서 E)
-    add({ type: 'cyl', x: cx, z: cz, r: maxR + 1, y0: fy - 3, y1: fy });
-    add({ type: 'cyl', x: cx, z: cz, r: maxR + 1, y0: fy + LH, y1: fy + LH + 2, walk: false });
-    const walls = [];
-    const doorIn = [door.x - dn[0] * 0.6, door.z - dn[1] * 0.6];
-    for (let i = 0; i < plan.length; i++) {
-      const [x0, z0] = plan[i], [x1, z1] = plan[(i + 1) % plan.length];
-      const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
-      const isDoor = Math.hypot(mx - doorIn[0], mz - doorIn[1]) < 2.6 || Math.hypot(x0 - doorIn[0], z0 - doorIn[1]) < 1.6 || Math.hypot(x1 - doorIn[0], z1 - doorIn[1]) < 1.6;
-      walls.push({ x0, z0, x1, z1, isDoor });
-      const L = Math.hypot(x1 - x0, z1 - z0);
-      add({ type: 'box', x: mx, z: mz, hx: L / 2 + 0.25, hz: 0.35, rot: -Math.atan2(z1 - z0, x1 - x0), y0: fy - 2, y1: fy + LH + 1, walk: false });
-    }
-    add({ type: 'cyl', x: cx, z: cz, r: 1.8, y0: fy, y1: fy + LH - 0.2, walk: false }); // 빛 승강기
-    this._build(cur, walls);
-    this._people(cur);
+    ind.setFloor(B.ground);
+    // 정문 (실내 쪽): 1층 평면의 정문 칸
+    const pl = ind.plan(B.ground);
+    const e = pl && pl.L.ents.main;
+    if (e) {
+      const G = B.G, i = e.c % G.gw, j = (e.c / G.gw) | 0;
+      const gx = G.ox + i + 0.5 + e.dir[0] * 0.5, gz = G.oz + j + 0.5 + e.dir[1] * 0.5;
+      const [x, z] = ind.world(gx, gz);
+      const nx = e.dir[0] * ind.V.ex[0] + e.dir[1] * ind.V.ez[0], nz = e.dir[0] * ind.V.ex[1] + e.dir[1] * ind.V.ez[1];
+      cur.door = { x, z, nx, nz };
+    } else cur.door = { x: r.door.x, z: r.door.z, nx: r.door.nx, nz: r.door.nz };
+    cur.LH = B.floors[B.ground].ceil - B.floors[B.ground].y;
+    if (this.game.ops) this.game.ops.open(cur);
   }
 
-  /** 실내 모양 */
-  _build(cur, walls) {
-    const { r, info, plan, LH } = cur;
-    const fy = cur.fy, cx = r.x, cz = r.z;
-    const { wall: PEARL, floor: FLOOR, acc: ACC, gold: GOLD } = cur.pal; // 방마다 다른 빛깔
-    const L = cur.layout;
-    const rin0 = Math.min(...plan.map(([x, z]) => Math.hypot(x - cx, z - cz)));
-    const P = [], C = [], E = [], WP = [], WU = [], FP = [], FC = [], FE = [];
-    const col = new THREE.Color();
-    const tri = (a, b, c, color, emit) => { P.push(...a, ...b, ...c); col.set(color); for (let k = 0; k < 3; k++) { C.push(col.r, col.g, col.b); E.push(emit); } };
-    const triF = (a, b, c, color, emit) => { FP.push(...a, ...b, ...c); col.set(color); for (let k = 0; k < 3; k++) { FC.push(col.r, col.g, col.b); FE.push(emit); } };
-    const quad = (a, b, c, d, color, emit) => { tri(a, b, c, color, emit); tri(a, c, d, color, emit); };
-    const scaleP = ([x, z], k) => [cx + (x - cx) * k, cz + (z - cz) * k];
-    const n = plan.length;
-    // 바닥과 무늬 (가운데로 모이는 빛 고리)
-    for (let i = 0; i < n; i++) {
-      const [x0, z0] = plan[i], [x1, z1] = plan[(i + 1) % n];
-      triF([cx, fy, cz], [x1, fy, z1], [x0, fy, z0], FLOOR, 0);
-      if (!L.dome) tri([cx, fy + LH, cz], [x0, fy + LH, z0], [x1, fy + LH, z1], PEARL, 0.05);
-      else {
-        // 돔 천장: 벽 위에서 안쪽으로 오르는 고리들 + 꼭대기의 둥근 천창 (하늘이 보인다)
-        const ks = [1, 0.86, 0.7, 0.52, 0.34, 0.2];
-        const yk = (k) => fy + LH + L.dome * (1 - k * k);
-        for (let j = 0; j < ks.length - 1; j++) {
-          const a0 = scaleP(plan[i], ks[j]), a1 = scaleP(plan[(i + 1) % n], ks[j]), b0 = scaleP(plan[i], ks[j + 1]), b1 = scaleP(plan[(i + 1) % n], ks[j + 1]);
-          quad([a0[0], yk(ks[j]), a0[1]], [a1[0], yk(ks[j]), a1[1]], [b1[0], yk(ks[j + 1]), b1[1]], [b0[0], yk(ks[j + 1]), b0[1]], j % 2 ? PEARL : GOLD, j % 2 ? 0.05 : 0.12);
-          const c0 = scaleP(plan[i], ks[j + 1] + 0.012), c1 = scaleP(plan[(i + 1) % n], ks[j + 1] + 0.012);
-          quad([b0[0], yk(ks[j + 1]) - 0.04, b0[1]], [b1[0], yk(ks[j + 1]) - 0.04, b1[1]], [c1[0], yk(ks[j + 1] + 0.012) - 0.04, c1[1]], [c0[0], yk(ks[j + 1] + 0.012) - 0.04, c0[1]], ACC, 1.2);
-        }
-      }
-      for (const [ka, kb, cc, ee] of [[0.42, 0.45, ACC, 1.2], [0.72, 0.74, GOLD, 0.9]]) {
-        const a0 = scaleP(plan[i], ka), a1 = scaleP(plan[(i + 1) % n], ka), b0 = scaleP(plan[i], kb), b1 = scaleP(plan[(i + 1) % n], kb);
-        triF([a0[0], fy + 0.02, a0[1]], [a1[0], fy + 0.02, a1[1]], [b1[0], fy + 0.02, b1[1]], cc, ee);
-        triF([a0[0], fy + 0.02, a0[1]], [b1[0], fy + 0.02, b1[1]], [b0[0], fy + 0.02, b0[1]], cc, ee);
-      }
-      // 천장 빛판 둘 (돔·살 천장은 따로)
-      if (!L.dome && !L.slats) for (const [ka, kb] of [[0.5, 0.6], [0.8, 0.86]]) {
-        const a0 = scaleP(plan[i], ka), a1 = scaleP(plan[(i + 1) % n], ka), b0 = scaleP(plan[i], kb), b1 = scaleP(plan[(i + 1) % n], kb);
-        quad([a0[0], fy + LH - 0.03, a0[1]], [a1[0], fy + LH - 0.03, a1[1]], [b1[0], fy + LH - 0.03, b1[1]], [b0[0], fy + LH - 0.03, b0[1]], 0xfff4e0, 1.6);
-      }
-    }
-    // 벽: 아래 굽도리 + 큰 창(바깥이 보이는 유리) + 위 띠. 문 자리는 비운다
-    let u = 0;
-    for (const w of walls) {
-      const L0 = Math.hypot(w.x1 - w.x0, w.z1 - w.z0);
-      if (w.isDoor) {
-        // 문 자리: 창 대신 막힌 벽 (안쪽에 나가는 문을 따로 세운다)
-        quad([w.x0, fy, w.z0], [w.x1, fy, w.z1], [w.x1, fy + LH, w.z1], [w.x0, fy + LH, w.z0], 0xd8d2e0, 0);
-        u += L0 / 2.4;
-        continue;
-      }
-      // 창 띠: 구조마다 다르다 (고창 · 바닥부터 천장까지 유리 · 두 층 · 꽃잎의 볼록한 곳만)
-      const mx = (w.x0 + w.x1) / 2 - cx, mz = (w.z0 + w.z1) / 2 - cz, md = Math.hypot(mx, mz) || 1;
-      const far = (mx * cur.door.nx + mz * cur.door.nz) / md < -0.45;
-      let bands = [[0.55, LH - 0.7]];
-      if (L.clerestory) bands = [[LH * 0.58, LH - 0.6]];
-      else if (L.glassWall && far) bands = [[0.12, LH - 0.25]];
-      else if (L.lobes) bands = md > rin0 * 1.07 ? [[0.55, LH - 0.9]] : [];
-      else if (L.balcony) bands = [[0.55, L.balcony - 0.8], [L.balcony + 1.4, LH - 0.7]];
-      const u1 = u + L0 / 2.4;
-      let yp = 0;
-      for (const [ba, bb] of bands) {
-        quad([w.x0, fy + yp, w.z0], [w.x1, fy + yp, w.z1], [w.x1, fy + ba, w.z1], [w.x0, fy + ba, w.z0], yp === 0 ? 0xd8d2e0 : PEARL, 0);
-        if (yp === 0) quad([w.x0, fy + ba - 0.04, w.z0], [w.x1, fy + ba - 0.04, w.z1], [w.x1, fy + ba, w.z1], [w.x0, fy + ba, w.z0], GOLD, 0.5);
-        quad([w.x0, fy + bb - 0.06, w.z0], [w.x1, fy + bb - 0.06, w.z1], [w.x1, fy + bb, w.z1], [w.x0, fy + bb, w.z0], ACC, 1.4);
-        WP.push(w.x0, fy + ba, w.z0, w.x1, fy + ba, w.z1, w.x1, fy + bb, w.z1, w.x0, fy + ba, w.z0, w.x1, fy + bb, w.z1, w.x0, fy + bb, w.z0);
-        WU.push(u, 0, u1, 0, u1, 1, u, 0, u1, 1, u, 1);
-        yp = bb;
-      }
-      quad([w.x0, fy + yp, w.z0], [w.x1, fy + yp, w.z1], [w.x1, fy + LH, w.z1], [w.x0, fy + LH, w.z0], yp === 0 ? 0xd8d2e0 : PEARL, 0);
-      if (!bands.length) { // 창 없는 벽: 세로 빛줄 하나
-        const ox = (w.x0 + w.x1) / 2 - (mx / md) * 0.03, oz = (w.z0 + w.z1) / 2 - (mz / md) * 0.03, tx = -mz / md * 0.04, tz = mx / md * 0.04;
-        quad([ox - tx, fy + 0.6, oz - tz], [ox + tx, fy + 0.6, oz + tz], [ox + tx, fy + LH - 0.6, oz + tz], [ox - tx, fy + LH - 0.6, oz - tz], ACC, 1.1);
-      }
-      u = u1;
-    }
-    // 나가는 문: 문틀 + 빛나는 유리문 + 위의 빛 띠 (여기서 E → 밖으로)
-    const dn = [cur.door.nx, cur.door.nz], dt = [-dn[1], dn[0]];
-    const dx = cur.door.x - dn[0] * 0.5, dz = cur.door.z - dn[1] * 0.5;
-    const wallRy = Math.atan2(dn[0], dn[1]); // 상자의 가로(x)가 벽을 따라 눕게
-    for (const sgn of [-1, 1]) {
-      const px = dx + dt[0] * 1.75 * sgn, pz = dz + dt[1] * 1.75 * sgn;
-      this._box(P, C, E, px, fy, pz, 0.4, 4.0, 0.7, wallRy, PEARL, 0);
-    }
-    this._box(P, C, E, dx, fy + 4.0, dz, 3.9, 0.4, 0.7, wallRy, PEARL, 0);
-    this._box(P, C, E, dx + dn[0] * 0.2, fy, dz + dn[1] * 0.2, 3.2, 3.95, 0.08, wallRy, 0x5fb4c8, 0.55);
-    this._box(P, C, E, dx - dn[0] * 0.38, fy + 4.45, dz - dn[1] * 0.38, 3.4, 0.08, 0.08, wallRy, ACC, 2.0);
-    // 가구
-    const g = new THREE.Group();
-    const geoms = [];
-    const put = (geo, color, emit, x, y, z, ry = 0) => { geo.rotateY(ry); geo.translate(x, y, z); geoms.push(this._paint(geo, color, emit)); };
-    const rin = Math.min(...plan.map(([x, z]) => Math.hypot(x - cx, z - cz)));
-    const toward = (k, ang = 0) => { const a = Math.atan2(dn[1], dn[0]) + ang; return [cx + Math.cos(a) * rin * k, cz + Math.sin(a) * rin * k]; };
-    const faceDoor = Math.atan2(dn[0], dn[1]);
-    // 자리 장부: 가구가 차지한 바닥 (단단한 가구 sBox·sCyl 는 저절로 적힌다). 서로 겹치면 cur.overlaps 에 남기고(검사 도구),
-    // 장식(화분·긴 의자)은 쓰임의 가구·시설·사람 자리를 다 놓은 뒤 빈 곳에만 둔다
-    const occ = cur.occ = [], ovl = cur.overlaps = [];
-    let tagN = 0;
-    const claim = (fp, tag) => {
-      fp.tag = tag || `${info.pid}#${tagN++}`;
-      for (const o of occ) if (o.tag !== fp.tag && fpHit(fp, o)) ovl.push({ a: fp.tag, b: o.tag, at: [+(fp.x - cx).toFixed(1), +(fp.z - cz).toFixed(1)] });
-      occ.push(fp);
-      return fp;
-    };
-    const isFree = (fp, pad = 0) => this._inside(fp.x, fp.z, (fp.r ?? Math.max(fp.hx, fp.hz)) + 0.8) && !occ.some((o) => fpHit(fp, o, -pad));
-    // 승강기 받침·고리, 안내대
-    put(new THREE.CylinderGeometry(2.2, 2.4, 0.18, 24), PEARL, 0, cx, fy + 0.09, cz);
-    put(new THREE.TorusGeometry(2.0, 0.05, 4, 32).rotateX(Math.PI / 2), ACC, 1.0, cx, fy + 0.2, cz);
-    put(new THREE.TorusGeometry(2.0, 0.05, 4, 32).rotateX(Math.PI / 2), ACC, 1.0, cx, fy + LH - 0.25, cz);
-    claim({ x: cx, z: cz, r: 2.5 }, 'lift');
-    claim({ x: cur.door.x - dn[0] * 2.4, z: cur.door.z - dn[1] * 2.4, hx: 2.3, hz: 2.4, rot: faceDoor }, 'door'); // 문 앞은 비워 둔다
-    /** 굽은 계산대: 반지름 R·폭 w·높이 h 의 호(±half, 각 ry 쪽으로 휜 바깥면). 위판은 고리 조각, 양 끝은 막는다 — 뚜껑 달린 부채꼴이 아니라 */
-    const arcCounter = (x, z, R, w, h, half, ry, color, edge, tag) => {
-      put(new THREE.CylinderGeometry(R, R, h, 18, 1, true, -half, 2 * half), color, 0, x, fy + h / 2, z, ry);
-      put(new THREE.CylinderGeometry(R - w, R - w, h, 18, 1, true, -half, 2 * half), color, 0, x, fy + h / 2, z, ry);
-      put(new THREE.RingGeometry(R - w - 0.03, R + 0.03, 18, 1, -half - Math.PI / 2, 2 * half).rotateX(-Math.PI / 2), color, 0, x, fy + h, z, ry);
-      put(new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.06, 18, 1, true, -half, 2 * half), edge, 1.6, x, fy + h + 0.01, z, ry);
-      for (const sgn of [-1, 1]) {
-        const a = ry + sgn * half, ex = x + Math.sin(a) * (R - w / 2), ez = z + Math.cos(a) * (R - w / 2);
-        put(new THREE.BoxGeometry(0.06, h, w), color, 0, ex, fy + h / 2, ez, a);
-      }
-      // 단단하다: 호를 세 토막 상자로
-      for (let k = -1; k <= 1; k++) {
-        const a = ry + (k * 2 * half) / 3, bx = x + Math.sin(a) * (R - w / 2), bz = z + Math.cos(a) * (R - w / 2), hx = R * Math.sin(half / 3) + 0.05;
-        cur.cols.push(this.game.world.colliders.add({ type: 'box', x: bx, z: bz, hx, hz: w / 2, rot: a, y0: fy - 1, y1: fy + h, city: true }));
-        claim({ x: bx, z: bz, hx, hz: w / 2, rot: a }, tag);
-      }
-    };
-    const [ddx, ddz] = toward(0.52);
-    if (rin > 6) {
-      arcCounter(ddx, ddz, 2.6, 0.55, 1.05, 0.7, faceDoor + Math.PI, PEARL, ACC, 'desk');
-      claim({ x: cx + dn[0] * deskKeeper(rin), z: cz + dn[1] * deskKeeper(rin), r: 0.6 }, 'desk'); // 안내지기가 서는 자리
-      if (deskKeeper(rin) < rin * 0.52 - 2.6) claim({ x: ddx - dn[0] * 1.2, z: ddz - dn[1] * 1.2, r: 0.8 }, 'desk'); // 계산대 앞(문 쪽) 손님 자리
-    }
-    // 화분 나무
-    const tree = (x, z, s = 1) => {
-      claim({ x, z, r: 0.75 * s }, 'tree');
-      cur.cols.push(this.game.world.colliders.add({ type: 'cyl', x, z, r: 0.7 * s, y0: fy - 1, y1: fy + 0.8 * s, city: true }));
-      // 실내 화분: 빛 웅덩이 그릇에서 휘어 오르는 결정 깃과 떠 있는 씨앗 구슬 (세렌의 식물)
-      put(new THREE.CylinderGeometry(0.7 * s, 0.55 * s, 0.8 * s, 10), GOLD, 0, x, fy + 0.4 * s, z);
-      put(new THREE.CircleGeometry(0.64 * s, 10).rotateX(-Math.PI / 2), 0x5fd8d0, 0.8, x, fy + 0.81 * s, z);
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2, h = (1.6 + (i % 2) * 0.7) * s;
-        put(new THREE.OctahedronGeometry(0.25 * s, 0).scale(0.38, h / (0.25 * s) * 0.5, 0.13).translate(0, h * 0.42, 0).rotateZ(-(0.3 + (i % 3) * 0.12)).rotateY(-a), [0x8ff0ff, 0xc8a8ff, 0xff9fd0][i % 3], 0.7, x, fy + 0.8 * s, z);
-      }
-      put(new THREE.IcosahedronGeometry(0.2 * s, 0), 0xbffcff, 2.2, x + 0.15 * s, fy + 3.1 * s, z);
-    };
-    const pid = info.pid;
-    // 장식(화분 나무·긴 의자)은 맨 끝에 빈 자리에만 — 여기서는 후보만 적는다
-    const decor = () => {
-      const nTrees = pid === 'garden' ? 9 : pid === 'factory' || pid === 'depot' || pid === 'plant' ? 0 : 4;
-      for (let i = 0; i < nTrees; i++) {
-        const ang = Math.PI * 0.35 + (i / nTrees) * Math.PI * 1.3, s = pid === 'garden' ? 1.2 : 0.9;
-        if (rin <= 5) break;
-        // 자리가 막혔으면 조금씩 옆·안쪽으로 찾아보고, 없으면 두지 않는다
-        for (const [dk, da] of [[0, 0], [0, 0.12], [0, -0.12], [-0.08, 0], [-0.08, 0.2], [-0.08, -0.2], [0.06, 0.25], [0.06, -0.25]]) {
-          const [x, z] = toward((pid === 'garden' ? 0.4 + (i % 3) * 0.18 : 0.78) + dk, ang + da);
-          if (isFree({ x, z, r: 0.75 * s }, 0.5)) { tree(x, z, s); break; }
-        }
-      }
-      // 긴 의자 (자기 가구 고리가 있는 쓰임은 빼고)
-      if (!['museum', 'cafe', 'plant', 'factory', 'depot', 'market'].includes(pid)) for (let i = 0; i < 3; i++) {
-        for (const [dk, da] of [[0, 0], [0, 0.15], [0, -0.15], [-0.1, 0], [0.1, 0], [-0.1, 0.25], [-0.1, -0.25]]) {
-          const [x, z] = toward(0.62 + dk, Math.PI * 0.6 + i * 0.5 + da);
-          const rot = Math.atan2(cx - x, cz - z), fp = { x, z, hx: 1.2, hz: 0.35, rot };
-          if (!isFree(fp, 0.6)) continue;
-          put(new THREE.BoxGeometry(2.4, 0.45, 0.7), PEARL, 0, x, fy + 0.4, z, rot);
-          claim(fp, 'bench');
-          cur.cols.push(this.game.world.colliders.add({ type: 'box', x, z, hx: 1.2, hz: 0.35, rot, y0: fy - 1, y1: fy + 0.62, city: true }));
-          break;
-        }
-      }
-    };
-    // 쓰임별: 가구 + 그 둘레에서 사람이 하는 일 (anchors → citizens.setIndoor)
-    const AN = cur.anchors = [];
-    const t = this.game.world.clock.time % 1;
-    const work = t > 0.27 && t < 0.76, evening = t >= 0.7 && t < 0.9, night = t >= 0.9 || t < 0.24;
-    const anchor = (x, z, act, yaw, o = {}) => AN.push({ x, z, y: fy, yaw, act, ...o });
-    const face = (x, z, tx, tz) => Math.atan2(tx - x, tz - z);
-    const rnd = mulberry32(Math.floor(r.seed * 3e8) + 5);
-    // 가구는 단단하다 (닫을 때 함께 치운다)
-    const solidC = (c) => cur.cols.push(this.game.world.colliders.add({ y0: fy - 1, city: true, ...c }));
-    const sBox = (x, z, hx, hz, rot, h, tag) => { claim({ x, z, hx, hz, rot }, tag); solidC({ type: 'box', x, z, hx, hz, rot, y1: fy + h }); };
-    const sCyl = (x, z, rr, h, tag) => { claim({ x, z, r: rr }, tag); solidC({ type: 'cyl', x, z, r: rr, y1: fy + h }); };
-    const table = (x, z, R = 1.3, n = 4, act = 'eat') => {
-      put(new THREE.CylinderGeometry(R, R * 0.9, 0.08, 16), PEARL, 0, x, fy + 0.85, z);
-      put(new THREE.CylinderGeometry(0.15, 0.3, 0.85, 8), GOLD, 0, x, fy + 0.42, z);
-      put(new THREE.TorusGeometry(R * 0.6, 0.04, 3, 18).rotateX(Math.PI / 2), ACC, 1.2, x, fy + 0.9, z);
-      sCyl(x, z, R, 0.9);
-      for (let i = 0; i < n; i++) { const a = (i / n) * TAU; const sx = x + Math.cos(a) * (R + 0.9), sz = z + Math.sin(a) * (R + 0.9); put(new THREE.CylinderGeometry(0.45, 0.4, 0.45, 10), 0xc8c2d2, 0, sx, fy + 0.22, sz); sCyl(sx, sz, 0.42, 0.45); if (act) anchor(sx, sz, act, face(sx, sz, x, z)); }
-    };
-    // ── 구조마다의 건축 (가구보다 먼저 자리를 잡는다 — 가구·시설은 이 자리를 피한다) ──
-    const da = Math.atan2(dn[1], dn[0]);
-    /** 문 쪽에서 ang 만큼 돈 방향으로 벽까지의 거리 */
-    const wallAt = (ang) => {
-      const ux = Math.cos(da + ang), uz = Math.sin(da + ang);
-      let best = rin;
-      for (let i = 0; i < n; i++) {
-        const [x0, z0] = plan[i], [x1, z1] = plan[(i + 1) % n];
-        const ex = x1 - x0, ez = z1 - z0, den = ux * ez - uz * ex;
-        if (Math.abs(den) < 1e-9) continue;
-        const tt = ((x0 - cx) * ez - (z0 - cz) * ex) / den, uu = ((x0 - cx) * uz - (z0 - cz) * ux) / den;
-        if (tt > 0 && uu >= 0 && uu <= 1) best = tt;
-      }
-      return best;
-    };
-    const at = (ang, d) => [cx + Math.cos(da + ang) * d, cz + Math.sin(da + ang) * d];
-    const later = []; // 벽기둥은 가구·시설을 다 놓은 뒤 빈 자리에만 (겹치지 않게)
-    const pilaster = (x, z, h) => later.push(() => {
-      if (!isFree({ x, z, r: 0.4 }, 0.15)) return;
-      put(new THREE.CylinderGeometry(0.3, 0.36, h, 10), PEARL, 0, x, fy + h / 2, z);
-      put(new THREE.CylinderGeometry(0.46, 0.46, 0.25, 10), GOLD, 0.15, x, fy + 0.12, z);
-      put(new THREE.CylinderGeometry(0.5, 0.36, 0.35, 10), GOLD, 0.15, x, fy + h - 0.18, z);
-      put(new THREE.TorusGeometry(0.33, 0.03, 3, 14).rotateX(Math.PI / 2), ACC, 1.3, x, fy + h * 0.62, z);
-      sCyl(x, z, 0.4, h, 'arch');
-    });
-    if (L.id === 'rotunda') {
-      // 벽기둥 열둘 (문 둘레는 비운다) + 천창 둘레 빛
-      for (let i = 0; i < 12; i++) {
-        const ang = ((i + 0.5) / 12) * TAU;
-        if (Math.cos(ang) > 0.82) continue;
-        const [x, z] = at(ang, wallAt(ang) - 0.34);
-        pilaster(x, z, LH);
-      }
-      const ky = fy + LH + L.dome * (1 - 0.2 * 0.2);
-      put(new THREE.CircleGeometry(rin * 0.2, 24).rotateX(Math.PI / 2), 0xd8f4ff, 1.4, cx, ky + 0.02, cz);
-      put(new THREE.TorusGeometry(rin * 0.2, 0.12, 4, 32).rotateX(Math.PI / 2), GOLD, 0.9, cx, ky, cz);
-    } else if (L.id === 'gallery') {
-      // 긴 벽을 따라 벽기둥과 그 위를 잇는 아치, 천장 가운데 천창 띠
-      const half = wallAt(Math.PI / 2), len = wallAt(0), back = wallAt(Math.PI);
-      const dt2 = [-dn[1], dn[0]];
-      for (let tpos = -back + 2.4; tpos < len - 3.2; tpos += 3.8) {
-        for (const sg of [-1, 1]) pilaster(cx + dn[0] * tpos + dt2[0] * sg * (half - 0.34), cz + dn[1] * tpos + dt2[1] * sg * (half - 0.34), LH - 0.3);
-        const arch = new THREE.TorusGeometry(half - 0.34, 0.16, 4, 24, Math.PI).scale(1, 2.0 / (half - 0.34), 1);
-        put(arch, PEARL, 0.05, cx + dn[0] * tpos, fy + LH - 2.3, cz + dn[1] * tpos, Math.atan2(-dt2[1], dt2[0]));
-      }
-      const sl = new THREE.PlaneGeometry(1.3, len + back - 2).rotateX(Math.PI / 2);
-      put(sl, 0xe8f6ff, 1.5, cx + dn[0] * (len - back) / 2, fy + LH - 0.04, cz + dn[1] * (len - back) / 2, Math.atan2(dn[0], dn[1]));
-      // 안쪽 끝 벽: 큰 빛 벽화
-      const [mx2, mz2] = at(Math.PI, back - 0.12);
-      put(new THREE.PlaneGeometry(Math.min(8, half * 1.3), LH * 0.62), ACC, 0.55, mx2, fy + LH * 0.45, mz2, Math.atan2(dn[0], dn[1]));
-      put(new THREE.PlaneGeometry(Math.min(8, half * 1.3) - 0.6, LH * 0.62 - 0.6), PEARL, 0.25, mx2 + dn[0] * 0.03, fy + LH * 0.45, mz2 + dn[1] * 0.03, Math.atan2(dn[0], dn[1]));
-    } else if (L.id === 'mezz') {
-      // 안쪽 벽을 두른 2층 발코니 (걸어 오를 수 있다) + 문 옆 벽을 따라 오르는 계단
-      const B = L.balcony, dep = 2.6;
-      const glassMat = glowMaterial({ color: 0xbff8ff, intensity: 0.22, fresnel: 0.9, side: THREE.DoubleSide });
-      const railG = [];
-      for (let i = 0; i < n; i++) {
-        const [x0, z0] = plan[i], [x1, z1] = plan[(i + 1) % n];
-        const mxx = (x0 + x1) / 2 - cx, mzz = (z0 + z1) / 2 - cz;
-        const rel = Math.atan2(dn[0] * mzz - dn[1] * mxx, dn[0] * mxx + dn[1] * mzz);
-        if (Math.abs(rel) < 0.42 * Math.PI) continue;
-        const k0 = Math.max(0, 1 - dep / Math.hypot(x0 - cx, z0 - cz)), k1 = Math.max(0, 1 - dep / Math.hypot(x1 - cx, z1 - cz));
-        const i0 = [cx + (x0 - cx) * k0, cz + (z0 - cz) * k0], i1 = [cx + (x1 - cx) * k1, cz + (z1 - cz) * k1];
-        quad([x0, fy + B, z0], [x1, fy + B, z1], [i1[0], fy + B, i1[1]], [i0[0], fy + B, i0[1]], FLOOR, 0);
-        quad([x0, fy + B - 0.3, z0], [i0[0], fy + B - 0.3, i0[1]], [i1[0], fy + B - 0.3, i1[1]], [x1, fy + B - 0.3, z1], PEARL, 0);
-        quad([i0[0], fy + B - 0.3, i0[1]], [i1[0], fy + B - 0.3, i1[1]], [i1[0], fy + B, i1[1]], [i0[0], fy + B, i0[1]], PEARL, 0);
-        quad([i0[0], fy + B - 0.34, i0[1]], [i1[0], fy + B - 0.34, i1[1]], [i1[0], fy + B - 0.3, i1[1]], [i0[0], fy + B - 0.3, i0[1]], ACC, 1.3);
-        railG.push(i0[0], fy + B, i0[1], i1[0], fy + B, i1[1], i1[0], fy + B + 1.05, i1[1], i0[0], fy + B, i0[1], i1[0], fy + B + 1.05, i1[1], i0[0], fy + B + 1.05, i0[1]);
-        const mxm = (x0 + x1 + i0[0] + i1[0]) / 4, mzm = (z0 + z1 + i0[1] + i1[1]) / 4, segL = Math.hypot(x1 - x0, z1 - z0), rot = -Math.atan2(z1 - z0, x1 - x0);
-        cur.cols.push(this.game.world.colliders.add({ type: 'box', x: mxm, z: mzm, hx: segL / 2 + 0.15, hz: dep / 2, rot, y0: fy + B - 0.3, y1: fy + B, city: true, sky: true }));
-        const rx = (i0[0] + i1[0]) / 2, rz = (i0[1] + i1[1]) / 2;
-        cur.cols.push(this.game.world.colliders.add({ type: 'box', x: rx, z: rz, hx: Math.hypot(i1[0] - i0[0], i1[1] - i0[1]) / 2 + 0.05, hz: 0.08, rot: -Math.atan2(i1[1] - i0[1], i1[0] - i0[0]), y0: fy + B, y1: fy + B + 1.05, walk: false, city: true, sky: true }));
-        // 위층 사람: 난간에 기대어 아래를 본다
-        if (i % 5 === 0) { const ax2 = (x0 + x1 + i0[0] * 3 + i1[0] * 3) / 8, az2 = (z0 + z1 + i0[1] * 3 + i1[1] * 3) / 8; AN.push({ x: ax2, z: az2, y: fy + B, yaw: Math.atan2(cx - ax2, cz - az2), act: rnd() < 0.5 ? 'read' : 'eat' }); }
-      }
-      if (railG.length) { const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(railG, 3)); rg.computeVertexNormals(); const rm = new THREE.Mesh(rg, glassMat); rm.frustumCulled = false; g.add(rm); }
-      // 계단: 문 오른쪽 벽을 따라 (아래 −0.17π → 위 −0.41π)
-      const d0 = wallAt(-0.17 * Math.PI) - 1.25, d1 = wallAt(-0.41 * Math.PI) - 1.25;
-      const [sx0, sz0] = at(-0.17 * Math.PI, d0), [sx1, sz1] = at(-0.41 * Math.PI, d1);
-      const sl2 = Math.hypot(sx1 - sx0, sz1 - sz0), ux = (sx1 - sx0) / sl2, uz = (sz1 - sz0) / sl2, srot = -Math.atan2(uz, ux);
-      const steps = Math.ceil(B / 0.28);
-      for (let k = 0; k < steps; k++) {
-        const t0 = k / steps, sxk = sx0 + (sx1 - sx0) * (t0 + 0.5 / steps), szk = sz0 + (sz1 - sz0) * (t0 + 0.5 / steps);
-        put(new THREE.BoxGeometry(sl2 / steps + 0.02, 0.22, 1.9), k % 2 ? PEARL : GOLD, 0, sxk, fy + B * (k + 1) / steps - 0.22, szk, srot);
-        put(new THREE.BoxGeometry(sl2 / steps + 0.02, 0.03, 1.9), ACC, 0.9, sxk, fy + B * (k + 1) / steps - 0.01, szk, srot);
-      }
-      cur.cols.push(this.game.world.colliders.add({ type: 'ramp', x: (sx0 + sx1) / 2, z: (sz0 + sz1) / 2, hx: sl2 / 2, hz: 0.95, rot: srot, y0: fy - 1, y1: fy + 0.05, y1b: fy + B, city: true, sky: true }));
-      claim({ x: (sx0 + sx1) / 2, z: (sz0 + sz1) / 2, hx: sl2 / 2 + 0.4, hz: 1.2, rot: srot }, 'stair');
-    } else if (L.id === 'octagon') {
-      // 모서리 기둥 여덟 + 천장 가운데 팔각 등롱(높은 빛)
-      for (let i = 0; i < 8; i++) {
-        const ang = ((i + 0.5) / 8) * TAU;
-        const [x, z] = at(ang, wallAt(ang) - 0.55);
-        pilaster(x, z, LH);
-      }
-      for (let i = 0; i < 8; i++) {
-        const a0 = (i / 8) * TAU + da, a1 = ((i + 1) / 8) * TAU + da, rr = Math.min(5, rin * 0.38);
-        const p0 = [cx + Math.cos(a0) * rr, cz + Math.sin(a0) * rr], p1 = [cx + Math.cos(a1) * rr, cz + Math.sin(a1) * rr];
-        quad([p0[0], fy + LH - 0.02, p0[1]], [p1[0], fy + LH - 0.02, p1[1]], [p1[0], fy + LH - 1.3, p1[1]], [p0[0], fy + LH - 1.3, p0[1]], i % 2 ? GOLD : PEARL, 0.25);
-        quad([p0[0], fy + LH - 1.34, p0[1]], [p1[0], fy + LH - 1.34, p1[1]], [p1[0], fy + LH - 1.28, p1[1]], [p0[0], fy + LH - 1.28, p0[1]], ACC, 1.6);
-      }
-    } else if (L.id === 'alcove') {
-      // 꽃잎마다 붙박이 긴 의자 + 등받이 + 작은 빛 등 (가구 고리 바깥의 볼록한 자리)
-      for (let k = 0; k < 6; k++) {
-        const ang = ((2 * k + 1) * Math.PI) / 6;
-        const d = wallAt(ang) - 1.05;
-        if (d < rin + 0.6) continue;
-        const [x, z] = at(ang, d), rot = face(x, z, cx, cz);
-        const ox = Math.sin(rot), oz = Math.cos(rot);
-        put(new THREE.BoxGeometry(2.8, 0.45, 0.85), PEARL, 0, x, fy + 0.22, z, rot);
-        put(new THREE.BoxGeometry(2.8, 0.7, 0.18), GOLD, 0.1, x - ox * 0.42, fy + 0.8, z - oz * 0.42, rot);
-        put(new THREE.BoxGeometry(2.82, 0.04, 0.87), ACC, 1.0, x, fy + 0.46, z, rot);
-        put(new THREE.CylinderGeometry(0.03, 0.03, 1.6, 5), GOLD, 0, x - ox * 0.55 + oz * 1.6, fy + 0.8, z - oz * 0.55 - ox * 1.6);
-        put(new THREE.IcosahedronGeometry(0.2, 1), ACC, 2.0, x - ox * 0.55 + oz * 1.6, fy + 1.7, z - oz * 0.55 - ox * 1.6);
-        sBox(x, z, 1.4, 0.45, rot, 0.5, 'alcove');
-        if (rnd() < 0.5) anchor(x + ox * 0.1, z + oz * 0.1, rnd() < 0.5 ? 'read' : 'eat', rot);
-      }
-    } else if (L.id === 'panorama') {
-      // 천장 살 (문에서 안쪽으로 1.4 m 마다) + 유리벽 앞 바라보는 긴 의자 줄
-      const half = wallAt(Math.PI / 2), len = wallAt(0), back = wallAt(Math.PI);
-      const dt2 = [-dn[1], dn[0]];
-      for (let tpos = -back + 0.8; tpos < len - 0.8; tpos += 1.4) put(new THREE.BoxGeometry(half * 2 - 0.4, 0.28, 0.16), tpos % 2.8 < 1.4 ? GOLD : PEARL, 0.05, cx + dn[0] * tpos, fy + LH - 0.2, cz + dn[1] * tpos, Math.atan2(-dt2[1], dt2[0]));
-      for (const sg of [-1, 1]) {
-        const tpos = -back + 2.2, x = cx + dn[0] * tpos + dt2[0] * sg * 2.4, z = cz + dn[1] * tpos + dt2[1] * sg * 2.4, rot = Math.atan2(-dn[0], -dn[1]) + Math.PI / 2;
-        if (tpos > -rin * 0.95) continue;
-        put(new THREE.BoxGeometry(3.6, 0.45, 0.8), PEARL, 0, x, fy + 0.22, z, rot);
-        put(new THREE.BoxGeometry(3.6, 0.04, 0.82), ACC, 1.0, x, fy + 0.46, z, rot);
-        sBox(x, z, 1.8, 0.4, rot, 0.5, 'view');
-        if (rnd() < 0.7) anchor(x, z, 'eat', Math.atan2(-dn[0], -dn[1]));
-      }
-    }
-
-    if (pid === 'home') {
-      // 책장 · 식탁 · 부엌대 · 잠자리 셋 · 아이 놀이 자리
-      const [x, z] = toward(0.9, Math.PI);
-      const ry = Math.atan2(cx - x, cz - z);
-      for (let a = 0; a < 6; a++) for (let b = 0; b < 4; b++) put(new THREE.BoxGeometry(0.5, 0.4, 0.06), [ACC, GOLD, 0xff9fd0][(a + b) % 3], 0.8 + ((a * 7 + b) % 3) * 0.4, x + Math.cos(ry) * (a - 2.5) * 0.65, fy + 1.2 + b * 0.55, z - Math.sin(ry) * (a - 2.5) * 0.65, ry);
-      const [tx, tz] = toward(0.42, Math.PI * 0.72);
-      const fam = 2 + Math.floor(rnd() * 3), kids = rnd() < 0.6 ? 1 + Math.floor(rnd() * 2) : 0;
-      table(tx, tz, 1.3, 4, null);
-      const [kx, kz] = toward(0.74, Math.PI * 1.3);
-      const kry = face(kx, kz, cx, cz);
-      put(new THREE.BoxGeometry(3.4, 0.95, 0.9), 0xd8d2e0, 0, kx, fy + 0.48, kz, kry);
-      sBox(kx, kz, 1.7, 0.45, kry, 0.97);
-      put(new THREE.BoxGeometry(3.42, 0.05, 0.92), ACC, 1.2, kx, fy + 0.97, kz, kry);
-      put(new THREE.CylinderGeometry(0.3, 0.3, 0.25, 12), 0xffc46a, 1.6, kx + Math.sin(kry) * 0.1, fy + 1.1, kz + Math.cos(kry) * 0.1);
-      for (let i = 0; i < 3; i++) { const [bx, bz] = toward(0.8, Math.PI * 0.25 + i * 0.32); put(new THREE.CapsuleGeometry(0.55, 1.6, 3, 10).rotateZ(Math.PI / 2), 0xe8e0f0, 0.3, bx, fy + 0.45, bz, face(bx, bz, cx, cz) + Math.PI / 2); sBox(bx, bz, 1.35, 0.55, face(bx, bz, cx, cz) + Math.PI / 2, 0.9); if (night) anchor(bx, bz, 'sleep', face(bx, bz, cx, cz) + Math.PI / 2); }
-      if (!night) {
-        if (evening || !work) { anchor(kx - Math.sin(kry) * 1.0, kz - Math.cos(kry) * 1.0, 'cook', kry); for (let i = 0; i < Math.min(4, fam - 1); i++) { const a = (i / 4) * TAU; const sx = tx + Math.cos(a) * 2.2, sz = tz + Math.sin(a) * 2.2; anchor(sx, sz, 'eat', face(sx, sz, tx, tz)); } }
-        else { anchor(kx - Math.sin(kry) * 1.0, kz - Math.cos(kry) * 1.0, 'cook', kry, { age: 'elder' }); const [rx, rz] = toward(0.62, Math.PI * 0.85); anchor(rx, rz, 'read', face(rx, rz, x, z), { age: 'elder' }); }
-        const [px, pz] = toward(0.3, Math.PI * 1.65);
-        for (let i = 0; i < kids; i++) anchor(px, pz, 'kidplay', 0, { r: 1.6 + i * 0.5 });
-      }
-    } else if (pid === 'lab') {
-      for (let i = 0; i < 3; i++) {
-        const [x, z] = toward(0.6, Math.PI * 0.75 + i * 0.45);
-        put(new THREE.CylinderGeometry(1.1, 0.9, 1.0, 14), PEARL, 0, x, fy + 0.5, z);
-        sCyl(x, z, 1.1, 1.0);
-        put(new THREE.OctahedronGeometry(0.4, 0), [ACC, 0xb9a6ff, 0xff9fd0][i], 2.2, x, fy + 2.0, z);
-        put(new THREE.TorusGeometry(0.9, 0.03, 3, 20).rotateX(Math.PI / 2), ACC, 1.8, x, fy + 1.05, z);
-        if (work || rnd() < 0.3) { const ax = x + (cx - x) * 0.3, az = z + (cz - z) * 0.3; anchor(ax, az, 'research', face(ax, az, x, z)); }
-      }
-    } else if (pid === 'market') {
-      for (let i = 0; i < 6; i++) {
-        const [x, z] = toward(0.68, Math.PI * 0.45 + i * 0.37);
-        const c = [0xff9fd0, 0xffc46a, 0x7ff3e6, 0xb9a6ff][i % 4];
-        put(new THREE.BoxGeometry(2.2, 0.9, 1.1), PEARL, 0, x, fy + 0.45, z, Math.atan2(cx - x, cz - z));
-        sBox(x, z, 1.1, 0.55, Math.atan2(cx - x, cz - z), 0.9);
-        put(new THREE.ConeGeometry(1.7, 0.7, 4).rotateY(Math.PI / 4), c, 0.4, x, fy + 2.7, z);
-        put(new THREE.CylinderGeometry(0.05, 0.05, 2.3, 4), GOLD, 0, x, fy + 1.4, z);
-        for (let k = 0; k < 4; k++) put(new THREE.IcosahedronGeometry(0.2, 0), [c, 0xffffff, GOLD][k % 3], 1.0, x + (k - 1.5) * 0.4, fy + 1.05, z);
-        if (work || evening) {
-          const bx = x + (x - cx) * 0.12, bz = z + (z - cz) * 0.12;
-          anchor(bx, bz, 'shop', face(bx, bz, cx, cz));
-          if (rnd() < 0.6) { const qx = x + (cx - x) * 0.28, qz = z + (cz - z) * 0.28; anchor(qx, qz, 'guest', face(qx, qz, x, z)); }
-        }
-      }
-    } else if (pid === 'school') {
-      for (let i = 0; i < 8; i++) {
-        const ang = (i / 8) * TAU;
-        const [x, z] = [cx + Math.cos(ang) * rin * 0.55, cz + Math.sin(ang) * rin * 0.55];
-        put(new THREE.BoxGeometry(1.6, 0.4, 0.6), [0xffc46a, 0x7ff3e6, 0xff9fd0, 0xb9a6ff][i % 4], 0.2, x, fy + 0.3, z, ang + Math.PI / 2);
-        if (work && t < 0.62) anchor(x + Math.cos(ang) * 0.8, z + Math.sin(ang) * 0.8, 'student', face(x, z, cx, cz) + Math.PI, { age: 'child' });
-      }
-      put(new THREE.RingGeometry(rin * 0.3, rin * 0.32, 32).rotateX(-Math.PI / 2), 0xffd27a, 1.6, cx, fy + 0.03, cz);
-      if (work) { const [x, z] = toward(0.22, Math.PI * 0.5); anchor(x, z, 'teach', face(x, z, cx, cz) + Math.PI); }
-    } else if (pid === 'heal') {
-      for (let i = 0; i < 4; i++) {
-        const [x, z] = toward(0.66, Math.PI * 0.6 + i * 0.5);
-        const ry = Math.atan2(cx - x, cz - z) + Math.PI / 2;
-        put(new THREE.CapsuleGeometry(0.7, 1.8, 4, 10).rotateZ(Math.PI / 2), 0xe8f4ff, 0.5, x, fy + 0.9, z, ry);
-        put(new THREE.BoxGeometry(2.8, 0.4, 1.2), PEARL, 0, x, fy + 0.2, z, ry);
-        sBox(x, z, 1.4, 0.6, ry, 1.0);
-        if (rnd() < 0.6) anchor(x, z, 'patient', ry);
-        if (i % 2 === 0) { const hx = x + (cx - x) * 0.25, hz = z + (cz - z) * 0.25; anchor(hx, hz, 'heal', face(hx, hz, x, z)); }
-      }
-    } else if (pid === 'garden') {
-      const [x, z] = toward(0.5, Math.PI);
-      put(new THREE.CircleGeometry(Math.min(4, rin * 0.3), 24).rotateX(-Math.PI / 2), 0x3a8ab8, 0.5, x, fy + 0.05, z);
-      put(new THREE.TorusGeometry(Math.min(4, rin * 0.3), 0.15, 4, 28).rotateX(Math.PI / 2), PEARL, 0, x, fy + 0.1, z);
-      for (let i = 0; i < 3; i++) { const [gx, gz] = toward(0.55, Math.PI * 0.4 + i * 0.6); anchor(gx, gz, 'garden', face(gx, gz, cx, cz)); }
-    } else if (pid === 'hall') {
-      const [x, z] = toward(0.62, Math.PI);
-      put(new THREE.CylinderGeometry(rin * 0.32, rin * 0.34, 0.6, 24, 1, false, 0, Math.PI), PEARL, 0, x, fy + 0.3, z, faceDoor + Math.PI / 2);
-      for (let k = 0; k < 3; k++) put(new THREE.TorusGeometry(rin * 0.3 + k * 0.6, 0.04, 3, 24, Math.PI).rotateX(Math.PI / 2), 0xff9fd0, 1.5, x, fy + 0.65 + k * 0.02, z, faceDoor + Math.PI / 2);
-      const sing = t > 0.45 && t < 0.92;
-      const n = sing ? 5 : 2;
-      for (let i = 0; i < n; i++) { const a = (i - (n - 1) / 2) * 0.28; const sx = x + Math.cos(Math.atan2(cz - z, cx - x) + a) * 1.6, sz = z + Math.sin(Math.atan2(cz - z, cx - x) + a) * 1.6; AN.push({ x: sx, z: sz, y: fy + 0.6, yaw: face(sx, sz, cx, cz), act: 'sing' }); }
-      if (sing) for (let i = 0; i < 4; i++) { const [ax, az] = toward(0.1 + (i % 2) * 0.18, Math.PI * (0.8 + (i >> 1) * 0.4)); anchor(ax, az, 'eat', face(ax, az, x, z)); }
-    } else if (pid === 'office' || pid === 'library') {
-      // 책상 줄 (서고는 책장 줄)
-      for (let i = 0; i < 6; i++) {
-        const [x, z] = toward(0.5 + (i % 2) * 0.22, Math.PI * 0.55 + Math.floor(i / 2) * 0.45);
-        const ry = face(x, z, cx, cz);
-        sBox(x, z, 0.9, 0.45, ry, pid === 'office' ? 1.0 : 2.4);
-        if (pid === 'office') { put(new THREE.BoxGeometry(1.8, 0.08, 0.9), 0xd8d2e0, 0, x, fy + 0.95, z, ry); put(new THREE.BoxGeometry(0.9, 0.6, 0.05), ACC, 1.4, x, fy + 1.4, z, ry); put(new THREE.BoxGeometry(0.2, 0.95, 0.2), GOLD, 0, x, fy + 0.48, z, ry); }
-        else for (let b = 0; b < 4; b++) put(new THREE.BoxGeometry(1.8, 0.06, 0.5), [ACC, GOLD, 0xff9fd0, 0xb9a6ff][b], 0.9, x, fy + 0.5 + b * 0.6, z, ry);
-        if (work || rnd() < 0.2) anchor(x + Math.sin(ry) * 1.0, z + Math.cos(ry) * 1.0, pid === 'office' ? 'clerk' : 'read', ry + Math.PI);
-      }
-    } else if (pid === 'factory' || pid === 'depot') {
-      for (let i = 0; i < 4; i++) {
-        const [x, z] = toward(0.6, Math.PI * 0.55 + i * 0.32);
-        const ry = face(x, z, cx, cz);
-        sBox(x, z, pid === 'factory' ? 1.1 : 0.75, pid === 'factory' ? 0.8 : 0.65, ry, pid === 'factory' ? 1.4 : 2.3);
-        if (pid === 'factory') { put(new THREE.BoxGeometry(2.2, 1.4, 1.6), 0x9aa4b2, 0, x, fy + 0.7, z, ry); put(new THREE.TorusGeometry(0.6, 0.06, 4, 18), [ACC, 0xffc46a][i % 2], 2.0, x, fy + 1.9, z, ry); }
-        else for (let k = 0; k < 2; k++) put(new THREE.BoxGeometry(1.5, 1.1, 1.3), [0x6f8fb0, 0xc89060][(i + k) % 2], 0, x, fy + 0.55 + k * 1.12, z, ry);
-        if (work) anchor(x + Math.sin(ry) * 1.6, z + Math.cos(ry) * 1.6, 'work', ry + Math.PI);
-      }
-    } else if (pid === 'terminal') {
-      for (let i = 0; i < 3; i++) { const [x, z] = toward(0.55, Math.PI * 0.6 + i * 0.4); put(new THREE.BoxGeometry(4, 0.45, 0.8), 0xc8c2d2, 0, x, fy + 0.4, z, face(x, z, cx, cz)); sBox(x, z, 2, 0.4, face(x, z, cx, cz), 0.62); anchor(x, z, 'eat', face(x, z, cx, cz) + Math.PI); }
-      const [dx2, dz2] = toward(0.3, Math.PI * 1.4);
-      put(new THREE.BoxGeometry(2.6, 3, 0.1), 0x7ff3e6, 1.6, dx2, fy + 2.4, dz2, face(dx2, dz2, cx, cz));
-      if (work) anchor(dx2 + 1, dz2, 'clerk', face(dx2, dz2, cx, cz));
-    }
-    // 건물이 실제로 하는 일: 시설(진열대·계산대·전시대·생산 줄…)과 움직이는 장치 (game/venues.js)
-    if (this.game.venues) this.game.venues.build(cur, { put, sBox, sCyl, anchor, toward, face, rnd, cx, cz, rin, fy, LH, work, evening, night, t, faceDoor, dn, group: g, table, tree, claim, isFree, arcCounter });
-    // 사람이 설 자리·시설 앞은 비워 두고, 남은 빈 곳에 장식
-    for (const A of AN) occ.push({ x: A.x, z: A.z, r: 0.55, tag: 'person' });
-    for (const st of (this.game.venues && this.game.venues.stations) || []) occ.push({ x: st.x, z: st.z, r: 0.9, tag: 'station' });
-    for (const f of later) f();
-    decor();
-    // 합치기
-    const base = new THREE.BufferGeometry();
-    base.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
-    base.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
-    base.setAttribute('emit', new THREE.Float32BufferAttribute(E, 1));
-    base.computeVertexNormals();
-    geoms.push(base);
-    const merged = this._merge(geoms);
-    const m = new THREE.Mesh(merged, this.mat);
-    m.frustumCulled = false;
-    g.add(m);
-    // 바닥 (동심원 문양)
-    const fg = new THREE.BufferGeometry();
-    fg.setAttribute('position', new THREE.Float32BufferAttribute(FP, 3));
-    fg.setAttribute('color', new THREE.Float32BufferAttribute(FC, 3));
-    fg.setAttribute('emit', new THREE.Float32BufferAttribute(FE, 1));
-    fg.computeVertexNormals();
-    this.floorMat.uniforms.uTechC.value.set(cx, fy, cz);
-    const fm = new THREE.Mesh(fg, this.floorMat);
-    fm.frustumCulled = false;
-    g.add(fm);
-    // 창 (바깥이 보이는 유리)
-    if (WP.length) {
-      const wg = new THREE.BufferGeometry();
-      wg.setAttribute('position', new THREE.Float32BufferAttribute(WP, 3));
-      wg.setAttribute('uv', new THREE.Float32BufferAttribute(WU, 2));
-      const wm = new THREE.Mesh(wg, this.winMat);
-      wm.frustumCulled = false;
-      g.add(wm);
-    }
-    // 빛 승강기: 유리 관 + 빛기둥
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(1.75, 1.75, LH - 0.3, 24, 1, true), glowMaterial({ color: 0xbff8ff, intensity: 0.18, fresnel: 0.95, side: THREE.DoubleSide }));
-    tube.position.set(cx, fy + (LH - 0.3) / 2 + 0.15, cz);
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.35, LH - 0.3, 12, 1, true), glowMaterial({ color: 0x9ff6ff, intensity: 0.45 }));
-    beam.position.copy(tube.position);
-    g.add(tube, beam);
-    // 안내 홀로그램 (문 안쪽) + 떠 있는 조형물
-    const holo = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.3), hologramMaterial({ color: 0x7ff3e6, color2: 0xffffff, intensity: 1.5, scroll: 0.03, repeat: [0.6, 1], seed: Math.floor(r.seed * 99) }));
-    const [hx, hz] = [cur.door.x - dn[0] * 3.2 + dt[0] * 2.6, cur.door.z - dn[1] * 3.2 + dt[1] * 2.6];
-    holo.position.set(hx, fy + 2.3, hz);
-    holo.rotation.y = faceDoor;
-    g.add(holo);
-    const [ax, az] = toward(0.55, Math.PI * 0.95);
-    const art = new THREE.Mesh(new THREE.TorusKnotGeometry(0.55, 0.12, 64, 6), glowMaterial({ color: [0xffd27a, 0xff9fd0, 0xb9a6ff][Math.floor(r.seed * 3)], intensity: 1.4 }));
-    art.position.set(ax, fy + Math.min(LH - 1.4, 3.2), az);
-    if (rin > 6 && info.pid !== 'garden') g.add(art);
-    cur.anims.push((t) => { art.rotation.set(t * 0.4, t * 0.7, 0); beam.material.uniforms.uIntensity.value = 0.7 + Math.sin(t * 2) * 0.15; });
-    g.userData.indoor = true;
-    this.game.engine.scene.add(g);
-    cur.group = g;
-  }
-
-  _box(P, C, E, x, y, z, w, h, d, ry, color, emit) {
-    const geo = new THREE.BoxGeometry(w, h, d).rotateY(ry).translate(x, y + h / 2, z).toNonIndexed();
-    const pos = geo.attributes.position.array;
-    const col = new THREE.Color(color);
-    for (let i = 0; i < pos.length; i += 3) { P.push(pos[i], pos[i + 1], pos[i + 2]); C.push(col.r, col.g, col.b); E.push(emit); }
-  }
-
-  _paint(geo, color, emit) {
-    const g = geo.index ? geo.toNonIndexed() : geo;
-    for (const k of Object.keys(g.attributes)) if (k !== 'position') g.deleteAttribute(k);
-    const n = g.attributes.position.count;
-    const c = new THREE.Color(color), cols = new Float32Array(n * 3), em = new Float32Array(n).fill(emit);
-    for (let i = 0; i < n; i++) { cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b; }
-    g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-    g.setAttribute('emit', new THREE.BufferAttribute(em, 1));
-    g.computeVertexNormals();
-    return g;
-  }
-
-  _merge(list) {
-    let n = 0;
-    for (const g of list) n += g.attributes.position.count;
-    const P = new Float32Array(n * 3), N = new Float32Array(n * 3), C = new Float32Array(n * 3), E = new Float32Array(n);
-    let o = 0;
-    for (const g of list) {
-      const c = g.attributes.position.count;
-      P.set(g.attributes.position.array, o * 3); N.set(g.attributes.normal.array, o * 3); C.set(g.attributes.color.array, o * 3); E.set(g.attributes.emit.array, o);
-      o += c;
-    }
-    const g = new THREE.BufferGeometry();
-    g.setAttribute('position', new THREE.BufferAttribute(P, 3));
-    g.setAttribute('normal', new THREE.BufferAttribute(N, 3));
-    g.setAttribute('color', new THREE.BufferAttribute(C, 3));
-    g.setAttribute('emit', new THREE.BufferAttribute(E, 1));
-    return g;
-  }
-
-  /** 로비의 사람들: 안내지기(인물) + 가구 둘레에서 일하고 쉬는 주민 (citizens 가 그리고 말을 건다) */
-  _people(cur) {
-    const { r, plan } = cur;
-    const g = this.game, N = g.npcs;
-    const rnd = mulberry32(Math.floor(r.seed * 7e8));
-    const cx = r.x, cz = r.z, dn = [cur.door.nx, cur.door.nz];
-    const rin = Math.min(...plan.map(([x, z]) => Math.hypot(x - cx, z - cz)));
-    if (rin > 6 && cur.info.pid !== 'home') {
-      const k = deskKeeper(rin); // 넓은 방이면 계산대 뒤(방 쪽)에서 문을 보고 선다
-      const desk = N._spawn({ id: 'in-desk', name: '안내지기', service: 'lobby', indoor: true, x: cx + dn[0] * k, z: cz + dn[1] * k, y: cur.fy, hue: rnd(), glow: 0x7ff3e6, scale: 0.95, home: { x: cx, z: cz, r: 0.3 } });
-      desk.fig.yaw = Math.atan2(dn[0], dn[1]);
-      cur.npcs.push(desk);
-    }
-    // 바닥 높이로 맞춘 자리
-    for (const A of cur.anchors || []) A.y = Math.max(A.y, cur.fy);
-    if (g.citizens) g.citizens.setIndoor(r, cur.anchors || [], cur.info);
-  }
-
-  // ── 하늘 전망대 (지붕 위에 떠 있는 원반) ─────────
-  _deck(cur) {
-    if (cur.deck) return cur.deck;
-    const { r } = cur;
-    const g = this.game, C = g.world.colliders;
-    const y = r.base + r.sy * 1.12 + 5;
-    const R = Math.max(8, Math.min(15, r.sx * 0.9));
-    const grp = new THREE.Group();
-    const parts = [];
-    parts.push(this._paint(new THREE.CylinderGeometry(R, R * 0.8, 0.8, 32).translate(r.x, y - 0.4, r.z), 0x9894aa, 0));
-    parts.push(this._paint(new THREE.RingGeometry(R * 0.55, R * 0.58, 40).rotateX(-Math.PI / 2).translate(r.x, y + 0.02, r.z), ACC, 1.6));
-    parts.push(this._paint(new THREE.CircleGeometry(1.4, 20).rotateX(-Math.PI / 2).translate(r.x, y + 0.03, r.z), 0xffd27a, 0.6));
-    parts.push(this._paint(new THREE.TorusGeometry(R - 0.2, 0.06, 4, 48).rotateX(Math.PI / 2).translate(r.x, y + 1.05, r.z), ACC, 2.0));
-    this.deckMat.uniforms.uTechC.value.set(r.x, y, r.z);
-    const m = new THREE.Mesh(this._merge(parts), this.deckMat);
-    m.frustumCulled = false;
-    grp.add(m);
-    const rail = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.2, R - 0.2, 1.05, 48, 1, true), glowMaterial({ color: 0xbff8ff, intensity: 0.35, fresnel: 0.8, side: THREE.DoubleSide }));
-    rail.position.set(r.x, y + 0.52, r.z);
-    const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 1.4, y - r.top, 12, 1, true), glowMaterial({ color: 0x9ff6ff, intensity: 0.6, fresnel: 0.5, side: THREE.DoubleSide }));
-    beam.position.set(r.x, (y + r.top) / 2, r.z);
-    grp.add(rail, beam);
-    g.engine.scene.add(grp);
-    const cols = [C.add({ type: 'cyl', x: r.x, z: r.z, r: R, y0: y - 0.8, y1: y, city: true })];
-    for (let i = 0; i < 16; i++) {
-      const a0 = (i / 16) * TAU, a1 = ((i + 1) / 16) * TAU;
-      const x0 = r.x + Math.cos(a0) * (R - 0.2), z0 = r.z + Math.sin(a0) * (R - 0.2), x1 = r.x + Math.cos(a1) * (R - 0.2), z1 = r.z + Math.sin(a1) * (R - 0.2);
-      cols.push(C.add({ type: 'box', x: (x0 + x1) / 2, z: (z0 + z1) / 2, hx: Math.hypot(x1 - x0, z1 - z0) / 2 + 0.1, hz: 0.25, rot: -Math.atan2(z1 - z0, x1 - x0), y0: y, y1: y + 1.05, walk: false, city: true }));
-    }
-    cur.deck = { y, R, grp, cols };
-    return cur.deck;
-  }
-
-  // ── 닫기 ─────────────────────────────────
   close() {
     const cur = this.cur;
     if (!cur) return;
     const g = this.game, C = g.world.colliders;
     if (this.inPocket) this._pocket(false);
+    if (g.ops && cur.indoor) g.ops.close(cur);
+    if (cur.indoor) cur.indoor.close();
     for (const c of cur.cols) C.remove(c);
-    if (cur.deck) { for (const c of cur.deck.cols) C.remove(c); g.engine.scene.remove(cur.deck.grp); }
     for (const n of cur.npcs) g.npcs.remove(n);
     if (g.citizens) g.citizens.clearIndoor();
     if (g.venues) g.venues.clear();
     this.guest = null;
     if (cur.group) {
       g.engine.scene.remove(cur.group);
-      // GPU 버퍼 풀기 (공용 재질은 두고, 이 실내에서 만든 것만)
-      const keep = new Set([this.mat, this.floorMat, this.deckMat, this.winMat]);
+      const keep = new Set([this.mat]);
       cur.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && !keep.has(o.material) && o.material.dispose) o.material.dispose(); });
     }
+    this.store.flush();
     this.cur = null;
   }
 
-  /**
-   * 실내 공간에 들어가 있는 동안: 바깥 세계는 그리지 않고(카메라가 바깥과 겹칠 일이 없다),
-   * 땅·도시의 세부 단계와 하늘빛은 문 앞 거리 높이 기준, 활공·썰매는 쓰지 않는다
-   */
+  /** 실내에 들어가 있는 동안: 바깥 세계는 그리지 않고, 세부 단계와 하늘빛은 문 앞 거리 높이 기준 */
   _pocket(on) {
     const g = this.game, cur = this.cur;
     this.inPocket = on;
     g.player.indoor = on;
-    g.rig.floorLock = on && cur ? cur.fy : null;
+    g.rig.floorLock = on && cur ? (cur.indoor ? cur.indoor.yOf(cur.indoor.cur) : cur.fy) : null;
     if (on && cur) {
       const r = cur.r;
-      g.engine.altOffset = cur.fy - r.floorY;
+      g.engine.altOffset = POCKET_Y - r.floorY;
       g.world.viewProxy = new THREE.Vector3(r.door.x + r.door.nx * 4, r.floorY + 1.6, r.door.z + r.door.nz * 4);
       g.engine.isolate((o) => o.userData.indoor || o.isLight);
     } else {
@@ -885,7 +178,6 @@ export class Interiors {
     g.ui.loading(true, title, sub);
     g.ui.fade(true, true);
     audio.noise({ freq: 700, q: 0.6, dur: 1.6, gain: 0.3, type: 'bandpass', sweep: 2400, attack: 0.4 });
-    // 화면이 다 어두워진 뒤에 옮기고(옮기는 모습이 비치지 않게), 새 자리가 한두 장 그려진 뒤에 밝힌다
     setTimeout(() => {
       try { fn(); } catch (e) { console.error('[interiors]', e); }
       setTimeout(() => {
@@ -897,12 +189,23 @@ export class Interiors {
 
   _placeIn(cur) {
     const g = this.game, p = g.player, d = cur.door;
-    const k = cur.cabin ? 1.3 : 5.5; // 선실은 좁다: 문 안쪽 1.3 m
-    p.teleport(d.x - d.nx * k, cur.fy + 0.3, d.z - d.nz * k);
+    const k = cur.cabin ? 1.3 : 3.2; // 건물: 정문 안쪽 3.2 m (카메라가 문 쪽 벽에 눌리지 않게)
+    p.teleport(d.x - d.nx * k, (cur.indoor ? cur.indoor.yOf(cur.B.ground) : cur.fy) + 0.3, d.z - d.nz * k);
     p.yaw = Math.atan2(-d.nx, -d.nz);
     g.rig.yaw = p.yaw + Math.PI;
     g.rig.pitch = -0.12;
     g.rig._init = false;
+  }
+
+  /** 실내의 한 자리로 옮기기 (층 i, 세계 x, z, 바라볼 방향 yaw(세계)) */
+  placeAt(i, x, z, yaw) {
+    const g = this.game, ind = this.cur && this.cur.indoor;
+    if (!ind) return;
+    ind.setFloor(i);
+    g.player.teleport(x, ind.yOf(i) + 0.3, z);
+    if (yaw != null) { g.player.yaw = yaw; g.rig.yaw = yaw + Math.PI; }
+    g.rig._init = false;
+    g.rig.floorLock = ind.yOf(i);
   }
 
   /** 착륙선 선실로 (해치에서): 건물처럼 바깥과 떨어진 실내 공간 — game/cabin.js */
@@ -910,7 +213,7 @@ export class Interiors {
     const g = this.game;
     if (this._busy || !L) return;
     const [hx, hz] = L.W(0, 2.6);
-    const sn = Math.sin(L.ry), cs = Math.cos(L.ry); // 로컬 +z(해치 쪽) → 세계
+    const sn = Math.sin(L.ry), cs = Math.cos(L.ry);
     const r = { x: L.X, z: L.Z, door: { x: hx, z: hz, nx: sn, nz: cs }, floorY: L.Y + 1.15, zone: 'lander', kind: 'lander', idx: 0, seed: 0.5, base: L.Y, sy: 4.3, top: L.Y + 4.4, sx: 3, sz: 3, gy: L.Y, cabin: true };
     r.info = { pid: 'cabin', P: { name: '착륙선 선실', desc: '라르크 2 의 선실' }, name: '착륙선 「라르크 2」', floors: 1, people: 1 };
     this._load(() => {
@@ -926,175 +229,301 @@ export class Interiors {
     });
   }
 
-  enter(r) {
+  /** 바깥 문에서 들어가기 (또는 테라스·옥상 문: o = { floor, at: [x,z] }) */
+  enter(r, o = {}) {
     const g = this.game;
     if (this._busy || (this.inPocket && this.cur && this.cur.r === r)) return;
     const I = this.info(r);
     const mine = g.state.home === r.id;
-    // 방마다 따로 기억한다: 몇 번 와 봤는지, 처음 온 날 (같은 모양의 방이라도 다른 방)
-    const key = `${r.zone}:${r.kind}:${r.idx}`;
+    const key = uidOf(r);
     const rooms = g.state.rooms || (g.state.rooms = {});
     const rm = rooms[key] || (rooms[key] = { v: 0, d: g.world.clock.day });
     rm.v++;
-    const Lo = this.layoutOf(r);
+    const title = mine ? '우리 집' : I.name, sub = mine ? '하모네아가 내어 준 집' : I.P.desc;
     this._load(() => {
       this.open(r);
-      this._placeIn(this.cur);
+      const cur = this.cur;
+      if (o.floor != null && o.at) this.placeAt(o.floor, o.at[0], o.at[1], o.yaw);
+      else this._placeIn(cur);
       this._pocket(true);
-    }, mine ? '우리 집' : I.name, mine ? '하모네아가 내어 준 집' : I.P.desc, () => {
-      g.ui.regionTitle(mine ? '우리 집' : I.name, `${Lo.name} · ${rm.v === 1 ? '처음 와 본 곳' : `${rm.v}번째 들름`}`, false);
+      if (g.ops) g.ops.entered(cur);
+    }, title, sub, () => {
+      const cur = this.cur;
+      if (!cur || !cur.B) return;
+      const B = cur.B;
+      const above = B.floors.filter((F) => !F.below && !F.mezz).length, below = B.floors.filter((F) => F.below).length;
+      const uses = [...new Set(B.zones.map((Z) => FUSE[Z.use] && FUSE[Z.use].name).filter(Boolean))].slice(0, 4).join('·');
+      g.ui.regionTitle(mine ? '우리 집' : this.title(r), `지상 ${above}층${below ? ` · 지하 ${below}층` : ''} · ${uses} · ${rm.v === 1 ? '처음 와 본 곳' : `${rm.v}번째 들름`}`, false);
       if (mine && !g.state.flags.homeVisit) { g.state.flags.moaIndoor = true; g.setFlag('homeVisit'); setTimeout(() => g.ui.moa('…여기가 우리 집이에요. 이웃들이 벌써 문패에 우리 이름 노래를 새겨 놨어요. 지친 날엔 여기서 쉬어요.'), 1600); }
-      if (!g.state.flags.moaIndoor) { g.state.flags.moaIndoor = true; setTimeout(() => g.ui.moa('안으로 들어왔어요! 가운데 빛기둥은 승강기예요. 나갈 때는 들어온 문 앞에서 E.'), 1600); }
+      if (!g.state.flags.moaIndoor) { g.state.flags.moaIndoor = true; setTimeout(() => g.ui.moa('안으로 들어왔어요! 층마다 안내판이 있고, 지도(M)를 열면 이 건물의 층 지도가 나와요. 나갈 때는 들어온 문 앞에서 E.'), 1600); }
       if (g.tips) g.tips.show('indoor');
     });
   }
 
-  exit() {
+  exit(to = null) {
     const cur = this.cur, g = this.game, p = g.player;
     if (!cur || this._busy) return;
     const r = cur.r;
     this._load(() => {
       this.close();
-      // 문에서 7 m 앞에 바깥을 보고 선다 — 뒤따르는 카메라가 문틀·벽 속에 들어가지 않게
-      p.teleport(r.door.x + r.door.nx * 7, r.floorY + 1.5, r.door.z + r.door.nz * 7);
-      p.yaw = Math.atan2(r.door.nx, r.door.nz);
+      if (to) {
+        p.teleport(to.x, to.y + 0.3, to.z);
+        if (to.yaw != null) p.yaw = to.yaw;
+      } else {
+        p.teleport(r.door.x + r.door.nx * 7, r.floorY + 1.5, r.door.z + r.door.nz * 7);
+        p.yaw = Math.atan2(r.door.nx, r.door.nz);
+      }
       g.rig.yaw = p.yaw + Math.PI;
       g.rig.pitch = -0.12;
       g.rig._init = false;
-    }, '밖으로', this.info(r).name);
+    }, to ? to.title || '바깥으로' : '밖으로', this.title(r));
   }
 
-  up() {
-    const cur = this.cur;
-    if (!cur) return;
-    const d = this._deck(cur);
-    const g = this.game, r = cur.r;
+  // ── 승강기 ─────────────────────────────────
+  /** 승강기 문 앞에서: 이 승강기가 서는 층을 골라 탄다 */
+  liftPanel(lift) {
+    const g = this.game, cur = this.cur, ind = cur.indoor, B = cur.B;
+    const lk = B.links.find((k) => k.id === lift.link);
+    if (!lk) return;
+    const here = ind.cur;
+    const items = lk.floors.slice().sort((a, b) => b - a).map((i) => {
+      const F = B.floors[i];
+      const Z = B.zones[F.zone];
+      const org = Z && Z.org ? B.orgs.find((o) => o.id === Z.org) : null;
+      return { label: `${F.label}층 · ${FUSE[F.use] ? FUSE[F.use].name : F.use}${i === here ? ' (여기)' : ''}`, sub: org ? org.name : F.below ? '지하' : ' ', disabled: i === here, onClick: () => this.ride(lift, i) };
+    });
+    g.ui.serviceCard(lift.cargo ? '화물 승강기' : lk.bank === 'high' ? '승강기 · 높은층 급행' : lk.bank === 'low' ? '승강기 · 낮은층' : '승강기', '몇 층으로 갈까요?', lift.cargo ? '짐과 함께 타는 넓은 칸. 일하는 사람이 쓴다.' : '공명 부양 칸이 조용히 오르내린다.', items);
+  }
+  ride(lift, to) {
+    const g = this.game, cur = this.cur, ind = cur.indoor, B = cur.B;
+    const from = ind.cur;
+    const F = B.floors[to];
+    audio.blip && audio.blip({ hz: 520, to: 780, dur: 0.25, gain: 0.08 });
+    const dist = Math.abs(F.y - B.floors[from].y);
     this._load(() => {
-      this._pocket(false);
-      g.player.teleport(r.x + r.door.nx * 3, d.y + 1, r.z + r.door.nz * 3);
-      g.player.yaw = Math.atan2(r.door.nx, r.door.nz);
-      g.rig.yaw = g.player.yaw + Math.PI;
-      g.rig.pitch = -0.25;
-      g.rig._init = false;
-    }, '하늘 전망대', '빛 승강기로 지붕 위까지', () => g.ui.regionTitle('하늘 전망대', `${Math.round(d.y - r.floorY)} m · 가장자리에서 뛰어내려 활공할 수 있어요`, false));
+      ind.setFloor(to);
+      const out = ind.built.get(to);
+      const L = out && out.lifts.find((q) => q.link === lift.link);
+      const f = L ? L.front : lift.front;
+      const lx = (L ? L.x : lift.x) + f[0] * 1.4, lz = (L ? L.z : lift.z) + f[1] * 1.4;
+      const [x, z] = ind.world(lx, lz);
+      const wx = f[0] * ind.V.ex[0] + f[1] * ind.V.ez[0], wz = f[0] * ind.V.ex[1] + f[1] * ind.V.ez[1];
+      this.placeAt(to, x, z, Math.atan2(wx, wz));
+      if (L) { L.open = 1; L.want = 1; setTimeout(() => { L.want = 0; }, 3000); }
+      if (g.ops) g.ops.floorChanged(to);
+    }, `${F.label}층`, `${FUSE[F.use] ? FUSE[F.use].name : ''} · ${Math.round(dist)} m ${to > from ? '올라감' : '내려감'}`);
   }
 
-  down() {
-    const cur = this.cur;
-    if (!cur) return;
-    const g = this.game;
-    this._load(() => {
-      g.player.teleport(cur.r.x + cur.door.nx * 3.2, cur.fy + 0.3, cur.r.z + cur.door.nz * 3.2);
-      g.player.yaw = Math.atan2(cur.door.nx, cur.door.nz);
-      g.rig.yaw = g.player.yaw + Math.PI;
-      g.rig._init = false;
-      this._pocket(true);
-    }, this.info(cur.r).name, '로비로 내려가는 중');
+  /** 테라스·옥상으로 나가기: 바깥의 실제 단·지붕 위로 */
+  outTo(kind, F, at) {
+    const cur = this.cur, ind = cur.indoor, B = cur.B, r = cur.r;
+    const [x, z] = ind.world(at[0], at[1]);
+    const y = kind === 'roof' ? B.roof.y : F.terrace.y;
+    this.outside = { r, floor: F.i, at: [x, z], kind, y };
+    this.exit({ x, y: y + 0.1, z, title: kind === 'roof' ? '옥상' : '테라스' });
+    setTimeout(() => this.game.ui.toast(`${kind === 'roof' ? '옥상' : '테라스'}로 나왔다 · 다시 들어갈 때는 나온 문 앞에서 E`, {}), 1500);
+    if (kind === 'roof' && this.game.setFlag) this.game.setFlag('liftTop');
   }
 
-  talk() {
-    const cur = this.cur;
-    if (!cur) return;
-    const I = cur.info, g = this.game;
-    g.ui.serviceCard('안내지기', I.name, I.P.desc, [
-      { label: '하늘 전망대로', sub: '가운데 빛 승강기로 지붕 위 전망대까지', primary: true, onClick: () => this.up() },
-      { label: '밖으로 나가기', sub: '문 앞으로', onClick: () => this.exit() },
-    ], `<div class="svc-stat"><span>구조 <b>${cur.layout.name}</b></span><span>층 <b>${I.floors}</b></span><span>${I.pid === 'home' ? '사는 이' : '오가는 이'} <b>${I.people}</b></span></div>`);
-  }
-
-  // ── 매 프레임 ─────────────────────────────
-  /** 상호작용할 것 (game._findTarget 이 부른다) */
+  // ── 상호작용 ───────────────────────────────
   target(p) {
     const cur = this.cur;
     if (cur && this.inPocket && cur.cabin) {
-      // 선실: 단말·별지도·표본함·일지 · 나가는 문
       if (Math.hypot(p.x - cur.door.x, p.z - cur.door.z) < 1.9) return { kind: 'exit', label: '해치 · 밖으로 나가기', short: '나가기' };
       let best = null, bd = 1e9;
       for (const st of cur.cabin.stations) { const d = Math.hypot(p.x - st.at[0], p.z - st.at[1]); if (d < st.r && d < bd) { bd = d; best = st; } }
       return best ? { kind: 'lander', o: best, label: best.label, short: best.short } : null;
     }
-    if (cur && this.inPocket) {
-      const r = cur.r;
-      const dc = Math.hypot(p.x - r.x, p.z - r.z);
-      if (dc < 3.6 && Math.abs(p.y - cur.fy) < 2.5) return { kind: 'lift', label: '빛 승강기 · 하늘 전망대로', short: '승강기' };
-      const dd = Math.hypot(p.x - cur.door.x, p.z - cur.door.z);
-      if (dd < 3.4 && Math.abs(p.y - cur.fy) < 2.5) return { kind: 'exit', label: '밖으로 나가기', short: '나가기' };
+    if (cur && this.inPocket && cur.indoor) {
+      const ind = cur.indoor, B = cur.B;
+      const i = ind.cur;
+      const fy = ind.yOf(i);
+      const out = ind.built.get(i);
+      if (!out) return null;
+      // 옥상 문 (계단 꼭대기)
+      for (const S of out.stairs) if (S.roofDoor) {
+        const [x, z] = ind.world(S.roofDoor[0], S.roofDoor[1]);
+        if (Math.hypot(p.x - x, p.z - z) < 1.6 && p.y > fy + S.roofY - 1.5) return { kind: 'roofdoor', o: { S, F: B.floors[i] }, label: '옥상 문 · 지붕 위로 나가기', short: '옥상' };
+      }
+      if (Math.abs(p.y - fy) > 2.6) return null;
+      if (i === B.ground && Math.hypot(p.x - cur.door.x, p.z - cur.door.z) < 2.6) return { kind: 'exit', label: '정문 · 밖으로 나가기', short: '나가기' };
+      for (const L of out.lifts) {
+        if (!L.stops) continue;
+        const [x, z] = ind.world(L.x + L.front[0] * 0.8, L.z + L.front[1] * 0.8);
+        if (Math.hypot(p.x - x, p.z - z) < 1.7) return { kind: 'ilift', o: L, label: `${L.cargo ? '화물 승강기' : '승강기'} · 층 고르기`, short: '승강기' };
+      }
+      const T = out.L.ents.terrace;
+      if (T) {
+        const G = B.G, ti = T.c % G.gw, tj = (T.c / G.gw) | 0;
+        const [x, z] = ind.world(G.ox + ti + 0.5 + T.dir[0] * 0.5, G.oz + tj + 0.5 + T.dir[1] * 0.5);
+        if (Math.hypot(p.x - x, p.z - z) < 1.8) return { kind: 'terrace', o: { F: B.floors[i], at: [G.ox + ti + 0.5 + T.dir[0] * 1.6, G.oz + tj + 0.5 + T.dir[1] * 1.6] }, label: '테라스 문 · 바깥 단으로 나가기', short: '테라스' };
+      }
       return null;
     }
-    if (cur && cur.deck) {
-      const dc = Math.hypot(p.x - cur.r.x, p.z - cur.r.z);
-      if (dc < 2.8 && Math.abs(p.y - cur.deck.y) < 2.5) return { kind: 'liftdown', label: '빛 승강기 · 로비로 내려가기', short: '내려가기' };
-    }
+    // 바깥: 테라스·옥상에서 다시 들어가는 문
+    const o = this.outside;
+    if (o && Math.hypot(p.x - o.at[0], p.z - o.at[1]) < 2.4 && Math.abs(p.y - o.y) < 3) return { kind: 'reenter', o, label: `${o.kind === 'roof' ? '옥상' : '테라스'} 문 · 안으로 들어가기`, short: '들어가기' };
     const d = this.city.nearestDoor(p.x, p.z, 3.4);
-    if (d && Math.abs(p.y - d.floorY) < 3) {
-      const I = this.info(d);
-      return { kind: 'door', o: d, dist: Math.hypot(p.x - d.door.x, p.z - d.door.z), label: `${this.game.state.home === d.id ? '우리 집' : I.name} · 들어가기`, short: '들어가기' };
-    }
+    if (d && Math.abs(p.y - d.floorY) < 3) return { kind: 'door', o: d, dist: Math.hypot(p.x - d.door.x, p.z - d.door.z), label: `${this.title(d)} · 들어가기`, short: '들어가기' };
     return null;
   }
+  /** game._interact 가 부르는 실내 행동 */
+  use(t) {
+    if (t.kind === 'ilift') return this.liftPanel(t.o);
+    if (t.kind === 'roofdoor') return this.outTo('roof', t.o.F, t.o.S.roofDoor);
+    if (t.kind === 'terrace') return this.outTo('terrace', t.o.F, t.o.at);
+    if (t.kind === 'reenter') { const o = t.o; this.outside = null; return this.enter(o.r, { floor: o.floor, at: this._reentryPoint(o) }); }
+    return null;
+  }
+  _reentryPoint(o) {
+    const B = this.store.plan(o.r);
+    const pl = this.store.floor(o.r, o.floor);
+    const G = B.G, V = B.V;
+    const toW = (gx, gz) => [o.r.x + gx * V.ex[0] + gz * V.ez[0], o.r.z + gx * V.ex[1] + gz * V.ez[1]];
+    if (o.kind === 'terrace' && pl.L.ents.terrace) { const T = pl.L.ents.terrace; return toW(G.ox + (T.c % G.gw) + 0.5 - T.dir[0] * 0.8, G.oz + ((T.c / G.gw) | 0) + 0.5 - T.dir[1] * 0.8); }
+    // 옥상: 계단참
+    const hall = pl.L.lifthall != null ? pl.L.rooms[pl.L.lifthall] : null;
+    if (hall) return toW(G.ox + hall.cx + 0.5, G.oz + hall.cz + 0.5);
+    return o.at;
+  }
 
+  // ── 매 프레임 ─────────────────────────────
   update(dt) {
     const g = this.game, p = g.player.pos;
     this.t += dt;
     const cur = this.cur;
+    if (this.outside && !cur) { const o = this.outside; if (Math.hypot(p.x - o.at[0], p.z - o.at[1]) > 400 || Math.abs(p.y - o.y) > 200) this.outside = null; }
     if (!cur) return;
     for (const f of cur.anims) f(this.t);
-    if (this.inPocket) {
-      const r = cur.r, ceil = cur.fy + cur.LH;
-      // 혹시 방 밖으로 밀려나거나 떨어지면 문 안쪽으로
-      if (p.y < cur.fy - 4 || !this._inside(p.x, p.z, -1.5)) this._placeIn(cur);
-      // 실내 사람도 방 안·천장 아래에
-      if (g.citizens) for (const q of g.citizens.indoor) {
-        if (!this._inside(q.pos.x, q.pos.z, 0.5)) { q.pos.x += (r.x - q.pos.x) * 0.2; q.pos.z += (r.z - q.pos.z) * 0.2; }
-        q.pos.y = Math.min(Math.max(q.pos.y, cur.fy), ceil - 2.0 * q.scale - 0.1);
-      }
+    if (this.inPocket && cur.indoor) {
+      const ind = cur.indoor;
+      ind.update(dt);
+      g.rig.floorLock = ind.yOf(ind.cur);
+      const fy = ind.yOf(ind.cur);
+      if (p.y < fy - 5 || p.y < POCKET_Y - 60) this._rescue();
       return;
     }
-    // 전망대에서 내려와 멀어지면 닫는다
-    const r = cur.r;
-    const dc = Math.hypot(p.x - r.x, p.z - r.z);
-    const onDeck = cur.deck && dc < cur.deck.R + 40 && Math.abs(p.y - cur.deck.y) < 60;
-    if (!onDeck && !this._busy) this.close();
+    if (this.inPocket && cur.cabin) {
+      if (p.y < cur.fy - 4) this._placeIn(cur);
+      return;
+    }
+    if (!this._busy) this.close();
+  }
+  _rescue() {
+    const cur = this.cur, ind = cur.indoor;
+    const pl = ind.plan(ind.cur);
+    const hall = pl && pl.L.lifthall != null ? pl.L.rooms[pl.L.lifthall] : null;
+    if (hall) { const [x, z] = ind.world(ind.G.ox + hall.cx + 0.5, ind.G.oz + hall.cz + 0.5); this.placeAt(ind.cur, x, z); }
+    else this._placeIn(cur);
   }
 
-  /** 실내에서는 카메라가 벽·바닥·천장 안에 머문다 (닫힌 방이라 그 밖은 아무것도 없다) */
+  /** 실내에서는 카메라가 지금 층의 벽·바닥·천장 안에 머문다 (칸막이를 넘어 옆방을 들여다보지 않게) */
   clampCamera(cam, target) {
     const cur = this.cur;
     if (!cur || !this.inPocket) return;
-    const r = cur.r;
-    const top = cur.fy + cur.LH - 0.45, bot = cur.fy + 0.35;
-    const ok = (x, y, z) => y < top && y > bot && this._inside(x, z, 1.3); // 벽에서 1.3 m — 문틀·가구 속에 들어가지 않게
     if (cam.near !== 0.15) { cam.near = 0.15; cam.updateProjectionMatrix(); }
-    // 안전한 기준점: 목표(머리 둘레)를 방 안으로 끌어들인 점
+    if (cur.cabin) return this._clampCabin(cam, target);
+    const ind = cur.indoor, i = ind.cur;
+    const bot = ind.yOf(i) + 0.3, top = ind.ceilY(i) - 0.3;
+    const pad = 0.35;
+    const ok = (x, y, z) => y < top && y > bot && ind.inside(i, x, z) && ind.inside(i, x + pad, z) && ind.inside(i, x - pad, z) && ind.inside(i, x, z + pad) && ind.inside(i, x, z - pad) && ind.segClear(i, target.x, target.z, x, z);
     const a = target.clone();
     a.y = Math.min(top - 0.05, Math.max(bot + 0.05, a.y));
-    if (!this._inside(a.x, a.z, 1.3)) {
-      const c = new THREE.Vector3(r.x, a.y, r.z);
-      let lo = 0, hi = 1;
-      for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2; const q = c.clone().lerp(a, m); if (this._inside(q.x, q.z, 1.3)) lo = m; else hi = m; }
-      a.copy(c.lerp(a, lo));
-    }
     if (ok(cam.position.x, cam.position.y, cam.position.z)) return;
     const b = cam.position.clone();
     let lo = 0, hi = 1;
-    for (let i = 0; i < 12; i++) {
-      const m = (lo + hi) / 2;
-      const q = a.clone().lerp(b, m);
-      if (ok(q.x, q.y, q.z)) lo = m; else hi = m;
-    }
+    for (let k = 0; k < 12; k++) { const m = (lo + hi) / 2; const q = a.clone().lerp(b, m); if (ok(q.x, q.y, q.z)) lo = m; else hi = m; }
     const pos = a.clone().lerp(b, lo);
-    // 벽을 등지고 서서 카메라가 너무 가까워지면, 뒤로 물러나는 대신 위로 올라 내려다본다
-    const near = pos.distanceTo(target);
-    if (near < 2.4) pos.y = Math.min(top - 0.1, pos.y + (2.4 - near) * 1.1);
+    // 벽을 등져 카메라가 너무 가까워지면, 뒤로 물러나는 대신 위로 올라 내려다본다 (머리·목도리에 가리지 않게)
+    const near = Math.hypot(pos.x - target.x, pos.z - target.z);
+    if (near < 2.6) pos.y = Math.min(top - 0.1, Math.max(pos.y, target.y + (2.6 - near) * 1.1));
     cam.position.copy(pos);
     cam.lookAt(target);
   }
+  _clampCabin(cam, target) {
+    const cur = this.cur;
+    const top = cur.fy + cur.LH - 0.45, bot = cur.fy + 0.35;
+    const inside = (x, z) => { const pts = cur.plan; let k = false; for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) { const [xi, zi] = pts[i], [xj, zj] = pts[j]; if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) k = !k; } return k; };
+    const ok = (x, y, z) => y < top && y > bot && inside(x, z);
+    if (ok(cam.position.x, cam.position.y, cam.position.z)) return;
+    const a = target.clone(), b = cam.position.clone();
+    let lo = 0, hi = 1;
+    for (let k = 0; k < 12; k++) { const m = (lo + hi) / 2; const q = a.clone().lerp(b, m); if (ok(q.x, q.y, q.z)) lo = m; else hi = m; }
+    cam.position.copy(a.lerp(b, lo));
+    cam.lookAt(target);
+  }
 
-  /** 저장할 자리: 실내·전망대에 있으면 바깥 문 앞으로 */
+  /** 저장할 자리: 실내면 바깥 문 앞 (실내 자리는 state.inside 에 따로) */
   safeSpot() {
     const cur = this.cur;
     if (!cur) return null;
     const r = cur.r;
     return { x: r.door.x + r.door.nx * 3, z: r.door.z + r.door.nz * 3 };
   }
+
+  // 선실·옛 시설이 쓰는 도구
+  _paint(geo, color, emit) {
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    for (const k of Object.keys(g.attributes)) if (k !== 'position') g.deleteAttribute(k);
+    const n = g.attributes.position.count;
+    const c = new THREE.Color(color), cols = new Float32Array(n * 3), em = new Float32Array(n).fill(emit);
+    for (let i = 0; i < n; i++) { cols[i * 3] = c.r; cols[i * 3 + 1] = c.g; cols[i * 3 + 2] = c.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+    g.setAttribute('emit', new THREE.BufferAttribute(em, 1));
+    g.computeVertexNormals();
+    return g;
+  }
+  _merge(list) {
+    let n = 0;
+    for (const g of list) n += g.attributes.position.count;
+    const P = new Float32Array(n * 3), N = new Float32Array(n * 3), C = new Float32Array(n * 3), E = new Float32Array(n);
+    let o = 0;
+    for (const g of list) { const c = g.attributes.position.count; P.set(g.attributes.position.array, o * 3); N.set(g.attributes.normal.array, o * 3); C.set(g.attributes.color.array, o * 3); E.set(g.attributes.emit.array, o); o += c; }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.BufferAttribute(N, 3)); g.setAttribute('color', new THREE.BufferAttribute(C, 3)); g.setAttribute('emit', new THREE.BufferAttribute(E, 1));
+    return g;
+  }
+  _box(P, C, E, x, y, z, w, h, d, ry, color, emit) {
+    const geo = new THREE.BoxGeometry(w, h, d).rotateY(ry).translate(x, y + h / 2, z).toNonIndexed();
+    const pos = geo.attributes.position.array;
+    const col = new THREE.Color(color);
+    for (let i = 0; i < pos.length; i += 3) { P.push(pos[i], pos[i + 1], pos[i + 2]); C.push(col.r, col.g, col.b); E.push(emit); }
+  }
+  /** 점검용 보기: 'plan' 위에서 내려다본 층(천장 숨김) · 'room' 방 하나를 모서리에서 · 'off' 되돌리기 */
+  debugView(kind = 'plan', arg = null) {
+    const g = this.game, cur = this.cur;
+    if (!cur || !cur.indoor) return null;
+    const ind = cur.indoor, i = arg && arg.floor != null ? arg.floor : ind.cur;
+    if (arg && arg.floor != null && arg.floor !== ind.cur) ind.setFloor(arg.floor);
+    for (const out of ind.built.values()) if (out.ceilMesh) out.ceilMesh.visible = kind !== 'plan';
+    if (kind === 'off') { g.rig.override = null; return null; }
+    const out = ind.built.get(i), B = cur.B, G = B.G;
+    if (!out) return null;
+    const y0 = ind.yOf(i);
+    if (kind === 'plan') {
+      // 위에서 (다른 층은 숨김)
+      for (const [j, o] of ind.built) o.group.visible = j === i;
+      let i0 = 1e9, i1 = -1e9, j0 = 1e9, j1 = -1e9;
+      const F = B.floors[i];
+      for (let c = 0; c < F.mask.length; c++) if (F.mask[c]) { const a = c % G.gw, b = (c / G.gw) | 0; i0 = Math.min(i0, a); i1 = Math.max(i1, a); j0 = Math.min(j0, b); j1 = Math.max(j1, b); }
+      const cx = G.ox + (i0 + i1 + 1) / 2, cz = G.oz + (j0 + j1 + 1) / 2, span = Math.max(i1 - i0, j1 - j0) + 4;
+      const [x, z] = ind.world(cx, cz);
+      const h = span / (2 * Math.tan((g.engine.camera.fov * Math.PI) / 360)) + 2;
+      const [x2, z2] = ind.world(cx, cz - 0.01);
+      g.rig.override = { pos: new THREE.Vector3(x2, y0 + h, z2), look: new THREE.Vector3(x, y0, z) };
+      return { span, h };
+    }
+    for (const o of ind.built.values()) o.group.visible = true;
+    const R = arg && arg.room != null ? out.L.rooms[arg.room] : out.L.rooms.find((q) => q.main) || out.L.rooms.find((q) => q.n > 20);
+    if (!R) return null;
+    const ax = G.ox + R.i0 + 0.8, az = G.oz + R.j1 + 0.2, bx = G.ox + R.cx + 0.5, bz = G.oz + R.cz + 0.5;
+    const [px, pz] = ind.world(ax, az), [lx, lz] = ind.world(bx, bz);
+    g.rig.override = { pos: new THREE.Vector3(px, y0 + Math.min(2.4, (B.floors[i].ceil - B.floors[i].y) - 0.4), pz), look: new THREE.Vector3(lx, y0 + 0.8, lz) };
+    return R.name;
+  }
+
+  // 옛 이름 (게임 쪽에서 아직 부를 수 있다)
+  up() {}
+  down() {}
+  talk() {}
 }

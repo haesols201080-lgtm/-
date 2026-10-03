@@ -424,3 +424,27 @@ body.busy .touchui *, body.busy .tones * { pointer-events: none !important; }
 .mp-sig .bars i { display: inline-block; width: 3px; background: rgba(255, 255, 255, 0.18); border-radius: 1px; }
 .mp-sig .bars i.on { background: var(--teal); }
 .mp-badge { cursor: pointer; }
+
+/* ── 건물 속 (v0.9): 울림판 단말 · 손에 든 것 · 할 일 ── */
+.card.os-card { width: min(94vw, 560px); padding: 0 0 18px; text-align: left; }
+.os { --os: #7ff3e6; }
+.os-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px 10px; border-bottom: 2px solid var(--os); background: linear-gradient(90deg, color-mix(in srgb, var(--os) 22%, transparent), transparent); border-radius: 14px 14px 0 0; }
+.os-head b { font-weight: 500; font-size: 16px; letter-spacing: 0.04em; }
+.os-head span { font-size: 12px; color: var(--ink-dim); }
+.os-nav { display: flex; gap: 4px; padding: 8px 14px 0; flex-wrap: wrap; }
+.os-tab { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); color: var(--ink-dim); border-radius: 10px; padding: 6px 12px; font-size: 13px; cursor: pointer; font-family: inherit; }
+.os-tab.on { color: var(--ink); border-color: var(--os); background: color-mix(in srgb, var(--os) 18%, transparent); }
+.os-body { padding: 4px 20px 0; max-height: 64vh; overflow-y: auto; }
+.os-body h3 { font-weight: 500; font-size: 18px; margin: 12px 0 2px; }
+.os-search { display: flex; gap: 6px; margin: 6px 0; }
+.os-search input { flex: 1; min-width: 0; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 10px; color: var(--ink); padding: 8px 12px; font-size: 14px; font-family: inherit; }
+.os-search .btn { margin: 0; padding: 6px 14px; }
+.os-quick { display: flex; flex-wrap: wrap; gap: 5px; margin: 4px 0 6px; }
+.os-quick .btn.os-q { margin: 0; padding: 4px 10px; font-size: 12.5px; border-radius: 999px; }
+.os-glyph { display: inline-block; vertical-align: middle; color: #efe6ff; }
+.os-chart { display: flex; align-items: flex-end; gap: 4px; height: 110px; padding: 6px 4px; background: rgba(0, 0, 0, 0.2); border-radius: 10px; }
+.os-bar { flex: 1; min-width: 8px; border: 0; border-radius: 4px 4px 0 0; background: linear-gradient(var(--os), color-mix(in srgb, var(--os) 30%, transparent)); cursor: pointer; padding: 0; }
+.os-bar:hover { filter: brightness(1.4); }
+.ops-hud { position: absolute; left: 18px; bottom: 120px; display: flex; flex-direction: column; gap: 5px; pointer-events: none; z-index: 3; }
+.ops-hud span { background: rgba(10, 14, 28, 0.62); border-left: 3px solid #7ff3e6; padding: 5px 10px; border-radius: 6px; font-size: 13px; color: var(--ink); max-width: 46vw; }
+.ops-hud .b { border-color: #ffc46a; } .ops-hud .c { border-color: #ff9fd0; } .ops-hud .t { border-color: #b9a6ff; } .ops-hud .s { border-color: #8ff0c0; } .ops-hud .g { border-color: #9ff6ff; }

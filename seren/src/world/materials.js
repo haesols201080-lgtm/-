@@ -300,7 +300,7 @@ void main() {
     glassMaskF = 1.0 - frame;
   } else if (ftype > 6.5) {
     // 수직 농장: 층마다 재배 띠(잎·꽃) + 유리 띠(보랏빛 생장등)
-    float fl = (vWorld.y - vBase) / 4.2;
+    float fl = (vWorld.y - vBase - 1.35) / 4.2;
     float ff = fract(fl), fwv = fwidth(fl);
     float slab = 1.0 - smoothstep(0.06, 0.06 + fwv * 1.5, ff);
     float planted = step(0.5, ff) * (1.0 - slab);
@@ -318,7 +318,7 @@ void main() {
     bool balc = ftype > 4.5;
     float bay = ftype < 1.5 ? 1.6 : ftype < 2.5 ? 2.2 : ftype < 3.5 ? 2.6 : balc ? 3.0 : 1.4;
     float flH = ftype < 1.5 ? 3.6 : ftype < 3.5 ? 3.9 : balc ? 3.2 : 3.3;
-    vec2 cell = vec2(vFac.x / bay, (vWorld.y - vBase) / flH);
+    vec2 cell = vec2(vFac.x / bay, (vWorld.y - vBase - 1.35) / flH); // 층 띠는 1층 바닥(기초 위 1.35 m)부터 — 실내 층과 같은 높이
     vec2 f = fract(cell), id = floor(cell);
     vec2 fw = max(fwidth(cell), vec2(1e-4));
     float aa = clamp(1.3 - max(fw.x, fw.y) * 2.2, 0.0, 1.0);

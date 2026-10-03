@@ -255,6 +255,13 @@ export class Citizens {
       this.vis.push(p);
       this._push(p, m, dt, pp);
     }
+    // 건물 운영의 사람들 (interior/agents — 지금 층)
+    const ag = g.ops && g.ops.agents;
+    if (ag) for (const p of ag.visible()) {
+      const m = p.mo.step(dt, p.pos.x, p.pos.z, p.yaw);
+      this.vis.push(p);
+      this._push(p, m, dt, pp);
+    }
     this.crowd.end();
     this._music(dt, pp);
     this._ambientTalk(dt, pp);

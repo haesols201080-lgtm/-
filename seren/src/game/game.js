@@ -53,6 +53,9 @@ import { Interiors } from './interiors.js';
 import { Tips } from './tips.js';
 import { MoaAI } from './moa-ai.js';
 import { Venues } from './venues.js';
+import { Economy } from '../interior/econ.js';
+import { Ops } from '../interior/ops.js';
+import { Guide } from '../interior/guide.js';
 import { Outdoors } from './outdoors.js';
 import { Citizens } from './citizens.js';
 import { UI } from '../ui/ui.js';
@@ -117,6 +120,9 @@ export class Game {
     this.services = new Services(this);
     this.venues = new Venues(this);
     this.interiors = new Interiors(this);
+    this.econ = new Economy(this); // 도시 살림 (v0.9): 별씨·물건이 저절로 생기지 않고 흐른다
+    this.ops = new Ops(this); // 건물이 하는 일 (v0.9)
+    this.guide = new Guide(this); // 실내 길 안내
     this.tips = new Tips(this);
     this.moaAI = new MoaAI(this);
     this.comm = new Comm(this); // 모아 = 궤도의 라르크 호 (착륙선 안테나로 교신)
@@ -404,6 +410,9 @@ export class Game {
       this.requests.update(dt);
       this.services.update(dt);
       this.interiors.update(dt);
+      this.econ.update(dt);
+      this.ops.update(dt);
+      this.guide.update(dt);
       this.venues.update(dt);
       this.outdoors.update(dt);
       this.citizens.update(dt);
@@ -479,6 +488,8 @@ export class Game {
     if (act) return act;
     const inside = this.interiors.target(p);
     if (inside && (inside.kind !== 'door' || inside.dist < 2.6)) return inside; // 문 바로 앞이면 문이 먼저 (옆 조작대·주민보다)
+    const opT = this.ops.target(p); // 건물 속 시설 (진열대·계산대·기계·단말…)
+    if (opT) return opT;
     const ven = this.venues.target(p);
     if (ven) return ven;
     const out = this.interiors.inPocket ? null : this.outdoors.target(p);
@@ -515,6 +526,8 @@ export class Game {
     if (t.kind === 'venue') return this.venues.use(t);
     if (t.kind === 'outdoor') return this.outdoors.use(t);
     if (t.kind === 'exit') return this.interiors.exit();
+    if (t.kind === 'ilift' || t.kind === 'roofdoor' || t.kind === 'terrace' || t.kind === 'reenter') return this.interiors.use(t);
+    if (t.kind === 'op' && this.ops) return this.ops.use(t);
     if (t.kind === 'lift') return this.interiors.up();
     if (t.kind === 'liftdown') return this.interiors.down();
     if (t.kind === 'lobby') { this.focusOn(t.o); return this.interiors.talk(); }
@@ -985,6 +998,7 @@ export class Game {
     }
     if (Math.hypot(pos.x, pos.z) > 1200) markers.push({ bearing: bearing(0, 0), cls: 'p', label: '척추' });
     markers.push(...this.services.compassMarkers(bearing));
+    markers.push(...this.guide.compassMarkers(bearing));
     this.ui.updateCompass(this.rig.yaw, markers);
     this.ui.altimeter(this.interiors.inPocket ? 0 : p.pos.y, p.state === 'glide' ? p.glideSpeed : p.vel.length());
     const t0 = tg[0];

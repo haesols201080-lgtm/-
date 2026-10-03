@@ -239,6 +239,49 @@ export class Avatar {
     this._w = new THREE.Vector3();
   }
 
+  /** 하는 일의 몸짓을 sec 초 동안 (실내 운영) */
+  act(pose, sec = 1.5) { this._act = { pose, t: sec }; }
+  /** 손에 든 것: null | { kind: 'basket'|'box'|'crate'|'tray'|'crystal'|'vial'|'book', n, color } */
+  setHeld(h) {
+    this.held = h;
+    if (!this._heldMeshes) this._heldMeshes = {};
+    for (const m of Object.values(this._heldMeshes)) m.visible = false;
+    if (!h) return;
+    const k = h.kind === 'basket' ? 'basket' : ['tray', 'crystal', 'vial', 'book'].includes(h.kind) ? h.kind : 'box';
+    let m = this._heldMeshes[k];
+    if (!m) {
+      m = new THREE.Group();
+      const mat = litMaterial({ color: 0xffffff, rim: 0.4, spec: 0.5, emissive: 0x111111 });
+      m.userData.mat = mat;
+      if (k === 'basket') {
+        const b = new THREE.Mesh(new THREE.CylinderGeometry(0.17, 0.13, 0.16, 12, 1, true), litMaterial({ color: 0x7ff3e6, rim: 0.6, side: THREE.DoubleSide }));
+        b.position.y = -0.2;
+        const hdl = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.012, 6, 16, Math.PI), litMaterial({ color: 0xe8e2d6 }));
+        hdl.position.y = -0.12;
+        const fill = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.12, 0.08, 10), mat);
+        fill.position.y = -0.18;
+        m.add(b, hdl, fill);
+        m.userData.fill = fill;
+        m.position.y = -0.36;
+        this.armR.el.add(m);
+      } else {
+        const geo = k === 'tray' ? new THREE.BoxGeometry(0.46, 0.04, 0.32) : k === 'crystal' ? new THREE.OctahedronGeometry(0.16) : k === 'vial' ? new THREE.CylinderGeometry(0.05, 0.05, 0.2, 10) : k === 'book' ? new THREE.BoxGeometry(0.26, 0.06, 0.2) : new THREE.BoxGeometry(0.42, 0.3, 0.32);
+        const body = new THREE.Mesh(geo, mat);
+        m.add(body);
+        if (k === 'tray') { const dish = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), litMaterial({ color: 0xffc46a, emissive: 0x332200 })); dish.position.y = 0.02; m.add(dish); }
+        if (k === 'box') { const band = new THREE.Mesh(new THREE.BoxGeometry(0.43, 0.05, 0.33), glowMaterial({ color: 0x7ff3e6, intensity: 1.2 })); band.position.y = 0.06; m.add(band); }
+        m.position.set(0, k === 'box' ? 0.12 : 0.2, 0.36);
+        this.spine.add(m);
+      }
+      this._heldMeshes[k] = m;
+    }
+    m.visible = true;
+    const col = h.color ?? (k === 'box' ? 0xc8b48a : k === 'crystal' ? 0xffd9a0 : k === 'vial' ? 0x9ff6ff : k === 'book' ? 0xb9a6ff : 0xffffff);
+    if (m.userData.mat.uniforms && m.userData.mat.uniforms.uColor) m.userData.mat.uniforms.uColor.value.set(col);
+    else if (m.userData.mat.color) m.userData.mat.color.set(col);
+    if (m.userData.fill) m.userData.fill.scale.y = Math.min(1.8, 0.3 + (h.n || 1) * 0.12);
+  }
+
   addTo(scene) {
     this.root.userData.indoor = this.scarf.userData.indoor = this.shadow.userData.indoor = true; // 실내 공간에서도 보인다
     scene.add(this.root);
@@ -367,6 +410,24 @@ export class Avatar {
     this.glowMat.uniforms.uColor.value.lerp(this.toneColor, Math.min(1, dt * 6));
     this.glowMat.uniforms.uIntensity.value = 1.4 + this.toneGlow * 4;
     if (this.toneGlow <= 0) this.glowMat.uniforms.uColor.value.lerp(_teal, Math.min(1, dt * 2));
+
+    // 손에 든 것 (실내 운영: 바구니·상자·쟁반·결정·시료·책) — 두 손으로 앞에 들거나 한 손에 건다
+    const hk = this.held && this.held.kind;
+    if (hk && (s === 'ground' || s === 'swim' || s === 'lift')) {
+      if (hk === 'basket') { P.shR = Math.max(P.shR, -0.15) * 0.4; P.shZR = 0.22; P.elR = -0.12; }
+      else { P.shL = -1.0; P.shR = -1.0; P.shZL = 0.06; P.shZR = 0.06; P.elL = -0.6; P.elR = -0.6; P.spineX -= 0.05; }
+    }
+    // 하는 일의 몸짓 (짧게): 집기·채우기·조작·먹기·앉기·눕기·돌보기
+    if (this._act && this._act.t > 0 && s === 'ground' && speed < 0.6) {
+      this._act.t -= dt;
+      const w = Math.sin(this.t * 6), a = this._act.pose;
+      if (a === 'reach') { P.shR = -1.75 + w * 0.1; P.elR = -0.15; P.shZR = 0.1; P.spineX += 0.08; P.headX -= 0.2; }
+      else if (a === 'stock') { P.shL = P.shR = -1.25 + w * 0.15; P.elL = P.elR = -0.35; P.shZL = P.shZR = 0.08; P.spineX += 0.15; }
+      else if (a === 'operate' || a === 'type' || a === 'scan') { P.shL = -0.95 + w * 0.08; P.shR = -0.95 - w * 0.08; P.elL = P.elR = -0.9; P.shZL = P.shZR = 0.1; P.headX += 0.25; }
+      else if (a === 'eat' || a === 'sit') { P.hipsY = 0.55; P.hipL = P.hipR = 1.45; P.kneeL = P.kneeR = 1.5; P.footL = P.footR = -0.1; if (a === 'eat') { P.shR = -1.2 + Math.max(0, w) * 0.5; P.elR = -1.6; } }
+      else if (a === 'tend') { P.hipsY = 0.5; P.hipL = P.hipR = 1.3; P.kneeL = P.kneeR = 2.1; P.footL = P.footR = 0.5; P.spineX += 0.35; P.shL = P.shR = -0.9 + w * 0.15; }
+      else if (a === 'lie') { P.bodyPitch = -1.4; P.hipsY = 0.35; P.shZL = P.shZR = 0.4; }
+    }
 
     // 바라보기: 가까운 사람·물건 쪽으로 머리를 (몸통이 조금 거든다)
     if (this.lookAt && (s === 'ground' || s === 'skim' || s === 'fly') && this.toneGlow <= 0) {
@@ -562,7 +623,9 @@ export class Avatar {
     } else this._lastAnchor = new THREE.Vector3();
     this._lastAnchor.copy(anchor);
     const vmax = Math.min(1, p.vel.length() / 25);
-    const wind = this._w.set(Math.sin(this.t * 0.7) * 1.5, 0, Math.cos(this.t * 0.5) * 1.5).addScaledVector(p.vel, -Math.min(1, 12 / Math.max(1, p.vel.length())));
+    // 바람: 바깥에서만 (실내에서는 움직이는 만큼의 맞바람뿐 — 목도리가 위로 날리지 않고 늘어진다)
+    const wk = p.indoor ? 0 : 1.5;
+    const wind = this._w.set(Math.sin(this.t * 0.7) * wk, 0, Math.cos(this.t * 0.5) * wk).addScaledVector(p.vel, -Math.min(p.indoor ? 0.35 : 1, 12 / Math.max(1, p.vel.length())));
     const sdt = Math.min(dt, 1 / 30);
     pts[0].copy(anchor);
     for (let i = 1; i < n; i++) {
