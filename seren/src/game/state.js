@@ -54,6 +54,7 @@ export function defaultState() {
     quests: { active: [], done: [], step: {}, data: {} },
     inv: { starseed: 0, shard: 0, flower: 0, fruit: 0, trinket: 0, tea: 0, cookie: 0, meal: 0, lantern: 0, mapshard: 0, book: 0, parcel: 0 },
     venue: { exhibits: {}, archives: {}, museums: {}, buffs: {}, days: {}, job: null, earned: 0, spent: 0, worked: 0 }, // 건물의 일 (v0.7)
+    rooms: {}, // 들어가 본 방: '구역:모양:번호' → { v: 들른 횟수, d: 처음 온 날 } (방마다 따로)
     home: null, // 하모네아가 내어 준 우리 집 (도시 건물 기록 id)
     homeAt: null, // 그 집의 자리 [x, z] (화질이 바뀌어 건물 번호가 달라져도 다시 찾게)
     cit: { f: {}, talked: {}, trinkets: 0 }, // 주민과 친한 정도 (자리 id#순번 → 0..5)
