@@ -226,14 +226,15 @@ export function layoutFloor(B, F, ctx = {}) {
   makeDoors(B, F, L, g, rnd);
   // ── 7. 테라스 문 (아래 부피의 지붕으로 나가는 문) ──
   if (F.terrace) {
-    let best = null, bs = -1;
+    let best = null, bs = -1e9;
     for (let c = 0; c < g.n; c++) {
       if (!room[c]) continue;
       const R = rooms[room[c] - 1];
-      if (['stair', 'lift', 'cargo', 'shaft', 'bath', 'wc', 'storage', 'mech'].includes(R.type)) continue;
+      if (['stair', 'lift', 'cargo', 'shaft'].includes(R.type) || R.sealed) continue;
+      const svc = ['bath', 'wc', 'storage', 'mech'].includes(R.type); // 맞닿은 방이 이것뿐이면 그래도 문을 낸다 (점수 낮게)
       g.nb(c, (e, di, dj) => {
         if (!F.terrace.mask[e]) return;
-        const s = (R.circ ? 3 : ROOMS[R.type] && ROOMS[R.type].acc === 'public' ? 2 : 1) + rnd() * 0.5;
+        const s = (svc ? -0.5 : R.circ ? 3 : ROOMS[R.type] && ROOMS[R.type].acc === 'public' ? 2 : 1) + rnd() * 0.5;
         if (s > bs) { bs = s; best = { c, e, dir: [di, dj], room: R.id }; }
       });
     }
@@ -480,6 +481,8 @@ function ringPlan(B, F, L, g, rnd, T) {
       if (!R.n) continue;
       if (R.type === 'unit') subdivideUnit(B, F, L, g, rnd, T, R, isCorr);
       else if (R.type === 'guestroom') subdivideGuest(B, F, L, g, rnd, T, R, isCorr);
+      // 발코니 외벽 층: 집·객실마다 바깥벽을 따라 발코니 (바깥에서 보이는 난간 띠와 같은 층)
+      if (F.balcony && (R.type === 'living' || R.type === 'guestroom')) balconyOf(F, L, g, T, R);
     }
   }
 }
@@ -590,6 +593,18 @@ function subdivideUnit(B, F, L, g, rnd, T, U, isEntry) {
   // 작은 방(3칸 미만)은 거실로
   for (const R of Object.values(sub)) if (R.n > 0 && R.n < 4) for (const c of cells) if (room[c] === R.id + 1) T.setCell(c, living);
   U.subs = Object.values(sub).filter((R) => R.n > 0).map((R) => R.id);
+}
+
+/** 방의 바깥벽에 닿은 칸 한 줄을 발코니로 (줄이 3칸 넘고, 방이 넉넉히 남을 때) */
+function balconyOf(F, L, g, T, R) {
+  const { room } = L;
+  const cells = [];
+  for (let c = 0; c < g.n; c++) if (room[c] === R.id + 1) cells.push(c);
+  const edge = cells.filter((c) => { let out = false; g.nb(c, (e) => { if (!F.mask[e]) out = true; }); return out; });
+  if (edge.length < 3 || cells.length - edge.length < 8) return;
+  const B = T.newRoom('balcony', { unit: R.unit ?? R.id, org: R.org });
+  for (const c of edge) T.setCell(c, B);
+  R.subs = (R.subs || []).concat([B.id]);
 }
 
 function subdivideGuest(B, F, L, g, rnd, T, U, isEntry) {

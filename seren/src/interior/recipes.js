@@ -256,6 +256,7 @@ const RECIPE = {
   bath(F, R) { F.alongWalls(R, 'washpod', { n: 1 }); F.alongWalls(R, 'wc1', { n: 1 }); F.alongWalls(R, 'sink', { n: 1 }); },
   entry(F, R, c) { if (R.circ && R.n < 14) return; F.alongWalls(R, 'cabinet', { n: 1 }); c.plants(R, 1); },
   unit(F, R, c) { F.alongWalls(R, 'bedpod1', { n: 1, tag: 'sleep' }); F.alongWalls(R, 'kcounter', { n: 1, tag: 'cook' }); const b = F.box(R); F.near(R, 'dtable', b.cx, b.cz, 0, { R: 2, tag: 'eat' }); },
+  balcony(F, R, c) { c.plants(R, 2); F.alongWalls(R, 'armchair', { n: R.n > 5 ? 1 : 0, keep: false }); },
   guestroom(F, R) { F.alongWalls(R, 'bedpod', { n: 1, tag: 'sleep' }); F.alongWalls(R, 'desk', { n: 1, tag: 'desk' }); F.alongWalls(R, 'wardrobe', { n: 1, avoidWindows: true }); F.alongWalls(R, 'armchair', { n: 1 }); },
   housekeeping(F, R) { F.alongWalls(R, 'hkcart', { n: 2, tag: 'cart' }); F.alongWalls(R, 'cabinet', { n: 2 }); F.alongWalls(R, 'washer', { n: 1, tag: 'laundry' }); },
   laundry(F, R) { F.alongWalls(R, 'washer', { n: Math.max(2, Math.floor(R.n / 5)), tag: 'laundry' }); F.alongWalls(R, 'prep', { n: 1 }); },

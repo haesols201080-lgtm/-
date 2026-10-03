@@ -772,7 +772,7 @@ export class CityFabric {
     this._propsDirty = true;
     B.props = [];
     B.spots = [];
-    for (const r of B.recs) if (r.door) this.fixDoor(r);
+    for (const r of B.recs || []) if (r.door) this.fixDoor(r);
     const raw = B.raw || [];
     for (let i = 0; i < raw.length; i += 6) {
       if (raw[i] === 0) this._propUV(B, raw[i + 1], raw[i + 2], raw[i + 3], raw[i + 4], raw[i + 5]);
@@ -785,7 +785,7 @@ export class CityFabric {
   /** 들어갈 수 없는 건물 발치의 바깥 조작대 (game/outdoors.js 가 쓴다) */
   _consoles(B) {
     B.ext = [];
-    for (const r of B.recs) {
+    for (const r of B.recs || []) {
       if (!r.out) continue;
       const c = this.consolePos(r);
       if (!c) continue;

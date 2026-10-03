@@ -281,7 +281,7 @@ export class Apps {
     const ask = () => {
       const [q, opts, ans] = Q[k];
       g.ui.serviceCard(`채용 면접 · ${a.org}`, `${k + 1} / 3`, `면접관: 「${q}」`, opts.map((o, j) => ({ label: o, onClick: () => { if (j === ans) score++; k++; audio.blip && audio.blip({ hz: j === ans ? 880 : 330, to: j === ans ? 1100 : 300, dur: 0.1, gain: 0.05 }); if (k < 3) setTimeout(ask, 120); else setTimeout(done, 150); } })));
-      this.ops.say(T || this.ops.byFloor(cur.indoor.cur), 'greet');
+      this.ops.say(T || this.ops.byFloor(cur.indoor.cur), 'chat');
     };
     const done = () => {
       if (score >= 2) {

@@ -127,6 +127,7 @@ export const ROOMS = {
   kitchen1: { name: '부엌', acc: 'private', win: true, fl: 'tile', cl: 'plain', tone: 'warm', lux: 1 },
   bath: { name: '씻는 방', acc: 'private', fl: 'tile', wl: 'tile', cl: 'plain', tone: 'cool', lux: 0.9 },
   entry: { name: '현관', acc: 'private', fl: 'tile', cl: 'plain', tone: 'base', lux: 0.9 },
+  balcony: { name: '발코니', acc: 'private', win: true, glass: true, fl: 'wood', cl: 'plain', tone: 'soft', lux: 0.85 },
   guestroom: { name: '객실', acc: 'private', win: true, fl: 'carpet', cl: 'coffer', tone: 'soft', lux: 0.8 },
   housekeeping: { name: '객실 관리실', acc: 'staff', fl: 'plain', cl: 'plain', tone: 'base', lux: 0.9 },
   laundry: { name: '세탁실', acc: 'staff', fl: 'tile', cl: 'plain', tone: 'cool', lux: 1 },

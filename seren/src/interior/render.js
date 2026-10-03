@@ -196,7 +196,10 @@ export function buildFloor(ctx) {
         let y = 0;
         const rows = Math.max(1, Math.round(Math.min(h0, h1) / mod));
         for (let k = 0; k < rows; k++) {
-          const yb = k * mod, sill = yb + Math.max(0.12, spand * mod), head = Math.min(Math.min(h0, h1) - 0.15, yb + mod * 0.96);
+          // 발코니: 바닥부터 천장까지 유리 + 바깥 외벽의 난간 높이에 빛 난간
+          const full = R.type === 'balcony';
+          const yb = k * mod, sill = yb + (full ? 0.04 : Math.max(0.12, spand * mod)), head = Math.min(Math.min(h0, h1) - 0.15, yb + mod * 0.96);
+          if (full && k === 0) { gb.box((a[0] + b[0]) / 2 + nx * 0.06, 1.0, (a[1] + b[1]) / 2 + nz * 0.06, len, 0.05, 0.06, Math.atan2(b[0] - a[0], b[1] - a[1]) + Math.PI / 2, st.glow ?? 0x7ff3e6, 1.2); }
           if (head <= sill + 0.3) continue;
           if (sill > y) gb.quad([a[0], y, a[1]], [b[0], y, b[1]], [b[0], sill, b[1]], [a[0], sill, a[1]], wallC, 0, wp, wprm);
           win.quad([a[0], sill, a[1]], [b[0], sill, b[1]], [b[0], head, b[1]], [a[0], head, a[1]], 0xffffff);

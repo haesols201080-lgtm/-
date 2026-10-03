@@ -364,7 +364,8 @@ export class Citizens {
   /** 그 사람이 할 말 하나 */
   _line(p, kind) {
     const t = this.game.world.clock.time % 1;
-    let pool = kind ? CIT_LINES[kind] : CIT_LINES[p.role] || CIT_LINES.chat;
+    let pool = (kind && CIT_LINES[kind]) || CIT_LINES[p.role] || CIT_LINES.chat;
+    if (kind && !CIT_LINES[kind]) kind = undefined;
     if (!kind && p.fr >= 2 && Math.random() < 0.4) { pool = CIT_LINES.friend; kind = 'friend'; }
     else if (!kind && Math.random() < 0.15) { pool = t > 0.22 && t < 0.4 ? CIT_LINES.morning : t > 0.78 || t < 0.2 ? CIT_LINES.night : pool; }
     const i = Math.floor(Math.random() * pool.length);
@@ -401,7 +402,8 @@ export class Citizens {
     const p = this.nearest(pos, 3.2);
     if (!p || p.flee) return null;
     const R = ROLES[p.role] || INDOOR[p.role];
-    return { kind: 'citizen', o: p, label: `${p.name} · ${R ? R.label : '주민'}${p.fr ? ' ' + '♥'.repeat(p.fr) : ''}`, short: '말 걸기' };
+    const lab = p.indoorRole && p.title ? p.title : R ? R.label : '주민'; // 건물 속 사람(ops agents)은 하는 일 이름으로
+    return { kind: 'citizen', o: p, label: `${p.name} · ${lab}${p.fr ? ' ' + '♥'.repeat(p.fr) : ''}`, short: '말 걸기' };
   }
 
   // ── 만나기 ─────────────────────────────
@@ -414,13 +416,15 @@ export class Citizens {
     const play = this._playOption(p);
     if (play) items.push(play);
     if (p.role === 'sell' || p.role === 'shop') items.push({ label: '장터 물건 보기', sub: '울로 나눈다', onClick: () => this.tradeCard(p) });
+    // 건물에서 일하는 사람에게는 길을 물을 수 있다 (안내 단말과 같은 찾기 → 바닥 길 안내)
+    if (p.indoorRole && p.staff && g.ops && g.ops.cur) items.push({ label: '길 묻기', sub: '이 건물에서 찾는 곳 (방·물건·시설)', onClick: () => { this.release(p); g.ops.apps.open('directory', {}); } });
     if ((inv.flower || 0) > 0) items.push({ label: '울림꽃 선물하기', sub: `가진 것 ${inv.flower}`, onClick: () => this.gift(p, 'flower') });
     if ((inv.fruit || 0) > 0) items.push({ label: '빛열매 나눠 먹기', sub: `가진 것 ${inv.fruit}`, onClick: () => this.gift(p, 'fruit') });
     if (p.fr >= 3 && p.home && p.home.door) items.push({ label: '집에 놀러 가기', sub: `${p.name}의 집 · 함께 저녁을`, onClick: () => this.visitHome(p) });
     items.push({ label: '인사하고 헤어지기', onClick: () => this.release(p) });
     const hearts = '♥'.repeat(p.fr) + '♡'.repeat(5 - p.fr);
     const age = p.age === 'child' ? '아이' : p.age === 'elder' ? '어르신' : '';
-    g.ui.serviceCard(`${R.label || '주민'}${age ? ' · ' + age : ''}`, p.name, `${R.verb || ''}`, items, `<div class="svc-stat"><span>친한 정도 <b>${hearts}</b></span></div>`);
+    g.ui.serviceCard(`${p.indoorRole && p.title ? p.title : R.label || '주민'}${age ? ' · ' + age : ''}`, p.name, `${p.indoorRole && p.title ? `${p.title} — ${p.staff ? '일하는 중' : '이 건물에 온 이'}` : R.verb || ''}`, items, `<div class="svc-stat"><span>친한 정도 <b>${hearts}</b></span></div>`);
     const off = bus.on ? null : null;
     void off;
     this._watchRelease(p);
