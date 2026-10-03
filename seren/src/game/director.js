@@ -35,6 +35,7 @@ export class Director {
 
   skip() {
     if (!this.seq) return;
+    if (this.seq.onSkip && this.seq.onSkip(this.seq)) return; // 연출이 스스로 다음 장으로 넘김
     this.seq.t = this.seq.duration;
     this.update(0);
   }

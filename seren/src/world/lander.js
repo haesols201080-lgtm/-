@@ -10,16 +10,12 @@ import { glowMaterial, litMaterial } from './materials.js';
 
 const HULL = 0xe8e4dc, HULL2 = 0xcfcac2, DARK = 0x3c3e4a, ORANGE = 0xff8a4c, GLASS = 0x1f4a58, TEAL = 0x7ff3e6;
 const FLOOR = 1.15, CEIL = 3.85;
+export const THRUSTERS = [[3.4, 1.15], [3.4, -1.15], [-3.6, 1.25], [-3.6, -1.25]]; // 배 밑 하강 분사구 (로컬 x, z)
 
-export function buildLander(S, p, ry) {
-  const [X, Z] = p.pos;
-  const Y = S._ground(X, Z);
-  const c = Math.cos(ry), s = Math.sin(ry);
-  // 로컬 → 세계
-  const W = (lx, lz) => [X + lx * c + lz * s, Z - lx * s + lz * c];
-  const parts = [], inner = [], glass = [];
+/** 착륙선의 바깥 (로컬 좌표): landed = 문 들리고 경사판 내림·그을음 / 아니면 해치 닫고 날아가는 모습 (오프닝·라르크 호에 붙은 모습) */
+export function landerShell({ landed = true } = {}) {
+  const parts = [], glass = [], navs = [];
   const put = (L, geo, o, col, e = 0) => L.push(part(xf(geo, o), col, e));
-
   // ── 선체: 길쭉한 몸을 x 축으로 (가운데 해치 자리는 비운다) ──
   const HP = [[0.0001, -5.6], [1.15, -5.35], [2.15, -4.3], [2.6, -2.2], [2.7, 0], [2.55, 2.4], [2.0, 4.1], [1.05, 5.25], [0.0001, 5.7]];
   const rAt = (y) => { for (let i = 0; i < HP.length - 1; i++) { const [r0, y0] = HP[i], [r1, y1] = HP[i + 1]; if (y <= y1) return r0 + ((r1 - r0) * (y - y0)) / (y1 - y0); } return 0.0001; };
@@ -44,7 +40,8 @@ export function buildLander(S, p, ry) {
   // 해치 둘레 테 (주황) + 문짝(위로 열린 문)
   for (const [x0, y0, x1, y1] of [[-1.05, FLOOR, -1.05, 3.25], [1.05, FLOOR, 1.05, 3.25]]) put(parts, new THREE.BoxGeometry(0.14, y1 - y0, 0.3), { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z: 2.25 }, ORANGE, 0.4);
   put(parts, new THREE.BoxGeometry(2.24, 0.14, 0.3), { x: 0, y: 3.27, z: 2.2 }, ORANGE, 0.4);
-  put(parts, new THREE.BoxGeometry(2.1, 0.08, 1.2), { x: 0, y: 3.55, z: 2.75, rx: -0.5 }, HULL2); // 들린 문짝
+  if (landed) put(parts, new THREE.BoxGeometry(2.1, 0.08, 1.2), { x: 0, y: 3.55, z: 2.75, rx: -0.5 }, HULL2); // 들린 문짝
+  else put(parts, hullSeg(-1.05, 1.05, -0.42, 1.42), {}, (x, y) => (y < 1.55 ? DARK : HULL2)); // 닫힌 해치
   // 조종석 유리 (앞 위) + 틀
   {
     const g = new THREE.SphereGeometry(1, 20, 12, Math.PI / 2, Math.PI, 0, Math.PI * 0.42); // 앞(+x) 반쪽 윗부분
@@ -67,7 +64,6 @@ export function buildLander(S, p, ry) {
     put(parts, new THREE.ConeGeometry(0.11, 0.24, 8).rotateX(z > 0 ? -Math.PI / 2 : Math.PI / 2), { x, y: 3.0, z: z + Math.sign(z) * 0.26 }, DARK);
   }
   // 짧은 날개 + 항법등 (왼쪽 빨강·오른쪽 초록·끝 흰빛)
-  const navs = [];
   for (const sz of [-1, 1]) {
     const g = new THREE.BoxGeometry(2.6, 0.14, 1.5);
     g.translate(-0.4, 0, sz * 0.75);
@@ -75,7 +71,7 @@ export function buildLander(S, p, ry) {
     for (let i = 0; i < pos.count; i++) if (pos.getZ(i) * sz > 0.75) pos.setX(i, pos.getX(i) - 0.7); // 끝을 뒤로 젖힌 날개
     g.computeVertexNormals();
     put(parts, g, { x: -2.2, y: 1.9, z: sz * 2.35 }, HULL2);
-    navs.push([W(-3.0, sz * 3.85), 1.9, sz < 0 ? 0xff5a4a : 0x5aff9a]);
+    navs.push([[-3.0, sz * 3.85], 1.9, sz < 0 ? 0xff5a4a : 0x5aff9a]);
   }
   // ── 착륙 다리 넷: 위 버팀대 + 충격 흡수 대 + 발판 ──
   for (const [lx, lz] of [[3.0, 1.7], [3.0, -1.7], [-3.3, 1.9], [-3.3, -1.9]]) {
@@ -84,14 +80,32 @@ export function buildLander(S, p, ry) {
     put(parts, new THREE.CylinderGeometry(0.06, 0.06, 1.4, 6).rotateZ(Math.sign(lx) * 0.6).rotateX(-Math.sign(lz) * 0.5), { x: lx * 0.98, y: 1.0, z: lz * 1.05 }, 0xd8d8e0);
     put(parts, new THREE.CylinderGeometry(0.55, 0.68, 0.16, 14), { x: fx, y: 0.08, z: fz }, DARK);
   }
+  // ── 배 밑 하강 분사구 넷 (내려앉을 때 아래로 불을 뿜는다) ──
+  for (const [x, z] of THRUSTERS) {
+    put(parts, new THREE.CylinderGeometry(0.2, 0.34, 0.5, 12, 1, true), { x, y: 1.05, z }, DARK);
+    put(parts, new THREE.CircleGeometry(0.2, 12).rotateX(Math.PI / 2), { x, y: 0.82, z }, 0xffb07a, 0.8);
+  }
   // ── 경사판: 해치에서 땅으로 ──
-  {
+  if (landed) {
     const len = 3.2, ang = Math.atan2(FLOOR - 0.05, len);
     put(parts, new THREE.BoxGeometry(2.0, 0.12, Math.hypot(len, FLOOR)).rotateX(ang), { x: 0, y: FLOOR / 2, z: 2.2 + len / 2 }, 0xd0ccc4);
     for (const sx of [-1, 1]) put(parts, new THREE.BoxGeometry(0.05, 0.05, Math.hypot(len, FLOOR)).rotateX(ang), { x: sx * 0.95, y: FLOOR / 2 + 0.08, z: 2.2 + len / 2 }, 0xffd27a, 1.3);
   }
   // 착륙 그을음 (땅 위 어두운 고리)
-  put(parts, new THREE.RingGeometry(3.0, 7.5, 40).rotateX(-Math.PI / 2), { y: 0.06 }, 0x3a3640);
+  if (landed) put(parts, new THREE.RingGeometry(3.0, 7.5, 40).rotateX(-Math.PI / 2), { y: 0.06 }, 0x3a3640);
+  return { parts, glass, navs };
+}
+
+
+export function buildLander(S, p, ry) {
+  const [X, Z] = p.pos;
+  const Y = S._ground(X, Z);
+  const c = Math.cos(ry), s = Math.sin(ry);
+  // 로컬 → 세계
+  const W = (lx, lz) => [X + lx * c + lz * s, Z - lx * s + lz * c];
+  const { parts, glass, navs } = landerShell({ landed: true });
+  const inner = [];
+  const put = (L, geo, o, col, e = 0) => L.push(part(xf(geo, o), col, e));
 
   // ── 선실 안 (안쪽을 보는 판들) ──
   const x0 = -2.6, x1 = 2.45, zw = 1.95;
@@ -138,10 +152,12 @@ export function buildLander(S, p, ry) {
 
   // ── 메시 (로컬 → 세계) ──
   const toWorld = (L) => L.map((g) => { g.rotateY(ry); g.translate(X, Y, Z); return g; });
-  S._mesh(toWorld(parts), S.mats.stone);
+  const grp = new THREE.Group(); // 착륙선 전체 (오프닝에서 내려앉는 동안 숨긴다)
+  S.group.add(grp);
+  S._mesh(toWorld(parts), S.mats.stone, grp);
   const innerMat = litMaterial({ vertexColors: true, vertexEmit: true, emissive: 0xffffff, emissiveIntensity: 1.3, emissiveNight: 0.9, rim: 0.1, spec: 0.6, side: THREE.DoubleSide });
-  S._mesh(toWorld(inner), innerMat);
-  S._mesh(toWorld(glass), S.mats.crystal);
+  S._mesh(toWorld(inner), innerMat, grp);
+  S._mesh(toWorld(glass), S.mats.crystal, grp);
 
   // ── 충돌체: 바닥·벽·지붕·앞뒤 덩어리 (해치 자리만 비운다) + 경사판 ──
   const box = (lx, lz, hx, hz, y0, y1, o = {}) => { const [x, z] = W(lx, lz); S._col({ type: 'box', x, z, hx, hz, rot: ry, y0: Y + y0, y1: Y + y1, ...o }); };
@@ -181,8 +197,8 @@ export function buildLander(S, p, ry) {
   const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), glowMaterial({ color: 0xffd27a, intensity: 2.5 }));
   beacon.position.y = 1.2;
   ant.add(beacon);
-  S.group.add(ant);
-  const navM = navs.map(([[x, z], y, col]) => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), glowMaterial({ color: col, intensity: 3 })); m.position.set(x, Y + y, z); S.group.add(m); return m; });
+  grp.add(ant);
+  const navM = navs.map(([[lx, lz], y, col]) => { const [x, z] = W(lx, lz); const m = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), glowMaterial({ color: col, intensity: 3 })); m.position.set(x, Y + y, z); grp.add(m); return m; });
   // 별지도: 가운데 노란 별 둘레를 도는 행성들, 그중 셋에 「?」 표식 (아직 가 보지 않은 별)
   const holo = new THREE.Group();
   { const [x, z] = W(mapL[0], mapL[1]); holo.position.set(x, Y + FLOOR + 1.25, z); }
@@ -197,14 +213,14 @@ export function buildLander(S, p, ry) {
     if (mark) { tag = new THREE.Mesh(new THREE.TorusGeometry(sz * 2.2, 0.006, 3, 18), glowMaterial({ color: mark === 1 ? 0x7ff3e6 : 0xffd27a, intensity: 2 })); holo.add(tag); }
     orbs.push({ r, pl, tag, sp: 0.6 / Math.sqrt(r), a: r * 17 });
   }
-  S.group.add(holo);
+  grp.add(holo);
   S.anims.push((t, dt) => {
     for (const o of orbs) { const a = o.a + t * o.sp; o.pl.position.set(Math.cos(a) * o.r, 0, Math.sin(a) * o.r); if (o.tag) { o.tag.position.copy(o.pl.position); o.tag.rotation.y = t; } }
     holo.rotation.y = t * 0.05;
     navM.forEach((m, i) => (m.visible = Math.sin(t * 2.2 + i * 1.7) > 0.2));
   });
   return {
-    X, Y, Z, W, ant, head, beacon, feed,
+    X, Y, Z, W, ry, ant, head, beacon, feed, group: grp,
     stations: [
       { at: W(termL[0], termL[1] + 0.8), y: Y + FLOOR, r: 1.3, kind: 'term', label: '모아 교신 단말 · 라르크 호와 이야기하기', short: '교신' },
       { at: W(mapL[0], mapL[1]), y: Y + FLOOR, r: 1.5, kind: 'map', label: '별지도 · 라르크 호의 항로', short: '별지도' },

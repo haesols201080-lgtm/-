@@ -40,6 +40,7 @@ import { defaultState, loadState, saveState, hasSave, loadSettings, deleteSave }
 import { Language } from './language.js';
 import { NPCs } from './npcs.js';
 import { Quests, awakenedCount } from './quests.js';
+import { playApproach } from './approach.js';
 import { Dialogue } from './dialogue.js';
 import { Actions } from './actions.js';
 import { Resonance } from './resonance.js';
@@ -173,7 +174,7 @@ export class Game {
     music.setMood('title');
     const auto = this.params.get('play');
     if (auto) { // 테스트·바로가기: ?play=new | ?play=continue
-      if (auto === 'continue' && hasSave()) this.continueGame(); else this.newGame(true);
+      if (auto === 'continue' && hasSave()) this.continueGame(); else this.newGame(auto !== 'intro'); // ?play=intro: 오프닝까지
       return;
     }
     this.ui.title({
@@ -219,16 +220,10 @@ export class Game {
     };
     this.ui.setHud(false);
     if (skipIntro) { begin(); return; }
-    this.ui.fade(true);
+    this.ui.fade(true, true);
     music.setMood('night');
-    this.ui.caption([
-      '신호를 따라 312일.',
-      '배에는 둘이 있었다.<br>조종사, 그리고 배의 지능 「모아」.',
-      '가스행성 「우르」를 도는 위성에서,<br>우리는 노래를 들었다.',
-      '궤도에서 내려다본 그 별에는<br>고리와 탑과, 밤새 빛나는 도시가 있었다.',
-      '누군가 들판에 빛을 밝혀 두었다.<br>— 내려와도 좋다고.',
-      '모아는 궤도의 배에 남고,<br>조종사 혼자 착륙선을 타고 내려갔다.',
-    ], begin);
+    // 오프닝: 라르크 호가 세렌에 다가가고, 착륙선이 내려앉기까지 (approach.js)
+    playApproach(this, begin);
   }
 
   continueGame() {
@@ -377,7 +372,7 @@ export class Game {
         this.rig._applyOverride();
         this.rig.override = null;
       }
-      this.avatar.root.visible = this.player.state !== 'ride' || !!(this.player.ride && this.player.ride.showAvatar);
+      this.avatar.root.visible = !this._hideAvatar && (this.player.state !== 'ride' || !!(this.player.ride && this.player.ride.showAvatar));
       this.director.update(dt);
       this._effects(dt);
       this.dialogue.update(dt);

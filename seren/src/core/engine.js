@@ -95,6 +95,7 @@ export class Engine {
 
   _drawScenes(renderer) {
     renderer.clear(true, true, false);
+    if (this.space) { this.space.draw(renderer); return; } // 오프닝의 우주 장면 (세계 대신)
     if (this.sky) renderer.render(this.sky.scene, this.sky.camera);
     renderer.clearDepth();
     const cam = this.camera;

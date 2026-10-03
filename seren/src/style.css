@@ -295,6 +295,10 @@ button { font-family: inherit; color: inherit; }
 .caption { position: absolute; inset: 0; z-index: 31; display: grid; place-items: center; pointer-events: auto; text-align: center; padding: 30px; }
 .caption .c { font-family: var(--serif); font-size: clamp(18px, 3vw, 26px); line-height: 2; color: #f3efe6; opacity: 0; transition: opacity 1.4s; max-width: 760px; }
 .caption .c.on { opacity: 1; }
+.caption.cine { place-items: end center; padding-bottom: calc(13vh + var(--safe-b)); }
+.caption.cine .c { transition: opacity 0.7s; text-shadow: 0 1px 14px rgba(0, 0, 0, 0.9), 0 0 3px rgba(0, 0, 0, 0.9); }
+.caption.cine .c.moa-line { font-family: var(--sans); font-size: clamp(14px, 2vw, 18px); line-height: 1.8; color: #dff8f4; }
+.caption.cine .cm-h { display: block; font-size: 11px; letter-spacing: 0.14em; color: #7ff3e6; margin-bottom: 6px; }
 .caption .skip { position: absolute; right: 20px; bottom: calc(20px + var(--safe-b)); font-size: 12px; color: var(--ink-faint); }
 
 /* 작곡 */
