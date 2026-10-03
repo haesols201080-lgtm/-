@@ -195,7 +195,7 @@ export class MapView {
     parent.appendChild(c);
     const legend = document.createElement('div');
     legend.className = 'map-legend glass';
-    legend.innerHTML = `<span style="color:#ffd89a">◆</span> 목표 &nbsp; <span style="color:#7ff3e6">●</span> 노래하는 탑 &nbsp; <span style="color:#8a8aa0">●</span> 잠든 탑 &nbsp; <span style="color:#fff">✦</span> 표식 &nbsp; <span style="color:#7fb8ff">◯</span> 시설<br><span style="color:#e2cca8">■</span> 주거 <span style="color:#f0b274">■</span> 상업 <span style="color:#bac6f4">■</span> 공공 <span style="color:#96d6ec">■</span> 연구 <span style="color:#a89eac">■</span> 산업·물류 <span style="color:#f6e076">■</span> 에너지 <span style="color:#8cd6ba">■</span> 인공 환경 <span style="color:#68a868">■</span> 녹지 <span style="color:#acc06a">■</span> 농장 &nbsp; ${g.ui.touch ? '눌러서 표식' : '클릭해서 표식 · 휠로 확대'}`;
+    legend.innerHTML = `<span style="color:#ffd89a">◆</span> 목표 &nbsp; <span style="color:#7ff3e6">●</span> 노래하는 탑 &nbsp; <span style="color:#8a8aa0">●</span> 듣는 탑 &nbsp; <span style="color:#fff">✦</span> 표식 &nbsp; <span style="color:#7fb8ff">◯</span> 시설<br><span style="color:#e2cca8">■</span> 주거 <span style="color:#f0b274">■</span> 상업 <span style="color:#bac6f4">■</span> 공공 <span style="color:#96d6ec">■</span> 연구 <span style="color:#a89eac">■</span> 산업·물류 <span style="color:#f6e076">■</span> 에너지 <span style="color:#8cd6ba">■</span> 인공 환경 <span style="color:#68a868">■</span> 녹지 <span style="color:#acc06a">■</span> 농장 &nbsp; ${g.ui.touch ? '눌러서 표식' : '클릭해서 표식 · 휠로 확대'}`;
     parent.appendChild(legend);
     const tools = document.createElement('div');
     tools.className = 'map-tools';

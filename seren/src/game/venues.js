@@ -677,6 +677,7 @@ export class Venues {
       g.rig.yaw = g.player.yaw + Math.PI;
       g.ui.fade(false);
       g.ui.toast(`${name} 터미널에 내렸다`, {});
+      g.setFlag('rodeSky');
     }, 1300);
   }
 
@@ -729,6 +730,7 @@ export class Venues {
     this.inv.parcel = 0;
     this._learn(J.word);
     this._wage(J.reward, `일을 마쳤다 · ${J.label}`);
+    this.game.setFlag('helpedNeighbor');
   }
   /** 주민과 이야기했을 때 (안부 일거리) */
   onTalk(p) { const J = this.S.job; if (J && J.kind === 'greet' && p.role === J.role) this._finishJob(); }

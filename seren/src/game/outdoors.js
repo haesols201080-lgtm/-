@@ -199,6 +199,7 @@ export class Outdoors {
           player.vel.set(0, 0, 0);
           g.rig.override = null;
           g.ui.regionTitle(name, '하늘배에서 내렸다', false);
+          g.setFlag('rodeSky');
           g.save();
         }
         return ride;
@@ -510,6 +511,7 @@ export class Outdoors {
           let ph = 0;
           this.fx.push((dt) => { ph += dt; const e = Math.min(1, ph / 3.2); d.position.lerpVectors(A, B, e * e * (3 - 2 * e)); if (e >= 1) { this.group.remove(d); return true; } return false; });
           this.V._learn('share');
+          g.setFlag('helpedNeighbor');
           this.V.inv.starseed = (this.V.inv.starseed || 0) + W.reward; this.V.S.earned += W.reward;
           g.ui.toast(`${W.who}: 「정말 고마워요!」 · 별씨 +${W.reward}`, { kind: 'item' });
           if (Math.random() < 0.25) setTimeout(() => this.V._add('trinket', 1), 900);
@@ -744,6 +746,7 @@ export class Outdoors {
       if (!this.tops.includes(T)) this.tops.push(T);
       this.game.ui.regionTitle(T.mark.def.name, `${T.name} · 뛰어내려 활공하거나, 승강판으로 내려가요`, false);
       this.V._learn('up');
+      this.game.setFlag('liftTop');
     });
   }
   _liftDown(T) {

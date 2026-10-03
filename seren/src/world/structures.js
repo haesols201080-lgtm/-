@@ -1,6 +1,6 @@
 // 장소 빌더: places.js 의 각 장소를 3D 구조물 + 충돌체 + 애니메이션으로 만듭니다.
 import * as THREE from 'three';
-import { PLACES } from '../data/places.js';
+import { PLACES, LANDER_YAW } from '../data/places.js';
 import { heightAt } from './heightfield.js';
 import { mulberry32 } from '../core/noise.js';
 import { part, merge, xf, lathe, tube, jitter } from './geo-utils.js';
@@ -301,35 +301,46 @@ export class Structures {
     this.markers.push({ id: p.id, x, y: y0, z });
   }
 
+  // 착륙 지점: 탐사선 「라르크」의 착륙선(세 다리·내린 경사판) + 아웬이 밝혀 둔 빛 표지(착륙할 자리를 알려 준 기둥)
   _crash(p) {
     const [x, z] = p.pos;
     const y = this._ground(x, z);
     const parts = [];
-    // 탈출 포드
-    const pod = lathe([[0.0001, -1.9], [0.9, -1.6], [1.25, -0.8], [1.3, 0.6], [1.0, 1.4], [0.5, 1.8], [0.0001, 1.85]], 18);
-    parts.push(part(xf(pod, { x, y: y + 0.7, z, rz: 1.35, ry: 0.4 }), (px, py, pz) => (py < y + 0.4 ? 0x3a3a44 : 0xe8e2d6), 0));
-    parts.push(part(xf(new THREE.TorusGeometry(1.3, 0.12, 6, 20), { x: x + 0.2, y: y + 0.85, z: z - 0.1, ry: 0.4 + Math.PI / 2, rx: 0.1 }), 0xff7a52, 0));
-    parts.push(part(xf(new THREE.CircleGeometry(0.55, 14), { x: x - 0.2, y: y + 1.6, z: z + 0.95, rx: -0.6, ry: 0.4 }), 0x7ff3e6, 1.2));
-    // 해치 문짝
-    parts.push(part(xf(new THREE.CylinderGeometry(0.8, 0.8, 0.12, 14), { x: x + 2.6, y: y + 0.12, z: z + 1.2, rx: 0.2 }), 0xd8d2c8, 0));
-    // 파편
-    const rnd = mulberry32(42);
-    for (let i = 0; i < 14; i++) {
-      const a = rnd() * Math.PI * 2, d = 3 + rnd() * 16;
-      const px = x + Math.cos(a) * d - 6, pz = z + Math.sin(a) * d * 0.6 + 4;
-      parts.push(part(xf(new THREE.BoxGeometry(0.3 + rnd() * 1.4, 0.08, 0.3 + rnd()), { x: px, y: this._ground(px, pz) + 0.05, z: pz, ry: rnd() * 3, rx: (rnd() - 0.5) * 0.6 }), rnd() < 0.3 ? 0xff7a52 : 0xcfc8bc, 0));
+    const ry = LANDER_YAW; // 경사판이 마중 나온 이엘 쪽을 본다
+    const P = (geo, o, c, e = 0) => parts.push(part(xf(geo, { x, y, z, ...o }), c, e));
+    // 몸체: 납작한 착륙선 (흰 외피 + 아래 검은 띠 + 창)
+    const body = lathe([[0.0001, 1.2], [2.6, 1.3], [3.1, 2.0], [2.8, 2.9], [1.6, 3.5], [0.0001, 3.6]], 24);
+    P(body, { ry }, (px, py) => (py < y + 1.6 ? 0x4a4a56 : 0xe8e2d6));
+    P(new THREE.TorusGeometry(3.05, 0.1, 6, 32).rotateX(Math.PI / 2).translate(0, 2.0, 0), {}, 0xff9a62, 0.6);
+    P(new THREE.CircleGeometry(0.9, 16).rotateX(-0.9).translate(0, 3.1, 1.7), { ry }, 0x7ff3e6, 1.0);
+    // 다리 셋 + 발판
+    for (let i = 0; i < 3; i++) {
+      const a = ry + (i / 3) * Math.PI * 2 + 0.5;
+      const lx = Math.cos(a), lz = Math.sin(a);
+      P(new THREE.CylinderGeometry(0.12, 0.16, 2.0, 6).rotateZ(-0.45).rotateY(-a).translate(lx * 3.0, 0.9, lz * 3.0), {}, 0xb8b2c4);
+      P(new THREE.CylinderGeometry(0.55, 0.65, 0.12, 10).translate(lx * 3.5, 0.06, lz * 3.5), {}, 0x8e8a9c);
     }
-    // 끌린 자국
-    parts.push(part(xf(new THREE.PlaneGeometry(4, 34), { x: x - 10, y: y + 0.1, z: z + 6, rx: -Math.PI / 2, rz: 1.2 }), 0x2a2a20, 0));
+    // 내린 경사판 (해치)
+    P(new THREE.BoxGeometry(1.6, 0.1, 3.4).rotateX(-0.32).translate(0, 0.65, 4.1), { ry }, 0xd8d2c8);
+    P(new THREE.BoxGeometry(1.7, 0.04, 0.06).rotateX(-0.32).translate(0, 1.2, 2.5), { ry }, 0xffd27a, 1.4);
     this._mesh(parts, this.mats.stone);
-    this._col({ type: 'cyl', x, z, r: 1.6, y0: y - 1, y1: y + 2.2, dome: 1 });
-    // 연기 기둥
-    this.smoke = this._smoke(x - 0.5, y + 1.5, z);
-    // 깜박이는 신호등
-    const beacon = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), glowMaterial({ color: 0xff5a3a, intensity: 4 }));
-    beacon.position.set(x + 0.4, y + 2.4, z + 0.3);
-    this.group.add(beacon);
-    this.anims.push((t) => { beacon.visible = Math.sin(t * 4) > 0.3; });
+    this._col({ type: 'cyl', x, z, r: 3.0, y0: y - 1, y1: y + 3.6, dome: 1.4 });
+    // 아웬의 빛 표지: 착륙할 자리를 밝혀 둔 진주빛 기둥과 떠도는 고리
+    const bx = x + Math.sin(ry) * 11 + Math.cos(ry) * 5, bz = z + Math.cos(ry) * 11 - Math.sin(ry) * 5, by = this._ground(bx, bz);
+    const bparts = [part(xf(new THREE.CylinderGeometry(0.35, 0.6, 5.5, 8), { x: bx, y: by + 2.75, z: bz }), 0xe8e2f0, 0)];
+    bparts.push(part(xf(new THREE.CylinderGeometry(0.9, 1.1, 0.3, 8), { x: bx, y: by + 0.15, z: bz }), 0x8e8a9c, 0));
+    this._mesh(bparts, this.mats.stone);
+    this._col({ type: 'cyl', x: bx, z: bz, r: 0.7, y0: by - 1, y1: by + 5.6 });
+    const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.5, 1), glowMaterial({ color: 0x9ff6ff, intensity: 2.4 }));
+    orb.position.set(bx, by + 6.3, bz);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.05, 4, 32), glowMaterial({ color: 0xffd27a, intensity: 2.0 }));
+    halo.position.copy(orb.position);
+    this.group.add(orb, halo);
+    // 착륙선 항법등 (흰빛·청록, 천천히)
+    const nav = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), glowMaterial({ color: 0xbffcff, intensity: 3 }));
+    nav.position.set(x, y + 3.75, z);
+    this.group.add(nav);
+    this.anims.push((t) => { nav.visible = Math.sin(t * 1.6) > -0.2; orb.rotation.y = t * 0.6; halo.rotation.set(Math.PI / 2 + Math.sin(t * 0.7) * 0.4, t * 0.5, 0); orb.position.y = by + 6.3 + Math.sin(t * 1.2) * 0.15; });
     this.markers.push({ id: 'crash', x, y, z });
   }
 
@@ -412,7 +423,7 @@ export class Structures {
       const x = cx + Math.cos(a) * R, z = cz + Math.sin(a) * R;
       A.place(parts, A.gardenBed({ r: 3 + rnd() * 2, seed: 60 + i }), { x, y: this._ground(x, z) - 0.2, z });
     }
-    // 입구 아치 (추락 지점 쪽, 남동)
+    // 입구 아치 (착륙 지점 쪽, 남동)
     const ga = Math.atan2(8600 - cz, 600 - cx);
     const gx = cx + Math.cos(ga) * 100, gz = cz + Math.sin(ga) * 100;
     A.place(parts, A.archGate({ span: 16, h: 14, glow: A.PAL.amber }), { x: gx, y: this._ground(gx, gz) - 0.5, z: gz, ry: -ga + Math.PI / 2 });

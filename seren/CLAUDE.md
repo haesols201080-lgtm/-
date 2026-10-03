@@ -64,7 +64,7 @@ src/
            venues(물건 ITEMS·기운 BUFFS·진열대·차림표·전시·기록·바깥 조작대 OUTDOOR·주민 부탁 WISHES)
 ```
 - 좌표: 1 = 1 m, Y 위, **−Z 가 북쪽**(우르 방향), +X 동쪽. 플레이어 yaw 는 `atan2(dx, dz)`, 카메라 yaw 0 은 북쪽을 봄.
-- 모든 지형 높이는 `heightAt(x, z)` 하나에서 나옵니다(렌더·충돌·배치·지도 공통). 지형을 바꾸면 `node tools/heightmap.mjs` 로 확인하세요. 장소 주변은 `places.js` 의 `flat` 으로 평탄화됩니다. 도시 구역은 `LEVEL`(구역별 땅 맞추기)로 높이를 맞춥니다 — 평평한 단(수도·구역·지방 도시: 중앙값 한 높이 + 바깥 둑), 계단 단(교외: 블록마다 평평, 길은 경사로, 이웃 차는 길 폭 × 0.3 까지), 높이 창(`grade: false`·`water`: 바닥 ±35 m 만). 구역을 옮기거나 키우면 지형도 바뀝니다. 계획(`cityplan.buildPlan`)은 둑 범위까지를 덮인 곳으로 봅니다(heightfield 와 같은 수치).
+- 모든 지형 높이는 `heightAt(x, z)` 하나에서 나옵니다(렌더·충돌·배치·지도 공통). 지형을 바꾸면 `node tools/heightmap.mjs` 로 확인하세요. 장소 주변은 `places.js` 의 `flat` 으로 평탄화됩니다. 도시 구역은 `LEVEL`(구역별 땅 맞추기)로 높이를 맞춥니다 — 평평한 단(수도·구역·지방 도시: 중앙값 한 높이 + 바깥 둑), 시골(`isRural`: 교외·마을 — 자연 지형 그대로, 고리길·큰길·골목만 길 단면으로 고르고 건물마다 집터 `setPads`; 집터는 일꾼에도 보냄 `terrain.setPads`, 첫 조각 요청 전에), 높이 창(`grade: false`·`water`: 바닥 ±35 m 만). 계단 단(방식 2)은 지금 쓰지 않습니다. 구역을 옮기거나 키우면 지형도 바뀝니다. 계획(`cityplan.buildPlan`)은 둑 범위까지를 덮인 곳으로 봅니다(heightfield 와 같은 수치).
 - 하늘은 별도 장면(카메라 원점, 하늘 단위 = 0.05 m)을 먼저 그리고 깊이를 지운 뒤 세계를 그립니다.
 - 모든 세계 셰이더는 `shaders.js` 의 `applyFog`(높이 안개 = 하늘색)와 `curveWorld`(행성 곡률)를 씁니다. 새 셰이더도 같은 걸 써야 공기 속에 섞입니다.
 - 셰이더 마지막에 `#include <tonemapping_fragment>`, `#include <colorspace_fragment>` 를 넣으세요. engine.js 가 이 조각에 NaN/무한대 방지를 끼워 넣습니다(블룸이 검게 번지는 문제 예방).
@@ -74,7 +74,7 @@ src/
 - **해류**: `data/currents.js` (점 = [x, 높이, z, 절대?]). `unlock: 탑id` 면 그 탑을 깨울 때 흐름.
 - **대사**: `data/story.js` 의 `LINES` (단어 id 배열 + 한국어). 새 단어는 `data/lexicon.js` 에 (음 모티프가 겹치지 않게).
 - **대화**: `CONVOS` — `{s: 인물id, line}` / `{s:'moa', t}` / `{choice:[...]}`, `act` 로 동작 실행.
-- **퀘스트**: `QUESTS` — 단계 type 은 `game/quests.js` 머리 주석 참고. 동작은 `game/actions.js` 의 `HANDLERS`.
+- **퀘스트**: `QUESTS` — 단계 type 은 `game/quests.js` 머리 주석 참고. 동작은 `game/actions.js` 의 `HANDLERS`. 도시의 삶을 본편에 엮을 때는 `stat`(예: `venue.worked`) 단계나 `flag` 단계 + 코드에서 `game.setFlag(k)` 를 씁니다(지금 깃발: `helpedNeighbor`·`rodeSky`·`liftTop`·`homeVisit`). 줄거리: 탐사선 「라르크」가 신호를 따라와 스스로 착륙 → 이웃이 되기 → 이름 노래로 시민(집 `state.home`) → 듣던 탑들이 다시 노래 → 온 하늘에 대답. 탑은 「잠든」 게 아니라 「듣는 쪽」입니다(쇠락한 문명이 아님).
 - **부탁(날마다)**: `game/world-events.js` 의 `TEMPLATES` 에 함수 추가.
 - **메아리·글자돌·도감**: `story.js` 의 `ECHOES`, `GLYPH_STONES`, `CODEX`.
 - **저장 항목**: `game/state.js` 의 `defaultState()` 에 추가(불러올 때 빠진 항목은 기본값으로 채워짐).

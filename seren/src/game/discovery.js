@@ -12,7 +12,7 @@ import { mulberry32 } from '../core/noise.js';
 import { bus } from '../core/events.js';
 
 const PICKUP_SETS = {
-  sled: { label: '썰매 부품', at: 'crash', spots: [[-140, 90], [190, -60], [60, 240]] },
+  sled: { label: '공명 결정', at: 'crash', spots: [[-140, 90], [190, -60], [60, 240]] },
 };
 
 function resolve(at, off = [0, 0]) {

@@ -286,6 +286,7 @@ export class Requests {
     g.state.flags.requests = this.active;
     g.state.requestsDone++;
     g.giveItem('starseed', r.reward);
+    g.setFlag('helpedNeighbor');
     // 모르는 단어 하나를 배운다
     const unknown = WORDS.filter((w) => !g.lang.known(w.id));
     if (unknown.length) g.lang.learn(unknown[Math.floor(Math.random() * unknown.length)].id, 'teach');

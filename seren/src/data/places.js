@@ -27,8 +27,8 @@ export const PLACES = [
     desc: '궤도 고리로 오르는 왕복선이 780 m 가속 고리탑을 지나 하늘로 쏘아 올려지는 곳.' },
 
   // ── 빛갈대 들판 (남) ─────────────────────
-  { id: 'crash', type: 'crash', name: '추락 지점', region: 'meadow', pos: [600, 8600], radius: 40,
-    desc: '탐사선 「라르크」의 탈출 포드가 떨어진 곳. 아직 연기가 오른다.' },
+  { id: 'crash', type: 'crash', name: '착륙 지점', region: 'meadow', pos: [600, 8600], radius: 40,
+    desc: '탐사선 「라르크」의 착륙선이 내려앉은 들판. 아웬이 밝혀 둔 빛 표지가 착륙할 자리를 알려 주었다.' },
   { id: 'dewfold', type: 'village', name: '이슬터', region: 'meadow', pos: [-420, 7820], radius: 160, flat: { r: 110, blend: 90 },
     desc: '빛갈대 들판의 정원 마을. 아웬 「이엘」이 사는 곳.' },
   { id: 'meadow-pylon', type: 'pylon', name: '들판의 공명탑', region: 'meadow', pos: [1350, 6200], flat: { r: 45, blend: 70 }, alive: true,
@@ -115,3 +115,7 @@ export const PLACE = Object.fromEntries(PLACES.map((p) => [p.id, p]));
 
 // 지형 평탄화 목록 (heightfield 가 사용)
 export const FLATTEN = PLACES.filter((p) => p.flat).map((p) => ({ x: p.pos[0], z: p.pos[1], r: p.flat.r, blend: p.flat.blend ?? 60, h: p.flat.h }));
+
+// 착륙선: 경사판이 마중 나온 이엘 쪽(남서)을 보고, 새 게임은 경사판 발치에서 시작한다
+export const LANDER_YAW = -2.39;
+export const LANDING_START = [600 + Math.sin(LANDER_YAW) * 7.5, 8600 + Math.cos(LANDER_YAW) * 7.5];

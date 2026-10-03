@@ -48,16 +48,18 @@ export class Director {
     g.rig.override = { pos: V(cx, cy, cz), look: V(-200 + Math.sin(a * 0.5) * 300, 900, -400) };
   }
 
-  // ── 오프닝: 누워 있는 조종사에게 다가갔다가 일어나며 풍경이 열린다 ──
+  // ── 오프닝: 착륙선 해치에서 조종사의 어깨 너머로 — 경사판을 내려선 들판과 마중 나온 빛 ──
   wake(onEnd) {
     const g = this.game;
     const p = g.player.pos;
-    const from = V(p.x + 2.2, p.y + 0.9, p.z + 1.6);
-    const mid = V(p.x + 1.2, p.y + 3.5, p.z + 4.5);
+    const fx = Math.sin(g.player.yaw), fz = Math.cos(g.player.yaw); // 바라보는 쪽
+    const rx = fz, rz = -fx;
+    const from = V(p.x - fx * 3.6 + rx * 0.6, p.y + 2.1, p.z - fz * 3.6 + rz * 0.6);
+    const mid = V(p.x - fx * 1.0 + rx * 4.5, p.y + 4.5, p.z - fz * 1.0 + rz * 4.5);
     this.run(7.5, (k) => {
       const e = k < 0.5 ? (k / 0.5) ** 2 * 0.5 : 0.5 + (1 - (1 - (k - 0.5) / 0.5) ** 2) * 0.5;
       const pos = from.clone().lerp(mid, e);
-      const look = V(p.x, p.y + 0.4 + e * 1.4, p.z - e * 30);
+      const look = V(p.x + fx * 40, p.y + 1.2 + e * 8, p.z + fz * 40);
       g.rig.override = { pos, look };
     }, onEnd);
   }

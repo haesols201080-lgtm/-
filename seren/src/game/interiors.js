@@ -575,7 +575,9 @@ export class Interiors {
     g.rig.yaw = p.yaw + Math.PI;
     g.rig.pitch = -0.05;
     const I = this.info(r);
-    g.ui.regionTitle(I.name, `${I.P.desc} · ${I.floors}층`, false);
+    const mine = g.state.home === r.id;
+    g.ui.regionTitle(mine ? '우리 집' : I.name, mine ? `${I.name} · 하모네아가 내어 준 집` : `${I.P.desc} · ${I.floors}층`, false);
+    if (mine && !g.state.flags.homeVisit) { g.state.flags.moaIndoor = true; g.setFlag('homeVisit'); setTimeout(() => g.ui.moa('…여기가 우리 집이에요. 이웃들이 벌써 문패에 우리 이름 노래를 새겨 놨어요. 지친 날엔 여기서 쉬어요.'), 2200); }
     if (!g.state.flags.moaIndoor) { g.state.flags.moaIndoor = true; setTimeout(() => g.ui.moa('안으로 들어왔어요! 가운데 빛기둥은 승강기예요. 꼭대기 위 하늘 전망대까지 올라가요.'), 2200); }
   }
 
@@ -637,7 +639,7 @@ export class Interiors {
     const d = this.city.nearestDoor(p.x, p.z, 3.2);
     if (d && Math.abs(p.y - d.floorY) < 3 && !(cur && cur.r === d && this._inside(p.x, p.z))) {
       const I = this.info(d);
-      return { kind: 'door', o: d, label: `${I.name} · 들어가기`, short: '들어가기' };
+      return { kind: 'door', o: d, label: `${this.game.state.home === d.id ? '우리 집' : I.name} · 들어가기`, short: '들어가기' };
     }
     return null;
   }

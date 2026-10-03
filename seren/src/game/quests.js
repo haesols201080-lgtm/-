@@ -2,12 +2,19 @@
 // 단계 type:
 //   move(dist) · near(npc,r) · reach(place,r) · talk(npc,convo) · glyphs(ids) · tone(n,place,r)
 //   pickup(set,count) · skim(dist) · vista(id) · awaken(count) · night · compose · scan(id) · flag(k)
+//   stat(path,count) — 상태의 수치(또는 기록 수)가 count 이상 (예: 'venue.worked' 일한 횟수, 'venue.exhibits' 본 전시 수)
 import { QUESTS, ECHOES, GLYPH_STONES } from '../data/story.js';
 import { PLACE, GREAT_PYLONS } from '../data/places.js';
 
 const GREAT = new Set(GREAT_PYLONS);
 /** 깨운 공명탑 수 (great: 큰 공명탑만 / 아니면 대륙의 공명탑만) */
 export function awakenedCount(state, great = false) { return Object.keys(state.pylons).filter((id) => GREAT.has(id) === great).length; }
+/** 'venue.worked' 같은 경로의 값: 수치면 그대로, 기록(객체)이면 그 개수 */
+function statValue(state, path) {
+  let v = state;
+  for (const k of path.split('.')) v = v == null ? undefined : v[k];
+  return typeof v === 'number' ? v : v && typeof v === 'object' ? Object.keys(v).length : 0;
+}
 import { bus } from '../core/events.js';
 
 export class Quests {
@@ -139,6 +146,7 @@ export class Quests {
         case 'compose': done = !!g.state.nameSong; break;
         case 'scan': done = !!g.state.codex[st.id]; break;
         case 'flag': done = !!g.state.flags[st.k]; break;
+        case 'stat': done = statValue(g.state, st.path) >= st.count; break;
       }
       if (done) this.completeStep(id);
     }
@@ -220,7 +228,10 @@ export class Quests {
       case 'awaken': for (const P of g.structures.pylons.values()) if (!P.alive && P.great === !!st.great) out.push({ x: P.x, y: P.y + P.h, z: P.z, label: P.place.name }); break;
       case 'compose': out.push({ x: 0, y: g.structures.deckY, z: 0, label: '전망대' }); break;
       case 'scan': if (st.id === 'skywhale' && g.creatures) { const w = g.creatures.nearestWhale(g.player.pos); if (w) out.push({ x: w.x, y: w.y, z: w.z, label: '하늘고래' }); } break;
-      case 'flag': if (st.marker === 'anchor' && g.anchor && g.player.pos.y < 20000) { const d = g.anchor.deckStop; out.push({ x: d.x, y: d.y, z: d.z, label: '승강차' }); } break;
+      case 'flag':
+        if (st.marker === 'anchor' && g.anchor && g.player.pos.y < 20000) { const d = g.anchor.deckStop; out.push({ x: d.x, y: d.y, z: d.z, label: '승강차' }); }
+        if (st.marker === 'home' && g.state.home != null && g.city) { const r = g.city.recs[g.state.home]; if (r) out.push({ x: r.door.x, y: r.floorY + 2, z: r.door.z, label: '우리 집' }); }
+        break;
     }
     return out;
   }

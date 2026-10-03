@@ -31,6 +31,7 @@ import { Player } from '../player/player.js';
 import { Avatar } from '../player/avatar.js';
 import { CameraRig } from '../player/camera-rig.js';
 import { CURRENTS } from '../data/currents.js';
+import { LANDING_START } from '../data/places.js';
 import { LINES, MOA, KEEPERS, PYLON_TONES, CODEX } from '../data/story.js';
 import { UR_DIR } from '../world/sky-clock.js';
 import { defaultState, loadState, saveState, hasSave, loadSettings, deleteSave } from './state.js';
@@ -126,8 +127,8 @@ export class Game {
     // 타이틀 카메라 자리에서 지형을 먼저 만들어 둔다
     this.world.clock.time = 0.745;
     this.world.clock.frozen = true;
-    this.player.teleport(606, undefined, 8606);
-    this.player.state = 'down';
+    this.player.teleport(LANDING_START[0], undefined, LANDING_START[1]);
+    this.player.state = 'ground';
     this.director.titleFrame(0);
     this._last = performance.now();
     const start = this._last;
@@ -187,10 +188,10 @@ export class Game {
     this.world.clock.frozen = false;
     this.world.clock.time = 0.655;
     this.player.teleport(this.state.player.x, this.state.player.y ?? undefined, this.state.player.z);
-    this.player.state = 'down';
-    this.player.yaw = Math.PI * 0.9;
+    this.player.state = 'ground'; // 착륙선 경사판 발치에 서서 시작
+    this.player.yaw = this.state.player.yaw;
     this.player.canSkim = false;
-    this.rig.yaw = 0;
+    this.rig.yaw = this.player.yaw + Math.PI;
     this.rig.pitch = -0.12;
     this.ui.refreshButtons();
     const begin = () => {
@@ -203,9 +204,9 @@ export class Game {
         this.ui.refreshButtons();
         this.quests.start('mq0', true);
         this.ui.refreshObjective();
-        this._moaLater('…생체 신호 안정. 조종사님, 들리세요? 모아예요. 탐사복 보조 지능.', 0.3);
-        this._moaLater('포드는 망가졌지만 우리는 무사해요. 그리고… 저기 보세요. 거대한 행성, 하늘을 가로지르는 고리, 그리고 저 탑. 누군가 저걸 지었어요.', 5.5);
-        this._moaLater('신호가 시작된 곳이 바로 이 위성이에요. 우리가 찾던 곳이요.', 12.5);
+        this._moaLater('…착륙 완료. 조종사님, 들리세요? 모아예요. 탐사복 보조 지능.', 0.3);
+        this._moaLater('저 빛 표지가 우리를 여기로 이끌었어요. 보세요 — 하늘을 가로지르는 고리, 승강줄, 2킬로미터짜리 탑들. 고등 문명이에요.', 5.5);
+        this._moaLater('신호가 시작된 곳이 바로 이 별이에요. 그리고… 누군가 우리를 마중 나오고 있어요.', 12.5);
       });
     };
     this.ui.setHud(false);
@@ -215,8 +216,8 @@ export class Game {
     this.ui.caption([
       '신호를 따라 312일.',
       '가스행성 「우르」를 도는 위성에서,<br>우리는 노래를 들었다.',
-      '데이터가 아니었다.<br>누군가가, 아주 오래, 부르고 있었다.',
-      '그리고 — 대기권에서 배가 부서졌다.',
+      '궤도에서 내려다본 그 별에는<br>고리와 탑과, 밤새 빛나는 도시가 있었다.',
+      '누군가 들판에 빛을 밝혀 두었다.<br>— 내려와도 좋다고.',
     ], begin);
   }
 
@@ -504,7 +505,7 @@ export class Game {
       if (s.flags.skimmer) { this._afterConvo = () => this.upgradeCard(); return 'on-seeds'; }
       return 'on-sled';
     }
-    if (id === 'hau') return Object.keys(s.pylons).length ? 'hau-pylon' : 'hau-first';
+    if (id === 'hau') return Object.keys(s.pylons).length ? 'hau-pylon' : this.quests.isDone('mq2b') ? 'hau-towers' : this.quests.isDone('mq2') ? 'hau-wait' : 'hau-first';
     if (id === 'iel') return 'iel-idle';
     return null;
   }
@@ -515,7 +516,7 @@ export class Game {
     T.refresh();
     if (!S.open) {
       const L = T.lines.find((l) => l.id === S.line);
-      this.ui.toast(`${L.name}은 잠들어 있다`, { kind: 'muted', sub: L.unlock.startsWith('quest:') ? '썰매를 고친 뒤에 다시 와 보자' : '그 지방의 공명탑을 깨우면 다시 달린다' });
+      this.ui.toast(`${L.name}은 멈춰 있다`, { kind: 'muted', sub: L.unlock.startsWith('quest:') ? '썰매를 고친 뒤에 다시 와 보자' : '그 지방의 공명탑이 노래하면 다시 달린다' });
       return;
     }
     const dests = T.stations.filter((d) => d !== S && d.open);
@@ -658,6 +659,13 @@ export class Game {
     this.ui.toast(`새 공명 음 · 「${['솟음', '열림', '흐름', '빛', '고요'][n]}」 (${n + 1})`, { kind: 'word' });
   }
 
+  /** 이야기 깃발 세우기 (퀘스트의 flag 단계가 듣는다) */
+  setFlag(k, v = true) {
+    if (this.state.flags[k] === v) return;
+    this.state.flags[k] = v;
+    bus.emit('flag', k);
+  }
+
   giveItem(k, n = 1) {
     this.state.inv[k] = (this.state.inv[k] || 0) + n;
     if (k === 'starseed') this.ui.toast(`별씨 +${n} (모두 ${this.state.inv.starseed})`, { kind: 'item' });
@@ -701,14 +709,14 @@ export class Game {
       if (kn && !P.great) { this.npcs.goTo(keeper, P.x + 18, P.z + 12); kn.moved = true; }
       this.state.harmony[P.place.region] = Math.max(this.state.harmony[P.place.region] || 0, 60);
       const lines = [
-        '탑이 깨어났어요! 주변의 색이 돌아오고… 척추 쪽으로 해류가 다시 흘러요.',
-        '두 번째 탑이에요. 새 음도 받았어요. 세렌이 우리를 기억하는 것 같아요.',
-        '세 번째예요. 하우가 우리를 부르는 것 같아요. 척추로 돌아가 봐요.',
+        '탑이 노래하는 쪽으로 돌아섰어요! 주변의 빛이 살아나고… 그 지방 빛길 갈래선과 하늘길이 다시 열렸어요.',
+        '두 번째 탑이에요. 새 음도 받았어요. 지나가던 주민들이 우리한테 인사해요.',
+        '세 번째예요. 하우가 우리를 부르는 것 같아요. 하모네아의 척추로 돌아가 봐요.',
         '네 번째. 세렌이 조금씩 더 크게 울려요.',
         '다섯 탑이 모두 노래해요! 하우에게 가요.',
       ];
       const greatLines = [
-        '큰 탑이 깨어났어요! 저 빛기둥… 고리까지 닿았어요. 척추 하나가 다시 숨을 쉬어요.',
+        '큰 탑이 노래해요! 저 빛기둥… 고리까지 닿았어요. 척추 하나가 귀에서 목소리로 바뀌었어요.',
         '두 번째 큰 탑. 바다 건너 하늘길이 다시 열려요. 배들이 오는 게 보여요.',
         '세 번째예요. 고리의 불빛이 점점 이어져요.',
         '네 큰 탑이 모두 노래해요! 하늘닻의 솔에게 가요.',

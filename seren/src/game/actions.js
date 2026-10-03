@@ -26,6 +26,22 @@ const HANDLERS = {
   startQuest: (g, a) => g.quests.start(a.id),
   festival: (g) => g.events.festival(),
   worldChorus: (g) => g.worldChorus(),
+  // 하모네아가 내어 주는 집: 지금 선 곳에서 가장 가까운 살림집
+  assignHome: (g) => {
+    const C = g.city;
+    if (!C || g.state.home != null) return;
+    const p = g.player.pos;
+    let best = null, bd = Infinity;
+    for (const r of C.recs) {
+      if (r.use !== 'home') continue;
+      const d = (r.x - p.x) ** 2 + (r.z - p.z) ** 2;
+      if (d < bd) { bd = d; best = r; }
+    }
+    if (!best) return;
+    g.state.home = best.id;
+    g.ui.toast('하모네아에 우리 집이 생겼다', { kind: 'item', sub: g.interiors.info(best).name });
+    g.ui.refreshObjective();
+  },
 };
 
 export class Actions {

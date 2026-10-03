@@ -1,4 +1,5 @@
 // 저장되는 게임 상태. 새 항목을 추가하면 defaultState() 에도 넣고, 필요하면 migrate() 에 이전 버전 처리를 더하세요.
+import { LANDING_START, LANDER_YAW } from '../data/places.js';
 const KEY = 'seren.save.v1';
 const SETTINGS_KEY = 'seren.settings.v1';
 export const SAVE_VERSION = 1;
@@ -9,7 +10,7 @@ export function defaultState() {
     created: Date.now(),
     saved: 0,
     playTime: 0,
-    player: { x: 606, y: null, z: 8606, yaw: 0 },
+    player: { x: LANDING_START[0], y: null, z: LANDING_START[1], yaw: LANDER_YAW },
     clock: 0.66,
     flags: {}, // 이야기 진행 플래그
     tones: [], // 얻은 공명 음 (0..4)
@@ -25,6 +26,7 @@ export function defaultState() {
     quests: { active: [], done: [], step: {}, data: {} },
     inv: { starseed: 0, shard: 0, flower: 0, fruit: 0, trinket: 0, tea: 0, cookie: 0, meal: 0, lantern: 0, mapshard: 0, book: 0, parcel: 0 },
     venue: { exhibits: {}, archives: {}, museums: {}, buffs: {}, days: {}, job: null, earned: 0, spent: 0, worked: 0 }, // 건물의 일 (v0.7)
+    home: null, // 하모네아가 내어 준 우리 집 (도시 건물 기록 id)
     cit: { f: {}, talked: {}, trinkets: 0 }, // 주민과 친한 정도 (자리 id#순번 → 0..5)
     upgrades: { glide: 0, skim: 0, rise: 0, detector: 0 },
     harmony: {}, // 지역 → 0..100

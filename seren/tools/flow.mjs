@@ -54,14 +54,20 @@ await step('이엘(척추로)', async () => { await ev(() => { const g = SEREN.g
 await step('척추 도착', () => run(1, "g.player.teleport(0, undefined, 150)"));
 await step('하우와 대화', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('hau'); g.player.teleport(n.pos.x + 3, undefined, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
 await step('전망대', async () => { await ev(() => { const g = SEREN.game; g.player.teleport(0, g.structures.deckY + 1, 20); g.vista('spine-deck', { x: 0, y: g.structures.deckY, z: 0, place: { name: '척추 전망대' } }); g.director.skip(); }); });
+// 이웃이 되기: 일하고, 사고, 전시를 보고, 이웃을 돕는다
+await step('일·구매·전시·돕기', async () => { await ev(() => { const g = SEREN.game; g.venues._wage(3, '시험 일'); g.ui.closeCard && g.ui.closeCard(); }); await run(0.3); await ev(() => { const g = SEREN.game; g.venues._pay(1); g.state.venue.exhibits['test'] = true; }); await run(0.3); await ev(() => SEREN.game.setFlag('helpedNeighbor')); await run(0.3); });
+await step('하우(이웃)', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('hau'); g.player.teleport(n.pos.x + 3, undefined, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
 await step('공명탑 3개', async () => { for (const id of ['glass-pylon', 'bloom-pylon', 'canyon-pylon']) { await ev((id) => { const g = SEREN.game; g.awakenPylon(id); g.director.skip(); }, id); await run(0.3); } });
 await step('하우(밤)', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('hau'); g.player.teleport(n.pos.x + 3, undefined, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
 await step('밤 기다리기', () => run(1, "g.world.clock.skipTo(0.95)"));
 await step('노래 짓기', async () => { await ev(() => { const g = SEREN.game; g.player.teleport(0, g.structures.deckY + 1, 20); g.startCompose(); for (const n of [0, 2, 4, 3, 1, 0]) { g.ui.composeNote(n); } document.querySelector('.compose [data-ok]').click(); g.director.skip(); }); await run(0.5); });
 await step('하우(노래 후)', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('hau'); g.player.teleport(n.pos.x + 3, undefined, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
+await step('우리 집 받음?', () => ev(() => { const g = SEREN.game; const r = g.city.recs[g.state.home]; return r ? { home: g.state.home, name: g.interiors.info(r).name, d: Math.round(Math.hypot(r.x, r.z)) } : null; }));
+await step('우리 집 들어가기', async () => { await ev(() => { const g = SEREN.game; g.interiors.enter(g.city.recs[g.state.home]); }); await run(0.5); await ev(() => { const g = SEREN.game; g.interiors.exit(); }); await run(1.5); });
 await step('남은 탑', async () => { for (const id of ['frost-pylon', 'sea-pylon']) { await ev((id) => { const g = SEREN.game; g.awakenPylon(id); g.director.skip(); }, id); await run(0.3); } });
 await step('하우(마지막)', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('hau'); g.player.teleport(n.pos.x + 3, undefined, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
 // ── 2부: 바다 건너 ──
+await step('하늘배·꼭대기', async () => { await ev(() => { const g = SEREN.game; g.setFlag('rodeSky'); }); await run(0.3); await ev(() => { const g = SEREN.game; g.setFlag('liftTop'); }); await run(0.3); });
 await step('하우(하늘닻 이야기)', async () => { await run(0.3); await ev(() => { const g = SEREN.game; const n = g.npcs.get('hau'); g.player.teleport(n.pos.x + 3, undefined, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
 await step('승강차로 하늘닻', async () => {
   await ev(() => { const g = SEREN.game; const d = g.anchor.deckStop; g.player.teleport(d.x, d.y + 1, d.z); g.rideElevator(true); });
