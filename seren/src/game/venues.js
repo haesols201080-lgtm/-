@@ -122,36 +122,42 @@ export class Venues {
   }
 
   // 찻집: 계산대에서 주문 → 부엌에서 짓는다(김) → 받아서 여기서 먹거나 싸 간다
+  //   부엌(화덕 둘·요리사)을 굽은 계산대가 감싸고, 계산대 안쪽에 점원, 바깥(방 쪽)에서 주문한다
   _b_cafe(cur, K) {
-    const [bx, bz] = K.toward(0.62, Math.PI);
-    const ry = K.face(bx, bz, K.cx, K.cz);
-    K.put(new THREE.CylinderGeometry(3.2, 3.2, 1.05, 18, 1, false, -0.9, 1.8), PEARL, 0, bx, K.fy + 0.52, bz, ry + Math.PI);
-    K.put(new THREE.CylinderGeometry(3.23, 3.23, 0.06, 18, 1, true, -0.9, 1.8), 0xffc46a, 1.6, bx, K.fy + 1.06, bz, ry + Math.PI);
-    K.sCyl(bx, bz, 2.4, 1.05);
+    const [kx, kz] = K.toward(0.8, Math.PI);
+    const ry = K.face(kx, kz, K.cx, K.cz); // 부엌 → 방 가운데
+    const fx = Math.sin(ry), fz = Math.cos(ry);
+    const R = Math.min(3.2, K.rin * 0.22);
+    K.arcCounter(kx, kz, R, 0.6, 1.05, 0.95, ry, PEARL, 0xffc46a, 'cafe-counter');
     // 부엌: 화덕 둘 + 김
-    const [kx, kz] = K.toward(0.82, Math.PI);
     for (const s of [-1, 1]) {
-      const ox = kx + Math.cos(ry) * s * 1.6, oz = kz - Math.sin(ry) * s * 1.6;
-      K.put(new THREE.CylinderGeometry(0.7, 0.8, 1.0, 10), 0xc8c2d2, 0, ox, K.fy + 0.5, oz);
-      K.put(new THREE.TorusGeometry(0.45, 0.06, 4, 16).rotateX(Math.PI / 2), 0xff9f6a, 2.2, ox, K.fy + 1.02, oz);
-      K.sCyl(ox, oz, 0.8, 1.0);
+      const ox = kx + Math.cos(ry) * s * 1.3 - fx * 0.3, oz = kz - Math.sin(ry) * s * 1.3 - fz * 0.3;
+      K.put(new THREE.CylinderGeometry(0.6, 0.7, 1.0, 10), 0xc8c2d2, 0, ox, K.fy + 0.5, oz);
+      K.put(new THREE.TorusGeometry(0.4, 0.06, 4, 16).rotateX(Math.PI / 2), 0xff9f6a, 2.2, ox, K.fy + 1.02, oz);
+      K.sCyl(ox, oz, 0.7, 1.0, 'cafe-stove');
       const puffs = [];
       for (let i = 0; i < 4; i++) { const m = this._glow(new THREE.IcosahedronGeometry(0.18, 0), 0xffffff, 0.5); puffs.push(m); }
       this._anim((t) => puffs.forEach((m, i) => { const k = ((t * 0.35 + i / 4) % 1); m.position.set(ox + Math.sin(i * 2 + t) * 0.2, K.fy + 1.2 + k * 2.2, oz); m.scale.setScalar(0.6 + k * 1.4); m.material.uniforms.uIntensity.value = 0.6 * (1 - k); }));
     }
-    // 차림표 홀로그램
+    // 차림표 홀로그램 (계산대 위)
     const menu = this._glow(new THREE.PlaneGeometry(2.6, 1.2), 0xffd9a0, 0.9);
-    menu.position.set(bx + Math.sin(ry) * 0.2, K.fy + 3.0, bz + Math.cos(ry) * 0.2); menu.rotation.y = ry + Math.PI;
-    K.anchor(kx, kz, 'cook', ry);
-    K.anchor(bx - Math.sin(ry) * 1.1, bz - Math.cos(ry) * 1.1, 'shop', ry);
-    // 식탁
-    for (let i = 0; i < 4; i++) { const [tx, tz] = K.toward(0.5, Math.PI * 0.35 + i * 0.42); K.table(tx, tz, 1.0, 3, i % 2 ? 'eat' : null); }
+    menu.position.set(kx + fx * (R - 0.3), K.fy + 3.0, kz + fz * (R - 0.3)); menu.rotation.y = ry;
+    K.anchor(kx - fx * 0.2, kz - fz * 0.2, 'cook', ry);
+    K.anchor(kx + fx * (R - 1.05), kz + fz * (R - 1.05), 'shop', ry);
+    // 식탁: 빈 자리에만 (계산대 앞 주문 자리는 비운다)
+    K.claim({ x: kx + fx * (R + 1.3), z: kz + fz * (R + 1.3), r: 1.1 }, 'cafe-queue');
+    let placed = 0;
+    for (let i = 0; i < 7 && placed < 4; i++) {
+      const [tx, tz] = K.toward(0.48 + (i % 2) * 0.08, Math.PI * 0.3 + i * 0.25);
+      if (!K.isFree({ x: tx, z: tz, r: 1.0 + 0.9 + 0.42 }, 0.4)) continue;
+      K.table(tx, tz, 1.0, 3, placed % 2 ? 'eat' : null); placed++;
+    }
     // 받을 접시 (주문이 다 되면 계산대 위에 나타난다)
     const dish = this._glow(new THREE.CylinderGeometry(0.4, 0.3, 0.12, 12), 0xffe2b8, 1.6);
-    dish.position.set(bx + Math.sin(ry) * 1.0, K.fy + 1.15, bz + Math.cos(ry) * 1.0);
+    dish.position.set(kx + fx * (R - 0.3), K.fy + 1.15, kz + fz * (R - 0.3));
     this._anim(() => { dish.visible = !!(this.order && this.order.ready <= this.t); });
     this._station({
-      x: bx + Math.sin(ry) * 2.2, z: bz + Math.cos(ry) * 2.2, r: 2.6,
+      x: kx + fx * (R + 1.2), z: kz + fz * (R + 1.2), r: 2.6,
       label: () => (!this.order ? '계산대 · 주문하기' : this.order.ready > this.t ? `${ITEMS[this.order.id].name} 짓는 중 · ${Math.ceil(this.order.ready - this.t)}초` : `${ITEMS[this.order.id].name} 받기`),
       short: '주문', use: () => this.cafe(),
     });
@@ -204,7 +210,7 @@ export class Venues {
     K.sBox(x, z, 1.2, 0.45, ry, 1.0);
     K.anchor(x - Math.sin(ry) * 0.9, z - Math.cos(ry) * 0.9, 'heal', ry);
     for (let i = 0; i < 4; i++) {
-      const [bx, bz] = K.toward(0.66, Math.PI * 0.6 + i * 0.5);
+      const [bx, bz] = K.toward(0.66, Math.PI * 0.6 + i * 0.5 * Math.PI); // 침대(interiors 의 치유원 가구) 위를 훑는다
       const ring = this._glow(new THREE.TorusGeometry(0.9, 0.03, 3, 20), 0xbfefff, 1.0);
       this._anim((t) => { ring.position.set(bx, K.fy + 1.0 + (Math.sin(t * 0.8 + i) * 0.5 + 0.5) * 1.2, bz); ring.rotation.x = Math.PI / 2; });
     }

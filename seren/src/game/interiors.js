@@ -84,6 +84,27 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
+/** 안내지기 자리 (방 가운데에서 문 쪽으로 m): 계산대(rin·0.52, 반지름 2.6 호) 뒤에 설 수 있으면 뒤, 아니면 호 안쪽 */
+const deskKeeper = (rin) => (rin * 0.52 - 3.35 > 3.2 ? rin * 0.52 - 3.35 : rin * 0.52 - 1.4);
+
+/** 바닥 자리 겹침: 원 {x,z,r} · 돌린 상자 {x,z,hx,hz,rot}(rot = three.js rotation.y). m 만큼 파고들어야 겹침 */
+function fpHit(a, b, m = 0.12) {
+  if (a.r != null && b.r != null) return Math.hypot(a.x - b.x, a.z - b.z) < a.r + b.r - m;
+  if (a.r != null || b.r != null) {
+    const c = a.r != null ? a : b, B = a.r != null ? b : a;
+    const dx = c.x - B.x, dz = c.z - B.z, co = Math.cos(B.rot || 0), si = Math.sin(B.rot || 0);
+    const lx = dx * co - dz * si, lz = dx * si + dz * co;
+    return Math.hypot(Math.max(0, Math.abs(lx) - B.hx), Math.max(0, Math.abs(lz) - B.hz)) < c.r - m;
+  }
+  for (const t of [a.rot || 0, (a.rot || 0) + Math.PI / 2, b.rot || 0, (b.rot || 0) + Math.PI / 2]) {
+    const ax = Math.cos(t), az = -Math.sin(t);
+    const pr = (B) => { const r = B.rot || 0, c = B.x * ax + B.z * az, e = B.hx * Math.abs(Math.cos(r) * ax - Math.sin(r) * az) + B.hz * Math.abs(Math.sin(r) * ax + Math.cos(r) * az); return [c - e, c + e]; };
+    const [a0, a1] = pr(a), [b0, b1] = pr(b);
+    if (Math.min(a1, b1) - Math.max(a0, b0) < m) return false;
+  }
+  return true;
+}
+
 export class Interiors {
   constructor(game) {
     this.game = game;
@@ -252,17 +273,49 @@ export class Interiors {
     const rin = Math.min(...plan.map(([x, z]) => Math.hypot(x - cx, z - cz)));
     const toward = (k, ang = 0) => { const a = Math.atan2(dn[1], dn[0]) + ang; return [cx + Math.cos(a) * rin * k, cz + Math.sin(a) * rin * k]; };
     const faceDoor = Math.atan2(dn[0], dn[1]);
+    // 자리 장부: 가구가 차지한 바닥 (단단한 가구 sBox·sCyl 는 저절로 적힌다). 서로 겹치면 cur.overlaps 에 남기고(검사 도구),
+    // 장식(화분·긴 의자)은 쓰임의 가구·시설·사람 자리를 다 놓은 뒤 빈 곳에만 둔다
+    const occ = cur.occ = [], ovl = cur.overlaps = [];
+    let tagN = 0;
+    const claim = (fp, tag) => {
+      fp.tag = tag || `${info.pid}#${tagN++}`;
+      for (const o of occ) if (o.tag !== fp.tag && fpHit(fp, o)) ovl.push({ a: fp.tag, b: o.tag, at: [+(fp.x - cx).toFixed(1), +(fp.z - cz).toFixed(1)] });
+      occ.push(fp);
+      return fp;
+    };
+    const isFree = (fp, pad = 0) => this._inside(fp.x, fp.z, (fp.r ?? Math.max(fp.hx, fp.hz)) + 0.8) && !occ.some((o) => fpHit(fp, o, -pad));
     // 승강기 받침·고리, 안내대
     put(new THREE.CylinderGeometry(2.2, 2.4, 0.18, 24), PEARL, 0, cx, fy + 0.09, cz);
     put(new THREE.TorusGeometry(2.0, 0.05, 4, 32).rotateX(Math.PI / 2), ACC, 1.0, cx, fy + 0.2, cz);
     put(new THREE.TorusGeometry(2.0, 0.05, 4, 32).rotateX(Math.PI / 2), ACC, 1.0, cx, fy + LH - 0.25, cz);
+    claim({ x: cx, z: cz, r: 2.5 }, 'lift');
+    claim({ x: cur.door.x - dn[0] * 2.4, z: cur.door.z - dn[1] * 2.4, hx: 2.3, hz: 2.4, rot: faceDoor }, 'door'); // 문 앞은 비워 둔다
+    /** 굽은 계산대: 반지름 R·폭 w·높이 h 의 호(±half, 각 ry 쪽으로 휜 바깥면). 위판은 고리 조각, 양 끝은 막는다 — 뚜껑 달린 부채꼴이 아니라 */
+    const arcCounter = (x, z, R, w, h, half, ry, color, edge, tag) => {
+      put(new THREE.CylinderGeometry(R, R, h, 18, 1, true, -half, 2 * half), color, 0, x, fy + h / 2, z, ry);
+      put(new THREE.CylinderGeometry(R - w, R - w, h, 18, 1, true, -half, 2 * half), color, 0, x, fy + h / 2, z, ry);
+      put(new THREE.RingGeometry(R - w - 0.03, R + 0.03, 18, 1, -half - Math.PI / 2, 2 * half).rotateX(-Math.PI / 2), color, 0, x, fy + h, z, ry);
+      put(new THREE.CylinderGeometry(R + 0.03, R + 0.03, 0.06, 18, 1, true, -half, 2 * half), edge, 1.6, x, fy + h + 0.01, z, ry);
+      for (const sgn of [-1, 1]) {
+        const a = ry + sgn * half, ex = x + Math.sin(a) * (R - w / 2), ez = z + Math.cos(a) * (R - w / 2);
+        put(new THREE.BoxGeometry(0.06, h, w), color, 0, ex, fy + h / 2, ez, a);
+      }
+      // 단단하다: 호를 세 토막 상자로
+      for (let k = -1; k <= 1; k++) {
+        const a = ry + (k * 2 * half) / 3, bx = x + Math.sin(a) * (R - w / 2), bz = z + Math.cos(a) * (R - w / 2), hx = R * Math.sin(half / 3) + 0.05;
+        cur.cols.push(this.game.world.colliders.add({ type: 'box', x: bx, z: bz, hx, hz: w / 2, rot: a, y0: fy - 1, y1: fy + h, city: true }));
+        claim({ x: bx, z: bz, hx, hz: w / 2, rot: a }, tag);
+      }
+    };
     const [ddx, ddz] = toward(0.52);
     if (rin > 6) {
-      put(new THREE.CylinderGeometry(2.6, 2.6, 1.05, 16, 1, false, -0.7, 1.4), PEARL, 0, ddx, fy + 0.52, ddz, faceDoor + Math.PI);
-      put(new THREE.CylinderGeometry(2.63, 2.63, 0.06, 16, 1, true, -0.7, 1.4), ACC, 1.6, ddx, fy + 1.06, ddz, faceDoor + Math.PI);
+      arcCounter(ddx, ddz, 2.6, 0.55, 1.05, 0.7, faceDoor + Math.PI, PEARL, ACC, 'desk');
+      claim({ x: cx + dn[0] * deskKeeper(rin), z: cz + dn[1] * deskKeeper(rin), r: 0.6 }, 'desk'); // 안내지기가 서는 자리
+      if (deskKeeper(rin) < rin * 0.52 - 2.6) claim({ x: ddx - dn[0] * 1.2, z: ddz - dn[1] * 1.2, r: 0.8 }, 'desk'); // 계산대 앞(문 쪽) 손님 자리
     }
     // 화분 나무
     const tree = (x, z, s = 1) => {
+      claim({ x, z, r: 0.75 * s }, 'tree');
       cur.cols.push(this.game.world.colliders.add({ type: 'cyl', x, z, r: 0.7 * s, y0: fy - 1, y1: fy + 0.8 * s, city: true }));
       // 실내 화분: 빛 웅덩이 그릇에서 휘어 오르는 결정 깃과 떠 있는 씨앗 구슬 (세렌의 식물)
       put(new THREE.CylinderGeometry(0.7 * s, 0.55 * s, 0.8 * s, 10), GOLD, 0, x, fy + 0.4 * s, z);
@@ -274,19 +327,31 @@ export class Interiors {
       put(new THREE.IcosahedronGeometry(0.2 * s, 0), 0xbffcff, 2.2, x + 0.15 * s, fy + 3.1 * s, z);
     };
     const pid = info.pid;
-    const nTrees = pid === 'garden' ? 9 : pid === 'factory' || pid === 'depot' || pid === 'plant' ? 0 : 4;
-    for (let i = 0; i < nTrees; i++) {
-      const ang = Math.PI * 0.35 + (i / nTrees) * Math.PI * 1.3;
-      const [x, z] = toward(pid === 'garden' ? 0.4 + (i % 3) * 0.18 : 0.78, ang);
-      if (rin > 5) tree(x, z, pid === 'garden' ? 1.2 : 0.9);
-    }
-    // 의자 (자기 가구 고리가 있는 쓰임은 빼고)
-    if (!['museum', 'cafe', 'plant', 'factory', 'depot', 'market'].includes(pid)) for (let i = 0; i < 3; i++) {
-      const ang = Math.PI * 0.6 + i * 0.5;
-      const [x, z] = toward(0.62, ang);
-      put(new THREE.BoxGeometry(2.4, 0.45, 0.7), PEARL, 0, x, fy + 0.4, z, Math.atan2(cx - x, cz - z));
-      cur.cols.push(this.game.world.colliders.add({ type: 'box', x, z, hx: 1.2, hz: 0.35, rot: Math.atan2(cx - x, cz - z), y0: fy - 1, y1: fy + 0.62, city: true }));
-    }
+    // 장식(화분 나무·긴 의자)은 맨 끝에 빈 자리에만 — 여기서는 후보만 적는다
+    const decor = () => {
+      const nTrees = pid === 'garden' ? 9 : pid === 'factory' || pid === 'depot' || pid === 'plant' ? 0 : 4;
+      for (let i = 0; i < nTrees; i++) {
+        const ang = Math.PI * 0.35 + (i / nTrees) * Math.PI * 1.3, s = pid === 'garden' ? 1.2 : 0.9;
+        if (rin <= 5) break;
+        // 자리가 막혔으면 조금씩 옆·안쪽으로 찾아보고, 없으면 두지 않는다
+        for (const [dk, da] of [[0, 0], [0, 0.12], [0, -0.12], [-0.08, 0], [-0.08, 0.2], [-0.08, -0.2], [0.06, 0.25], [0.06, -0.25]]) {
+          const [x, z] = toward((pid === 'garden' ? 0.4 + (i % 3) * 0.18 : 0.78) + dk, ang + da);
+          if (isFree({ x, z, r: 0.75 * s }, 0.5)) { tree(x, z, s); break; }
+        }
+      }
+      // 긴 의자 (자기 가구 고리가 있는 쓰임은 빼고)
+      if (!['museum', 'cafe', 'plant', 'factory', 'depot', 'market'].includes(pid)) for (let i = 0; i < 3; i++) {
+        for (const [dk, da] of [[0, 0], [0, 0.15], [0, -0.15], [-0.1, 0], [0.1, 0], [-0.1, 0.25], [-0.1, -0.25]]) {
+          const [x, z] = toward(0.62 + dk, Math.PI * 0.6 + i * 0.5 + da);
+          const rot = Math.atan2(cx - x, cz - z), fp = { x, z, hx: 1.2, hz: 0.35, rot };
+          if (!isFree(fp, 0.6)) continue;
+          put(new THREE.BoxGeometry(2.4, 0.45, 0.7), PEARL, 0, x, fy + 0.4, z, rot);
+          claim(fp, 'bench');
+          cur.cols.push(this.game.world.colliders.add({ type: 'box', x, z, hx: 1.2, hz: 0.35, rot, y0: fy - 1, y1: fy + 0.62, city: true }));
+          break;
+        }
+      }
+    };
     // 쓰임별: 가구 + 그 둘레에서 사람이 하는 일 (anchors → citizens.setIndoor)
     const AN = cur.anchors = [];
     const t = this.game.world.clock.time % 1;
@@ -296,8 +361,8 @@ export class Interiors {
     const rnd = mulberry32(Math.floor(r.seed * 3e8) + 5);
     // 가구는 단단하다 (닫을 때 함께 치운다)
     const solidC = (c) => cur.cols.push(this.game.world.colliders.add({ y0: fy - 1, city: true, ...c }));
-    const sBox = (x, z, hx, hz, rot, h) => solidC({ type: 'box', x, z, hx, hz, rot, y1: fy + h });
-    const sCyl = (x, z, rr, h) => solidC({ type: 'cyl', x, z, r: rr, y1: fy + h });
+    const sBox = (x, z, hx, hz, rot, h, tag) => { claim({ x, z, hx, hz, rot }, tag); solidC({ type: 'box', x, z, hx, hz, rot, y1: fy + h }); };
+    const sCyl = (x, z, rr, h, tag) => { claim({ x, z, r: rr }, tag); solidC({ type: 'cyl', x, z, r: rr, y1: fy + h }); };
     const table = (x, z, R = 1.3, n = 4, act = 'eat') => {
       put(new THREE.CylinderGeometry(R, R * 0.9, 0.08, 16), PEARL, 0, x, fy + 0.85, z);
       put(new THREE.CylinderGeometry(0.15, 0.3, 0.85, 8), GOLD, 0, x, fy + 0.42, z);
@@ -408,7 +473,11 @@ export class Interiors {
       if (work) anchor(dx2 + 1, dz2, 'clerk', face(dx2, dz2, cx, cz));
     }
     // 건물이 실제로 하는 일: 시설(진열대·계산대·전시대·생산 줄…)과 움직이는 장치 (game/venues.js)
-    if (this.game.venues) this.game.venues.build(cur, { put, sBox, sCyl, anchor, toward, face, rnd, cx, cz, rin, fy, LH, work, evening, night, t, faceDoor, dn, group: g, table, tree });
+    if (this.game.venues) this.game.venues.build(cur, { put, sBox, sCyl, anchor, toward, face, rnd, cx, cz, rin, fy, LH, work, evening, night, t, faceDoor, dn, group: g, table, tree, claim, isFree, arcCounter });
+    // 사람이 설 자리·시설 앞은 비워 두고, 남은 빈 곳에 장식
+    for (const A of AN) occ.push({ x: A.x, z: A.z, r: 0.55, tag: 'person' });
+    for (const st of (this.game.venues && this.game.venues.stations) || []) occ.push({ x: st.x, z: st.z, r: 0.9, tag: 'station' });
+    decor();
     // 합치기
     const base = new THREE.BufferGeometry();
     base.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
@@ -506,8 +575,8 @@ export class Interiors {
     const cx = r.x, cz = r.z, dn = [cur.door.nx, cur.door.nz];
     const rin = Math.min(...plan.map(([x, z]) => Math.hypot(x - cx, z - cz)));
     if (rin > 6 && cur.info.pid !== 'home') {
-      const k = rin * 0.52 + 1.2;
-      const desk = N._spawn({ id: 'in-desk', name: '안내지기', service: 'lobby', indoor: true, x: cx + dn[0] * (k - 2.6), z: cz + dn[1] * (k - 2.6), y: cur.fy, hue: rnd(), glow: 0x7ff3e6, scale: 0.95, home: { x: cx, z: cz, r: 0.3 } });
+      const k = deskKeeper(rin); // 넓은 방이면 계산대 뒤(방 쪽)에서 문을 보고 선다
+      const desk = N._spawn({ id: 'in-desk', name: '안내지기', service: 'lobby', indoor: true, x: cx + dn[0] * k, z: cz + dn[1] * k, y: cur.fy, hue: rnd(), glow: 0x7ff3e6, scale: 0.95, home: { x: cx, z: cz, r: 0.3 } });
       desk.fig.yaw = Math.atan2(dn[0], dn[1]);
       cur.npcs.push(desk);
     }

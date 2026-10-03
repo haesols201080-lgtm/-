@@ -78,7 +78,24 @@ export class CameraRig {
       }
     }
     dir.normalize();
+    // 구조물 충돌: 카메라 팔이 건물·벽·바위에 막히면 그 앞까지 당긴다 (바로) — 막힘이 풀리면 천천히 돌아간다
+    const C = this.world.colliders;
+    if (C && C.cast) {
+      const st = this.smoothTarget;
+      const hit = C.cast(st.x, st.y, st.z, dir.x, dir.y, dir.z, dist, 0.42);
+      const want2 = Math.max(0.9, hit - 0.15);
+      if (want2 < this.armLen || this.armLen == null) this.armLen = want2;
+      else this.armLen = Math.min(want2, this.armLen + dt * Math.max(2.5, (want2 - this.armLen) * 3));
+      dist = Math.min(dist, this.armLen);
+      this.blocked = this.armLen < this.dist - 0.3;
+    }
     cam.position.set(this.smoothTarget.x + dir.x * dist, this.smoothTarget.y + dir.y * dist, this.smoothTarget.z + dir.z * dist);
+    // 벽에 바짝 붙어 팔이 아주 짧아지면 머리 위로 조금 올려 내려다본다 (등만 화면을 가리지 않게)
+    if (C && C.cast && this.armLen < 1.8 && (s === 'ground' || s === 'air')) {
+      const lift = (1.8 - this.armLen) * 0.75;
+      const room = C.cast(cam.position.x, cam.position.y, cam.position.z, 0, 1, 0, lift + 0.4, 0.3);
+      cam.position.y += Math.max(0, Math.min(lift, room - 0.4));
+    }
     const gh = Math.max(H(cam.position.x, cam.position.z), 0) + 0.45;
     if (cam.position.y < gh) cam.position.y = gh;
 
@@ -95,7 +112,7 @@ export class CameraRig {
     // 속도감: 시야각
     const fv = this.fovBase + Math.min(20, Math.max(0, player.hspeed - 8) * 0.42);
     cam.fov += (fv - cam.fov) * Math.min(1, dt * 3);
-    cam.near = s === 'glide' || s === 'current' || player.pos.y - player.groundH > 60 ? 1.2 : 0.6;
+    cam.near = s === 'glide' || s === 'current' || player.pos.y - player.groundH > 60 ? 1.2 : this.blocked ? 0.2 : 0.6; // 벽 가까이 당겨졌으면 가까운 면을 줄여 벽 속이 보이지 않게
     cam.updateProjectionMatrix();
 
     if (this.override) this._applyOverride(dt);
