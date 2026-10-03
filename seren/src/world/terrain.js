@@ -190,6 +190,11 @@ export class Terrain {
     for (const w of this.workers) w.postMessage({ pads: arr });
   }
 
+  /** 시골 블록 단(바닥을 까는 블록): 구역 번호 → 블록 칸마다 0/1 */
+  setRuralBlocks(map) {
+    for (const w of this.workers) w.postMessage({ rural: map });
+  }
+
   /** 워커가 막힌 환경(엄격한 보안 정책 등): 메인 스레드로 전환하고 대기 중이던 작업을 다시 넣는다 */
   _workerFailed() {
     if (!this.workers.length) return;

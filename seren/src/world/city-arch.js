@@ -326,7 +326,7 @@ export function cityArchetypes() {
         P.push(loft([ring(0, pts, { dx: x }), ring(h, pts, { dx: x, s: 0.9 })], { color: (xx, y) => (y < 0.02 ? GOLD : PEARL), type: (xx, y) => (y < 0.02 ? 0 : 1) }));
         P.push(loft([ring(h, pts, { dx: x, s: 0.9 }), ring(h + 0.05, pts, { dx: x, s: 0.4 })], { color: PEARL2, type: 0 }));
         P.push(cap(ring(h + 0.05, pts, { dx: x, s: 0.4 })));
-        if (hi) P.push(band(pts, h - 0.01, 0.012, 1.0, ACC, 1.8, { dx: x, s: 0.92 }));
+        if (hi) P.push(band(pts, h - 0.01, 0.012, 1.0, ACC, 1.8, { dx: x, s: 0.925 }));
       }
       const br = (y, t) => { const pts = squircle(n > 8 ? 8 : 4, 0.6, 0.16, 8); P.push(loft([ring(y, pts), ring(y + t, pts)], { color: PEARL, type: 1, smooth: false }), cap(ring(y + t, pts), { color: PEARL2 }), cap(ring(y, pts), { color: PEARL2, down: true })); };
       br(0.52, 0.06);
@@ -392,7 +392,7 @@ export function cityArchetypes() {
       const roofPts = squircle(n, 0.95, 0.78, 10);
       P.push(loft([ring(0.88, roofPts, { dx: 0.25, dz: 0.15, rot: 0.3 }), ring(0.94, roofPts, { dx: 0.25, dz: 0.15, rot: 0.3 })], { color: PEARL2, type: 0, smooth: false }));
       P.push(cap(ring(0.94, roofPts, { dx: 0.25, dz: 0.15, rot: 0.3 }), { color: PEARL2 }), cap(ring(0.88, roofPts, { dx: 0.25, dz: 0.15, rot: 0.3 }), { color: PEARL2, down: true }));
-      if (hi) P.push(band(roofPts, 0.9, 0.012, 1.0, ACC, 1.4, { dx: 0.25, dz: 0.15, rot: 0.3 }));
+      if (hi) P.push(band(roofPts, 0.9, 0.012, 1.018, ACC, 1.4, { dx: 0.25, dz: 0.15, rot: 0.3 })); // 처마 판 옆면보다 바깥 (같은 면이면 깜박인다)
       return mergeF(P);
     };
     A.villa = { hi: make(12, true), lo: make(4, false) };
@@ -403,7 +403,7 @@ export function cityArchetypes() {
     const make = (hi) => {
       const pts = squircle(4, Math.SQRT2, Math.SQRT2, 2, 0);
       const P = [loft([ring(0, pts), ring(1, pts)], { color: (x, y) => (y < 0.01 ? GOLD : PEARL), type: 2, smooth: false }), cap(ring(1, pts), { color: (x, y, z) => (Math.abs(x) < 0.7 && Math.abs(z) < 0.6 ? GARDEN : 0xc8c2d2) })];
-      if (hi) P.push(band(pts, 0.96, 0.03, 1.005, ACC, 1.2));
+      if (hi) P.push(band(pts, 0.96, 0.03, 1.012, ACC, 1.2));
       return mergeF(P);
     };
     A.podium = { hi: make(true), lo: make(false) };
@@ -584,7 +584,7 @@ export function cityArchetypes() {
       const disc = squircle(n, 1, 1, 2);
       for (const [y, r] of [[0.42, 1], [0.7, 0.82], [0.96, 0.66]]) {
         P.push(loft([ring(y - 0.015, disc, { s: r }), ring(y, disc, { s: r })], { color: PEARL2, type: 0, smooth: false }), cap(ring(y, disc, { s: r }), { color: 0x8e8a9c }), cap(ring(y - 0.015, disc, { s: r * 0.6 }), { color: PEARL2, down: true }));
-        if (hi) P.push(solid(new THREE.TorusGeometry(r * 0.7, 0.01, 3, 24).rotateX(Math.PI / 2).translate(0, y + 0.003, 0), 0xffd27a, 2.0), band(disc, y - 0.012, 0.01, r * 1.005, ACC, 1.6));
+        if (hi) P.push(solid(new THREE.TorusGeometry(r * 0.7, 0.01, 3, 24).rotateX(Math.PI / 2).translate(0, y + 0.003, 0), 0xffd27a, 2.0), band(disc, y - 0.012, 0.01, r * 1.014, ACC, 1.6));
       }
       return mergeF(P);
     };

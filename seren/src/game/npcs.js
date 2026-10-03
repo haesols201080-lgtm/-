@@ -123,12 +123,17 @@ export class NPCs {
         const d = Math.hypot(tx, tz);
         // 플레이어를 이끄는 중이면 너무 멀어지지 않게 기다림
         const lead = n.lead && d2 > 40 * 40;
-        if (d < 1.5) { n.target = null; n.wait = 3 + Math.random() * 6; }
+        if (d < 1.5) { n.target = null; n.wait = 3 + Math.random() * 6; n.v = 0; }
         else if (!lead) {
-          const sp = Math.min(n.speed, d);
+          // 먼저 그쪽으로 돌아서고(몸이 스스로 천천히), 천천히 출발해 도착할 땐 늦춘다
+          const face = Math.atan2(tx, tz);
+          n.fig.face = face;
+          const off = Math.abs(Math.atan2(Math.sin(face - n.fig.yaw), Math.cos(face - n.fig.yaw)));
+          const goal = Math.min(n.speed, d * 0.9) * Math.max(0.15, Math.cos(Math.min(1.5, off)));
+          n.v = (n.v || 0) + Math.max(-5 * dt, Math.min((n.speed > 3 ? 4 : 1.8) * dt, goal - (n.v || 0)));
+          const sp = Math.min(n.v, d);
           n.pos.x += (tx / d) * sp * dt; n.pos.z += (tz / d) * sp * dt;
-          n.fig.yaw = Math.atan2(tx, tz);
-        }
+        } else n.v = 0;
       } else if (n.ambient || n.wander) {
         n.wait -= dt;
         if (n.wait <= 0) {
@@ -159,6 +164,7 @@ export class NPCs {
       }
       // 플레이어 바라보기
       n.fig.look = d2 < 14 * 14 && !n.target ? pp : null;
+      if (!n.target) n.fig.face = null;
       if (night && n.ambient && !n.target) n.fig.gesture = 0.4 + Math.sin(g.time * 1.2 + n.pos.x) * 0.2;
       else n.fig.gesture = Math.max(0, n.fig.gesture - dt);
       n.fig.update(dt);

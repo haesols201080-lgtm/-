@@ -891,6 +891,11 @@ export class Game {
     if (tk === 'venue' && !fl.moaVenue) { fl.moaVenue = true; this.ui.moa('이 건물의 시설은 장식이 아니에요. 가게에서 사고, 공방·창고에서 일해 별씨를 벌 수 있어요. 가방은 일지에 있어요.'); }
     if (tk === 'outdoor' && !fl.moaConsole) { fl.moaConsole = true; this.ui.moa('발치의 빛 기둥은 바깥 조작대예요. 들어갈 수 없는 건물도 여기서 그 건물의 일을 할 수 있어요.'); }
     this.ui.prompt(this._target ? this._target.label : null, this._target ? this._target.short : null);
+    // 다가간 사람·시설지기를 바라본다 (말 걸 수 있다는 걸 몸으로도)
+    const who = this._target && this._target.o && (this._target.kind === 'npc' || this._target.kind === 'citizen' || this._target.kind === 'lobby' ? this._target.o : this._target.kind === 'facility' ? this._target.o.npc : null);
+    const wp = who && who.pos;
+    if (wp) (this.avatar.lookAt || (this.avatar.lookAt = new THREE.Vector3())).set(wp.x, wp.y + 3.0 * (who.scale || 1), wp.z);
+    else this.avatar.lookAt = null;
     const markers = [];
     const pos = p.pos;
     const bearing = (x, z) => ((Math.atan2(x - pos.x, -(z - pos.z)) * 180) / Math.PI + 360) % 360;

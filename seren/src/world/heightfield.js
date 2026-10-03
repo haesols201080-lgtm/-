@@ -345,6 +345,42 @@ function padAt(x, z, h, road) {
   return W;
 }
 
+// ── 시골 블록 단 (cityfabric 이 쓰임을 정한 뒤 setRuralBlocks 로 받는다 — 메인과 지형 워커 모두) ──
+// 집·가게·광장·공방처럼 바닥을 까는 블록은 둘레 길 높이를 이은 매끈한 면(radialH)으로 고른다 — 길과 늘 높이가 맞는다.
+// 논밭·녹지·비탈은 자연 지형 그대로 두되, 고른 블록과 맞닿은 가장자리 RB_FALL m 는 그 면으로 완만하게 잇는다(길가 절벽 대신).
+const RB_FALL = 18;
+export function setRuralBlocks(map) {
+  if (!LEVEL || !map) return;
+  for (const L of LEVEL) if (L.mode === 4) L.hard = map[L.zi] || null;
+}
+function hardIdx(Z, k, s, j) {
+  const n = Z.avenues;
+  return Z.hard[Z.bStart[k] + (((s % n) + n) % n) * Z.bandM[k] + j] || 0;
+}
+/** 블록 (k, 각) 의 s, j */
+function blockOf(Z, k, rel) {
+  const s = Math.min(Z.avenues - 1, Math.floor(rel / Z.SA)), m = Z.bandM[k];
+  return [s, Math.min(m - 1, Math.floor(((rel - s * Z.SA) / Z.SA) * m))];
+}
+/** 0..1: 고른 블록 면을 얼마나 따를까 */
+function hardAt(Z, d, ang) {
+  const k = Math.floor((d - Z.r0) / Z.ring);
+  if (k < 0 || k >= Z.nb) return 0;
+  const rel = (((ang - Z.aOff) % TAU) + TAU) % TAU;
+  const [s, j] = blockOf(Z, k, rel), m = Z.bandM[k];
+  if (hardIdx(Z, k, s, j)) return 1;
+  let w = 0;
+  const fall = (dist, hard) => { if (hard && dist < RB_FALL) w = Math.max(w, 1 - ss01(Math.max(0, dist) / RB_FALL)); };
+  const dIn = d - (Z.r0 + k * Z.ring + Z.bs[k]), dOut = Z.r0 + (k + 1) * Z.ring - d;
+  if (k > 0 && dIn < RB_FALL) { const [s2, j2] = blockOf(Z, k - 1, rel); fall(dIn, hardIdx(Z, k - 1, s2, j2)); }
+  if (k < Z.nb - 1 && dOut < RB_FALL) { const [s2, j2] = blockOf(Z, k + 1, rel); fall(dOut, hardIdx(Z, k + 1, s2, j2)); }
+  const fs = rel - s * Z.SA, a0 = (j * Z.SA) / m, a1 = ((j + 1) * Z.SA) / m;
+  const dL = (fs - a0) * d - (j === 0 ? Z.avH : Z.lane / 2), dR = (a1 - fs) * d - (j === m - 1 ? Z.avH : Z.lane / 2);
+  if (dL < RB_FALL) fall(dL, j > 0 ? hardIdx(Z, k, s, j - 1) : hardIdx(Z, k, s - 1, m - 1));
+  if (dR < RB_FALL) fall(dR, j < m - 1 ? hardIdx(Z, k, s, j + 1) : hardIdx(Z, k, s + 1, 0));
+  return w;
+}
+
 /** 구역들을 차례로 덮어 높이를 맞춘다. 결과는 _lvH, 돌려주는 값은 맞춘 정도(0..1, 가장 큰 것) */
 function levelCity(x, z, hNat) {
   let h = hNat, mMax = 0;
@@ -358,7 +394,18 @@ function levelCity(x, z, hNat) {
     if (m <= 0) continue;
     if (Z.mode === 4) {
       // 시골: 자연 지형 그대로 — 길(고리 길·대로·골목)만 가로로 평평하고 세로로 완만하게, 둘레는 자연스럽게 잇는다
-      let w = ruralRoad(Z, d, Math.atan2(dz, dx));
+      //       바닥을 까는 블록(집·가게·광장…)은 둘레 길을 이은 매끈한 면으로 (논밭·녹지는 그대로)
+      const ang = Math.atan2(dz, dx);
+      if (Z.hard) {
+        let wb = hardAt(Z, d, ang) * m;
+        if (wb > 0) {
+          // 물가: 물은 메우지 않고, 면이 물가보다 한참 높으면 바닷가 쪽으로 비탈지게 내려 둑 벽이 서지 않게
+          const S = radialH(Z, d, ang);
+          if (hNat < 6) wb *= smoothstep(0.5, Math.min(6, 2.5 + 0.6 * Math.max(0, S - hNat)), hNat);
+          if (wb > 0) { h += (S - h) * wb; if (wb > mMax) mMax = wb; }
+        }
+      }
+      let w = ruralRoad(Z, d, ang);
       if (w <= 0) continue;
       w *= m * smoothstep(0.5, 2.5, hNat); // 물 위로는 길을 돋우지 않는다
       if (w <= 0) continue;
@@ -409,6 +456,9 @@ function levelCity(x, z, hNat) {
       for (let k = 0; k < G.nb; k++) { const bs = bandStart(G, k); L.ringR.push(G.r0 + k * G.ring + bs / 2); L.ringW.push(bs / 2); }
       L.ringR.push(G.rOut + G.street / 2); L.ringW.push(G.street / 2);
       L.bandM = zb.rings.map((R) => R.m);
+      L.bStart = zb.rings.map((R) => R.start);
+      L.bs = zb.rings.map((R, k) => bandStart(G, k));
+      L.zi = i; L.hard = null;
       void hasStreet;
     }
     if (mode === 1 || mode === 3) {

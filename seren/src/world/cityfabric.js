@@ -6,7 +6,7 @@
 //    한꺼번에 올려 두고 셰이더가 거리로 잘라 낸다(USE_CUT). 소품은 종류마다 1회(가까운 것만).
 //  · 충돌: 건물은 모양에 맞춘 겹 충돌체(탑의 층, 착륙대 원반, 지붕…), 소품은 플레이어 둘레에서만 켠다(흘려 넣기).
 import * as THREE from 'three';
-import { heightAt, setPads } from './heightfield.js';
+import { heightAt, setPads, setRuralBlocks } from './heightfield.js';
 import { mulberry32 } from '../core/noise.js';
 import { cityArchetypes, SPEC, PROPCOL, doorGeo, propArchetypes } from './city-arch.js';
 import { buildPlan, layoutBlock, layoutCore, uvToWorld, locate } from './cityplan.js';
@@ -82,6 +82,16 @@ export class CityFabric {
       bigPlace: (x, z, r) => this._bigExcl(x, z, r),
     });
     this.timing = { plan: performance.now() - t0, layout: 0, street: 0 };
+    // 시골 구역: 바닥을 까는 블록(논밭·녹지·빈 땅이 아닌 것)은 지형을 길 높이에 맞춘 매끈한 면으로 — 건물을 놓기 전에
+    const rural = {};
+    for (const P of this.plan.zones) {
+      if (!isRural(P.Z)) continue;
+      const a = new Uint8Array(P.size);
+      for (const B of P.blocks) a[B.idx] = B.type && B.type !== USE.GRN && B.type !== USE.FARM ? 1 : 0;
+      rural[P.zi] = a;
+    }
+    setRuralBlocks(rural);
+    if (world.terrain && world.terrain.setRuralBlocks) world.terrain.setRuralBlocks(rural);
     this.SPEC = SPEC; // (검사 도구가 모양 평면을 본다)
     this.pads = []; // 시골 집터 [x, z, 반폭x, 반폭z, 방향, 높이] — 다 지은 뒤 지형(메인·워커)에 넘긴다
     for (const P of this.plan.zones) { try { this._zone(P); } catch (e) { console.warn('[city]', P.Z.id, e); } }

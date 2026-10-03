@@ -134,7 +134,7 @@ function droneGeo() {
   return g;
 }
 
-/** 걷는 아웬 (키 약 1.9 m): 긴 옷자락 몸, 어깨, 머리, 빛나는 띠 */
+/** 멀리 다니는 아웬 (가까운 주민과 같은 키 약 3 m, 땅에서 조금 떠 있다): 긴 옷자락 몸, 어깨, 머리, 빛나는 띠 */
 function walkerGeo() {
   const g = merge([
     part(new THREE.CylinderGeometry(0.13, 0.36, 1.25, 6, 1, true).translate(0, 0.62, 0), 0xf0ecf4, 0),
@@ -143,6 +143,8 @@ function walkerGeo() {
     part(new THREE.CylinderGeometry(0.235, 0.235, 0.06, 6, 1, true).translate(0, 1.0, 0), 0x7ff3e6, 2.2),
     part(new THREE.OctahedronGeometry(0.05, 0).translate(0, 1.95, 0.02), 0xffd27a, 2.6),
   ]);
+  g.scale(1.5, 1.5, 1.5);
+  g.translate(0, 0.3, 0);
   g.setAttribute('aVCol', g.attributes.color);
   g.setAttribute('aEmit', g.attributes.emit);
   g.deleteAttribute('color');

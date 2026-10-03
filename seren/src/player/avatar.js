@@ -134,10 +134,17 @@ export class Avatar {
       const kneePad = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), accent);
       kneePad.position.set(0, -0.02, 0.04);
       knee.add(kneePad);
+      // 발목: 디딘 발은 땅에 평평하게, 차고 나갈 때 뒤꿈치가 들리고, 앞으로 옮길 때 발끝이 든다
+      const ankle = new THREE.Group();
+      ankle.position.y = -0.4;
+      knee.add(ankle);
       const boot = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.1, 0.24), dark);
-      boot.position.set(0, -0.43, 0.04);
-      knee.add(boot);
-      return { hip, knee, boot };
+      boot.position.set(0, -0.03, 0.04);
+      ankle.add(boot);
+      const sole = new THREE.Mesh(new THREE.BoxGeometry(0.135, 0.025, 0.25), accent);
+      sole.position.set(0, -0.075, 0.04);
+      ankle.add(sole);
+      return { hip, knee, ankle, boot };
     };
     this.legL = mkLeg(-1);
     this.legR = mkLeg(1);
@@ -245,128 +252,174 @@ export class Avatar {
   }
 
   /**
-   * p: 플레이어 상태 { state, speed, vel, onGround, yaw, pitch, turn, groundH, pos }
+   * p: 플레이어 상태 { state, hspeed, vel, yaw, pitch, turn, groundH, pos }
+   * 몸짓은 「목표 자세」를 매 프레임 계산하고 부드럽게 따라간다.
+   *  · 걷기·달리기: 보폭에 맞춘 박자(발이 미끄러지지 않게), 디딤(평평한 발)·차기(뒤꿈치 듦)·흔들기(무릎·발끝 듦),
+   *    디딘 다리 길이로 골반 높이를 풀어 발을 땅에 붙인다, 골반·어깨의 반대 비틀림, 머리는 시선을 수평으로
+   *  · 서 있기: 숨쉬기·무게 옮기기·둘러보기·손목 공명기 보기 · 제자리 돌기: 작은 걸음 · 출발·멈춤: 몸을 숙이고 젖힌다
+   *  · 공중: 오를 때 무릎을 모으고, 떨어질 때 다리를 펴 착지를 준비한다 · 가까운 것을 바라본다(lookAt)
    */
   update(dt, p) {
     this.t += dt;
     const s = p.state;
     const speed = p.hspeed;
     const L = (a, b, k) => a + (b - a) * Math.min(1, k * dt);
+    dt = Math.max(1e-4, dt);
 
     this.root.position.copy(p.pos);
     this.root.rotation.set(0, p.yaw, 0);
 
-    // 기본 자세
-    let hipX = 0, spineX = 0, spineZ = 0, headX = 0;
-    let lHip = 0, rHip = 0, lKnee = 0, rKnee = 0;
-    let lSh = 0, rSh = 0, lShZ = 0.12, rShZ = -0.12, lEl = -0.15, rEl = -0.15;
-    let bodyPitch = 0, bodyRoll = 0, hipsY = 0.93, bodyYaw = 0;
-    let wingTarget = 0;
+    // 속도 변화(가속·감속)와 도는 빠르기
+    const acc = (speed - (this._lastSpeed ?? speed)) / dt;
+    this._lastSpeed = speed;
+    let dyaw = p.yaw - (this._lastYaw ?? p.yaw);
+    dyaw = Math.atan2(Math.sin(dyaw), Math.cos(dyaw));
+    this._lastYaw = p.yaw;
+    this.yawRate = L(this.yawRate || 0, dyaw / dt, 10);
+    this.accel = L(this.accel || 0, Math.max(-40, Math.min(40, acc)), 8);
+
+    // 목표 자세 (각도: 다리 hip* 는 앞으로 +, 무릎 knee* 는 굽힘 +, 발 foot* 는 발끝 내림 +)
+    const P = {
+      hipL: 0, hipR: 0, kneeL: 0.05, kneeR: 0.05, footL: 0, footR: 0, spreadL: 0.04, spreadR: 0.04,
+      shL: 0.05, shR: 0.05, shZL: 0.12, shZR: 0.12, elL: -0.15, elR: -0.15,
+      spineX: 0.02, spineY: 0, spineZ: 0, pelvisY: 0, hipsX: 0,
+      headX: 0, headY: 0, bodyPitch: 0, bodyRoll: 0, bodyYaw: 0, hipsY: null, wing: 0,
+    };
+    let kPose = 10;
 
     if (s === 'ground' || s === 'swim') {
-      const run = Math.min(1, speed / 9);
-      this.phase += dt * (3.2 + speed * 1.15);
-      const ph = this.phase;
-      const amp = 0.25 + 0.65 * run;
-      lHip = Math.sin(ph) * amp; rHip = -lHip;
-      lKnee = Math.max(0, -Math.sin(ph + 0.6)) * (0.3 + 1.1 * run) + 0.05;
-      rKnee = Math.max(0, Math.sin(ph + 0.6)) * (0.3 + 1.1 * run) + 0.05;
-      lSh = lHip * 0.85; rSh = rHip * 0.85;
-      lEl = -0.3 - 0.7 * run; rEl = lEl;
-      spineX = 0.08 + run * 0.22;
-      hipsY = 0.93 - Math.abs(Math.cos(ph)) * 0.05 * run + (speed < 0.3 ? Math.sin(this.t * 1.8) * 0.006 : 0);
-      if (speed < 0.3) { // 숨쉬기 · 둘러보기
-        lSh = 0.05; rSh = 0.05; lEl = -0.12; rEl = -0.12;
-        headX = Math.sin(this.t * 0.4) * 0.05;
-        spineX = 0.02 + Math.sin(this.t * 1.8) * 0.01;
+      const turning = speed < 0.9 && Math.abs(this.yawRate) > 0.9;
+      if (speed > 0.25 || turning) this._gait(dt, speed, turning, P);
+      else this._idle(dt, P);
+      // 출발할 땐 앞으로 숙이고, 세게 멈출 땐 몸을 젖히고 한 발을 앞에 버틴다
+      const lean = Math.max(-0.2, Math.min(0.22, this.accel * 0.018));
+      if (lean > 0) P.spineX += lean;
+      this.brake = L(this.brake || 0, this.accel < -12 && speed > 1.2 ? 1 : 0, this.accel < -12 ? 12 : 4);
+      if (this.brake > 0.01) {
+        const b = this.brake;
+        P.spineX += -0.18 * b; P.hipL += (0.5 - P.hipL) * b; P.kneeL += (0.12 - P.kneeL) * b; P.hipR += (-0.25 - P.hipR) * b; P.kneeR += (0.6 - P.kneeR) * b;
+        P.shL += (-0.5 - P.shL) * b; P.shR += (-0.45 - P.shR) * b; P.elL += (-0.4 - P.elL) * b; P.elR += (-0.4 - P.elR) * b; P.footL = -0.15 * b;
       }
-      bodyRoll = -p.turn * 0.25 * run;
+      P.bodyRoll = -p.turn * 0.25 * Math.min(1, speed / 9);
+      kPose = speed > 0.25 || turning ? 30 : 9;
       if (s === 'swim') {
-        bodyPitch = 1.2; hipsY = 0.3;
-        lSh = -2.2 + Math.sin(this.t * 3) * 0.6; rSh = lSh; lShZ = 0.6 + Math.cos(this.t * 3) * 0.4; rShZ = -lShZ;
-        lHip = Math.sin(this.t * 4) * 0.3; rHip = -lHip;
+        P.bodyPitch = 1.2; P.hipsY = 0.3;
+        P.shL = -2.2 + Math.sin(this.t * 3) * 0.6; P.shR = P.shL; P.shZL = 0.6 + Math.cos(this.t * 3) * 0.4; P.shZR = P.shZL;
+        P.hipL = Math.sin(this.t * 4) * 0.3; P.hipR = -P.hipL; P.kneeL = P.kneeR = 0.3; P.footL = P.footR = 0.6;
+        kPose = 10;
       }
     } else if (s === 'air') {
-      const up = Math.max(-1, Math.min(1, p.vel.y / 8));
-      lHip = 0.5 + up * 0.2; rHip = -0.2; lKnee = 0.9; rKnee = 0.4;
-      lSh = -0.6; rSh = -0.4; lShZ = 0.6; rShZ = -0.6; lEl = -0.6; rEl = -0.6;
-      spineX = 0.1;
+      // 오를 때: 무릎을 모아 올리고 팔을 벌린다 · 떨어질 때: 다리를 펴 땅을 찾고 팔로 균형
+      //   막 뛰었을 때(빠르게 오름): 다리는 밀어 낸 채 펴지고 발끝이 아래, 팔은 앞위로 휘둘러 올린다
+      //   꼭대기: 무릎을 모은다 · 내려올 때: 다리를 펴 땅을 찾고 팔을 벌려 균형
+      const vy = p.vel.y;
+      const push = Math.max(0, Math.min(1, (vy - 4.5) / 3.5));
+      const top = Math.max(0, 1 - Math.abs(vy) / 6) * (1 - push);
+      const down = Math.max(0, Math.min(1, -vy / 9));
+      P.hipL = 0.1 * push + 0.85 * top + 0.35 * down; P.kneeL = 0.12 * push + 1.3 * top + 0.35 * down;
+      P.hipR = -0.18 * push + 0.45 * top + 0.05 * down; P.kneeR = 0.25 * push + 0.95 * top + 0.25 * down;
+      P.footL = 0.6 * push + 0.3 * top + 0.05; P.footR = 0.75 * push + 0.25 * top + 0.05;
+      P.shL = -1.6 * push - 0.6 * top - 0.85 * down; P.shR = -1.4 * push - 0.45 * top - 0.95 * down;
+      P.shZL = 0.2 * push + 0.6 * top + 0.75 * down; P.shZR = 0.2 * push + 0.6 * top + 0.75 * down;
+      P.elL = -0.3 * push - 0.7 * top - 0.4 * down; P.elR = -0.35 * push - 0.6 * top - 0.4 * down;
+      P.spineX = -0.05 * push + 0.14 * top - 0.04 * down; P.headX = -0.2 * push - 0.05 * top + 0.22 * down;
+      P.hipsY = 0.93;
+      kPose = 9;
     } else if (s === 'glide' || s === 'current') {
-      wingTarget = 1;
-      bodyPitch = 1.25 + (p.pitch || 0) * 0.6;
-      bodyRoll = -p.turn * 0.7;
-      lHip = 0.05; rHip = 0.05; lKnee = 0.15; rKnee = 0.15;
-      lSh = -1.3; rSh = -1.3; lShZ = 1.1; rShZ = -1.1; lEl = -0.3; rEl = -0.3;
-      headX = -0.9;
-      hipsY = 0.93;
-      if (s === 'current') { lSh = -2.6; rSh = -2.6; lShZ = 0.25; rShZ = -0.25; wingTarget = 0.35; }
+      P.wing = 1;
+      P.bodyPitch = 1.25 + (p.pitch || 0) * 0.6;
+      P.bodyRoll = -p.turn * 0.7;
+      P.hipL = 0.05; P.hipR = -0.02; P.kneeL = 0.15; P.kneeR = 0.25; P.footL = P.footR = 0.7;
+      P.shL = -1.3; P.shR = -1.3; P.shZL = 1.1; P.shZR = 1.1; P.elL = -0.3; P.elR = -0.3;
+      P.headX = -0.9; P.hipsY = 0.93;
+      if (s === 'current') { P.shL = -2.6; P.shR = -2.6; P.shZL = 0.25; P.shZR = 0.25; P.wing = 0.35; }
     } else if (s === 'skim') {
-      bodyYaw = 0;
-      hipsY = 0.78 + 0.12;
-      lHip = -0.55; rHip = 0.15; lKnee = 0.9; rKnee = 0.55;
-      spineX = 0.35;
-      lSh = -0.4; rSh = 0.3; lShZ = 0.9; rShZ = -0.9; lEl = -0.5; rEl = -0.4;
-      bodyRoll = -p.turn * 0.55;
-      bodyPitch = Math.max(-0.3, Math.min(0.3, -(p.vel.y || 0) * 0.03));
-      headX = -0.2;
+      P.hipsY = 0.9;
+      P.hipL = 0.55; P.hipR = -0.15; P.kneeL = 0.9; P.kneeR = 0.55; P.footL = -0.35; P.footR = 0.1;
+      P.spineX = 0.35; P.spineY = 0.25;
+      P.shL = -0.4; P.shR = 0.3; P.shZL = 0.9; P.shZR = 0.9; P.elL = -0.5; P.elR = -0.4;
+      P.bodyRoll = -p.turn * 0.55;
+      P.bodyPitch = Math.max(-0.3, Math.min(0.3, -(p.vel.y || 0) * 0.03));
+      P.headX = -0.2; P.headY = -0.25;
     } else if (s === 'fly') {
       // 나룻배 조종: 키 고리를 두 손으로
-      lHip = -0.2; rHip = 0.15; lKnee = 0.3; rKnee = 0.25;
-      spineX = 0.15;
-      lSh = -0.75; rSh = -0.75; lShZ = 0.25; rShZ = -0.25; lEl = -0.9; rEl = -0.9;
-      bodyRoll = -p.turn * 0.3;
-      headX = -0.1;
+      P.hipL = 0.2; P.hipR = -0.15; P.kneeL = 0.3; P.kneeR = 0.25;
+      P.spineX = 0.15;
+      P.shL = -0.75; P.shR = -0.75; P.shZL = 0.25; P.shZR = 0.25; P.elL = -0.9; P.elR = -0.9;
+      P.bodyRoll = -p.turn * 0.3; P.headX = -0.1;
     } else if (s === 'down') {
-      // 쓰러져 누운 자세 (오프닝)
-      bodyPitch = -1.45; bodyRoll = 0.15;
-      lHip = 0.1; rHip = -0.05; lKnee = 0.5; rKnee = 0.1;
-      lSh = 0.3; rSh = -0.2; lShZ = 0.9; rShZ = -0.5; lEl = -0.4; rEl = -0.2;
-      headX = 0.3;
+      P.bodyPitch = -1.45; P.bodyRoll = 0.15;
+      P.hipL = -0.1; P.hipR = 0.05; P.kneeL = 0.5; P.kneeR = 0.1;
+      P.shL = 0.3; P.shR = -0.2; P.shZL = 0.9; P.shZR = 0.5; P.elL = -0.4; P.elR = -0.2; P.headX = 0.3;
+      P.hipsY = 0.2;
     } else if (s === 'lift') {
-      lHip = 0.1; rHip = 0.1; lKnee = 0.3; rKnee = 0.3;
-      lSh = -0.3; rSh = -0.3; lShZ = 1.0; rShZ = -1.0;
-      headX = -0.4;
-      spineX = -0.1;
+      P.hipL = -0.1; P.hipR = -0.1; P.kneeL = 0.3; P.kneeR = 0.3;
+      P.shL = -0.3; P.shR = -0.3; P.shZL = 1.0; P.shZR = 1.0; P.headX = -0.4; P.spineX = -0.1;
     }
 
-    // 공명 연주: 오른팔을 앞으로
+    // 공명 연주: 오른팔을 앞으로 뻗고 손목을 본다
     this.toneGlow = Math.max(0, this.toneGlow - dt * 1.6);
     if (this.toneGlow > 0 && s !== 'glide' && s !== 'skim' && s !== 'current' && s !== 'fly') {
       const k = Math.min(1, this.toneGlow * 2.5);
-      rSh = rSh + (-1.5 - rSh) * k; rShZ = rShZ + (-0.1 - rShZ) * k; rEl = rEl + (-0.4 - rEl) * k;
+      P.shR += (-1.5 - P.shR) * k; P.shZR += (0.1 - P.shZR) * k; P.elR += (-0.4 - P.elR) * k;
+      P.headX += (0.15 - P.headX) * k * 0.5;
     }
     this.glowMat.uniforms.uColor.value.lerp(this.toneColor, Math.min(1, dt * 6));
     this.glowMat.uniforms.uIntensity.value = 1.4 + this.toneGlow * 4;
     if (this.toneGlow <= 0) this.glowMat.uniforms.uColor.value.lerp(_teal, Math.min(1, dt * 2));
 
-    // 착지 눌림
-    this.landSquash = Math.max(0, this.landSquash - dt * 4);
-    hipsY -= this.landSquash * 0.22;
-    lKnee += this.landSquash * 0.9; rKnee += this.landSquash * 0.9;
+    // 바라보기: 가까운 사람·물건 쪽으로 머리를 (몸통이 조금 거든다)
+    if (this.lookAt && (s === 'ground' || s === 'skim' || s === 'fly') && this.toneGlow <= 0) {
+      const dx = this.lookAt.x - p.pos.x, dz = this.lookAt.z - p.pos.z, dy = this.lookAt.y - (p.pos.y + 1.6);
+      let a = Math.atan2(dx, dz) - p.yaw;
+      a = Math.atan2(Math.sin(a), Math.cos(a));
+      if (Math.abs(a) < 2.0) {
+        const yaw = Math.max(-1.1, Math.min(1.1, a));
+        P.headY += yaw * 0.75; P.spineY += yaw * 0.2;
+        P.headX += Math.max(-0.5, Math.min(0.4, -Math.atan2(dy, Math.hypot(dx, dz)))) * 0.8;
+      }
+    }
 
-    const k = 14;
+    // 착지 눌림: 무릎이 받아 낸다
+    this.landSquash = Math.max(0, this.landSquash - dt * 4);
+    const sq = this.landSquash;
+    if (sq > 0) { P.kneeL += sq * 0.9; P.kneeR += sq * 0.9; P.hipL += sq * 0.35; P.hipR += sq * 0.35; P.spineX += sq * 0.25; P.shL -= sq * 0.3; P.shR -= sq * 0.3; P.shZL += sq * 0.3; P.shZR += sq * 0.3; }
+
+    // 따라가기
+    const Q = this.pose || (this.pose = { ...P, hipsY: 0.93 });
+    for (const k in P) if (k !== 'hipsY' && k !== 'wing') Q[k] = L(Q[k], P[k], kPose);
+    // 골반 높이: 땅을 디딘 쪽 다리 길이로 풀어 발바닥을 땅(0)에 붙인다 (공중·탈것은 정한 높이)
+    let hy = P.hipsY;
+    if (hy == null) {
+      const reach = (h, k) => 0.44 * Math.cos(h) + 0.4 * Math.cos(h - k) + 0.08;
+      hy = 0.04 + Math.max(reach(Q.hipL, Q.kneeL), reach(Q.hipR, Q.kneeR)) + (this.flight || 0);
+    }
+    Q.hipsY = L(Q.hipsY ?? 0.93, hy, s === 'ground' ? 25 : 8);
+
     const h = this.hips, sp = this.spine;
-    h.position.y = L(h.position.y, hipsY - 0.93, k);
-    sp.rotation.x = L(sp.rotation.x, spineX, k);
-    sp.rotation.z = L(sp.rotation.z, spineZ, k);
-    this.head.rotation.x = L(this.head.rotation.x, headX, 8);
-    this.legL.hip.rotation.x = L(this.legL.hip.rotation.x, -lHip, k);
-    this.legR.hip.rotation.x = L(this.legR.hip.rotation.x, -rHip, k);
-    this.legL.knee.rotation.x = L(this.legL.knee.rotation.x, lKnee, k);
-    this.legR.knee.rotation.x = L(this.legR.knee.rotation.x, rKnee, k);
-    this.armL.sh.rotation.x = L(this.armL.sh.rotation.x, lSh, k);
-    this.armR.sh.rotation.x = L(this.armR.sh.rotation.x, rSh, k);
-    this.armL.sh.rotation.z = L(this.armL.sh.rotation.z, -lShZ, k);
-    this.armR.sh.rotation.z = L(this.armR.sh.rotation.z, -rShZ, k);
-    this.armL.el.rotation.x = L(this.armL.el.rotation.x, lEl, k);
-    this.armR.el.rotation.x = L(this.armR.el.rotation.x, rEl, k);
-    this.body.rotation.x = L(this.body.rotation.x, bodyPitch, s === 'down' ? 30 : 8);
+    h.position.y = Q.hipsY - 0.93;
+    h.position.x = Q.hipsX;
+    h.rotation.y = Q.pelvisY;
+    sp.rotation.set(Q.spineX, Q.spineY - Q.pelvisY, Q.spineZ);
+    this.head.rotation.set(Q.headX - Q.spineX * 0.6, Q.headY, 0);
+    const leg = (Lg, hip, knee, foot, spread, side) => {
+      Lg.hip.rotation.set(-hip, 0, side * spread);
+      Lg.knee.rotation.x = knee;
+      // 발: 디딘 다리는 땅에 평평하게(허벅지·정강이 각을 되돌림) + 차기·들기
+      Lg.ankle.rotation.x = hip - knee + foot;
+    };
+    leg(this.legL, Q.hipL, Q.kneeL, Q.footL, Q.spreadL, 1);
+    leg(this.legR, Q.hipR, Q.kneeR, Q.footR, Q.spreadR, -1);
+    this.armL.sh.rotation.x = Q.shL; this.armR.sh.rotation.x = Q.shR;
+    this.armL.sh.rotation.z = -Q.shZL; this.armR.sh.rotation.z = Q.shZR;
+    this.armL.el.rotation.x = Q.elL; this.armR.el.rotation.x = Q.elR;
+    this.body.rotation.x = L(this.body.rotation.x, P.bodyPitch, s === 'down' ? 30 : 8);
     this.body.position.y = L(this.body.position.y, s === 'down' ? 0.2 : 0.93, s === 'down' ? 30 : 6);
-    this.body.rotation.z = L(this.body.rotation.z, bodyRoll, 8);
-    this.body.rotation.y = L(this.body.rotation.y, bodyYaw, 8);
+    this.body.rotation.z = L(this.body.rotation.z, P.bodyRoll, 8);
+    this.body.rotation.y = L(this.body.rotation.y, P.bodyYaw, 8);
 
     // 날개
-    this.wingOpen = L(this.wingOpen, wingTarget, 7);
+    this.wingOpen = L(this.wingOpen, P.wing, 7);
     const wo = this.wingOpen;
     this.wings.visible = wo > 0.02;
     if (this.wings.visible) {
@@ -385,7 +438,7 @@ export class Avatar {
     this.board.visible = s === 'skim';
     if (this.board.visible) {
       this.board.position.set(0, 0.12 + Math.sin(this.t * 5) * 0.02, 0);
-      this.board.rotation.set(bodyPitch * 0.5, 0, bodyRoll * 0.6);
+      this.board.rotation.set(P.bodyPitch * 0.5, 0, P.bodyRoll * 0.6);
       this.boardGlow.material.uniforms.uIntensity.value = 1.5 + Math.min(2.5, speed * 0.05);
     }
 
@@ -404,6 +457,92 @@ export class Avatar {
     this.shadow.material.opacity = 0.32 * Math.max(0, 1 - above / 30);
 
     this._updateScarf(dt, p);
+  }
+
+  /** 걷기·달리기 (그리고 제자리 돌기의 작은 걸음) */
+  _gait(dt, speed, turning, P) {
+    const v = turning ? 0.9 : speed;
+    // 한 걸음 길이(m): 천천히 0.6 → 걷기 0.85 → 달리기 1.9 → 전력 2.6
+    const step = v < 2.5 ? 0.55 + 0.12 * v : 0.85 + 0.183 * (v - 2.5);
+    const omega = turning ? 5.5 + Math.abs(this.yawRate) * 0.8 : (Math.PI * v) / step;
+    this.phase = (this.phase + omega * dt) % (Math.PI * 2);
+    const run = turning ? 0 : Math.max(0, Math.min(1, (v - 3.2) / 5));
+    const beta = 0.62 - 0.27 * run; // 디딘 시간의 몫 (걷기 0.62 · 달리기 0.35)
+    const amp = turning ? 0.18 : Math.max(0.2, Math.min(0.85, Math.asin(Math.min(0.95, (beta * step) / 0.88))));
+    const kneeSwing = turning ? 0.55 : 0.78 + 1.15 * run; // 흔들 때 무릎 (걸을 땐 60° 남짓, 달리면 뒤꿈치를 높이 찬다)
+    const leg = (u) => {
+      u = ((u % 1) + 1) % 1;
+      if (u < beta) {
+        // 디딤: 다리가 앞에서 뒤로, 무릎은 받아 냈다가 펴지고, 끝에 뒤꿈치가 들린다
+        const a = u / beta;
+        const hip = amp * (1 - 2 * a);
+        const knee = 0.08 + (0.12 + 0.3 * run) * Math.sin(Math.PI * a);
+        const foot = a > 0.7 ? (a - 0.7) / 0.3 * (0.45 + 0.35 * run) : 0;
+        return [hip, knee, foot];
+      }
+      // 흔들기: 뒤에서 앞으로 (부드럽게), 무릎은 일찍 접혔다가 착지 전에 펴지고, 발끝을 든다
+      const b = (u - beta) / (1 - beta);
+      // 허벅지는 일찍 앞으로 나가고(빨리 시작해 천천히 멈춤), 무릎은 허벅지가 몸 밑을 지날 때 가장 접힌다
+      const hip = -amp + 2 * amp * Math.sin((Math.PI / 2) * Math.min(1, b * 1.08)) + 0.12 * run * Math.sin(Math.PI * b);
+      const knee = 0.08 + kneeSwing * Math.pow(Math.sin(Math.PI * Math.min(1, b * 1.2)), 1.4);
+      const foot = b < 0.25 ? (0.6 + 0.3 * run) * (1 - b / 0.25) : -0.25 * Math.sin(Math.PI * (b - 0.25) / 0.75);
+      return [hip, knee, foot];
+    };
+    const u = this.phase / (Math.PI * 2);
+    [P.hipL, P.kneeL, P.footL] = leg(u);
+    [P.hipR, P.kneeR, P.footR] = leg(u + 0.5);
+    // 달리면 디딤 사이에 잠깐 뜬다
+    this.flight = run * 0.07 * Math.max(0, Math.sin(Math.PI * 2 * ((u % 0.5) / 0.5) - Math.PI * beta * 2)) ;
+    // 팔: 같은 쪽 다리와 반대로, 달리면 팔꿈치를 접어 크게
+    const arm = 0.55 + 0.45 * run;
+    P.shL = P.hipL * arm; P.shR = P.hipR * arm;
+    P.elL = -(0.3 + 1.15 * run) - Math.max(0, -P.hipL) * 0.35 * run; P.elR = -(0.3 + 1.15 * run) - Math.max(0, -P.hipR) * 0.35 * run;
+    P.shZL = P.shZR = 0.1 + 0.05 * run;
+    // 몸통: 앞으로 숙임, 어깨와 골반은 반대로 비틀고, 걸을 땐 디딘 다리 쪽으로 골반이 실린다
+    const sw = Math.sin(this.phase);
+    P.spineX = 0.05 + 0.22 * run;
+    P.pelvisY = -0.12 * sw * (1 - 0.4 * run);
+    P.spineY = 0.1 * sw * (0.5 + run);
+    P.hipsX = 0.025 * Math.cos(this.phase) * (1 - run);
+    P.spineZ = -0.03 * Math.cos(this.phase) * (1 - run);
+    // 머리: 흔들림을 덜고 앞을 본다
+    P.headX = -0.04 - 0.1 * run;
+    if (turning) { P.spineX = 0.04; P.shL *= 0.3; P.shR *= 0.3; P.elL = P.elR = -0.2; P.headY = Math.sign(this.yawRate) * 0.35; }
+    this.idleT = 0;
+  }
+
+  /** 서 있기: 숨·무게 옮기기·둘러보기·손목 보기 */
+  _idle(dt, P) {
+    this.flight = 0;
+    this.idleT = (this.idleT || 0) + dt;
+    const t = this.t;
+    const br = Math.sin(t * 1.7);
+    P.spineX = 0.02 + br * 0.012;
+    P.shZL = P.shZR = 0.13 + br * 0.015;
+    // 무게 옮기기: 몇 초마다 한쪽 다리에 기대고 다른 무릎을 살짝 푼다
+    if (!this._wsT || this.idleT > this._wsT) { this._wsT = this.idleT + 4 + Math.random() * 4; this._ws = this._ws ? -this._ws : 1; }
+    const ws = this._ws || 1;
+    P.hipsX = 0.035 * ws; P.spineZ = -0.03 * ws;
+    P.kneeL = ws > 0 ? 0.06 : 0.22; P.kneeR = ws > 0 ? 0.22 : 0.06;
+    P.hipL = ws > 0 ? 0 : 0.08; P.hipR = ws > 0 ? 0.08 : 0;
+    P.footL = 0; P.footR = 0;
+    P.spreadL = P.spreadR = 0.07;
+    // 둘러보기
+    if (!this._lkT || this.idleT > this._lkT) {
+      this._lkT = this.idleT + 2.5 + Math.random() * 4;
+      const r = Math.random();
+      this._lk = r < 0.35 ? [0, 0] : r < 0.7 ? [(Math.random() - 0.5) * 1.6, (Math.random() - 0.5) * 0.3] : [(Math.random() - 0.5) * 0.6, -0.45];
+    }
+    P.headY = this._lk ? this._lk[0] : 0;
+    P.headX = this._lk ? this._lk[1] : 0;
+    P.spineY = P.headY * 0.15;
+    // 오래 서 있으면 가끔 손목의 공명기를 들여다본다
+    const cyc = (this.idleT % 14);
+    if (this.idleT > 6 && cyc > 10 && cyc < 12.2) {
+      const k = Math.min(1, Math.min(cyc - 10, 12.2 - cyc) * 2.5);
+      P.shR += (-0.75 - P.shR) * k; P.shZR += (0.35 - P.shZR) * k; P.elR += (-1.6 - P.elR) * k;
+      P.headX += (0.45 - P.headX) * k; P.headY += (-0.35 - P.headY) * k;
+    }
   }
 
   _updateScarf(dt, p) {

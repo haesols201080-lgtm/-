@@ -6,7 +6,7 @@
 //    선물 · 친해지면 집에 초대. 친한 정도는 저장된다.
 //  · 사람은 단단하다: 플레이어가 지나갈 수 없고, 사람도 플레이어를 피해 걷는다.
 import * as THREE from 'three';
-import { Crowd } from '../world/crowd.js';
+import { Crowd, AwenMotion } from '../world/crowd.js';
 import { ROLES, INDOOR, CIT_LINES, SYL_A, SYL_B, GOODS } from '../data/citizens.js';
 import { hashStr, mulberry32 } from '../core/noise.js';
 import { audio } from '../core/audio.js';
@@ -216,13 +216,18 @@ export class Citizens {
       let moving = 0;
       if (p.flee) moving = this._flee(p, dt);
       else if (d > 0.05) {
-        if (d > 25) { p.pos.x = tx; p.pos.z = tz; }
+        if (d > 25) { p.pos.x = tx; p.pos.z = tz; p.v = 0; }
         else {
-          const sp = Math.min(d / dt, p.speed * (d > 3 ? 2 : 1.15));
+          // 천천히 출발하고 부드럽게 멈춘다 · 등진 쪽으로 가야 하면 먼저 돌아서며 느리게
+          const want = Math.min(d * 2.2, p.speed * (d > 3 ? 2 : 1.15));
+          const off = Math.abs(Math.atan2(Math.sin(Math.atan2(dx, dz) - p.yaw), Math.cos(Math.atan2(dx, dz) - p.yaw)));
+          const goal = want * Math.max(0.25, Math.cos(Math.min(1.5, off)));
+          p.v = (p.v || 0) + Math.max(-4 * dt, Math.min(2.2 * dt, goal - (p.v || 0)));
+          const sp = Math.min(d / dt, p.v);
           p.pos.x += (dx / d) * sp * dt; p.pos.z += (dz / d) * sp * dt;
           moving = sp;
         }
-      }
+      } else p.v = 0;
       // 걸을 때는 건물 벽·나무·가로등을 뚫지 않고 미끄러지듯 돌아간다 (플레이어와 같은 밀어내기)
       if (moving > 0.3) g.world.colliders.pushOut(p.pos, 0.3 * p.scale + 0.12, 1.8 * p.scale, 0.6);
       // 플레이어를 비켜 간다
@@ -232,21 +237,21 @@ export class Citizens {
       // 발밑 바닥: 지금 선 높이에서 연석 정도(0.9 m)까지만 오른다 — 정자·차양 지붕 위로 올라가지 않게
       const gy = g.world.colliders.ground(p.pos.x, p.pos.z, p.pos.y + 0.2, 0.7).h;
       p.pos.y += (gy - p.pos.y) * Math.min(1, dt * 8);
-      const wantYaw = moving > 0.3 ? Math.atan2(p.flee ? p._fx : dx, p.flee ? p._fz : dz) : tyaw;
+      const wantYaw = moving > 0.3 || (d > 0.4 && !p.flee && !p.engaged) ? Math.atan2(p.flee ? p._fx : dx, p.flee ? p._fz : dz) : tyaw;
       const dyaw = Math.atan2(Math.sin(wantYaw - p.yaw), Math.cos(wantYaw - p.yaw));
-      p.yaw += dyaw * Math.min(1, dt * 5);
-      this._pose(p, moving, T, dt, st);
+      p.yaw += Math.max(-2.6 * dt, Math.min(2.6 * dt, dyaw * Math.min(1, dt * 5))); // 돌아서는 데 한계가 있다
+      const m = (p.mo || (p.mo = new AwenMotion(p.ph))).step(dt, p.pos.x, p.pos.z, p.yaw);
+      this._pose(p, moving, T, dt, st, m);
       if (Math.hypot(p.pos.x - pp.x, p.pos.z - pp.z) > this.R + 10) continue;
       this.vis.push(p);
-      const a = p.anim;
-      this.crowd.push({ x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, s: p.scale, phase: p.ph, speak: a.speak, kneel: a.kneel, armL: a.armL, armR: a.armR, head: a.head, hold: a.hold, skin: p.skin, deep: p.deep, glow: p.glow });
+      this._push(p, m, dt, pp);
     }
     // 실내 사람
     for (const p of this.indoor) {
       this._indoorPose(p, T, dt);
+      const m = (p.mo || (p.mo = new AwenMotion(p.ph))).step(dt, p.pos.x, p.pos.z, p.yaw);
       this.vis.push(p);
-      const a = p.anim;
-      this.crowd.push({ x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, s: p.scale, phase: p.ph, speak: a.speak, kneel: a.kneel, armL: a.armL, armR: a.armR, head: a.head, hold: a.hold, skin: p.skin, deep: p.deep, glow: p.glow });
+      this._push(p, m, dt, pp);
     }
     this.crowd.end();
     this._music(dt, pp);
@@ -254,45 +259,73 @@ export class Citizens {
     if (this.activity) this.activity.update(dt);
   }
 
-  /** 하는 일에 맞는 몸짓 */
-  _pose(p, moving, T, dt, st) {
+  /** 하는 일에 맞는 몸짓 (팔꿈치 elL/elR 를 안 주면 팔 든 만큼 자연스럽게 굽힌다). m = AwenMotion 결과 */
+  _pose(p, moving, T, dt, st, m) {
     const a = p.anim;
     a.speakT = Math.max(0, (a.speakT || 0) - dt);
     a.speak = a.speakT > 0 ? 1 : 0;
-    let armL = 0, armR = 0, head = 0, kneel = 0, hold = 0;
+    let armL = 0.06, armR = 0.06, head = 0, kneel = 0, hold = 0, elL = null, elR = null, out = 0.04, lean = 0.03;
     if (moving > 0.3) {
-      p.walkPh += moving * dt * 2.6;
-      const sw = Math.sin(p.walkPh) * (p.flee ? 0.7 : 0.35);
-      armL = 0.1 + sw; armR = 0.1 - sw;
-      if (p.role === 'carry' && p._loaded) { armL = armR = 0.9; hold = 5; }
-      if (p.role === 'play' || p.flee) { armL = 0.9 + sw * 0.5; armR = 0.9 - sw * 0.5; }
+      // 떠서 나아갈 때: 박자에 맞춰 팔을 엇갈려 흔들고 팔꿈치가 따라 접힌다 (달아날 땐 크게)
+      const sw = m.swing * (p.flee ? 0.6 : 0.3);
+      armL = 0.08 + sw; armR = 0.08 - sw;
+      elL = 0.2 + Math.max(0, sw) * 0.9; elR = 0.2 + Math.max(0, -sw) * 0.9;
+      if (p.role === 'carry' && p._loaded) { armL = armR = 0.9; elL = elR = 1.1; hold = 5; }
+      if (p.role === 'play' || p.flee) { armL = 0.9 + sw * 0.5; armR = 0.9 - sw * 0.5; elL = elR = 0.5; out = 0.3; }
+      lean = 0.05;
     } else if (p.engaged) {
-      armL = 0.15 + (a.speak ? 0.5 + Math.sin(T * 5) * 0.2 : 0); armR = 0.15;
+      armL = 0.15 + (a.speak ? 0.4 + Math.sin(T * 3.1) * 0.15 : 0); armR = 0.15; elL = a.speak ? 1.0 + Math.sin(T * 3.1) * 0.25 : 0.25;
     } else if (p.caught) {
-      armL = armR = 2.6 + Math.sin(T * 8) * 0.2;
+      armL = armR = 2.6 + Math.sin(T * 8) * 0.2; elL = elR = 0.3; out = 0.35;
     } else if (!st || !st.walk) {
       const ph = T + p.ph * 10;
       switch (p.role) {
-        case 'sell': { const g2 = Math.max(0, Math.sin(ph * 0.9)); armR = 0.2 + g2 * 1.1; armL = 0.25; head = -0.05; if (g2 > 0.9 && Math.random() < dt * 0.4) a.speakT = 1.2; break; }
-        case 'tend': kneel = 0.9; armL = 0.9 + Math.sin(ph * 2) * 0.15; armR = 0.8 + Math.cos(ph * 2.3) * 0.15; head = 0.35; hold = Math.sin(ph * 0.3) > 0.2 ? 7 : 0; break;
-        case 'music': armL = 1.15 + Math.sin(ph * 6) * 0.12; armR = 1.15 + Math.sin(ph * 6 + 1.6) * 0.12; hold = 6; head = -0.1; a.speak = 0.4; break;
+        case 'sell': { const g2 = Math.max(0, Math.sin(ph * 0.9)); armR = 0.2 + g2 * 0.8; elR = 0.4 + g2 * 0.7; armL = 0.25; elL = 1.0; head = -0.05; if (g2 > 0.9 && Math.random() < dt * 0.4) a.speakT = 1.2; break; }
+        case 'tend': kneel = 0.9; armL = 0.9 + Math.sin(ph * 2) * 0.15; armR = 0.8 + Math.cos(ph * 2.3) * 0.15; elL = 0.5 + Math.sin(ph * 2) * 0.2; elR = 0.6; head = 0.35; hold = Math.sin(ph * 0.3) > 0.2 ? 7 : 0; break;
+        case 'music': armL = 1.0 + Math.sin(ph * 6) * 0.1; armR = 1.0 + Math.sin(ph * 6 + 1.6) * 0.1; elL = elR = 0.75; hold = 6; head = -0.1; a.speak = 0.4; break;
         case 'listen': armL = armR = 0.1 + Math.max(0, Math.sin(ph * 2)) * 0.25; head = -0.08; break;
-        case 'chat': { const turn = Math.floor(ph / 3 + p.i) % (p.groupN || 2) === 0; armR = turn ? 0.5 + Math.sin(ph * 4) * 0.3 : 0.1; armL = 0.1; a.speak = Math.max(a.speak, turn ? 0.6 : 0); break; }
-        case 'sit': kneel = 0.48; armL = armR = 0.35; head = 0.12; break;
-        case 'meditate': armL = armR = 1.0 + Math.sin(T * 0.6) * 0.9; head = -0.3; a.speak = 0.25; break;
-        case 'console': armL = 0.95 + Math.sin(ph * 9) * 0.05; armR = 0.95 + Math.cos(ph * 8) * 0.05; head = 0.2; break;
-        case 'observe': head = -0.7; armR = Math.sin(ph * 0.5) > 0.6 ? 2.0 : 0.1; break;
-        case 'wait': armL = armR = 0.05; head = 0.05; break;
-        case 'carry': if (p._drop) { armL = armR = 0.6; } break;
+        case 'chat': { const turn = Math.floor(ph / 3 + p.i) % (p.groupN || 2) === 0; armR = turn ? 0.45 + Math.sin(ph * 3.3) * 0.2 : 0.1; elR = turn ? 1.0 + Math.sin(ph * 3.3) * 0.3 : 0.2; armL = turn ? 0.2 : 0.4; elL = turn ? 0.3 : 1.2; a.speak = Math.max(a.speak, turn ? 0.6 : 0); break; }
+        case 'sit': kneel = 0.48; armL = armR = 0.35; elL = elR = 0.8; out = -0.05; head = 0.12; break;
+        case 'meditate': armL = armR = 1.0 + Math.sin(T * 0.6) * 0.9; elL = elR = 0.25; out = 0.25; head = -0.3; a.speak = 0.25; break;
+        case 'console': armL = 0.75 + Math.sin(ph * 9) * 0.05; armR = 0.75 + Math.cos(ph * 8) * 0.05; elL = elR = 0.65; head = 0.2; lean = 0.08; break;
+        case 'observe': head = -0.7; armR = Math.sin(ph * 0.5) > 0.6 ? 2.0 : 0.1; elR = 0.4; break;
+        case 'wait': armL = armR = 0.3; elL = elR = 1.25; out = -0.12; head = 0.05; break;
+        case 'carry': if (p._drop) { armL = armR = 0.6; elL = elR = 0.9; } break;
         default: break;
       }
     }
     p._drop = false;
-    a.armL += (armL - a.armL) * Math.min(1, dt * 8);
-    a.armR += (armR - a.armR) * Math.min(1, dt * 8);
-    a.head += (head - a.head) * Math.min(1, dt * 5);
+    const k8 = Math.min(1, dt * 8), k5 = Math.min(1, dt * 5);
+    a.armL += (armL - a.armL) * k8;
+    a.armR += (armR - a.armR) * k8;
+    a.elL = (a.elL ?? 0.2) + ((elL ?? 0.18 + Math.min(armL, 1.3) * 0.45) - (a.elL ?? 0.2)) * k8;
+    a.elR = (a.elR ?? 0.2) + ((elR ?? 0.18 + Math.min(armR, 1.3) * 0.45) - (a.elR ?? 0.2)) * k8;
+    a.out = (a.out ?? 0) + (out - (a.out ?? 0)) * k5;
+    a.lean = (a.lean ?? 0) + (lean - (a.lean ?? 0)) * k5;
+    a.head += (head - a.head) * k5;
     a.kneel += (kneel - a.kneel) * Math.min(1, dt * 4);
     a.hold = hold;
+  }
+
+  /** 무리에 한 명 그리기: 몸의 움직임(기울기·옷자락) + 지나가는 플레이어를 힐끗 보는 고개 */
+  _push(p, m, dt, pp) {
+    const a = p.anim;
+    let hy = 0;
+    const dx = pp.x - p.pos.x, dz = pp.z - p.pos.z, d2 = dx * dx + dz * dz;
+    if ((d2 < 49 && a.kneel < 0.6 && Math.abs(pp.y - p.pos.y) < 4) || p.engaged) {
+      const r = Math.atan2(Math.sin(Math.atan2(dx, dz) - p.yaw), Math.cos(Math.atan2(dx, dz) - p.yaw));
+      if (Math.abs(r) < 1.9) hy = Math.max(-1, Math.min(1, r * 0.85));
+    }
+    a.headYaw = (a.headYaw || 0) + (hy - (a.headYaw || 0)) * Math.min(1, dt * 3.5);
+    const br = Math.sin(this.game.time * 1.3 + p.ph * 9);
+    this.crowd.push({
+      x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, s: p.scale, phase: p.ph, speak: a.speak, kneel: a.kneel, hold: a.hold,
+      armL: a.armL + br * 0.02, armR: a.armR - br * 0.02, head: a.head - (m.tilt + (a.lean || 0)) * 0.6 + (hy ? -0.08 : 0), headYaw: a.headYaw,
+      elbowL: a.elL ?? 0.2, elbowR: a.elR ?? 0.2, outL: a.out || 0, outR: a.out || 0,
+      lean: (a.lean || 0) + br * 0.012, bank: m.bank, move: m.move, tilt: m.tilt, walk: m.walk, twist: -m.swing * 0.08 + a.headYaw * 0.15,
+      side: Math.sin(this.game.time * 0.37 + p.ph * 20) * 0.03 * (1 - Math.min(1, m.speed)),
+      skin: p.skin, deep: p.deep, glow: p.glow,
+    });
   }
 
   /** 악사가 가까우면 실제로 노래가 들린다 */
