@@ -389,17 +389,13 @@ export class Structures {
     (this.world.houseQueue || (this.world.houseQueue = [])).push({ x, z, r, fa, group, use, col, deck });
   }
 
-  /** 착륙선 선실의 쓸 것 (교신 단말·별지도·표본함·일지) */
+  /** 착륙선 해치 (경사판 위에서 E → 선실로) */
   landerTarget(p) {
     const L = this.lander;
-    if (!L) return null;
-    let best = null, bd = 1e9;
-    for (const st of L.stations) {
-      if (Math.abs(p.y - st.y) > 1.6) continue;
-      const d = Math.hypot(p.x - st.at[0], p.z - st.at[1]);
-      if (d < st.r && d < bd) { bd = d; best = st; }
-    }
-    return best ? { kind: 'lander', o: best, label: best.label, short: best.short } : null;
+    if (!L || !L.hatch) return null;
+    const h = L.hatch;
+    if (Math.abs(p.y - h.y) > 1.8 || Math.hypot(p.x - h.at[0], p.z - h.at[1]) > h.r) return null;
+    return { kind: 'lander', o: { kind: 'door' }, label: '착륙선 「라르크 2」 · 선실로 들어가기', short: '들어가기' };
   }
 
   /** 안테나: 궤도의 배 쪽을 겨누고, 모아가 말하면 빛난다 (comm 이 부른다) */

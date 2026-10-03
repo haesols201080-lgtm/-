@@ -531,6 +531,7 @@ export class Game {
   /** 착륙선 선실: 교신 단말·별지도·표본함·일지 */
   landerUse(kind) {
     const s = this.state, ui = this.ui;
+    if (kind === 'door') { this.interiors.enterCabin(this.structures.lander); return; }
     if (kind === 'term') { this.moaAI.open(); this.moaAI.note('(착륙선 교신 단말) 여기선 신호가 제일 깨끗해요. 라르크 호는 지금도 궤도를 돌고 있어요.'); return; }
     if (kind === 'map') {
       ui.serviceCard('라르크 호 · 별지도', '우리가 지나온 길과, 아직 가 보지 않은 별들', '탁자 위 빛 지도. 고향 쪽 항로와 우르 둘레, 그리고 모아가 표시해 둔 별 몇 개.', [{ label: '닫기', primary: true }],

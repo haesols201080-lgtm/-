@@ -318,6 +318,7 @@ export function buildDewfold(S, p) {
     S._col({ type: 'cyl', x: cx + gxo, z: cz + gzo, r: 5.2, y0: y0 - 1, y1: at(gxo, gzo) + 5, dome: 4.2 });
     claim(gxo, gzo, 6);
     S.ielHouse = { x: cx + ih.x, z: cz + ih.z + 12, y: y0 };
+    { const d = Math.hypot(ih.x, ih.z); (S.world.customRecs || (S.world.customRecs = [])).push({ x: cx + ih.x, z: cz + ih.z, gy: at(ih.x, ih.z), r: 8.4, h: 12, ux: -ih.x / d, uz: -ih.z / d, dz: 8.4 * 1.02 + 0.2, use: 'home', zone: 'dewfold', i: 99, name: '이엘의 집' }); }
   }
 
   // ── 디딤 잎과 전망 잎 (마을 뒤, 관문 반대쪽) ──
@@ -380,6 +381,8 @@ export function buildDewfold(S, p) {
     // 문 앞에서 광장까지 작은 길 + 문 옆 등
     const dr = H.kind === 'petal' ? H.r + 2.2 : H.r + 0.8;
     const ux = -H.x / H.d, uz = -H.z / H.d;
+    // 들어갈 수 있는 집 (문은 모델에 있다 — 실내는 도시의 집처럼 따로 떨어진 공간): cityfabric._customRecs 가 받는다
+    (S.world.customRecs || (S.world.customRecs = [])).push({ x: cx + H.x, z: cz + H.z, gy, r: H.r, h: H.kind === 'petal' ? H.r * 1.4 : 13, ux, uz, dz: H.kind === 'petal' ? H.r * 1.02 + 0.2 : H.r * 0.85 + 0.15, use: H.kind === 'petal' ? (i === 2 ? 'cafe' : i === 5 ? 'school' : 'home') : (i % 2 ? 'library' : 'heal'), zone: 'dewfold', i });
     const sx = H.x + ux * dr, sz = H.z + uz * dr;
     const ex = (-ux) * 22.6, ez = (-uz) * 22.6;
     if (Math.hypot(sx - ex, sz - ez) > 2) flat.push(...ribbon(S, line(sx, sz, ex, ez, 2).map(([x, z]) => [cx + x, cz + z]), 1.9, 0.08, 0xe4dcec, 0));

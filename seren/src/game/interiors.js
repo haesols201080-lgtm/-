@@ -14,6 +14,7 @@ import { CURVE_GLSL, ATMOS_PARS, NOISE_GLSL } from '../world/shaders.js';
 import { atmosUniforms } from '../world/atmosphere.js';
 import { SPEC } from '../world/city-arch.js';
 import { audio } from '../core/audio.js';
+import { buildCabin } from './cabin.js';
 
 const TAU = Math.PI * 2;
 const PREFIX = ['새벽', '물결', '은하', '고요', '바람', '윤슬', '별빛', '노을', '이슬', '하늘', '메아리', '푸른', '은빛', '첫눈', '꽃잎', '먼별'];
@@ -159,7 +160,7 @@ export class Interiors {
     const pid = list[Math.floor(rnd() * list.length)];
     const P = PURPOSE[pid];
     const floors = Math.max(2, Math.floor((r.top - r.gy) / 3.6));
-    r.info = { pid, P, name: `${PREFIX[Math.floor(rnd() * PREFIX.length)]} ${P.name}`, floors, people: floors * (pid === 'home' ? 30 + Math.floor(rnd() * 40) : 8 + Math.floor(rnd() * 20)) };
+    r.info = { pid, P, name: r.name || (r.custom && pid === 'home' ? `${PREFIX[Math.floor(rnd() * PREFIX.length)]} 꽃잎 집` : `${PREFIX[Math.floor(rnd() * PREFIX.length)]} ${P.name}`), floors, people: r.custom ? (pid === 'home' ? 3 + Math.floor(rnd() * 4) : 6 + Math.floor(rnd() * 8)) : floors * (pid === 'home' ? 30 + Math.floor(rnd() * 40) : 8 + Math.floor(rnd() * 20)) };
     return r.info;
   }
 
@@ -896,11 +897,33 @@ export class Interiors {
 
   _placeIn(cur) {
     const g = this.game, p = g.player, d = cur.door;
-    p.teleport(d.x - d.nx * 5.5, cur.fy + 0.3, d.z - d.nz * 5.5);
+    const k = cur.cabin ? 1.3 : 5.5; // 선실은 좁다: 문 안쪽 1.3 m
+    p.teleport(d.x - d.nx * k, cur.fy + 0.3, d.z - d.nz * k);
     p.yaw = Math.atan2(-d.nx, -d.nz);
     g.rig.yaw = p.yaw + Math.PI;
     g.rig.pitch = -0.12;
     g.rig._init = false;
+  }
+
+  /** 착륙선 선실로 (해치에서): 건물처럼 바깥과 떨어진 실내 공간 — game/cabin.js */
+  enterCabin(L) {
+    const g = this.game;
+    if (this._busy || !L) return;
+    const [hx, hz] = L.W(0, 2.6);
+    const sn = Math.sin(L.ry), cs = Math.cos(L.ry); // 로컬 +z(해치 쪽) → 세계
+    const r = { x: L.X, z: L.Z, door: { x: hx, z: hz, nx: sn, nz: cs }, floorY: L.Y + 1.15, zone: 'lander', kind: 'lander', idx: 0, seed: 0.5, base: L.Y, sy: 4.3, top: L.Y + 4.4, sx: 3, sz: 3, gy: L.Y, cabin: true };
+    r.info = { pid: 'cabin', P: { name: '착륙선 선실', desc: '라르크 2 의 선실' }, name: '착륙선 「라르크 2」', floors: 1, people: 1 };
+    this._load(() => {
+      if (this.cur) this.close();
+      const fy = POCKET_Y;
+      const cab = buildCabin(this, g, { x: L.X, z: L.Z, fy });
+      this.cur = { r, info: r.info, plan: cab.plan, LH: cab.LH, fy, door: cab.door, cols: cab.cols, meshes: [], npcs: [], anims: cab.anims, deck: null, cabin: cab, group: cab.group, layout: { name: '선실' }, pal: {}, key: 'lander' };
+      this._placeIn(this.cur);
+      this._pocket(true);
+    }, '착륙선 「라르크 2」', '선실 · 모아와 이어진 교신 단말', () => {
+      g.ui.regionTitle('착륙선 선실', '라르크 2 · 조종석 · 교신 단말 · 별지도', false);
+      if (!g.state.flags.cabinSeen) { g.state.flags.cabinSeen = true; setTimeout(() => g.ui.moa('어서 와요. 선실 단말에선 제 목소리가 제일 깨끗해요. 별지도도 한번 봐 줘요 — 라르크 호가 지나온 길이에요.'), 1500); }
+    });
   }
 
   enter(r) {
@@ -983,6 +1006,13 @@ export class Interiors {
   /** 상호작용할 것 (game._findTarget 이 부른다) */
   target(p) {
     const cur = this.cur;
+    if (cur && this.inPocket && cur.cabin) {
+      // 선실: 단말·별지도·표본함·일지 · 나가는 문
+      if (Math.hypot(p.x - cur.door.x, p.z - cur.door.z) < 1.9) return { kind: 'exit', label: '해치 · 밖으로 나가기', short: '나가기' };
+      let best = null, bd = 1e9;
+      for (const st of cur.cabin.stations) { const d = Math.hypot(p.x - st.at[0], p.z - st.at[1]); if (d < st.r && d < bd) { bd = d; best = st; } }
+      return best ? { kind: 'lander', o: best, label: best.label, short: best.short } : null;
+    }
     if (cur && this.inPocket) {
       const r = cur.r;
       const dc = Math.hypot(p.x - r.x, p.z - r.z);

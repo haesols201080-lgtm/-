@@ -46,7 +46,10 @@ export class Comm {
     const L = PLACE.crash ? PLACE.crash.pos : [0, 0];
     const far = Math.hypot(p.x - L[0], p.z - L[1]);
     let bars = up ? 4 : far < 30000 ? 3 : 2, route = up ? '라르크 호 직통' : far < 30000 ? '착륙선 중계' : '착륙선 중계 · 원거리';
-    if (g.interiors && g.interiors.inPocket) { bars = Math.max(1, bars - 1); route += ' · 건물 안'; }
+    if (g.interiors && g.interiors.inPocket) {
+      if (g.interiors.cur && g.interiors.cur.cabin) { bars = 4; route = '착륙선 교신 단말'; }
+      else { bars = Math.max(1, bars - 1); route += ' · 건물 안'; }
+    }
     if (p.y > 20000) { bars = 4; route = '라르크 호 직통 · 고공'; }
     return { bars, route, up };
   }

@@ -97,6 +97,7 @@ export class CityFabric {
     this.pads = []; // 시골 집터 [x, z, 반폭x, 반폭z, 방향, 높이] — 다 지은 뒤 지형(메인·워커)에 넘긴다
     for (const P of this.plan.zones) { try { this._zone(P); } catch (e) { console.warn('[city]', P.Z.id, e); } }
     this._extraHouses();
+    this._customRecs();
     this.padData = new Float32Array(this.pads);
     setPads(this.padData);
     if (world.terrain && world.terrain.setPads) world.terrain.setPads(this.padData);
@@ -449,6 +450,31 @@ export class CityFabric {
       if (rec) built++;
     }
     this.extraBuilt = built;
+  }
+
+  /**
+   * 장소 빌더가 직접 지은 집(이슬터의 꽃잎 집·이슬 탑·이엘의 집)을 들어갈 수 있게: world.customRecs → 건물 기록.
+   * 모델과 문은 빌더의 것을 그대로 쓰고(noDoorMesh), 실내는 도시의 집처럼 따로 떨어진 공간으로 연다.
+   */
+  _customRecs() {
+    const Q = this.world.customRecs || [];
+    if (!Q.length) return;
+    const B = { recs: [], spots: [], raw: [], idx: 61000, extra: true, act: 1 };
+    Q.forEach((q, k) => {
+      const yaw = Math.atan2(q.ux, q.uz);
+      const r = { kind: 'dome', idx: -1 - k, x: q.x, z: q.z, a: Math.atan2(q.uz, q.ux), base: q.gy - 0.2, gy: q.gy, mx: q.gy, sx: q.r, sy: q.h, sz: q.r, rot: 0, cols: [], top: q.gy + q.h, zone: q.zone || 'custom', B, use: q.use || 'home', style: 'village', seed: ((k * 0.6180339 + 0.37) % 1), podiumKind: false, pad: false, custom: true, noDoorMesh: true };
+      if (q.name) r.name = q.name;
+      r.door = { x: q.x + q.ux * q.dz, z: q.z + q.uz * q.dz, nx: q.ux, nz: q.uz, yaw, covered: false, hs: 1 };
+      r.ext = q.dz;
+      r.floorY = q.gy + 0.15;
+      r.doorFixed = true;
+      r.id = this.recs.length;
+      this.recs.push(r);
+      B.recs.push(r);
+      const key = Math.floor(r.door.x / 80) * 100003 + Math.floor(r.door.z / 80);
+      if (!this.recGrid.has(key)) this.recGrid.set(key, []);
+      this.recGrid.get(key).push(r);
+    });
   }
 
   /** 입구 자리 정하기 + 찾기용 칸에 넣기. door: -1 안쪽 거리 쪽, 1 바깥, 'u+' / 'u-' 블록 끝 쪽 */
@@ -1269,7 +1295,7 @@ export class CityFabric {
     for (const r of this.recs) {
       if (k >= this.doorCap || kc >= this.doorCap) break;
       const dx = r.door.x - cam.x, dy = r.floorY - cam.y, dz = r.door.z - cam.z;
-      if (!r.doorFixed || dx * dx + dy * dy + dz * dz >= DR2 || r.open) continue;
+      if (!r.doorFixed || r.noDoorMesh || dx * dx + dy * dy + dz * dz >= DR2 || r.open) continue;
       q.setFromAxisAngle(up, r.door.yaw);
       m4.compose(p.set(r.door.x, r.floorY, r.door.z), q, r.door.hs && r.door.hs !== 1 ? sc.set(1, r.door.hs, 1) : one);
       if (r.door.covered) this.doorsC.setMatrixAt(kc++, m4); else this.doors.setMatrixAt(k++, m4);
