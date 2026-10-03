@@ -6,7 +6,7 @@
 //  · 집(house)·세대(unit): 현관 쪽 깊이·옆 자리로 씻는 방·부엌·잠방·거실을 나누고 방 사이에 문.
 //  · 출입구: 1층 정문은 바깥 문과 같은 자리(실내는 바깥 문 그 자리에서 열린다), 일하는 쪽은 뒤에 하역 문.
 //  · 결과는 순수 자료(Int16 방 번호 칸 + 방·문 목록) — 그리기·충돌·길찾기·지도·모아가 모두 이것을 읽는다.
-import { FUSE, ROOMS } from './catalog.js';
+import { FUSE, ROOMS, flowRoom } from './catalog.js';
 import { rngFor, pick, shuffle } from './ids.js';
 import { cellX, cellZ } from './volume.js';
 import { searchMezzStair } from './core.js';
@@ -101,6 +101,12 @@ function ringProgram(use, T, rnd, o) {
       add('nurse', 6); add('treat', 5); add('storage', 3); add('wc', 3);
       let left = T - 17;
       while (left > 5) { add('wardroom', 5 + Math.floor(rnd() * 2)); left -= 6; }
+      break;
+    }
+    case 'faculty': { // 학교의 교무·행정층: 큰 교무실 · 교장실 · 상담 · 회의 · 기록 · 채용 면접실
+      add('wc', 4); add('pantry', 5); add('teachers', 14); add('manager', 6); add('meeting', 8); add('records', 6); add('hr', 5);
+      let left = T - seq.reduce((a, b) => a + b.w, 0);
+      while (left > 7) { const w = Math.min(left, 8 + Math.floor(rnd() * 4)); add(rnd() < 0.5 ? 'teachers' : 'meeting', w); left -= w; }
       break;
     }
     case 'school': {
@@ -255,6 +261,49 @@ export function layoutFloor(B, F, ctx = {}) {
     if (best >= 0) L.ents.main = { c: best, dir: bdir, w: 2 };
   }
 
+  // ── 3b. 공동 로비: 1층이 가게·식당·찻집인데 위층에 다른 조직(집·회사·호텔…)이 있으면, 정문에서 승강기 홀까지 그 사람들이 지나는
+  //   로비를 따로 낸다 — 건물이 클수록 넓게 (중간 3 m 길 · 큰 5 m · 아주 큰 7 m, 정문 앞 넓은 마당)
+  if (isGround && L.ents.main && L.lifthall != null && !F.mezz) {
+    const own = FUSE[F.use] ? FUSE[F.use].op : '';
+    const lobbyUse = ['lobby', 'hotel', 'admin', 'clinic', 'school', 'library', 'museum', 'terminal', 'hall'].includes(own) || ['lobby', 'hotelfront', 'stem', 'care', 'civic', 'transit'].includes(F.use);
+    const others = B.zones.some((Z) => Z.from > F.i && Z.org && Z.org !== F.org && !B.floors[Z.from].below && !['tech', 'parking', 'amenity', 'observation', 'mezz'].includes(FUSE[Z.use] ? FUSE[Z.use].op : ''));
+    if (!lobbyUse && others) {
+      const big = B.size === 'huge' ? 3 : B.size === 'large' ? 2 : 1;
+      const lob = newRoom('lobby', { circ: true, shared: true });
+      lob.name = '공동 로비';
+      const lh = L.lifthall + 1, e0 = L.ents.main.c;
+      // 정문 → 승강기 홀: 바깥벽을 따라가는 길을 좋아한다 (넓은 홀 가운데를 가르지 않게) — 벽에서 먼 칸일수록 비싸다
+      const edgeD = new Int16Array(g.n).fill(99), dq = [];
+      for (let c = 0; c < g.n; c++) if (inside[c]) { let out = false; g.nb(c, (e) => { if (!inside[e]) out = true; }); if (out || g.i(c) === 0 || g.j(c) === 0 || g.i(c) === g.gw - 1 || g.j(c) === g.gh - 1) { edgeD[c] = 0; dq.push(c); } }
+      for (let h = 0; h < dq.length; h++) { const c = dq[h]; g.nb(c, (e) => { if (inside[e] && edgeD[e] > edgeD[c] + 1) { edgeD[e] = edgeD[c] + 1; dq.push(e); } }); }
+      const dist = new Float32Array(g.n).fill(Infinity), prev = new Int32Array(g.n).fill(-2), open = [e0];
+      dist[e0] = 0; prev[e0] = -1;
+      let hit = -1;
+      while (open.length) {
+        let bi = 0;
+        for (let k = 1; k < open.length; k++) if (dist[open[k]] < dist[open[bi]]) bi = k;
+        const c = open[bi]; open[bi] = open[open.length - 1]; open.pop();
+        if (room[c] === lh) { hit = c; break; }
+        g.nb(c, (e) => {
+          if (!inside[e] || (room[e] && room[e] !== lh)) return;
+          const d = dist[c] + 1 + Math.min(6, Math.max(0, edgeD[e] - big - 1)) * 0.8;
+          if (d < dist[e]) { if (dist[e] === Infinity) open.push(e); dist[e] = d; prev[e] = c; }
+        });
+      }
+      if (hit >= 0) {
+        const path = [];
+        for (let c = prev[hit]; c >= 0; c = prev[c]) path.push(c);
+        let ring = new Set(path.filter((c) => !room[c]));
+        for (let k = 0; k < big; k++) { const nx = new Set(ring); for (const c of ring) g.nb(c, (e) => { if (inside[e] && !room[e] && !voidM[e]) nx.add(e); }); ring = nx; }
+        // 정문 앞 마당
+        const ei = g.i(e0), ej = g.j(e0), fr = 1.5 + big * 1.5;
+        for (let c = 0; c < g.n; c++) if (inside[c] && !room[c] && !voidM[c] && Math.hypot(g.i(c) - ei, g.j(c) - ej) <= fr) ring.add(c);
+        for (const c of ring) if (!room[c]) setCell(c, lob);
+        L.sharedLobby = lob.id;
+      }
+    }
+  }
+
   // ── 4. 쓰임에 따라 복도·방 ──
   const plan = FU.plan;
   if (plan === 'ring') ringPlan(B, F, L, g, rnd, { newRoom, setCell, free });
@@ -269,6 +318,39 @@ export function layoutFloor(B, F, ctx = {}) {
       let to = 0;
       g.nb(c, (e) => { if (room[e] && !to) { const R = rooms[room[e] - 1]; if (!['stair', 'lift', 'cargo', 'shaft'].includes(R.type)) to = room[e]; } });
       if (to) setCell(c, rooms[to - 1]);
+    }
+  }
+
+  // ── 5a. 한 방은 한 덩어리: 떨어진 조각(세대·객실을 나누다 생긴)은 맞닿은 방으로 — 같은 세대·객실의 방부터.
+  //   (조각마다 문이 따로 달려 한쪽에서 다른 쪽으로 걸어갈 수 없는 방이 생기지 않게)
+  {
+    const CORE = ['stair', 'lift', 'cargo', 'shaft'];
+    const sameHome = (R, S) => R.unit == null ? S.unit == null : (S.unit === R.unit || S.id === R.unit || (R.unitRoot && S.unit === R.id) || (S.unitRoot && R.unit === S.id));
+    for (let pass = 0; pass < 3; pass++) {
+      let changed = 0;
+      for (const R of rooms) {
+        if (!R.n || CORE.includes(R.type) || R.sealed || flowRoom(R)) continue; // 오가는 공간끼리는 벽 없이 이어지니 조각이어도 된다
+        const cells = [];
+        for (let c = 0; c < g.n; c++) if (room[c] === R.id + 1) cells.push(c);
+        const comps = components(g, cells, (c) => room[c] === R.id + 1);
+        if (comps.length < 2) continue;
+        // 남길 조각: 세대·객실의 첫 방(거실)은 복도에 닿는 조각, 나머지는 가장 큰 조각
+        const touchCirc = (comp) => { let n = 0; for (const c of comp) g.nb(c, (e) => { const S = room[e] ? rooms[room[e] - 1] : null; if (S && S !== R && (S.circ || S.main)) n++; }); return n; };
+        comps.sort((a, b) => (R.unitRoot || R.type === 'unit' || R.type === 'guestroom' ? touchCirc(b) - touchCirc(a) : 0) || b.length - a.length);
+        for (const comp of comps.slice(1)) {
+          const votes = new Map();
+          for (const c of comp) g.nb(c, (e) => {
+            const S = room[e] ? rooms[room[e] - 1] : null;
+            if (!S || S === R || CORE.includes(S.type) || S.sealed) return;
+            const w = sameHome(R, S) ? 10 : S.circ || S.main ? 1 : 0.5;
+            votes.set(S, (votes.get(S) || 0) + w);
+          });
+          let best = null, bv = 0;
+          for (const [S, v] of votes) if (v > bv) { bv = v; best = S; }
+          if (best) { for (const c of comp) setCell(c, best); changed++; }
+        }
+      }
+      if (!changed) break;
     }
   }
 
@@ -793,7 +875,7 @@ function openPlan(B, F, L, g, rnd, T) {
   const HALL = {
     lobby: 'lobby', stem: 'vestibule', mart: 'sales', shops: 'sales', dept: 'sales', food: 'dining', cafe: 'dining', care: 'waiting', civic: 'counters',
     library: 'stacks', museum: 'gallery', hall: 'auditorium', schoolhall: 'gym', hotelfront: 'lobby', factory: 'production', storage: 'warehouse',
-    transit: 'concourse', farm: 'growhall', garden: 'gardenhall', plant: 'corehall', parking: 'parkbay', supply: 'warehouse', amenity: 'lounge', observation: 'deck', mezz: 'office1',
+    transit: 'concourse', farm: 'growhall', garden: 'gardenhall', plant: 'corehall', parking: 'parkbay', supply: 'warehouse', amenity: 'lounge', observation: 'deck', mezz: 'office1', canteen: 'canteen',
   };
   // 뒤쪽 일하는 방들: [종류, 너비 m] (뒤쪽 벽을 따라 depth m 깊이)
   const BOH = {
@@ -802,6 +884,7 @@ function openPlan(B, F, L, g, rnd, T) {
     dept: { d: 6, list: [['stockroom', 0.5], ['staffroom', 5], ['wc', 4], ['office1', 5]], dock: F.i === B.ground },
     food: { d: 6, list: [['kitchen', 0.45], ['pantry2', 4], ['wc', 3], ['staffroom', 4]] },
     cafe: { d: 5, list: [['kitchen', 0.5], ['pantry2', 3], ['wc', 3]] },
+    canteen: { d: 6, list: [['kitchen', 0.5], ['pantry2', 5], ['staffroom', 4], ['wc', 4]] },
     care: { d: 6, list: [['consult', 4], ['treat', 6], ['pharmacy', 5], ['nurse', 4], ['wc', 3]] },
     civic: { d: 6, list: [['office1', 0.4], ['records', 6], ['meeting', 6], ['wc', 3]] },
     library: { d: 6, list: [['archive', 0.4], ['reading', 8], ['office1', 4], ['wc', 3]] },
@@ -838,6 +921,18 @@ function openPlan(B, F, L, g, rnd, T) {
   for (let c = 0; c < g.n; c++) if (inside[c]) maxJ = Math.max(maxJ, back[c]);
   const bohD = spec ? Math.min(spec.d, Math.max(0, Math.floor(maxJ * 0.38))) : 0;
   const hall = T.newRoom(hallType, { org: F.org, main: true });
+  // 승강기 홀 → 넓은 홀: 뒤쪽 일하는 방 띠가 심을 감싸 승강기 홀을 가두지 않게, 띠 밖까지 길(두세 칸)을 먼저 홀로 잡는다
+  if (L.lifthall != null && spec && bohD >= 3 && !F.mezz) {
+    const lh = L.lifthall + 1, prev = new Int32Array(g.n).fill(-2), q = [];
+    for (let c = 0; c < g.n; c++) if (room[c] === lh) { prev[c] = -1; q.push(c); }
+    let hit = -1;
+    for (let h = 0; h < q.length && hit < 0; h++) {
+      const c = q[h];
+      if (room[c] !== lh && back[c] >= bohD) { hit = c; break; }
+      g.nb(c, (e) => { if (prev[e] === -2 && T.free(e)) { prev[e] = c; q.push(e); } });
+    }
+    if (hit >= 0) for (let c = hit; c >= 0 && room[c] !== lh; c = prev[c]) { if (T.free(c)) T.setCell(c, hall); g.nb(c, (e) => { if (T.free(e) && back[e] >= 0) T.setCell(e, hall); }); }
+  }
   const bohCells = [];
   for (let c = 0; c < g.n; c++) {
     if (!T.free(c)) continue;
@@ -935,7 +1030,8 @@ function makeDoors(B, F, L, g, rnd) {
     const out = [];
     for (let c = 0; c < g.n; c++) {
       if (room[c] !== R.id + 1) continue;
-      g.nb(c, (e, di, dj) => { const S = typeOf(e); if (S && S !== R && pred(S)) out.push({ c, e, di, dj, S }); });
+      if (L.void[c] === 3) continue; // 중2층 계단 칸에는 문을 내지 않는다
+      g.nb(c, (e, di, dj) => { const S = typeOf(e); if (S && S !== R && pred(S) && L.void[e] !== 3) out.push({ c, e, di, dj, S }); });
     }
     return out;
   };

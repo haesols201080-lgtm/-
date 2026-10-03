@@ -8,6 +8,7 @@ import { MapView } from './map.js';
 import { InteriorMap } from './imap.js';
 import { Journal } from './journal.js';
 import { Settings } from './settings.js';
+import { CUR } from '../data/money.js';
 
 const $ = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
@@ -53,6 +54,10 @@ export class UI {
       tb.appendChild(b);
     }
     this.hud.appendChild(tb);
+    // 지갑: 지금 가진 돈(울) — 늘 보이고, 바뀌면 잠깐 +/− 가 뜬다
+    this.walletEl = $(`<div class="wallet" title="가진 돈"><span class="wv">0</span><span class="wu">${CUR}</span><span class="wd"></span></div>`);
+    this.hud.appendChild(this.walletEl);
+    this.walletEl.addEventListener('click', () => this.openMenu('journal'));
     this.promptEl = $(`<div class="prompt glass hidden"></div>`);
     this.hud.appendChild(this.promptEl);
     this.moaEl = $(`<div class="moa" style="opacity:0"></div>`);
@@ -123,6 +128,24 @@ export class UI {
   }
 
   setHud(on) { this.hud.classList.toggle('off', !on); }
+
+  /** 지갑 (매 틀마다 불러도 된다 — 값이 바뀔 때만 고친다) */
+  updateWallet(v) {
+    const n = Math.round((+v || 0) * 100) / 100;
+    if (this._wallet === n) return;
+    const el = this.walletEl;
+    if (this._wallet != null) {
+      const d = Math.round((n - this._wallet) * 100) / 100;
+      const wd = el.querySelector('.wd');
+      wd.textContent = `${d > 0 ? '+' : '−'}${Math.abs(d).toLocaleString('ko-KR', { maximumFractionDigits: 2 })}`;
+      wd.className = `wd ${d > 0 ? 'up' : 'down'} on`;
+      clearTimeout(this._walletT);
+      this._walletT = setTimeout(() => { wd.className = 'wd'; }, 1600);
+      el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
+    }
+    this._wallet = n;
+    el.querySelector('.wv').textContent = n.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+  }
 
   // ── 목표 ────────────────────────────
   refreshObjective() {

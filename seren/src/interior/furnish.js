@@ -4,7 +4,7 @@
 //  · 하나 놓을 때마다 검사: 자리가 방 안이고 비었나, 앞이 비었나, 그리고 문에서 이 방의 모든 가구 앞까지 걸어서 닿나.
 //    막히면 그 자리는 버리고 다른 자리를 찾는다(물건을 지워서 맞추지 않고 놓는 규칙이 막지 않게).
 //  · 결과: [{ id, t, x, z(틀 좌표 m, 가운데), rot(0..3: 정면 +z,+x,−z,−x), w, d, h, room, ax, az(쓰는 사람이 서는 곳), tag }]
-import { FIX, ROOMS } from './catalog.js';
+import { FIX, ROOMS, flowRoom } from './catalog.js';
 import { rngFor, shuffle } from './ids.js';
 
 const S = 2; // 칸 하나를 2×2 로 (0.5 m)
@@ -82,6 +82,9 @@ export class Furnisher {
     this.occ.keepDoors();
     this.list = [];
     this.rnd = rngFor(B.seed, `furn${L.i}`);
+    // 오가는 길(복도·승강기 홀·로비·넓은 홀)은 층 전체가 한 덩어리로 이어져 있어야 한다 — 가구가 길을 끊지 않게
+    this.flowR = new Uint8Array(L.rooms.length + 1);
+    for (const R of L.rooms) if (flowRoom(R)) this.flowR[R.id + 1] = 1;
     this.opts = opts;
     this.stats = { tried: 0, placed: 0, blocked: 0 };
   }
@@ -103,26 +106,97 @@ export class Furnisher {
     return out;
   }
 
-  /** 방 안에서 문으로부터 걸어서 닿는가 (0.5 m 칸 BFS) — 닿아야 할 칸 목록 */
+  /** 방의 문마다 이 방 쪽 0.5 m 칸들 [[k…], …] */
+  _doorGroups(R) {
+    const L = this.L, occ = this.occ, out = [];
+    for (const d of L.doors) {
+      if (d.a !== R.id && d.b !== R.id) continue;
+      const i = d.c % L.gw, j = (d.c / L.gw) | 0;
+      const inA = d.a === R.id;
+      const ci = inA ? i : i + d.dir[0], cj = inA ? j : j + d.dir[1];
+      const w = Math.max(1, d.w), o0 = -Math.floor((w - 1) / 2);
+      const g = [];
+      for (let o = o0; o < o0 + w; o++) { const a = ci + (d.dir[1] ? o : 0), b = cj + (d.dir[0] ? o : 0); if (a < 0 || b < 0 || a >= L.gw || b >= L.gh) continue; for (let q = 0; q < S * S; q++) g.push(occ.k(a * S + (q % S), b * S + ((q / S) | 0))); }
+      if (g.length) out.push(g);
+    }
+    return out;
+  }
+  /** 0.5 m 칸 (a, b) 를 왼쪽 아래로 하는 1 m 창이 pred 를 모두 만족하나 — 사람(반지름 0.35 m)은 1 m 너비면 지나간다 */
+  _win(a, b, pred) {
+    const occ = this.occ;
+    if (a < 0 || b < 0 || a + 1 >= occ.gw || b + 1 >= occ.gh) return false;
+    const k = occ.k(a, b);
+    return pred(k) && pred(k + 1) && pred(k + occ.gw) && pred(k + occ.gw + 1);
+  }
+  /**
+   * 방 안에서 걸어서 닿는가: 1 m 창이 비어 있는 곳으로만 (0.5 m 씩 옮겨 가며) — 첫 문에서 이 방의 다른 문 모두
+   * (문끼리 이어져야 방을 지나갈 수 있다)와 닿아야 할 칸 목록(가구 앞자리)까지.
+   */
   _reach(R, targets) {
     const occ = this.occ, rid = R.id + 1;
-    const start = this._doorSubs(R).filter((k) => occ.o[k] === 0 || occ.o[k] === 3);
-    if (!start.length) return true; // 문이 없는 방(복도·홀의 일부)은 따지지 않는다
-    const seen = new Uint8Array(occ.o.length);
-    const q = [];
-    for (const k of start) { seen[k] = 1; q.push(k); }
-    for (let h = 0; h < q.length; h++) {
-      const k = q[h], a = k % occ.gw, b = (k / occ.gw) | 0;
-      for (const [da, db] of FR) {
-        const x = a + da, y = b + db;
-        if (x < 0 || y < 0 || x >= occ.gw || y >= occ.gh) continue;
-        const e = occ.k(x, y);
-        if (seen[e] || occ.rm[e] !== rid || (occ.o[e] !== 0 && occ.o[e] !== 3)) continue;
-        seen[e] = 1; q.push(e);
-      }
-    }
-    for (const t of targets) if (t >= 0 && !seen[t]) return false;
+    const ok = (k) => occ.rm[k] === rid && (occ.o[k] === 0 || occ.o[k] === 3);
+    const groups = this._doorGroups(R).map((g) => g.filter((k) => occ.rm[k] === rid)).filter((g) => g.length);
+    const start = groups.length ? groups[0] : this._doorSubs(R).filter((k) => occ.rm[k] === rid);
+    if (!start.length) return true; // 문이 없는 방(복도·홀의 일부)은 따지지 않는다 (오가는 길은 _keepsFlow 가 본다)
+    const W = occ.gw;
+    const seenW = new Uint8Array(occ.o.length), got = new Uint8Array(occ.o.length), q = [];
+    const push = (a, b) => { if (a < 0 || b < 0 || a + 1 >= occ.gw || b + 1 >= occ.gh) return; const k = b * W + a; if (seenW[k] || !this._win(a, b, ok)) return; seenW[k] = 1; q.push(k); got[k] = got[k + 1] = got[k + W] = got[k + W + 1] = 1; };
+    for (const k of start) { const a = k % W, b = (k / W) | 0; push(a, b); push(a - 1, b); push(a, b - 1); push(a - 1, b - 1); }
+    if (!q.length) return false; // 첫 문 앞에 1 m 자리가 없다
+    for (let h = 0; h < q.length; h++) { const k = q[h], a = k % W, b = (k / W) | 0; push(a + 1, b); push(a - 1, b); push(a, b + 1); push(a, b - 1); }
+    for (const t of targets) if (t >= 0 && !got[t]) return false;
+    for (const g of groups.slice(1)) if (!g.some((k) => got[k])) return false;
     return true;
+  }
+
+  /** 오가는 길의 0.5 m 칸인가 (가구·막힘이 아닌) */
+  _net(k) { const o = this.occ.o[k]; return this.flowR[this.occ.rm[k]] === 1 && (o === 0 || o === 3); }
+  /** 오가는 길(1 m 창)이 몇 덩어리인가 — 범위(a0..a1, b0..b1)를 주면 그 안에서 창마다 덩어리 번호 */
+  _flowLabels(a0, a1, b0, b1) {
+    const occ = this.occ, W = occ.gw;
+    const fw = (a, b) => a >= a0 && a <= a1 && b >= b0 && b <= b1 && this._win(a, b, (k) => this._net(k));
+    const lab = new Map();
+    let id = 0;
+    for (let b = b0; b <= b1; b++) for (let a = a0; a <= a1; a++) {
+      const k0 = b * W + a;
+      if (lab.has(k0) || !fw(a, b)) continue;
+      id++;
+      const q = [k0]; lab.set(k0, id);
+      for (let h = 0; h < q.length; h++) { const k = q[h], x = k % W, y = (k / W) | 0; for (const [dx, dy] of FR) { const nx = x + dx, ny = y + dy, nk = ny * W + nx; if (!lab.has(nk) && fw(nx, ny)) { lab.set(nk, id); q.push(nk); } } }
+    }
+    return { lab, n: id };
+  }
+  /** 이 칸들(가구 자리)을 막아도 오가는 길이 끊기지 않나 — 둘레 창(가까운 범위의 가장자리)들의 이어짐이 그대로면 그대로, 아니면 층 전체 덩어리 수 */
+  _keepsFlow(cells, prev) {
+    const occ = this.occ, W = occ.gw;
+    let a0 = 1e9, a1 = -1, b0 = 1e9, b1 = -1;
+    for (const k of cells) { const a = k % W, b = (k / W) | 0; a0 = Math.min(a0, a); a1 = Math.max(a1, a); b0 = Math.min(b0, b); b1 = Math.max(b1, b); }
+    const M = 5, x0 = Math.max(0, a0 - M), x1 = Math.min(occ.gw - 2, a1 + M), y0 = Math.max(0, b0 - M), y1 = Math.min(occ.gh - 2, b1 + M);
+    const now = cells.map((k) => occ.o[k]);
+    const after = this._flowLabels(x0, x1, y0, y1);
+    cells.forEach((k, n) => { occ.o[k] = prev[n]; });
+    const before = this._flowLabels(x0, x1, y0, y1);
+    cells.forEach((k, n) => { occ.o[k] = now[n]; });
+    // 가장자리 창: 전에 같은 덩어리였으면 뒤에도 같은 덩어리
+    const map = new Map(), edgeB = new Set(), edgeA = new Set();
+    let split = false;
+    for (let y = y0; y <= y1 && !split; y++) for (let x = x0; x <= x1; x++) {
+      if (x !== x0 && x !== x1 && y !== y0 && y !== y1) continue;
+      const k = y * W + x, lb = before.lab.get(k), la = after.lab.get(k);
+      if (lb) edgeB.add(lb);
+      if (la) edgeA.add(la);
+      if (!lb || !la) continue;
+      if (!map.has(lb)) map.set(lb, la); else if (map.get(lb) !== la) { split = true; break; }
+    }
+    // 범위 안에 갇힌 덩어리: 전에는 가장자리(바깥)로 이어졌는데 이제는 아니면 (작은 승강기 홀이 진열대에 막히는 것처럼)
+    if (!split) for (const [k, la] of after.lab) { if (edgeA.has(la)) continue; const lb = before.lab.get(k); if (lb && edgeB.has(lb)) { split = true; break; } }
+    if (!split) return true;
+    // 가까이에서 돌아갈 길이 없으면: 층 전체의 덩어리 수가 늘었나
+    const nA = this._flowLabels(0, occ.gw - 2, 0, occ.gh - 2).n;
+    cells.forEach((k, n) => { occ.o[k] = prev[n]; });
+    const nB = this._flowLabels(0, occ.gw - 2, 0, occ.gh - 2).n;
+    cells.forEach((k, n) => { occ.o[k] = now[n]; });
+    return nA <= nB;
   }
 
   /**
@@ -173,6 +247,11 @@ export class Furnisher {
     // 시험으로 놓아 보고, 문에서 모든 가구 앞까지 닿는지
     const prev = cells.map((k) => occ.o[k]);
     for (const k of cells) occ.o[k] = f.walk ? 0 : 2;
+    if (!f.walk && this.flowR[rid] && !this._keepsFlow(cells, prev)) {
+      cells.forEach((k, n) => { occ.o[k] = prev[n]; });
+      this.stats.blocked++;
+      return null;
+    }
     const acc = front.length ? front[Math.floor(front.length / 2)] : -1;
     const mine = this.list.filter((q) => q.room === R.id && q.accK >= 0).map((q) => q.accK);
     if (!o.noReach && !this._reach(R, [...mine, acc, ...(back.length ? [back[Math.floor(back.length / 2)]] : [])])) {

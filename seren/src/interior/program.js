@@ -158,11 +158,15 @@ function decideUses(pid, slots, ctx, rnd) {
         notes.special = '종합 치유원';
         break;
       }
-      case 'school': { // 학교 한 채: 체육관·강당(높은 1층) → 급식·도서 → 교실층 (짝수층 과학실·홀수층 노래실)
+      case 'school': { // 학교 한 채 (높이에 상관없이 학교만): 체육관·강당 → 도서층 → 급식층 → 교실층(짝수층 과학실·홀수층 노래실) → 교무·행정층 → 교실층 → 강당
+        if (N >= 16) techEvery(3, top); // 설비층 먼저 — 아래 학교 시설이 겹치면 그 층은 학교 시설로
         uses[0] = slots[0].h >= 6.5 || N <= 2 ? 'schoolhall' : 'school';
         if (N >= 3) uses[1] = 'library';
-        fill(1, top, 'school');
+        if (N >= 7) uses[2] = 'canteen';
+        if (N >= 10) { let f = Math.floor((3 + top) / 2); if (uses[f] === 'tech') f++; uses[f] = 'faculty'; }
+        if (N >= 20) { let l = Math.floor(top * 0.78); if (uses[l] === 'tech') l--; uses[l] = 'library'; } // 큰 학교는 위쪽에도 배움터(도서·자습)
         if (N >= 6) uses[top] = 'schoolhall';
+        fill(1, top, 'school');
         notes.special = '학교';
         break;
       }
@@ -477,7 +481,8 @@ export function makeBuilding(r, ctx) {
   if (!slots.length) return null;
   // 전문 건물인가 (한 기관이 건물 전체): 쓰임마다 비율이 다르다 — 큰 병원·학교·박물관은 대개 전문, 사무·마트는 섞인 건물이 많다
   const SPECIAL_P = { heal: 0.7, school: 0.75, lab: 0.5, office: 0.3, market: 0.35, depot: 0.6, factory: 0.55, terminal: 0.5, farm: 0.6, hotel: 0.55 };
-  const special = !r.custom && rngFor(seed, 'special')() < (SPECIAL_P[pid] || 0);
+  // 학교는 늘 학교만 쓰는 건물 (섞인 건물에 학교를 넣지 않는다 — 높은 탑이어도 층마다 학교의 다른 시설)
+  const special = !r.custom && (pid === 'school' || rngFor(seed, 'special')() < (SPECIAL_P[pid] || 0));
   const D = decideUses(pid, slots, { district: r.style, custom: !!r.custom, special }, rnd);
   // 공중다리가 닿는 층: 건너온 사람을 받는 공용층(하늘 쉼터)으로 — 이미 누구나 드나드는 층이면 그대로
   const bridgeSlot = new Set();

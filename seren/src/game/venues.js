@@ -10,7 +10,7 @@ import { glowMaterial } from '../world/materials.js';
 import { audio } from '../core/audio.js';
 import { WORD, WORDS } from '../data/lexicon.js';
 import { glyphSVG } from './language.js';
-import { ITEMS, BUFFS, SHELVES, MENU, EXHIBITS, ARCHIVES, BAG_ORDER, WORK_TUNES, ZONE_NAMES } from '../data/venues.js';
+import { ITEMS, BUFFS, SHELVES, MENU, EXHIBITS, ARCHIVES, BAG_ORDER, WORK_TUNES, ZONE_NAMES, itemInfo } from '../data/venues.js';
 import { mulberry32 } from '../core/noise.js';
 import { won } from '../data/money.js';
 
@@ -40,9 +40,9 @@ export class Venues {
   _add(id, n = 1, quiet = false) {
     const E = this.game.econ;
     if (n > 0 && E && this.game.city) n = E.goodsOut(id, n);
-    if (n <= 0) { if (!quiet) this.game.ui.toast(`${ITEMS[id] ? ITEMS[id].name : id} — 구역에 남은 것이 없어요`, { kind: 'muted' }); return 0; }
+    if (n <= 0) { if (!quiet) this.game.ui.toast(`${itemInfo(id) ? itemInfo(id).name : id} — 구역에 남은 것이 없어요`, { kind: 'muted' }); return 0; }
     this.inv[id] = (this.inv[id] || 0) + n;
-    if (!quiet) this.game.ui.toast(`${ITEMS[id] ? ITEMS[id].name : id} ${n > 0 ? '+' : ''}${n}`, { kind: 'item' });
+    if (!quiet) this.game.ui.toast(`${itemInfo(id) ? itemInfo(id).name : id} ${n > 0 ? '+' : ''}${n}`, { kind: 'item' });
     return n;
   }
   /** 값 치르기: 플레이어 → 그 구역 회사 몫 (도시 장부) */
@@ -440,7 +440,7 @@ export class Venues {
 
   /** 먹기: 기운 + (가게 밖에서 먹으면 가방에서 하나 줄인다) */
   eat(id, here = false) {
-    const I = ITEMS[id];
+    const I = itemInfo(id);
     if (!I || I.use !== 'eat') return;
     if (!here) { if ((this.inv[id] || 0) <= 0) return; this.inv[id]--; }
     this.buff(I.buff);
@@ -875,7 +875,7 @@ export class Venues {
 
   // ── 가방에서 쓰기 ───────────────────────────
   useItem(id) {
-    const I = ITEMS[id], g = this.game;
+    const I = itemInfo(id), g = this.game;
     if (!I || (this.inv[id] || 0) <= 0) return;
     if (I.use === 'eat') return this.eat(id);
     if (I.use === 'map') {

@@ -96,6 +96,16 @@ button { font-family: inherit; color: inherit; }
 .compass .center { position: absolute; left: 50%; top: 0; width: 1px; height: 30px; background: linear-gradient(var(--gold), transparent); }
 
 .topbtns { position: absolute; right: calc(14px + var(--safe-r)); top: calc(12px + var(--safe-t)); display: flex; gap: 8px; }
+/* 지갑: 가진 돈(울) — 오른쪽 위 단추 아래 */
+.wallet { position: absolute; right: calc(14px + var(--safe-r)); top: calc(62px + var(--safe-t)); pointer-events: auto; cursor: pointer; display: flex; align-items: baseline; gap: 3px; padding: 5px 12px 5px 30px; border-radius: 16px; border: 1px solid var(--line); background: rgba(14, 16, 40, 0.5); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); font-variant-numeric: tabular-nums; color: var(--ink); text-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+.wallet::before { content: ''; position: absolute; left: 10px; top: 50%; width: 13px; height: 13px; margin-top: -6.5px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff6d8, var(--gold) 60%, #a07a30); box-shadow: 0 0 8px rgba(233, 194, 124, 0.6); }
+.wallet .wv { font-size: 16px; font-weight: 500; }
+.wallet .wu { font-size: 12px; color: var(--gold); }
+.wallet .wd { position: absolute; right: 8px; top: 100%; margin-top: 4px; font-size: 12px; opacity: 0; transform: translateY(-4px); transition: opacity .25s, transform .25s; white-space: nowrap; }
+.wallet .wd.on { opacity: 1; transform: none; }
+.wallet .wd.up { color: #8ff0c0; } .wallet .wd.down { color: #ffb08a; }
+.wallet.pulse { animation: walletPulse .5s ease-out; }
+@keyframes walletPulse { 0% { box-shadow: 0 0 0 0 rgba(233,194,124,0.55); } 100% { box-shadow: 0 0 0 10px rgba(233,194,124,0); } }
 .icobtn {
   pointer-events: auto; width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line);
   background: rgba(14, 16, 40, 0.45); color: var(--ink); font-size: 18px; display: grid; place-items: center; cursor: pointer;

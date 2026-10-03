@@ -8,7 +8,7 @@
 //  · 사무: 자리마다 사람이 단말로 일하고, 단말의 「일자리」 앱으로 지원 → 면접(채용 면접실) → 채용. 일은 직무마다 다른 앱.
 //  · 연구: 시료 → 손질 → 장비 측정 → 분석 단말 → 연구 진척(건물마다 저장). 학교: 시간표·수업·학생. 병원: 접수 → 대기 → 진료 → 치료/약.
 //  · 발전: 연료 결정을 넣고 출력을 맞춘다(구역의 빛). 교통: 표·타는 문·타는 곳. 박물관·서고·공연장·호텔·행정·농장·집·쉼터.
-import { GOODS, SHELF_GOODS, RECIPES, LINES, CROPS } from '../data/goods.js';
+import { GOODS, SHELF_GOODS, RECIPES, LINES, CROPS, CATS } from '../data/goods.js';
 import { ITEMS, EXHIBITS, ARCHIVES, BUFFS } from '../data/venues.js';
 import { FIX, ROOMS } from './catalog.js';
 import { audio } from '../core/audio.js';
@@ -75,7 +75,7 @@ function shelfGoods(T, F, out) {
   slots.forEach((s, si) => { const st = T.node.shelf[`${F.id}/${si}`]; if (!st) return; const e = m.get(st.g) || { g: st.g, n: 0, cap: 0, keys: [] }; e.n += st.n; e.cap += st.cap; e.keys.push(`${F.id}/${si}`); m.set(st.g, e); });
   return [...m.values()];
 }
-const CAT_NAME = { fresh: '신선', bakery: '빵·과자', pantry: '곡물·향', drink: '마실 것', chill: '서늘 칸', snack: '주전부리', home: '살림', gift: '선물', craft: '부품·결정', med: '약' };
+const CAT_NAME = CATS; // 진열 구역 20가지 (data/goods.js)
 const catOfMart = (F) => F.cat || (F.t === 'chiller' ? 'chill' : F.t === 'produce' ? 'fresh' : F.t === 'display' ? 'bakery' : F.t === 'medshelf' ? 'med' : 'pantry');
 
 // ════════════════════════════════════════════════════════════

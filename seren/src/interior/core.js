@@ -47,10 +47,13 @@ function layoutComps(list) {
   const D = Math.max(...list.map((t) => COMP[t].d));
   const mini = list.every((t) => t === 'spiral' || t === 'spiral2' || t === 'liftS');
   const lobbyD = mini || list.some((t) => COMP[t].d < D) ? 0 : 2; // 곧은 계단만 있으면 앞에 2칸 홀
+  // 승강기가 많을수록 승강기 홀이 깊다 (기다리는 사람이 많은 큰 탑: 넷이면 한 칸, 여섯이면 두 칸 더)
+  const nl = list.filter((t) => COMP[t].kind === 'lift' || COMP[t].kind === 'cargo').length;
+  const extra = mini ? 0 : nl >= 6 ? 2 : nl >= 4 ? 1 : 0;
   const parts = [];
   let x = 0;
   for (const t of list) { const c = COMP[t]; parts.push({ type: t, kind: c.kind, i0: x, j0: 0, w: c.w, d: c.d }); x += c.w; }
-  const W = x, Dt = D + lobbyD;
+  const W = x, Dt = D + lobbyD + extra;
   const lobby = [];
   const occ = new Set();
   for (const p of parts) for (let i = p.i0; i < p.i0 + p.w; i++) for (let j = p.j0; j < p.j0 + p.d; j++) occ.add(i * 100 + j);
@@ -101,9 +104,29 @@ export function planCore(B) {
     for (let j = gh - 1; j >= 0; j--) if (G0.mask[j * gw + Math.floor(gw / 2)]) { doorJ = j; break; }
     const bridgeDirs = [];
     for (const F of B.floors) for (const b of F.bridges || []) { const [ux, uz] = b.dir; bridgeDirs.push(Math.abs(ux) > Math.abs(uz) ? [Math.sign(ux), 0] : [0, Math.sign(uz)]); }
+    // 심이 층을 둘로 가르지 않는가: 심 부품 칸을 뺀 나머지 칸이 한 덩어리여야 (승강기 홀에서 모든 곳에 닿게)
+    const G0mask = B.floors[B.ground].mask;
+    const splits = (L, cand) => {
+      const { o, i0, j0 } = cand;
+      const blocked = new Uint8Array(N);
+      for (const p of L.parts) for (let i = p.i0; i < p.i0 + p.w; i++) for (let j = p.j0; j < p.j0 + p.d; j++) { const [a, b] = rot(o, L.w, L.d, i, j); blocked[(j0 + b) * gw + i0 + a] = 1; }
+      for (const M of [I, G0mask]) {
+        const seen = new Uint8Array(N);
+        let comps = 0;
+        for (let c0 = 0; c0 < N; c0++) {
+          if (!M[c0] || blocked[c0] || seen[c0]) continue;
+          const q = [c0]; seen[c0] = 1;
+          for (let h = 0; h < q.length; h++) { const c = q[h], i = c % gw, j = (c / gw) | 0; for (const [di, dj] of DIRS) { const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= gw || b >= gh) continue; const e = b * gw + a; if (M[e] && !blocked[e] && !seen[e]) { seen[e] = 1; q.push(e); } } }
+          if (q.length >= 4) comps++;
+          if (comps > 1) return true;
+        }
+      }
+      return false;
+    };
     for (const list of coreOptions(B, nUp)) {
       const L = layoutComps(list);
       let best = null, bs = Infinity;
+      const cands = [];
       for (let o = 0; o < 4; o++) {
         const W = o % 2 ? L.d : L.w, Dd = o % 2 ? L.w : L.d;
         const [fx, fz] = DIRS[o];
@@ -129,10 +152,14 @@ export function planCore(B) {
             const ok = di > 0 ? full(i0 + W, j0, 2, Dd) : di < 0 ? full(i0 - 2, j0, 2, Dd) : dj > 0 ? full(i0, j0 + Dd, W, 2) : full(i0, j0 - 2, W, 2);
             if (!ok) s += 40;
           }
+          cands.push([s, { o, i0, j0, W, Dd }]);
           if (s < bs) { bs = s; best = { o, i0, j0, W, Dd }; }
         }
       }
       if (!best) continue;
+      // 점수 좋은 차례로 층을 가르지 않는 자리 (서른 곳까지 — 모두 가르면 가장 좋은 자리)
+      cands.sort((a, b) => a[0] - b[0]);
+      for (const [, c] of cands.slice(0, 30)) if (!splits(L, c)) { best = c; break; }
       return finish(B, L, best, list, serve);
     }
     // 아무것도 안 들어가면 맨 위층부터 하나씩 빼 본다 (그 층은 쓸 수 없는 층)

@@ -22,6 +22,8 @@ export const FUSE = {
   care: { name: '응급·접수', plan: 'open', mod: 1, op: 'clinic', pub: true, front: true },
   school: { name: '교실', plan: 'ring', mod: 1, op: 'school', roomd: 9 },
   schoolhall: { name: '체육관·강당', plan: 'hall', mod: 2, op: 'school', pub: true },
+  canteen: { name: '급식실', plan: 'open', mod: 1, op: 'food', pub: true },
+  faculty: { name: '교무·행정', plan: 'ring', mod: 1, op: 'office', roomd: 9 },
   library: { name: '서가', plan: 'open', mod: 1, op: 'library', pub: true },
   museum: { name: '전시실', plan: 'gallery', mod: 1, op: 'museum', pub: true },
   hall: { name: '공연장', plan: 'hall', mod: 2, op: 'hall', pub: true },
@@ -301,3 +303,7 @@ export const OP_NAME = {
   hall: '공연장', admin: '행정청', home: '주거', hotel: '호텔', factory: '공장', depot: '물류 창고', terminal: '터미널', farm: '농장',
   garden: '정원', plant: '발전소', tech: '설비', parking: '주차장', amenity: '쉼터', observation: '전망대', mezz: '중2층',
 };
+
+/** 사람이 오가는 공간(복도·승강기 홀·로비·넓은 홀)끼리는 벽 없이 이어진다 — 그리기(render)·걸음 칸(nav)·검사가 같은 규칙 */
+export function flowRoom(R) { return !!R && (R.circ || (R.main && !R.boh)) && !['stair', 'lift', 'cargo', 'shaft'].includes(R.type) && !R.sealed; }
+

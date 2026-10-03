@@ -4,7 +4,31 @@
 //    주민 → 가게에서 사서 씀(돈는 가구 → 회사) / 일하는 시간 → 품삯(회사·공공 → 가구) / 세금(가구 → 공공).
 //  · 들어가 본 건물은 「살아 있는 건물(node)」: 제 재고·진열대·금고를 가진다. 처음 열 때 구역의 몫에서 물건과 돈를 가져온다(새로 만들지 않는다).
 //  · 플레이어도 같은 장부의 한 사람: 사면 플레이어 → 가게 금고, 일하면 고용한 건물 금고 → 플레이어. 모든 돈의 합은 늘 같다(검사 total()).
-import { GOODS, RECIPES, LINES, CROPS, SHELF_GOODS, DEMAND } from '../data/goods.js';
+import { GOODS, RECIPES, LINES, CROPS, MINED, SHELF_GOODS, DEMAND, MAKER, PER_CAPITA, RECIPE_ORDER } from '../data/goods.js';
+
+const GOODS_V = 2; // 물건 판 (2 = 진열 구역 20가지)
+const WH = (0.72 - 0.3) * 24; // 하루 일하는 시간 (WORK 와 같다)
+/** 공정마다: 한 사람의 하루 몫을 만드는 데 한 시간에 몇 번 돌아야 하나 */
+const RUNS_PP = {};
+for (const [rk, R] of Object.entries(RECIPES)) { const k = Object.keys(R.out)[0]; RUNS_PP[rk] = (PER_CAPITA[k] || 0.02) / R.out[k] / WH; }
+/** 공정 → 그 공정을 도는 공장 줄들 */
+const REC_LINES = {};
+for (const rk of Object.keys(RECIPES)) REC_LINES[rk] = Object.keys(LINES).filter((L) => LINES[L].includes(rk));
+/** 거둠: 농장 한 몫(주민 300명)·채굴 한 몫(500명)이 한 시간에 */
+const Y_FARM = {}, Y_MINE = {};
+for (const k of CROPS) Y_FARM[k] = ((PER_CAPITA[k] || 0.05) * 300 * 1.15) / WH;
+for (const k of MINED) Y_MINE[k] = ((PER_CAPITA[k] || 0.05) * 500 * 1.15) / WH;
+/** 연료 한 단위의 빛: 발전소 기본 크기(주민 800명당 한 몫, 시간당 연료 0.4)가 기준 공장들이 쓰는 빛의 1.3배를 내게 */
+const E_FUEL = (() => { let e = 0; for (const [rk, R] of Object.entries(RECIPES)) if (MAKER[Object.keys(R.out)[0]] === rk) e += RUNS_PP[rk] * R.energy; return (e * 1.3 * 800) / 0.4; })();
+// 연료 거둠은 발전소가 태우는 만큼 + 여유 (일하는 시간에 태우는 것: 주민 800명당 0.4)
+Y_MINE.fuel = Math.max(Y_MINE.fuel, (0.4 / 800) * 500 * 1.4);
+/** 처음 창고에 두는 원료·반제품 */
+const RAWS = [...new Set([...CROPS, ...MINED, 'flour', 'shard', 'panel', 'cloth', 'paper'])];
+/** 구역에 없는 공정 줄은 그 구역 공장 단지가 함께 돌린다 (공장 힘의 한 몫) — 어느 물건도 만드는 곳이 없어 진열대가 영영 비지 않게 */
+function coverLines(z) {
+  const total = Object.values(z.factories).reduce((a, b) => a + b, 0) || z.pop / 400;
+  for (const line of Object.keys(LINES)) if (!z.factories[line]) z.factories[line] = Math.max(0.6, total * 0.08);
+}
 import { hashStr } from '../core/noise.js';
 import { won } from '../data/money.js';
 
@@ -20,7 +44,17 @@ export class Economy {
   get S() {
     const s = this.game.state;
     if (!s.econ || !s.econ.Z) s.econ = this._init();
+    if (s.econ.gv !== GOODS_V) this._migrate(s.econ);
     return s.econ;
+  }
+  /** 물건 가짓수가 늘어난 판(20가지 진열 구역): 옛 저장의 구역에 새 물건의 처음 재고·새 공정 줄을 더한다 */
+  _migrate(S) {
+    for (const z of Object.values(S.Z)) {
+      for (const [k, d] of Object.entries(DEMAND)) { if (z.retail[k] == null) z.retail[k] = Math.round(d * z.pop * 1.5); if (z.depot[k] == null) z.depot[k] = Math.round(d * z.pop * 2); }
+      for (const k of RAWS) if (z.depot[k] == null) z.depot[k] = Math.round(z.pop * 0.3);
+      coverLines(z);
+    }
+    S.gv = GOODS_V;
   }
 
   // ── 처음: 구역마다 사람·건물 수로 살림을 짓는다 ─────────────
@@ -48,11 +82,12 @@ export class Economy {
       // 첫 살림: 사람 수에 비례한 돈와 재고 (이것이 그 뒤로 도는 전부)
       z.hh = z.pop * 12; z.firms = z.pop * 8; z.commons = z.pop * 4;
       for (const [k, d] of Object.entries(DEMAND)) { z.retail[k] = Math.round(d * z.pop * 1.5); z.depot[k] = Math.round(d * z.pop * 2); }
-      for (const k of ['grain', 'tealeaf', 'nectar', 'fiber', 'herb', 'ore', 'resin', 'fuel', 'flour', 'shard', 'panel', 'cloth']) z.depot[k] = Math.round(z.pop * 0.3);
+      for (const k of RAWS) z.depot[k] = Math.round(z.pop * 0.3);
       z.farms = Math.max(z.farms, z.pop / 300); z.mines = Math.max(z.mines, z.pop / 500); z.plants = Math.max(z.plants, z.pop / 800);
       if (!Object.keys(z.factories).length) z.factories = { food: z.pop / 400, drink: z.pop / 600 };
+      coverLines(z);
     }
-    return { v: 1, Z, N: {}, T: 0, P: { earned: 0, spent: 0 }, log: [] };
+    return { v: 1, gv: GOODS_V, Z, N: {}, T: 0, P: { earned: 0, spent: 0 }, log: [] };
   }
 
   /** 공장의 공정 묶음 (씨앗으로 정해진다) */
@@ -148,28 +183,45 @@ export class Economy {
     const work = tod > WORK[0] && tod < WORK[1];
     for (const [zid, z] of Object.entries(S.Z)) {
       const hh = `z:${zid}:hh`, firms = `z:${zid}:firms`, commons = `z:${zid}:commons`;
-      // 1. 농장·채굴 (낮에만 거둔다)
+      // 1. 농장·채굴 (낮에만 거둔다): 기본 크기(주민 300명당 농장 한 몫·500명당 채굴 한 몫)면 사람들이 쓰는 것의 1.15배 —
+      //    농장·채굴장이 많은 구역은 더 거둔다. 창고가 엿새치로 차면 거두지 않고 밭에 둔다
       if (work) {
-        for (const k of CROPS) z.depot[k] = (z.depot[k] || 0) + z.farms * 0.35 / CROPS.length * 8;
-        for (const k of ['ore', 'resin', 'fuel']) z.depot[k] = (z.depot[k] || 0) + z.mines * 0.5;
+        for (const k of CROPS) if ((z.depot[k] || 0) < (PER_CAPITA[k] || 0.05) * z.pop * 6) z.depot[k] = (z.depot[k] || 0) + z.farms * Y_FARM[k];
+        for (const k of MINED) if ((z.depot[k] || 0) < Math.max((PER_CAPITA[k] || 0), 0.05) * z.pop * 6 + (k === 'fuel' ? z.pop * 0.05 : 0)) z.depot[k] = (z.depot[k] || 0) + z.mines * Y_MINE[k];
       }
-      // 2. 발전: 빛을 내려면 연료를 태운다
-      const fuelNeed = z.plants * 0.4;
-      const fuel = Math.min(fuelNeed, z.depot.fuel || 0);
-      z.depot.fuel = (z.depot.fuel || 0) - fuel;
-      z.energy = fuel * 30; // 이번 시간에 쓸 수 있는 빛
-      // 3. 공장: 공정마다 재료·빛이 있는 만큼 (일하는 시간에만)
+      // 2·3. 공장: 모자란 것부터 (창고+가게 재고가 이틀 반치보다 적은 물건) — 재료가 되는 공정부터, 공장 힘·재료·빛이 닿는 만큼.
+      //   빛은 발전소가 연료를 태워 낸다 (필요한 만큼만, 발전소 힘까지)
       let made = 0;
-      if (work) for (const [line, cap] of Object.entries(z.factories)) {
-        for (const rk of LINES[line] || []) {
+      z.energy = 0;
+      if (work && z.pop > 0) {
+        const ref = z.pop / 2000; // 공정 줄 하나의 기준 공장 크기
+        const want = [];
+        let eNeed = 0;
+        for (const rk of RECIPE_ORDER) {
+          let cap = 0;
+          for (const L of REC_LINES[rk]) cap += (z.factories[L] || 0) / ref;
+          if (cap <= 0) continue;
+          const R = RECIPES[rk], k = Object.keys(R.out)[0];
+          if (MAKER[k] !== rk && !(PER_CAPITA[k] > 0)) continue;
+          const short = (PER_CAPITA[k] || 0.02) * z.pop * 2.5 - (z.depot[k] || 0) - (z.retail[k] || 0);
+          if (short <= 0) continue;
+          const runsCap = Math.min(4, cap) * RUNS_PP[rk] * z.pop * 1.25;
+          const runs = Math.min(runsCap, Math.ceil(short / R.out[k]));
+          if (runs > 0) { want.push([rk, runs]); eNeed += runs * R.energy; }
+        }
+        const burn = Math.min(z.plants * 0.4, z.depot.fuel || 0, eNeed / E_FUEL);
+        z.depot.fuel = (z.depot.fuel || 0) - burn;
+        let energy = burn * E_FUEL;
+        z.energy = energy;
+        for (const [rk, w] of want) {
           const R = RECIPES[rk];
-          let runs = Math.floor(cap * 0.6);
+          let runs = Math.floor(w);
           for (const [k, n] of Object.entries(R.in)) runs = Math.min(runs, Math.floor((z.depot[k] || 0) / n));
-          runs = Math.min(runs, Math.floor(z.energy / R.energy));
+          runs = Math.min(runs, Math.floor(energy / R.energy));
           if (runs <= 0) continue;
           for (const [k, n] of Object.entries(R.in)) z.depot[k] -= n * runs;
           for (const [k, n] of Object.entries(R.out)) { z.depot[k] = (z.depot[k] || 0) + n * runs; made += n * runs; }
-          z.energy -= R.energy * runs;
+          energy -= R.energy * runs;
         }
       }
       z.made = made;

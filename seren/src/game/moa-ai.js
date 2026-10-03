@@ -4,7 +4,7 @@
 //    지금의 게임 상태(목표·자리·가진 것·아는 음과 말·둘레의 시설)를 함께 보내고, 「길 표시」 도구로 나침반에 표식을 단다
 //  · 그냥 파일로 열었거나 허락하지 않았으면, 게임 상태를 읽어 직접 대답하는 모아 (다음 할 일·가까운 시설·돈·음·말·집…)
 // 대화는 이 화면 안에서만 이어진다(저장하지 않음). 모아의 혼잣말(ui.moa)도 여기 기록으로 보인다.
-import { ITEMS, ZONE_NAMES } from '../data/venues.js';
+import { ITEMS, ZONE_NAMES, itemInfo } from '../data/venues.js';
 import { WORD } from '../data/lexicon.js';
 import { PLACES } from '../data/places.js';
 import { TIPS } from '../data/tips.js';
@@ -331,7 +331,7 @@ export class MoaAI {
     const c = g.world.clock;
     const hh = Math.floor((c.time % 1) * 24);
     L.push(`때: 세렌의 ${c.day + 1}일째 ${hh}시 무렵${g.world.atmos.state.night > 0.6 ? ' (밤)' : ''} · 다음 일식까지 ${Math.ceil(c.daysToEclipse())}일`);
-    const inv = Object.entries(s.inv || {}).filter(([k, n]) => n > 0 && k !== 'starseed').map(([k, n]) => `${ITEMS[k] ? ITEMS[k].name : k}×${n}`);
+    const inv = Object.entries(s.inv || {}).filter(([k, n]) => n > 0 && k !== 'starseed').map(([k, n]) => `${itemInfo(k) ? itemInfo(k).name : k}×${n}`);
     L.push(`가진 것: ${won(s.inv.starseed || 0)}${inv.length ? ' · ' + inv.join(', ') : ''}`);
     const V = s.venue || {};
     if (V.job) L.push(`맡은 일: ${V.job.label}`);

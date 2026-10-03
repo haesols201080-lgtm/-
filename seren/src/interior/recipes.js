@@ -123,19 +123,31 @@ const RECIPE = {
     F.near(R, 'baskets', ex - side * 2.2, front - 2.5, 0, { R: 3, tag: 'basket', anyRot: true });
     // 2. 벽: 뒷벽은 서늘 진열대, 옆벽은 벽 진열대
     const dep0 = c.B.floors[c.L.i].dep;
-    const cats = dep0 && dep0 !== 'food' ? ['home', 'home'] : c.rnd() < 0.5 ? ['chill', 'drink'] : ['drink', 'chill'];
-    F.alongWalls(R, 'chiller', { tag: 'shelf', data: { cat: cats[0] }, prefer: (p, q) => p.z - q.z, n: Math.max(1, Math.round(b.w / 5)), avoidWindows: false, onlyBack: true });
-    F.alongWalls(R, 'wallshelf', { tag: 'shelf', data: { cat: 'home' }, n: Math.max(2, Math.round(R.n / 60)), notFront: true });
+    // 뒷벽 서늘 진열대: 식품 매장이면 반찬·구름젖·얼음·마실 것을 차례로, 생활·도구·옷 매장이면 벽 진열대처럼
+    const coldCats = dep0 && dep0 !== 'food' ? null : (c.rnd() < 0.5 ? ['chill', 'dairy', 'frozen', 'drink'] : ['dairy', 'drink', 'chill', 'frozen']);
+    const n0 = F.list.length;
+    F.alongWalls(R, 'chiller', { tag: 'shelf', data: { cat: coldCats ? coldCats[0] : 'home' }, prefer: (p, q) => p.z - q.z, n: Math.max(1, Math.round(b.w / 5)), avoidWindows: false, onlyBack: true });
+    if (coldCats) F.list.slice(n0).filter((q) => q.room === R.id && q.t === 'chiller').forEach((q, k) => { q.cat = coldCats[k % coldCats.length]; });
+    // 옆벽 진열대: 매장마다 다른 살림 구역을 차례로
+    const WALL = { food: ['spice', 'home', 'kitchen', 'med'], living: ['home', 'kitchen', 'beauty', 'garden', 'med'], craft: ['craft', 'device', 'paper'], fashion: ['fashion', 'beauty', 'gift'] };
+    const wallCats = WALL[dep0] || (op === 'dept' ? ['fashion', 'beauty', 'kitchen', 'device'] : ['home', 'kitchen', 'beauty', 'paper', 'garden', 'med']);
+    const n1 = F.list.length;
+    F.alongWalls(R, 'wallshelf', { tag: 'shelf', data: { cat: wallCats[0] }, n: Math.max(2, Math.round(R.n / 60)), notFront: true });
+    F.list.slice(n1).filter((q) => q.room === R.id && q.t === 'wallshelf').forEach((q, k) => { q.cat = wallCats[k % wallCats.length]; });
     // 3. 입구 쪽 신선 진열섬
     if (!dep0 || dep0 === 'food') for (let k = 0; k < Math.min(3, Math.round(R.n / 150)); k++) F.near(R, 'produce', ex - side * (2 + k * 3), front - 8.5, 0, { R: 3, tag: 'shelf', data: { cat: 'fresh' } });
     // 4. 가운데 진열대 줄 (통로 2 m) — 구역마다 다른 물건
     const g = F.rows(R, 'gondola', { aisle: 2.0, gap: 0.0, margin: 1.6, axis: 'z', rot: 0, tag: 'shelf' });
     // 층마다 매장(대형점의 층별 매장: 식품관·생활·도구·옷과 선물)
     const dep = c.B.floors[c.L.i].dep;
-    const DEP = { food: ['pantry', 'bakery', 'snack', 'drink', 'pantry', 'bakery'], living: ['home', 'home', 'pantry', 'snack', 'home'], craft: ['craft', 'craft', 'home', 'gift'], fashion: ['gift', 'home', 'gift', 'craft'] };
-    const order = DEP[dep] || (op === 'dept' ? ['home', 'gift', 'craft', 'home', 'gift'] : ['pantry', 'bakery', 'snack', 'drink', 'pantry', 'home', 'craft']);
+    // 진열 구역 20가지 (data/goods CATS): 동네 마트는 먹을 것 위주 + 살림 조금, 큰 마트는 줄이 많아 거의 모든 구역, 대형점은 층마다 매장
+    const DEP = { food: ['pantry', 'bakery', 'snack', 'drink', 'spice', 'chill', 'dairy', 'frozen'], living: ['home', 'kitchen', 'garden', 'beauty', 'paper', 'med', 'home'], craft: ['craft', 'device', 'toys', 'paper', 'kitchen'], fashion: ['fashion', 'beauty', 'gift', 'toys', 'fashion'] };
+    const big = g.length >= 8;
+    const order = DEP[dep] || (op === 'dept' ? ['fashion', 'home', 'gift', 'device', 'beauty', 'kitchen', 'toys', 'paper']
+      : big ? ['pantry', 'bakery', 'snack', 'drink', 'spice', 'home', 'kitchen', 'paper', 'toys', 'med', 'beauty', 'garden', 'device', 'craft', 'fashion', 'gift']
+        : ['pantry', 'bakery', 'snack', 'drink', 'spice', 'home', 'med']);
     for (const q of g) q.cat = order[(q.row || 0) % order.length];
-    if (op === 'shops') for (const q of g) q.cat = ['gift', 'craft', 'home'][(q.row || 0) % 3];
+    if (op === 'shops') for (const q of g) q.cat = ['gift', 'fashion', 'beauty', 'toys', 'craft', 'paper'][(q.row || 0) % 6];
   },
   stockroom(F, R) {
     F.alongWalls(R, 'stockrack', { tag: 'stock', avoidWindows: false });

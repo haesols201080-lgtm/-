@@ -5,7 +5,7 @@
 //  4) 살아 있는 건물(가게 node)의 주문 → 하역 → 창고 → 진열 흐름이 도는가
 //   node tools/econ-check.mjs
 import { Economy } from '../src/interior/econ.js';
-import { GOODS } from '../src/data/goods.js';
+import { GOODS, DEMAND, SHELF_GOODS, CATS } from '../src/data/goods.js';
 
 function mockGame(seed = 1) {
   let s = seed;
@@ -101,6 +101,21 @@ const negatives = (E) => {
   for (let h = 0; h < 12; h++) { g.world.clock.time += 1 / 24; E.update(1); made2 += z.made; }
   check(made2 === 0, `빛(연료) 없이 공장이 돌았음 ${made2}`);
   console.log(`연료가 없으면: 공장이 만든 것 ${made2}`);
+}
+
+// ── 진열 구역 20가지가 모두 채워지는가: 닷새 돌린 뒤 어느 구역에서도 다 떨어져(가게·창고 0) 다시 들어오지 않는 물건이 없어야 ──
+{
+  const g = mockGame(17), E = new Economy(g);
+  const out = new Map();
+  for (let h = 0; h < 24 * 5; h++) {
+    g.world.clock.time += 1 / 24; E.update(1);
+    if (h >= 24 * 4) for (const [zid, z] of Object.entries(E.S.Z)) for (const k of Object.keys(DEMAND)) if ((z.retail[k] || 0) + (z.depot[k] || 0) < 1) out.set(`${zid}.${k}`, (out.get(`${zid}.${k}`) || 0) + 1);
+  }
+  const dead = [...out].filter(([, n]) => n >= 24).map(([k]) => k);
+  check(!dead.length, `닷새째 하루 내내 다 떨어진 물건: ${dead.slice(0, 12).join(', ')}`);
+  const cats = Object.keys(CATS).filter((c) => (SHELF_GOODS[c] || []).length);
+  console.log(`진열 구역 ${cats.length}가지 · 물건 ${Object.keys(DEMAND).length}가지 · 닷새째 하루 내내 다 떨어진 물건 ${dead.length}`);
+  check(cats.length >= 20, `진열 구역이 ${cats.length}가지`);
 }
 
 console.log(fails.length ? `실패 ${fails.length}\n${[...new Set(fails)].slice(0, 20).join('\n')}` : '모두 통과');

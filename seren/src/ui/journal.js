@@ -3,7 +3,7 @@ import { QUESTS, ECHOES, CODEX, LINES } from '../data/story.js';
 import { WORDS, WORD } from '../data/lexicon.js';
 import { glyphSVG } from '../game/language.js';
 import { NOTE_COLORS } from '../core/audio.js';
-import { ITEMS, BUFFS, BAG_ORDER } from '../data/venues.js';
+import { ITEMS, BUFFS, BAG_ORDER, itemInfo, bagOrder } from '../data/venues.js';
 import { won } from '../data/money.js';
 
 const TABS = [['quests', '이야기'], ['bag', '가방'], ['words', '단어'], ['heard', '들은 말'], ['echoes', '메아리'], ['codex', '도감'], ['help', '도움말'], ['log', '기록']];
@@ -100,11 +100,12 @@ export class Journal {
     const g = this.game, inv = g.state.inv, V = g.state.venue || {};
     let h = '<div class="section-title">가진 것</div><div class="bag">';
     let any = false;
-    for (const id of BAG_ORDER) {
+    for (const id of bagOrder(inv)) {
       const n = inv[id] || 0;
       if (!n && id !== 'starseed') continue;
+      const I = itemInfo(id);
+      if (!I) continue;
       any = true;
-      const I = ITEMS[id];
       const can = I.use === 'eat' || I.use === 'map' || I.use === 'read';
       h += `<div class="bag-item"><span class="ic">${I.icon}</span><div class="tx"><b>${I.name} <small>${id === 'starseed' ? won(n) : `× ${n}`}</small></b><small>${I.tag} · ${I.desc}</small></div>${can && n ? `<button class="btn" data-use="${id}">${I.use === 'eat' ? '먹기' : I.use === 'read' ? '읽기' : '쓰기'}</button>` : ''}</div>`;
     }

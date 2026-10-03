@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { GB } from './geom.js';
 import { PAT, interiorMaterial, windowMaterial } from './material.js';
 import { drawFixture } from './props.js';
-import { FIX, ROOMS } from './catalog.js';
+import { FIX, ROOMS, flowRoom } from './catalog.js';
 import { sdfSpan, sdfAt, WALL } from './volume.js';
 import { SLAB } from './program.js';
 import { glowMaterial } from '../world/materials.js';
@@ -557,6 +557,8 @@ function partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st) {
       if (isMezz && L.mstair && dj === 1 && j === L.mstair.J && i >= L.mstair.i0 && i <= L.mstair.i1) continue;
       if ((A && voidB) || (Bq && voidA) || (isMezz && (!!A !== !!Bq) && L.void[A ? e : c] !== 2)) { edge(x0, z0, x1, z1, 'rail', A, Bq, null, key); continue; }
       if (!A || !Bq || A === Bq) continue;
+      // 복도·승강기 홀·로비·넓은 홀끼리는 벽 없이 이어진다
+      if (flowRoom(A) && flowRoom(Bq)) continue;
       // 같은 세대의 열린 방(거실-부엌) · 열린 문은 벽 없이
       const d = doorAt.get(key);
       if (d && d.kind === 'open') { edge(x0, z0, x1, z1, 'opening', A, Bq, d); continue; }

@@ -94,6 +94,49 @@ for (const pid of want) {
     }
     return res;
   }, pid);
+  // 마트: 진열 구역(건물 모든 층) · 진열대 몇 곳에서 실제로 집어 → 계산대에서 값 치르기 → 가방에 보이나
+  if (pid === 'market') {
+    info.shop = await page.evaluate(() => {
+      const g = SEREN.game, I = g.interiors, ind = I.cur.indoor, o = g.ops, B = I.cur.B;
+      const cats = new Set();
+      for (const F of B.floors) { if (!F.reach || F.dead) continue; const pl = ind.plan(F.i); if (pl) for (const q of pl.fix) if (q.tag === 'shelf' && q.cat) cats.add(q.cat); }
+      const out = ind.built.get(ind.cur);
+      const T = out.T;
+      const orig = g.ui.serviceCard.bind(g.ui);
+      const inv0 = { ...g.state.inv }, money0 = g.state.inv.starseed || 0;
+      const picked = [];
+      const shelves = out.fix.filter((F) => F.tag === 'shelf');
+      const seenCat = new Set();
+      for (const F of shelves) {
+        if (picked.length >= 5) break;
+        if (seenCat.has(F.cat)) continue;
+        let items = null;
+        g.ui.serviceCard = (t, s2, d, its) => { items = its; return null; };
+        try { const h = T.type.act(o, T, F, out); if (h) h.use(); } catch (e) { picked.push('오류 ' + e.message); }
+        g.ui.serviceCard = orig;
+        const it = items && items.find((x) => !x.disabled && x.onClick);
+        if (it) { it.onClick(); picked.push(`${F.cat}:${it.label.split(' · ')[0]}`); seenCat.add(F.cat); }
+      }
+      const basket = o.basket.length;
+      const co = out.fix.find((F) => F.tag === 'checkout');
+      let paid = false;
+      if (co) {
+        let items = null;
+        g.ui.serviceCard = (t, s2, d, its) => { items = its; return null; };
+        try { o.checkout(T, true); } catch (e) { paid = 'err ' + e.message; }
+        g.ui.serviceCard = orig;
+        const pay = items && items.find((x) => x.primary && !x.disabled);
+        if (pay) { pay.onClick(); paid = true; }
+      }
+      g.ui.closeCard();
+      const gained = Object.keys(g.state.inv).filter((k) => k !== 'starseed' && (g.state.inv[k] || 0) > (inv0[k] || 0));
+      const div = document.createElement('div');
+      g.ui.journal._bag(div);
+      const html = div.innerHTML;
+      const inBag = gained.filter((k) => { const n = (window.__itemName || ((x) => x))(k); return html.includes(n); });
+      return { cats: [...cats].length, catList: [...cats].join(','), picked, basket, paid, spent: Math.round((money0 - (g.state.inv.starseed || 0)) * 100) / 100, gained, bagHas: gained.map((k) => html.includes(`data-use="${k}"`) || html.includes(k)).filter(Boolean).length, bagItems: (html.match(/class="bag-item"/g) || []).length, inBag: inBag.length };
+    });
+  }
   // 모아에게 건물 안 길 묻기 + 안내 길
   const moa = await page.evaluate(() => {
     const g = SEREN.game, M = g.moaAI;

@@ -176,6 +176,8 @@ src/
 - **손에 든 것**: `avatar.setHeld({kind})`(바구니·상자·쟁반·결정·시료·책) · `avatar.act(pose, 초)` · 짐을 들면 `player.carrySlow`.
 - **저장**: `state.work`(일자리·지원·교대·과제 수·호텔 방) · `state.bld[uid]`(연구 진척·내 집 칸·맡긴 물건·면접 자리) · `state.econ`(구역 살림·살아 있는 건물의 재고·진열·금고) · `state.inside`(건물 안에서 저장한 층·자리 → 불러오면 다시 들어간다).
 - **공중다리**: 바깥 다리(`city.bridgeList`, 탑 기록 `r.bridges = [{bi, y, ux, uz}]`)의 바닥 높이에 `stackSlots(opt.cuts)` 가 층 바닥을 맞추고, 그 층(`F.bridges`)에 `layout` 이 「공중다리 문」(`L.ents.bridge`, 문 `kind 'bridge'`, b −3)과 승강기 홀까지 통로를 낸다. 드나들기는 `interiors.target` 의 `bridge`(안 → 다리) · `bridgein`(다리 끝 → 그 탑, `city.bridgeAt`·`interiors.bridgeEntry`). 시험: `node tools/bridge-flow.mjs [개수] [shots]`.
+- **걸어서 닿는가 (한 규칙)**: 오가는 공간(`catalog.flowRoom`: 복도·승강기 홀·로비·넓은 홀)끼리는 벽이 없고, 사람이 설 수 있는 곳은 「비어 있는 1 m 창」(0.5 m 칸 2×2, 벽을 넘지 않는)에 드는 칸 — `furnish._reach`·`_keepsFlow`(가구 놓기), `nav.navGrid`(사람·안내선), `interior-gen`(검사)이 모두 같은 규칙을 쓴다. 방은 한 덩어리(`layout` 5a), 심은 층을 가르지 않는 자리(`core.planCore` 의 splits).
+- **물건·살림**: 진열 구역 20가지 `data/goods.CATS` · 물건 `GOODS`(desc·eat) · 공정 `RECIPES` · 공장 줄 `LINES` · 한 사람 하루 몫 `PER_CAPITA`(재료까지) — 물건을 더하면 공정과 공장 줄도 더할 것(`node tools/econ-check.mjs` 가 「다 떨어진 물건」으로 잡는다). 가방·먹기는 `data/venues.itemInfo`.
 - **확인 도구**: `node tools/interior-gen.mjs`(모든 모양×쓰임×크기: 갇힌 방·정문·바깥 부피 밖 칸·승강기 칸·쓰임 차례·저장 왕복·중2층 계단·결정성·가짓수), `node tools/interior-gen.mjs show slab office 30 22 120 [층들]`(층 평면을 글자로), `node tools/ops-flow.mjs [쓰임들|all] [shots] [map]`(한 번 불러와 쓰임마다 들어가 시설·사람·일자리·과제·모아·지도·저장 확인 + 별씨 합), `node tools/indoor.mjs 이름 '{"pid":"market"}' '[스크립트…]'`(한 건물 스크린샷). 페이지 안: `SEREN.game.interiors.debugView('plan'|'room'|'off')`.
 
 ## 지켜야 할 것

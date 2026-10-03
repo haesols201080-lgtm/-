@@ -1,3 +1,4 @@
+import { GOODS, CATS } from './goods.js';
 // 도시 건물이 실제로 하는 일: 물건·음식·효과·전시·기록·일거리.
 // (game/venues.js 가 읽는다. 건물 쓰임은 game/interiors.js 의 PURPOSE, 쓰임마다의 시설은 venues.js 의 BUILD)
 
@@ -18,6 +19,26 @@ export const ITEMS = {
   seedstar: { name: '별씨', tag: '재료', desc: '별비가 내린 밤과 생명나무에서 줍는 빛 씨앗. 온실에 심으면 빛꽃이 피고, 장인 온이 녹여 장비를 손본다.', icon: '✶' },
 };
 export const BAG_ORDER = ['starseed', 'seedstar', 'meal', 'tea', 'cookie', 'fruit', 'flower', 'trinket', 'lantern', 'mapshard', 'book', 'shard'];
+/** 도시의 물건(GOODS) 모양 → 가방 아이콘 */
+const SHAPE_ICON = { round: '●', box: '▣', jar: '◍', bottle: '◊', flat: '▭', sack: '◒', crystal: '◆', flower: '✿' };
+/**
+ * 가방·장터·가게가 보는 물건 정보 하나로: 처음부터 있던 것(ITEMS)과 도시의 물건(GOODS, 진열 구역 20가지).
+ * 반환: { name, tag, desc, price, use, buff, icon } 또는 null
+ */
+export function itemInfo(id) {
+  if (ITEMS[id]) return ITEMS[id];
+  const G = GOODS[id];
+  if (!G) return null;
+  return { name: G.name, tag: CATS[G.cat] || (G.cat === 'raw' ? '원료' : '물건'), desc: G.desc || '', price: G.price, use: G.eat ? 'eat' : null, buff: G.eat || null, icon: SHAPE_ICON[G.shape] || '·', cat: G.cat };
+}
+/** 가방에 보이는 차례: 처음 것들 → 진열 구역 차례대로 도시의 물건 */
+export function bagOrder(inv) {
+  const out = BAG_ORDER.slice();
+  const catIdx = Object.keys(CATS);
+  const rest = Object.keys(inv || {}).filter((k) => !out.includes(k) && GOODS[k] && (inv[k] || 0) > 0);
+  rest.sort((a, b) => (catIdx.indexOf(GOODS[a].cat) + 100 * (GOODS[a].cat === 'raw')) - (catIdx.indexOf(GOODS[b].cat) + 100 * (GOODS[b].cat === 'raw')) || a.localeCompare(b));
+  return out.concat(rest);
+}
 
 // ── 몸의 기운 (먹거나 치유받으면 잠깐) ─────────────
 export const BUFFS = {

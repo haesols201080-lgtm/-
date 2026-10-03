@@ -1020,6 +1020,7 @@ export class Game {
     markers.push(...this.services.compassMarkers(bearing));
     markers.push(...this.guide.compassMarkers(bearing));
     this.ui.updateCompass(this.rig.yaw, markers);
+    this.ui.updateWallet(this.state.inv.starseed || 0);
     this.ui.altimeter(this.interiors.inPocket ? 0 : p.pos.y, p.state === 'glide' ? p.glideSpeed : p.vel.length());
     const t0 = tg[0];
     if (t0) {

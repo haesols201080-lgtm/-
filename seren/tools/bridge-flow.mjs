@@ -24,7 +24,7 @@ const total = await page.evaluate(() => SEREN.game.city.bridgeList.length);
 console.log(`공중다리 ${total}개`);
 const waitIn = () => page.waitForFunction(() => SEREN.game.interiors.inPocket && !SEREN.game.interiors._busy, null, { timeout: 90000, polling: 300 });
 const waitOut = () => page.waitForFunction(() => !SEREN.game.interiors.inPocket && !SEREN.game.interiors._busy, null, { timeout: 90000, polling: 300 });
-const shot = async (name) => { if (shots) await page.screenshot({ path: join(root, 'shots', `${name}.png`) }); };
+const shot = async (name) => { if (shots) await page.screenshot({ path: join(root, 'shots', `${name}.png`), timeout: 300000 }); };
 let fail = 0;
 for (let k = 0; k < Math.min(N, total); k++) {
   const bi = Math.floor((k * total) / Math.max(1, N));

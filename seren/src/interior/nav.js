@@ -1,7 +1,7 @@
 // 실내 길찾기 (v0.9): 층마다 0.5 m 칸의 걸을 수 있는 땅(벽·가구·심을 뺀) + 칸 사이 벽 + 층 사이 이음(계단·승강기).
 //  · 사람(agents)·플레이어 안내선·지도 길·모아의 「가는 길」이 모두 이것을 쓴다 — 지도와 실제 공간이 같은 자료에서 나온다.
 //  · 층을 건너는 길: 이 층 → (계단·승강기 문 앞) → 그 층의 같은 이음 문 앞 → 목적지. 이음은 건물 짜임(B.links)에 있다.
-import { FIX } from './catalog.js';
+import { FIX, flowRoom } from './catalog.js';
 
 const S = 2;
 const D8 = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [1, -1, 1.414], [-1, 1, 1.414], [-1, -1, 1.414]];
@@ -20,12 +20,12 @@ export function navGrid(B, L, fix) {
     const i = c % L.gw, j = (c / L.gw) | 0;
     for (let b = 0; b < S; b++) for (let a = 0; a < S; a++) ok[(j * S + b) * gw + i * S + a] = 1;
   }
-  // 가구 (0.2 m 여유)
+  // 가구: 가구 놓기(furnish)와 같은 자리 (0.5 m 칸에 걸치면 막힘)
   for (const q of fix) {
     const f = FIX[q.t];
     if (!f || f.walk) continue;
-    const odd = q.rot % 2 === 1, W = (odd ? q.d : q.w) + 0.3, D = (odd ? q.w : q.d) + 0.3;
-    const a0 = Math.floor((q.x - W / 2 - ox) * S), a1 = Math.floor((q.x + W / 2 - ox) * S - 1e-6), b0 = Math.floor((q.z - D / 2 - oz) * S), b1 = Math.floor((q.z + D / 2 - oz) * S - 1e-6);
+    const odd = q.rot % 2 === 1, W = odd ? q.d : q.w, D = odd ? q.w : q.d;
+    const a0 = Math.floor((q.x - W / 2 + 0.01 - ox) * S), a1 = Math.floor((q.x + W / 2 - 0.01 - ox) * S), b0 = Math.floor((q.z - D / 2 + 0.01 - oz) * S), b1 = Math.floor((q.z + D / 2 - 0.01 - oz) * S);
     for (let b = Math.max(0, b0); b <= Math.min(gh - 1, b1); b++) for (let a = Math.max(0, a0); a <= Math.min(gw - 1, a1); a++) ok[b * gw + a] = 0;
   }
   // 벽: 1 m 칸 사이의 벽 모서리 (문·열린 곳은 통한다)
@@ -36,10 +36,24 @@ export function navGrid(B, L, fix) {
     for (let o = o0; o <= o1; o++) { const ci = i + (dj ? o : 0), cj = j + (di ? o : 0); open.add(di ? `v${di > 0 ? ci + 1 : ci},${cj}` : `h${ci},${dj > 0 ? cj + 1 : cj}`); }
   }
   const wallV = new Uint8Array((L.gw + 1) * L.gh), wallH = new Uint8Array(L.gw * (L.gh + 1));
+  const flow = rooms.map(flowRoom);
+  const walled = (r, s) => r && s && r !== s && !(flow[r - 1] && flow[s - 1]); // 복도·홀끼리는 벽이 없다 (render.partitions 와 같은 규칙)
   for (let j = 0; j < L.gh; j++) for (let i = 0; i < L.gw; i++) {
     const c = j * L.gw + i, r = L.room[c];
-    if (i + 1 < L.gw) { const e = c + 1, s = L.room[e]; if (r && s && r !== s && !open.has(`v${i + 1},${j}`)) wallV[j * (L.gw + 1) + i + 1] = 1; }
-    if (j + 1 < L.gh) { const e = c + L.gw, s = L.room[e]; if (r && s && r !== s && !open.has(`h${i},${j + 1}`)) wallH[(j + 1) * L.gw + i] = 1; }
+    if (i + 1 < L.gw) { const e = c + 1, s = L.room[e]; if (walled(r, s) && !open.has(`v${i + 1},${j}`)) wallV[j * (L.gw + 1) + i + 1] = 1; }
+    if (j + 1 < L.gh) { const e = c + L.gw, s = L.room[e]; if (walled(r, s) && !open.has(`h${i},${j + 1}`)) wallH[(j + 1) * L.gw + i] = 1; }
+  }
+  // 사람(반지름 0.35 m)이 설 수 있는 곳: 비어 있는 1 m 창(0.5 m 칸 2×2, 벽을 넘지 않는)에 드는 칸만 — 가구 놓기의 길 검사와 같은 규칙
+  const free = ok.slice();
+  ok.fill(0);
+  const cw = L.gw;
+  for (let b = 0; b + 1 < gh; b++) for (let a = 0; a + 1 < gw; a++) {
+    const k = b * gw + a;
+    if (!free[k] || !free[k + 1] || !free[k + gw] || !free[k + gw + 1]) continue;
+    const ci0 = a >> 1, ci1 = (a + 1) >> 1, cj0 = b >> 1, cj1 = (b + 1) >> 1;
+    if (ci0 !== ci1 && (wallV[cj0 * (cw + 1) + ci1] || wallV[cj1 * (cw + 1) + ci1])) continue;
+    if (cj0 !== cj1 && (wallH[cj1 * cw + ci0] || wallH[cj1 * cw + ci1])) continue;
+    ok[k] = ok[k + 1] = ok[k + gw] = ok[k + gw + 1] = 1;
   }
   return { gw, gh, ok, ox, oz, wallV, wallH, cgw: L.gw };
 }
