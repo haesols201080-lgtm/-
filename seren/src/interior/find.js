@@ -24,8 +24,14 @@ export function exitSpot(B, L, k = 'main') {
 export function mezzSpot(B, L, top) {
   const m = L.mstair;
   if (!m) return null;
-  const gx = B.G.ox + (m.i0 + m.i1 + 1) / 2;
-  return top ? [gx, B.G.oz + m.jTop - 0.6] : [gx, B.G.oz + m.jBot + 1.6];
+  const { ox, oz } = B.G;
+  if (m.axis === 'x') {
+    if (top) return [ox + (m.i0 + m.i1 + 1) / 2, oz + m.J + 0.4];
+    const ib = m.run0 + m.sx * (m.n - 1);
+    return [ox + ib + 0.5 + m.sx * 1.4, oz + m.J + 2];
+  }
+  const gx = ox + (m.i0 + m.i1 + 1) / 2;
+  return top ? [gx, oz + m.J + 0.4] : [gx, oz + m.jBot + 1.6];
 }
 
 const LINKNAME = { stair: '계단', spiral: '나선 계단', lift: '승강기', cargo: '화물 승강기', open: '중2층 계단', roof: '옥상 계단' };

@@ -108,7 +108,7 @@ if (!cmd || cmd === 'all') {
   const KINDS = Object.entries(SPEC).filter(([, S]) => S.enter && !S.fixed).map(([k]) => k);
   const USES = ['home', 'office', 'market', 'cafe', 'school', 'heal', 'library', 'museum', 'hall', 'factory', 'depot', 'lab', 'terminal', 'garden', 'plant', 'hotel', 'admin', 'farm'];
   const SIZES = [[9, 9, 9], [14, 12, 22], [20, 16, 60], [28, 22, 140], [40, 16, 16]];
-  let n = 0, fail = 0, floors = 0, rooms = 0, ms = 0;
+  let n = 0, fail = 0, floors = 0, rooms = 0, ms = 0, mz = 0;
   const problems = [];
   for (const kind of KINDS) for (const use of USES) for (const [hw, hd, h] of SIZES) {
     const S = SPEC[kind];
@@ -134,6 +134,9 @@ if (!cmd || cmd === 'all') {
         if (lost.length) problems.push(`${kind}/${use}/${hw}x${h}: ${F.label}층 갇힌 방 ${lost.map((R) => R.name + R.n).join(',')}`);
         if (!roots.length) problems.push(`${kind}/${use}/${hw}x${h}: ${F.label}층 복도·홀 없음`);
         if (F.i === B.ground && !L.ents.main) problems.push(`${kind}/${use}/${hw}x${h}: 정문 없음`);
+        // 중2층이 있으면 홀에서 오르는 계단이 있어야 한다
+        const up = B.floors[F.i + 1];
+        if (up && up.mezz && !up.dead && !F.mezz) { if (!L.mstair) problems.push(`${kind}/${use}/${hw}x${h}: 중2층 계단 없음`); else mz++; }
       }
       // 같은 건물은 늘 같은 짜임
       const B2 = makeBuilding(fakeRec(kind, use, hw, hd, h, { x: 1000 + (n - 1) * 37, z: -2000 + (n - 1) * 11 }), ctxFor());
@@ -142,7 +145,7 @@ if (!cmd || cmd === 'all') {
       ms += performance.now() - t0;
     } catch (e) { fail++; problems.push(`${kind}/${use}/${hw}x${h}: 오류 ${e.message}\n${e.stack.split('\n').slice(1, 3).join('\n')}`); }
   }
-  console.log(`건물 ${n} · 실패 ${fail} · 층 ${floors} · 방 ${rooms} · 평균 ${(ms / n).toFixed(1)} ms`);
+  console.log(`건물 ${n} · 실패 ${fail} · 층 ${floors} · 방 ${rooms} · 평균 ${(ms / n).toFixed(1)} ms · 중2층 계단 ${mz}`);
   const uniq = [...new Set(problems)];
   console.log(`문제 ${uniq.length}`);
   console.log(uniq.slice(0, 60).join('\n'));

@@ -39,7 +39,7 @@ export function unrle(s, n, Type = Uint8Array) {
 function packB(B) {
   const N = B.G.gw * B.G.gh;
   return {
-    v: B.v, uid: B.uid, seed: B.seed, kind: B.kind, use: B.use, pid: B.pid, size: B.size, gfa: B.gfa, G: B.G, theta: B.theta, ground: B.ground,
+    v: B.v, uid: B.uid, seed: B.seed, kind: B.kind, use: B.use, pid: B.pid, size: B.size, gfa: B.gfa, special: B.special, G: B.G, theta: B.theta, ground: B.ground,
     zones: B.zones, orgs: B.orgs, mainOrg: B.mainOrg, roof: B.roof, atrium: B.atrium, podium: B.podium, door: B.door, module: B.module, bay: B.bay, volume: B.volume,
     core: B.core, links: B.links, atriumCells: B.atriumCells ? rle(Uint8Array.from({ length: N }, (_, c) => (B.atriumCells.includes(c) ? 1 : 0))) : null,
     floors: B.floors.map((F) => ({ ...F, mask: rle(F.mask), terrace: F.terrace ? { ...F.terrace, mask: rle(F.terrace.mask) } : null })),
@@ -55,7 +55,7 @@ function unpackB(P, r) {
 }
 function packL(L, fix) {
   return {
-    i: L.i, use: L.use, gw: L.gw, gh: L.gh, room: rle(L.room), void: rle(L.void), ents: L.ents, lifthall: L.lifthall, boh: L.boh, galleries: L.galleries, mezzWalk: L.mezzWalk, org: L.org, closed: L.closed,
+    i: L.i, use: L.use, gw: L.gw, gh: L.gh, room: rle(L.room), void: rle(L.void), ents: L.ents, lifthall: L.lifthall, boh: L.boh, galleries: L.galleries, mezzWalk: L.mezzWalk, mstair: L.mstair, org: L.org, closed: L.closed,
     rooms: L.rooms, doors: L.doors,
     fix: fix.map((q) => { const o = { ...q }; delete o.accK; return o; }),
   };
@@ -82,7 +82,8 @@ export class PlanStore {
     const uid = uidOf(r);
     let e = this.mem.get(uid);
     if (e) return e.B;
-    const d = this.disk[uid];
+    let d = this.disk[uid];
+    if (d && d.gen !== GEN_VERSION) { delete this.disk[uid]; d = null; this._dirty = true; } // 생성 규칙이 바뀌면 다시 (움직이는 상태는 state.bld·econ 에 따로 있다)
     let B = null;
     if (d && d.B) { try { B = unpackB(d.B, r); } catch (err) { console.warn('[bld] 저장된 구조를 못 읽음', uid, err); B = null; } }
     if (!B) {

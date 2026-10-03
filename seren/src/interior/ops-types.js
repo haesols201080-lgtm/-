@@ -129,15 +129,16 @@ const mart = {
     ui(ops).serviceCard('하역장', d.length ? `들어온 짐 ${d.length}` : '들어온 짐 없음', `물류 창고에 주문한 짐: ${ord.map((o) => `${gname(o.g)} ${o.n}`).join(', ') || '없음'}`, d.map((c) => ({ label: `${gname(c.g)} × ${c.n}`, sub: '하역 담당이 창고로 옮긴다', disabled: true })));
   },
   /** 계산원으로 손님 받기: 손님 바구니의 물건을 하나씩 빛판에 (박자 맞추기) */
-  cashier(ops, T, F, out) {
-    const q = ops.agents.list.find((a) => a.data.atCheckout === F.id && a.basket);
-    if (!q) { toast(ops, '줄 선 손님이 없어요. 잠깐 기다려요', 'muted'); return; }
+  cashier(ops, T, F, out, fin) {
+    const q = ops.agents.list.find((a) => a.data.atCheckout === F.id && a.basket && a.basket.length && !a.data.served);
+    if (!q) { toast(ops, '줄 선 손님이 없어요. 손님이 바구니를 들고 오면 E', 'muted'); return; }
     const V = ops.game.venues;
     const n = q.basket.length;
     V._timing('계산대 · 물건 세기', `손님 바구니에 ${n}개. 빛 표시가 가운데 칸에 들어올 때 E — 하나씩 셉니다.`, Math.min(6, n), (hits) => {
       q.data.served = true;
       ops.taskDone(T);
       toast(ops, `${n}개 계산 · 정확히 ${hits}/${Math.min(6, n)}`, 'item');
+      if (fin) fin();
     });
   },
   people(ops, T, out, i) {
@@ -243,7 +244,10 @@ const mart = {
           { label: `진열대에 채우기 (${CAT_NAME[low.st.cat] || ''})`, short: '채우기', at: () => low.F, do: () => { const c = ops.dropCarry(); if (c) low.st.n += c.n; ops.dirty(); ops.taskDone(T); ops.game.avatar && ops.game.avatar.act && ops.game.avatar.act('stock', 1.6); toast(ops, `${gname(low.st.g)} ${c ? c.n : 0}개를 채웠다`, 'item'); return true; } },
         ], next: () => roleOf('mart', 'stocker').next(ops, T) };
       } },
-    cashier: { title: '계산원', wage: 1.5, hours: [0.32, 0.7], desc: '계산대에서 손님 바구니의 물건을 세고 값을 받는다', next: () => null },
+    cashier: { title: '계산원', wage: 1.5, hours: [0.32, 0.7], desc: '계산대에서 손님 바구니의 물건을 세고 값을 받는다',
+      next(ops, T) {
+        return { title: '계산대 지키기', steps: [{ label: '계산대에서 줄 선 손님 받기', short: '계산', at: (o) => tagged(o, 'checkout').find((F) => F.t === 'checkout'), do: (F, fin) => { const out = ops.cur.indoor.built.get(ops.cur.indoor.cur); mart.cashier(ops, T, F, out, fin); return false; } }], next: () => roleOf('mart', 'cashier').next(ops, T) };
+      } },
     hauler: { title: '하역 담당', wage: 1.7, hours: [0.28, 0.6], desc: '하역장에 들어온 짐을 창고 선반으로 옮긴다',
       next(ops, T) {
         const d = T.node.dock || [];
@@ -554,7 +558,7 @@ const depot = {
     }
   },
   act(ops, T, F, out) {
-    if (F.tag === 'sort') return { label: '분류 띠 · 짐 나누기', short: '분류', use: () => { const job = ops.myJobHere(); if (!(job && ops.S.shift)) { toast(ops, '분류는 이 창고 일꾼이 해요 — 단말의 「일자리」', 'muted'); return; } ops.game.venues.sortWork(); ops.taskDone(T); } };
+    if (F.tag === 'sort') return { label: '분류 띠 · 짐 나누기', short: '분류', use: () => { const job = ops.myJobHere(); if (!(job && ops.S.shift)) { toast(ops, '분류는 이 창고 일꾼이 해요 — 단말의 「일자리」', 'muted'); return; } ops.game.venues.payless = performance.now() + 120000; ops.game.venues.sortWork(); ops.taskDone(T); } };
     if (F.tag === 'stock') return { label: () => { const b = (T.node.bins || []).find((q) => q.key.startsWith(F.id + '/')); return `높은 짐 선반 · ${b && b.g ? gname(b.g) : '빈 칸'}`; }, short: '선반', use: () => depot.rackCard(ops, T, F) };
     if (F.tag === 'terminal') return { label: '배차 단말 · 짐 흐름', short: '배차', use: () => ops.apps.open('dispatch', { T, F }) };
     if (F.tag === 'drone') return { label: '짐 드론 자리', short: '드론', use: () => toast(ops, '짐 드론이 가게로 날아가는 자리 — 피킹한 짐을 여기 내려놓아요') };
@@ -574,7 +578,7 @@ const depot = {
     for (let k = 0; k < Math.min(3, racks.length); k++) spawn(ops, { ...staffSpec(ops, out, T, 'carry', '피킹 담당', racks[k]), key: `${T.uid}:${i}:pick${k}` }, [], (a) => { const R = pick(racks), P = pads.length ? pick(pads) : null; return [{ go: AT(R) }, { face: yawTo(R), act: 'reach', t: 1.4, fx: () => { a.carry = { g: 'box' }; } }, ...(P ? [{ go: AT(P) }, { face: yawTo(P), act: 'stock', t: 1.2, fx: () => { a.carry = null; } }] : [])]; });
   },
   roles: {
-    sorter: { title: '분류원', wage: 1.6, hours: [0.27, 0.6], desc: '들어온 짐의 빛 띠를 보고 구역별 칸으로', next(ops, T) { return { title: '짐 나누기', steps: [{ label: '분류 띠에서 짐 나누기', short: '분류', at: (o) => tagged(o, 'sort')[0], do: () => { ops.game.venues.sortWork(); ops.taskDone(T); return true; } }] }; } },
+    sorter: { title: '분류원', wage: 1.6, hours: [0.27, 0.6], desc: '들어온 짐의 빛 띠를 보고 구역별 칸으로', next(ops, T) { return { title: '짐 나누기', steps: [{ label: '분류 띠에서 짐 나누기', short: '분류', at: (o) => tagged(o, 'sort')[0], do: () => { ops.game.venues.payless = performance.now() + 120000; ops.game.venues.sortWork(); ops.taskDone(T); return true; } }] }; } },
     picker: { title: '피킹 담당', wage: 1.7, hours: [0.3, 0.65], desc: '가게 주문서대로 선반에서 골라 드론 자리로',
       next(ops, T) {
         const out = ops.cur.indoor.built.get(ops.cur.indoor.cur);
@@ -703,7 +707,7 @@ const lab = {
     const L = lab.st(ops);
     setTimeout(() => {
       const ok = (ops.game.state.inv.shard || 0) > before;
-      if (ok) ops.game.state.inv.shard = before; // 실험 보상 대신 측정 자료로
+      if (ok) { ops.game.state.inv.shard = before; ops.econ.goodsIn('shard', 1); } // 실험 보상 대신 측정 자료로 (결정 조각은 재고로 돌려놓는다)
       L.data += prepared ? 2 : 1;
       L.last = P.id;
       toast(ops, `측정 자료 +${prepared ? 2 : 1} · 분석 단말에서 풀어요`, 'item');
@@ -1035,11 +1039,23 @@ const hotel = {
     const rooms = pl.L.rooms.filter((R) => R.type === 'guestroom' && R.n);
     if (!rooms.length) { toast(ops, '빈 방이 없어요', 'muted'); return; }
     const R = pick(rooms);
-    ui(ops).serviceCard(T.org ? T.org.name : '호텔', '방 잡기', `${F.label}층 ${R.id + 1}호 · 하룻밤 별씨 5 · 잠 고치에서 쉬면 아침이 되고 저장돼요.`, [{ label: '방 잡기 · 별씨 5', primary: true, disabled: (ops.game.state.inv.starseed || 0) < 5, onClick: () => { if (ops.econ.transfer('player', `n:${T.uid}`, 5, '호텔 방') < 5) return; ops.S.hotel = { uid: ops.cur.uid, floor: F.i, floorLabel: F.label, roomId: R.id, room: `${F.label}층 ${R.id + 1}호`, label: `${F.label}층 ${R.id + 1}호` }; toast(ops, `${F.label}층 ${R.id + 1}호 · 지도에 표시했어요`, 'item'); ops.guide && ops.guide.toRoom(F.i, R.id); } }]);
+    ui(ops).serviceCard(T.org ? T.org.name : '호텔', '방 잡기', `${F.label}층 ${R.id + 1}호 · 하룻밤 별씨 5 · 잠 고치에서 쉬면 아침이 되고 저장돼요.`, [{ label: '방 잡기 · 별씨 5', primary: true, disabled: (ops.game.state.inv.starseed || 0) < 5, onClick: () => { if (ops.econ.transfer('player', `n:${T.uid}`, 5, '호텔 방') < 5) return; ops.S.hotel = { uid: ops.cur.uid, x: ops.cur.r.door ? ops.cur.r.door.x : ops.cur.r.x, z: ops.cur.r.door ? ops.cur.r.door.z : ops.cur.r.z, bname: ops.game.interiors.title(ops.cur.r), floor: F.i, floorLabel: F.label, roomId: R.id, room: `${F.label}층 ${R.id + 1}호`, label: `${F.label}층 ${R.id + 1}호` }; toast(ops, `${F.label}층 ${R.id + 1}호 · 지도에 표시했어요`, 'item'); ops.guide && ops.guide.toRoom(F.i, R.id); } }]);
   },
   people(ops, T, out, i) {
     const desk = tagged(out, 'reception')[0];
     if (desk) spawn(ops, staffSpec(ops, out, T, 'clerk', '안내원', desk), loopAt(desk, 'talk', 8, true)(), () => loopAt(desk, 'type', 8, true)());
+    // 로비: 짐을 든 손님이 와서 안내대에서 방을 받고 승강기로 · 소파에서 기다리는 이
+    if (desk && out.i === ops.cur.B.ground) {
+      const sofas = out.fix.filter((F) => ['sofa', 'armchair', 'bench'].includes(F.t));
+      const hallR = out.L.lifthall != null ? out.L.rooms[out.L.lifthall] : null;
+      for (let k = 0; k < 5; k++) {
+        const [gx, gz] = arrival(ops, out);
+        const plan = [{ wait: k * 6 + Math.random() * 3, fx: (a) => { if (k % 2 === 0) a.carry = { g: 'box' }; } }, { go: AT(desk) }, { face: yawTo(desk), act: 'talk', t: 3 }];
+        if (sofas.length && k % 2) { const S = pick(sofas); plan.push({ go: AT(S) }, { act: 'sit', t: 10 + Math.random() * 10 }); }
+        if (hallR) plan.push({ go: [ops.cur.B.G.ox + hallR.cx + 0.5, ops.cur.B.G.oz + hallR.cz + 0.5] }, { act: 'wait', t: 3 });
+        spawn(ops, { key: `${T.uid}:${i}:arr${k}`, role: 'guest', title: '묵을 손님', floor: i, gx, gz }, plan);
+      }
+    }
     const sleeps = tagged(out, 'sleep');
     const night = tod(ops) > 0.88 || tod(ops) < 0.27;
     for (const S of sleeps.slice(0, 10)) if (Math.random() < (night ? 0.7 : 0.15)) spawn(ops, { key: `${T.uid}:${i}:g${S.id}`, role: 'sleep', title: '손님', floor: i, gx: S.x, gz: S.z }, [{ act: 'lie', t: 120 }], () => [{ act: 'lie', t: 120 }]);

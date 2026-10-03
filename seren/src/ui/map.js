@@ -256,6 +256,16 @@ export class MapView {
     this._timer = setInterval(() => this.draw(), 500);
   }
 
+  /** 건물 안에서 연 도시 지도: 건물 안 지도로 돌아가는 단추 */
+  addInside(fn) {
+    const t = this.canvas && this.canvas.parentElement.querySelector('.map-tools');
+    if (!t) return;
+    const b = document.createElement('button');
+    b.className = 'btn'; b.textContent = '건물 안 지도';
+    b.addEventListener('click', fn);
+    t.prepend(b);
+  }
+
   detach() {
     if (this._resize) removeEventListener('resize', this._resize);
     clearInterval(this._timer);
@@ -377,6 +387,20 @@ export class MapView {
         ctx.restore();
         if (this.zoom > 3.5) { ctx.fillStyle = 'rgba(243,239,230,0.85)'; ctx.fillText(M.name, sx, sy - 9 * dpr); }
       }
+    }
+    // 일자리·면접·묵는 곳 (v0.9: 건물 속 일)
+    {
+      const W = g.state.work || { jobs: [], apps: [] };
+      const mark = (x, z, col, ch, label) => {
+        const [sx, sy] = this._toScreen(x, z);
+        ctx.fillStyle = 'rgba(12,13,34,0.8)'; ctx.strokeStyle = col; ctx.lineWidth = 1.6 * dpr;
+        ctx.beginPath(); ctx.arc(sx, sy, 8 * dpr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = col; ctx.font = `bold ${10 * dpr}px sans-serif`; ctx.fillText(ch, sx, sy + 3.5 * dpr);
+        if (this.zoom > 3) { ctx.fillStyle = 'rgba(243,239,230,0.85)'; ctx.font = `${10 * dpr}px sans-serif`; ctx.fillText(label, sx, sy - 12 * dpr); }
+      };
+      for (const j of W.jobs) if (j.x != null) mark(j.x, j.z, '#ff9fd0', '일', `${j.title} · ${j.bname}`);
+      for (const a of W.apps) if (a.status === 'interview' && a.x != null) mark(a.x, a.z, '#ffd27a', '면', `면접 · ${a.bname}`);
+      if (W.hotel && W.hotel.x != null) mark(W.hotel.x, W.hotel.z, '#b9a6ff', '☾', `${W.hotel.bname || ''} ${W.hotel.room}`);
     }
     // 목표
     for (const t of g.quests.targets()) {

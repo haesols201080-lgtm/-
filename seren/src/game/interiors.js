@@ -202,6 +202,12 @@ export class Interiors {
     const g = this.game, ind = this.cur && this.cur.indoor;
     if (!ind) return;
     ind.setFloor(i);
+    // 그 자리가 이 층의 걸을 수 있는 칸이 아니면 (구조가 바뀌었거나 가구 속) 승강기 홀로
+    if (!ind.inside(i, x, z)) {
+      const out = ind.built.get(i), L = out && out.L;
+      const R = L && (L.lifthall != null ? L.rooms[L.lifthall] : L.rooms.find((q) => q.circ && q.n) || L.rooms.find((q) => q.n));
+      if (R) [x, z] = ind.world(ind.B.G.ox + R.cx + 0.5, ind.B.G.oz + R.cz + 0.5);
+    }
     g.player.teleport(x, ind.yOf(i) + 0.3, z);
     if (yaw != null) { g.player.yaw = yaw; g.rig.yaw = yaw + Math.PI; }
     g.rig._init = false;
@@ -243,7 +249,8 @@ export class Interiors {
     this._load(() => {
       this.open(r);
       const cur = this.cur;
-      if (o.floor != null && o.at) this.placeAt(o.floor, o.at[0], o.at[1], o.yaw);
+      const Fo = o.floor != null ? cur.B.floors[o.floor] : null;
+      if (Fo && Fo.reach && !Fo.dead && o.at) this.placeAt(o.floor, o.at[0], o.at[1], o.yaw);
       else this._placeIn(cur);
       this._pocket(true);
       if (g.ops) g.ops.entered(cur);
@@ -253,7 +260,8 @@ export class Interiors {
       const B = cur.B;
       const above = B.floors.filter((F) => !F.below && !F.mezz).length, below = B.floors.filter((F) => F.below).length;
       const uses = [...new Set(B.zones.map((Z) => FUSE[Z.use] && FUSE[Z.use].name).filter(Boolean))].slice(0, 4).join('·');
-      g.ui.regionTitle(mine ? '우리 집' : this.title(r), `지상 ${above}층${below ? ` · 지하 ${below}층` : ''} · ${uses} · ${rm.v === 1 ? '처음 와 본 곳' : `${rm.v}번째 들름`}`, false);
+      const kind = B.special ? `${B.special} 건물 (한 기관이 전체를 쓴다)` : B.orgs.length > 2 ? `복합 건물 · 조직 ${B.orgs.length}` : uses;
+      g.ui.regionTitle(mine ? '우리 집' : this.title(r), `지상 ${above}층${below ? ` · 지하 ${below}층` : ''} · ${kind}${B.special || B.orgs.length > 2 ? ` · ${uses}` : ''} · ${rm.v === 1 ? '처음 와 본 곳' : `${rm.v}번째 들름`}`, false);
       if (mine && !g.state.flags.homeVisit) { g.state.flags.moaIndoor = true; g.setFlag('homeVisit'); setTimeout(() => g.ui.moa('…여기가 우리 집이에요. 이웃들이 벌써 문패에 우리 이름 노래를 새겨 놨어요. 지친 날엔 여기서 쉬어요.'), 1600); }
       if (!g.state.flags.moaIndoor) { g.state.flags.moaIndoor = true; setTimeout(() => g.ui.moa('안으로 들어왔어요! 층마다 안내판이 있고, 지도(M)를 열면 이 건물의 층 지도가 나와요. 나갈 때는 들어온 문 앞에서 E.'), 1600); }
       if (g.tips) g.tips.show('indoor');

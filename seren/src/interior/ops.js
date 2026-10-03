@@ -67,7 +67,7 @@ export class Ops {
     this._floorEntered(cur.indoor.cur);
     this.apps.onEnter(cur);
   }
-  floorChanged(i) { this._floorEntered(i); }
+  floorChanged(i) { this._floorEntered(i); if (this.task) this._guideTo(); }
   close(cur) {
     const g = this.game;
     // 계산하지 않은 바구니는 진열대로 돌려놓는다
@@ -305,7 +305,7 @@ export class Ops {
   cancelTask() { if (this.carry) this.dropCarry(true); this.task = null; this.guide && this.guide.clear(); }
   taskTarget(gx, gz, out) {
     const tk = this.task, st = tk.steps[tk.k];
-    if (!st) return null;
+    if (!st || (tk.floor != null && tk.floor !== out.i)) return null;
     const F = st.at(out);
     if (!F) return null;
     const d = Math.min(Math.hypot(gx - F.ax, gz - F.az), Math.hypot(gx - F.x, gz - F.z) - Math.max(F.w, F.d) / 2 - 0.4);
@@ -332,9 +332,20 @@ export class Ops {
   _guideTo() {
     const tk = this.task;
     if (!tk || !this.cur || !this.guide) return;
-    const out = this.cur.indoor.built.get(this.cur.indoor.cur);
-    const F = out && tk.steps[tk.k] && tk.steps[tk.k].at(out);
-    if (F) this.guide.to({ floor: this.cur.indoor.cur, gx: F.ax, gz: F.az, label: tk.steps[tk.k].label });
+    const ind = this.cur.indoor, st = tk.steps[tk.k];
+    if (!st) return;
+    // 지금 층부터 가까운 층 순서로: 그 단계의 자리(가구)가 있는 층으로 안내 (다른 층이면 계단·승강기부터)
+    const order = [ind.cur, ...this.cur.B.floors.filter((F) => F.reach && !F.dead && F.i !== ind.cur).map((F) => F.i).sort((a, b) => Math.abs(a - ind.cur) - Math.abs(b - ind.cur))].slice(0, 30);
+    for (const i of order) {
+      let out = ind.built.get(i);
+      if (!out) { const pl = ind.plan(i); if (!pl || pl.L.closed) continue; out = { i, fix: pl.fix, L: pl.L, slots: new Map(), T: this.byFloor(i) }; }
+      let F = null;
+      try { F = st.at(out); } catch { F = null; }
+      if (!F) continue;
+      tk.floor = i;
+      this.guide.to({ floor: i, gx: F.ax, gz: F.az, label: st.label });
+      return;
+    }
   }
 
   // ── 교대 (일자리) ───────────────────────────────

@@ -261,6 +261,33 @@ export class Economy {
     if (work && n.staff) this.transfer(me, hh, n.staff * 0.06);
   }
 
+  // ── 플레이어 둘레의 계정으로 (옛 시설·바깥 조작대·부탁·보상이 쓴다) ──
+  here() { const p = this.game.player.pos; return this.zoneOf(p.x, p.z); }
+  /** 플레이어가 낸다 → 그 구역의 회사(firms)·가구(hh)·공공(commons). 모자라면 false (하나도 안 옮김) */
+  charge(n, why = '', to = 'firms') {
+    if ((this.get('player')) < n - 1e-9) return false;
+    const z = this.here();
+    if (!z) { this._add('player', -n); return true; }
+    this.transfer('player', `z:${z}:${to}`, n, why);
+    return true;
+  }
+  /** 플레이어가 받는다 ← 그 구역의 계정 (있는 만큼). 반환: 받은 양 */
+  reward(n, why = '', from = 'commons') {
+    const z = this.here();
+    if (!z) return 0;
+    return this.transfer(`z:${z}:${from}`, 'player', n, why);
+  }
+  /** 물건이 플레이어 가방으로 갈 때: 도시의 물건(GOODS)이면 그 구역 가게·창고 재고에서 (없으면 못 준다). 반환: 준 수 */
+  goodsOut(k, n = 1) {
+    if (!GOODS[k]) return n; // 빌린 책·소포 같은 것은 재고가 아니다
+    const z = this.here();
+    if (!z) return n;
+    const a = this.take(z, 'retail', k, n);
+    return a + (a < n ? this.take(z, 'depot', k, n - a) : 0);
+  }
+  /** 플레이어가 되판 물건 → 그 구역 가게 재고로 */
+  goodsIn(k, n = 1) { const z = this.here(); if (z && GOODS[k]) this.give(z, 'retail', k, n); }
+
   /** 지금 살림 한 줄 (지도·모아·장부 앱) */
   summary(zid) {
     const z = this.S.Z[zid];

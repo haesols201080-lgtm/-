@@ -14,7 +14,7 @@ export function navGrid(B, L, fix) {
   const rooms = L.rooms;
   for (let c = 0; c < L.room.length; c++) {
     const r = L.room[c];
-    if (!r || L.void[c] === 1) continue;
+    if (!r || L.void[c] === 1 || L.void[c] === 3) continue;
     const R = rooms[r - 1];
     if (['lift', 'cargo', 'shaft'].includes(R.type) || R.sealed) continue;
     const i = c % L.gw, j = (c / L.gw) | 0;

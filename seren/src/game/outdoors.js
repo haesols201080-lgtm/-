@@ -519,7 +519,7 @@ export class Outdoors {
           this.fx.push((dt) => { ph += dt; const e = Math.min(1, ph / 3.2); d.position.lerpVectors(A, B, e * e * (3 - 2 * e)); if (e >= 1) { this.group.remove(d); return true; } return false; });
           this.V._learn('share');
           g.setFlag('helpedNeighbor');
-          this.V.inv.starseed = (this.V.inv.starseed || 0) + W.reward; this.V.S.earned += W.reward;
+          const got = g.econ && g.city ? g.econ.reward(W.reward, `부탁 · ${W.who}`, 'hh') : ((this.V.inv.starseed = (this.V.inv.starseed || 0) + W.reward), W.reward); this.V.S.earned += got;
           g.ui.toast(`${W.who}: 「정말 고마워요!」 · 별씨 +${W.reward}`, { kind: 'item' });
           if (Math.random() < 0.25) setTimeout(() => this.V._add('trinket', 1), 900);
         } },

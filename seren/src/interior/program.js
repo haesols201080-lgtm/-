@@ -130,6 +130,100 @@ function decideUses(pid, slots, ctx, rnd) {
     if (N >= 12 && slots[top].n >= 40) uses[top] = rnd() < 0.5 ? 'observation' : 'amenity';
   };
   const wantBase = (gfa > 1800 && N >= 4) || (gfa > 2500 && ['market', 'depot', 'factory', 'museum', 'library', 'heal', 'plant'].includes(pid));
+  // ── 전문 건물: 한 기관이 건물 전체를 쓴다 (실제 시설처럼 층마다 그 기관의 다른 기능) ──
+  const deps = new Array(N).fill(null);
+  if (ctx.special && size !== 'tiny' && size !== 'small' && N >= 2) {
+    let done = true;
+    switch (pid) {
+      case 'heal': { // 종합 치유원: 응급·접수 → 외래 진료 → 검사·영상 → (행정) → 병동 → 회복 정원
+        uses[0] = 'care';
+        const cl = Math.max(1, Math.round(N * 0.22));
+        fill(1, cl, 'clinic');
+        const d = cl + 1;
+        if (d <= top) uses[d] = 'diag';
+        if (N >= 8 && d + 1 < top) uses[d + 1] = 'office';
+        fill(d + 1, top, 'ward');
+        techEvery(d + 2, top);
+        if (N >= 6) uses[top] = 'garden';
+        basements.push('supply');
+        if (gfa > 2500) basements.push('parking');
+        notes.special = '종합 치유원';
+        break;
+      }
+      case 'school': { // 학교 한 채: 체육관·강당(높은 1층) → 급식·도서 → 교실층 (짝수층 과학실·홀수층 노래실)
+        uses[0] = slots[0].h >= 6.5 || N <= 2 ? 'schoolhall' : 'school';
+        if (N >= 3) uses[1] = 'library';
+        fill(1, top, 'school');
+        if (N >= 6) uses[top] = 'schoolhall';
+        notes.special = '학교';
+        break;
+      }
+      case 'office': { // 한 회사의 본사: 로비 → 사원 식당 → 사무 → 회의·교육층 → 사무 → 임원층
+        uses[0] = 'lobby';
+        if (N >= 4) uses[1] = 'food';
+        if (N >= 8) uses[Math.floor((2 + top) / 2)] = 'confer';
+        if (N >= 5) uses[top] = 'exec';
+        fill(1, top, 'office');
+        techEvery(2, top);
+        if (wantBase) basements.push('parking');
+        if (N > 24) basements.push('tech');
+        if (N > 6 && rnd() < 0.5) atrium = { from: 0, to: 1 };
+        notes.special = '본사';
+        break;
+      }
+      case 'lab': { // 연구원 한 곳: 로비 → 연구층 → 회의·교육 → 연구층 → 연구 행정
+        uses[0] = 'lobby';
+        if (N >= 6) uses[Math.floor(N / 2)] = 'confer';
+        if (N >= 4) uses[top] = 'office';
+        fill(1, top, 'research');
+        if (wantBase || N >= 4) basements.push('supply');
+        notes.special = '연구원';
+        break;
+      }
+      case 'market': { // 대형 마트 한 곳: 층마다 다른 매장(식품관 → 생활 → 도구 → 옷·선물), 꼭대기는 같은 회사의 식당가
+        // 매장은 넷까지(식품관·생활·도구·옷과 선물) → 식당가 → (높으면) 상품 창고층 → 그 회사 본사 사무 → 임원층
+        uses[0] = 'mart'; deps[0] = 'food';
+        const D3 = ['living', 'craft', 'fashion'];
+        const salesTop = Math.min(top - (N >= 3 ? 1 : 0), 3);
+        for (let k = 1; k <= salesTop; k++) { uses[k] = 'mart'; deps[k] = D3[(k - 1) % 3]; }
+        if (N >= 3) uses[salesTop + 1] = 'food';
+        if (top > salesTop + 2) uses[salesTop + 2] = 'storage';
+        if (top > salesTop + 3) { fill(salesTop + 3, top, 'office'); if (top - salesTop > 6) uses[top] = 'exec'; techEvery(salesTop + 3, top); }
+        basements.push('parking');
+        if (gfa > 4000) basements.push('parking');
+        notes.special = '본점';
+        break;
+      }
+      case 'depot': // 물류 센터: 큰 창고 홀 + 위 창고층들 + 꼭대기 사무
+        uses[0] = 'storage'; fill(1, top - 1, 'storage'); uses[top] = N >= 3 ? 'office' : 'storage';
+        notes.special = '물류 센터';
+        break;
+      case 'factory': // 공장 단지: 큰 생산동 + 위 조립층 + 꼭대기 사무
+        uses[0] = 'factory'; fill(1, top - 1, 'factory'); uses[top] = N >= 3 ? 'office' : 'factory';
+        basements.push('supply');
+        notes.special = '공장 단지';
+        break;
+      case 'terminal': // 교통 거점: 대합실 + 같은 공사의 식당·상점 + 사무
+        uses[0] = 'transit'; if (N >= 2) uses[1] = 'food'; if (N >= 3) uses[2] = 'shops'; fill(3, top, 'office');
+        notes.special = '교통 거점';
+        break;
+      case 'farm': // 농업 단지: 직판장(마트) + 재배층들
+        uses[0] = N >= 3 ? 'mart' : 'farm'; deps[0] = 'food'; fill(1, top, 'farm');
+        notes.special = '농업 단지';
+        break;
+      case 'hotel': // 호텔 한 곳: 로비 → 호텔 식당 → 쉼터 → 객실 → 전망
+        uses[0] = 'hotelfront'; if (N > 4) uses[1] = 'food'; if (N > 8) uses[2] = 'amenity';
+        fill(1, top, 'hotel'); techEvery(3, top); if (N >= 12) uses[top] = 'observation';
+        if (wantBase) basements.push('supply');
+        notes.special = '호텔';
+        break;
+      default: done = false;
+    }
+    if (done) {
+      for (let k = 0; k < N; k++) if (slots[k].n < 24 && uses[k] !== 'house') uses[k] = k === 0 ? 'stem' : 'tech';
+      return { uses, basements, atrium, notes, podium, deps, special: notes.special };
+    }
+  }
 
   switch (pid) {
     case 'home': {
@@ -232,7 +326,7 @@ function decideUses(pid, slots, ctx, rnd) {
   }
   // 아주 작은 층(버섯 집의 줄기, 둥근 지붕 아래 다락)은 현관·다락으로
   for (let k = 0; k < N; k++) if (slots[k].n < 24 && uses[k] !== 'house') uses[k] = k === 0 ? 'stem' : 'tech';
-  return { uses, basements, atrium, notes, podium };
+  return { uses, basements, atrium, notes, podium, deps, special: null };
 }
 
 // ── 조직 ───────────────────────────────────────────────────
@@ -372,7 +466,10 @@ export function makeBuilding(r, ctx) {
   const groundMods = pid === 'school' || (pid === 'home' && V.top - V.base < 24) || (pid === 'cafe' && V.top - V.base < 14) || V.top - V.base < 11 ? 1 : 2;
   const slots = stackSlots(r, V, G, prof, { defMod: pid === 'home' ? 3.3 : 3.6, groundMods });
   if (!slots.length) return null;
-  const D = decideUses(pid, slots, { district: r.style, custom: !!r.custom }, rnd);
+  // 전문 건물인가 (한 기관이 건물 전체): 쓰임마다 비율이 다르다 — 큰 병원·학교·박물관은 대개 전문, 사무·마트는 섞인 건물이 많다
+  const SPECIAL_P = { heal: 0.7, school: 0.75, lab: 0.5, office: 0.3, market: 0.35, depot: 0.6, factory: 0.55, terminal: 0.5, farm: 0.6, hotel: 0.55 };
+  const special = !r.custom && rngFor(seed, 'special')() < (SPECIAL_P[pid] || 0);
+  const D = decideUses(pid, slots, { district: r.style, custom: !!r.custom, special }, rnd);
   // 층 합치기: 높은 한 공간(공장·창고·대합실·발전동·낮은 공연장·온실 농장)은 위 자리들을 하나로 — 천장은 그 칸의 바깥 지붕 안쪽
   // (둥근 지붕 아래면 칸마다 높이가 다른 둥근 천장 = vault) + 뒤쪽 벽을 따라 중2층(관제·사무·대기)
   const low = !!(SPEC[r.kind] && SPEC[r.kind].low);
@@ -395,7 +492,7 @@ export function makeBuilding(r, ctx) {
       for (let c = 0; c < mask.length; c++) if (mask[c] && t.mask[c]) { m2[c] = 1; n2++; }
       if (n2 >= n * 0.7) { mask = m2; n = n2; h += t.h; ceil = t.ceil; kk++; }
     }
-    floors.push({ y: s.y, h, ceil, mod: s.mod, ftype: s.ftype, mask, n, use, vault: vault || s.vault });
+    floors.push({ y: s.y, h, ceil, mod: s.mod, ftype: s.ftype, mask, n, use, vault: vault || s.vault, dep: D.deps[k] || null });
     if (bigHall && ceil - s.y > 7.0) {
       const my = s.y + Math.max(3.6, Math.min(4.6, (ceil - s.y) * 0.45));
       const head = maskOf(V, G, my, my + 2.7).m;
@@ -445,16 +542,27 @@ export function makeBuilding(r, ctx) {
   const orgs = [];
   const zones = [];
   let prev = null;
+  // 전문 건물: 모든 묶음이 한 조직 (병원의 식당·행정도 그 병원, 본사의 식당·회의층도 그 회사)
+  const mainOpOrg = { home: 'home', hotel: 'hotel', office: 'office', lab: 'lab', admin: 'admin', market: 'mart', cafe: 'food', school: 'school', heal: 'clinic', library: 'library', museum: 'museum', hall: 'hall', factory: 'factory', depot: 'depot', terminal: 'terminal', plant: 'plant', farm: 'farm', garden: 'garden' }[pid] || 'office';
+  let soleOrg = null;
+  if (D.special) {
+    soleOrg = orgFor(mainOpOrg, r, seed, 0);
+    if (D.special === '본점') soleOrg.name = soleOrg.name.replace(/ (동네점|큰점)$/, '');
+    const suf = { 본사: ' 본사', 본점: ' 본점', '물류 센터': ' 센터', '공장 단지': '', '교통 거점': '', '농업 단지': ' 단지' }[D.special];
+    if (suf && !soleOrg.name.endsWith(suf.trim())) { soleOrg.name += suf; soleOrg.id = `${soleOrg.op}:${soleOrg.name}`; }
+    soleOrg.special = D.special;
+    orgs.push(soleOrg);
+  }
   for (const F of all) {
     const op = FUSE[F.use] ? FUSE[F.use].op : 'office';
     const orgOp = F.use === 'dept' ? 'dept' : F.use === 'shops' ? 'shops' : op;
-    const sameZone = prev && prev.use === F.use && !(F.use === 'office' && rnd() < 0.45);
+    const sameZone = prev && prev.use === F.use && (soleOrg || !(F.use === 'office' && rnd() < 0.45));
     if (!sameZone) {
       const needOrg = !['lobby', 'tech', 'parking', 'mezz', 'amenity', 'observation', 'stem'].includes(op) || F.use === 'stem';
       let org = null;
       if (needOrg) {
         // 큰 건물의 같은 업종은 한 조직(주거조합·호텔·병원), 사무층은 회사마다
-        const reuse = op !== 'office' && orgs.find((o) => o.op === orgOp);
+        const reuse = soleOrg || (op !== 'office' && orgs.find((o) => o.op === orgOp));
         org = reuse || orgFor(orgOp, r, seed, orgs.length);
         if (!reuse) orgs.push(org);
       }
@@ -466,12 +574,12 @@ export function makeBuilding(r, ctx) {
   }
   // 건물 전체의 대표 조직(간판·이름): 주된 쓰임의 조직
   const mainOp = { home: 'home', hotel: 'hotel', office: 'office', lab: 'lab', admin: 'admin', market: 'mart', cafe: 'food', school: 'school', heal: 'clinic', library: 'library', museum: 'museum', hall: 'hall', factory: 'factory', depot: 'depot', terminal: 'terminal', plant: 'plant', farm: 'farm', garden: 'garden' }[pid] || 'office';
-  const mainOrg = orgs.find((o) => o.op === mainOp || (mainOp === 'mart' && (o.op === 'dept' || o.op === 'shops'))) || orgs[0] || null;
+  const mainOrg = soleOrg || orgs.find((o) => o.op === mainOp || (mainOp === 'mart' && (o.op === 'dept' || o.op === 'shops'))) || orgs[0] || null;
   // 빛깔: 묶음마다 (조직 상표 + 쓰임 빛깔 + 구역 색조)
   for (const Z of zones) { const org = orgs.find((o) => o.id === Z.org); Z.style = styleFor(Z.op, r, seed, org, zones.indexOf(Z)); }
   const dg = r.door ? [(r.door.x - r.x) * V.ex[0] + (r.door.z - r.z) * V.ex[1], (r.door.x - r.x) * V.ez[0] + (r.door.z - r.z) * V.ez[1]] : [0, V.R];
   const B = {
-    V, v: GEN_VERSION, uid, seed, kind: r.kind, use: r.use, pid, size: D.notes.size, gfa: D.notes.gfa,
+    V, v: GEN_VERSION, uid, seed, kind: r.kind, use: r.use, pid, size: D.notes.size, gfa: D.notes.gfa, special: D.special || null,
     G, theta: V.theta, floors: all, ground: gi, zones, orgs, mainOrg: mainOrg ? mainOrg.id : null,
     roof, atrium: D.atrium, podium: D.podium, door: { gx: dg[0], gz: dg[1] },
     module: base0.mod, bay: BAY[base0.ftype] || 2.2,

@@ -249,6 +249,12 @@ export class Game {
     this.mode = 'play';
     this.ui.setHud(true);
     this.ui.toast(`돌아왔어요 · 세렌의 ${this.world.clock.day + 1}일째`, { kind: 'quest' });
+    // 건물 안에서 저장했으면 그 건물 그 층으로
+    if (s.inside && this.city) {
+      const S = s.inside;
+      const r = this.city.recs.find((q) => q.kind === S.kind && Math.abs(q.x - S.x) < 0.6 && Math.abs(q.z - S.z) < 0.6) || null;
+      if (r) { this.city.fixDoor(r); setTimeout(() => { if (this.mode === 'play' && !this.interiors.inPocket) this.interiors.enter(r, { floor: S.floor, at: [S.px, S.pz], yaw: S.yaw }); }, 400); }
+    }
     // 옛 이야기로 저장한 판: 새 이야기의 알맞은 장으로 옮겼다고 알린다
     if (s.flags.storyMigrated) {
       const q = QUESTS[s.flags.storyMigrated];
@@ -302,6 +308,10 @@ export class Game {
     if (p.state !== 'current' && p.state !== 'lift' && p.state !== 'down' && p.state !== 'ride') s.player = { x: p.pos.x, y: p.pos.y > 20000 && p.state === 'ground' ? p.pos.y + 0.5 : null, z: p.pos.z, yaw: p.yaw };
     const safe = this.interiors && this.interiors.safeSpot();
     if (safe) s.player = { x: safe.x, y: null, z: safe.z, yaw: p.yaw };
+    // 건물 안에서 저장하면: 그 건물·그 층·그 자리 (불러오면 다시 들어간다 — 바깥 자리는 문 앞)
+    const I = this.interiors, cur = I && I.cur;
+    s.inside = I && I.inPocket && cur && cur.indoor && !I.outside ? { x: cur.r.x, z: cur.r.z, kind: cur.r.kind, uid: cur.uid, floor: cur.indoor.cur, px: p.pos.x, pz: p.pos.z, yaw: p.yaw } : null;
+    if (I && I.store) I.store.flush();
     s.clock = this.world.clock.time;
     s.upgrades = { ...p.upgrades };
     s.reveal = this.mapData.serialize();
@@ -727,7 +737,7 @@ export class Game {
       const k = b.dataset.up;
       const lv = p.upgrades[k] || 0;
       if (s.inv.starseed < cost(lv)) return;
-      s.inv.starseed -= cost(lv);
+      if (this.econ && this.city) this.econ.charge(cost(lv), '장인 온의 작업대', 'hh'); else s.inv.starseed -= cost(lv);
       p.upgrades[k] = lv + 1;
       s.upgrades = { ...p.upgrades };
       audio.chime('quest');
@@ -767,9 +777,17 @@ export class Game {
     bus.emit('flag', k);
   }
 
+  /** 가방에 넣기 (v0.9): 별씨는 그 구역 공공 몫(고마움·보상·들에 뿌려진 별씨)에서, 도시의 물건은 그 구역 재고에서 — 저절로 생기지 않는다 */
   giveItem(k, n = 1) {
+    const E = this.econ;
+    if (E && this.city) {
+      if (k === 'starseed') { const got = E.reward(n, '보상'); if (got > 0) this.ui.toast(`별씨 +${Math.round(got * 100) / 100} (모두 ${this.state.inv.starseed})`, { kind: 'item' }); return got; }
+      n = E.goodsOut(k, n);
+      if (n <= 0) return 0;
+    }
     this.state.inv[k] = (this.state.inv[k] || 0) + n;
     if (k === 'starseed') this.ui.toast(`별씨 +${n} (모두 ${this.state.inv.starseed})`, { kind: 'item' });
+    return n;
   }
 
   scan(id) {

@@ -104,6 +104,8 @@ export function buildFloor(ctx) {
       }
     }
   }
+  // ── 1b. 중2층 계단 (홀 바닥 → 중2층 앞 가장자리): 디딤판·챌판·옆 유리 난간·경사 충돌체 ──
+  if (L.mstair && !isMezz) buildMezzStair(ctx, out, gb, glass, L.mstair, st);
   // ── 2. 바닥 · 천장 ──
   const flCol = (R) => {
     const fl = R ? (ROOMS[R.type] || {}).fl || 'tile' : 'tile';
@@ -383,6 +385,59 @@ function buildStair(ctx, out, gb, glass, p, lk, stairCells, st) {
   ctx.extraCols.push(colBox(ctx, (mx0 + mx1) / 2, (mz0 + mz1) / 2, Math.abs(fx) ? lenM / 2 : 0.08, Math.abs(fx) ? 0.08 : lenM / 2, 0, -0.5, h + 1.0, false));
   void L;
 }
+/** 중2층 계단. 'z': 곧은 계단(아래 끝 J+n+1 모서리 → 위 끝 J+1 모서리). 'x': 중2층 가장자리를 따라 옆으로 올라 2×2 계단참에서 중2층으로.
+ *  두 옆은 유리 난간(기울어진 판) + 막는 벽 충돌체, 계단 밑은 옆판으로 막는다 */
+function buildMezzStair(ctx, out, gb, glass, M, st) {
+  const { B } = ctx;
+  const { ox, oz } = B.G;
+  const stepC = mix(st.floor, 0xffffff, 0.2), side = mix(st.wall, 0x000000, 0.08), rail = st.glow ?? 0x7ff3e6;
+  // 기울어진 난간 한 줄: (a → b) 를 따라 바닥 높이 ya → yb
+  const sideRail = (ax, az, bx, bz, ya, yb, under = true) => {
+    if (under) { gb.tri([ax, 0, az], [bx, 0, bz], [bx, yb, bz], side, 0, PAT.panel); gb.tri([bx, 0, bz], [ax, 0, az], [bx, yb, bz], side, 0, PAT.panel); if (ya > 0.01) { gb.tri([ax, 0, az], [bx, yb, bz], [ax, ya, az], side, 0, PAT.panel); gb.tri([bx, yb, bz], [ax, 0, az], [ax, ya, az], side, 0, PAT.panel); } }
+    glass.quad([ax, ya + 0.05, az], [bx, yb + 0.05, bz], [bx, yb + 1.0, bz], [ax, ya + 1.0, az], 0xcff4ff, 0.06);
+    glass.quad([bx, yb + 0.05, bz], [ax, ya + 0.05, az], [ax, ya + 1.0, az], [bx, yb + 1.0, bz], 0xcff4ff, 0.06);
+    const L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(L / 0.8)), ry = Math.atan2(bx - ax, bz - az);
+    for (let k = 0; k < n; k++) {
+      const t0 = k / n, t1 = (k + 1) / n;
+      const x = ax + (bx - ax) * (t0 + t1) / 2, z = az + (bz - az) * (t0 + t1) / 2, y = ya + (yb - ya) * (t0 + t1) / 2 + 1.0;
+      gb.box(x, y - 0.02, z, 0.06, 0.05, L / n + 0.02, ry, rail, 1.4);
+    }
+    const m = Math.max(1, Math.ceil(L / 1.5));
+    for (let k = 0; k < m; k++) {
+      const t0 = k / m, t1 = (k + 1) / m;
+      const x = ax + (bx - ax) * (t0 + t1) / 2, z = az + (bz - az) * (t0 + t1) / 2;
+      const vert = Math.abs(bx - ax) < 1e-6;
+      ctx.extraCols.push(colBox(ctx, x, z, vert ? 0.06 : L / m / 2, vert ? L / m / 2 : 0.06, 0, -0.4, ya + (yb - ya) * t1 + 1.0, false));
+    }
+  };
+  if (M.axis !== 'x') {
+    const x0 = ox + M.i0, x1 = ox + M.i1 + 1, zt = oz + M.J + 1, zb = oz + M.J + M.n + 1;
+    flight(ctx, gb, (lx, lz) => [lx, lz], x0 + 0.06, x1 - 0.06, zb, zt, 0, M.h, stepC, 0);
+    for (const x of [x0 + 0.03, x1 - 0.03]) sideRail(x, zb, x, zt, 0, M.h);
+    out.mstair = { ...M, x0, x1, zt, zb };
+    return;
+  }
+  // 옆 계단: 계단참(i0..i1 × J+1..J+2) 높이 h, 계단은 run0 → run0+sx*(n-1) 쪽으로 내려간다
+  const z0 = oz + M.J + 1, z1 = oz + M.J + 3;
+  const lx0 = ox + M.i0, lx1 = ox + M.i1 + 1;
+  const xt = M.sx > 0 ? lx1 : lx0; // 계단 위 끝 (계단참 가장자리)
+  const xb = xt + M.sx * M.n; // 계단 아래 끝
+  // 계단: 로컬 z = 세계 x (아래 → 위), 로컬 x = 세계 z
+  flight(ctx, gb, (lx, lz) => [lz, lx], z0 + 0.06, z1 - 0.06, xb, xt, 0, M.h, stepC, Math.PI / 2);
+  // 계단참 (평평한 판 + 충돌체)
+  gb.box((lx0 + lx1) / 2, M.h - 0.3, (z0 + z1) / 2, lx1 - lx0, 0.3, z1 - z0, 0, stepC, 0, PAT.stone);
+  ctx.extraCols.push(colBox(ctx, (lx0 + lx1) / 2, (z0 + z1) / 2, (lx1 - lx0) / 2, (z1 - z0) / 2, 0, M.h - 0.4, M.h, true));
+  // 계단참 밑 기둥 (막힌 벽)
+  gb.box((lx0 + lx1) / 2, 0, (z0 + z1) / 2, lx1 - lx0 - 0.1, M.h - 0.3, z1 - z0 - 0.1, 0, side, 0, PAT.panel);
+  ctx.extraCols.push(colBox(ctx, (lx0 + lx1) / 2, (z0 + z1) / 2, (lx1 - lx0) / 2 - 0.05, (z1 - z0) / 2 - 0.05, 0, -0.4, M.h - 0.4, false));
+  // 난간: 홀 쪽(z1) 계단+계단참, 계단참 바깥 끝, 중2층 쪽(z0)은 계단만 (위는 중2층 가장자리)
+  sideRail(xb, z1 - 0.03, xt, z1 - 0.03, 0, M.h);
+  sideRail(xt, z1 - 0.03, xt - M.sx * (lx1 - lx0), z1 - 0.03, M.h, M.h, false);
+  const xe = M.sx > 0 ? lx0 : lx1;
+  sideRail(xe, z0, xe, z1, M.h, M.h, false);
+  sideRail(xb, z0 + 0.03, xt, z0 + 0.03, 0, M.h);
+  out.mstair = { ...M, z0, z1, xt, xb };
+}
 function flight(ctx, gb, P, xa, xb, za, zb, ya, yb, col, ry) {
   const n = Math.max(4, Math.round((yb - ya) / 0.18));
   const w = xb - xa;
@@ -470,6 +525,8 @@ function partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st) {
       const x0 = di ? ox + i + 1 : ox + i, z0 = di ? oz + j : oz + j + 1, x1 = di ? ox + i + 1 : ox + i + 1, z1 = di ? oz + j + 1 : oz + j + 1;
       const key = di ? `v${i + 1},${j}` : `h${i},${j + 1}`;
       // 뚫린 곳 가장자리 = 난간
+      // 중2층 계단이 닿는 곳은 난간 없이 열어 둔다
+      if (isMezz && L.mstair && dj === 1 && j === L.mstair.J && i >= L.mstair.i0 && i <= L.mstair.i1) continue;
       if ((A && voidB) || (Bq && voidA) || (isMezz && (!!A !== !!Bq) && L.void[A ? e : c] !== 2)) { edge(x0, z0, x1, z1, 'rail', A, Bq, null, key); continue; }
       if (!A || !Bq || A === Bq) continue;
       // 같은 세대의 열린 방(거실-부엌) · 열린 문은 벽 없이

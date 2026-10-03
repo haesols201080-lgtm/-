@@ -122,14 +122,18 @@ const RECIPE = {
     if (R.n > 250) for (let k = 0; k < 2; k++) F.near(R, 'selfcheck', ex - side * (4 + k * 1.6), front - 4, 0, { R: 3, tag: 'checkout' });
     F.near(R, 'baskets', ex - side * 2.2, front - 2.5, 0, { R: 3, tag: 'basket', anyRot: true });
     // 2. 벽: 뒷벽은 서늘 진열대, 옆벽은 벽 진열대
-    const cats = c.rnd() < 0.5 ? ['chill', 'drink'] : ['drink', 'chill'];
+    const dep0 = c.B.floors[c.L.i].dep;
+    const cats = dep0 && dep0 !== 'food' ? ['home', 'home'] : c.rnd() < 0.5 ? ['chill', 'drink'] : ['drink', 'chill'];
     F.alongWalls(R, 'chiller', { tag: 'shelf', data: { cat: cats[0] }, prefer: (p, q) => p.z - q.z, n: Math.max(1, Math.round(b.w / 5)), avoidWindows: false, onlyBack: true });
     F.alongWalls(R, 'wallshelf', { tag: 'shelf', data: { cat: 'home' }, n: Math.max(2, Math.round(R.n / 60)), notFront: true });
     // 3. 입구 쪽 신선 진열섬
-    for (let k = 0; k < Math.min(3, Math.round(R.n / 150)); k++) F.near(R, 'produce', ex - side * (2 + k * 3), front - 8.5, 0, { R: 3, tag: 'shelf', data: { cat: 'fresh' } });
+    if (!dep0 || dep0 === 'food') for (let k = 0; k < Math.min(3, Math.round(R.n / 150)); k++) F.near(R, 'produce', ex - side * (2 + k * 3), front - 8.5, 0, { R: 3, tag: 'shelf', data: { cat: 'fresh' } });
     // 4. 가운데 진열대 줄 (통로 2 m) — 구역마다 다른 물건
     const g = F.rows(R, 'gondola', { aisle: 2.0, gap: 0.0, margin: 1.6, axis: 'z', rot: 0, tag: 'shelf' });
-    const order = op === 'dept' ? ['home', 'gift', 'craft', 'home', 'gift'] : ['pantry', 'bakery', 'snack', 'drink', 'pantry', 'home', 'craft'];
+    // 층마다 매장(대형점의 층별 매장: 식품관·생활·도구·옷과 선물)
+    const dep = c.B.floors[c.L.i].dep;
+    const DEP = { food: ['pantry', 'bakery', 'snack', 'drink', 'pantry', 'bakery'], living: ['home', 'home', 'pantry', 'snack', 'home'], craft: ['craft', 'craft', 'home', 'gift'], fashion: ['gift', 'home', 'gift', 'craft'] };
+    const order = DEP[dep] || (op === 'dept' ? ['home', 'gift', 'craft', 'home', 'gift'] : ['pantry', 'bakery', 'snack', 'drink', 'pantry', 'home', 'craft']);
     for (const q of g) q.cat = order[(q.row || 0) % order.length];
     if (op === 'shops') for (const q of g) q.cat = ['gift', 'craft', 'home'][(q.row || 0) % 3];
   },
@@ -176,8 +180,10 @@ const RECIPE = {
   classroom(F, R) {
     const board = F.alongWalls(R, 'board', { n: 1, tag: 'board', avoidWindows: true })[0];
     const rot = board ? board.rot : 0;
-    if (board) F.near(R, 'tdesk', board.x + FR4[rot][0] * 2.2, board.z + FR4[rot][1] * 2.2, (rot + 2) % 4, { R: 2, tag: 'teacher' });
-    F.rows(R, 'sdesk', { rot: (rot + 2) % 4, axis: rot % 2 ? 'z' : 'x', aisle: 0.9, gap: 0.5, margin: 1.4, tag: 'student' });
+    // 작은 교실은 선생님 책상 없이 칠판 앞에 서서 (학생 자리가 먼저)
+    const st = F.rows(R, 'sdesk', { rot: (rot + 2) % 4, axis: rot % 2 ? 'z' : 'x', aisle: 0.75, gap: 0.3, margin: R.n < 30 ? 0.9 : 1.2, tag: 'student' });
+    if (board) F.near(R, 'tdesk', board.x + FR4[rot][0] * 1.4, board.z + FR4[rot][1] * 1.4, (rot + 2) % 4, { R: 1.5, tag: 'teacher' });
+    if (!st.length) F.scatter && F.scatter(R, 'sdesk', { n: Math.max(2, Math.floor(R.n / 6)), tag: 'student' });
     F.alongWalls(R, 'cabinet', { n: 1, avoidWindows: true });
   },
   sciroom(F, R) { F.alongWalls(R, 'board', { n: 1, tag: 'board', avoidWindows: true }); F.alongWalls(R, 'hood', { n: 1, tag: 'bench', avoidWindows: true }); F.rows(R, 'labbench', { aisle: 1.4, margin: 1.4, tag: 'bench' }); },

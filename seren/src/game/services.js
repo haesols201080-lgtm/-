@@ -98,7 +98,8 @@ export class Services {
   _pay(starseed, shard = 0) {
     const inv = this.game.state.inv;
     if (inv.starseed < starseed || (inv.shard || 0) < shard) return false;
-    inv.starseed -= starseed;
+    const E = this.game.econ;
+    if (E && this.game.city) E.charge(starseed, '시설 이용', 'commons'); else inv.starseed -= starseed;
     inv.shard = (inv.shard || 0) - shard;
     return true;
   }

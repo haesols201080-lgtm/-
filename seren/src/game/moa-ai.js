@@ -9,6 +9,8 @@ import { WORD } from '../data/lexicon.js';
 import { PLACES } from '../data/places.js';
 import { TIPS } from '../data/tips.js';
 import { saveSettings } from './state.js';
+import { searchBuilding } from '../interior/find.js';
+import { FUSE } from '../interior/catalog.js';
 
 const TONE_NAMES = ['솟음', '열림', '흐름', '빛', '고요'];
 const TONE_USE = ['공중에서 한 번 더 솟아오름', '메아리·잠긴 것을 엶', '활공·썰매 중 앞으로 밀어 줌', '빛 구슬·밤길 밝힘', '하늘고래를 부르고 마음을 고름'];
@@ -223,13 +225,13 @@ export class MoaAI {
     return [
       {
         name: 'mark_place',
-        description: '조종사의 나침반·지도에 표식을 단다. query 는 찾을 것: 시설 종류(가게·찻집·박물관·학교·치유원·서고·연구동·공방·창고·터미널·사무탑·공연장·정원·발전소), 장소·인물 이름, "우리 집", "목표". 찾은 곳의 이름·거리(m)·방위를 돌려준다.',
+        description: '조종사의 나침반·지도에 표식을 단다(건물 안이면 바닥에 빛 길을 깔고 계단·승강기를 거쳐 안내). query 는 찾을 것: 건물 안에서는 "가까운 엘리베이터", "계단", "출구", "계산대", "화장실", "면접", "출근 단말", "내가 일하는 곳", "연구실", "회의실", 물건 이름(빵·울림차…), 방·시설 이름, 사람 직함(계산원·치유사…). 바깥에서는 시설 종류(가게·찻집·박물관·학교·치유원·서고·연구동·공방·창고·터미널·사무탑·공연장·정원·발전소), 장소·인물 이름, "우리 집", "목표", "일터", "면접". 찾은 곳의 이름·거리(m)·방위·층을 돌려준다.',
         inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
         execute: (input) => {
           const f = this.find(String(input.query || ''));
           if (!f) throw new Error('그런 곳을 둘레에서 찾지 못했어요');
           this.mark(f);
-          return { name: f.name, distance_m: f.d, direction: f.dir };
+          return { name: f.name, distance_m: f.d, direction: f.dir, floor: f.floor || null, route: f.inside && g.guide ? g.guide.text : null };
         },
       },
     ];
@@ -254,6 +256,20 @@ export class MoaAI {
   find(q) {
     const g = this.game, P = g.player.pos, C = g.city;
     const s = q.replace(/\s/g, '');
+    // 건물 안: 그 건물의 방·시설·물건·사람·승강기·출구부터 (실제 길로 안내)
+    const I = g.interiors;
+    if (I && I.inPocket && I.cur && I.cur.indoor && !/목표|할일|퀘스트/.test(s)) {
+      const r = searchBuilding(g, q, { limit: 1 })[0];
+      if (r && r.kind !== 'world') {
+        const ind = I.cur.indoor, [x, z] = ind.world(r.gx, r.gz);
+        const B = I.cur.B, fl = B.floors[r.floor];
+        return { name: `${r.label}${r.floor !== ind.cur ? ` (${fl.label}층)` : ''}`, x, z, ...this._where(x, z), inside: r, floor: fl.label, sameFloor: r.floor === ind.cur };
+      }
+    }
+    // 일터·면접 (다른 건물)
+    const W = g.state.work;
+    if (W && /내가일하|일터|직장|내일하는|출근/.test(s) && W.jobs.length) { const j = W.jobs[0]; return { name: `일터 · ${j.title} (${j.bname})`, x: j.x, z: j.z, ...this._where(j.x, j.z) }; }
+    if (W && /면접/.test(s)) { const a = W.apps.find((x) => x.status === 'interview'); if (a) return { name: `면접 · ${a.title} (${a.bname})`, x: a.x, z: a.z, ...this._where(a.x, a.z) }; }
     if (/목표|할일|다음|퀘스트/.test(s)) {
       const t = g.quests.targets()[0];
       if (t) return { name: t.label || '목표', x: t.x, z: t.z, ...this._where(t.x, t.z) };
@@ -287,6 +303,7 @@ export class MoaAI {
 
   mark(f) {
     const g = this.game;
+    if (f.inside && g.guide) { g.guide.to(f.inside); return; } // 건물 안: 바닥의 빛 길 + 나침반
     g.state.waypoint = { x: f.x, z: f.z };
     g.updateWaypoint && g.updateWaypoint();
   }
@@ -315,6 +332,32 @@ export class MoaAI {
     L.push(`가진 것: 별씨 ${s.inv.starseed || 0}${inv.length ? ' · ' + inv.join(', ') : ''}`);
     const V = s.venue || {};
     if (V.job) L.push(`맡은 일: ${V.job.label}`);
+    // 건물 속 (v0.9): 층·조직·지금 층의 시설, 일자리·교대·과제·바구니·안내
+    if (I && I.inPocket && I.cur && I.cur.indoor) {
+      const B = I.cur.B, ind = I.cur.indoor, F = B.floors[ind.cur];
+      const Z = B.zones[F.zone], org = Z && Z.org ? B.orgs.find((q) => q.id === Z.org) : null;
+      L.push(`건물: ${I.title(I.cur.r)} · ${B.special ? `${B.special}(한 기관이 전체)` : B.orgs.length > 2 ? `복합 건물(조직 ${B.orgs.length})` : '건물'} · 지금 ${F.label}층 ${FUSE[F.use] ? FUSE[F.use].name : F.use}${org ? `(${org.name})` : ''}`);
+      const zs = [];
+      for (const Zq of B.zones) { const fl = B.floors.filter((q) => B.zones[q.zone] === Zq && q.reach); if (!fl.length) continue; const o = Zq.org ? B.orgs.find((q) => q.id === Zq.org) : null; zs.push(`${fl[0].label}${fl.length > 1 ? `~${fl[fl.length - 1].label}` : ''}층 ${FUSE[Zq.use] ? FUSE[Zq.use].name : Zq.use}${o ? `·${o.name}` : ''}`); }
+      L.push(`층 안내: ${zs.slice(0, 12).join(' / ')}`);
+      const out = ind.built.get(ind.cur);
+      if (out && out.fix) { const cnt = {}; for (const q of out.fix) if (q.tag) cnt[q.tag] = (cnt[q.tag] || 0) + 1; L.push(`이 층의 시설: ${Object.entries(cnt).slice(0, 14).map(([k, v]) => `${k}${v}`).join(' ')}`); }
+      const ops = g.ops;
+      if (ops) {
+        if (ops.basket.length) L.push(`바구니: ${ops.basket.length}개 (별씨 ${Math.round(ops.basketTotal() * 100) / 100}) — 계산대에서 값을 치러야 가방으로`);
+        if (ops.carry) L.push(`손에 든 것: ${ops.carry.label || ops.carry.g} ×${ops.carry.n || 1}`);
+        if (ops.task) L.push(`하는 과제: ${ops.task.title} — 다음: ${(ops.task.steps[ops.task.k] || {}).label || ''}`);
+      }
+      if (g.guide && g.guide.goal) L.push(`길 안내 중: ${g.guide.text}`);
+    }
+    const Wk = s.work;
+    if (Wk) {
+      if (Wk.jobs.length) L.push(`맡은 일자리: ${Wk.jobs.map((j) => `${j.title}(${j.org}, ${j.bname}) ${Math.round(j.hours[0] * 24)}~${Math.round(j.hours[1] * 24)}시`).join(', ')}${Wk.shift ? ' · 지금 교대 중' : ''}`);
+      const ap = Wk.apps.filter((a) => a.status !== 'done');
+      if (ap.length) L.push(`일자리 지원: ${ap.map((a) => `${a.title}(${a.bname}) ${a.status === 'applied' ? '면접 안내 기다림' : a.status === 'interview' ? '면접 안내 받음' : '다음 기회'}`).join(', ')}`);
+      if (Wk.hotel) L.push(`묵는 방: ${Wk.hotel.room}`);
+    }
+    if (g.econ && g.econ.S) { const zid = g.econ.zoneOf(P.x, P.z); if (zid) L.push(`구역 살림: ${g.econ.summary(zid)}`); }
     const buffs = Object.keys(V.buffs || {});
     if (buffs.length) L.push(`몸의 기운: ${buffs.join(', ')}`);
     L.push(`아는 공명 음: ${s.tones.length ? s.tones.map((n) => `${TONE_NAMES[n]}(${n + 1}번 · ${TONE_USE[n]})`).join(', ') : '아직 없음'}`);
@@ -379,8 +422,16 @@ export class MoaAI {
       const f = this.find('우리 집');
       if (f) { this.mark(f); return `우리 집은 ${f.dir}쪽 ${f.d} m 에 있어요. 나침반에 표시했어요.`; }
     }
-    // 시설·장소·인물 찾기
+    if (/일자리|취직|일하고싶|채용|지원/.test(q)) {
+      const I = g.interiors, W = s.work;
+      const iv = W && W.apps.find((a) => a.status === 'interview');
+      if (iv) { const f2 = this.find('면접'); if (f2) this.mark(f2); return `「${iv.title}」(${iv.org}) 면접 안내가 와 있어요! ${iv.bname}의 채용 면접실로 가요${f2 ? ' — 길을 표시했어요' : ''}.`; }
+      if (I && I.inPocket && I.cur && I.cur.indoor) { const f2 = this.find('단말'); if (f2) this.mark(f2); return `건물 안 울림판 단말의 「일자리」 앱에서 이 건물과 둘레 건물의 일자리에 지원할 수 있어요. 한 시간쯤 뒤 면접 안내가 오고, 그 건물 채용 면접실에서 면접을 봐요.${f2 ? ` 가까운 단말은 ${f2.name} — 길을 깔아 드렸어요.` : ''}`; }
+      return '일자리는 건물 안 울림판 단말의 「일자리」 앱에서 찾아요. 사무탑·마트·공장·연구동 아무 데나 들어가 보세요. 지원 → 면접 → 채용되면 그 건물 출근 단말에서 출근해요.';
+    }
+    // 시설·장소·인물 찾기 (건물 안이면 그 건물 안부터)
     const f = this.find(q);
+    if (f && f.inside) { this.mark(f); return `「${f.name}」 — ${f.sameFloor ? `이 층 ${f.d} m` : `${f.floor}층`}이에요. 바닥에 빛 길을 깔았어요${g.guide && g.guide.text ? ` (${g.guide.text})` : ''}.`; }
     if (f) { this.mark(f); return `「${f.name}」 — ${f.dir}쪽 ${f.d} m 예요. 나침반에 표시했어요.`; }
     if (/어디야|여기|위치|어디에있|어디지|어디인/.test(q)) {
       const reg = g.world.regionAt(P.x, P.z), zone = this.zoneName(P.x, P.z);

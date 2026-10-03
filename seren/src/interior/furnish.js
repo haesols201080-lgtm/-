@@ -21,9 +21,20 @@ export class Occ {
       const r = L.room[c];
       if (!r) continue;
       const R = L.rooms[r - 1];
-      const solid = ['shaft', 'lift', 'cargo', 'stair'].includes(R.type);
+      const solid = ['shaft', 'lift', 'cargo', 'stair'].includes(R.type) || L.void[c] === 3; // void 3 = 중2층 계단
       const i = c % L.gw, j = (c / L.gw) | 0;
       for (let b = 0; b < S; b++) for (let a = 0; a < S; a++) { const k = (j * S + b) * this.gw + i * S + a; this.o[k] = solid ? 1 : 0; this.rm[k] = r; }
+    }
+    // 중2층 계단 아래 끝 앞은 비워 둔다
+    const M = L.mstair;
+    if (M && !B.floors[L.i].mezz) {
+      const cells = [];
+      if (M.axis === 'x') { for (let k = M.n; k <= M.n + 1; k++) for (let j = M.J; j <= M.J + 3; j++) cells.push([M.run0 + M.sx * k, j]); }
+      else for (let k = M.n + 1; k <= M.n + 2; k++) for (let i = M.i0 - 1; i <= M.i1 + 1; i++) cells.push([i, M.J + k]);
+      for (const [i, j] of cells) {
+        if (i < 0 || j < 0 || i >= L.gw || j >= L.gh) continue;
+        for (let b = 0; b < S; b++) for (let a = 0; a < S; a++) { const q = (j * S + b) * this.gw + i * S + a; if (this.o[q] === 0) this.o[q] = 3; }
+      }
     }
   }
   k(a, b) { return b * this.gw + a; }

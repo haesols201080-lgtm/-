@@ -5,6 +5,7 @@ import { glyphSVG } from '../game/language.js';
 import { WORD } from '../data/lexicon.js';
 import { IS_TOUCH } from '../core/quality.js';
 import { MapView } from './map.js';
+import { InteriorMap } from './imap.js';
 import { Journal } from './journal.js';
 import { Settings } from './settings.js';
 
@@ -25,6 +26,7 @@ export class UI {
     this.touch = IS_TOUCH;
     this._build();
     this.mapView = new MapView(game);
+    this.imap = new InteriorMap(game); // 건물 안 지도 (v0.9)
     this.journal = new Journal(game);
     this.settingsView = new Settings(game);
     this.dialogue = this._dialogueApi();
@@ -402,9 +404,12 @@ export class UI {
     m.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.t === tab));
     const body = m.querySelector('.body');
     this.mapView.detach();
+    this.imap.detach();
     body.className = 'body' + (tab === 'map' ? ' map' : '');
     body.innerHTML = '';
-    if (tab === 'map') this.mapView.attach(body);
+    const inside = this.game.interiors.inPocket && this.game.interiors.cur && this.game.interiors.cur.indoor;
+    if (tab === 'map' && inside && !this._worldMap) this.imap.attach(body, () => { this._worldMap = true; this.switchTab('map'); });
+    else if (tab === 'map') { this.mapView.attach(body); if (inside) this.mapView.addInside(() => { this._worldMap = false; this.switchTab('map'); }); }
     else if (tab === 'journal') this.journal.render(body);
     else this.settingsView.render(body);
     this.menuTab = tab;
@@ -413,6 +418,8 @@ export class UI {
   closeMenu() {
     if (!this.menuEl) return;
     this.mapView.detach();
+    this.imap.detach();
+    this._worldMap = false;
     this.menuEl.remove();
     this.menuEl = null;
     if (this._menuPrev !== 'title') this.game.setMode('play');

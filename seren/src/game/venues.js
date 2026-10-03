@@ -35,19 +35,32 @@ export class Venues {
   }
   get inv() { return this.game.state.inv; }
   _day() { return Math.floor(this.game.world.clock.time); }
+  /** 물건을 가방에: 도시의 물건이면 그 구역 가게·창고 재고에서 온다 (v0.9 — 저절로 생기지 않는다) */
   _add(id, n = 1, quiet = false) {
+    const E = this.game.econ;
+    if (n > 0 && E && this.game.city) n = E.goodsOut(id, n);
+    if (n <= 0) { if (!quiet) this.game.ui.toast(`${ITEMS[id] ? ITEMS[id].name : id} — 구역에 남은 것이 없어요`, { kind: 'muted' }); return 0; }
     this.inv[id] = (this.inv[id] || 0) + n;
     if (!quiet) this.game.ui.toast(`${ITEMS[id] ? ITEMS[id].name : id} ${n > 0 ? '+' : ''}${n}`, { kind: 'item' });
+    return n;
   }
-  _pay(n) {
+  /** 값 치르기: 플레이어 → 그 구역 회사 몫 (도시 장부) */
+  _pay(n, why = '값', to = 'firms') {
     if ((this.inv.starseed || 0) < n) { this.game.ui.toast(`별씨가 모자라요 (가진 것 ${this.inv.starseed || 0})`, { kind: 'muted' }); return false; }
-    this.inv.starseed -= n; this.S.spent += n;
+    const E = this.game.econ;
+    if (E && this.game.city) E.charge(n, why, to); else this.inv.starseed -= n;
+    this.S.spent += n;
     audio.chime && audio.chime('soft');
     return true;
   }
-  _wage(n, what) {
-    this.inv.starseed = (this.inv.starseed || 0) + n; this.S.earned += n; this.S.worked++;
-    this.game.ui.toast(`${what} · 별씨 +${n} (가진 것 ${this.inv.starseed})`, { kind: 'item' });
+  /** 품삯: 그 구역 회사 몫 → 플레이어 (금고에 있는 만큼). 건물 속 교대 일(ops)이 부른 놀이는 퇴근 때 한꺼번에 받으므로 여기서 주지 않는다 */
+  _wage(n, what, from = 'firms') {
+    if (this.payless && performance.now() < this.payless) { this.payless = 0; this.game.ui.toast(`${what} · 교대 일로 셈`, { kind: 'item' }); return 0; }
+    const E = this.game.econ;
+    const paid = E && this.game.city ? E.reward(n, what, from) : (this.inv.starseed = (this.inv.starseed || 0) + n, n);
+    this.S.earned += paid; this.S.worked++;
+    this.game.ui.toast(`${what} · 별씨 +${Math.round(paid * 100) / 100}${paid < n ? ' (구역 금고가 모자라 덜 받음)' : ''} (가진 것 ${this.inv.starseed})`, { kind: 'item' });
+    return paid;
   }
   _learn(id) { const L = this.game.lang; if (id && WORD[id] && !L.known(id)) L.learn(id, 'teach'); }
   /** 실내의 그 쓰임 사람이 한마디 (고맙다·인사) */
@@ -402,7 +415,7 @@ export class Venues {
     if (!sellable.length) { g.ui.serviceCard('가게', '계산대', '되팔 물건이 없어요. 공방에서 빚은 손등불·결정 조각·울림꽃은 여기서 별씨로 바꿀 수 있어요.', []); return; }
     g.ui.serviceCard('가게', '계산대 · 되팔기', `가진 별씨 ${inv.starseed || 0}`, sellable.map((id) => {
       const I = ITEMS[id];
-      return { label: `${I.icon} ${I.name} 팔기 · 별씨 ${I.sell}`, sub: `가진 것 ${inv[id]}`, stay: true, onClick: (b) => { if ((inv[id] || 0) <= 0) return; inv[id]--; inv.starseed = (inv.starseed || 0) + I.sell; this._say('shop'); b.querySelector('small').textContent = `가진 것 ${inv[id]}`; g.ui.toast(`${I.name} → 별씨 +${I.sell}`, { kind: 'item' }); } };
+      return { label: `${I.icon} ${I.name} 팔기 · 별씨 ${I.sell}`, sub: `가진 것 ${inv[id]}`, stay: true, onClick: (b) => { if ((inv[id] || 0) <= 0) return; const E = g.econ; const got = E ? E.reward(I.sell, `되팔기 · ${I.name}`, 'firms') : I.sell; if (got <= 0) { g.ui.toast('가게 금고가 비었어요', { kind: 'muted' }); return; } inv[id]--; if (E) E.goodsIn(id, 1); else inv.starseed = (inv.starseed || 0) + I.sell; this._say('shop'); b.querySelector('small').textContent = `가진 것 ${inv[id]}`; g.ui.toast(`${I.name} → 별씨 +${I.sell}`, { kind: 'item' }); } };
     }));
   }
 
@@ -456,7 +469,7 @@ export class Venues {
     if (!this.museum || this.S.museums[this.museumKey]) return;
     if (this.museum.every((m) => this.S.exhibits[m.e.id])) {
       this.S.museums[this.museumKey] = true;
-      this._add('trinket', 1, true); this.inv.starseed = (this.inv.starseed || 0) + 3;
+      this._add('trinket', 1, true); if (this.game.econ) this.game.econ.reward(3, '박물관 기념', 'commons'); else this.inv.starseed = (this.inv.starseed || 0) + 3;
       setTimeout(() => this.game.ui.toast('전시를 모두 보았다 · 기념품 노래 장신구 + 별씨 3', { kind: 'item' }), 600);
     }
   }
@@ -495,7 +508,7 @@ export class Venues {
     const ask = () => {
       if (k >= qs.length) {
         this.S.days.school = this._day();
-        this._wage(1, `수업 ${right}/3`);
+        this._wage(1, `수업 ${right}/3`, 'commons');
         this._say('teach', 'thanks');
         return;
       }
@@ -646,6 +659,7 @@ export class Venues {
       if (T1 >= 12) {
         done = true; window.removeEventListener('keydown', key);
         wrap.close();
+        if (o.pay === 0) { if (inBand >= 7) { this._learn('core'); if (o.onWin) o.onWin(); } else this.game.ui.toast(`띠 안에 ${inBand.toFixed(1)}초 — 7초를 넘겨야 해요`, { kind: 'muted' }); return; }
         if (inBand >= 7) { this._wage(o.pay || 4, `${o.title || '출력 맞추기'} 성공`); this._learn('core'); audio.sing && audio.sing(WORK_TUNES.plant, { gain: 0.25 }); if (o.onWin) o.onWin(); else this._say('work', 'thanks'); }
         else { this._wage(1, `${o.title || '출력 맞추기'} · 띠 안에 ${inBand.toFixed(1)}초 (7초를 넘기면 별씨 ${o.pay || 4})`); }
         return;

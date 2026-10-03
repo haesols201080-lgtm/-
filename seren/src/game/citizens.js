@@ -486,7 +486,8 @@ export class Citizens {
       label: `${G.name} · 별씨 ${G.price}`, sub: `${G.desc} (가진 것 ${inv[G.id] || 0})`, disabled: (inv.starseed || 0) < G.price, stay: true,
       onClick: () => {
         if ((inv.starseed || 0) < G.price) return;
-        inv.starseed -= G.price;
+        // 노점의 물건도 구역 가게 재고에서, 값은 그 집(가구) 몫으로
+        if (g.econ && g.city) { if (g.econ.goodsOut(G.id, 1) < 1) { g.ui.toast('다 팔렸어요', { kind: 'muted' }); return; } g.econ.charge(G.price, `장터 · ${G.name}`, 'hh'); } else inv.starseed -= G.price;
         inv[G.id] = (inv[G.id] || 0) + 1;
         if (G.id === 'trinket') this.S.trinkets = (this.S.trinkets || 0) + 1;
         audio.chime('item');
@@ -504,7 +505,7 @@ export class Citizens {
     const g = this.game;
     for (const q of people) this.addFriend(q, friend);
     if (seeds) g.giveItem('starseed', seeds);
-    if (flower) { g.state.inv.flower = (g.state.inv.flower || 0) + flower; g.ui.toast(`울림꽃 +${flower}`, { kind: 'item' }); }
+    if (flower) { const n = g.giveItem('flower', flower); if (n) g.ui.toast(`울림꽃 +${n}`, { kind: 'item' }); }
     for (const [w, how] of words) g.lang.learn(w, how);
     audio.chime('quest');
     g.save();

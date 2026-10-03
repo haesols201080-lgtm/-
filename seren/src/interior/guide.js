@@ -34,8 +34,8 @@ export class Guide {
     }
     this.goal = { ...goal };
     this.leg = null;
-    this.t = 1e9; // 다음 프레임에 바로 길 찾기
     this._arrived = false;
+    if (this.cur) { this.t = 0; this._recalc(); } else this.t = 1e9;
   }
   /** 방으로 */
   toRoom(floor, roomId, label) {

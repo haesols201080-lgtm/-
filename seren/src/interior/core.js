@@ -180,9 +180,61 @@ function finish(B, L, best, list, serve) {
     const { gw } = B.G;
     for (const p of parts) for (const [i, j] of p.cells) for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const c = (j + dj) * gw + i + di; if (c >= 0 && c < F.mask.length && F.mask[c]) { F.mask[c] = 0; F.n--; } }
     for (const [i, j] of lobby) { const c = j * gw + i; if (F.mask[c]) { F.mask[c] = 0; F.n--; } }
-    if (F.n < 24) { F.dead = true; B.links = B.links.filter((k) => k.mezz !== F.i); }
+    if (F.n < 24) { F.dead = true; B.links = B.links.filter((k) => k.mezz !== F.i); continue; }
+    // 홀 바닥에서 오를 계단 자리가 있어야 중2층을 둔다 (보이는 단은 닿을 수 있어야)
+    const H = B.floors[F.i - 1];
+    const coreC = new Set();
+    for (const p of parts) for (const [i, j] of p.cells) coreC.add(j * gw + i);
+    for (const [i, j] of lobby) coreC.add(j * gw + i);
+    const ok = (i, j) => i >= 0 && j >= 0 && i < gw && j < B.G.gh && H.mask[j * gw + i] && !F.mask[j * gw + i] && !coreC.has(j * gw + i);
+    if (!searchMezzStair(gw, F.mask, F.y - H.y, ok, null)) { F.dead = true; B.links = B.links.filter((k) => k.mezz !== F.i); }
   }
   // 심이 닿지 않는 층(맨 위의 작은 층 등)은 쓰지 않는다
   for (const F of B.floors) F.reach = !F.dead && (F.mezz || serveIdx.includes(F.i));
   return B.core;
+}
+
+/**
+ * 중2층 계단 자리 찾기 (심 놓기·층 평면이 같은 규칙을 쓴다).
+ * gw: 격자 너비, M: 중2층 덮개, h: 오를 높이, ok(i, j): 홀 바닥으로 쓸 수 있는 칸, door: 정문 칸 [i, j] (멀수록 좋다)
+ *  · 'z' 곧은 계단: 중2층 가장자리(열마다 맨 앞 칸 J)가 같은 두 열 앞에 두 칸 너비 × n 칸 + 아래 디딤 한 칸
+ *  · 'x' 옆 계단: 가장자리를 따라 J+1..J+2 두 줄로 n 칸 + 위 끝 2×2 계단참(중2층 J 와 닿는다) + 아래 디딤, 옆 한 줄(J+3)은 통로
+ */
+export function searchMezzStair(gw, M, h, ok, door) {
+  const n = Math.max(4, Math.ceil(h / 0.7));
+  const gh = M.length / gw;
+  const jm = new Int16Array(gw).fill(-1);
+  for (let c = 0; c < M.length; c++) if (M[c]) { const i = c % gw, j = (c / gw) | 0; if (j > jm[i]) jm[i] = j; }
+  let mi0 = 1e9, mi1 = -1;
+  for (let i = 0; i < gw; i++) if (jm[i] >= 0) { mi0 = Math.min(mi0, i); mi1 = Math.max(mi1, i); }
+  const mid = (mi0 + mi1) / 2;
+  const score = (ci, cj) => -Math.abs(ci - mid) * 0.6 + (door ? Math.min(12, Math.hypot(ci - door[0], cj - door[1])) * 0.3 : 0);
+  let best = null, bs = -1e9;
+  for (let i = 0; i < gw - 1; i++) {
+    const J = jm[i];
+    if (J < 0 || jm[i + 1] !== J || J + n + 1 >= gh) continue;
+    let good = true;
+    for (let k = 1; k <= n + 1 && good; k++) for (let a = 0; a < 2 && good; a++) if (!ok(i + a, J + k)) good = false;
+    if (!good) continue;
+    let side = 0;
+    for (let k = 1; k <= n; k++) for (const ii of [i - 1, i + 2]) if (ok(ii, J + k)) side++;
+    const sc = side * 0.5 + score(i + 1, J + n);
+    if (sc > bs) { bs = sc; best = { axis: 'z', i0: i, i1: i + 1, J, n, h, jTop: J + 1, jBot: J + n }; }
+  }
+  if (best) return best;
+  for (let L0 = 0; L0 < gw - 1; L0++) {
+    const J = jm[L0];
+    if (J < 0 || jm[L0 + 1] !== J) continue;
+    for (const sx of [1, -1]) {
+      const runStart = sx > 0 ? L0 + 2 : L0 - 1;
+      let good = true;
+      for (const ii of [L0, L0 + 1]) for (const jj of [J + 1, J + 2]) if (!ok(ii, jj)) good = false;
+      for (let k = 0; k <= n && good; k++) { const ii = runStart + sx * k; for (const jj of [J + 1, J + 2]) if (!ok(ii, jj)) { good = false; break; } }
+      if (good) for (let k = 0; k < n; k++) if (!ok(runStart + sx * k, J + 3)) { good = false; break; }
+      if (!good) continue;
+      const sc = score(L0 + 1, J + 2);
+      if (sc > bs) { bs = sc; best = { axis: 'x', sx, i0: L0, i1: L0 + 1, J, n, h, run0: runStart, ib: runStart + sx * (n - 1), jTop: J + 1, jBot: J + 2 }; }
+    }
+  }
+  return best;
 }
