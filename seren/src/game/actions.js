@@ -38,7 +38,9 @@ const HANDLERS = {
       if (d < bd) { bd = d; best = r; }
     }
     if (!best) return;
+    C.fixDoor(best);
     g.state.home = best.id;
+    g.state.homeAt = [best.x, best.z];
     g.ui.toast('하모네아에 우리 집이 생겼다', { kind: 'item', sub: g.interiors.info(best).name });
     g.ui.refreshObjective();
   },

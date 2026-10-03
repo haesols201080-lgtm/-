@@ -98,7 +98,7 @@ export class Engine {
     if (this.sky) renderer.render(this.sky.scene, this.sky.camera);
     renderer.clearDepth();
     const cam = this.camera;
-    const alt = cam.position.y;
+    const alt = cam.position.y - (this.altOffset || 0); // 실내 공간(하늘 높이의 닫힌 방)은 땅 높이로 친다
     if (alt > 2500) {
       // 높은 곳: 먼 곳(수백 km)과 가까운 곳을 깊이 범위를 나눠 두 번 그린다 (깊이 정밀도)
       const n = cam.near, f = cam.far;
@@ -115,6 +115,18 @@ export class Engine {
       cam.far = f;
       cam.updateProjectionMatrix();
     } else renderer.render(this.scene, cam);
+  }
+
+  /** 실내 공간: keep(o) 가 아닌 장면의 것들을 잠시 숨긴다 (바깥 세계를 그리지 않는다) */
+  isolate(keep) {
+    this.unisolate();
+    this._hidden = [];
+    for (const o of this.scene.children) if (o.visible && !keep(o)) { o.visible = false; this._hidden.push(o); }
+  }
+  unisolate() {
+    if (!this._hidden) return;
+    for (const o of this._hidden) o.visible = true;
+    this._hidden = null;
   }
 
   render() {

@@ -305,6 +305,7 @@ export class Player {
   }
 
   startGlide() {
+    if (this.indoor) return; // 실내에서는 날개를 펴지 않는다
     const v = this.vel;
     const hs = Math.hypot(v.x, v.z);
     this.glideSpeed = Math.max(11, hs, Math.hypot(hs, v.y) * 0.8);
@@ -408,7 +409,7 @@ export class Player {
   }
 
   mountSkimmer() {
-    if (this.state === 'skim') return;
+    if (this.state === 'skim' || this.indoor) return;
     const hs = Math.hypot(this.vel.x, this.vel.z);
     this.skimSpeed = Math.max(hs, this.state === 'glide' ? this.glideSpeed * 0.9 : 0);
     if (this.state === 'glide' || this.state === 'air') this._skimAir = true;

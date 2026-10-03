@@ -431,9 +431,118 @@ export class CityFabric {
     for (let i = i0 - 1; i <= i0 + 1; i++) for (let j = j0 - 1; j <= j0 + 1; j++) {
       const arr = this.recGrid.get(i * 100003 + j);
       if (!arr) continue;
-      for (const r of arr) { const d = Math.hypot(r.door.x - x, r.door.z - z); if (d < bd) { bd = d; best = r; } }
+      for (const r of arr.slice()) {
+        if (!r.doorFixed && Math.hypot(r.x - x, r.z - z) < 60) this.fixDoor(r);
+        const d = Math.hypot(r.door.x - x, r.door.z - z);
+        if (d < bd) { bd = d; best = r; }
+      }
     }
     return best;
+  }
+
+  /**
+   * 문 자리 바로 잡기: 실제 건물 모델에 광선을 쏘아 바깥벽 바로 앞에 붙인다(떠 있거나 벽에 묻히지 않게).
+   *  · 상가 기단 위의 탑은 기단 바깥벽에 문을 낸다(탑 발치는 기단 속이라 닿을 수 없다)
+   *  · 다른 건물·구조물에 막힌 쪽, 문 앞에 설 수 없는 쪽, 이웃 문과 겹치는 쪽은 건너뛰고 다른 벽으로
+   *  · 문 바닥 = 문 앞 땅 높이. 처음 쓸 때 한 번만 (r.doorFixed) — 가까운 것부터 뒤에서 조금씩 미리 한다
+   */
+  fixDoor(r) {
+    if (r.doorFixed || !r.door || !this.sets) return r;
+    r.doorFixed = true;
+    const B = r.B, C = this.world.colliders;
+    const ray = this._ray || (this._ray = new THREE.Raycaster());
+    const pool = this._rayMesh || (this._rayMesh = {});
+    const setOf = this._setOf || (this._setOf = new Map(this.sets.map((S) => [S.kind, S])));
+    const near = B.recs.filter((q) => this.arch[q.kind] && setOf.has(q.kind));
+    let far = 10;
+    for (const q of near) far = Math.max(far, Math.hypot(q.x - r.x, q.z - r.z) + Math.hypot(q.sx, q.sz) * 1.3 + 4);
+    const O = new THREE.Vector3(), D = new THREE.Vector3();
+    const hitNearest = () => {
+      let best = null;
+      for (const q of near) {
+        const m = pool[q.kind] || (pool[q.kind] = new THREE.Mesh(this.arch[q.kind].hi, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide })));
+        m.matrixAutoUpdate = false;
+        m.matrixWorld.fromArray(setOf.get(q.kind).mats, q.idx * 16);
+        const h = ray.intersectObject(m, false)[0];
+        if (h && (!best || h.distance < best.d)) best = { d: h.distance, q };
+      }
+      return best;
+    };
+    const onPodium = (q) => {
+      if (!q.podiumKind || r.podiumKind) return false;
+      const c = Math.cos(q.rot), s = Math.sin(q.rot), dx = r.x - q.x, dz = r.z - q.z;
+      return Math.abs(c * dx - s * dz) < q.sx && Math.abs(s * dx + c * dz) < q.sz;
+    };
+    const n0 = [r.door.nx, r.door.nz];
+    const cands = [n0, [-n0[0], -n0[1]], [-n0[1], n0[0]], [n0[1], -n0[0]]];
+    const p = new THREE.Vector3();
+    // 한 쪽 벽에 문 자리 찾기. strict: 문 너비와 양옆 여유(±2.45 m)가 고른 벽이어야 — 기둥·지느러미·모서리에 걸치거나 붙지 않게 옆으로 밀어 본다
+    const tryPlace = (nx, nz, strict) => {
+      const tx = -nz, tz = nx;
+      const e0 = planExt(r, nx, nz);
+      const ge = Math.max(heightAt(r.x + nx * (e0 + 2), r.z + nz * (e0 + 2)), 0);
+      for (const sl of strict ? [0, -1.6, 1.6, -3.2, 3.2, -4.8, 4.8] : [0]) {
+        const ox = r.x + tx * sl, oz = r.z + tz * sl;
+        const cast = (lat, dy) => {
+          O.set(ox + tx * lat + nx * far, ge + dy, oz + tz * lat + nz * far); D.set(-nx, 0, -nz);
+          ray.set(O, D); ray.far = far + 2;
+          return hitNearest();
+        };
+        let best = null;
+        for (const dy of [0.5, 1.6, 2.8, 4.2]) { const h = cast(0, dy); if (h && (!best || h.d < best.d)) best = h; }
+        if (!best || (best.q !== r && !onPodium(best.q))) continue;
+        if (strict) {
+          let flat = true;
+          for (const lat of [-1.95, 1.95, -2.45, 2.45]) for (const dy of [1.0, 3.2]) {
+            const h = cast(lat, dy);
+            // 옆이 더 튀어나왔으면(기둥) 문틀과 겹치고, 훨씬 멀면(모서리 밖) 문이 허공에 걸린다
+            if (!h || h.q !== best.q || h.d < best.d - 0.12 || h.d > best.d + 1.1) { flat = false; break; }
+          }
+          if (!flat) continue;
+        }
+        const wd = far - best.d;
+        const dx = ox + nx * (wd + 0.17), dz = oz + nz * (wd + 0.17);
+        if (this._excluded(dx, dz, 3)) continue;
+        // 이웃 문(같은 기단을 쓰는 탑·기단 자신)과 겹치지 않게
+        if (B.recs.some((q) => q !== r && q.doorFixed && q.door && Math.hypot(q.door.x - dx, q.door.z - dz) < 6)) continue;
+        const fy = Math.max(heightAt(dx + nx * 1.3, dz + nz * 1.3), 0) + 0.15;
+        // 문 앞에 설 수 있나 (건물·구조물 충돌체에 밀리지 않나)
+        p.set(dx + nx * 1.6, fy, dz + nz * 1.6);
+        const px = p.x, pz = p.z;
+        C.pushOut(p, 0.45, 1.8, 0.6);
+        if (Math.hypot(p.x - px, p.z - pz) > 0.25) continue;
+        return { dx, dz, fy };
+      }
+      return null;
+    };
+    for (const strict of [true, false]) for (const [nx, nz] of cands) {
+      const got = tryPlace(nx, nz, strict);
+      if (!got) continue;
+      const { dx, dz, fy } = got;
+      const k0 = Math.floor(r.door.x / 80) * 100003 + Math.floor(r.door.z / 80);
+      r.door = { x: dx, z: dz, nx, nz, yaw: Math.atan2(nx, nz) };
+      r.ext = Math.hypot(dx - r.x, dz - r.z);
+      r.floorY = fy;
+      const k1 = Math.floor(dx / 80) * 100003 + Math.floor(dz / 80);
+      if (k1 !== k0) {
+        const a = this.recGrid.get(k0);
+        if (a) { const i = a.indexOf(r); if (i >= 0) a.splice(i, 1); }
+        if (!this.recGrid.has(k1)) this.recGrid.set(k1, []);
+        this.recGrid.get(k1).push(r);
+      }
+      return r;
+    }
+    return r; // 맞는 벽이 없으면 처음 자리 그대로
+  }
+  /** 블록의 문 앞(문에서 바깥으로 3.4 m)과 겹치나 — 소품·조작대가 문을 막지 않게 */
+  _doorBlocked(B, x, z, rr) {
+    for (const q of B.recs) {
+      if (!q.door || !q.doorFixed) continue;
+      const { x: dx, z: dz, nx, nz } = q.door;
+      const t = Math.max(0, Math.min(3.4, (x - dx) * nx + (z - dz) * nz));
+      if (Math.hypot(x - (dx + nx * t), z - (dz + nz * t)) < rr + 1.5) return true;
+    }
+    return false;
   }
   /** 반지름 R 안의 들어갈 수 있는 건물들 */
   recsNear(x, z, R) {
@@ -520,6 +629,7 @@ export class CityFabric {
     this._propsDirty = true;
     B.props = [];
     B.spots = [];
+    for (const r of B.recs) if (r.door) this.fixDoor(r);
     const raw = B.raw || [];
     for (let i = 0; i < raw.length; i += 6) {
       if (raw[i] === 0) this._propUV(B, raw[i + 1], raw[i + 2], raw[i + 3], raw[i + 4], raw[i + 5]);
@@ -538,7 +648,7 @@ export class CityFabric {
       if (!c) continue;
       // 템플릿 소품(노점·나무…)과 겹치면 옆으로 조금
       let { x, z } = c;
-      const hit = (px, pz) => B.props.some((q) => Math.hypot(q.x - px, q.z - pz) < 1.4 + (q.s || 1));
+      const hit = (px, pz) => B.props.some((q) => Math.hypot(q.x - px, q.z - pz) < 1.4 + (q.s || 1)) || this._doorBlocked(B, px, pz, 0.6);
       if (hit(x, z)) {
         const tx = Math.cos(c.yaw), tz = -Math.sin(c.yaw);
         for (const k of [2.5, -2.5, 5, -5]) if (!hit(c.x + tx * k, c.z + tz * k)) { x = c.x + tx * k; z = c.z + tz * k; break; }
@@ -642,6 +752,7 @@ export class CityFabric {
     // 건물과 겹치면 놓지 않는다 (소품끼리는 템플릿이 피한다)
     const rr = o.col ? o.col.r * (o.s || 1) : 0.5;
     if (B.core && !this._clearAll(x, z, rr + 0.5)) return null;
+    if (this._doorBlocked(B, x, z, rr)) return null;
     for (const c of this.world.colliders.near(x, z, rr + 2)) {
       if (!c.city || c.stream) continue;
       if (c.y0 > h + 6) continue;
@@ -842,7 +953,7 @@ export class CityFabric {
         for (const q of spec) {
           const lx = q[1] * s * p.sx, lz = q[2] * s;
           const wx = p.x + lx * c + lz * sn, wz = p.z - lx * sn + lz * c;
-          const col = q[0] === 'c' ? { type: 'cyl', x: wx, z: wz, r: q[3] * s, y0: p.y + q[4] * s - 0.3, y1: p.y + q[5] * s, city: true, stream: true }
+          const col = q[0] === 'c' ? { type: 'cyl', x: wx, z: wz, r: q[3] * s, y0: p.y + q[4] * s - 0.3, y1: p.y + q[5] * s, dome: q[6] ? q[6] * s : undefined, city: true, stream: true }
             : { type: 'box', x: wx, z: wz, hx: q[3] * s * p.sx, hz: q[4] * s, rot: p.yaw, y0: p.y + q[5] * s - 0.3, y1: p.y + q[6] * s, city: true, stream: true };
           B.pcols.push(C.add(col));
         }
@@ -1091,6 +1202,14 @@ export class CityFabric {
     if (this._propsDirty && (this._fillT = (this._fillT || 0) - dt) < 0) { this._fillT = 0.25; this._fillProps(this._last.y > -1e5 ? this._last : cam); }
     const pp = ctx.player ? ctx.player.pos : cam;
     if ((this._colT = (this._colT || 0) - dt) < 0) { this._colT = 0.3; this._propCols(pp.x, pp.z); }
+    // 문 자리 미리 잡기 (가까운 것부터, 한 프레임 1 ms 안팎)
+    {
+      const t1 = performance.now();
+      if ((this._doorNearT = (this._doorNearT || 0) - dt) < 0) { this._doorNearT = 1; this._doorNear = this.recsNear(cam.x, cam.z, 420).filter((r) => !r.doorFixed); }
+      while (this._doorNear && this._doorNear.length && performance.now() - t1 < 1.2) this.fixDoor(this._doorNear.pop());
+      this._doorI = this._doorI || 0;
+      while (this._doorI < this.recs.length && performance.now() - t1 < 1.2) this.fixDoor(this.recs[this._doorI++]);
+    }
     this.lamps.update();
     this.beacons.update();
   }

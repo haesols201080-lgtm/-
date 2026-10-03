@@ -53,7 +53,7 @@ src/
   player/  player(이동 상태기계) avatar(모델·절차 애니메이션) camera-rig
   game/    game(중심·모드·입력·저장) state(저장 형식) quests dialogue actions language npcs resonance discovery
            services(시설의 쓰임: 시설지기 카드·연락선·나룻배·온실·날씨·탐지기)
-           interiors(건물 들어가기: 로비·사람·빛 승강기·하늘 전망대, 충돌체 갈아 끼우기)
+           interiors(건물 들어가기: 로딩 → 바깥과 떨어진 실내 공간(POCKET_Y)·사람·빛 승강기·하늘 전망대) tips(처음 해 보는 일 안내 카드)
            citizens(도시 주민: 자리·일과·걷기·말 걸기·함께 놀기·집 안 사람들)
            venues(건물의 일 — 실내 쓰임마다 시설·돈·물건·기운·일거리) outdoors(바깥 조작대·승강판·하늘배·드론·충전·부탁함)
            world-events(일식·별비·축제·부탁) director(연출 카메라)
@@ -74,6 +74,8 @@ src/
 - **해류**: `data/currents.js` (점 = [x, 높이, z, 절대?]). `unlock: 탑id` 면 그 탑을 깨울 때 흐름.
 - **대사**: `data/story.js` 의 `LINES` (단어 id 배열 + 한국어). 새 단어는 `data/lexicon.js` 에 (음 모티프가 겹치지 않게).
 - **대화**: `CONVOS` — `{s: 인물id, line}` / `{s:'moa', t}` / `{choice:[...]}`, `act` 로 동작 실행.
+- **처음 해 보는 일 안내**: `data/tips.js` 의 `TIPS[id]`(제목·한 줄·순서) + 그 일을 시작하는 함수 첫 줄에 `if (this.game.tips && this.game.tips.first('id', () => 이함수(인자))) return;`. 본 것은 `state.tips`, 설정 「도움말」 끄면 안 띄움, 일지 → 도움말에서 다시 보기.
+- **공명 음을 요구하는 놀이**: 고를 수 있는 음 = `state.tones`(아는 음)뿐. 아는 음이 모자라면 듣기만 하는 판으로 바꾸거나(연구동 「같다/다르다」), 버튼을 막고 이유를 적는다(주민 「함께 고요해지기」).
 - **퀘스트**: `QUESTS` — 단계 type 은 `game/quests.js` 머리 주석 참고. 동작은 `game/actions.js` 의 `HANDLERS`. 도시의 삶을 본편에 엮을 때는 `stat`(예: `venue.worked`) 단계나 `flag` 단계 + 코드에서 `game.setFlag(k)` 를 씁니다(지금 깃발: `helpedNeighbor`·`rodeSky`·`liftTop`·`homeVisit`). 줄거리: 탐사선 「라르크」가 신호를 따라와 스스로 착륙 → 이웃이 되기 → 이름 노래로 시민(집 `state.home`) → 듣던 탑들이 다시 노래 → 온 하늘에 대답. 탑은 「잠든」 게 아니라 「듣는 쪽」입니다(쇠락한 문명이 아님).
 - **부탁(날마다)**: `game/world-events.js` 의 `TEMPLATES` 에 함수 추가.
 - **메아리·글자돌·도감**: `story.js` 의 `ECHOES`, `GLYPH_STONES`, `CODEX`.
@@ -115,7 +117,8 @@ src/
 - 건물 외벽은 `litMaterial({ facade: true, tech })` — 정점 `fac` = [단면 둘레 길이, 외벽 종류(0 없음 1 커튼월 2 띠창 3 점창 4 첨탑 5 발코니 6 유리 격자 7 수직 농장)], `base`(땅 높이), `anc`(미터 부속의 고정: 켜짐·기준 위 높이·바깥 거리). 창은 실내 매핑(방 들여다보기)으로 그린다. 문양 빛은 유리 위에 그리지 않는다(`glassMaskF`).
 - 모든 `litMaterial` 은 반사광의 밝기가 0.72 를 넘으면 부드럽게 누른다(블룸 문턱 1.1 아래). 빛나야 하는 것은 em(emissive·정점 emit·창 불빛)으로 넣을 것.
 - 피할 곳: 장소·인물·글자돌·메아리·시설·빛길 역은 `_excl`(원), 빛길 관·낮은 해류 밑은 `_corr`(높이 제한 통로, `_under(x, z, R)` = 그 아래로만 지을 수 있는 높이).
-- 도시 충돌체에는 `city: true`. 들어간 건물은 `openShell` 이 문 뚫린 모델로 바꾸고 `interiors` 가 충돌체를 바닥·벽·승강기로 갈아 끼우며, 나오면 되돌린다.
+- 도시 충돌체에는 `city: true`. **실내는 바깥 건물 속이 아니다**: 문에서 E → 로딩 화면 → 건물 바로 위 하늘 높이(`interiors.POCKET_Y` = 8000 m)에 쓰임별 크기의 닫힌 방을 짓고(`sky: true` 충돌체: 바닥·벽·천장), 들어가 있는 동안 `engine.isolate` 로 바깥 세계를 숨기고(실내에 보일 것은 `userData.indoor = true`), `world.viewProxy` 로 땅·도시 세부 단계를 문 앞 거리 기준으로, `engine.altOffset` 으로 하늘빛·고도 효과를 땅 높이 기준으로 둔다. 카메라는 `rig.floorLock`(점프해도 거의 안 오름) + `clampCamera`(벽에서 1.3 m 안). 바깥 건물 모델·충돌체는 손대지 않는다(`openShell` 은 이제 쓰지 않음).
+- **문 자리**: `cityfabric.fixDoor(r)` 가 실제 건물 모델에 광선을 쏘아 바깥벽 0.17 m 앞에 붙인다 — 문 너비±여유가 고른 벽으로 옆으로 밀어 보고(기둥·모서리 피하기), 상가 기단 위의 탑은 기단 바깥벽에, 다른 건물에 막히거나 문 앞에 설 수 없는 쪽은 건너뛴다. 처음 쓸 때 한 번(뒤에서 가까운 것부터 조금씩, `nearestDoor` 는 둘레 60 m 를 바로). 문을 웨이포인트로 쓸 때는 먼저 `city.fixDoor(r)`. 문 앞 3.4 m 에는 소품·조작대를 두지 않는다(`_doorBlocked`). 검사: 스크래치 `doors4.mjs` 류(광선으로 문-벽 틈·문 앞 높이·막힘).
 - 도시 바닥은 지형 셰이더의 `cityGround()`(city-ground.js)가 계획 텍스처(`uPlan`, 구역마다 한 줄: 고리 표 + 블록 쓰임·변형·플래그)를 읽어 그린다. JS(`cityplan.js`)와 GLSL 의 블록 좌표식이 같아야 템플릿과 바닥이 맞는다.
 
 ## 땅의 쓰임과 주민 (v0.5)에서 알아 둘 것

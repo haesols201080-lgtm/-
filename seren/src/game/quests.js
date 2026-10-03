@@ -230,7 +230,7 @@ export class Quests {
       case 'scan': if (st.id === 'skywhale' && g.creatures) { const w = g.creatures.nearestWhale(g.player.pos); if (w) out.push({ x: w.x, y: w.y, z: w.z, label: '하늘고래' }); } break;
       case 'flag':
         if (st.marker === 'anchor' && g.anchor && g.player.pos.y < 20000) { const d = g.anchor.deckStop; out.push({ x: d.x, y: d.y, z: d.z, label: '승강차' }); }
-        if (st.marker === 'home' && g.state.home != null && g.city) { const r = g.city.recs[g.state.home]; if (r) out.push({ x: r.door.x, y: r.floorY + 2, z: r.door.z, label: '우리 집' }); }
+        if (st.marker === 'home' && g.state.home != null && g.city) { const r = g.city.recs[g.state.home]; if (r) g.city.fixDoor(r); if (r) out.push({ x: r.door.x, y: r.floorY + 2, z: r.door.z, label: '우리 집' }); }
         break;
     }
     return out;

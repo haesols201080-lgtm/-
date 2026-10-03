@@ -78,13 +78,20 @@ export class World {
 
   update(dt, camera, ctx) {
     this.elapsed += dt;
-    this.atmos.u.uAlt.value = camera.position.y;
-    this.clock.update(dt);
-    this.atmos.update(this.clock, this.elapsed, camera.position.y);
-    this.colliders.update();
-    for (const m of this.modules) m.update && m.update(dt, ctx);
-    this.terrain.update(camera.position);
-    this.water.update(camera.position);
+    // 실내 공간에 있는 동안에는 땅·도시·하늘을 문 앞 거리에 선 것처럼 갱신한다 (세부 단계가 바뀌지 않게)
+    const real = this.viewProxy ? camera.position.clone() : null;
+    if (real) camera.position.copy(this.viewProxy);
+    try {
+      this.atmos.u.uAlt.value = camera.position.y;
+      this.clock.update(dt);
+      this.atmos.update(this.clock, this.elapsed, camera.position.y);
+      this.colliders.update();
+      for (const m of this.modules) m.update && m.update(dt, ctx);
+      this.terrain.update(camera.position);
+      this.water.update(camera.position);
+    } finally {
+      if (real) camera.position.copy(real);
+    }
   }
 
   /** 렌더 직전에 (카메라 확정 후) 하늘 갱신 */

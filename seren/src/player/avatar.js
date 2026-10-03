@@ -233,6 +233,7 @@ export class Avatar {
   }
 
   addTo(scene) {
+    this.root.userData.indoor = this.scarf.userData.indoor = this.shadow.userData.indoor = true; // 실내 공간에서도 보인다
     scene.add(this.root);
     scene.add(this.scarf);
     scene.add(this.shadow);

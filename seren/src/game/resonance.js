@@ -123,6 +123,7 @@ export class Resonance {
 
   // ── 공명탑 선율 맞추기 ───────────────────
   startPylon(P) {
+    if (this.game.tips && this.game.tips.first('song', () => this.startPylon(P))) return;
     const g = this.game;
     if (P.alive) return;
     const tones = this.unlocked.length ? this.unlocked : [0];

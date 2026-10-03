@@ -46,6 +46,7 @@ import { WorldEvents, Requests } from './world-events.js';
 import { Director } from './director.js';
 import { Services } from './services.js';
 import { Interiors } from './interiors.js';
+import { Tips } from './tips.js';
 import { Venues } from './venues.js';
 import { Outdoors } from './outdoors.js';
 import { Citizens } from './citizens.js';
@@ -110,6 +111,7 @@ export class Game {
     this.services = new Services(this);
     this.venues = new Venues(this);
     this.interiors = new Interiors(this);
+    this.tips = new Tips(this);
     this.outdoors = new Outdoors(this);
     this.citizens = new Citizens(this);
 
@@ -258,6 +260,15 @@ export class Game {
     if (s.flags['pickups:sled']) this.discovery.spawnPickups('sled');
     for (const [id, pos] of Object.entries(s.flags.npcPos || {})) this.npcs.goTo(id, pos[0], pos[1], { instant: true });
     this.requests.active = s.flags.requests || [];
+    // 우리 집: 건물 번호는 화질(건물 밀도)에 따라 달라질 수 있어, 저장된 자리에서 가장 가까운 살림집으로 다시 찾는다
+    if (s.home != null && s.homeAt && this.city) {
+      const r = this.city.recs[s.home];
+      if (!r || Math.hypot(r.x - s.homeAt[0], r.z - s.homeAt[1]) > 3) {
+        let best = null, bd = Infinity;
+        for (const q of this.city.recs) { if (q.use !== 'home') continue; const d = Math.hypot(q.x - s.homeAt[0], q.z - s.homeAt[1]); if (d < bd) { bd = d; best = q; } }
+        if (best) s.home = best.id;
+      }
+    }
     // 1부를 끝낸 옛 저장: 2부(바다 건너)를 이어서 시작
     if (this.quests.isDone('mq5') && !this.quests.isActive('mq6') && !this.quests.isDone('mq6')) this.quests.start('mq6', true);
     this.transit.refresh();
@@ -431,10 +442,10 @@ export class Game {
     const act = this.citizens.activityTarget(p);
     if (act) return act;
     const inside = this.interiors.target(p);
-    if (inside && inside.kind !== 'door') return inside;
+    if (inside && (inside.kind !== 'door' || inside.dist < 2.6)) return inside; // 문 바로 앞이면 문이 먼저 (옆 조작대·주민보다)
     const ven = this.venues.target(p);
     if (ven) return ven;
-    const out = this.interiors.cur && this.interiors._inside(p.x, p.z) ? null : this.outdoors.target(p);
+    const out = this.interiors.inPocket ? null : this.outdoors.target(p);
     if (out) return out;
     const npc = this.npcs.nearest(p, 5.5, (n) => !n.ambient);
     if (npc && npc.service === 'lobby') return { kind: 'lobby', o: npc, label: '안내지기 · 이 건물 이야기', short: '안내' };
@@ -465,7 +476,7 @@ export class Game {
     if (t.kind === 'lift') return this.interiors.up();
     if (t.kind === 'liftdown') return this.interiors.down();
     if (t.kind === 'lobby') { this.focusOn(t.o); return this.interiors.talk(); }
-    if (t.kind === 'station') return this.stationCard(t.o);
+    if (t.kind === 'station') { if (this.tips.first('transit', () => this.stationCard(t.o))) return; return this.stationCard(t.o); }
     if (t.kind === 'elevator') return this.rideElevator(t.o.up);
     if (t.kind === 'deck' && this.quests.step('mq4')?.type === 'compose') {
       if (this.world.atmos.state.night > 0.5) return this.startCompose();
@@ -893,7 +904,7 @@ export class Game {
     if (Math.hypot(pos.x, pos.z) > 1200) markers.push({ bearing: bearing(0, 0), cls: 'p', label: '척추' });
     markers.push(...this.services.compassMarkers(bearing));
     this.ui.updateCompass(this.rig.yaw, markers);
-    this.ui.altimeter(p.pos.y, p.state === 'glide' ? p.glideSpeed : p.vel.length());
+    this.ui.altimeter(this.interiors.inPocket ? 0 : p.pos.y, p.state === 'glide' ? p.glideSpeed : p.vel.length());
     const t0 = tg[0];
     if (t0) {
       const d = Math.hypot(t0.x - pos.x, t0.z - pos.z);
@@ -920,7 +931,7 @@ export class Game {
     for (const e of p.events) {
       if (e === 'jump') {
         audio.noise({ freq: 900, dur: 0.18, gain: 0.08, sweep: 2000 });
-        if (!s.flags.moaJump) { s.flags.moaJump = true; this.ui.moa(MOA.firstJump); }
+        if (!s.flags.moaJump && !this.player.indoor) { s.flags.moaJump = true; this.ui.moa(MOA.firstJump); }
       }
       if (e === 'land') {
         const k = Math.min(1, (p.impact || 4) / 20);

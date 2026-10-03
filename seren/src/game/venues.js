@@ -379,6 +379,7 @@ export class Venues {
   // ═══ 쓰기 ═══════════════════════════════════════════════
 
   shelf(sh) {
+    if (this.game.tips && this.game.tips.first('shop', () => this.shelf(sh))) return;
     const g = this.game, inv = this.inv;
     const items = sh.items.map((id) => {
       const I = ITEMS[id];
@@ -389,6 +390,7 @@ export class Venues {
   }
 
   sellCard() {
+    if (this.game.tips && this.game.tips.first('shop', () => this.sellCard())) return;
     const g = this.game, inv = this.inv;
     const sellable = BAG_ORDER.filter((id) => ITEMS[id].sell && (inv[id] || 0) > 0);
     if (!sellable.length) { g.ui.serviceCard('가게', '계산대', '되팔 물건이 없어요. 공방에서 빚은 손등불·결정 조각·울림꽃은 여기서 별씨로 바꿀 수 있어요.', []); return; }
@@ -399,6 +401,7 @@ export class Venues {
   }
 
   cafe() {
+    if (this.game.tips && this.game.tips.first('cafe', () => this.cafe())) return;
     const g = this.game;
     if (this.order && this.order.ready > this.t) { g.ui.toast('부엌에서 짓고 있어요. 잠깐만요', { kind: 'muted' }); return; }
     if (this.order) {
@@ -434,6 +437,7 @@ export class Venues {
   }
 
   exhibit(e) {
+    if (this.game.tips && this.game.tips.first('museum', () => this.exhibit(e))) return;
     const g = this.game, first = !this.S.exhibits[e.id];
     this.S.exhibits[e.id] = true;
     if (first) this._learn(e.word);
@@ -452,6 +456,7 @@ export class Venues {
   }
   /** 해설사의 안내: 전시대를 차례로 비추며 이야기한다 (카드를 닫으면 안내도 끝) */
   tour() {
+    if (this.game.tips && this.game.tips.first('museum', () => this.tour())) return;
     const g = this.game;
     if (!this.museum) return;
     const list = this.museum.slice();
@@ -472,6 +477,7 @@ export class Venues {
   }
 
   classQuiz() {
+    if (this.game.tips && this.game.tips.first('school', () => this.classQuiz())) return;
     const g = this.game, t = g.world.clock.time % 1;
     if (this.S.days.school === this._day()) { g.ui.toast('오늘 수업은 이미 들었어요. 내일 또 와요', { kind: 'muted' }); return; }
     if (t < 0.27 || t > 0.72) { g.ui.serviceCard('노래 학교', '지금은 수업이 없어요', '수업은 아침부터 저녁 전까지 열려요. 그때 다시 오세요.', []); return; }
@@ -501,6 +507,7 @@ export class Venues {
   }
 
   treat() {
+    if (this.game.tips && this.game.tips.first('heal', () => this.treat())) return;
     const g = this.game, p = g.player.pos;
     if (this._treatT && this.t - this._treatT < 30) { g.ui.toast('방금 진료를 받았어요. 조금 쉬었다 와요', { kind: 'muted' }); return; }
     this._treatT = this.t;
@@ -515,6 +522,7 @@ export class Venues {
   }
 
   archives(recs) {
+    if (this.game.tips && this.game.tips.first('library', () => this.archives(recs))) return;
     const g = this.game;
     g.ui.serviceCard('서고', '기록 결정', '결정을 손에 쥐면 옛 노래가 들린다. 읽으면 말을 하나 배워요.', [
       ...recs.map((R) => ({ label: `${this.S.archives[R.id] ? '✓ ' : ''}${R.title}`, sub: R.text.slice(0, 34) + '…', onClick: () => { this.S.archives[R.id] = true; this._learn(R.word); g.ui.serviceCard('기록 결정', R.title, R.text, [], R.word && WORD[R.word] ? `<div class="mini-glyph">${glyphSVG(R.word, 56)}<span>「${WORD[R.word].ko}」</span></div>` : ''); } })),
@@ -522,22 +530,40 @@ export class Venues {
     ]);
   }
 
-  /** 실험: 물질이 내는 음을 듣고 같은 음을 고른다 (세 번) */
+  /**
+   * 실험: 물질이 내는 음을 듣고 같은 음을 고른다 (세 번). 고를 수 있는 음 = 내가 아는 공명 음뿐.
+   * 아는 음이 하나 이하면 「두 소리가 같은가」만 듣고 고른다 (연주할 필요 없음)
+   */
   experiment() {
+    if (this.game.tips && this.game.tips.first('lab', () => this.experiment())) return;
     const g = this.game;
+    const NAMES = ['솟음', '열림', '흐름', '빛', '고요'];
+    const pool = [...g.state.tones].sort((a, b) => a - b);
     let k = 0, right = 0;
+    const finish = (ok) => { if (ok) right++; g.ui.toast(ok ? '정렬됐다!' : '어긋났다…', { kind: ok ? 'item' : 'muted' }); setTimeout(round, 600); };
     const round = () => {
       if (k >= 3) {
         if (right >= 2) { this._add('shard'); this._say('research', 'thanks'); } else g.ui.toast(`실험 ${right}/3 · 다시 해 봐요`, { kind: 'muted' });
         return;
       }
       k++;
-      const target = Math.floor(Math.random() * 5);
+      if (pool.length < 2) {
+        const a = Math.floor(Math.random() * 5), b = Math.random() < 0.5 ? a : (a + 1 + Math.floor(Math.random() * 4)) % 5;
+        const play = () => { audio.tone && audio.tone(a, { gain: 0.45 }); setTimeout(() => audio.tone && audio.tone(b, { gain: 0.45 }), 650); };
+        play();
+        g.ui.serviceCard(`연구동 · 실험 ${k}/3`, '두 물질이 같은 음으로 울릴까요?', '두 소리를 차례로 들려줘요. 같으면 「같다」, 다르면 「다르다」. (공명 음을 둘 이상 알게 되면 음 이름으로 맞히는 실험을 해요)', [
+          { label: '▶ 다시 듣기', stay: true, onClick: play },
+          { label: '같다', onClick: () => finish(a === b) },
+          { label: '다르다', onClick: () => finish(a !== b) },
+        ]);
+        return;
+      }
+      const target = pool[Math.floor(Math.random() * pool.length)];
       const play = () => audio.tone && audio.tone(target, { gain: 0.45 });
       play();
-      g.ui.serviceCard(`연구동 · 실험 ${k}/3`, '이 물질은 어떤 음으로 울릴까요?', '들은 음과 같은 음을 고르세요. 맞으면 물질이 그 음으로 정렬된다.', [
+      g.ui.serviceCard(`연구동 · 실험 ${k}/3`, '이 물질은 어떤 음으로 울릴까요?', `들은 음과 같은 음을 고르세요 — 내가 아는 음 ${pool.length}개 중 하나예요. 맞으면 물질이 그 음으로 정렬된다.`, [
         { label: '▶ 다시 듣기', stay: true, onClick: play },
-        ...['솟음', '열림', '흐름', '빛', '고요'].map((nm, i) => ({ label: `${nm}`, sub: `${i + 1}번 음`, onClick: () => { audio.tone && audio.tone(i, { gain: 0.35 }); const ok = i === target; if (ok) right++; g.ui.toast(ok ? '정렬됐다!' : '어긋났다…', { kind: ok ? 'item' : 'muted' }); setTimeout(round, 600); } })),
+        ...pool.map((i) => ({ label: NAMES[i], sub: `${i + 1}번 음 · 눌러서 들어 보기도`, onClick: () => { audio.tone && audio.tone(i, { gain: 0.35 }); finish(i === target); } })),
       ]);
     };
     round();
@@ -545,6 +571,7 @@ export class Venues {
 
   /** 생산 줄: 빛 표시가 가운데 칸에 올 때 누르기 (여섯 번) */
   lineWork() {
+    if (this.game.tips && this.game.tips.first('factory', () => this.lineWork())) return;
     const g = this.game;
     this._learn('build');
     this._timing('빚음 공방 · 생산 줄', '빛 표시가 가운데 칸에 들어올 때 「빚기」(E·스페이스). 박자에 맞춰 여섯 번.', 6, (hits) => {
@@ -558,6 +585,7 @@ export class Venues {
 
   /** 분류: 들어온 짐의 색에 맞는 칸으로 (여섯 개) */
   sortWork() {
+    if (this.game.tips && this.game.tips.first('depot', () => this.sortWork())) return;
     const g = this.game;
     this._learn('carry');
     const COLS = ['#ff9fd0', '#7ff3e6', '#ffd27a'], NAMES = ['분홍 칸', '청록 칸', '금빛 칸'];
@@ -582,6 +610,7 @@ export class Venues {
    * o: { kicker, title, pay, onWin } — 코일 탑 조율도 같은 놀이를 쓴다
    */
   powerWork(o = {}) {
+    if (this.game.tips && this.game.tips.first('plant', () => this.powerWork(o))) return;
     const g = this.game;
     const html = `<div class="mini-meter"><div class="band"></div><div class="needle"></div></div><div class="mini-row"><button class="btn" data-d="-1">▼ 낮추기</button><button class="btn" data-d="1">▲ 높이기</button></div><p class="mini-msg">띠 안에 머문 시간 <b>0.0</b>초 / 7초 · 남은 시간 <i>12</i>초</p>`;
     const wrap = g.ui._card(`<div class="kicker">${o.kicker || '공명 발전소 · 조종대'}</div><h2>${o.title || '출력 맞추기'}</h2><p>핵의 출력이 물결친다. ▲▼(또는 방향키 위·아래, W·S)로 바늘을 가운데 띠 안에 붙잡아 두세요. 12초 동안 7초를 넘기면 성공.</p>${html}`, null, { keys: false });
@@ -651,6 +680,7 @@ export class Venues {
 
   // ── 표·여행 ─────────────────────────────
   tickets() {
+    if (this.game.tips && this.game.tips.first('terminal', () => this.tickets())) return;
     const g = this.game, here = this.cur && this.cur.r;
     const by = new Map();
     for (const r of g.city.recs) {
@@ -683,6 +713,7 @@ export class Venues {
 
   // ── 일거리 (사무탑 게시판·창고 배달) ──────────────
   jobBoard(here = this.cur && this.cur.r) {
+    if (this.game.tips && this.game.tips.first('jobs', () => this.jobBoard(here))) return;
     const g = this.game;
     if (this.S.job) { this._jobStatus(); return; }
     if (!here) return;
@@ -691,6 +722,7 @@ export class Venues {
     const pickFar = (arr) => { const c = arr.filter((r) => { const d = Math.hypot(r.x - here.x, r.z - here.z); return d > 200 && d < 1100; }); return c.length ? c[Math.floor(rnd() * c.length)] : null; };
     const items = [];
     const doc = pickFar(offices);
+    if (doc) g.city.fixDoor(doc);
     if (doc) { const I = g.interiors.info(doc); const d = Math.hypot(doc.x - here.x, doc.z - here.z); items.push({ label: `문서 전하기 → ${I.name}`, sub: `${Math.round(d)} m · 별씨 ${2 + Math.round(d / 300)}`, onClick: () => this._takeJob({ kind: 'deliver', label: `문서 → ${I.name}`, x: doc.door.x, z: doc.door.z, reward: 2 + Math.round(d / 300), word: 'carry' }) }); }
     const mk = g.city.marks && g.city.marks.length ? g.city.marks[Math.floor(rnd() * g.city.marks.length)] : null;
     if (mk) { const d = Math.hypot(mk.x - here.x, mk.z - here.z); items.push({ label: `측량 · ${mk.name}의 높이 재기`, sub: `${(d / 1000).toFixed(1)} km · 별씨 ${3 + Math.round(d / 800)}`, onClick: () => this._takeJob({ kind: 'visit', label: `측량 → ${mk.name}`, x: mk.x, z: mk.z, r: 60, reward: 3 + Math.round(d / 800), word: 'far' }) }); }
@@ -700,12 +732,14 @@ export class Venues {
     g.ui.serviceCard('사무탑', '오늘의 일거리', '도시의 일은 노래로 나누어 맡아요. 하나를 맡으면 나침반에 목적지가 보여요.', items);
   }
   deliveryCard(here = this.cur && this.cur.r) {
+    if (this.game.tips && this.game.tips.first('delivery', () => this.deliveryCard(here))) return;
     const g = this.game;
     if (this.S.job) { this._jobStatus(); return; }
     if (!here) return;
     const cands = g.city.recs.filter((r) => r !== here && r.zone === here.zone && Math.hypot(r.x - here.x, r.z - here.z) > 220 && Math.hypot(r.x - here.x, r.z - here.z) < 1200);
     if (!cands.length) { g.ui.toast('지금은 맡길 짐이 없어요', { kind: 'muted' }); return; }
     const dst = cands[Math.floor(Math.random() * cands.length)];
+    g.city.fixDoor(dst);
     const I = g.interiors.info(dst), d = Math.hypot(dst.x - here.x, dst.z - here.z);
     const reward = 2 + Math.round(d / 250);
     g.ui.serviceCard('물류 창고', '배달 창구', `${I.name}로 갈 짐이 있어요. ${Math.round(d)} m.`, [
@@ -744,16 +778,26 @@ export class Venues {
   // ── 공연·정원·집 ─────────────────────────────
   _showtime() { const t = this.game.world.clock.time % 1; return t > 0.45 && t < 0.92; }
   concert() {
+    if (this.game.tips && this.game.tips.first('concert', () => this.concert())) return;
     const g = this.game;
     if (!this._showtime()) { g.ui.serviceCard('공연장', '공연 시간표', '합창은 한낮이 지나면 시작해 밤까지 이어져요. 그때 객석에 앉으면 함께 부를 수도 있어요.', []); return; }
-    const phrase = Array.from({ length: 4 }, () => Math.floor(Math.random() * 5));
+    const pool = [...g.state.tones].sort((a, b) => a - b);
+    if (pool.length < 2) {
+      const l = [0, 2, 4, 2, 0];
+      audio.sing && audio.sing(l, { gain: 0.32, step: 0.45 });
+      g.ui.serviceCard('공연장', '합창단이 노래한다', '함께 부르려면 공명 음을 둘 이상 알아야 해요. 지금은 객석에서 들어요 — 들을수록 아웬의 말이 귀에 익어요.', [
+        { label: '▶ 한 번 더 듣기', stay: true, onClick: () => audio.sing && audio.sing(l, { gain: 0.32, step: 0.45 }) },
+      ]);
+      return;
+    }
+    const phrase = Array.from({ length: 4 }, () => pool[Math.floor(Math.random() * pool.length)]);
     audio.sing && audio.sing(phrase, { gain: 0.32, step: 0.45 });
     this._say('sing', 'friend');
     let inp = [];
     const NAMES = ['솟음', '열림', '흐름', '빛', '고요'];
-    const wrap = g.ui.serviceCard('공연장', '합창단이 노래한다', '방금 부른 네 음을 따라 불러 보세요 (버튼 또는 1~5).', [
+    const wrap = g.ui.serviceCard('공연장', '합창단이 노래한다', `방금 부른 네 음을 따라 불러 보세요 — 내가 아는 음(${pool.map((i) => NAMES[i]).join('·')})만 나와요 (버튼 또는 숫자 키).`, [
       { label: '▶ 한 번 더 듣기', stay: true, onClick: () => audio.sing && audio.sing(phrase, { gain: 0.32, step: 0.45 }) },
-      ...NAMES.map((nm, i) => ({ label: nm, sub: `${i + 1}`, stay: true, onClick: () => press(i) })),
+      ...pool.map((i) => ({ label: NAMES[i], sub: `${i + 1}`, stay: true, onClick: () => press(i) })),
     ], `<p class="mini-msg">따라 부른 음: <b>-</b></p>`);
     const msg = wrap.querySelector('.mini-msg b');
     const press = (i) => {
@@ -769,11 +813,12 @@ export class Venues {
         }, 300);
       }
     };
-    const key = (e) => { const n = +e.key; if (n >= 1 && n <= 5) press(n - 1); };
+    const key = (e) => { const n = +e.key; if (n >= 1 && n <= 5 && pool.includes(n - 1)) press(n - 1); };
     window.addEventListener('keydown', key);
     const obs = setInterval(() => { if (!wrap.isConnected) { window.removeEventListener('keydown', key); clearInterval(obs); } }, 500);
   }
   tend() {
+    if (this.game.tips && this.game.tips.first('tend', () => this.tend())) return;
     const g = this.game;
     if (this.S.days.garden === this._day()) { g.ui.toast('오늘은 다 돌봤어요', { kind: 'muted' }); return; }
     const moist = [0.6, 0.3, 0.8].map((m) => Math.max(0.1, m + (Math.random() - 0.5) * 0.4));
@@ -792,12 +837,14 @@ export class Venues {
     draw(wrap);
   }
   sleep() {
+    if (this.game.tips && this.game.tips.first('home', () => this.sleep())) return;
     const g = this.game, t = g.world.clock.time % 1;
     if (t > 0.3 && t < 0.72) { g.ui.toast('아직 낮이에요. 저녁에 다시 와요', { kind: 'muted' }); return; }
     this.buff('full');
     g.rest(0.27);
   }
   snack() {
+    if (this.game.tips && this.game.tips.first('home', () => this.snack())) return;
     const g = this.game;
     if (this.S.days.snack === this._day()) { g.ui.toast('오늘 간식은 받았어요', { kind: 'muted' }); return; }
     this.S.days.snack = this._day();

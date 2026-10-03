@@ -268,6 +268,15 @@ export class Flora {
     const kRedBoulder = reg2(K2, variants(1, (s) => F.boulder(s, 0xd88858, 0x9a4a3a)), solid, 1.5, 2);
     const kIce = reg2(K2, variants(1, (s) => F.iceSpike(s)), crystal, 1.6);
     const kFan = reg2(K2, variants(1, (s) => F.seaFan(s)), plants, 1.4);
+    // 단단한 것: 바위(둥근 윗면, 올라설 수 있다) · 수정 무리 · 얼음 기둥 · 작은 버섯의 대 (흘려 넣는 충돌체)
+    const ROCK = new Set([...kBoulder, ...kPinkBoulder, ...kRedBoulder]), CRYS = new Set(kCrys), ICE = new Set(kIce), SHROOM = new Set(kShroom);
+    const midCol = (k, x, y, z, sc) => {
+      if (ROCK.has(k)) return [{ type: 'cyl', x, z, r: 1.05 * sc, y0: y - 1, y1: y + 0.95 * sc, dome: 0.5 * sc, stream: true }];
+      if (CRYS.has(k)) return [{ type: 'cyl', x, z, r: 0.55 * sc, y0: y - 1, y1: y + 1.7 * sc, dome: 0.6 * sc, stream: true }];
+      if (ICE.has(k)) return [{ type: 'cyl', x, z, r: 0.3 * sc, y0: y - 1, y1: y + 0.95 * sc, walk: false, stream: true }];
+      if (SHROOM.has(k)) return [{ type: 'cyl', x, z, r: 0.12 * sc + 0.05, y0: y - 1, y1: y + 0.7 * sc, walk: false, stream: true }];
+      return undefined;
+    };
     const mid = new ScatterLayer(world, {
       name: 'mid', patch: 48, radius: 170 * q.farFlora, samples: 6, batch: 4, kinds: K2,
       gen: ({ x0, z0, size, rng, s, out }) => {
@@ -279,7 +288,7 @@ export class Flora {
           if (world.city && world.city.blocks(x, z)) continue;
           const reg = pickRegion((i) => s.weight(x, z, i), rng);
           const ry = rng() * 6.28;
-          const push = (k, sc, extra) => out.push({ k, x, y: h - 0.1, z, ry, s: sc, ...extra });
+          const push = (k, sc, extra) => out.push({ k, x, y: h - 0.1, z, ry, s: sc, ...extra, col: midCol(k, x, h - 0.1, z, sc) });
           if (h < -1.5) {
             if (h > -6 && (reg === R.sea || reg === R.meadow) && rng() < 0.4) push(kFan[0], 0.8 + rng() * 0.8);
             continue;
@@ -322,6 +331,9 @@ export class Flora {
     const kLantern = reg2(KT, variants(3, (s) => F.lanternTree(s)), plants, 1.2);
     const kPine = reg2(KT, variants(2, (s) => F.frostPine(s)), plants, 1);
     const kWhip = reg2(KT, variants(2, (s) => F.whipTree(s)), plants, 1.2);
+    // 나무의 단단한 곳: 줄기 (가지·잎은 지나갈 수 있다), 소나무는 가지가 빽빽한 가운데 기둥까지
+    const trunk = (x, y, z, r, h) => [{ type: 'cyl', x, z, r, y0: y - 1, y1: y + h, walk: false, stream: true }];
+    const pineCol = (x, y, z, sc) => [...trunk(x, y, z, 0.03 * sc + 0.1, 0.95 * sc), { type: 'cyl', x, z, r: 0.09 * sc, y0: y + 0.2 * sc, y1: y + 0.85 * sc, walk: false, stream: true }];
     const trees = new ScatterLayer(world, {
       name: 'trees', patch: 128, radius: 750 * q.farFlora, samples: 6, batch: 4, kinds: KT,
       gen: ({ x0, z0, size, rng, s, out }) => {
@@ -334,10 +346,10 @@ export class Flora {
           const reg = pickRegion((i) => s.weight(x, z, i), rng);
           const pick = rng();
           const ry = rng() * 6.28;
-          if (h < 4) { if (rng() < 0.5 && (reg === R.sea || reg === R.meadow || reg === R.spine)) out.push({ k: kWhip[Math.floor(rng() * 2)], x, y: h - 0.2, z, ry, s: 6 + rng() * 7 }); continue; }
-          if (reg === R.meadow && pick < 0.55) out.push({ k: kLantern[Math.floor(rng() * 3)], x, y: h - 0.2, z, ry, s: 7 + rng() * 9 });
-          else if (reg === R.frost && h < 1000) out.push({ k: kPine[Math.floor(rng() * 2)], x, y: h - 0.3, z, ry, s: 7 + rng() * 10 });
-          else if ((reg === R.sea || reg === R.spine) && pick < 0.25) out.push({ k: kWhip[0], x, y: h - 0.2, z, ry, s: 6 + rng() * 6 });
+          if (h < 4) { if (rng() < 0.5 && (reg === R.sea || reg === R.meadow || reg === R.spine)) { const sc = 6 + rng() * 7; out.push({ k: kWhip[Math.floor(rng() * 2)], x, y: h - 0.2, z, ry, s: sc, col: trunk(x, h - 0.2, z, 0.03 * sc + 0.08, 0.6 * sc) }); } continue; }
+          if (reg === R.meadow && pick < 0.55) { const sc = 7 + rng() * 9; out.push({ k: kLantern[Math.floor(rng() * 3)], x, y: h - 0.2, z, ry, s: sc, col: trunk(x, h - 0.2, z, 0.04 * sc + 0.1, 0.55 * sc) }); }
+          else if (reg === R.frost && h < 1000) { const sc = 7 + rng() * 10; out.push({ k: kPine[Math.floor(rng() * 2)], x, y: h - 0.3, z, ry, s: sc, col: pineCol(x, h - 0.3, z, sc) }); }
+          else if ((reg === R.sea || reg === R.spine) && pick < 0.25) { const sc = 6 + rng() * 6; out.push({ k: kWhip[0], x, y: h - 0.2, z, ry, s: sc, col: trunk(x, h - 0.2, z, 0.03 * sc + 0.08, 0.6 * sc) }); }
         }
       },
     });
@@ -392,10 +404,12 @@ export class Flora {
               const px = x + (rng() - 0.5) * 60, pz = z + (rng() - 0.5) * 60;
               const ph = heightAt(px, pz, 1);
               if (ph < 1 || ph > 1000) continue;
-              out.push({ k: kBigPine[Math.floor(rng() * 2)], x: px, y: ph - 0.5, z: pz, ry: rng() * 6.28, s: 16 + rng() * 16 });
+              const sc = 16 + rng() * 16;
+              out.push({ k: kBigPine[Math.floor(rng() * 2)], x: px, y: ph - 0.5, z: pz, ry: rng() * 6.28, s: sc, col: pineCol(px, ph - 0.5, pz, sc) });
             }
           } else if (reg === R.meadow && pick < 0.12) {
-            out.push({ k: kBigLantern[Math.floor(rng() * 2)], x, y: h - 0.5, z, ry, s: 24 + rng() * 18 });
+            const sc = 24 + rng() * 18;
+            out.push({ k: kBigLantern[Math.floor(rng() * 2)], x, y: h - 0.5, z, ry, s: sc, col: trunk(x, h - 0.5, z, 0.04 * sc + 0.1, 0.55 * sc) });
           }
         }
       },

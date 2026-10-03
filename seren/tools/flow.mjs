@@ -63,7 +63,15 @@ await step('밤 기다리기', () => run(1, "g.world.clock.skipTo(0.95)"));
 await step('노래 짓기', async () => { await ev(() => { const g = SEREN.game; g.player.teleport(0, g.structures.deckY + 1, 20); g.startCompose(); for (const n of [0, 2, 4, 3, 1, 0]) { g.ui.composeNote(n); } document.querySelector('.compose [data-ok]').click(); g.director.skip(); }); await run(0.5); });
 await step('하우(노래 후)', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('hau'); g.player.teleport(n.pos.x + 3, undefined, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
 await step('우리 집 받음?', () => ev(() => { const g = SEREN.game; const r = g.city.recs[g.state.home]; return r ? { home: g.state.home, name: g.interiors.info(r).name, d: Math.round(Math.hypot(r.x, r.z)) } : null; }));
-await step('우리 집 들어가기', async () => { await ev(() => { const g = SEREN.game; g.interiors.enter(g.city.recs[g.state.home]); }); await run(0.5); await ev(() => { const g = SEREN.game; g.interiors.exit(); }); await run(1.5); });
+// 건물 드나들기는 로딩 화면(실제 시간)을 거친다: 실내 공간에 들어갈 때까지 기다리고, 안내 카드는 닫고, 나와서 실내가 닫힐 때까지
+await step('우리 집 들어가기', async () => {
+  await ev(() => { const g = SEREN.game; g.interiors.enter(g.city.recs[g.state.home]); });
+  await page.waitForFunction(() => SEREN.game.interiors.inPocket && SEREN.game.mode !== 'cinematic', null, { timeout: 120000, polling: 200 });
+  const inside = await ev(() => { const g = SEREN.game; g.ui.closeCard(); return { flag: !!g.state.flags.homeVisit, y: Math.round(g.player.pos.y) }; });
+  await ev(() => SEREN.game.interiors.exit());
+  await page.waitForFunction(() => !SEREN.game.interiors.cur && SEREN.game.mode === 'play', null, { timeout: 120000, polling: 200 });
+  return inside;
+});
 await step('남은 탑', async () => { for (const id of ['frost-pylon', 'sea-pylon']) { await ev((id) => { const g = SEREN.game; g.awakenPylon(id); g.director.skip(); }, id); await run(0.3); } });
 await step('하우(마지막)', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('hau'); g.player.teleport(n.pos.x + 3, undefined, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); });
 // ── 2부: 바다 건너 ──

@@ -1,5 +1,6 @@
 // 아웬 인물 관리: 이름 있는 인물(퀘스트), 거리의 아웬(배회·노래·혼잣말), 머리 위 「!」 표시.
 import * as THREE from 'three';
+import { heightAt } from '../world/heightfield.js';
 import { AwenFigure } from '../world/awen.js';
 import { NPCS, AMBIENT, AMBIENT_AFTER_NAME } from '../data/story.js';
 import { PLACE } from '../data/places.js';
@@ -55,12 +56,17 @@ export class NPCs {
     if (d.ambient && !d.indoor && this.game.city) { const s = this.game.city.snapStreet(d.x, d.z); if (s) { d.x = s.x; d.z = s.z; } }
     const fig = new AwenFigure({ hue: d.hue, glow: d.glow, scale: d.scale || 1 });
     // y 가 있으면 그 높이의 바닥에 (하늘닻·하늘 주조소처럼 높은 곳)
-    const y = d.y !== undefined ? this.game.world.groundAt(d.x, d.z, d.y + 3) : this.game.world.groundAt(d.x, d.z, 1e5);
+    // 거리의 아웬은 거리 높이에(지붕 위가 아니라), 이야기 인물은 그 자리의 맨 위 바닥(척추 광장 등)에
+    const y = d.y !== undefined ? this.game.world.groundAt(d.x, d.z, d.y + 3)
+      : d.ambient ? this.game.world.colliders.ground(d.x, d.z, Math.max(heightAt(d.x, d.z), 0) + 0.3, 0.7).h
+        : this.game.world.groundAt(d.x, d.z, 1e5);
     fig.root.position.set(d.x, y, d.z);
     fig.yaw = Math.random() * 6.28;
+    fig.root.userData.indoor = !!d.indoor; // 실내 공간의 인물 (안내지기)
     this.scene.add(fig.root);
     const mark = new THREE.Mesh(this.markGeo, this.markMat);
     mark.visible = false;
+    mark.userData.indoor = !!d.indoor;
     this.scene.add(mark);
     const n = {
       ...d, fig, mark, pos: fig.root.position,
@@ -147,7 +153,8 @@ export class NPCs {
         }
       }
       if (!n.walker) {
-        const gy = g.world.groundAt(n.pos.x, n.pos.z, n.pos.y + 3);
+        // 지금 선 높이에서 조금(1 m)만 오른다 — 걷다가 정자 지붕·차양 위로 올라가지 않게
+        const gy = g.world.colliders.ground(n.pos.x, n.pos.z, n.pos.y + 0.3, 0.7).h;
         n.pos.y += (gy - n.pos.y) * Math.min(1, dt * 6);
       }
       // 플레이어 바라보기

@@ -1,11 +1,11 @@
-// 일지: 이야기 · 가방 · 단어 · 들은 말 · 메아리 · 도감 · 기록
+// 일지: 이야기 · 가방 · 단어 · 들은 말 · 메아리 · 도감 · 도움말 · 기록
 import { QUESTS, ECHOES, CODEX, LINES } from '../data/story.js';
 import { WORDS, WORD } from '../data/lexicon.js';
 import { glyphSVG } from '../game/language.js';
 import { NOTE_COLORS } from '../core/audio.js';
 import { ITEMS, BUFFS, BAG_ORDER } from '../data/venues.js';
 
-const TABS = [['quests', '이야기'], ['bag', '가방'], ['words', '단어'], ['heard', '들은 말'], ['echoes', '메아리'], ['codex', '도감'], ['log', '기록']];
+const TABS = [['quests', '이야기'], ['bag', '가방'], ['words', '단어'], ['heard', '들은 말'], ['echoes', '메아리'], ['codex', '도감'], ['help', '도움말'], ['log', '기록']];
 
 export class Journal {
   constructor(game) { this.game = game; this.tab = 'quests'; }
@@ -116,6 +116,18 @@ export class Journal {
     h += '<p class="muted">별씨는 공방(생산 줄)·창고(짐 나누기·배달)·발전소(출력 맞추기)·사무탑(일거리), 그리고 바깥 조작대(설비 점검·짐 드론 관제·코일 조율·주민 부탁함)에서 벌고, 가게·찻집·터미널·하늘배에서 써요.</p>';
     c.innerHTML = h;
     c.querySelectorAll('[data-use]').forEach((b) => b.addEventListener('click', () => { g.venues.useItem(b.dataset.use); const body = c.parentElement; body.innerHTML = ''; this.render(body); }));
+  }
+
+  /** 도움말: 처음 해 볼 때 본 안내를 다시 보기 (아직 안 해 본 것은 이름만) */
+  _help(c) {
+    const g = this.game;
+    if (!g.tips) return;
+    const L = g.tips.list();
+    let h = '<div class="section-title">해 본 일 · 다시 보기</div>';
+    for (const T of L.filter((t) => t.seen)) h += `<details class="help-item"><summary><b>${T.title}</b> <small>${T.intro}</small></summary><ol class="tip-steps">${T.steps.map((x) => `<li>${x}</li>`).join('')}</ol></details>`;
+    const left = L.filter((t) => !t.seen);
+    if (left.length) h += `<div class="section-title">아직 해 보지 않은 일 (${left.length})</div><p class="muted">${left.map((t) => t.title).join(' · ')}</p>`;
+    c.innerHTML = h;
   }
 
   _log(c) {

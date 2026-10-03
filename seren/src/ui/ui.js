@@ -74,7 +74,7 @@ export class UI {
     });
     this.hud.appendChild(this.tonesEl);
     if (this.touch) this._buildTouch();
-    this.fadeEl = $(`<div class="fade"></div>`);
+    this.fadeEl = $(`<div class="fade"><div class="fade-msg"><div class="fm-k">들어가는 중</div><div class="fm-t"></div><div class="fm-s"></div><div class="fm-bar"><i></i></div></div></div>`);
     r.appendChild(this.fadeEl);
     this.flashEl = $(`<div class="flash"></div>`);
     r.appendChild(this.flashEl);
@@ -192,7 +192,13 @@ export class UI {
     this._regT = setTimeout(() => el.classList.remove('show'), first ? 5200 : 3000);
   }
 
-  fade(on) { this.fadeEl.classList.toggle('on', on); }
+  fade(on, quick = false) { this.fadeEl.classList.toggle('quick', quick); this.fadeEl.classList.toggle('on', on); }
+  /** 로딩 화면 글자 (건물에 드나들 때): 어두워진 화면 가운데 이름과 한 줄 설명, 흐르는 빛 막대 */
+  loading(on, title = '', sub = '') {
+    const m = this.fadeEl.querySelector('.fade-msg');
+    if (on) { m.querySelector('.fm-t').textContent = title; m.querySelector('.fm-s').textContent = sub; }
+    m.classList.toggle('show', on);
+  }
 
   flash(color = '#ffffff', ms = 900) {
     const el = this.flashEl;

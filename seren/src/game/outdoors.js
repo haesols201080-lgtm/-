@@ -118,6 +118,7 @@ export class Outdoors {
 
   // 하늘배 승강탑: 행선지를 골라 하늘배를 불러 탄다
   _taxi(c) {
+    if (this.game.tips && this.game.tips.first('skyport', () => this._taxi(c))) return;
     const g = this.game, city = g.city;
     const here = c.rec;
     const dests = [];
@@ -290,6 +291,7 @@ export class Outdoors {
 
   // 가지 항구: 짐 드론 관제 — 드론의 빛 띠 색에 맞는 가지로 보낸다
   _drones(c) {
+    if (this.game.tips && this.game.tips.first('drones', () => this._drones(c))) return;
     const g = this.game, r = c.rec;
     const S = SPEC.branchport;
     const cs = Math.cos(r.rot), sn = Math.sin(r.rot);
@@ -359,6 +361,7 @@ export class Outdoors {
 
   // 코일 탑: 공명 충전 — 코일에서 빛줄기가 몸으로 (하루 한 번, 코일마다)
   _charge(c) {
+    if (this.game.tips && this.game.tips.first('coil', () => this._charge(c))) return;
     const g = this.game, r = c.rec;
     if (this._doneToday(c.key + ':charge')) { g.ui.toast('이 코일은 오늘 이미 충전해 줬어요. 다른 코일 탑을 찾아봐요', { kind: 'muted' }); return; }
     this._markToday(c.key + ':charge');
@@ -406,6 +409,7 @@ export class Outdoors {
 
   // 도관·식힘 탑·탱크: 점검 — 가장 높은 압력부터 풀기 (세 번). 풀 때마다 김이 뿜어진다
   _maint(c) {
+    if (this.game.tips && this.game.tips.first('maint', () => this._maint(c))) return;
     const g = this.game, r = c.rec;
     if (this._doneToday(c.key + ':maint')) { g.ui.toast('오늘 점검은 끝났어요. 압력이 고르게 유지되고 있어요', { kind: 'muted' }); return; }
     const p = [0, 1, 2].map(() => 0.35 + Math.random() * 0.6);
@@ -434,6 +438,7 @@ export class Outdoors {
 
   // 안테나: 먼 신호 듣기 — 노래를 해독 (하루 한 번, 안테나마다)
   _signal(c) {
+    if (this.game.tips && this.game.tips.first('signal', () => this._signal(c))) return;
     const g = this.game, r = c.rec, L = g.lang;
     if (this._doneToday(c.key + ':signal')) { g.ui.toast('오늘 신호는 다 들었어요', { kind: 'muted' }); return; }
     const un = WORDS.filter((w) => !L.known(w.id));
@@ -487,6 +492,7 @@ export class Outdoors {
       if (best) break;
     }
     if (!best) { g.ui.toast(`가까이에 ${nm}이(가) 없어요`, { kind: 'muted' }); return; }
+    g.city.fixDoor(best);
     g.state.waypoint = { x: best.door.x, z: best.door.z };
     g.updateWaypoint();
     audio.chime('soft');
@@ -497,6 +503,7 @@ export class Outdoors {
   _tower(c) {
     const g = this.game, r = c.rec;
     if (r.use === 'office') return this.V.jobBoard(r);
+    if (g.tips && g.tips.first('wish', () => this._tower(c))) return;
     const W = this._wish(c), I = ITEMS[W.item], have = this.V.inv[W.item] || 0;
     if (this._doneToday(c.key + ':wish')) { g.ui.serviceCard(`${c.def.name} · 주민 부탁함`, '오늘은 다 들어줬어요', `${W.who}: 「고마워요, 덕분에 살았어요.」 내일 또 들러 주세요.`, []); return; }
     g.ui.serviceCard(`${c.def.name} · 주민 부탁함`, `${W.floor}층 ${W.who}의 부탁`, `「${W.why}」<br>필요한 것: <b>${I.icon} ${I.name} ${W.n}개</b> (가진 것 ${have}) · 구하는 곳: ${W.where}`, [
@@ -742,6 +749,7 @@ export class Outdoors {
     return [V3(sx, y0 + 0.15, sz), V3(sx, lo, sz), V3(Rx, lo, Rz), V3(Rx, T.hy, Rz), V3(T.x, T.hy, T.z), V3(T.x, T.y + 0.15, T.z)];
   }
   _liftUp(c, T) {
+    if (this.game.tips && this.game.tips.first('lift', () => this._liftUp(c, T))) return;
     this._lift(this._liftPath(c, T), T, () => {
       if (!this.tops.includes(T)) this.tops.push(T);
       this.game.ui.regionTitle(T.mark.def.name, `${T.name} · 뛰어내려 활공하거나, 승강판으로 내려가요`, false);

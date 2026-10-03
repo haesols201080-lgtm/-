@@ -1,8 +1,10 @@
-// 건물 안: 도시의 건물 문으로 들어가면 그 건물 로비가 그 자리에서 만들어진다.
-//  · 문이 뚫린 외벽(cityfabric.openShell) + 바닥·벽·천장·빛 승강기·안내대·화분·의자·홀로그램·조형물
-//  · 건물마다 이름과 쓰임(주거탑·연구동·시장·학교·치유원·하늘 정원·작은 공연장) — 쓰임에 따라 가구와 사람이 다르다
-//  · 가운데 빛 승강기를 타면 지붕 위에 떠 있는 「하늘 전망대」로. 거기서 뛰어내려 활공할 수 있다
-//  · 충분히 멀어지면 실내를 치우고 원래의 단단한 건물로 되돌린다 (한 번에 한 건물)
+// 건물 안: 도시의 건물 문으로 들어가면 (로딩 화면을 거쳐) 바깥 세계와 떨어진 「실내 공간」으로 간다.
+//  · 실내는 바깥 건물 속이 아니라 건물 바로 위 하늘 높이(POCKET_Y)에 따로 짓는 닫힌 방이다 — 바깥 건물·거리와
+//    카메라가 겹칠 일이 없다. 들어가 있는 동안 바깥 세계는 그리지 않고(engine.isolate), 땅·도시의 세부 단계는
+//    문 앞 거리 기준으로 유지한다(world.viewProxy). 하늘빛·고도 효과도 땅 높이 기준(engine.altOffset)
+//  · 방 크기는 건물 발자국이 아니라 쓰임으로 정한다(가게·박물관·공장은 넓게, 집은 아늑하게). 천장은 7.5~9 m
+//  · 바닥·벽·천장(닫힘)·빛 승강기·안내대·화분·의자·홀로그램·조형물 + 쓰임별 가구와 사람(game/venues.js)
+//  · 가운데 빛 승강기를 타면 실제 건물 지붕 위에 떠 있는 「하늘 전망대」로. 거기서 뛰어내려 활공할 수 있다
 import * as THREE from 'three';
 import { heightAt } from '../world/heightfield.js';
 import { mulberry32 } from '../core/noise.js';
@@ -52,6 +54,13 @@ const BY_STYLE = {
   frost: ['home', 'lab', 'heal'],
 };
 const PEARL = 0xf1ece4, FLOOR = 0xaaa6ba, ACC = 0x7ff3e6, GOLD = 0xe9c27c, LEAF = 0x5fbf8a;
+/** 실내 공간의 바닥 높이 — 바깥 세계(산 2 km·거대 탑 2.3 km·구름)보다 높고 하늘닻(30 km)보다 낮은 빈 하늘 */
+export const POCKET_Y = 8000;
+/** 쓰임별 방 크기: [안쪽 반지름 m, 천장 높이 m] */
+const ROOM = {
+  home: [12, 7.5], lab: [14, 7.5], market: [17, 8], school: [15, 7.5], heal: [14, 7.5], garden: [18, 9], hall: [18, 9],
+  office: [14, 7.5], library: [15, 8], factory: [18, 9], depot: [18, 9], terminal: [18, 9], cafe: [14, 7.5], museum: [18, 9], plant: [17, 9],
+};
 
 // 창 너머 바깥(하늘과 먼 도시)이 보이는 유리 — 낮에는 밝은 하늘, 밤에는 도시 불빛
 const winVert = `${CURVE_GLSL}
@@ -102,16 +111,15 @@ export class Interiors {
     return r.info;
   }
 
-  // ── 평면 (실내 벽이 서는 선) ─────────────────
-  _plan(r) {
+  // ── 평면 (실내 벽이 서는 선): 건물의 모양(둥근·각진·길쭉한)을 따르고, 크기는 쓰임으로 ─────────
+  _plan(r, R) {
     const pts = [];
-    let rot, sx, sz, k, A, B, n;
-    if (r.kind === 'podium' || r.kind === 'midrise' || r.kind === 'warehouse') { rot = r.rot; sx = r.sx * 0.96; sz = r.sz * 0.96; k = 12; A = 1; B = 1; n = 28; }
-    else {
-      [k, A, B] = SPEC[r.kind].plan;
-      const inset = r.kind === 'dome' ? 0.8 : r.kind === 'cap' ? 0.86 : 0.9;
-      rot = r.rot; sx = r.sx * A * inset; sz = r.sz * B * inset; n = 22;
-    }
+    const sp = SPEC[r.kind] && SPEC[r.kind].plan;
+    let k = sp ? Math.min(6, Math.max(2, sp[0])) : 4;
+    if (r.kind === 'podium' || r.kind === 'midrise' || r.kind === 'warehouse') k = 6;
+    const asp = Math.min(1.35, Math.max(0.75, (r.sx * (sp ? sp[1] : 1)) / (r.sz * (sp ? sp[2] : 1))));
+    const sx = asp >= 1 ? R * asp : R, sz = asp >= 1 ? R : R / asp;
+    const rot = r.rot, n = 28;
     const c = Math.cos(rot), s = Math.sin(rot);
     for (let i = 0; i < n; i++) {
       const t = (i / n) * TAU + Math.PI / n;
@@ -123,6 +131,7 @@ export class Interiors {
   }
 
   _inside(x, z, pad = 0) {
+    if (!this.cur) return false;
     const pts = this.cur.plan;
     // 가운데 쪽으로 pad 만큼 줄인 다각형 안인가 (볼록하지 않아도 되는 짝수 규칙)
     const cx = this.cur.r.x, cz = this.cur.r.z;
@@ -135,56 +144,54 @@ export class Interiors {
     return inside;
   }
 
-  // ── 열기 ─────────────────────────────────
+  // ── 열기: 실내 공간 짓기 (건물 위 하늘 높이의 닫힌 방) ─────────────
   open(r) {
     if (this.cur && this.cur.r === r) return;
     if (this.cur) this.close();
     const g = this.game, C = g.world.colliders;
     const info = this.info(r);
-    const plan = this._plan(r);
-    const low = SPEC[r.kind].low || r.kind === 'podium';
-    const LH = Math.max(4.4, Math.min(low ? 8 : 7.5, (r.top - r.floorY) * (r.kind === 'dome' || r.kind === 'biodome' ? 0.42 : low ? 0.5 : 0.3)));
-    const cur = { r, info, plan, LH, cols: [], meshes: [], npcs: [], anims: [], deck: null };
-    this.cur = cur;
-    const fy = r.floorY;
-    const dn = [r.door.nx, r.door.nz];
-    const doorIn = [r.door.x - dn[0] * 0.6, r.door.z - dn[1] * 0.6];
-    // 충돌: 단단한 건물 대신 바닥·벽(문 자리 비움)·로비 위의 몸통
-    for (const c of r.cols) C.remove(c);
-    const add = (c) => cur.cols.push(C.add({ ...c, city: true }));
+    const [R, LH] = ROOM[info.pid] || [14, 7.5];
+    const plan = this._plan(r, R);
+    const fy = POCKET_Y;
     const cx = r.x, cz = r.z;
+    // 방 안의 문: 바깥 문과 같은 쪽 벽 (들어오면 건물 안쪽을 보고 선다)
+    const dn = [r.door.nx, r.door.nz];
+    let ext = R;
+    for (let i = 0; i < plan.length; i++) {
+      const [x0, z0] = plan[i], [x1, z1] = plan[(i + 1) % plan.length];
+      const ex = x1 - x0, ez = z1 - z0, den = dn[0] * ez - dn[1] * ex;
+      if (Math.abs(den) < 1e-9) continue;
+      const t = ((x0 - cx) * ez - (z0 - cz) * ex) / den, u = ((x0 - cx) * dn[1] - (z0 - cz) * dn[0]) / den;
+      if (t > 0 && u >= 0 && u <= 1) ext = t;
+    }
+    const door = { x: cx + dn[0] * ext, z: cz + dn[1] * ext, nx: dn[0], nz: dn[1] };
+    const cur = { r, info, plan, LH, fy, door, cols: [], meshes: [], npcs: [], anims: [], deck: null };
+    this.cur = cur;
+    const add = (c) => cur.cols.push(C.add({ ...c, city: true, sky: true }));
     let maxR = 0;
     for (const [x, z] of plan) maxR = Math.max(maxR, Math.hypot(x - cx, z - cz));
-    add({ type: 'cyl', x: cx, z: cz, r: maxR + 0.5, y0: fy - 8, y1: fy });
+    // 바닥 · 천장(점프해도 머리가 닿는 곳) · 닫힌 벽 (문 자리도 막혀 있다 — 나갈 때는 문에서 E)
+    add({ type: 'cyl', x: cx, z: cz, r: maxR + 1, y0: fy - 3, y1: fy });
+    add({ type: 'cyl', x: cx, z: cz, r: maxR + 1, y0: fy + LH, y1: fy + LH + 2, walk: false });
     const walls = [];
+    const doorIn = [door.x - dn[0] * 0.6, door.z - dn[1] * 0.6];
     for (let i = 0; i < plan.length; i++) {
       const [x0, z0] = plan[i], [x1, z1] = plan[(i + 1) % plan.length];
       const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
       const isDoor = Math.hypot(mx - doorIn[0], mz - doorIn[1]) < 2.6 || Math.hypot(x0 - doorIn[0], z0 - doorIn[1]) < 1.6 || Math.hypot(x1 - doorIn[0], z1 - doorIn[1]) < 1.6;
       walls.push({ x0, z0, x1, z1, isDoor });
-      if (isDoor) continue;
       const L = Math.hypot(x1 - x0, z1 - z0);
-      add({ type: 'box', x: mx, z: mz, hx: L / 2 + 0.25, hz: 0.35, rot: -Math.atan2(z1 - z0, x1 - x0), y0: fy - 2, y1: fy + LH, walk: false });
+      add({ type: 'box', x: mx, z: mz, hx: L / 2 + 0.25, hz: 0.35, rot: -Math.atan2(z1 - z0, x1 - x0), y0: fy - 2, y1: fy + LH + 1, walk: false });
     }
-    // 로비 위의 몸통: 겹 충돌체를 로비 천장 위로 잘라서
-    for (const c of r.cols) if (c.y1 > fy + LH + 0.2) { const k2 = { ...c, y0: Math.max(c.y0, fy + LH) }; delete k2._mark; add(k2); }
     add({ type: 'cyl', x: cx, z: cz, r: 1.8, y0: fy, y1: fy + LH - 0.2, walk: false }); // 빛 승강기
-    // 문 앞이 땅보다 높으면 경사로
-    const ground = heightAt(r.door.x + dn[0] * 2, r.door.z + dn[1] * 2);
-    if (fy - ground > 0.45) {
-      const L = Math.max(3, (fy - ground) * 3);
-      add({ type: 'ramp', x: r.door.x + dn[0] * (L / 2), z: r.door.z + dn[1] * (L / 2), hx: L / 2, hz: 2, rot: -Math.atan2(dn[1], dn[0]), y0: ground - 2, y1: fy, y1b: ground });
-    }
-    this.city.openShell(r);
     this._build(cur, walls);
     this._people(cur);
-    audio.chime('soft');
   }
 
   /** 실내 모양 */
   _build(cur, walls) {
     const { r, info, plan, LH } = cur;
-    const fy = r.floorY, cx = r.x, cz = r.z;
+    const fy = cur.fy, cx = r.x, cz = r.z;
     const P = [], C = [], E = [], WP = [], WU = [], FP = [], FC = [], FE = [];
     const col = new THREE.Color();
     const tri = (a, b, c, color, emit) => { P.push(...a, ...b, ...c); col.set(color); for (let k = 0; k < 3; k++) { C.push(col.r, col.g, col.b); E.push(emit); } };
@@ -212,7 +219,12 @@ export class Interiors {
     let u = 0;
     for (const w of walls) {
       const L = Math.hypot(w.x1 - w.x0, w.z1 - w.z0);
-      if (w.isDoor) { u += L / 2.4; continue; }
+      if (w.isDoor) {
+        // 문 자리: 창 대신 막힌 벽 (안쪽에 나가는 문을 따로 세운다)
+        quad([w.x0, fy, w.z0], [w.x1, fy, w.z1], [w.x1, fy + LH, w.z1], [w.x0, fy + LH, w.z0], 0xd8d2e0, 0);
+        u += L / 2.4;
+        continue;
+      }
       const y0 = fy, y1 = fy + 0.55, y2 = fy + LH - 0.7, y3 = fy + LH;
       quad([w.x0, y0, w.z0], [w.x1, y0, w.z1], [w.x1, y1, w.z1], [w.x0, y1, w.z0], 0xd8d2e0, 0);
       quad([w.x0, y2, w.z0], [w.x1, y2, w.z1], [w.x1, y3, w.z1], [w.x0, y3, w.z0], PEARL, 0);
@@ -222,13 +234,17 @@ export class Interiors {
       WU.push(u, 0, u1, 0, u1, 1, u, 0, u1, 1, u, 1);
       u = u1;
     }
-    // 문틀 안쪽
-    const dn = [r.door.nx, r.door.nz], dt = [-dn[1], dn[0]];
-    const dx = r.door.x - dn[0] * 0.5, dz = r.door.z - dn[1] * 0.5;
+    // 나가는 문: 문틀 + 빛나는 유리문 + 위의 빛 띠 (여기서 E → 밖으로)
+    const dn = [cur.door.nx, cur.door.nz], dt = [-dn[1], dn[0]];
+    const dx = cur.door.x - dn[0] * 0.5, dz = cur.door.z - dn[1] * 0.5;
+    const wallRy = Math.atan2(dn[0], dn[1]); // 상자의 가로(x)가 벽을 따라 눕게
     for (const sgn of [-1, 1]) {
       const px = dx + dt[0] * 1.75 * sgn, pz = dz + dt[1] * 1.75 * sgn;
-      this._box(P, C, E, px, fy, pz, 0.35, 4.0, 0.9, Math.atan2(dt[0], dt[1]), PEARL, 0);
+      this._box(P, C, E, px, fy, pz, 0.4, 4.0, 0.7, wallRy, PEARL, 0);
     }
+    this._box(P, C, E, dx, fy + 4.0, dz, 3.9, 0.4, 0.7, wallRy, PEARL, 0);
+    this._box(P, C, E, dx + dn[0] * 0.2, fy, dz + dn[1] * 0.2, 3.2, 3.95, 0.08, wallRy, 0x5fb4c8, 0.55);
+    this._box(P, C, E, dx - dn[0] * 0.38, fy + 4.45, dz - dn[1] * 0.38, 3.4, 0.08, 0.08, wallRy, ACC, 2.0);
     // 가구
     const g = new THREE.Group();
     const geoms = [];
@@ -431,7 +447,7 @@ export class Interiors {
     g.add(tube, beam);
     // 안내 홀로그램 (문 안쪽) + 떠 있는 조형물
     const holo = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.3), hologramMaterial({ color: 0x7ff3e6, color2: 0xffffff, intensity: 1.5, scroll: 0.03, repeat: [0.6, 1], seed: Math.floor(r.seed * 99) }));
-    const [hx, hz] = [r.door.x - dn[0] * 3.2 + dt[0] * 2.6, r.door.z - dn[1] * 3.2 + dt[1] * 2.6];
+    const [hx, hz] = [cur.door.x - dn[0] * 3.2 + dt[0] * 2.6, cur.door.z - dn[1] * 3.2 + dt[1] * 2.6];
     holo.position.set(hx, fy + 2.3, hz);
     holo.rotation.y = faceDoor;
     g.add(holo);
@@ -440,6 +456,7 @@ export class Interiors {
     art.position.set(ax, fy + Math.min(LH - 1.4, 3.2), az);
     if (rin > 6 && info.pid !== 'garden') g.add(art);
     cur.anims.push((t) => { art.rotation.set(t * 0.4, t * 0.7, 0); beam.material.uniforms.uIntensity.value = 0.7 + Math.sin(t * 2) * 0.15; });
+    g.userData.indoor = true;
     this.game.engine.scene.add(g);
     cur.group = g;
   }
@@ -486,16 +503,16 @@ export class Interiors {
     const { r, plan } = cur;
     const g = this.game, N = g.npcs;
     const rnd = mulberry32(Math.floor(r.seed * 7e8));
-    const cx = r.x, cz = r.z, dn = [r.door.nx, r.door.nz];
+    const cx = r.x, cz = r.z, dn = [cur.door.nx, cur.door.nz];
     const rin = Math.min(...plan.map(([x, z]) => Math.hypot(x - cx, z - cz)));
     if (rin > 6 && cur.info.pid !== 'home') {
       const k = rin * 0.52 + 1.2;
-      const desk = N._spawn({ id: 'in-desk', name: '안내지기', service: 'lobby', indoor: true, x: cx + dn[0] * (k - 2.6), z: cz + dn[1] * (k - 2.6), y: r.floorY, hue: rnd(), glow: 0x7ff3e6, scale: 0.95, home: { x: cx, z: cz, r: 0.3 } });
+      const desk = N._spawn({ id: 'in-desk', name: '안내지기', service: 'lobby', indoor: true, x: cx + dn[0] * (k - 2.6), z: cz + dn[1] * (k - 2.6), y: cur.fy, hue: rnd(), glow: 0x7ff3e6, scale: 0.95, home: { x: cx, z: cz, r: 0.3 } });
       desk.fig.yaw = Math.atan2(dn[0], dn[1]);
       cur.npcs.push(desk);
     }
     // 바닥 높이로 맞춘 자리
-    for (const A of cur.anchors || []) A.y = Math.max(A.y, r.floorY);
+    for (const A of cur.anchors || []) A.y = Math.max(A.y, cur.fy);
     if (g.citizens) g.citizens.setIndoor(r, cur.anchors || [], cur.info);
   }
 
@@ -537,9 +554,9 @@ export class Interiors {
     const cur = this.cur;
     if (!cur) return;
     const g = this.game, C = g.world.colliders;
+    if (this.inPocket) this._pocket(false);
     for (const c of cur.cols) C.remove(c);
     if (cur.deck) { for (const c of cur.deck.cols) C.remove(c); g.engine.scene.remove(cur.deck.grp); }
-    for (const c of cur.r.cols) C.add(c);
     for (const n of cur.npcs) g.npcs.remove(n);
     if (g.citizens) g.citizens.clearIndoor();
     if (g.venues) g.venues.clear();
@@ -550,44 +567,89 @@ export class Interiors {
       const keep = new Set([this.mat, this.floorMat, this.deckMat, this.winMat]);
       cur.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && !keep.has(o.material) && o.material.dispose) o.material.dispose(); });
     }
-    this.city.closeShell(cur.r);
     this.cur = null;
   }
 
+  /**
+   * 실내 공간에 들어가 있는 동안: 바깥 세계는 그리지 않고(카메라가 바깥과 겹칠 일이 없다),
+   * 땅·도시의 세부 단계와 하늘빛은 문 앞 거리 높이 기준, 활공·썰매는 쓰지 않는다
+   */
+  _pocket(on) {
+    const g = this.game, cur = this.cur;
+    this.inPocket = on;
+    g.player.indoor = on;
+    g.rig.floorLock = on && cur ? cur.fy : null;
+    if (on && cur) {
+      const r = cur.r;
+      g.engine.altOffset = cur.fy - r.floorY;
+      g.world.viewProxy = new THREE.Vector3(r.door.x + r.door.nx * 4, r.floorY + 1.6, r.door.z + r.door.nz * 4);
+      g.engine.isolate((o) => o.userData.indoor || o.isLight);
+    } else {
+      g.engine.altOffset = 0;
+      g.world.viewProxy = null;
+      g.engine.unisolate();
+    }
+  }
+
   // ── 행동 ─────────────────────────────────
-  _fade(fn, title, sub) {
+  /** 로딩 화면: 어두워지는 동안 일을 하고, 한 박자 쉬었다 밝아진다 */
+  _load(fn, title, sub, after) {
     const g = this.game;
+    if (this._busy) return;
+    this._busy = true;
     g.setMode('cinematic');
-    g.ui.fade(true);
+    g.ui.loading(true, title, sub);
+    g.ui.fade(true, true);
     audio.noise({ freq: 700, q: 0.6, dur: 1.6, gain: 0.3, type: 'bandpass', sweep: 2400, attack: 0.4 });
+    // 화면이 다 어두워진 뒤에 옮기고(옮기는 모습이 비치지 않게), 새 자리가 한두 장 그려진 뒤에 밝힌다
     setTimeout(() => {
-      fn();
-      setTimeout(() => { g.ui.fade(false); g.setMode('play'); if (title) g.ui.regionTitle(title, sub, false); }, 500);
-    }, 900);
+      try { fn(); } catch (e) { console.error('[interiors]', e); }
+      setTimeout(() => {
+        g.ui.fade(false, true); g.ui.loading(false); g.setMode('play'); this._busy = false;
+        if (after) after();
+      }, 650);
+    }, 650);
+  }
+
+  _placeIn(cur) {
+    const g = this.game, p = g.player, d = cur.door;
+    p.teleport(d.x - d.nx * 5.5, cur.fy + 0.3, d.z - d.nz * 5.5);
+    p.yaw = Math.atan2(-d.nx, -d.nz);
+    g.rig.yaw = p.yaw + Math.PI;
+    g.rig.pitch = -0.12;
+    g.rig._init = false;
   }
 
   enter(r) {
-    const g = this.game, p = g.player;
-    this.open(r);
-    const dn = [r.door.nx, r.door.nz];
-    p.teleport(r.door.x - dn[0] * 3.2, r.floorY + 1, r.door.z - dn[1] * 3.2);
-    p.yaw = Math.atan2(-dn[0], -dn[1]);
-    g.rig.yaw = p.yaw + Math.PI;
-    g.rig.pitch = -0.05;
+    const g = this.game;
+    if (this._busy || (this.inPocket && this.cur && this.cur.r === r)) return;
     const I = this.info(r);
     const mine = g.state.home === r.id;
-    g.ui.regionTitle(mine ? '우리 집' : I.name, mine ? `${I.name} · 하모네아가 내어 준 집` : `${I.P.desc} · ${I.floors}층`, false);
-    if (mine && !g.state.flags.homeVisit) { g.state.flags.moaIndoor = true; g.setFlag('homeVisit'); setTimeout(() => g.ui.moa('…여기가 우리 집이에요. 이웃들이 벌써 문패에 우리 이름 노래를 새겨 놨어요. 지친 날엔 여기서 쉬어요.'), 2200); }
-    if (!g.state.flags.moaIndoor) { g.state.flags.moaIndoor = true; setTimeout(() => g.ui.moa('안으로 들어왔어요! 가운데 빛기둥은 승강기예요. 꼭대기 위 하늘 전망대까지 올라가요.'), 2200); }
+    this._load(() => {
+      this.open(r);
+      this._placeIn(this.cur);
+      this._pocket(true);
+    }, mine ? '우리 집' : I.name, mine ? '하모네아가 내어 준 집' : I.P.desc, () => {
+      g.ui.regionTitle(mine ? '우리 집' : I.name, '', false);
+      if (mine && !g.state.flags.homeVisit) { g.state.flags.moaIndoor = true; g.setFlag('homeVisit'); setTimeout(() => g.ui.moa('…여기가 우리 집이에요. 이웃들이 벌써 문패에 우리 이름 노래를 새겨 놨어요. 지친 날엔 여기서 쉬어요.'), 1600); }
+      if (!g.state.flags.moaIndoor) { g.state.flags.moaIndoor = true; setTimeout(() => g.ui.moa('안으로 들어왔어요! 가운데 빛기둥은 승강기예요. 나갈 때는 들어온 문 앞에서 E.'), 1600); }
+      if (g.tips) g.tips.show('indoor');
+    });
   }
 
   exit() {
     const cur = this.cur, g = this.game, p = g.player;
-    if (!cur) return;
+    if (!cur || this._busy) return;
     const r = cur.r;
-    p.teleport(r.door.x + r.door.nx * 2.5, undefined, r.door.z + r.door.nz * 2.5);
-    p.yaw = Math.atan2(r.door.nx, r.door.nz);
-    g.rig.yaw = p.yaw + Math.PI;
+    this._load(() => {
+      this.close();
+      // 문에서 7 m 앞에 바깥을 보고 선다 — 뒤따르는 카메라가 문틀·벽 속에 들어가지 않게
+      p.teleport(r.door.x + r.door.nx * 7, r.floorY + 1.5, r.door.z + r.door.nz * 7);
+      p.yaw = Math.atan2(r.door.nx, r.door.nz);
+      g.rig.yaw = p.yaw + Math.PI;
+      g.rig.pitch = -0.12;
+      g.rig._init = false;
+    }, '밖으로', this.info(r).name);
   }
 
   up() {
@@ -595,23 +657,27 @@ export class Interiors {
     if (!cur) return;
     const d = this._deck(cur);
     const g = this.game, r = cur.r;
-    this._fade(() => {
+    this._load(() => {
+      this._pocket(false);
       g.player.teleport(r.x + r.door.nx * 3, d.y + 1, r.z + r.door.nz * 3);
       g.player.yaw = Math.atan2(r.door.nx, r.door.nz);
       g.rig.yaw = g.player.yaw + Math.PI;
       g.rig.pitch = -0.25;
-    }, '하늘 전망대', `${Math.round(d.y - r.floorY)} m · 가장자리에서 뛰어내려 활공할 수 있어요`);
+      g.rig._init = false;
+    }, '하늘 전망대', '빛 승강기로 지붕 위까지', () => g.ui.regionTitle('하늘 전망대', `${Math.round(d.y - r.floorY)} m · 가장자리에서 뛰어내려 활공할 수 있어요`, false));
   }
 
   down() {
     const cur = this.cur;
     if (!cur) return;
-    const g = this.game, r = cur.r;
-    this._fade(() => {
-      g.player.teleport(r.x + r.door.nx * 3.2, r.floorY + 1, r.z + r.door.nz * 3.2);
-      g.player.yaw = Math.atan2(r.door.nx, r.door.nz);
+    const g = this.game;
+    this._load(() => {
+      g.player.teleport(cur.r.x + cur.door.nx * 3.2, cur.fy + 0.3, cur.r.z + cur.door.nz * 3.2);
+      g.player.yaw = Math.atan2(cur.door.nx, cur.door.nz);
       g.rig.yaw = g.player.yaw + Math.PI;
-    }, this.info(r).name, '로비');
+      g.rig._init = false;
+      this._pocket(true);
+    }, this.info(cur.r).name, '로비로 내려가는 중');
   }
 
   talk() {
@@ -628,18 +694,22 @@ export class Interiors {
   /** 상호작용할 것 (game._findTarget 이 부른다) */
   target(p) {
     const cur = this.cur;
-    if (cur) {
+    if (cur && this.inPocket) {
       const r = cur.r;
       const dc = Math.hypot(p.x - r.x, p.z - r.z);
-      if (dc < 3.6 && Math.abs(p.y - r.floorY) < 2.5) return { kind: 'lift', label: '빛 승강기 · 하늘 전망대로', short: '승강기' };
-      if (cur.deck && dc < 2.8 && Math.abs(p.y - cur.deck.y) < 2.5) return { kind: 'liftdown', label: '빛 승강기 · 로비로 내려가기', short: '내려가기' };
-      const dd = Math.hypot(p.x - r.door.x, p.z - r.door.z);
-      if (dd < 3.2 && Math.abs(p.y - r.floorY) < 2.5 && this._inside(p.x, p.z)) return { kind: 'exit', label: '밖으로 나가기', short: '나가기' };
+      if (dc < 3.6 && Math.abs(p.y - cur.fy) < 2.5) return { kind: 'lift', label: '빛 승강기 · 하늘 전망대로', short: '승강기' };
+      const dd = Math.hypot(p.x - cur.door.x, p.z - cur.door.z);
+      if (dd < 3.4 && Math.abs(p.y - cur.fy) < 2.5) return { kind: 'exit', label: '밖으로 나가기', short: '나가기' };
+      return null;
     }
-    const d = this.city.nearestDoor(p.x, p.z, 3.2);
-    if (d && Math.abs(p.y - d.floorY) < 3 && !(cur && cur.r === d && this._inside(p.x, p.z))) {
+    if (cur && cur.deck) {
+      const dc = Math.hypot(p.x - cur.r.x, p.z - cur.r.z);
+      if (dc < 2.8 && Math.abs(p.y - cur.deck.y) < 2.5) return { kind: 'liftdown', label: '빛 승강기 · 로비로 내려가기', short: '내려가기' };
+    }
+    const d = this.city.nearestDoor(p.x, p.z, 3.4);
+    if (d && Math.abs(p.y - d.floorY) < 3) {
       const I = this.info(d);
-      return { kind: 'door', o: d, label: `${this.game.state.home === d.id ? '우리 집' : I.name} · 들어가기`, short: '들어가기' };
+      return { kind: 'door', o: d, dist: Math.hypot(p.x - d.door.x, p.z - d.door.z), label: `${this.game.state.home === d.id ? '우리 집' : I.name} · 들어가기`, short: '들어가기' };
     }
     return null;
   }
@@ -647,55 +717,42 @@ export class Interiors {
   update(dt) {
     const g = this.game, p = g.player.pos;
     this.t += dt;
-    // 문 앞에 서면 저절로 열린다
-    this._auto -= dt;
-    if (this._auto <= 0) {
-      this._auto = 0.25;
-      if (g.mode === 'play' && g.player.state === 'ground') {
-        const d = this.city.nearestDoor(p.x, p.z, 2.4);
-        if (d && !d.open && Math.abs(p.y - d.floorY) < 2) this.open(d);
-      }
-    }
     const cur = this.cur;
     if (!cur) return;
     for (const f of cur.anims) f(this.t);
-    // 로비 천장: 점프·활공으로 머리가 천장을 뚫지 않게 (승강기는 순간 이동이라 걸리지 않는다)
-    {
-      const r = cur.r, ceil = r.floorY + cur.LH;
-      if (p.y > r.floorY - 1 && p.y < ceil + 1.5 && this._inside(p.x, p.z, -0.2)) {
-        const maxY = ceil - 1.75 - 0.12;
-        if (p.y > maxY) { p.y = maxY; if (g.player.vel.y > 0) g.player.vel.y = 0; }
-      }
+    if (this.inPocket) {
+      const r = cur.r, ceil = cur.fy + cur.LH;
+      // 혹시 방 밖으로 밀려나거나 떨어지면 문 안쪽으로
+      if (p.y < cur.fy - 4 || !this._inside(p.x, p.z, -1.5)) this._placeIn(cur);
       // 실내 사람도 방 안·천장 아래에
       if (g.citizens) for (const q of g.citizens.indoor) {
         if (!this._inside(q.pos.x, q.pos.z, 0.5)) { q.pos.x += (r.x - q.pos.x) * 0.2; q.pos.z += (r.z - q.pos.z) * 0.2; }
-        q.pos.y = Math.min(q.pos.y, ceil - 2.0 * q.scale - 0.1);
+        q.pos.y = Math.min(Math.max(q.pos.y, cur.fy), ceil - 2.0 * q.scale - 0.1);
       }
+      return;
     }
-    // 멀어지면 닫는다
+    // 전망대에서 내려와 멀어지면 닫는다
     const r = cur.r;
     const dc = Math.hypot(p.x - r.x, p.z - r.z);
     const onDeck = cur.deck && dc < cur.deck.R + 40 && Math.abs(p.y - cur.deck.y) < 60;
-    if (!onDeck && dc > r.ext + 45) this.close();
+    if (!onDeck && !this._busy) this.close();
   }
 
-  /** 실내에서는 카메라가 벽·바닥·천장 밖으로 나가지 않게 (좁은 방에서 다른 층·바깥이 비쳐 보이는 것을 막는다) */
+  /** 실내에서는 카메라가 벽·바닥·천장 안에 머문다 (닫힌 방이라 그 밖은 아무것도 없다) */
   clampCamera(cam, target) {
     const cur = this.cur;
-    if (!cur) return;
-    const p = this.game.player.pos, r = cur.r;
-    if (p.y > r.floorY + cur.LH + 1 || p.y < r.floorY - 2 || !this._inside(p.x, p.z, -0.8)) return;
-    const top = r.floorY + cur.LH - 0.45, bot = r.floorY + 0.35;
-    const ok = (x, y, z) => y < top && y > bot && this._inside(x, z, 0.55);
-    // 벽에 가까워도 화면 가장자리가 벽을 뚫고 보이지 않게 가까운 면을 당긴다
+    if (!cur || !this.inPocket) return;
+    const r = cur.r;
+    const top = cur.fy + cur.LH - 0.45, bot = cur.fy + 0.35;
+    const ok = (x, y, z) => y < top && y > bot && this._inside(x, z, 1.3); // 벽에서 1.3 m — 문틀·가구 속에 들어가지 않게
     if (cam.near !== 0.15) { cam.near = 0.15; cam.updateProjectionMatrix(); }
     // 안전한 기준점: 목표(머리 둘레)를 방 안으로 끌어들인 점
     const a = target.clone();
     a.y = Math.min(top - 0.05, Math.max(bot + 0.05, a.y));
-    if (!this._inside(a.x, a.z, 0.55)) {
+    if (!this._inside(a.x, a.z, 1.3)) {
       const c = new THREE.Vector3(r.x, a.y, r.z);
       let lo = 0, hi = 1;
-      for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2; const q = c.clone().lerp(a, m); if (this._inside(q.x, q.z, 0.55)) lo = m; else hi = m; }
+      for (let i = 0; i < 12; i++) { const m = (lo + hi) / 2; const q = c.clone().lerp(a, m); if (this._inside(q.x, q.z, 1.3)) lo = m; else hi = m; }
       a.copy(c.lerp(a, lo));
     }
     if (ok(cam.position.x, cam.position.y, cam.position.z)) return;
@@ -706,16 +763,19 @@ export class Interiors {
       const q = a.clone().lerp(b, m);
       if (ok(q.x, q.y, q.z)) lo = m; else hi = m;
     }
-    cam.position.copy(a.lerp(b, lo));
+    const pos = a.clone().lerp(b, lo);
+    // 벽을 등지고 서서 카메라가 너무 가까워지면, 뒤로 물러나는 대신 위로 올라 내려다본다
+    const near = pos.distanceTo(target);
+    if (near < 2.4) pos.y = Math.min(top - 0.1, pos.y + (2.4 - near) * 1.1);
+    cam.position.copy(pos);
     cam.lookAt(target);
   }
 
-  /** 저장할 자리: 실내·전망대에 있으면 문 앞으로 */
+  /** 저장할 자리: 실내·전망대에 있으면 바깥 문 앞으로 */
   safeSpot() {
     const cur = this.cur;
     if (!cur) return null;
-    const p = this.game.player.pos, r = cur.r;
-    if (Math.hypot(p.x - r.x, p.z - r.z) > r.ext + 6 && !(cur.deck && Math.abs(p.y - cur.deck.y) < 20)) return null;
+    const r = cur.r;
     return { x: r.door.x + r.door.nx * 3, z: r.door.z + r.door.nz * 3 };
   }
 }

@@ -34,6 +34,7 @@ export class Citizens {
     this.max = f < 0.5 ? 50 : f < 0.7 ? 90 : 130;
     this.R = f < 0.5 ? 90 : 125;
     this.crowd = new Crowd(game.engine.scene, this.max + 16);
+    this.crowd.mesh.userData.indoor = true; // 실내 공간의 주민도 같은 무리로 그린다
     this.people = new Map(); // key → 사람 (가까이 있는 동안 기억)
     this.vis = []; // 이번 프레임에 그린 사람
     this.scanT = 0;
@@ -228,7 +229,8 @@ export class Citizens {
       const ox = p.pos.x - pp.x, oz = p.pos.z - pp.z, od = Math.hypot(ox, oz);
       const minD = 0.55 * p.scale + 0.45;
       if (od < minD && od > 1e-3 && Math.abs(p.pos.y - pp.y) < 2.5) { p.pos.x = pp.x + (ox / od) * minD; p.pos.z = pp.z + (oz / od) * minD; }
-      const gy = g.world.groundAt(p.pos.x, p.pos.z, p.pos.y + 2.5);
+      // 발밑 바닥: 지금 선 높이에서 연석 정도(0.9 m)까지만 오른다 — 정자·차양 지붕 위로 올라가지 않게
+      const gy = g.world.colliders.ground(p.pos.x, p.pos.z, p.pos.y + 0.2, 0.7).h;
       p.pos.y += (gy - p.pos.y) * Math.min(1, dt * 8);
       const wantYaw = moving > 0.3 ? Math.atan2(p.flee ? p._fx : dx, p.flee ? p._fz : dz) : tyaw;
       const dyaw = Math.atan2(Math.sin(wantYaw - p.yaw), Math.cos(wantYaw - p.yaw));
@@ -395,13 +397,15 @@ export class Citizens {
   _playOption(p) {
     const R = ROLES[p.role] || INDOOR[p.role];
     if (!R || !R.play || this.activity) return null;
+    const T = this.game.state.tones;
+    const noTone = !T.length;
     const o = {
       tag: { label: '술래잡기', sub: '아이들을 모두 잡아 보세요 (45초)', fn: () => this.startTag(p) },
-      song: { label: '노래 주고받기', sub: '악사의 가락을 따라 연주한다', fn: () => this.startSong(p) },
-      garden: { label: '꽃 가꾸기 돕기', sub: '싹 셋에 물 주기 (E 또는 「흐름」 음)', fn: () => this.startGarden(p) },
+      song: { label: '노래 주고받기', sub: noTone ? '공명 음을 하나라도 알아야 해요' : '악사의 가락을 따라 연주한다 (내가 아는 음만)', fn: () => this.startSong(p), off: noTone },
+      garden: { label: '꽃 가꾸기 돕기', sub: T.includes(2) ? '싹 셋에 물 주기 (E 또는 「흐름」 음)' : '싹 셋에 물 주기 (싹 앞에서 E)', fn: () => this.startGarden(p) },
       carry: { label: '짐 나르기 돕기', sub: '상자를 들어 내려놓을 자리까지 (60초)', fn: () => this.startCarry(p) },
-      tune: { label: '장치 음 맞추기', sub: '기계가 내는 가락을 맞춘다', fn: () => this.startTune(p) },
-      meditate: { label: '함께 고요해지기', sub: '「고요」 음을 연주한다 (5)', fn: () => this.startMeditate(p) },
+      tune: { label: '장치 음 맞추기', sub: noTone ? '공명 음을 하나라도 알아야 해요' : '기계가 내는 가락을 맞춘다 (내가 아는 음만)', fn: () => this.startTune(p), off: noTone },
+      meditate: { label: '함께 고요해지기', sub: T.includes(4) ? '「고요」 음을 연주한다 (5)' : '「고요」 음을 아직 몰라요 — 공명탑을 노래하게 하면 얻어요', fn: () => this.startMeditate(p), off: !T.includes(4) },
       meal: { label: '함께 먹기', sub: '식탁에 앉아 저녁을 나눈다 (조금 쉰다)', fn: () => this.meal(p) },
       kidplay: { label: '같이 놀기', sub: '아이들과 빙글빙글', fn: () => this.kidPlay(p) },
       lesson: { label: '수업 듣기', sub: '선생님에게 새 말을 배운다 (하루 한 번)', fn: () => this.lesson(p) },
@@ -409,7 +413,7 @@ export class Citizens {
       heal: { label: '울림 고르기', sub: '치유사가 마음의 울림을 고른다', fn: () => this.heal(p) },
       trade: null,
     }[R.play];
-    return o ? { label: o.label, sub: o.sub, onClick: o.fn } : null;
+    return o ? { label: o.label, sub: o.sub, onClick: o.fn, disabled: !!o.off } : null;
   }
 
   talk(p) {
@@ -485,6 +489,7 @@ export class Citizens {
 
   /** 술래잡기: 그 놀이터의 아이들이 도망친다. 가까이 가면 잡힌다 */
   startTag(p) {
+    if (this.game.tips && this.game.tips.first('tag', () => this.startTag(p))) return;
     const g = this.game;
     const kids = this.vis.filter((q) => q.spot === p.spot && q.role === 'play');
     if (!kids.length) return;
@@ -541,6 +546,7 @@ export class Citizens {
 
   /** 노래 주고받기: 악사가 부른 가락을 따라 연주 */
   startSong(p) {
+    if (this.game.tips && this.game.tips.first('song', () => this.startSong(p))) return;
     const g = this.game;
     const tones = g.state.tones.length ? g.state.tones : [0];
     const r = mulberry32(hashStr(p.key) + Math.floor(g.time));
@@ -559,6 +565,7 @@ export class Citizens {
   }
   /** 장치 음 맞추기 (기술자·관측자) */
   startTune(p) {
+    if (this.game.tips && this.game.tips.first('song', () => this.startTune(p))) return;
     const g = this.game;
     const tones = g.state.tones.length ? g.state.tones : [0];
     const r = mulberry32(hashStr(p.key) + 7 + Math.floor(g.time));
@@ -575,6 +582,7 @@ export class Citizens {
 
   /** 꽃 가꾸기: 둘레의 싹 셋에 물 주기 (E, 또는 「흐름」 음) */
   startGarden(p) {
+    if (this.game.tips && this.game.tips.first('garden', () => this.startGarden(p))) return;
     const g = this.game;
     p.engaged = false;
     const marks = [], beds = [];
@@ -583,7 +591,7 @@ export class Citizens {
       const a = r() * TAU, d = 3 + r() * 6;
       const x = p.spot.x + Math.sin(a) * d, z = p.spot.z + Math.cos(a) * d;
       if (this.city.solidAt && this.city.solidAt(x, z, p.spot.y)) continue;
-      const y = g.world.groundAt(x, z, p.spot.y + 3);
+      const y = g.world.colliders.ground(x, z, p.spot.y + 0.3, 0.7).h;
       const m = this._mark(x, y, z, 0x7fdc9a);
       const sprout = new THREE.Mesh(new THREE.ConeGeometry(0.25, 0.7, 5), glowMaterial({ color: 0x7fdc9a, intensity: 1.2 }));
       sprout.position.y = 0.35;
@@ -597,7 +605,7 @@ export class Citizens {
         left -= dt;
         const n = beds.filter((b) => !b.done).length;
         for (const b of beds) if (b.done && b.sprout.scale.x < 3) b.sprout.scale.multiplyScalar(1 + dt * 2);
-        g.ui.say('꽃 가꾸기', `<b>물 줄 싹 ${n}</b> · E 또는 「흐름」(3)`);
+        g.ui.say('꽃 가꾸기', `<b>물 줄 싹 ${n}</b> · 싹 앞에서 E${g.state.tones.includes(2) ? ' 또는 「흐름」(3)' : ''}`);
         if (!n) { this._end(); g.dialogue.startCustom([{ lineObj: this._line(p, 'tend') }], p, () => {}); this._reward([p], { flower: 1, words: [['water', 'teach'], ['flower', 'teach'], ['grow', 'guess']] }); }
         else if (left <= 0) this._end();
       },
@@ -621,10 +629,11 @@ export class Citizens {
 
   /** 짐 나르기: 상자를 들고 표시된 자리로 */
   startCarry(p) {
+    if (this.game.tips && this.game.tips.first('carry', () => this.startCarry(p))) return;
     const g = this.game;
     const s = p.spot;
     const to = s.to || { x: s.x + 15, z: s.z };
-    const ty = g.world.groundAt(to.x, to.z, s.y + 3);
+    const ty = g.world.colliders.ground(to.x, to.z, s.y + 0.3, 0.7).h;
     const pick = this._mark(s.x, s.y, s.z, 0xffc46a);
     const crate = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.7, 0.8), glowMaterial({ color: 0xc89060, intensity: 0.5 }));
     crate.position.y = 0.6;
@@ -647,6 +656,7 @@ export class Citizens {
 
   /** 함께 고요해지기: 20초 안에 「고요」 */
   startMeditate(p) {
+    if (this.game.tips && this.game.tips.first('meditate', () => this.startMeditate(p))) return;
     const g = this.game;
     let left = 20;
     p.engaged = false;

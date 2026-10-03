@@ -47,6 +47,8 @@ export class CameraRig {
     // 목표 지점
     const tgtY = s === 'glide' || s === 'current' ? 0.9 : s === 'swim' ? 0.7 : 1.55;
     this.target.set(player.pos.x, player.pos.y + tgtY, player.pos.z);
+    // 실내: 점프해도 카메라는 거의 따라 오르지 않는다 (천장 쪽으로 치솟지 않게)
+    if (this.floorLock != null) this.target.y = this.floorLock + tgtY + Math.max(0, player.pos.y - this.floorLock) * 0.25;
     if (!this._init) { this.smoothTarget.copy(this.target); this._init = true; }
     const k = s === 'ground' ? 18 : 12;
     this.smoothTarget.x += (this.target.x - this.smoothTarget.x) * Math.min(1, dt * k);
