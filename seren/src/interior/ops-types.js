@@ -16,7 +16,7 @@ import { hashStr, mulberry32 } from '../core/noise.js';
 import { WORDS, WORD } from '../data/lexicon.js';
 import { won } from '../data/money.js';
 import { bookById, bookColor } from '../data/books.js';
-import { stockFor, shelfTitles, subjectName, slotName, libState, readPage } from './library.js';
+import { stockFor, shelfTitles, subjectName, slotName, libState, readPage, SPINES } from './library.js';
 
 // ── 도구 ─────────────────────────────────────────────────
 const tod = (ops) => ops.game.world.clock.time % 1;
@@ -1024,7 +1024,7 @@ const library = {
     if (!b) return;
     const S = libState(ops.game);
     const page = S.done[x.id] ? 0 : Math.min(Math.max(0, (S.read[x.id] || 1) - 1), b.pages.length - 1);
-    ui(ops).reader(b, { kicker: `${subjectName(b.subject)} · ${slotName(x.si)}`, page, onPage: (p) => readPage(ops.game, x.id, p), actions: [
+    ui(ops).reader(b, { kicker: `${subjectName(b.subject)} · ${slotName(x.si, F)}`, page, onPage: (p) => readPage(ops.game, x.id, p), actions: [
       { label: '들고 가기', sub: '열람 탁자에 앉아 읽거나, 대출대에서 빌려 가방에 넣는다', primary: true, onClick: () => library.take(ops, out, F, x) },
       { label: '서가로 돌아가기', sub: '다른 책 고르기', onClick: () => library.browse(ops, T, out, F) },
     ] });
@@ -1088,8 +1088,26 @@ const library = {
     if (desk) spawn(ops, staffSpec(ops, out, T, 'read', '사서', desk), loopAt(desk, 'type', 8, true)(), () => loopAt(desk, 'type', 8, true)());
     for (let k = 0; k < Math.min(8, tables.length * 2 + 2); k++) {
       const [gx, gz] = arrival(ops, out);
-      spawn(ops, { key: `${T.uid}:${i}:rd${k}`, role: 'read', title: '읽는 이', floor: i, gx, gz }, [{ wait: k * 2 }], () => { const S = shelves.length ? pick(shelves) : null; const Tb = tables.length ? pick(tables) : null; return [...(S ? [{ go: AT(S) }, { face: yawTo(S), act: 'reach', t: 3 }] : []), ...(Tb ? [{ go: AT(Tb) }, { act: 'sit', t: 25 }] : [])]; });
+      spawn(ops, { key: `${T.uid}:${i}:rd${k}`, role: 'read', title: '읽는 이', floor: i, gx, gz }, [{ wait: k * 2 }], () => library.readerPlan(ops, T, out, shelves, tables));
     }
+  },
+  /** 읽는 이 (주민): 서가에서 실제 책 한 권을 꺼내(그 자리가 빈다) 열람 탁자에서 읽고 제자리에 꽂는다 */
+  readerPlan(ops, T, out, shelves, tables) {
+    const S = shelves.filter((F) => out.books && out.books.get(F.id));
+    if (!S.length) return [{ act: 'look', t: 10 }];
+    const F = pick(S), Tb = tables.length ? pick(tables) : null;
+    let key = null;
+    return [
+      { go: AT(F) },
+      { face: yawTo(F), act: 'reach', t: 2, fx: () => {
+        const en = out.books.get(F.id), gone = ops.booksGone(out.i);
+        for (let k = 0; k < 12 && !key; k++) { const si = Math.floor(Math.random() * en.spines.length), e = Math.floor(Math.random() * SPINES); const q = `${F.id}/${si}/${e}`; if (en.spines[si][e] && !gone.has(q)) key = q; }
+        if (key) { ops.agentBook(out.i, key, 120); ops.dirty(out.i); }
+      } },
+      ...(Tb ? [{ go: AT(Tb) }, { act: 'sit', t: 20 + Math.random() * 20 }] : [{ act: 'look', t: 15 }]),
+      { go: AT(F) },
+      { face: yawTo(F), act: 'reach', t: 1.5, fx: () => { if (key) { ops.agentBook(out.i, key, 0); ops.dirty(out.i); } } },
+    ];
   },
   roles: { shelver: { title: '서가 정리', wage: 1.4, hours: [0.33, 0.75], desc: '돌아온 책을 제 서가 제 칸에 꽂는다', next(ops, T) {
     const out = ops.cur.indoor.built.get(ops.cur.indoor.cur);
@@ -1097,7 +1115,7 @@ const library = {
     if (!sh.length) return null;
     const S = pick(sh), en = out.books.get(S.id), si = Math.floor(Math.random() * en.spines.length), id = pick(en.spines[si].filter(Boolean)), b = bookById(id);
     if (!b) return null;
-    const where = `${en.annal ? '연대 기록' : subjectName(en.subject)} 서가 ${slotName(si)}`;
+    const where = `${en.annal ? '연대 기록' : subjectName(en.subject)} 서가 ${slotName(si, S)}`;
     return { title: `「${b.title}」 꽂기`, steps: [
       { label: '대출대에서 돌아온 책 들기', short: '들기', at: (o) => tagged(o, 'circulation')[0] || tagged(o, 'catalog')[0], do: () => { ops.takeCarry({ g: 'book', n: 1, kind: 'book', label: b.title, color: bookColor(id) }); return true; } },
       { label: `「${b.title}」 — ${where}`, short: '꽂기', at: () => S, do: () => { ops.dropCarry(); ops.taskDone(T); learn(ops, b.word); return true; } },
@@ -1254,7 +1272,7 @@ const farm = {
       const slots = out.slots.get(F.id) || [];
       const cs = slots.map((s, si) => T.node.crop[`${F.id}/${si}`]).filter(Boolean);
       const ripe = cs.filter((c) => c.stage >= 1).length, dry = cs.filter((c) => c.water < 0.4).length;
-      return { label: () => `${F.t === 'growrack' ? '재배 선반' : '재배 이랑'} · ${gname(cs[0] ? cs[0].g : 'grain')} ${ripe ? `· 거둘 것 ${ripe}` : dry ? '· 목말라요' : '· 자라는 중'}`, short: ripe ? '거두기' : '돌보기', use: () => farm.tend(ops, T, F, out) };
+      return { label: () => `${F.t === 'growrack' ? '재배 선반' : F.t === 'growbox' ? '재배 상자' : '재배 이랑'} · ${gname(cs[0] ? cs[0].g : 'grain')} ${ripe ? `· 거둘 것 ${ripe}` : dry ? '· 목말라요' : '· 자라는 중'}`, short: ripe ? '거두기' : '돌보기', use: () => farm.tend(ops, T, F, out) };
     }
     if (F.tag === 'nutrient') return { label: '양분 탱크', short: '양분', use: () => toast(ops, '빛물에 양분이 녹아 이랑으로 흐른다') };
     if (F.tag === 'pack') return { label: '포장 탁자', short: '포장', use: () => farm.pack(ops, T) };

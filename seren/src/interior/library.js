@@ -11,6 +11,8 @@ import { hashStr } from '../core/noise.js';
 /** 칸 하나(서가 한 단의 절반)에 꽂힌 책 수 · 서가 단 수 · 단마다 칸 수 (props.js 의 책 서가 모양과 같은 수) */
 export const SPINES = 12, SHELF_LEVELS = 5, SHELF_COLS = 2;
 const SLOTS = SHELF_LEVELS * SHELF_COLS;
+/** 서가 하나의 칸 수 (작은 서가는 한 줄) */
+export const slotsOf = (F) => (F.t === 'bookcase' ? SHELF_LEVELS : SLOTS);
 const ORDER = ['history', 'nature', 'sky', 'song', 'story', 'child', 'words', 'tech', 'life', 'heal', 'city', 'law'];
 const SCHOOL = ['child', 'story', 'words', 'nature', 'sky', 'song', 'tech', 'history', 'life', 'heal', 'city', 'law'];
 const bySubj = {};
@@ -21,7 +23,7 @@ export function libraryFloors(B) { return B.floors.filter((F) => F.use === 'libr
 
 /** 층의 서가를 자리 차례로 */
 export function shelvesOf(fix) {
-  return fix.filter((F) => F.t === 'bookshelf').sort((a, b) => (a.room - b.room) || (a.z - b.z) || (a.x - b.x));
+  return fix.filter((F) => F.t === 'bookshelf' || F.t === 'bookcase').sort((a, b) => (a.room - b.room) || (a.z - b.z) || (a.x - b.x));
 }
 
 /** 이 층이 맡는 분류: 서고 층이 여럿이면 차례로 나눠 맡고(남는 층은 다시 처음부터), 하나면 전부 — 짜임(plan) 없이 정해진다 */
@@ -45,7 +47,7 @@ export function stockFloor(ctx, fix) {
   const { subs, rank } = floorSubjects(B, i);
   const shelves = shelvesOf(fix);
   const open = shelves.filter((F) => F.tag !== 'archive'), arch = shelves.filter((F) => F.tag === 'archive');
-  const cap = open.length * SLOTS * SPINES;
+  const cap = open.reduce((a, F) => a + slotsOf(F) * SPINES, 0);
   const total = subs.reduce((a, s) => a + (bySubj[s] || []).length, 0);
   const seq = [];
   if (cap > 0) {
@@ -65,7 +67,7 @@ export function stockFloor(ctx, fix) {
   let k = 0;
   for (const F of open) {
     const spines = [], cnt = {};
-    for (let s = 0; s < SLOTS; s++) {
+    for (let s = 0; s < slotsOf(F); s++) {
       const row = [];
       for (let e = 0; e < SPINES; e++) { const id = seq[k++] || null; row.push(id); if (id) { const sb = subjectOfId(id); cnt[sb] = (cnt[sb] || 0) + 1; } }
       spines.push(row);
@@ -77,7 +79,7 @@ export function stockFloor(ctx, fix) {
   let v = rank * 2000;
   for (const F of arch) {
     const spines = [];
-    for (let s = 0; s < SLOTS; s++) { const row = []; for (let e = 0; e < SPINES; e++) row.push(annalId(zone, v++)); spines.push(row); }
+    for (let s = 0; s < slotsOf(F); s++) { const row = []; for (let e = 0; e < SPINES; e++) row.push(annalId(zone, v++)); spines.push(row); }
     out.set(F.id, { subject: 'history', annal: true, spines });
   }
   return out;
@@ -95,7 +97,7 @@ function subjectOfId(id) {
 
 export const subjectName = (s) => SUBJECTS[s] || s;
 /** 칸 번호 → 「3단 왼쪽」 */
-export const slotName = (si) => `${Math.floor(si / SHELF_COLS) + 1}단 ${SHELF_COLS === 2 ? (si % 2 ? '오른쪽' : '왼쪽') : ''}`.trim();
+export const slotName = (si, F) => (F && F.t === 'bookcase' ? `${si + 1}단` : `${Math.floor(si / SHELF_COLS) + 1}단 ${SHELF_COLS === 2 ? (si % 2 ? '오른쪽' : '왼쪽') : ''}`.trim());
 
 /**
  * 건물의 서고 색인 (찾기 단말·모아): 목록의 책 id → 그 책을 맡은 층, 층마다 분류.

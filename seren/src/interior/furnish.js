@@ -61,8 +61,11 @@ export class Occ {
         }
       }
     };
-    for (const d of L.doors) zone(d.c, d.dir, Math.max(1, d.w), ['lift', 'cargo', 'stair'].includes(d.kind) ? 3 : 2.4, d.b < 0 ? 'in' : 'both');
-    for (const e of [L.ents.main, L.ents.dock]) if (e) zone(e.c, e.dir, (e.w || 2) + 2, 3, 'in');
+    // 작은 방(40 m² 아래)은 비워 둘 깊이를 반쯤으로 — 문 앞을 다 비우면 계산대 하나 놓을 자리도 없다 (걸어서 닿는지는 가구마다 따로 검사)
+    const small = (c) => { const r = L.room[c]; const R = r ? L.rooms[r - 1] : null; return R && R.n < 40; };
+    const roomAt = (c, dir) => { const i = c % L.gw + dir[0], j = ((c / L.gw) | 0) + dir[1]; return i >= 0 && j >= 0 && i < L.gw && j < L.gh ? j * L.gw + i : c; };
+    for (const d of L.doors) { const sm = small(d.c) && (d.b < 0 || small(roomAt(d.c, d.dir))); zone(d.c, d.dir, Math.max(1, d.w), (['lift', 'cargo', 'stair'].includes(d.kind) ? 3 : 2.4) * (sm ? 0.5 : 1), d.b < 0 ? 'in' : 'both'); }
+    for (const e of [L.ents.main, L.ents.dock]) if (e) zone(e.c, e.dir, (e.w || 2) + (small(e.c) ? 0 : 2), small(e.c) ? 1.5 : 3, 'in');
   }
 }
 
@@ -81,6 +84,7 @@ export class Furnisher {
     this.occ = new Occ(B, L);
     this.occ.keepDoors();
     this.list = [];
+    this._n = 0; // 가구 번호 (치운 가구가 있어도 겹치지 않게)
     this.rnd = rngFor(B.seed, `furn${L.i}`);
     // 오가는 길(복도·승강기 홀·로비·넓은 홀)은 층 전체가 한 덩어리로 이어져 있어야 한다 — 가구가 길을 끊지 않게
     this.flowR = new Uint8Array(L.rooms.length + 1);
@@ -134,7 +138,9 @@ export class Furnisher {
    */
   _reach(R, targets) {
     const occ = this.occ, rid = R.id + 1;
-    const ok = (k) => occ.rm[k] === rid && (occ.o[k] === 0 || occ.o[k] === 3);
+    // 오가는 공간(홀·복도·승강기 홀)은 서로 벽이 없다 — 그런 방은 이웃한 오가는 공간을 거쳐서도 이어진다 (조각난 홀·전시실)
+    const fl = this.flowR[rid] === 1;
+    const ok = fl ? (k) => (occ.rm[k] === rid || this.flowR[occ.rm[k]] === 1) && (occ.o[k] === 0 || occ.o[k] === 3) : (k) => occ.rm[k] === rid && (occ.o[k] === 0 || occ.o[k] === 3);
     const groups = this._doorGroups(R).map((g) => g.filter((k) => occ.rm[k] === rid)).filter((g) => g.length);
     const start = groups.length ? groups[0] : this._doorSubs(R).filter((k) => occ.rm[k] === rid);
     if (!start.length) return true; // 문이 없는 방(복도·홀의 일부)은 따지지 않는다 (오가는 길은 _keepsFlow 가 본다)
@@ -265,10 +271,31 @@ export class Furnisher {
     if (acc >= 0) { const [cx, cz] = occ.ctr(acc % occ.gw, (acc / occ.gw) | 0); ax = cx; az = cz; }
     let bx = null, bz = null;
     if (back.length) { const bk = back[Math.floor(back.length / 2)]; [bx, bz] = occ.ctr(bk % occ.gw, (bk / occ.gw) | 0); }
-    const F = { id: `${this.L.i}:${this.list.length}`, t, x, z, rot, w: f.w, d: f.d, h: f.h, room: R.id, ax, az, bx, bz, accK: acc, tag: o.tag || null, ...(o.data || {}) };
+    const F = { id: `${this.L.i}:${this._n++}`, t, x, z, rot, w: f.w, d: f.d, h: f.h, room: R.id, ax, az, bx, bz, accK: acc, tag: o.tag || null, ...(o.keep === false ? { nokeep: true } : {}), ...(o.data || {}) };
     this.list.push(F);
     this.stats.placed++;
     return F;
+  }
+
+  /** 가구 하나 치우기: 자리 장부를 처음부터 다시 쓴다 (문 앞 + 남은 가구의 자리·앞자리·뒷자리) */
+  remove(F) {
+    const k = this.list.indexOf(F);
+    if (k < 0) return false;
+    this.list.splice(k, 1);
+    const occ = new Occ(this.B, this.L);
+    occ.keepDoors();
+    this.occ = occ;
+    for (const q of this.list) {
+      const f = FIX[q.t];
+      if (!f) continue;
+      const fp = footprint(occ, f, q.x, q.z, q.rot);
+      for (let b = fp.b0; b <= fp.b1; b++) for (let a = fp.a0; a <= fp.a1; a++) if (a >= 0 && b >= 0 && a < occ.gw && b < occ.gh && !f.walk) occ.o[occ.k(a, b)] = 2;
+      const [fx, fz] = FR[q.rot], fw = q.rot % 2 ? fp.D : fp.W;
+      const mark = (a, b) => { if (a >= 0 && b >= 0 && a < occ.gw && b < occ.gh && occ.o[occ.k(a, b)] === 0) occ.o[occ.k(a, b)] = 3; };
+      if ((f.front ?? 0.8) > 0 && !q.nokeep) for (let st = 1; st <= Math.max(1, Math.round((f.front ?? 0.8) * S)); st++) for (let u = 0; u < Math.round(fw * S); u++) { if (fz) mark(fp.a0 + u, fz > 0 ? fp.b1 + st : fp.b0 - st); else mark(fx > 0 ? fp.a1 + st : fp.a0 - st, fp.b0 + u); }
+      if (f.back) for (let st = 1; st <= Math.round(f.back * S); st++) for (let u = 0; u < Math.round(fw * S); u++) { if (fz) mark(fp.a0 + u, fz > 0 ? fp.b0 - st : fp.b1 + st); else mark(fx > 0 ? fp.a0 - st : fp.a1 + st, fp.b0 + u); }
+    }
+    return true;
   }
 
   // ── 자리 찾기 도구 ─────────────────────────────────────

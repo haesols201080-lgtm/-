@@ -6,7 +6,7 @@ import { makeBuilding } from '../src/interior/program.js';
 import { layoutFloor } from '../src/interior/layout.js';
 import { facadeProfile, sdfAt, cellX, cellZ } from '../src/interior/volume.js';
 import { packB, unpackB, packL, unpackL } from '../src/interior/store.js';
-import { furnishFloor } from '../src/interior/recipes.js';
+import { furnishFloor, ESSENTIAL } from '../src/interior/recipes.js';
 import { FIX } from '../src/interior/catalog.js';
 import { navGrid } from '../src/interior/nav.js';
 
@@ -112,7 +112,7 @@ if (!cmd || cmd === 'all') {
   const SIZES = [[9, 9, 9], [14, 12, 22], [20, 16, 60], [28, 22, 140], [40, 16, 16]];
   let n = 0, fail = 0, floors = 0, rooms = 0, ms = 0, mz = 0;
   const LK = { stair: '계단', spiral: '나선 계단', lift: '승강기', cargo: '화물 승강기' };
-  const stats = { cells: 0, outside: 0, links: 0, order: 0, special: 0, doorD: 0, noTerrace: 0, persist: 0, bridges: 0, bridgeNoLift: 0, walkRooms: 0, walkLost: 0, byPid: {} };
+  const stats = { cells: 0, outside: 0, links: 0, order: 0, special: 0, doorD: 0, noTerrace: 0, persist: 0, bridges: 0, bridgeNoLift: 0, walkRooms: 0, walkLost: 0, essRooms: 0, essN: 0, essMiss: {}, byPid: {} };
   const problems = [];
   for (const kind of KINDS) for (const use of USES) for (const [hw, hd, h] of SIZES) {
     const S = SPEC[kind];
@@ -218,6 +218,16 @@ if (!cmd || cmd === 'all') {
         // 실제로 걸어서 닿나 (가구·벽까지 넣은 0.5 m 걸음 칸): 승강기 홀(없으면 정문 홀)에서 범람 → 모든 방에 닿아야
         {
           const fx = furnishFloor(B, L).list;
+          // 방마다 꼭 있어야 하는 가구 (그 쓰임의 일이 일어나는 자리): 하나라도 없으면 센다
+          for (const R of L.rooms) {
+            const need = R.n ? ESSENTIAL[R.type] : null;
+            if (!need) continue;
+            stats.essRooms++;
+            for (const [, tg, , , , cond] of need) {
+              if (cond && !cond({ B, L })) continue;
+              if (!fx.some((q) => q.room === R.id && q.tag === tg)) { const k = `${R.type}:${tg}`; stats.essMiss[k] = (stats.essMiss[k] || 0) + 1; stats.essN++; if (stats.essN <= 12) problems.push(`${tag}: ${F.label}층 ${R.name}(${R.n} m²)에 ${tg} 없음`); }
+            }
+          }
           const N = navGrid(B, L, fx);
           const startRoom = L.lifthall != null ? L.lifthall : (L.rooms.find((R) => R.main && R.n) || L.rooms.find((R) => R.circ && R.n) || {}).id;
           const seen = new Uint8Array(N.gw * N.gh), q = [];
@@ -260,6 +270,7 @@ if (!cmd || cmd === 'all') {
   console.log(`건물 ${n} · 실패 ${fail} · 층 ${floors} · 방 ${rooms} · 평균 ${(ms / n).toFixed(1)} ms · 중2층 계단 ${mz}`);
   console.log(`바깥 부피 밖 칸 ${stats.outside}/${stats.cells} · 이음 검사 ${stats.links} · 쓰임 차례 검사 ${stats.order} (전문 건물 ${stats.special}) · 정문-바깥 문 (가장 가까운 칸 기준) 최대 ${stats.doorD.toFixed(1)} m · 테라스 문 없는 큰 테라스 ${stats.noTerrace} · 저장 왕복 ${stats.persist} · 공중다리 문 ${stats.bridges} (승강기 안 서는 층 ${stats.bridgeNoLift}, 문 → 바깥 외벽 최대 ${(stats.bridgeWall || 0).toFixed(1)} m, 다리 폭 밖으로 비킨 문 ${stats.bridgeOff || 0} · 최대 ${(stats.bridgeSide || 0).toFixed(1)} m)`);
   console.log(`걸어서 닿는가 (가구·벽 포함 0.5 m 칸): 방 ${stats.walkRooms} 중 못 가는 방 ${stats.walkLost}`);
+  console.log(`핵심 가구 (방마다 그 쓰임의 일이 일어나는 자리): 방 ${stats.essRooms} 중 빠진 것 ${stats.essN}${stats.essN ? ` — ${Object.entries(stats.essMiss).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => `${k} ${v}`).join(', ')}` : ''}`);
   console.log('1층 짜임의 가짓수 (같은 쓰임 안에서):', Object.entries(stats.byPid).map(([k, v]) => `${k} ${v.sig.size}`).join(' · '));
   const uniq = [...new Set(problems)];
   console.log(`문제 ${uniq.length}`);

@@ -232,7 +232,7 @@ function decideUses(pid, slots, ctx, rnd) {
       default: done = false;
     }
     if (done) {
-      for (let k = 0; k < N; k++) if (slots[k].n < (k === 0 ? 40 : 24) && uses[k] !== 'house') uses[k] = k === 0 ? 'stem' : 'tech';
+      tinyFloors(slots, uses);
       return { uses, basements, atrium, notes, podium, deps, special: notes.special };
     }
   }
@@ -336,9 +336,21 @@ function decideUses(pid, slots, ctx, rnd) {
     case 'garden': uses[0] = 'garden'; fill(1, top, N > 4 ? 'office' : 'garden'); if (N >= 3) uses[top] = 'observation'; break;
     default: fill(0, top, 'office');
   }
-  // 아주 작은 층(버섯 집의 줄기, 둥근 지붕 아래 다락)은 현관·다락으로
-  for (let k = 0; k < N; k++) if (slots[k].n < (k === 0 ? 40 : 24) && uses[k] !== 'house') uses[k] = k === 0 ? 'stem' : 'tech';
+  tinyFloors(slots, uses);
   return { uses, basements, atrium, notes, podium, deps, special: null };
+}
+/**
+ * 아주 작은 층(버섯 집의 줄기, 둥근 지붕 아래 다락)은 현관·다락으로 — 단, 건물에 쓰임을 담을 큰 층이 따로 있을 때만.
+ * 건물 전체가 작으면(작은 둥근 서고·가게) 1층이 본래 쓰임을 지킨다: 밖에서 「서고」인 건물이 안에서 남의 현관이 되지 않게.
+ */
+function tinyFloors(slots, uses) {
+  const N = slots.length;
+  const big = Math.max(0, ...slots.map((s) => s.n));
+  for (let k = 0; k < N; k++) {
+    if (slots[k].n >= (k === 0 ? 40 : 24) || uses[k] === 'house') continue;
+    if (k === 0 && big < 60) continue;
+    uses[k] = k === 0 ? 'stem' : 'tech';
+  }
 }
 
 // ── 조직 ───────────────────────────────────────────────────

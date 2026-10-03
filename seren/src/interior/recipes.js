@@ -4,7 +4,7 @@
 //  공장: 원료 통 → 성형기 → 조립 팔 → 빛가마 → 포장기 (긴 축을 따라 한 줄) + 검사대·조종대 · 물류: 높은 선반 줄(뜬짐차 통로 2.6 m) + 분류 띠
 //  병원: 접수·대기 의자 줄, 진료실(책상+침상), 검사실(스캐너), 입원실(침상 둘~넷) · 그 밖의 방도 모두 쓰임에 맞게.
 import { Furnisher } from './furnish.js';
-import { FIX } from './catalog.js';
+import { FIX, FUSE } from './catalog.js';
 
 /** 마트의 물건 구역 (진열대마다 붙는 이름 — ops 가 물건을 채운다) */
 export const MART_CATS = ['fresh', 'bakery', 'pantry', 'drink', 'home', 'gift', 'craft', 'snack'];
@@ -22,7 +22,83 @@ export function furnishFloor(B, L) {
     const f = RECIPE[rm.type];
     if (f) f(Fu, rm, { B, L, rnd, plants, style });
   }
+  for (const rm of order) ensureEssentials(Fu, rm, { B, L });
+  // 작은 층(150 m² 아래)은 직원실이 없을 수 있다 — 일하는 사람이 있는 쓰임이면 본 홀에 출근 단말 하나
+  const Fl = B.floors[L.i], op = FUSE[Fl.use] ? FUSE[Fl.use].op : '';
+  if (Fl.n < 150 && !['home', 'tech', 'lobby', 'parking'].includes(op) && Fl.use !== 'house' && !Fu.list.some((q) => q.tag === 'clock')) {
+    const main = R.find((q) => q.main && q.n) || order.find((q) => !q.circ && q.n > 6);
+    if (main) ensureEssentials(Fu, main, { B, L }, [['timeclock', 'clock', 1, null, ['terminal']]]);
+  }
   return { list: Fu.list, stats: Fu.stats, occ: Fu.occ };
+}
+
+/**
+ * 방마다 꼭 있어야 하는 가구: [종류, 표시(tag), 개수, data, 대신 쓸 종류들] — 그 쓰임의 일이 실제로 일어나는 자리.
+ * 큰 방을 기준으로 짠 놓는 법(여백·통로)이 작은 방에서 아무것도 못 놓으면, 벽을 따라 → 방 가운데 둘레로 다시 찾고,
+ * 그래도 자리가 없으면 그 방의 장식(화분·의자·탁자…)을 하나씩 치우고 놓는다. 작은 마트에도 계산대와 진열대, 작은 서고에도 서가.
+ */
+export const ESSENTIAL = {
+  sales: [['checkout', 'checkout', 1, null, ['selfcheck']], ['wallshelf', 'shelf', 2, { cat: 'pantry' }, ['gondola', 'chiller', 'display', 'produce']]],
+  kiosk: [['checkout', 'checkout', 1, null, ['selfcheck']], ['wallshelf', 'shelf', 1, { cat: 'snack' }, ['display']]],
+  giftshop: [['checkout', 'checkout', 1, null, ['selfcheck']], ['wallshelf', 'shelf', 1, { cat: 'gift' }, ['display']]],
+  dining: [['counter', 'order', 1, null, ['checkout', 'selfcheck']], ['table2', 'table', 2, null, ['table4']]],
+  canteen: [['canteenline', 'order', 1, null, ['counter', 'checkout']], ['table4', 'table', 1, null, ['table2']]],
+  waiting: [['seats', 'wait', 1, null, ['bench']], ['examdesk', 'doctor', 1, null, null, (c) => !c.L.rooms.some((q) => q.type === 'consult' && q.n)]],
+  consult: [['examdesk', 'doctor', 1]],
+  counters: [['servicecounter', 'civic', 1, null, ['examdesk', 'desk']]],
+  stacks: [['reception', 'circulation', 1, null, ['desk']], ['bookshelf', 'books', 3, null, ['bookcase']], ['catalog', 'catalog', 1]],
+  reading: [['readtable', 'read', 1, null, ['table2']]],
+  gallery: [['case', 'exhibit', 2, null, ['plinth']]],
+  auditorium: [['seatrow', 'seat', 2, null, ['bench']]],
+  production: [['machine', 'machine', 1, { line: 0, step: 0 }, ['assembler', 'packer']]],
+  warehouse: [['bigrack', 'stock', 1, null, ['stockrack']]],
+  classroom: [['board', 'board', 1], ['sdesk', 'student', 2]],
+  open: [['desk', 'desk', 2]],
+  labroom: [['labbench', 'bench', 1, null, ['hood']]],
+  unit: [['bedpod1', 'sleep', 1], ['kcounter', 'cook', 1, null, ['kitchenette']]],
+  bedroom: [['bedpod1', 'sleep', 1]],
+  guestroom: [['bedpod1', 'sleep', 1]],
+  wardroom: [['bed', 'bed', 1, null, ['exambed']]],
+  growhall: [['growrack', 'crop', 2, null, ['growbed', 'growbox']]],
+  corehall: [['core', 'core', 1, null, ['console']]],
+  concourse: [['ticketm', 'tickets', 1]],
+  gym: [['floatpad', 'exercise', 1]],
+};
+const DECOR = new Set(['plant', 'bench', 'sofa', 'lowtable', 'armchair', 'water', 'art', 'cabinet', 'printer', 'shelfh', 'baskets', 'lightrig', 'forklift', 'toolrack', 'numbers', 'infokiosk', 'display', 'freezer']);
+function ensureEssentials(F, R, c, list = null) {
+  const need = list || ESSENTIAL[R.type];
+  if (!need || !R.n) return;
+  const essTags = new Set(need.map((q) => q[1]));
+  for (const [t, tag, n, data, alts, cond] of need) {
+    if (cond && !cond(c)) continue;
+    const have = () => F.list.filter((q) => q.room === R.id && q.tag === tag).length;
+    if (have() >= n) continue;
+    const types = [t, ...(alts || [])];
+    const place = (sweep) => {
+      for (const tt of types) {
+        if (!FIX[tt]) continue;
+        const o = { tag, ...(data ? { data } : {}), ...(tt === 'stageplat' ? { noReach: true } : {}) };
+        if (F.alongWalls(R, tt, { ...o, n: 1 }).length) return true;
+        const b = F.box(R);
+        if (F.near(R, tt, b.cx, b.cz, 0, { ...o, R: Math.min(8, Math.max(b.w, b.d) / 2 + 1), anyRot: true })) return true;
+        if (sweep) {
+          // 방 전체를 0.5 m 간격으로 (좁고 긴 방·가운데가 막힌 방)
+          let tries = 0;
+          for (let z = b.z0 + 0.5; z < b.z1 && tries < 1500; z += 0.5) for (let x = b.x0 + 0.5; x < b.x1 && tries < 1500; x += 0.5) for (let rot = 0; rot < 4; rot++) { tries++; if (F.try(R, tt, x, z, rot, o)) return true; }
+        }
+      }
+      return false;
+    };
+    const need0 = Object.fromEntries(need.map((q) => [q[1], q[2]]));
+    for (let guard = 0; have() < n && guard < n + 8; guard++) {
+      if (place(guard > 0 || R.n < 60)) continue;
+      // 자리가 없으면 하나 치우고 다시: 장식 → 꼭 있어야 하는 것이 아닌 가구 → 필요한 수보다 넘치는 같은 가구(식탁 예순여덟 개 중 하나)
+      const mine = F.list.filter((q) => q.room === R.id && !essTags.has(q.tag));
+      const extra = F.list.filter((q) => q.room === R.id && essTags.has(q.tag) && q.tag !== tag && F.list.filter((p) => p.room === R.id && p.tag === q.tag).length > (need0[q.tag] || 1));
+      const dec = mine.filter((q) => DECOR.has(q.t)).pop() || mine.pop() || extra.pop();
+      if (!dec || !F.remove(dec)) break;
+    }
+  }
 }
 
 const PRIORITY = { lobby: 0, sales: 0, production: 0, warehouse: 0, concourse: 0, corehall: 0, growhall: 0, dining: 1, auditorium: 1, stacks: 1, gallery: 1, counters: 1 };
@@ -207,7 +283,13 @@ const RECIPE = {
     const b = F.box(R);
     for (let k = 0; k < 4; k++) F.near(R, 'floatpad', b.cx + (k - 1.5) * 3, b.cz, 0, { R: 2, tag: 'exercise' });
   },
-  canteen(F, R, c) { F.alongWalls(R, 'canteenline', { n: 1, tag: 'order', avoidWindows: true }); F.rows(R, 'table4', { aisle: 1.6, gap: 1.6, margin: 1.6, tag: 'table' }); },
+  canteen(F, R, c) {
+    // 배식대: 주방과 맞닿은 벽 쪽이 먼저 (창이 있는 벽이어도), 그다음 식탁 줄
+    const kit = c.L.rooms.find((q) => q.type === 'kitchen' && q.n);
+    const kx = kit ? c.B.G.ox + kit.cx + 0.5 : F.box(R).cx, kz = kit ? c.B.G.oz + kit.cz + 0.5 : F.box(R).z0;
+    if (!F.alongWalls(R, 'canteenline', { n: 1, tag: 'order', prefer: (p, q) => Math.hypot(p.x - kx, p.z - kz) - Math.hypot(q.x - kx, q.z - kz) }).length) F.near(R, 'canteenline', kx, kz + 3, 0, { R: 8, tag: 'order', anyRot: true });
+    F.rows(R, 'table4', { aisle: 1.6, gap: 1.6, margin: 1.6, tag: 'table' });
+  },
   // 서고·박물관·공연
   stacks(F, R, c) {
     const b = F.box(R);

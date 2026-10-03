@@ -227,7 +227,7 @@ export class Apps {
     const b = this.ops.bstate(cur.uid);
     if (b.iv && b.iv.gen === cur.B.seed) return b.iv;
     const ind = cur.indoor, B = cur.B;
-    const order = [(F) => F.tag === 'interview', (F, L) => F.tag === 'desk' && L.rooms[F.room] && L.rooms[F.room].type === 'manager', (F, L) => F.tag === 'meeting', (F) => F.tag === 'reception', (F) => F.tag === 'clock', (F) => F.tag === 'checkout' || F.tag === 'order' || F.tag === 'console'];
+    const order = [(F) => F.tag === 'interview', (F, L) => F.tag === 'desk' && L.rooms[F.room] && L.rooms[F.room].type === 'manager', (F, L) => F.tag === 'meeting', (F) => F.tag === 'reception', (F) => F.tag === 'clock', (F) => ['checkout', 'order', 'console', 'circulation', 'civic', 'doctor', 'tickets', 'desk', 'teacher', 'nurse'].includes(F.tag)]; // 작은 건물은 계산대·대출대·창구·진료 책상 앞에서
     const floors = B.floors.filter((F) => F.reach && !F.dead).map((F) => F.i).sort((a, b) => Math.abs(a - B.ground) - Math.abs(b - B.ground));
     for (const test of order) {
       for (const i of floors.slice(0, 12)) {
@@ -510,12 +510,12 @@ export class Apps {
     else if (sub) list = books.filter((b) => b.subject === sub);
     const shown = list.slice(0, 80);
     const fl = (i) => cur.B.floors[i].label;
-    const plan = idx.floors.map((x) => `${fl(x.floor)}층 ${x.subs.map(subjectName).join('·')}`).join(' / ');
+    const plan = idx.floors.length > 4 ? `서고 ${idx.floors.length}개 층, 층마다 맡은 분류가 달라요 (${fl(idx.floors[0].floor)}층 ${idx.floors[0].subs.map(subjectName).join('·')} …)` : idx.floors.map((x) => `${fl(x.floor)}층 ${x.subs.map(subjectName).join('·')}`).join(' / ');
     this._render('찾기 단말', `이 서고의 목록 ${books.length}가지 — ${plan}. 서가마다 목록의 책 다음에는 그 분류의 일지·기록·이야기가 이어져요. 고르면 그 책이 꽂힌 서가로 길을 알려 줘요.`, [
       { html: `<div class="os-search"><input type="text" placeholder="제목·지은이·분류" value="${esc(q)}"><button class="btn" data-go>찾기</button></div>` },
       { html: `<div class="book-tabs">${Object.keys(cnt).map((k) => `<button class="btn${k === sub && !q ? ' on' : ''}" data-sub="${k}">${subjectName(k)} ${cnt[k]}</button>`).join('')}</div>` },
       ...(list.length ? [] : [{ head: '찾는 책이 이 서고 목록에 없어요' }]),
-      ...shown.map((b) => { const i = idx.at.get(b.id), out = S.borrowed.find((x) => x.id === b.id && x.uid === cur.uid); return { label: `${S.done[b.id] ? '✓ ' : ''}${esc(b.title)}`, sub: `${esc(b.author)} · ${subjectName(b.subject)} · ${fl(i)}층${out ? ' · 내가 빌린 책' : ''}`, act: () => { const w = locate(cur, T.zone, b.id, i); if (!w || !w.F) { g.ui.toast('지금은 서가에 꽂혀 있지 않아요', { kind: 'muted' }); return; } g.guide.to({ floor: w.floor, gx: w.F.ax, gz: w.F.az, label: `「${b.title}」 — ${subjectName(w.subject)} 서가 ${slotName(w.si)}` }); this.close(); } }; }),
+      ...shown.map((b) => { const i = idx.at.get(b.id), out = S.borrowed.find((x) => x.id === b.id && x.uid === cur.uid); return { label: `${S.done[b.id] ? '✓ ' : ''}${esc(b.title)}`, sub: `${esc(b.author)} · ${subjectName(b.subject)} · ${fl(i)}층${out ? ' · 내가 빌린 책' : ''}`, act: () => { const w = locate(cur, T.zone, b.id, i); if (!w || !w.F) { g.ui.toast('지금은 서가에 꽂혀 있지 않아요', { kind: 'muted' }); return; } g.guide.to({ floor: w.floor, gx: w.F.ax, gz: w.F.az, label: `「${b.title}」 — ${subjectName(w.subject)} 서가 ${slotName(w.si, w.F)}` }); this.close(); } }; }),
       ...(list.length > shown.length ? [{ head: `… ${list.length - shown.length}가지 더 — 분류를 고르거나 더 좁혀 찾아요` }] : []),
     ]);
     const body = this.wrap.querySelector('.os-body'), inp = body.querySelector('input');

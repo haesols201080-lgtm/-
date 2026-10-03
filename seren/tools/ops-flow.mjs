@@ -37,8 +37,8 @@ for (const pid of want) {
     I.enter(r);
     return { kind: r.kind, h: Math.round(r.top - r.gy), n: list.length };
   }, pid);
-  if (!found) { report.push({ pid, err: '건물 없음' }); continue; }
-  try { await page.waitForFunction(() => SEREN.game.interiors.inPocket && !SEREN.game.interiors._busy, null, { timeout: 90000, polling: 300 }); } catch { report.push({ pid, err: '들어가기 시간 초과' }); continue; }
+  if (!found) { report.push({ pid, err: '건물 없음' }); console.log(JSON.stringify({ pid, err: '건물 없음' })); continue; }
+  try { await page.waitForFunction(() => SEREN.game.interiors.inPocket && !SEREN.game.interiors._busy, null, { timeout: 90000, polling: 300 }); } catch { report.push({ pid, err: '들어가기 시간 초과' }); console.log(JSON.stringify({ pid, err: '들어가기 시간 초과', found })); continue; }
   await page.waitForTimeout(1500);
   const info = await page.evaluate((pid) => {
     const g = SEREN.game, I = g.interiors, cur = I.cur, B = cur.B, ind = cur.indoor, o = g.ops;
@@ -115,7 +115,7 @@ for (const pid of want) {
         try { const h = T.type.act(o, T, F, out); if (h) h.use(); } catch (e) { picked.push('오류 ' + e.message); }
         g.ui.serviceCard = orig;
         const it = items && items.find((x) => !x.disabled && x.onClick);
-        if (it) { it.onClick(); picked.push(`${F.cat}:${it.label.split(' · ')[0]}`); seenCat.add(F.cat); }
+        if (it) { const btn = document.createElement('button'); btn.innerHTML = '<b></b><small></small>'; it.onClick(btn); picked.push(`${F.cat}:${it.label.split(' · ')[0]}`); seenCat.add(F.cat); }
       }
       const basket = o.basket.length;
       const co = out.fix.find((F) => F.tag === 'checkout');
@@ -253,8 +253,10 @@ for (const pid of want) {
     if (o.task) {
       const ind = g.interiors.cur.indoor;
       const st = o.task.steps[o.task.k];
-      const out = ind.built.get(ind.cur);
-      const F = st && out && st.at(out);
+      let out = ind.built.get(ind.cur);
+      let F = st && out && st.at(out);
+      // 과제 자리가 다른 층이면 그 일터의 층들에서 찾아 그 층으로 (안내선도 그 층으로 이끈다)
+      if (st && !F) { const T = o.tenants.find((q) => q.k === (o.S.shift || {}).k) || o.tenants[0]; for (const i of T.floors) { g.interiors.placeAt(i, g.player.pos.x, g.player.pos.z); out = ind.built.get(i); F = out && st.at(out); if (F) { res.stepFloor = g.interiors.cur.B.floors[i].label; break; } } }
       if (F) {
         const [x, z] = ind.world(F.ax, F.az);
         g.player.teleport(x, ind.yOf(ind.cur) + 0.15, z);

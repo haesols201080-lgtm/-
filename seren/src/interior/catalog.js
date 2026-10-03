@@ -235,6 +235,7 @@ export const FIX = {
   seats: { name: '대기 의자 줄', w: 3.0, d: 0.7, h: 0.5, front: 0.8, use: 'wait' },
   // 서고·박물관·공연·행정
   bookshelf: { name: '기록 결정 서가', w: 3.0, d: 0.6, h: 2.2, front: 1.2, use: 'books', slots: 6 },
+  bookcase: { name: '작은 서가', w: 1.5, d: 0.5, h: 2.2, front: 1.0, use: 'books', slots: 3 },
   readtable: { name: '열람 탁자', w: 2.4, d: 1.2, h: 0.75, front: 0.9, seats: 6, use: 'read' },
   catalog: { name: '찾기 단말', w: 0.8, d: 0.6, h: 1.2, front: 1.0, use: 'catalog' },
   plinth: { name: '전시대', w: 1.2, d: 1.2, h: 1.1, front: 1.3, round: true, use: 'exhibit' },
@@ -253,6 +254,7 @@ export const FIX = {
   bedpod1: { name: '작은 잠 고치', w: 2.0, d: 1.0, h: 0.9, wall: true, front: 0.8, use: 'sleep' },
   wardrobe: { name: '옷 고치', w: 1.2, d: 0.6, h: 2.0, wall: true, front: 0.8, use: 'storage' },
   kcounter: { name: '부엌 조리대', w: 2.4, d: 0.6, h: 0.92, wall: true, front: 1.0, use: 'cook' },
+  kitchenette: { name: '작은 조리대', w: 1.2, d: 0.6, h: 0.92, wall: true, front: 0.9, use: 'cook' },
   dtable: { name: '식탁', w: 1.6, d: 0.9, h: 0.75, front: 0.8, seats: 4, use: 'eat' },
   washpod: { name: '씻는 고치', w: 1.4, d: 1.0, h: 2.1, wall: true, front: 0.8 },
   wc1: { name: '정화대', w: 0.7, d: 0.7, h: 0.5, wall: true, front: 0.7 },
@@ -285,6 +287,7 @@ export const FIX = {
   fuelrack: { name: '연료 결정 선반', w: 2.4, d: 1.0, h: 2.2, front: 1.2, use: 'stock', slots: 6 },
   growrack: { name: '재배 선반', w: 1.2, d: 4.0, h: 2.6, front: 0, use: 'crop', aisle: true },
   growbed: { name: '재배 이랑', w: 1.4, d: 4.0, h: 0.7, front: 0, use: 'crop', aisle: true },
+  growbox: { name: '재배 상자', w: 1.2, d: 2.0, h: 1.4, front: 0.8, use: 'crop' },
   tank: { name: '양분 탱크', w: 1.8, d: 1.8, h: 2.4, round: true, front: 1.1, use: 'nutrient' },
   packtable: { name: '포장 탁자', w: 2.4, d: 1.0, h: 0.95, front: 1.1, use: 'pack' },
   crates: { name: '거둔 것 상자', w: 1.2, d: 1.2, h: 1.0, front: 1.0, use: 'stock', slots: 2 },

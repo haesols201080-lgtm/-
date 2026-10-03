@@ -167,7 +167,7 @@ export function searchBuilding(game, q, opt = {}) {
       const nt = sq(b.title);
       if (!(nt.includes(ns) || sq(b.author).includes(ns) || (ns.length >= 3 && ns.includes(nt)))) continue;
       const w = locate(cur, zone, id, i);
-      if (w && w.F) add({ kind: 'book', label: `${b.title} (책)`, sub: `${b.author} · ${fl(i).label}층 ${subjectName(w.subject)} 서가 ${slotName(w.si)}`, floor: i, gx: w.F.ax, gz: w.F.az, fix: w.F.id });
+      if (w && w.F) add({ kind: 'book', label: `${b.title} (책)`, sub: `${b.author} · ${fl(i).label}층 ${subjectName(w.subject)} 서가 ${slotName(w.si, w.F)}`, floor: i, gx: w.F.ax, gz: w.F.az, fix: w.F.id });
       if (++n >= 6) break;
     }
   }

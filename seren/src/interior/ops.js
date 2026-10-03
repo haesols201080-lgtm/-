@@ -45,6 +45,7 @@ export class Ops {
   open(cur) {
     const g = this.game, B = cur.B, ind = cur.indoor;
     this.cur = cur;
+    this._agentBooks = null;
     this.agents = new Agents(g, ind, this);
     ind.agents = this.agents;
     // 세입자: 쓰임 묶음마다
@@ -254,9 +255,15 @@ export class Ops {
     if (m.instanceColor) m.instanceColor.needsUpdate = true;
     out.itemsDirty = false;
   }
-  /** 이 건물 이 층에서 자리가 빈 책 (빌린 책 + 손에 든 책) → Set('fid/칸/자리') */
+  /** 주민이 서가에서 꺼내 읽는 책: 층·자리 → 돌려놓을 때(벽시계 ms). secs = 0 이면 제자리에 */
+  agentBook(i, key, secs) {
+    const m = this._agentBooks || (this._agentBooks = new Map());
+    if (secs > 0) m.set(`${i}:${key}`, performance.now() + secs * 1000); else m.delete(`${i}:${key}`);
+  }
+  /** 이 건물 이 층에서 자리가 빈 책 (빌린 책 + 손에 든 책 + 주민이 읽는 책) → Set('fid/칸/자리') */
   booksGone(i) {
     const out = new Set(), uid = this.cur && this.cur.uid;
+    if (this._agentBooks) { const now = performance.now(); for (const [k, t] of this._agentBooks) { if (t < now) { this._agentBooks.delete(k); continue; } const [f, ...r] = k.split(':'); if (+f === i) out.add(r.join(':')); } }
     const L = this.game.state.lib;
     for (const b of (L && L.borrowed) || []) if (b.uid === uid && b.floor === i) out.add(`${b.fid}/${b.si}/${b.e}`);
     const c = this.carry;

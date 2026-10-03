@@ -123,13 +123,14 @@ export function drawFixture(gb, F, st) {
       for (const sd of [-1, 1]) for (let l = 0; l < 4; l++) for (const zz of [-D / 4, D / 4]) slots.push({ x: sd * W * 0.27, y: 0.34 + l * 0.38, z: zz, w: D / 2 - 0.1, d: W * 0.38, n: 4, along: 'z' });
       break;
     }
-    case 'wallshelf': case 'medshelf': case 'bookshelf': case 'fuelrack': {
+    case 'wallshelf': case 'medshelf': case 'bookshelf': case 'bookcase': case 'fuelrack': {
       f.box(0, 0, -D / 2 + 0.04, W, H, 0.08, P, 0, PAT.panel);
-      const lv = F.t === 'bookshelf' ? SHELF_LEVELS : 4;
-      for (let l = 0; l < lv; l++) f.box(0, 0.25 + l * ((H - 0.4) / lv), 0, W, 0.03, D, F.t === 'bookshelf' ? 0x8a6a4a : pearl, 0, PAT.metal);
+      const books = F.t === 'bookshelf' || F.t === 'bookcase';
+      const lv = books ? SHELF_LEVELS : 4;
+      for (let l = 0; l < lv; l++) f.box(0, 0.25 + l * ((H - 0.4) / lv), 0, W, 0.03, D, books ? 0x8a6a4a : pearl, 0, PAT.metal);
       f.box(-W / 2 + 0.02, 0, 0, 0.04, H, D, steel); f.box(W / 2 - 0.02, 0, 0, 0.04, H, D, steel);
       f.box(0, H - 0.08, D / 2, W, 0.08, 0.02, F.t === 'medshelf' ? 0x8ff0c0 : B, 1.2);
-      shelfSlots(lv, 0.27, (H - 0.4) / lv, D - 0.1, 0.02, F.t === 'bookshelf' ? SPINES : 5, F.t === 'bookshelf' ? SHELF_COLS : 2);
+      shelfSlots(lv, 0.27, (H - 0.4) / lv, D - 0.1, 0.02, books ? SPINES : 5, F.t === 'bookcase' ? 1 : books ? SHELF_COLS : 2);
       break;
     }
     case 'chiller': case 'coldbox': case 'freezer': {
@@ -175,11 +176,11 @@ export function drawFixture(gb, F, st) {
     case 'docklevel': f.box(0, 0, 0, W, 0.2, D * 3, dark); f.box(0, 0, -D / 2, W + 0.4, H, 0.1, 0x5a6068, 0, PAT.rib); f.box(0, H - 0.25, -D / 2 + 0.06, W, 0.1, 0.02, 0xffc46a, 1.5); break;
     // ── 먹고 마시기 ──
     case 'teamachine': f.box(0, 0.9, 0, W, 0.06, D, pearl); f.box(0, 0, 0, W, 0.9, D, P, 0, PAT.panel); f.cyl(-W * 0.2, 0.96, 0, 0.18, 0.5, steel, 0, PAT.metal); f.cyl(W * 0.2, 0.96, 0, 0.14, 0.42, GOLD, 0, PAT.metal); f.sph(-W * 0.2, 1.5, 0, 0.08, 0xffc46a, 2); break;
-    case 'stove': case 'prep': case 'kcounter': case 'dishwash': case 'packtable': case 'qcbench': case 'restore': {
-      f.box(0, 0, 0, W, H - 0.04, D, F.t === 'kcounter' ? (st.warm ?? P) : P, 0, PAT.panel);
+    case 'stove': case 'prep': case 'kcounter': case 'kitchenette': case 'dishwash': case 'packtable': case 'qcbench': case 'restore': {
+      f.box(0, 0, 0, W, H - 0.04, D, F.t === 'kcounter' || F.t === 'kitchenette' ? (st.warm ?? P) : P, 0, PAT.panel);
       f.box(0, H - 0.04, 0, W + 0.04, 0.04, D + 0.04, F.t === 'stove' || F.t === 'qcbench' ? steel : pearl, 0, PAT.stone);
       if (F.t === 'stove') for (let k = 0; k < 2; k++) f.geo(torusG, (k - 0.5) * W * 0.5, H + 0.01, 0, 0xff9f6a, 2.2, 0, 0, [0.2, 1, 0.2]);
-      if (F.t === 'kcounter') { f.geo(torusG, W * 0.3, H + 0.01, 0, 0xff9f6a, 1.6, 0, 0, [0.15, 1, 0.15]); f.box(-W * 0.25, H, 0, 0.4, 0.04, D * 0.6, 0x9fdcf0, 0.2); }
+      if (F.t === 'kcounter' || F.t === 'kitchenette') { f.geo(torusG, W * 0.3, H + 0.01, 0, 0xff9f6a, 1.6, 0, 0, [0.15, 1, 0.15]); f.box(-W * 0.25, H, 0, 0.4, 0.04, D * 0.6, 0x9fdcf0, 0.2); }
       if (F.t === 'dishwash') f.box(0, H - 0.25, 0, W * 0.6, 0.22, D * 0.6, 0x9fdcf0, 0.3, PAT.glassfrost);
       if (F.t === 'packtable' || F.t === 'qcbench' || F.t === 'restore') slots.push({ x: 0, y: H, z: 0, w: W - 0.3, d: D - 0.2, n: 4 });
       if (F.t === 'qcbench' || F.t === 'restore') { f.cyl(W * 0.35, H, -D * 0.3, 0.05, 0.6, steel); f.box(W * 0.35, H + 0.6, -D * 0.2, 0.3, 0.06, 0.3, 0xfff4e0, 2); }
@@ -272,14 +273,14 @@ export function drawFixture(gb, F, st) {
     case 'coil': f.cyl(0, 0, 0, W / 2, 0.3, dark, 0, 0, 0, 16); f.cyl(0, 0.3, 0, W * 0.3, H - 0.5, 0xb87333, 0, PAT.rib, 0, 16); for (let k = 0; k < 4; k++) f.geo(torusG, 0, 0.6 + k * 0.7, 0, G, 1.4, 0, 0, [W * 0.36, 1, W * 0.36]); break;
     case 'pump': f.box(0, 0, 0, W, 0.4, D, dark); f.cyl(-W * 0.2, 0.4, 0, 0.5, 1.0, steel, 0, PAT.metal, 0, 14); f.cyl(W * 0.3, 0.4, 0, 0.25, 1.3, 0x9fdcf0, 0.3, 0, 0, 10); break;
     case 'tank': case 'nutrient': f.cyl(0, 0, 0, W / 2, H, 0xd8e4e0, 0, PAT.metal, 0, 18); f.cyl(0, 0.3, 0, W / 2 + 0.01, H * 0.6, 0x7fe0a0, 0.25, PAT.glassfrost, 0, 18); break;
-    case 'growrack': case 'growbed': {
-      const lv = F.t === 'growrack' ? 3 : 1;
+    case 'growrack': case 'growbed': case 'growbox': {
+      const lv = F.t === 'growrack' ? 3 : F.t === 'growbox' ? 2 : 1;
       for (let l = 0; l < lv; l++) {
-        const y = F.t === 'growrack' ? 0.3 + l * 0.8 : 0.0;
-        f.box(0, y, 0, W, F.t === 'growrack' ? 0.08 : 0.6, D, 0x6a5a48, 0, PAT.wood);
-        f.box(0, y + (F.t === 'growrack' ? 0.08 : 0.6), 0, W - 0.1, 0.02, D - 0.1, 0x3a2a1a);
-        if (F.t === 'growrack') f.box(0, y + 0.72, 0, W * 0.8, 0.03, D, 0xc06aff, 1.6);
-        slots.push({ x: 0, y: y + (F.t === 'growrack' ? 0.1 : 0.62), z: 0, w: W - 0.2, d: D - 0.2, n: 8, crop: true });
+        const y = F.t === 'growrack' ? 0.3 + l * 0.8 : F.t === 'growbox' ? 0.2 + l * 0.6 : 0.0;
+        f.box(0, y, 0, W, F.t !== 'growbed' ? 0.08 : 0.6, D, 0x6a5a48, 0, PAT.wood);
+        f.box(0, y + (F.t !== 'growbed' ? 0.08 : 0.6), 0, W - 0.1, 0.02, D - 0.1, 0x3a2a1a);
+        if (F.t !== 'growbed') f.box(0, y + (F.t === 'growbox' ? 0.55 : 0.72), 0, W * 0.8, 0.03, D, 0xc06aff, 1.6);
+        slots.push({ x: 0, y: y + (F.t !== 'growbed' ? 0.1 : 0.62), z: 0, w: W - 0.2, d: D - 0.2, n: F.t === 'growbox' ? 4 : 8, crop: true });
       }
       break;
     }
