@@ -177,6 +177,7 @@ export class Player {
     this._fullTilt = wishLen > 0.95 ? (this._fullTilt || 0) + dt : 0;
     let maxS = (sprint ? TUNING.sprintSpeed : TUNING.runSpeed) * wishLen * this.mods.speed;
     if (this.stumble > 0) maxS *= 0.3;
+    if (this.wade) maxS *= 1 - 0.42 * this.wade; // 분수 연못 속: 물을 헤치며 걷는다
 
     // 경사
     const n = this._groundNormal();

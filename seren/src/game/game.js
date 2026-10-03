@@ -41,6 +41,7 @@ import { Language } from './language.js';
 import { NPCs } from './npcs.js';
 import { Quests, awakenedCount } from './quests.js';
 import { playApproach } from './approach.js';
+import { fountainWaterMaterial } from '../world/cityfabric.js';
 import { Dialogue } from './dialogue.js';
 import { Actions } from './actions.js';
 import { Resonance } from './resonance.js';
@@ -327,6 +328,24 @@ export class Game {
   }
 
   /** 렌더링 없이 시뮬레이션만 한 걸음 (자동 테스트용) */
+  /** 분수 연못 속을 걷기: 느려지고, 둘레로 물결이 퍼지고, 첨벙 소리 (물은 밟히지 않는다 — 연못 테만 단단하다) */
+  _wading(dt) {
+    const p = this.player;
+    if ((this._wadeT = (this._wadeT || 0) - dt) < 0) { this._wadeT = 0.12; this._fount = this.city && !this.interiors.inPocket ? this.city.fountainAt(p.pos.x, p.pos.z) : null; }
+    const F = this._fount;
+    const inW = !!F && p.pos.y < F.y - 0.05 && (p.state === 'ground' || p.state === 'air');
+    p.wade = (p.wade || 0) + ((inW ? 1 : 0) - (p.wade || 0)) * Math.min(1, dt * 6);
+    const U = fountainWaterMaterial().uniforms.uWade.value;
+    if (inW) U.set(p.pos.x, p.pos.z, Math.min(1, 0.25 + p.hspeed / 5), 0);
+    else U.z = Math.max(0, U.z - dt * 0.8);
+    if (inW && !this._wasWade && audio.ready) audio.noise({ freq: 900, q: 0.6, dur: 0.55, gain: 0.16, type: 'bandpass', sweep: 260, pos: p.pos });
+    if (inW && p.hspeed > 0.8 && p.state === 'ground' && (this._splashT = (this._splashT || 0) - dt) < 0) {
+      this._splashT = Math.max(0.24, 0.45 - p.hspeed * 0.03);
+      if (audio.ready) audio.noise({ freq: 1300 + Math.random() * 600, q: 0.9, dur: 0.16, gain: 0.06, type: 'bandpass', pos: p.pos });
+    }
+    this._wasWade = inW;
+  }
+
   updateSim(dt) {
     this.input.poll(dt);
     this.player.update(dt, this.input, this.rig);
@@ -358,6 +377,7 @@ export class Game {
       }
       this._stats(prev);
       this.avatar.update(dt, this.player);
+      this._wading(dt);
       this.comm.update(dt);
       this.structures.aimAntenna(this.comm.shipDir(), this.comm.pulseK, this.time);
       playerUniform.value.copy(this.player.pos);

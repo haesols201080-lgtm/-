@@ -1286,6 +1286,12 @@ export const SPEC = {
 /** 건물 입구: 빛의 막이 드리운 문틀 + 차양 + 문턱 (로컬: x 가 벽을 따라, +z 가 바깥) */
 // 문: 원점 = 바깥벽에서 0.17 m 앞, +z = 바깥. 벽에 거의 붙은 얇은 문틀(앞으로 0.17 m)과 빛 테두리, 두 짝 유리문,
 // 가벼운 빛 차양과 문턱 판. 문틀은 벽 쪽으로 1 m 숨은 깊이가 있어 위로 들어가는 둥근 벽(돔)에도 틈이 생기지 않는다
+/** 분수의 물 (분수 소품과 같은 자리·배율, 연못 반지름 5.1 m · 물높이 0.5 m) */
+export function fountainWaterGeo() {
+  return new THREE.CircleGeometry(5.12, 40).rotateX(-Math.PI / 2).translate(0, 0.5, 0);
+}
+export const FOUNTAIN = { r: 5.1, y: 0.5 };
+
 export function doorGeo({ canopy = true } = {}) {
   return mergeF([
     solid(new THREE.BoxGeometry(0.3, 4.1, 1.12).translate(-1.75, 2.05, -0.54), PEARL),
@@ -1443,7 +1449,10 @@ export function propArchetypes() {
   P.fountain = mergeF([
     solid(new THREE.CylinderGeometry(5.2, 5.4, 0.7, 24, 1, true).translate(0, 0.35, 0), 0xc8c2d2),
     solid(new THREE.TorusGeometry(5.3, 0.25, 4, 28).rotateX(Math.PI / 2).translate(0, 0.72, 0), 0xd8d2e0),
-    solid(new THREE.CircleGeometry(5.1, 24).rotateX(-Math.PI / 2).translate(0, 0.5, 0), 0x3f9cc8, 0.8),
+    // 연못 바닥 (물은 따로 — cityfabric 이 물결치는 투명한 물로 그린다: fountainWaterGeo)
+    solid(new THREE.CircleGeometry(5.1, 24).rotateX(-Math.PI / 2).translate(0, 0.05, 0), 0x35525c),
+    solid(new THREE.TorusGeometry(4.6, 0.05, 3, 32).rotateX(Math.PI / 2).translate(0, 0.08, 0), 0x7ff3e6, 1.0),
+    solid(new THREE.CylinderGeometry(5.12, 5.12, 0.45, 24, 1, true).translate(0, 0.28, 0), 0x6d7f8a), // 연못 안쪽 벽
     solid(new THREE.CylinderGeometry(0.5, 0.8, 2.4, 10).translate(0, 1.2, 0), 0xd8d2e0),
     ...[0, 1, 2].map((i) => solid(new THREE.TorusGeometry(1.4 - i * 0.35, 0.09, 4, 24).rotateX(Math.PI / 2 + i * 0.35).rotateY(i * 1.1).translate(0, 2.9 + i * 0.7, 0), [0xffd27a, 0x7ff3e6, 0xff9fd0][i], 1.8)),
     solid(new THREE.IcosahedronGeometry(0.35, 1).translate(0, 4.8, 0), 0xbffcff, 2.8),
@@ -1602,7 +1611,8 @@ export const PROPCOL = {
   pillar: [['c', 0, 0, 0.62, 0, 5.2]],
   bollard: [['c', 0, 0, 0.18, 0, 0.9]],
   beacon: [['c', 0, 0, 0.5, 0, 6.2]],
-  fountain: [['c', 0, 0, 5.4, 0, 0.75], ['c', 0, 0, 0.8, 0, 2.6], ['c', 0, 0, 1.4, 2.6, 4.4]], // 떠 있는 고리 조형까지
+  // 연못 테만 단단하다(고리 모양으로 낮은 벽 열둘) — 안으로 뛰어들면 물속을 걷는다 + 가운데 기둥과 떠 있는 고리 조형
+  fountain: [...Array.from({ length: 12 }, (_, i) => { const a = (i / 12) * TAU; return ['b', Math.cos(a) * 5.25, Math.sin(a) * 5.25, 1.45, 0.24, 0, 0.74, -a - Math.PI / 2]; }), ['c', 0, 0, 0.8, 0, 2.6], ['c', 0, 0, 1.4, 2.6, 4.4]],
   sculpt: [['c', 0, 0, 1.9, 0, 0.9], ['c', 0, 0, 0.5, 0.9, 3.5], ['c', 0, 0, 1.6, 2.3, 3.7]], // 꿰인 고리들
   pavilion: [...[0, 1, 2, 3, 4, 5].map((i) => ['c', Math.cos(i * 1.047) * 4.2, Math.sin(i * 1.047) * 4.2, 0.2, 0, 3.9]), ['c', 0, 0, 5.6, 3.9, 4.4], ['c', 0, 0, 3.4, 4.3, 5.66, 1.36]],
   play: [['c', 0, 0, 2.5, 0, 1.7], ['b', 3.0, -1.75, 0.45, 0.45, 0, 1.9]],

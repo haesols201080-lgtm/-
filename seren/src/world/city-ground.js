@@ -86,6 +86,41 @@ vec4 hexCell(vec2 p) {
   return vec4(gv, e, hash12(floor((p - gv) * 4.0 + 0.5)));
 }
 
+// 돌 판석 한 장의 질감: 칸마다 다른 돌빛·색조, 칸마다 방향이 다른 결과 알갱이·반점,
+// 깎인 모서리(해를 향한 쪽은 밝고 반대쪽은 그늘), 오목한 이음매에 낀 흙, 오래 밟혀 닳은 자리와 얼룩.
+// hx = hexCell(...), q = 무늬 좌표(m), fade = 멀어지면 잔무늬를 지운다(깜박임 방지)
+vec3 paver(vec4 hx, vec2 q, float fw, float fade, vec3 cA, vec3 cB, float seamW, float scale, out float spec, out float seam) {
+  float h = hx.w, h2 = fract(h * 13.7), h3 = fract(h * 71.3);
+  vec3 c = mix(cA, cB, h);
+  c *= vec3(1.0 + (h2 - 0.5) * 0.07, 1.0 + (h3 - 0.5) * 0.02, 1.0 + (h3 - 0.5) * 0.09);
+  float ang = h * 6.2831;
+  vec2 dir = vec2(cos(ang), sin(ang));
+  float vein = vnoise(vec2(dot(q, dir) * 1.8, dot(q, vec2(-dir.y, dir.x)) * 0.3) + h * 17.0);
+  float grain = vnoise(q * 7.0 + h * 31.0) * 0.6 + vnoise(q * 19.0) * 0.4;
+  float fine = clamp(1.6 - fw * 6.0, 0.0, 1.0) * fade;
+  c *= 1.0 + ((vein - 0.5) * 0.16 * fade + (grain - 0.5) * 0.18 * fine);
+  vec2 sid = floor(q * 30.0);
+  float speck = step(0.97, hash12(sid)) * fine;
+  c *= mix(1.0, hash12(sid + 3.1) < 0.5 ? 0.62 : 1.3, speck * 0.7);
+  // 깎인 모서리: 가장자리 쪽으로 기운 면 — 그 기울기가 해를 향하면 밝다
+  float bev = (1.0 - smoothstep(0.0, 0.085, hx.z)) * fade;
+  vec2 nrm = normalize(hx.xy + vec2(1e-4));
+  float sunH = max(uSunDir.y, 0.0);
+  float lit = dot(nrm, normalize(uSunDir.xz + vec2(1e-4))) * (1.0 - uNight) * smoothstep(0.0, 0.25, sunH);
+  c *= 1.0 + bev * (lit * 0.32 - 0.1);
+  // 오목한 이음매 + 낀 흙 (밤엔 그림자처럼 짙게)
+  seam = (1.0 - smoothstep(0.0, seamW / scale + fw * 1.1 / scale, hx.z)) * fade;
+  vec3 grout = vec3(0.13, 0.125, 0.14) * (0.75 + 0.5 * vnoise(q * 2.7));
+  c = mix(c, grout, seam * 0.88);
+  // 닳은 자리·얼룩 (큰 무늬)
+  float wear = vnoise(q * 0.06) * 0.6 + vnoise(q * 0.19) * 0.4;
+  c *= 0.9 + 0.17 * wear;
+  float dirt = smoothstep(0.58, 0.85, vnoise(q * 0.45 + 7.0)) * 0.3 + smoothstep(0.62, 0.9, vnoise(q * 1.7 - 3.0)) * 0.15;
+  c = mix(c, c * vec3(0.8, 0.79, 0.74), dirt);
+  spec = mix(0.1, 0.5, h3 * wear) * (1.0 - seam);
+  return c;
+}
+
 // 바닥 종류 → 색 (선형). q = 무늬 좌표(m), fw = 화소 크기(m)
 // 세렌의 길은 지구의 아스팔트·페인트가 아니다: 짙은 쪽빛 합성 석판에 빛 안내줄, 육각 판석, 이끼·결정 모래
 vec3 citySurface(CityS S, out vec3 em, out float spec) {
@@ -94,20 +129,20 @@ vec3 citySurface(CityS S, out vec3 em, out float spec) {
   float fade = clamp(1.4 - fw * 2.2, 0.0, 1.0);
   vec3 c;
   int k = int(S.kind + 0.5);
-  if (k == 1) { // 보도: 1.1 m 육각 판석, 이음매에 희미한 빛
+  if (k == 1) { // 보도: 1.1 m 육각 판석 (돌결·깎인 모서리·이음매), 밤에 이음매에 희미한 빛
     vec4 hx = hexCell(q / 1.1);
-    float seam = (1.0 - smoothstep(0.0, 0.04 + fw * 1.4, hx.z)) * fade;
-    c = vec3(0.53, 0.51, 0.59) * (0.93 + 0.1 * hx.w) * (1.0 - seam * 0.3);
-    em += vec3(0.35, 0.85, 0.85) * seam * uGlow * 0.08;
-    spec = 0.2;
+    float seam;
+    c = paver(hx, q, fw, fade, vec3(0.56, 0.54, 0.58), vec3(0.45, 0.44, 0.5), 0.035, 1.1, spec, seam);
+    em += vec3(0.35, 0.85, 0.85) * seam * uGlow * 0.06;
   } else if (k == 2) { // 광장: 2.4 m 육각 + 동심 빛 새김
     vec4 hx = hexCell(q / 2.4);
-    float seam = (1.0 - smoothstep(0.0, 0.02 + fw * 0.5, hx.z)) * fade;
-    c = mix(vec3(0.6, 0.57, 0.64), vec3(0.5, 0.48, 0.56), step(0.55, hx.w)) * (1.0 - seam * 0.25);
+    float seam, sp0;
+    // 큰 판석: 밝은 석회빛과 조금 짙은 돌이 섞인다 (칸마다 다른 결)
+    c = paver(hx, q, fw, fade, step(0.55, hx.w) > 0.5 ? vec3(0.5, 0.48, 0.53) : vec3(0.62, 0.6, 0.62), step(0.55, hx.w) > 0.5 ? vec3(0.44, 0.42, 0.48) : vec3(0.56, 0.54, 0.57), 0.04, 2.4, sp0, seam);
     float ringL = cLine(fract(S.line / 6.0) - 0.5, 0.025, fw / 6.0) * fade;
     c = mix(c, vec3(0.62, 0.52, 0.34), ringL * 0.7);
     em += mix(vec3(1.0, 0.75, 0.4), vec3(0.4, 0.95, 0.9), step(0.5, fract(S.line / 12.0))) * ringL * (0.08 + uGlow * 0.4);
-    spec = 0.3;
+    spec = sp0;
   } else if (k == 3) { // 이끼밭: 청록·보랏빛 낮은 이끼 + 밤에 빛나는 홀씨 점
     float n = vnoise(q * 0.35) * 0.6 + vnoise(q * 1.7) * 0.4;
     c = mix(vec3(0.05, 0.2, 0.17), vec3(0.16, 0.11, 0.24), smoothstep(0.35, 0.75, n)) * (0.9 + 0.2 * vnoise(q * 3.0));
@@ -169,7 +204,8 @@ vec3 citySurface(CityS S, out vec3 em, out float spec) {
     em += c * (0.08 + uGlow * 0.3);
   } else if (k == 12) { // 호버 차로: 짙은 쪽빛 합성 석판 + 빛 안내줄(흐른다)
     vec4 hx = hexCell(q / 2.0);
-    c = vec3(0.07, 0.075, 0.11) * (0.9 + 0.14 * hx.w) * (1.0 - (1.0 - smoothstep(0.0, 0.03 + fw * 0.6, hx.z)) * 0.25 * fade);
+    float seam, sp0;
+    c = paver(hx, q, fw, fade, vec3(0.085, 0.09, 0.125), vec3(0.065, 0.068, 0.1), 0.03, 2.0, sp0, seam);
     float flow = 0.55 + 0.45 * sin(uTime * 2.4 - (q.x + q.y) * 0.18);
     c = mix(c, vec3(0.3, 0.55, 0.6), S.line * fade * 0.6);
     em += vec3(0.35, 0.95, 0.9) * (S.line * fade * flow * (0.35 + uGlow * 0.9) + S.glow * (0.15 + uGlow * 0.6));

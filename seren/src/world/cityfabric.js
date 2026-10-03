@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { heightAt, setPads, setRuralBlocks } from './heightfield.js';
 import { mulberry32 } from '../core/noise.js';
-import { cityArchetypes, SPEC, PROPCOL, doorGeo, propArchetypes } from './city-arch.js';
+import { cityArchetypes, SPEC, PROPCOL, doorGeo, propArchetypes, fountainWaterGeo, FOUNTAIN } from './city-arch.js';
 import { buildPlan, layoutBlock, layoutCore, uvToWorld, locate } from './cityplan.js';
 import { planUniforms, applyPlanUniforms } from './city-ground.js';
 import { litMaterial } from './materials.js';
@@ -1027,6 +1027,32 @@ export class CityFabric {
       this.scene.add(mesh);
       return { kind, mesh, cap };
     });
+    // 분수의 물: 분수 소품과 같은 인스턴스 행렬을 나눠 쓰는 투명한 물결 (밟히지 않는다 — 연못 테만 단단하다)
+    this.fountI = this.pkind.indexOf('fountain');
+    if (this.fountI >= 0) {
+      const F = this.psets[this.fountI];
+      const w = new THREE.InstancedMesh(fountainWaterGeo(), fountainWaterMaterial(), F.cap);
+      w.instanceMatrix = F.mesh.instanceMatrix;
+      w.count = 0;
+      w.frustumCulled = false;
+      w.renderOrder = 2;
+      this.scene.add(w);
+      this.fountWater = w;
+    }
+  }
+
+  /** 플레이어 발밑의 분수 연못: {x, z, y(물높이), r, s} 또는 null (깨어난 둘레 블록에서만) */
+  fountainAt(x, z) {
+    if (this.fountI < 0) return null;
+    for (const B of this.blocksNear(x, z, 40)) {
+      if (!B.act || !B.props) continue;
+      for (const p of B.props) {
+        if (p.ki !== this.fountI) continue;
+        const r = FOUNTAIN.r * p.s;
+        if ((p.x - x) ** 2 + (p.z - z) ** 2 < r * r) return { x: p.x, z: p.z, y: p.y + FOUNTAIN.y * p.s, r, s: p.s };
+      }
+    }
+    return null;
   }
   _fillProps(cam) {
     const R = this.propR, R2 = R * R;
@@ -1043,6 +1069,7 @@ export class CityFabric {
         counts[p.ki] = k + 1;
       }
     }
+    if (this.fountWater) this.fountWater.count = counts[this.fountI];
     this.psets.forEach((S, i) => {
       S.mesh.count = counts[i];
       if (counts[i]) { S.mesh.instanceMatrix.clearUpdateRanges(); S.mesh.instanceMatrix.addUpdateRange(0, counts[i] * 16); S.mesh.instanceMatrix.needsUpdate = true; }
@@ -1067,7 +1094,7 @@ export class CityFabric {
           const lx = q[1] * s * p.sx, lz = q[2] * s;
           const wx = p.x + lx * c + lz * sn, wz = p.z - lx * sn + lz * c;
           const col = q[0] === 'c' ? { type: 'cyl', x: wx, z: wz, r: q[3] * s, y0: p.y + q[4] * s - 0.3, y1: p.y + q[5] * s, dome: q[6] ? q[6] * s : undefined, city: true, stream: true }
-            : { type: 'box', x: wx, z: wz, hx: q[3] * s * p.sx, hz: q[4] * s, rot: p.yaw, y0: p.y + q[5] * s - 0.3, y1: p.y + q[6] * s, city: true, stream: true };
+            : { type: 'box', x: wx, z: wz, hx: q[3] * s * p.sx, hz: q[4] * s, rot: p.yaw + (q[7] || 0), y0: p.y + q[5] * s - 0.3, y1: p.y + q[6] * s, city: true, stream: true };
           B.pcols.push(C.add(col));
         }
       }
@@ -1342,4 +1369,55 @@ export class CityFabric {
     this.lamps.update();
     this.beacons.update();
   }
+}
+
+/** 분수의 물: 떨어지는 물이 만드는 고리 물결 + 잔물결, 하늘을 비추는 프레넬, 바닥에 어른대는 빛, 밤에는 조형의 빛이 고인다.
+ *  uWade(x, z, 세기): 플레이어가 물속을 걸으면 그 둘레로 물결이 퍼진다 (game 이 넣는다) */
+export function fountainWaterMaterial() {
+  if (fountainWaterMaterial.m) return fountainWaterMaterial.m;
+  const m = new THREE.ShaderMaterial({
+    uniforms: { ...atmosUniforms, uWade: { value: new THREE.Vector4(0, 0, 0, 0) } },
+    vertexShader: `${CURVE_GLSL}
+      varying vec3 vWorld; varying vec2 vLoc;
+      void main() {
+        vLoc = position.xz;
+        vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
+        vWorld = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * vec4(curveWorld(wp.xyz), 1.0);
+      }`,
+    fragmentShader: `${NOISE_GLSL}${ATMOS_PARS}
+      uniform vec4 uWade;
+      varying vec3 vWorld; varying vec2 vLoc;
+      void main() {
+        float r = length(vLoc), t = uTime;
+        vec2 q = vWorld.xz;
+        // 가운데로 떨어지는 물의 고리 물결 + 바람의 잔물결
+        float ph = r * 6.5 - t * 3.0;
+        vec2 g = (vLoc / max(r, 1e-3)) * cos(ph) * 0.16 * exp(-r * 0.3) * smoothstep(0.6, 1.3, r);
+        g += (vec2(vnoise(q * 1.4 + vec2(t * 0.6, t * 0.35)), vnoise(q * 1.4 - vec2(t * 0.45, -t * 0.55))) - 0.5) * 0.22;
+        g += (vec2(vnoise(q * 4.1 - t * 0.9), vnoise(q * 4.3 + t * 0.8)) - 0.5) * 0.1;
+        // 걷는 사람 둘레의 물결
+        if (uWade.z > 0.0) { vec2 d = q - uWade.xy; float dl = length(d); g += (d / max(dl, 1e-3)) * cos(dl * 8.0 - t * 9.0) * 0.2 * uWade.z * exp(-dl * 0.9); }
+        vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
+        vec3 V = normalize(cameraPosition - vWorld);
+        float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+        vec3 R = reflect(-V, N);
+        vec3 sky = skyBase(vec3(R.x, abs(R.y), R.z));
+        vec3 light = uAmbTop * 0.9 + uSunColor * 0.4 * max(uSunDir.y, 0.0);
+        vec3 body = mix(vec3(0.1, 0.36, 0.4), vec3(0.03, 0.16, 0.21), smoothstep(0.0, 4.5, r)) * light;
+        float caus = vnoise(q * 3.1 + t * 0.7) * vnoise(q * 3.7 - t * 0.55);
+        body += vec3(0.45, 0.85, 0.85) * pow(caus, 2.0) * 0.5 * light;
+        vec3 col = mix(body, sky, fres);
+        col += uSunColor * pow(max(dot(R, uSunDir), 0.0), 220.0) * 2.4 * (1.0 - uNight);
+        col += vec3(0.45, 1.0, 0.92) * uNight * (0.3 * smoothstep(2.2, 0.5, r) + 0.07 + 0.12 * pow(caus, 1.5)); // 밤: 조형의 빛이 물에 고이고 어른댄다
+        col += vec3(0.6, 1.0, 0.95) * uNight * 0.35 * smoothstep(4.75, 4.6, r) * smoothstep(4.4, 4.62, r); // 바닥 빛 고리가 물 너머로
+        float a = mix(0.62, 0.94, fres) * smoothstep(5.12, 4.95, r) + 0.06;
+        gl_FragColor = vec4(applyFog(col, vWorld), clamp(a, 0.0, 1.0));
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+    transparent: true, depthWrite: false,
+  });
+  fountainWaterMaterial.m = m;
+  return m;
 }
