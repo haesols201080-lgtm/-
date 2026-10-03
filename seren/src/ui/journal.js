@@ -4,6 +4,8 @@ import { WORDS, WORD } from '../data/lexicon.js';
 import { glyphSVG } from '../game/language.js';
 import { NOTE_COLORS } from '../core/audio.js';
 import { ITEMS, BUFFS, BAG_ORDER, itemInfo, bagOrder } from '../data/venues.js';
+import { bookById, bookColor } from '../data/books.js';
+import { libState, readPage } from '../interior/library.js';
 import { won } from '../data/money.js';
 
 const TABS = [['quests', '이야기'], ['bag', '가방'], ['words', '단어'], ['heard', '들은 말'], ['echoes', '메아리'], ['codex', '도감'], ['help', '도움말'], ['log', '기록']];
@@ -111,12 +113,21 @@ export class Journal {
     }
     h += '</div>';
     if (!any) h += '<p class="muted">아직 아무것도 없어요.</p>';
+    // 빌린 책: 아무 데서나 읽고, 어느 서고 대출대에 돌려준다
+    const LB = g.state.lib || { borrowed: [], done: {} };
+    if (LB.borrowed.length || Object.keys(LB.done || {}).length) {
+      const day = g.world.clock.day;
+      h += `<div class="section-title">빌린 책 ${LB.borrowed.length}권 <small class="muted">· 다 읽은 책 ${Object.keys(LB.done || {}).length}권</small></div><div class="bag">`;
+      LB.borrowed.forEach((b, k) => { const B = bookById(b.id); if (!B) return; const late = day - b.day > 7; h += `<div class="bag-item"><span class="ic" style="color:#${bookColor(b.id).toString(16).padStart(6, '0')}">▮</span><div class="tx"><b>${B.title} <small>${(LB.read || {})[b.id] || 0}/${B.pages.length}쪽</small></b><small>${B.author} · ${day - b.day}일째${late ? ' · 돌려줄 날이 지났어요 (아무 서고 대출대)' : ''}</small></div><button class="btn" data-read="${k}">읽기</button></div>`; });
+      h += '</div>';
+    }
     const bs = Object.entries(V.buffs || {});
     if (bs.length) h += `<div class="section-title">몸의 기운</div>${bs.map(([id, t]) => `<p>${BUFFS[id].name} · ${Math.floor(t / 60)}분 ${Math.floor(t % 60)}초 남음</p>`).join('')}`;
     if (V.job) h += `<div class="section-title">맡은 일</div><p>${V.job.label} · ${won(V.job.reward)}</p>`;
     h += `<div class="section-title">도시에서</div><p>일해서 번 ${won(V.earned || 0)} · 쓴 ${won(V.spent || 0)} · 본 전시 ${Object.keys(V.exhibits || {}).length} · 읽은 기록 ${Object.keys(V.archives || {}).length}</p>`;
     h += '<p class="muted">돈(울)은 공방(생산 줄)·창고(짐 나누기·배달)·발전소(출력 맞추기)·사무탑(일거리), 그리고 바깥 조작대(설비 점검·짐 드론 관제·코일 조율·주민 부탁함)에서 벌고, 가게·찻집·터미널·하늘배에서 써요.</p>';
     c.innerHTML = h;
+    c.querySelectorAll('[data-read]').forEach((b) => b.addEventListener('click', () => { const e = LB.borrowed[+b.dataset.read]; const B = e && bookById(e.id); if (!B) return; g.ui.closeMenu && g.ui.closeMenu(); const S = libState(g); g.ui.reader(B, { kicker: '빌린 책', page: S.done[e.id] ? 0 : Math.min(Math.max(0, (S.read[e.id] || 1) - 1), B.pages.length - 1), onPage: (p) => readPage(g, e.id, p) }); }));
     c.querySelectorAll('[data-use]').forEach((b) => b.addEventListener('click', () => { g.venues.useItem(b.dataset.use); const body = c.parentElement; body.innerHTML = ''; this.render(body); }));
   }
 

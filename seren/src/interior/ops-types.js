@@ -9,12 +9,14 @@
 //  · 연구: 시료 → 손질 → 장비 측정 → 분석 단말 → 연구 진척(건물마다 저장). 학교: 시간표·수업·학생. 병원: 접수 → 대기 → 진료 → 치료/약.
 //  · 발전: 연료 결정을 넣고 출력을 맞춘다(구역의 빛). 교통: 표·타는 문·타는 곳. 박물관·서고·공연장·호텔·행정·농장·집·쉼터.
 import { GOODS, SHELF_GOODS, RECIPES, LINES, CROPS, CATS } from '../data/goods.js';
-import { ITEMS, EXHIBITS, ARCHIVES, BUFFS } from '../data/venues.js';
+import { ITEMS, EXHIBITS, BUFFS, ZONE_NAMES } from '../data/venues.js';
 import { FIX, ROOMS } from './catalog.js';
 import { audio } from '../core/audio.js';
 import { hashStr, mulberry32 } from '../core/noise.js';
 import { WORDS, WORD } from '../data/lexicon.js';
 import { won } from '../data/money.js';
+import { bookById, bookColor } from '../data/books.js';
+import { stockFor, shelfTitles, subjectName, slotName, libState, readPage } from './library.js';
 
 // ── 도구 ─────────────────────────────────────────────────
 const tod = (ops) => ops.game.world.clock.time % 1;
@@ -998,12 +1000,85 @@ const museum = {
   roles: { conservator: { title: '보존 처리사', wage: 1.9, hours: [0.33, 0.7], desc: '유물의 결정 먼지를 걷어 낸다', next(ops, T) { return { title: '유물 보존', steps: [{ label: '보존 작업대', short: '보존', at: (o) => tagged(o, 'restore')[0], do: (F) => { museum.act(ops, T, F).use(); return true; } }] }; } } },
 };
 const library = {
-  shelfOf(ops, F) { return ARCHIVES[hashStr(`${ops.cur.uid}|${F.id}`) % ARCHIVES.length]; },
+  // 서가마다 실제 책 (library.js) — 칸마다 책등, 고르면 쪽마다 읽고, 들고 가서 열람 탁자·대출대로
+  setup(ops, T, out) { out.books = stockFor(ops.cur, T.zone, out.i, out.fix); ops.dirty(out.i); },
+  carried(ops) { const c = ops.carry; return c && c.book ? c : null; },
+  zoneName(ops, T) { return ZONE_NAMES[T.zone] || '이 구역'; },
+  /** 서가: 꽂힌 책들 → 고르기 */
+  browse(ops, T, out, F) {
+    const en = out.books && out.books.get(F.id);
+    if (!en) return;
+    const g = ops.game;
+    if (g.tips && g.tips.first('books', () => library.browse(ops, T, out, F))) return;
+    const S = libState(g), gone = ops.booksGone(out.i);
+    const xs = shelfTitles(en, (si, e) => gone.has(`${F.id}/${si}/${e}`));
+    const list = xs.map((x) => { const b = bookById(x.id); return b && { ...x, title: b.title, author: b.author, color: bookColor(x.id), read: S.read[x.id] || 0, pages: b.pages.length, done: !!S.done[x.id] }; }).filter(Boolean);
+    const total = xs.reduce((a, x) => a + x.n, 0);
+    const name = en.annal ? `${library.zoneName(ops, T)} 연대 기록` : subjectName(en.subject);
+    const fl = ops.cur.B.floors[out.i];
+    ui(ops).bookShelf(`서가 · ${fl ? fl.label : ''}층`, name, `${list.length}가지 · ${total}권이 꽂혀 있어요. 고르면 펼쳐 읽고, 들고 가서 열람 탁자에서 앉아 읽거나 대출대에서 빌려요.${en.annal ? ' 권마다 그 구역의 한 해가 적혀 있어요.' : ''}`, list, (id) => library.open(ops, T, out, F, list.find((x) => x.id === id)));
+  },
+  /** 서가 앞에서 펼쳐 읽기 */
+  open(ops, T, out, F, x) {
+    const b = x && bookById(x.id);
+    if (!b) return;
+    const S = libState(ops.game);
+    const page = S.done[x.id] ? 0 : Math.min(Math.max(0, (S.read[x.id] || 1) - 1), b.pages.length - 1);
+    ui(ops).reader(b, { kicker: `${subjectName(b.subject)} · ${slotName(x.si)}`, page, onPage: (p) => readPage(ops.game, x.id, p), actions: [
+      { label: '들고 가기', sub: '열람 탁자에 앉아 읽거나, 대출대에서 빌려 가방에 넣는다', primary: true, onClick: () => library.take(ops, out, F, x) },
+      { label: '서가로 돌아가기', sub: '다른 책 고르기', onClick: () => library.browse(ops, T, out, F) },
+    ] });
+  },
+  take(ops, out, F, x) {
+    const b = bookById(x.id);
+    const ok = ops.takeCarry({ kind: 'book', g: 'book', label: b.title, color: bookColor(x.id), book: { id: x.id, uid: ops.cur.uid, floor: out.i, fid: F.id, si: x.si, e: x.e }, back: () => { toast(ops, `「${b.title}」 — 서가 제자리에 돌려놓았다`, 'muted'); ops.dirty(out.i); } });
+    if (ok) { ops.dirty(out.i); toast(ops, `「${b.title}」 · 열람 탁자에서 앉아 읽거나 대출대에서 빌려요`, 'item'); }
+  },
+  /** 손에 든 책 / 빌린 책 읽기 */
+  read(ops, id, kicker) {
+    const b = bookById(id);
+    if (!b) return;
+    const S = libState(ops.game);
+    const page = S.done[id] ? 0 : Math.min(Math.max(0, (S.read[id] || 1) - 1), b.pages.length - 1);
+    ui(ops).reader(b, { kicker, page, onPage: (p) => readPage(ops.game, id, p) });
+  },
+  /** 대출대: 들고 온 책 빌리기 · 빌린 책 돌려주기 (어느 서고에 돌려줘도 된다) */
+  desk(ops, T, out) {
+    const g = ops.game, S = libState(g), c = library.carried(ops), day = g.world.clock.day;
+    if (c) {
+      if (S.borrowed.length >= 6) { toast(ops, '한 번에 여섯 권까지 빌릴 수 있어요 — 먼저 돌려줘요', 'muted'); return; }
+      S.borrowed.push({ ...c.book, title: c.label, day });
+      ops.dropCarry();
+      ops.dirty(c.book.floor);
+      audio.blip && audio.blip({ hz: 900, to: 1200, dur: 0.07, gain: 0.05 });
+      toast(ops, `「${c.label}」을(를) 빌렸다 · 일지 → 가방에서 읽어요 · 이레 안에 아무 서고 대출대에 돌려줘요`, 'item');
+      g.scan && g.scan('c_library');
+      return;
+    }
+    const back = (b) => { const k = S.borrowed.indexOf(b); if (k >= 0) S.borrowed.splice(k, 1); if (b.uid === ops.cur.uid) ops.dirty(b.floor); };
+    const items = S.borrowed.map((b) => { const late = day - b.day > 7; return { label: `「${b.title}」 돌려주기`, sub: `${day - b.day}일째 빌림${late ? ' · 돌려줄 날이 지났어요' : ''}${b.uid === ops.cur.uid ? '' : ' · 다른 서고의 책 (이 대출대에서 받아 줘요)'}`, onClick: () => { back(b); toast(ops, `「${b.title}」을(를) 돌려주었다`); library.desk(ops, T, out); } }; });
+    if (S.borrowed.length > 1) items.push({ label: '모두 돌려주기', onClick: () => { for (const b of S.borrowed.slice()) back(b); toast(ops, '빌린 책을 모두 돌려주었다'); } });
+    ui(ops).serviceCard('대출대', S.borrowed.length ? `빌린 책 ${S.borrowed.length}권` : '빌리기·돌려주기', S.borrowed.length ? '빌린 책은 어느 서고 대출대에 돌려줘도 돼요.' : '서가에서 책을 골라 「들고 가기」로 들고 오면 여기서 빌려 줘요. 한 번에 여섯 권, 이레 동안. 값은 받지 않아요.', items, `<div class="svc-stat"><span>읽은 책 ${Object.keys(S.done).length}권</span><span>펼쳐 본 책 ${Object.keys(S.read).length}권</span></div>`);
+  },
   act(ops, T, F, out) {
-    if (F.tag === 'books' || F.tag === 'archive') { const A = library.shelfOf(ops, F); return { label: `서가 · 「${A.title}」 칸`, short: '꺼내기', use: () => { ops.game.venues.archives([A]); } }; }
-    if (F.tag === 'catalog') return { label: '찾기 단말 · 기록 찾기', short: '찾기', use: () => ops.apps.open('catalog', { T, F }) };
-    if (F.tag === 'read') return { label: '열람 탁자 · 앉아 읽기', short: '읽기', use: () => { if ((ops.game.state.inv.book || 0) > 0) ops.game.venues.useItem('book'); else toast(ops, '빌린 기록이 없어요 — 서가에서', 'muted'); } };
-    if (F.tag === 'circulation') return { label: '대출대 · 빌리기·돌려주기', short: '대출', use: () => { const has = (ops.game.state.inv.book || 0) > 0; ui(ops).serviceCard('대출대', has ? '빌린 기록 돌려주기' : '기록 빌리기', '서가에서 고른 기록 결정을 빌려 가요. 다 읽으면 사라져요.', [{ label: has ? '돌려주기' : '아무 기록이나 빌리기', onClick: () => { if (has) { ops.game.state.inv.book--; toast(ops, '돌려주었다'); } else { ops.game.state.inv.book = 1; toast(ops, '기록 결정을 빌렸다', 'item'); } } }]); } };
+    if (F.tag === 'books' || F.tag === 'archive') {
+      const en = out.books && out.books.get(F.id);
+      if (!en) return null;
+      const c = library.carried(ops);
+      if (c && c.book.uid === ops.cur.uid) return { label: `서가 · 「${c.label}」 제자리에 꽂기`, short: '꽂기', use: () => { const fl = c.book.floor; ops.dropCarry(); ops.dirty(fl); toast(ops, `「${c.label}」을(를) 서가에 꽂았다`, 'muted'); } };
+      return { label: `서가 · ${en.annal ? `${library.zoneName(ops, T)} 연대 기록` : subjectName(en.subject)}`, short: '책 고르기', use: () => library.browse(ops, T, out, F) };
+    }
+    if (F.tag === 'catalog') return { label: '찾기 단말 · 책 찾기', short: '찾기', use: () => ops.apps.open('catalog', { T, F }) };
+    if (F.tag === 'read') {
+      const c = library.carried(ops), S = libState(ops.game);
+      return { label: c ? `열람 탁자 · 「${c.label}」 앉아 읽기` : S.borrowed.length ? '열람 탁자 · 빌린 책 읽기' : '열람 탁자', short: '읽기', use: () => {
+        const av = ops.game.avatar;
+        if (c) { av && av.act && av.act('sit', 3); library.read(ops, c.book.id, '열람 탁자'); }
+        else if (S.borrowed.length) ui(ops).serviceCard('열람 탁자', '빌린 책', '', S.borrowed.map((b) => ({ label: b.title, onClick: () => { av && av.act && av.act('sit', 3); library.read(ops, b.id, '열람 탁자 · 빌린 책'); } })));
+        else toast(ops, '서가에서 책을 골라 「들고 가기」로 들고 와요', 'muted');
+      } };
+    }
+    if (F.tag === 'circulation') { const c = library.carried(ops); return { label: c ? `대출대 · 「${c.label}」 빌리기` : '대출대 · 빌리기·돌려주기', short: '대출', use: () => library.desk(ops, T, out) }; }
     if (F.tag === 'clock') return clockAct(ops, T);
     return null;
   },
@@ -1016,7 +1091,18 @@ const library = {
       spawn(ops, { key: `${T.uid}:${i}:rd${k}`, role: 'read', title: '읽는 이', floor: i, gx, gz }, [{ wait: k * 2 }], () => { const S = shelves.length ? pick(shelves) : null; const Tb = tables.length ? pick(tables) : null; return [...(S ? [{ go: AT(S) }, { face: yawTo(S), act: 'reach', t: 3 }] : []), ...(Tb ? [{ go: AT(Tb) }, { act: 'sit', t: 25 }] : [])]; });
     }
   },
-  roles: { shelver: { title: '서가 정리', wage: 1.4, hours: [0.33, 0.75], desc: '돌아온 기록을 제 칸에 꽂는다', next(ops, T) { const out = ops.cur.indoor.built.get(ops.cur.indoor.cur); const sh = tagged(out, 'books'); if (!sh.length) return null; const S = pick(sh); const A = library.shelfOf(ops, S); return { title: `「${A.title}」 꽂기`, steps: [{ label: '대출대에서 돌아온 기록 들기', short: '들기', at: (o) => tagged(o, 'circulation')[0] || tagged(o, 'catalog')[0], do: () => { ops.takeCarry({ g: 'book', n: 1, kind: 'book', label: A.title }); return true; } }, { label: `「${A.title}」 칸에 꽂기`, short: '꽂기', at: () => S, do: () => { ops.dropCarry(); ops.taskDone(T); learn(ops, A.word); return true; } }], next: () => roleOf('library', 'shelver').next(ops, T) }; } } },
+  roles: { shelver: { title: '서가 정리', wage: 1.4, hours: [0.33, 0.75], desc: '돌아온 책을 제 서가 제 칸에 꽂는다', next(ops, T) {
+    const out = ops.cur.indoor.built.get(ops.cur.indoor.cur);
+    const sh = tagged(out, 'books', 'archive').filter((F) => out.books && out.books.get(F.id));
+    if (!sh.length) return null;
+    const S = pick(sh), en = out.books.get(S.id), si = Math.floor(Math.random() * en.spines.length), id = pick(en.spines[si].filter(Boolean)), b = bookById(id);
+    if (!b) return null;
+    const where = `${en.annal ? '연대 기록' : subjectName(en.subject)} 서가 ${slotName(si)}`;
+    return { title: `「${b.title}」 꽂기`, steps: [
+      { label: '대출대에서 돌아온 책 들기', short: '들기', at: (o) => tagged(o, 'circulation')[0] || tagged(o, 'catalog')[0], do: () => { ops.takeCarry({ g: 'book', n: 1, kind: 'book', label: b.title, color: bookColor(id) }); return true; } },
+      { label: `「${b.title}」 — ${where}`, short: '꽂기', at: () => S, do: () => { ops.dropCarry(); ops.taskDone(T); learn(ops, b.word); return true; } },
+    ], next: () => roleOf('library', 'shelver').next(ops, T) };
+  } } },
 };
 const hall = {
   act(ops, T, F, out) {

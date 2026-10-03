@@ -6,6 +6,8 @@ import { GOODS } from '../data/goods.js';
 import { ITEMS } from '../data/venues.js';
 import { FUSE, ROOMS, FIX } from './catalog.js';
 import { won } from '../data/money.js';
+import { bookById } from '../data/books.js';
+import { libraryFloors, libraryIndex, locate, slotName, subjectName } from './library.js';
 
 /** 이음(계단·승강기)의 문 앞 자리 (틀 좌표) */
 export function partSpot(B, part, out = 1.3) {
@@ -65,6 +67,10 @@ const ALIAS = [
   [/회의/, { room: ['meeting', 'council'] }],
   [/식당|밥|먹을|주문/, { tag: ['order'] }],
   [/쉬|휴게|쉼터/, { room: ['lounge', 'staffroom', 'foyer'] }],
+  // 서고 (앞의 「단말」 같은 넓은 별칭보다 뒤에 — 뒤의 것이 이긴다)
+  [/책 ?찾|찾기 ?단말|도서 ?목록/, { tag: ['catalog'] }],
+  [/대출|반납|돌려주/, { tag: ['circulation'] }],
+  [/열람|읽을 ?자리/, { tag: ['read'] }],
 ];
 
 /**
@@ -84,7 +90,7 @@ export function searchBuilding(game, q, opt = {}) {
   const fl = (i) => B.floors[i];
   const reach = B.floors.filter((F) => F.reach && !F.dead).map((F) => F.i).sort((a, b) => Math.abs(a - here) - Math.abs(b - here) || a - b);
   const al = ALIAS.filter(([re]) => re.test(s)).map(([, v]) => v);
-  const want = Object.assign({}, ...al);
+  const want = Object.assign({}, ...al); // 여럿 맞으면 뒤의 (더 좁은) 별칭이 이긴다
   const S = game.state.work || { jobs: [] };
   // ── 나와 관계된 곳 ──
   if (want.mywork) {
@@ -147,6 +153,22 @@ export function searchBuilding(game, q, opt = {}) {
       const other = BL ? (BL.a === cur.r ? BL.b : BL.a) : null;
       const i = e.c % B.G.gw, j = (e.c / B.G.gw) | 0;
       add({ kind: 'bridge', label: '공중다리 문', sub: `${F.label}층${other ? ` · 건너편 ${game.interiors.title(other)}` : ''}`, floor: F.i, gx: B.G.ox + i + 0.5 - e.dir[0], gz: B.G.oz + j + 0.5 - e.dir[1] });
+    }
+  }
+  // ── 서가의 책 (제목·지은이로) ──
+  if (s.length >= 2 && libraryFloors(B).length) {
+    const T = ops && ops.byFloor ? ops.byFloor(here) : null;
+    const idx = libraryIndex(cur), zone = (T && T.zone) || cur.r.zone;
+    let n = 0;
+    const ns = s.replace(/\s/g, ''), sq = (x) => x.replace(/\s/g, ''); // 모아는 띄어쓰기를 지운 말로 묻는다
+    for (const [id, i] of idx.at) {
+      const b = bookById(id);
+      if (!b) continue;
+      const nt = sq(b.title);
+      if (!(nt.includes(ns) || sq(b.author).includes(ns) || (ns.length >= 3 && ns.includes(nt)))) continue;
+      const w = locate(cur, zone, id, i);
+      if (w && w.F) add({ kind: 'book', label: `${b.title} (책)`, sub: `${b.author} · ${fl(i).label}층 ${subjectName(w.subject)} 서가 ${slotName(w.si)}`, floor: i, gx: w.F.ax, gz: w.F.az, fix: w.F.id });
+      if (++n >= 6) break;
     }
   }
   // ── 층 쓰임 ──

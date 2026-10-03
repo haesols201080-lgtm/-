@@ -137,6 +137,97 @@ for (const pid of want) {
       return { cats: [...cats].length, catList: [...cats].join(','), picked, basket, paid, spent: Math.round((money0 - (g.state.inv.starseed || 0)) * 100) / 100, gained, bagHas: gained.map((k) => html.includes(`data-use="${k}"`) || html.includes(k)).filter(Boolean).length, bagItems: (html.match(/class="bag-item"/g) || []).length, inBag: inBag.length };
     });
   }
+  // 서고(서고 건물·학교의 배움터): 서가의 실제 책 → 펼쳐 끝까지 읽기(말 배움) → 들고 가기(책등이 빈다) → 대출대에서 빌리기 → 가방에서 읽기
+  //   → 대출대에서 돌려주기(책등이 돌아온다) · 찾기 단말에서 제목으로 찾아 길 안내 · 모아에게 책 제목으로 묻기
+  if (pid === 'library' || pid === 'school') {
+    info.books = await page.evaluate(() => {
+      const g = SEREN.game, I = g.interiors, cur = I.cur, ind = cur.indoor, o = g.ops, B = cur.B;
+      const libs = B.floors.filter((F) => F.use === 'library' && F.reach && !F.dead).map((F) => F.i);
+      if (!libs.length) return { err: '서고 층 없음' };
+      const i = libs[0];
+      const out0 = ind.built.get(i) || null;
+      I.placeAt(i, g.player.pos.x, g.player.pos.z);
+      const out = ind.built.get(i), T = out.T;
+      const res = { floor: B.floors[i].label, shelves: [...out.books.values()].length, archive: [...out.books.values()].filter((e) => e.annal).length, prebuilt: !!out0 };
+      const spines = () => { o._drawItems(out); return out.items ? out.items.count : 0; };
+      // 손으로 쓴 책(b-)이 꽂힌 서가부터 (목록의 책이라 찾기 단말·모아로도 찾힌다)
+      const sh = out.fix.find((F) => F.tag === 'books' && out.books.get(F.id) && out.books.get(F.id).spines.some((r) => r.some((id) => id && id.startsWith('b-')))) || out.fix.find((F) => F.tag === 'books' && out.books.get(F.id));
+      if (!sh) return { ...res, err: '책 서가 없음' };
+      // 그 서가 앞에 서서 (가까운 서가는 책 한 권씩)
+      const [sx, sz] = ind.world(sh.ax, sh.az);
+      g.player.teleport(sx, ind.yOf(i) + 0.15, sz);
+      const n0 = spines();
+      const t = o.target(g.player.pos);
+      res.target = t && t.label;
+      // 서가 카드: 꽂힌 책 목록 (앞에 선 그 서가 — 등을 맞댄 서가가 같이 가까워도)
+      let shelf = null;
+      const ob = g.ui.bookShelf.bind(g.ui);
+      g.ui.bookShelf = (k, title, body, books, onPick) => { shelf = { title, n: books.length, books, onPick }; return null; };
+      T.type.act(o, T, sh, out).use();
+      g.ui.bookShelf = ob;
+      if (!shelf) return { ...res, err: '서가 카드 없음' };
+      res.shelf = `${shelf.title} · ${shelf.n}가지 · 예: ${shelf.books.slice(0, 3).map((b) => b.title).join(' / ')}`;
+      // 한 권 펼쳐 끝 쪽까지 넘기기 (읽은 쪽 · 다 읽음 · 배운 말)
+      const pick = shelf.books.find((b) => b.id.startsWith('b-')) || shelf.books.find((b) => b.pages >= 3 && !/^[gn]-/.test(b.id)) || shelf.books[0];
+      const words0 = g.lang.knownCount;
+      shelf.onPick(pick.id);
+      const card = document.querySelector('.card.book-card');
+      const pageText = card && card.querySelector('.book-page').textContent;
+      res.reader = !!card && pageText && pageText.length > 10;
+      for (let k = 0; k < 12; k++) card.querySelector('[data-next]').click();
+      res.pageNo = card.querySelector('.book-no').textContent;
+      res.done = !!(g.state.lib.done[pick.id]);
+      res.wordsLearned = g.lang.knownCount - words0;
+      // 들고 가기 → 그 책등이 빈다
+      const takeBtn = [...card.querySelectorAll('[data-a]')].find((b) => b.textContent.includes('들고'));
+      takeBtn.click();
+      res.carry = o.carry && o.carry.label;
+      const n1 = spines();
+      res.spinesTaken = n0 - n1;
+      // 대출대에서 빌리기
+      const desk = out.fix.find((F) => F.tag === 'circulation');
+      if (desk) {
+        const h = T.type.act(o, T, desk, out);
+        res.deskLabel = h && h.label;
+        h.use();
+        res.borrowed = g.state.lib.borrowed.map((b) => b.title).join(', ');
+        res.carryAfter = !!o.carry;
+        res.spinesWhileBorrowed = n0 - spines();
+        // 가방(일지)에서 빌린 책 읽기
+        const div = document.createElement('div');
+        g.ui.journal._bag(div);
+        res.bagBook = div.innerHTML.includes(pick.title) && !!div.querySelector('[data-read]');
+        // 돌려주기 → 책등이 돌아온다
+        let items = null;
+        const os = g.ui.serviceCard.bind(g.ui);
+        g.ui.serviceCard = (k, title, body, its) => { items = its; return null; };
+        h.use();
+        g.ui.serviceCard = os;
+        const back = items && items.find((x) => x.label.includes('돌려주기'));
+        if (back) back.onClick();
+        g.ui.closeCard();
+        res.returned = g.state.lib.borrowed.length === 0;
+        res.spinesAfterReturn = n0 - spines();
+      } else res.deskLabel = '(대출대 없음)';
+      // 찾기 단말: 제목으로 찾아 그 서가로 길 안내
+      const cat = out.fix.find((F) => F.tag === 'catalog');
+      if (cat) {
+        o.apps.open('catalog', { T, F: cat });
+        o.apps._v_catalog({ T, F: cat, q: pick.title.slice(0, 4) });
+        const rows = [...o.apps.wrap.querySelectorAll('.os-body [data-a]')];
+        res.catalog = `${rows.length}건: ${rows.slice(0, 2).map((b) => b.querySelector('b').textContent).join(' / ')}`;
+        if (rows[0]) rows[0].click();
+        res.catalogGuide = g.guide.text;
+        g.guide.clear();
+        o.apps.close && o.apps.close();
+      }
+      // 모아: 책 제목으로 묻기 (건물 안 찾기)
+      try { res.moaBook = g.moaAI.local(`${pick.title} 어디 있어`).slice(0, 100); res.moaShelf = g.moaAI.local('책 찾는 단말 어디야').slice(0, 80); } catch (e) { res.moaBook = '오류 ' + e.message; }
+      g.ui.closeCard();
+      res.spinesDrawn = out.items ? out.items.count : 0;
+      return res;
+    });
+  }
   // 모아에게 건물 안 길 묻기 + 안내 길
   const moa = await page.evaluate(() => {
     const g = SEREN.game, M = g.moaAI;

@@ -57,6 +57,7 @@ export function defaultState() {
     // 건물 속 (v0.9): 일자리·지원·교대·과제·호텔 방 / 건물마다 바뀐 상태(연구 진척·내 집 칸·맡긴 물건…) / 도시 살림(구역 돈·재고·살아 있는 건물)
     work: { jobs: [], apps: [], shift: null, done: 0, earned: 0, edu: {}, research: {}, hotel: null },
     bld: {},
+    lib: { borrowed: [], read: {}, done: {} }, // 서고: 빌린 책 [{ id, uid, floor, fid, si, e, title, day }] · 읽은 쪽 · 다 읽은 날
     econ: null,
     inside: null, // 저장할 때 건물 안이면 { rid, x, z, floor, uid } — 불러오면 그 건물 그 층으로
     rooms: {}, // 들어가 본 방: '구역:모양:번호' → { v: 들른 횟수, d: 처음 온 날 } (방마다 따로)

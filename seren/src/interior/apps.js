@@ -5,7 +5,8 @@
 //  · 연구소 분석 단말, 서고 찾기 단말, 물류 배차 단말, 회의 탁자.
 //  면접은 건물의 채용 면접실(없으면 책임자실·사무실·안내대)에서 면접관과 — 단말 카드만으로 끝나지 않는다.
 import { GOODS, DEMAND } from '../data/goods.js';
-import { ARCHIVES } from '../data/venues.js';
+import { bookById } from '../data/books.js';
+import { libraryIndex, locate, libState, subjectName, slotName } from './library.js';
 import { WORDS, WORD } from '../data/lexicon.js';
 import { glyphSVG } from '../game/language.js';
 import { FUSE, ROOMS, FIX } from './catalog.js';
@@ -498,19 +499,30 @@ export class Apps {
   /** 서고 찾기 단말: 기록 → 그 칸이 있는 서가로 길 안내 */
   _v_catalog(ctx = {}) {
     const ops = this.ops, cur = this.cur, g = this.game;
-    const q = ctx.q || '';
-    const where = new Map();
-    for (const F of cur.B.floors) {
-      if (!F.reach || where.size >= ARCHIVES.length) continue;
-      const pl = cur.indoor.plan(F.i);
-      for (const f of pl ? pl.fix : []) if (f.tag === 'books' || f.tag === 'archive') { const A = TYPES.library.shelfOf(ops, f); if (!where.has(A.id)) where.set(A.id, { floor: F.i, f }); }
-    }
-    const list = ARCHIVES.filter((A) => !q || A.title.includes(q) || A.text.includes(q));
-    this._render('찾기 단말', `기록 결정 ${ARCHIVES.length}가지 · 고르면 그 칸이 있는 서가로 길을 알려 줘요.`, [{ html: `<div class="os-search"><input type="text" placeholder="기록 찾기" value="${esc(q)}"><button class="btn" data-go>찾기</button></div>` }, ...list.map((A) => { const w = where.get(A.id); return { label: A.title, sub: w ? `${cur.B.floors[w.floor].label}층 서가` : '이 서고에는 없어요', disabled: !w, act: () => { g.guide.to({ floor: w.floor, gx: w.f.ax, gz: w.f.az, label: `「${A.title}」 칸` }); this.close(); } }; })]);
+    const q = (ctx.q || '').trim(), sub = ctx.sub || null;
+    const T = ctx.T || ops.byFloor(cur.indoor.cur);
+    const idx = libraryIndex(cur), S = libState(g);
+    const books = [...idx.at.keys()].map((id) => bookById(id)).filter(Boolean);
+    const cnt = {};
+    for (const b of books) cnt[b.subject] = (cnt[b.subject] || 0) + 1;
+    let list = books;
+    if (q) list = books.filter((b) => b.title.includes(q) || b.author.includes(q) || subjectName(b.subject).includes(q));
+    else if (sub) list = books.filter((b) => b.subject === sub);
+    const shown = list.slice(0, 80);
+    const fl = (i) => cur.B.floors[i].label;
+    const plan = idx.floors.map((x) => `${fl(x.floor)}층 ${x.subs.map(subjectName).join('·')}`).join(' / ');
+    this._render('찾기 단말', `이 서고의 목록 ${books.length}가지 — ${plan}. 서가마다 목록의 책 다음에는 그 분류의 일지·기록·이야기가 이어져요. 고르면 그 책이 꽂힌 서가로 길을 알려 줘요.`, [
+      { html: `<div class="os-search"><input type="text" placeholder="제목·지은이·분류" value="${esc(q)}"><button class="btn" data-go>찾기</button></div>` },
+      { html: `<div class="book-tabs">${Object.keys(cnt).map((k) => `<button class="btn${k === sub && !q ? ' on' : ''}" data-sub="${k}">${subjectName(k)} ${cnt[k]}</button>`).join('')}</div>` },
+      ...(list.length ? [] : [{ head: '찾는 책이 이 서고 목록에 없어요' }]),
+      ...shown.map((b) => { const i = idx.at.get(b.id), out = S.borrowed.find((x) => x.id === b.id && x.uid === cur.uid); return { label: `${S.done[b.id] ? '✓ ' : ''}${esc(b.title)}`, sub: `${esc(b.author)} · ${subjectName(b.subject)} · ${fl(i)}층${out ? ' · 내가 빌린 책' : ''}`, act: () => { const w = locate(cur, T.zone, b.id, i); if (!w || !w.F) { g.ui.toast('지금은 서가에 꽂혀 있지 않아요', { kind: 'muted' }); return; } g.guide.to({ floor: w.floor, gx: w.F.ax, gz: w.F.az, label: `「${b.title}」 — ${subjectName(w.subject)} 서가 ${slotName(w.si)}` }); this.close(); } }; }),
+      ...(list.length > shown.length ? [{ head: `… ${list.length - shown.length}가지 더 — 분류를 고르거나 더 좁혀 찾아요` }] : []),
+    ]);
     const body = this.wrap.querySelector('.os-body'), inp = body.querySelector('input');
-    const go = () => this._v_catalog({ q: inp.value.trim() });
+    const go = () => this._v_catalog({ ...ctx, q: inp.value.trim(), sub: null });
     body.querySelector('[data-go]').addEventListener('click', (e) => { e.stopPropagation(); go(); });
     inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') go(); });
+    body.querySelectorAll('[data-sub]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); this._v_catalog({ ...ctx, q: '', sub: b.dataset.sub }); }));
   }
 }
 export { FIX };

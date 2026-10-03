@@ -267,7 +267,7 @@ export class MoaAI {
         return { name: `${r.label}${r.floor !== ind.cur ? ` (${fl.label}층)` : ''}`, x, z, ...this._where(x, z), inside: r, floor: fl.label, sameFloor: r.floor === ind.cur };
       }
       // 건물 안의 것을 물었는데 없으면 바깥의 엉뚱한 곳(이름 일부가 같은 장소)으로 가지 않는다
-      if (/엘리베이터|승강기|계단|출구|화장실|정화실|계산|단말|안내|진열|창고|교실|진료|약|회의/.test(s)) return { none: true, name: q };
+      if (/엘리베이터|승강기|계단|출구|화장실|정화실|계산|단말|안내|진열|창고|교실|진료|약|회의|책|서가|대출|열람/.test(s)) return { none: true, name: q };
     }
     // 일터·면접 (다른 건물)
     const W = g.state.work;
@@ -395,7 +395,8 @@ export class MoaAI {
     const q = text.replace(/\s/g, '');
     const say = (t) => t;
     if (/안녕|하이|헬로|반가/.test(q)) return say('안녕하세요, 조종사님. 라르크 호에서 잘 들려요. 길을 묻거나, 지금 할 일, 들은 말의 뜻, 돈 버는 법… 무엇이든 물어보세요.');
-    if (/어디있|어딨|너어디|모아어디|옆에|같이있|내려와|보고싶/.test(q)) { const st = this.game.comm ? this.game.comm.status() : null; return `저는 궤도를 도는 라르크 호에 있어요. ${st && st.up ? '지금 마침 머리 위를 지나는 중이에요 — 밤이면 깜박이는 점으로 보여요.' : '지금은 지평선 너머라 착륙선 안테나가 이어 주고 있어요.'} 조종사님 탐사복 카메라로 같이 보고 있으니 걱정 마세요.`; }
+    // 모아 자신이 어디 있는지 묻는 말만 — 「이엘 어디 있어?」·「(책 제목) 어디 있어」 같은 찾기는 아래 find 로
+    if (/^(너|넌|너는|모아|모아는|모아야|모아너)?(지금)?(어디있|어딨)|너어디|모아어디|옆에있|같이있|내려와|보고싶/.test(q)) { const st = this.game.comm ? this.game.comm.status() : null; return `저는 궤도를 도는 라르크 호에 있어요. ${st && st.up ? '지금 마침 머리 위를 지나는 중이에요 — 밤이면 깜박이는 점으로 보여요.' : '지금은 지평선 너머라 착륙선 안테나가 이어 주고 있어요.'} 조종사님 탐사복 카메라로 같이 보고 있으니 걱정 마세요.`; }
     if (/뭐해|뭘해|뭘하|뭐하|할일|할게|해야|다음|목표|어떻게하|어떻게해|막혔|모르겠|이야기진행/.test(q)) {
       const o = g.quests.objectiveText();
       if (!o) return '지금은 정해진 일이 없어요. 도시를 걸으며 건물마다 들어가 보거나, 주민 부탁함·일거리 게시판을 둘러보세요.';
@@ -404,14 +405,14 @@ export class MoaAI {
       const st = g.quests.step(g.quests.tracked());
       return `지금 할 일은 「${o.text}」${yeyo(o.text)} (${o.title}).${st && st.hint ? ' ' + st.hint + '.' : ''}${f ? ` ${f.dir}쪽 ${f.d} m — 나침반에 표시했어요.` : ''}`;
     }
-    if (/돈|울|벌|가난|비싸|품삯/.test(q) && !/울림/.test(q)) return `지금 가진 돈은 ${won(s.inv.starseed || 0)}이에요. 건물 안 울림판 단말의 「일자리」에서 지원해 일하면(출근 → 과제 → 퇴근 때 그 회사 금고에서 품삯), 또 바깥 조작대의 설비 점검·짐 드론 관제, 주민 부탁함으로도 벌 수 있어요. 마트·식당·터미널·하늘배에서 써요. 별씨는 돈이 아니라 별비·생명나무에서 줍는 재료예요(온실·장인 온).`;
-    if (/음|공명|연주|솟음|열림|흐름|고요/.test(q) && !/음식/.test(q)) {
+    if (/돈|몇울|울(?=이|을|은|벌|모|있|없|얼)|벌(?=어|고|까|면|기|이|었|려)|가난|비싸|품삯|지갑/.test(q) && !/울림/.test(q)) return `지금 가진 돈은 ${won(s.inv.starseed || 0)}이에요. 건물 안 울림판 단말의 「일자리」에서 지원해 일하면(출근 → 과제 → 퇴근 때 그 회사 금고에서 품삯), 또 바깥 조작대의 설비 점검·짐 드론 관제, 주민 부탁함으로도 벌 수 있어요. 마트·식당·터미널·하늘배에서 써요. 별씨는 돈이 아니라 별비·생명나무에서 줍는 재료예요(온실·장인 온).`;
+    if (/^음(?![식료악])|공명|연주|솟음|열림|흐름|고요|아는음|무슨음|몇음|음을|음이|음은/.test(q) && !/음식/.test(q)) {
       const T = s.tones;
       if (!T.length) return '아직 공명 음을 하나도 몰라요. 아웬이 가르쳐 줄 거예요 — 먼저 마중 나온 이를 만나 봐요.';
       const miss = [0, 1, 2, 3, 4].filter((n) => !T.includes(n));
       return `아는 음: ${T.map((n) => `${TONE_NAMES[n]}(${n + 1} · ${TONE_USE[n]})`).join(', ')}.${miss.length ? ` 남은 음(${miss.map((n) => TONE_NAMES[n]).join('·')})은 아웬과 공명탑에게서 얻어요.` : ' 다섯 음을 모두 알아요!'}`;
     }
-    if (/말|뜻|단어|번역|아웬어|무슨소리/.test(q)) {
+    if (/(?<!단)말(?!단)|뜻|단어|번역|아웬어|무슨소리/.test(q)) { // 「단말(울림판)」은 말이 아니다
       const h = (s.heard || []).slice(-1)[0];
       const line = h && g.lines && g.lines[h.id];
       const n = Object.keys(s.vocab || {}).filter((id) => g.lang.known(id)).length;

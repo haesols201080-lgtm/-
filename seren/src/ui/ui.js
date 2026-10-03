@@ -12,6 +12,7 @@ import { CUR } from '../data/money.js';
 
 const $ = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+const escH = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 const ICON = {
   menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
@@ -401,6 +402,54 @@ export class UI {
       if (!it.stay) this.closeCard();
       it.onClick && it.onClick(b);
     }));
+    return wrap;
+  }
+
+  /**
+   * 서가: 꽂힌 책을 책등처럼 늘어놓는다 → 고르면 onPick(id).
+   * books: [{ id, title, author, color, n(같은 책 수), read(읽은 쪽), pages, done }]
+   */
+  bookShelf(kicker, title, body, books, onPick, extra = '') {
+    const row = (b) => `<button class="book-spine${b.done ? ' done' : ''}" data-id="${escH(b.id)}" style="--bc:${hex(b.color)}"><b>${escH(b.title)}</b><small>${escH(b.author)}${b.n > 1 ? ` · ${b.n}부` : ''}${b.done ? ' · 다 읽음' : b.read ? ` · ${b.read}/${b.pages}쪽` : ''}</small></button>`;
+    const wrap = this._card(`<div class="kicker">${kicker}</div><h2>${title}</h2>${body ? `<p>${body}</p>` : ''}${extra}<div class="book-shelf">${books.map(row).join('')}</div>`);
+    wrap.querySelector('.card').classList.add('book-card');
+    wrap.querySelectorAll('[data-id]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); onPick(b.dataset.id); }));
+    return wrap;
+  }
+
+  /**
+   * 책 읽기: 쪽마다 넘긴다 (◀ ▶ 단추 · ←/→ · A/D, Esc 닫기).
+   * opts: { page, kicker, actions: [{ label, primary, onClick }], onPage(p), onClose }
+   */
+  reader(book, opts = {}) {
+    let p = Math.max(0, Math.min(book.pages.length - 1, opts.page || 0));
+    const acts = opts.actions || [];
+    const key = (e) => {
+      if (this._cardWrap !== wrap) return;
+      const k = e.key;
+      if (k === 'ArrowLeft' || k === 'a' || k === 'A') go(p - 1);
+      else if (k === 'ArrowRight' || k === 'd' || k === 'D' || k === ' ') go(p + 1);
+      else if (k === 'Escape') wrap.close();
+      else return;
+      e.stopPropagation(); e.preventDefault();
+    };
+    const wrap = this._card(`<div class="kicker">${opts.kicker || '책'}</div><h2>${escH(book.title)}</h2><div class="book-by">${escH(book.author)}</div><div class="book-page"></div><div class="book-nav"><button class="btn" data-prev>◀ 앞 쪽</button><span class="book-no"></span><button class="btn" data-next>다음 쪽 ▶</button></div>${acts.length ? `<div class="svc">${acts.map((a, i) => `<button class="btn svc-b${a.primary ? ' primary' : ''}" data-a="${i}"><b>${a.label}</b>${a.sub ? `<small>${a.sub}</small>` : ''}</button>`).join('')}</div>` : ''}`, () => { removeEventListener('keydown', key, true); opts.onClose && opts.onClose(); }, { keys: false });
+    wrap.querySelector('.card').classList.add('book-card');
+    const pg = wrap.querySelector('.book-page'), no = wrap.querySelector('.book-no'), prev = wrap.querySelector('[data-prev]'), next = wrap.querySelector('[data-next]');
+    const go = (np) => {
+      p = Math.max(0, Math.min(book.pages.length - 1, np));
+      pg.textContent = book.pages[p];
+      no.textContent = `${p + 1} / ${book.pages.length}쪽`;
+      prev.disabled = p === 0;
+      next.disabled = p === book.pages.length - 1;
+      opts.onPage && opts.onPage(p);
+    };
+    prev.addEventListener('click', (e) => { e.stopPropagation(); go(p - 1); });
+    next.addEventListener('click', (e) => { e.stopPropagation(); go(p + 1); });
+    wrap.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); const a = acts[+b.dataset.a]; if (!a) return; if (!a.stay) wrap.close(); a.onClick && a.onClick(); }));
+    addEventListener('keydown', key, true);
+    go(p);
+    wrap.page = () => p;
     return wrap;
   }
 

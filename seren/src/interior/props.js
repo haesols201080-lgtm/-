@@ -2,6 +2,7 @@
 // 모양마다 「물건 칸」 자리(slots)도 정한다 — 진열대·선반·통의 물건은 재고만큼 그 칸에 놓인다(ops 가 채운다).
 import * as THREE from 'three';
 import { PAT } from './material.js';
+import { SPINES, SHELF_LEVELS, SHELF_COLS } from './library.js';
 
 const TAU = Math.PI * 2;
 /** 가구의 로컬(정면 +z, 바닥 0) → 층 틀 좌표 */
@@ -124,11 +125,11 @@ export function drawFixture(gb, F, st) {
     }
     case 'wallshelf': case 'medshelf': case 'bookshelf': case 'fuelrack': {
       f.box(0, 0, -D / 2 + 0.04, W, H, 0.08, P, 0, PAT.panel);
-      const lv = F.t === 'bookshelf' ? 5 : 4;
+      const lv = F.t === 'bookshelf' ? SHELF_LEVELS : 4;
       for (let l = 0; l < lv; l++) f.box(0, 0.25 + l * ((H - 0.4) / lv), 0, W, 0.03, D, F.t === 'bookshelf' ? 0x8a6a4a : pearl, 0, PAT.metal);
       f.box(-W / 2 + 0.02, 0, 0, 0.04, H, D, steel); f.box(W / 2 - 0.02, 0, 0, 0.04, H, D, steel);
       f.box(0, H - 0.08, D / 2, W, 0.08, 0.02, F.t === 'medshelf' ? 0x8ff0c0 : B, 1.2);
-      shelfSlots(lv, 0.27, (H - 0.4) / lv, D - 0.1, 0.02, F.t === 'bookshelf' ? 8 : 5, 2);
+      shelfSlots(lv, 0.27, (H - 0.4) / lv, D - 0.1, 0.02, F.t === 'bookshelf' ? SPINES : 5, F.t === 'bookshelf' ? SHELF_COLS : 2);
       break;
     }
     case 'chiller': case 'coldbox': case 'freezer': {

@@ -14,7 +14,9 @@ import { Apps } from './apps.js';
 import { findPath } from './nav.js';
 import { audio } from '../core/audio.js';
 import { won } from '../data/money.js';
+import { bookColor } from '../data/books.js';
 
+const BOOK_NEAR = 8; // 이 거리(m) 안의 서가는 책을 한 권씩 그린다
 const SHAPE = { box: [0.2, 0.16, 0.16], round: [0.16, 0.16, 0.16], bottle: [0.1, 0.26, 0.1], jar: [0.14, 0.18, 0.14], crystal: [0.1, 0.24, 0.1], flat: [0.3, 0.05, 0.22], sack: [0.28, 0.24, 0.2], flower: [0.1, 0.3, 0.1] };
 
 export class Ops {
@@ -69,7 +71,7 @@ export class Ops {
     this.apps.onEnter(cur);
     // 도감: 처음 보는 건물의 짜임
     const B = cur.B, sc = (id) => this.game.scan && setTimeout(() => this.game.scan(id), 2500);
-    if (B.special) sc({ heal: 'c_hospital', office: 'c_hq', school: 'c_campus', market: 'c_mart' }[B.pid] || null);
+    if (B.special) sc({ heal: 'c_hospital', office: 'c_hq', school: 'c_campus', market: 'c_mart', library: 'c_library' }[B.pid] || null);
     else if (B.orgs.length >= 3) sc('c_mixed');
     if (['factory', 'depot', 'farm'].includes(B.pid)) sc('c_chain');
   }
@@ -105,10 +107,11 @@ export class Ops {
       const nrm = geo.attributes.normal, shade = new Float32Array(nrm.count * 3);
       for (let k = 0; k < nrm.count; k++) { const ny = nrm.getY(k), nx = nrm.getX(k); const v = ny > 0.5 ? 1.0 : ny < -0.5 ? 0.55 : nx !== 0 ? 0.78 : 0.86; shade[k * 3] = shade[k * 3 + 1] = shade[k * 3 + 2] = v; }
       geo.setAttribute('color', new THREE.BufferAttribute(shade, 3));
-      const mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true }), Math.min(6000, cap));
+      const mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true }), Math.min(12000, cap));
       mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(mesh.count * 3), 3);
       mesh.frustumCulled = false;
       mesh.userData.indoor = true;
+      mesh.userData.cap = mesh.count; // 그릴 수 있는 최대 수 (count 는 매번 실제 그린 수로 줄어든다)
       out.group.add(mesh);
       out.items = mesh;
       out.itemsDirty = true;
@@ -177,11 +180,49 @@ export class Ops {
   _drawItems(out) {
     const m = out.items;
     if (!m) return;
-    const T = out.T, n = T.node;
+    const T = out.T, n = T.node, cap = m.userData.cap ?? m.count;
     const mat = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), pos = new THREE.Vector3(), sc = new THREE.Vector3(), col = new THREE.Color();
     let k = 0;
+    // 서가의 책등: 칸마다 실제 책(out.books) — 빌려 갔거나 손에 든 책의 자리는 비어 있다.
+    // 서가가 아주 많은 층(수만 권)은 가까운 서가(BOOK_NEAR m 안)만 책 한 권씩, 먼 서가는 칸마다 책 덩어리 하나로 (플레이어가 움직이면 다시)
+    const gone = out.books ? this.booksGone(out.i) : null;
+    let pgx = 1e9, pgz = 1e9;
+    if (out.books && this.cur && this.cur.indoor.cur === out.i) [pgx, pgz] = this.cur.indoor.grid(this.game.player.pos.x, this.game.player.pos.z);
+    out._bookAt = [pgx, pgz];
     for (const [fid, slots] of out.slots) {
+      const bk = out.books && out.books.get(fid);
       slots.forEach((s, si) => {
+        if (bk) {
+          const row = bk.spines[si] || [], per = row.length || 1, span = Math.max(0.2, s.w), F = s.fix;
+          const cs = Math.cos(F.rot * Math.PI / 2), sn = Math.sin(F.rot * Math.PI / 2);
+          q.setFromAxisAngle(up, (s.rot || 0) * Math.PI / 2);
+          if (Math.hypot(F.x - pgx, F.z - pgz) > BOOK_NEAR) {
+            if (k >= cap || !row[0]) return;
+            pos.set(F.x + s.x * cs + s.z * sn, s.y + 0.14, F.z - s.x * sn + s.z * cs);
+            sc.set(span * 0.97, 0.28, Math.min(0.32, s.d * 0.7));
+            mat.compose(pos, q, sc);
+            m.setMatrixAt(k, mat);
+            col.set(bookColor(row[(si * 5) % per] || row[0])).multiplyScalar(0.8);
+            m.setColorAt(k, col);
+            k++;
+            return;
+          }
+          row.forEach((id, e) => {
+            if (!id || k >= cap || gone.has(`${fid}/${si}/${e}`)) return;
+            let hh = 0;
+            for (let c = 0; c < id.length; c++) hh = (hh * 33 + id.charCodeAt(c)) >>> 0;
+            const w = (span / per) * (0.7 + (hh % 3) * 0.08), h = 0.22 + ((hh >> 3) % 9) * 0.012, d = Math.min(0.32, s.d * 0.7);
+            const lx = s.x + ((e + 0.5) / per - 0.5) * span, lz = s.z;
+            pos.set(F.x + lx * cs + lz * sn, s.y + h / 2, F.z - lx * sn + lz * cs);
+            sc.set(w, h, d);
+            mat.compose(pos, q, sc);
+            m.setMatrixAt(k, mat);
+            col.set(bookColor(id)).multiplyScalar(0.82 + ((hh >> 6) % 5) * 0.07);
+            m.setColorAt(k, col);
+            k++;
+          });
+          return;
+        }
         const st = n.shelf[`${fid}/${si}`] || (n.bins && n.bins.find((b) => b.key === `${fid}/${si}`));
         if (!st || !st.g || st.n <= 0) return;
         const G = GOODS[st.g] || ITEMS[st.g] || {};
@@ -192,7 +233,7 @@ export class Ops {
         q.setFromAxisAngle(up, a);
         const along = s.along === 'z';
         const span = Math.max(0.2, s.w);
-        for (let e = 0; e < shown && k < m.count; e++) {
+        for (let e = 0; e < shown && k < cap; e++) {
           const layer = Math.floor(e / per), idx = e % per;
           const off = per > 1 ? ((idx / (per - 1)) - 0.5) * (span - w) : 0;
           const lx = s.x + (along ? 0 : off), lz = s.z + (along ? off : 0);
@@ -212,6 +253,15 @@ export class Ops {
     m.instanceMatrix.needsUpdate = true;
     if (m.instanceColor) m.instanceColor.needsUpdate = true;
     out.itemsDirty = false;
+  }
+  /** 이 건물 이 층에서 자리가 빈 책 (빌린 책 + 손에 든 책) → Set('fid/칸/자리') */
+  booksGone(i) {
+    const out = new Set(), uid = this.cur && this.cur.uid;
+    const L = this.game.state.lib;
+    for (const b of (L && L.borrowed) || []) if (b.uid === uid && b.floor === i) out.add(`${b.fid}/${b.si}/${b.e}`);
+    const c = this.carry;
+    if (c && c.book && c.book.uid === uid && c.book.floor === i) out.add(`${c.book.fid}/${c.book.si}/${c.book.e}`);
+    return out;
   }
   dirty(i) { const out = this.cur && this.cur.indoor.built.get(i ?? this.cur.indoor.cur); if (out) out.itemsDirty = true; }
   dirtyAll() { if (this.cur) for (const out of this.cur.indoor.built.values()) out.itemsDirty = true; }
@@ -336,7 +386,7 @@ export class Ops {
     if (back && c.back) c.back(c);
     return c;
   }
-  _basketVis() { const av = this.game.avatar; if (av && av.setHeld) av.setHeld(this.basket.length ? { kind: 'basket', n: this.basket.length } : this.carry ? { kind: this.carry.kind || 'box', color: (GOODS[this.carry.g] || {}).color } : null); }
+  _basketVis() { const av = this.game.avatar; if (av && av.setHeld) av.setHeld(this.basket.length ? { kind: 'basket', n: this.basket.length } : this.carry ? { kind: this.carry.kind || 'box', color: this.carry.color ?? (GOODS[this.carry.g] || {}).color } : null); }
   _carryVis() { this._basketVis(); this.game.player.carrySlow = this.carry ? 0.78 : 1; }
 
   // ── 과제 (일) ───────────────────────────────────
@@ -446,6 +496,8 @@ export class Ops {
     if (this.agents && this.game.interiors.inPocket) this.agents.update(dt);
     for (const out of cur.indoor.built.values()) {
       if (out.T && out.T.type.tick) out.T.type.tick(this, out.T, out, dt);
+      // 서가가 있는 층: 3 m 넘게 움직이면 가까운 서가의 책등을 다시
+      if (out.books && out.i === cur.indoor.cur && out._bookAt) { const [gx, gz] = cur.indoor.grid(this.game.player.pos.x, this.game.player.pos.z); if (Math.hypot(gx - out._bookAt[0], gz - out._bookAt[1]) > 3) out.itemsDirty = true; }
       if (out.itemsDirty) this._drawItems(out);
     }
     // 교대가 끝날 시각이면 알림
