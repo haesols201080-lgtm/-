@@ -8,6 +8,7 @@ import * as A from './arch.js';
 import { litMaterial, glowMaterial } from './materials.js';
 import { TOWERS } from './megacity.js';
 import { buildDewfold } from './dewfold.js';
+import { buildLander } from './lander.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -306,28 +307,11 @@ export class Structures {
   _crash(p) {
     const [x, z] = p.pos;
     const y = this._ground(x, z);
-    const parts = [];
-    const ry = LANDER_YAW; // 경사판이 마중 나온 이엘 쪽을 본다
-    const P = (geo, o, c, e = 0) => parts.push(part(xf(geo, { x, y, z, ...o }), c, e));
-    // 몸체: 납작한 착륙선 (흰 외피 + 아래 검은 띠 + 창)
-    const body = lathe([[0.0001, 1.2], [2.6, 1.3], [3.1, 2.0], [2.8, 2.9], [1.6, 3.5], [0.0001, 3.6]], 24);
-    P(body, { ry }, (px, py) => (py < y + 1.6 ? 0x4a4a56 : 0xe8e2d6));
-    P(new THREE.TorusGeometry(3.05, 0.1, 6, 32).rotateX(Math.PI / 2).translate(0, 2.0, 0), {}, 0xff9a62, 0.6);
-    P(new THREE.CircleGeometry(0.9, 16).rotateX(-0.9).translate(0, 3.1, 1.7), { ry }, 0x7ff3e6, 1.0);
-    // 다리 셋 + 발판
-    for (let i = 0; i < 3; i++) {
-      const a = ry + (i / 3) * Math.PI * 2 + 0.5;
-      const lx = Math.cos(a), lz = Math.sin(a);
-      P(new THREE.CylinderGeometry(0.12, 0.16, 2.0, 6).rotateZ(-0.45).rotateY(-a).translate(lx * 3.0, 0.9, lz * 3.0), {}, 0xb8b2c4);
-      P(new THREE.CylinderGeometry(0.55, 0.65, 0.12, 10).translate(lx * 3.5, 0.06, lz * 3.5), {}, 0x8e8a9c);
-    }
-    // 내린 경사판 (해치)
-    P(new THREE.BoxGeometry(1.6, 0.1, 3.4).rotateX(-0.32).translate(0, 0.65, 4.1), { ry }, 0xd8d2c8);
-    P(new THREE.BoxGeometry(1.7, 0.04, 0.06).rotateX(-0.32).translate(0, 1.2, 2.5), { ry }, 0xffd27a, 1.4);
-    this._mesh(parts, this.mats.stone);
-    this._col({ type: 'cyl', x, z, r: 3.0, y0: y - 1, y1: y + 3.6, dome: 1.4 });
+    const ry = LANDER_YAW; // 해치와 경사판이 마중 나온 이엘 쪽을 본다
+    this.lander = buildLander(this, p, ry); // 착륙선 「라르크 2」 (lander.js) — 안의 선실까지
+    { const W = this.lander.W, [rx, rz] = W(0, 6.2); this.world.clearZones.push({ x, z, r: 7.2 }, { seg: [x, z, rx, rz], r: 2.2 }); } // 선실·경사판에 풀이 자라지 않게
     // 아웬의 빛 표지: 착륙할 자리를 밝혀 둔 진주빛 기둥과 떠도는 고리
-    const bx = x + Math.sin(ry) * 11 + Math.cos(ry) * 5, bz = z + Math.cos(ry) * 11 - Math.sin(ry) * 5, by = this._ground(bx, bz);
+    const bx = x + Math.sin(ry) * 12 + Math.cos(ry) * 8, bz = z + Math.cos(ry) * 12 - Math.sin(ry) * 8, by = this._ground(bx, bz);
     const bparts = [part(xf(new THREE.CylinderGeometry(0.35, 0.6, 5.5, 8), { x: bx, y: by + 2.75, z: bz }), 0xe8e2f0, 0)];
     bparts.push(part(xf(new THREE.CylinderGeometry(0.9, 1.1, 0.3, 8), { x: bx, y: by + 0.15, z: bz }), 0x8e8a9c, 0));
     this._mesh(bparts, this.mats.stone);
@@ -337,11 +321,7 @@ export class Structures {
     const halo = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.05, 4, 32), glowMaterial({ color: 0xffd27a, intensity: 2.0 }));
     halo.position.copy(orb.position);
     this.group.add(orb, halo);
-    // 착륙선 항법등 (흰빛·청록, 천천히)
-    const nav = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), glowMaterial({ color: 0xbffcff, intensity: 3 }));
-    nav.position.set(x, y + 3.75, z);
-    this.group.add(nav);
-    this.anims.push((t) => { nav.visible = Math.sin(t * 1.6) > -0.2; orb.rotation.y = t * 0.6; halo.rotation.set(Math.PI / 2 + Math.sin(t * 0.7) * 0.4, t * 0.5, 0); orb.position.y = by + 6.3 + Math.sin(t * 1.2) * 0.15; });
+    this.anims.push((t) => { orb.rotation.y = t * 0.6; halo.rotation.set(Math.PI / 2 + Math.sin(t * 0.7) * 0.4, t * 0.5, 0); orb.position.y = by + 6.3 + Math.sin(t * 1.2) * 0.15; });
     this.markers.push({ id: 'crash', x, y, z });
   }
 
@@ -395,6 +375,30 @@ export class Structures {
     this.group.add(fount);
     this.well = { fount, x: cx, y: y0, z: cz, updraft: { x: cx, z: cz, r: 8, y0: y0, y1: y0 + 80, strength: 26, enabled: false } };
     this.world.updrafts.push(this.well.updraft);
+  }
+
+  /** 착륙선 선실의 쓸 것 (교신 단말·별지도·표본함·일지) */
+  landerTarget(p) {
+    const L = this.lander;
+    if (!L) return null;
+    let best = null, bd = 1e9;
+    for (const st of L.stations) {
+      if (Math.abs(p.y - st.y) > 1.6) continue;
+      const d = Math.hypot(p.x - st.at[0], p.z - st.at[1]);
+      if (d < st.r && d < bd) { bd = d; best = st; }
+    }
+    return best ? { kind: 'lander', o: best, label: best.label, short: best.short } : null;
+  }
+
+  /** 안테나: 궤도의 배 쪽을 겨누고, 모아가 말하면 빛난다 (comm 이 부른다) */
+  aimAntenna(dir, pulse, t) {
+    const L = this.lander;
+    if (!L) return;
+    const d = dir || { x: 0.3, y: 0.9, z: 0.2 };
+    const tgt = L.head.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(d.x, d.y, d.z).multiplyScalar(50));
+    L.head.lookAt(tgt);
+    L.beacon.material.uniforms.uIntensity.value = 1.6 + pulse * 5 + Math.max(0, Math.sin(t * 2.4)) * 0.6;
+    L.feed.material.uniforms.uIntensity.value = 1.5 + pulse * 6;
   }
 
   /** 인물이 그 장소로 갈 때 따라갈 길 (마을 둘레 도시를 건물 사이로 가로지르지 않게). 없으면 null */

@@ -473,6 +473,15 @@ export function buildDewfold(S, p) {
     const route = [W(pl.x * 0.9, pl.z * 0.9), W(Math.cos(ang) * 30, Math.sin(ang) * 30), W(dirG[0] * 30 + Math.cos(ga + 1.2) * 6, dirG[1] * 30 + Math.sin(ga + 1.2) * 6), W(dirG[0] * (gR + 25) + Math.cos(ga + Math.PI / 2) * 2, dirG[1] * (gR + 25) + Math.sin(ga + Math.PI / 2) * 2), W(dirG[0] * 30 - Math.cos(ga + 1.2) * 6, dirG[1] * 30 - Math.sin(ga + 1.2) * 6)];
     sites.push({ key: 'dew-work', sp: 'beast', x: route[0][0], z: route[0][1], r: 4, n: 2, mode: 'work', route, seed: 0.9 });
   }
+  // 착륙지 둘레의 들판: 내리자마자 보이는 생물 (톡톡이 무리 둘, 노래새 떼, 풀 뜯는 등짐소, 해 질 녘 해파리)
+  if (PLACE.crash) {
+    const [kx, kz] = PLACE.crash.pos, toV = Math.atan2(cz - kz, cx - kx);
+    const at2 = (a, d) => [kx + Math.cos(toV + a) * d, kz + Math.sin(toV + a) * d];
+    for (const [k, sp, a, d, n, r] of [[0, 'hopper', 0.5, 55, 6, 18], [1, 'hopper', -0.9, 95, 5, 20], [2, 'bird', 0.2, 70, 9, 40], [3, 'beast', -0.4, 210, 4, 55], [4, 'beast', 1.3, 260, 3, 50], [5, 'jelly', 0.9, 120, 5, 40]]) {
+      const [x, z] = at2(a, d);
+      sites.push({ key: 'crash-' + k, sp, x, z, r, n, mode: 'wild', cond: sp === 'jelly' ? 'dusk' : undefined, seed: k * 0.13 });
+    }
+  }
   S.world.perches = (S.world.perches || []).concat(perches);
   // 마을 사람들 (citizens 가 그린다): 광장의 이야기 모둠·악사, 텃밭의 정원지기, 의자의 쉬는 이, 광장을 도는 산책, 짐꾼, 돛 기술자, 전망 잎의 별 관측자
   const spots = S.world.placeSpots = S.world.placeSpots || [];

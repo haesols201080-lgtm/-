@@ -141,7 +141,7 @@ export class Journal {
       ['세렌의 날', `${g.world.clock.day + 1}일째`],
       ['연주한 음', s.stats.tones],
       ['해류 탑승', s.stats.currentRides],
-      ['깨운 탑', `${Object.keys(s.pylons).length} / 5`],
+      ['노래하는 탑', `${Object.keys(s.pylons).length} / 5`],
       ['찾은 장소', Object.keys(s.discovered).length],
       ['별씨', s.inv.starseed],
       ['아는 단어', g.lang.knownCount],

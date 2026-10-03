@@ -152,7 +152,11 @@ export class UI {
 
   moa(text, dur) {
     const el = this.moaEl;
-    el.innerHTML = `<b>모아</b>${text}`;
+    // 모아는 궤도의 라르크 호에서 교신한다: 이름 옆에 경로·신호 세기, 짧은 무전 소리
+    const c = this.game.comm;
+    el.innerHTML = `<b>모아</b>${c ? c.badgeHTML() : ''}<span class="mt">${text}</span>`;
+    el.classList.remove('rx'); void el.offsetWidth; el.classList.add('rx');
+    if (c) c.pulse();
     el.style.opacity = 1;
     clearTimeout(this._moaT);
     this._moaT = setTimeout(() => (el.style.opacity = 0), dur || Math.max(3500, text.length * 85));
@@ -292,7 +296,8 @@ export class UI {
         const b = ensure();
         b.classList.remove('hidden');
         b.querySelector('.who').className = 'who moa';
-        b.querySelector('.who').innerHTML = `모아<small>탐사복 보조 지능</small>`;
+        b.querySelector('.who').innerHTML = `모아<small>라르크 호 · 궤도에서 교신</small>`;
+        if (ui.game.comm) ui.game.comm.pulse();
         b.querySelector('.text').textContent = text;
         b.querySelector('.tr-hint').textContent = '';
         b.querySelector('.choices').innerHTML = '';

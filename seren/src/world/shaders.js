@@ -107,7 +107,7 @@ vec3 applyFog(vec3 col, vec3 wpos) {
   return mix(col, fogColorFor(rd), clamp(f, 0.0, 1.0));
 }
 
-// 공명이 멈춘 지역(침묵 구역): 채도·밝기를 낮춘다
+// 듣는 탑의 둘레(「들음」 구역): 탑이 하늘에 귀 기울이는 동안 땅도 숨을 고르는 듯 — 색은 그대로 두고 서늘한 푸른 기운만 (죽은 땅이 아니다)
 float silenceAt(vec2 xz) {
   float s = 0.0;
   for (int i = 0; i < 10; i++) {
@@ -120,7 +120,8 @@ float silenceAt(vec2 xz) {
 }
 vec3 applySilence(vec3 col, float s) {
   float l = dot(col, vec3(0.299, 0.587, 0.114));
-  return mix(col, vec3(l) * vec3(0.82, 0.84, 0.9), s * 0.85);
+  vec3 hush = mix(col, vec3(l), 0.22) * vec3(0.9, 0.95, 1.08);
+  return mix(col, hush, s * 0.8);
 }
 
 vec3 shadeLit(vec3 albedo, vec3 N, float ao) {

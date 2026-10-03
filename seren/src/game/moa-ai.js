@@ -1,4 +1,5 @@
-// 모아: 부르면 오는 탐사복 보조 지능 (T 또는 화면 위 「모아」 단추).
+// 모아: 궤도를 도는 탐사선 「라르크」 호의 함선 지능. 착륙선 안테나·탐사복 무전으로 교신한다 (T 또는 화면 위 「모아」 단추).
+//  · 같은 자리에 있지 않다 — 탐사복 카메라·센서로 들어오는 것만 보고, 배를 지키며 위에서 돕는다 (game/comm.js)
 //  · claude.ai 아티팩트로 열면 Claude 가 모아가 되어 대답한다 — 보는 사람의 Claude 계정으로(처음 한 번 허락),
 //    지금의 게임 상태(목표·자리·가진 것·아는 음과 말·둘레의 시설)를 함께 보내고, 「길 표시」 도구로 나침반에 표식을 단다
 //  · 그냥 파일로 열었거나 허락하지 않았으면, 게임 상태를 읽어 직접 대답하는 모아 (다음 할 일·가까운 시설·돈·음·말·집…)
@@ -7,6 +8,7 @@ import { ITEMS, ZONE_NAMES } from '../data/venues.js';
 import { WORD } from '../data/lexicon.js';
 import { PLACES } from '../data/places.js';
 import { TIPS } from '../data/tips.js';
+import { saveSettings } from './state.js';
 
 const TONE_NAMES = ['솟음', '열림', '흐름', '빛', '고요'];
 const TONE_USE = ['공중에서 한 번 더 솟아오름', '메아리·잠긴 것을 엶', '활공·썰매 중 앞으로 밀어 줌', '빛 구슬·밤길 밝힘', '하늘고래를 부르고 마음을 고름'];
@@ -54,7 +56,8 @@ export class MoaAI {
     const ui = this.game.ui;
     const el = document.createElement('div');
     el.className = 'moa-panel glass hidden';
-    el.innerHTML = `<div class="mp-head"><span class="mp-orb"></span><div class="mp-title"><b>모아</b><small>탐사복 보조 지능</small></div><span class="mp-badge"></span><button class="mp-x" aria-label="닫기">×</button></div>
+    el.innerHTML = `<div class="mp-head"><span class="mp-orb"></span><div class="mp-title"><b>모아</b><small>라르크 호 · 궤도에서 교신</small></div><span class="mp-badge" title="눌러서 Claude 쓰기 켜기·끄기"></span><button class="mp-x" aria-label="닫기">×</button></div>
+      <div class="mp-sig"></div>
       <div class="mp-log"></div>
       <div class="mp-chips"></div>
       <form class="mp-in"><input type="text" maxlength="300" placeholder="모아에게 물어보기… (Enter)" autocomplete="off"><button class="btn primary" type="submit">보내기</button></form>`;
@@ -63,6 +66,7 @@ export class MoaAI {
     this.log = el.querySelector('.mp-log');
     this.input = el.querySelector('input');
     el.querySelector('.mp-x').addEventListener('click', () => this.close());
+    el.querySelector('.mp-badge').addEventListener('click', () => this.toggleClaude());
     el.querySelector('form').addEventListener('submit', (e) => { e.preventDefault(); this.send(this.input.value); });
     this.input.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); this.close(); } e.stopPropagation(); });
     el.addEventListener('pointerdown', (e) => e.stopPropagation());
@@ -89,9 +93,33 @@ export class MoaAI {
     this._badge();
   }
 
+  /** Claude 로 대답할 수 있나: 아티팩트에서 열렸고, 설정에서 켜 두었고, 사용 한도에 걸려 쉬는 중이 아니면 */
+  get useClaude() { return !!this.sample && this.game.settings.moaClaude !== false && Date.now() > (this.limitUntil || 0); }
+
   _badge() {
     const b = this.el && this.el.querySelector('.mp-badge');
-    if (b) { b.textContent = this.sample ? 'Claude 연결됨' : '기본 모드'; b.classList.toggle('on', !!this.sample); }
+    if (!b) return;
+    const lim = this.sample && Date.now() <= (this.limitUntil || 0);
+    b.textContent = !this.sample ? '기본 모드' : this.game.settings.moaClaude === false ? 'Claude 끔 · 기본 모드' : lim ? '한도 · 잠시 기본 모드' : 'Claude 연결됨';
+    b.classList.toggle('on', this.useClaude);
+  }
+
+  /** Claude 쓰기 켜기·끄기 (설정에 저장) */
+  toggleClaude() {
+    if (!this.sample) { this._bubble('moa', '지금 화면에서는 Claude 를 쓸 수 없어요. claude.ai 아티팩트로 열면 켤 수 있어요. 그동안은 제가 아는 것으로 바로 대답할게요.'); return; }
+    const s = this.game.settings;
+    s.moaClaude = s.moaClaude === false;
+    saveSettings(s);
+    this._badge();
+    this._bubble('moa', s.moaClaude ? 'Claude 로 생각해서 대답할게요. (보는 분의 Claude 사용량을 조금 써요)' : '이제 Claude 없이, 게임 안에서 아는 것으로 바로 대답할게요.');
+  }
+
+  _sig() {
+    const box = this.el && this.el.querySelector('.mp-sig');
+    const c = this.game.comm;
+    if (!box || !c) return;
+    const st = c.status();
+    box.innerHTML = `<span class="bars">${[1, 2, 3, 4].map((i) => `<i class="${i <= st.bars ? 'on' : ''}" style="height:${3 + i * 2}px"></i>`).join('')}</span>${st.route}${st.up ? ' · 지금 머리 위를 지나는 중' : ''}`;
   }
 
   get isOpen() { return this.el && !this.el.classList.contains('hidden'); }
@@ -101,6 +129,10 @@ export class MoaAI {
     if (this.isOpen || !(g.mode === 'play')) return;
     g.setMode('moa');
     this.el.classList.remove('hidden');
+    this._sig();
+    clearInterval(this._sigT);
+    this._sigT = setInterval(() => this._sig(), 2000);
+    this._badge();
     if (!this.log.childElementCount) {
       for (const n of this.notes.slice(-3)) this._bubble('moa', n, 'note');
       const o = g.quests.objectiveText();
@@ -112,6 +144,7 @@ export class MoaAI {
   close() {
     if (!this.isOpen) return;
     if (this.ctl) this.ctl.abort();
+    clearInterval(this._sigT);
     this.el.classList.add('hidden');
     this.input.blur();
     if (this.game.mode === 'moa') this.game.setMode('play');
@@ -139,7 +172,8 @@ export class MoaAI {
     if (!text || this.busy) return;
     this.input.value = '';
     this._bubble('me', text);
-    if (!this.sample) { this._localReply(text); return; }
+    if (this.game.comm) this.game.comm.pulse();
+    if (!this.useClaude) { this._localReply(text); return; }
     this.busy = true;
     const out = this._bubble('moa', '생각하는 중…', 'wait');
     this.ctl = new AbortController();
@@ -165,7 +199,11 @@ export class MoaAI {
       } else if (code === 'tools_unavailable') {
         this.toolsOk = false; out.textContent = '잠깐 신호가 엉켰어요. 한 번 더 물어봐 주세요.';
       } else if (code === 'rate_limited') {
-        out.textContent = (e.text ? e.text + '\n' : '') + '오늘은 생각을 너무 많이 했나 봐요… 조금 뒤에 다시 물어봐 주세요. (그동안은 아는 것만 바로 대답할게요)';
+        // Claude 사용 한도: 한동안(15분) 기본 모드로 바로 대답하고, 지난 뒤 다시 Claude 로
+        this.limitUntil = Date.now() + 15 * 60 * 1000;
+        this._badge();
+        out.textContent = (e.text ? e.text + '\n' : '') + '(Claude 사용 한도에 닿았어요 — 한동안은 제가 아는 것으로 바로 대답할게요.)';
+        this._localReply(text);
       } else {
         out.textContent = (e && e.text) || '신호가 잠깐 끊겼어요. 다시 물어봐 주세요.';
       }
@@ -288,7 +326,7 @@ export class MoaAI {
       return g.lang.isUnderstood(line) ? `「${line.ko}」(알아들음)` : `(아직 다 못 알아들음 · 아는 낱말: ${line.words.filter((w) => g.lang.known(w)).map((w) => (WORD[w] ? WORD[w].ko : w)).join(', ') || '없음'})`;
     }).filter(Boolean);
     if (heard.length) L.push(`최근 들은 아웬의 말: ${heard.join(' / ')}`);
-    L.push(`깨운 공명탑: ${Object.keys(s.pylons).length} · 우리 집: ${s.home != null ? '있음' : '아직 없음'}`);
+    L.push(`노래하게 한 공명탑: ${Object.keys(s.pylons).length} · 우리 집: ${s.home != null ? '있음' : '아직 없음'}`);
     // 둘레의 시설 (가까운 것 몇)
     if (g.city) {
       const seen = new Map();
@@ -310,7 +348,8 @@ export class MoaAI {
     const g = this.game, s = g.state, P = g.player.pos;
     const q = text.replace(/\s/g, '');
     const say = (t) => t;
-    if (/안녕|하이|헬로|반가/.test(q)) return say('안녕하세요, 조종사님. 모아는 늘 여기 있어요. 길을 묻거나, 지금 할 일, 들은 말의 뜻, 별씨 버는 법… 무엇이든 물어보세요.');
+    if (/안녕|하이|헬로|반가/.test(q)) return say('안녕하세요, 조종사님. 라르크 호에서 잘 들려요. 길을 묻거나, 지금 할 일, 들은 말의 뜻, 별씨 버는 법… 무엇이든 물어보세요.');
+    if (/어디있|어딨|너어디|모아어디|옆에|같이있|내려와|보고싶/.test(q)) { const st = this.game.comm ? this.game.comm.status() : null; return `저는 궤도를 도는 라르크 호에 있어요. ${st && st.up ? '지금 마침 머리 위를 지나는 중이에요 — 밤이면 깜박이는 점으로 보여요.' : '지금은 지평선 너머라 착륙선 안테나가 이어 주고 있어요.'} 조종사님 탐사복 카메라로 같이 보고 있으니 걱정 마세요.`; }
     if (/뭐해|뭘해|뭘하|뭐하|할일|할게|해야|다음|목표|어떻게하|어떻게해|막혔|모르겠|이야기진행/.test(q)) {
       const o = g.quests.objectiveText();
       if (!o) return '지금은 정해진 일이 없어요. 도시를 걸으며 건물마다 들어가 보거나, 주민 부탁함·일거리 게시판을 둘러보세요.';
@@ -360,7 +399,8 @@ export class MoaAI {
 }
 
 /** Claude 에게 주는 모아의 자리 (대화마다 맨 앞에) */
-const RULES = `너는 「모아」다. 탐사선 「라르크」 조종사의 탐사복에 깃든 보조 지능이고, 조종사와 함께 신호를 따라 312일을 날아와 가스행성 「우르」를 도는 위성 「세렌」에 착륙했다.
+const RULES = `너는 「모아」다. 탐사선 「라르크」 호의 함선 지능이다. 조종사와 함께 신호를 따라 312일을 날아와 가스행성 「우르」를 도는 위성 「세렌」의 궤도에 들어왔고, 조종사는 착륙선을 타고 혼자 내려갔다.
+너는 지금 궤도를 도는 라르크 호에 남아 배를 지키며, 착륙선 안테나와 탐사복 무전으로 교신한다. 조종사의 탐사복 카메라·센서로 들어오는 것만 볼 수 있다. 같은 장소에 있는 것처럼 말하지 않는다("옆에서", "같이 걸어요" 같은 말 금지) — "여기서 보니", "카메라로 보니", "위에서"처럼 말한다. 조종사 자신인 척하지도 않는다.
 세렌의 문명 「아웬」은 소리의 공명으로 중력을 다루며, 노래로 말한다. 조종사는 아웬의 말을 조금씩 배우고, 수도 하모네아에서 일하고 어울리며 이 사회의 한 사람이 되어 가고 있다.
 
 말투와 규칙:

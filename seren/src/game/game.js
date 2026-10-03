@@ -24,6 +24,7 @@ import { Streams } from '../world/streams.js';
 import { Currents } from '../world/currents.js';
 import { Creatures } from '../world/creatures.js';
 import { Fauna } from '../world/fauna.js';
+import { Comm } from './comm.js';
 import { Clouds } from '../world/clouds.js';
 import { Particles, Trail } from '../world/particles.js';
 import { REGIONS } from '../world/regions.js';
@@ -33,7 +34,7 @@ import { Avatar } from '../player/avatar.js';
 import { CameraRig } from '../player/camera-rig.js';
 import { CURRENTS } from '../data/currents.js';
 import { LANDING_START } from '../data/places.js';
-import { LINES, MOA, KEEPERS, PYLON_TONES, CODEX } from '../data/story.js';
+import { LINES, MOA, KEEPERS, PYLON_TONES, CODEX, QUESTS } from '../data/story.js';
 import { UR_DIR } from '../world/sky-clock.js';
 import { defaultState, loadState, saveState, hasSave, loadSettings, deleteSave } from './state.js';
 import { Language } from './language.js';
@@ -116,6 +117,7 @@ export class Game {
     this.interiors = new Interiors(this);
     this.tips = new Tips(this);
     this.moaAI = new MoaAI(this);
+    this.comm = new Comm(this); // 모아 = 궤도의 라르크 호 (착륙선 안테나로 교신)
     this.outdoors = new Outdoors(this);
     this.citizens = new Citizens(this);
 
@@ -210,9 +212,9 @@ export class Game {
         this.ui.refreshButtons();
         this.quests.start('mq0', true);
         this.ui.refreshObjective();
-        this._moaLater('…착륙 완료. 조종사님, 들리세요? 모아예요. 탐사복 보조 지능.', 0.3);
-        this._moaLater('저 빛 표지가 우리를 여기로 이끌었어요. 보세요 — 하늘을 가로지르는 고리, 승강줄, 2킬로미터짜리 탑들. 고등 문명이에요.', 5.5);
-        this._moaLater('신호가 시작된 곳이 바로 이 별이에요. 그리고… 누군가 우리를 마중 나오고 있어요.', 12.5);
+        this._moaLater('…착륙 확인. 조종사님, 들리세요? 여기는 궤도의 라르크 호, 모아예요. 착륙선 안테나로 이어졌어요.', 0.3);
+        this._moaLater('탐사복 카메라 화면이 잘 들어와요. 저 빛 표지가 우리를 여기로 이끌었어요 — 하늘의 고리, 승강줄, 2킬로미터짜리 탑들. 고등 문명이에요.', 6.0);
+        this._moaLater('저는 배를 지키며 위에서 듣고 볼게요. 땅 위는 조종사님 혼자예요. …누군가 마중 나오고 있어요.', 13.0);
       });
     };
     this.ui.setHud(false);
@@ -221,9 +223,11 @@ export class Game {
     music.setMood('night');
     this.ui.caption([
       '신호를 따라 312일.',
+      '배에는 둘이 있었다.<br>조종사, 그리고 배의 지능 「모아」.',
       '가스행성 「우르」를 도는 위성에서,<br>우리는 노래를 들었다.',
       '궤도에서 내려다본 그 별에는<br>고리와 탑과, 밤새 빛나는 도시가 있었다.',
       '누군가 들판에 빛을 밝혀 두었다.<br>— 내려와도 좋다고.',
+      '모아는 궤도의 배에 남고,<br>조종사 혼자 착륙선을 타고 내려갔다.',
     ], begin);
   }
 
@@ -242,7 +246,14 @@ export class Game {
     this.rig.override = null;
     this.mode = 'play';
     this.ui.setHud(true);
-    this.ui.toast(`다시 울리자 · 세렌의 ${this.world.clock.day + 1}일째`, { kind: 'quest' });
+    this.ui.toast(`돌아왔어요 · 세렌의 ${this.world.clock.day + 1}일째`, { kind: 'quest' });
+    // 옛 이야기로 저장한 판: 새 이야기의 알맞은 장으로 옮겼다고 알린다
+    if (s.flags.storyMigrated) {
+      const q = QUESTS[s.flags.storyMigrated];
+      setTimeout(() => this.ui.toast('이야기가 새로 쓰였어요', { kind: 'quest', sub: `지금까지의 여정에 맞춰 「${q ? q.title : ''}」부터 이어 가요` }), 2600);
+      delete s.flags.storyMigrated;
+      this.save();
+    }
   }
 
   /** 불러온 상태를 세계에 반영 */
@@ -352,6 +363,8 @@ export class Game {
       }
       this._stats(prev);
       this.avatar.update(dt, this.player);
+      this.comm.update(dt);
+      this.structures.aimAntenna(this.comm.shipDir(), this.comm.pulseK, this.time);
       playerUniform.value.copy(this.player.pos);
       this.rig.update(dt, free ? input : NO_INPUT, this.player);
       if (!this.rig.override) this.interiors.clampCamera(this.engine.camera, this.rig.smoothTarget);
@@ -462,6 +475,8 @@ export class Game {
     if (cit) return cit;
     const fa = this.fauna && this.fauna.target(p);
     if (fa) return fa;
+    const ld = this.structures.landerTarget && this.structures.landerTarget(p);
+    if (ld) return ld;
     if (inside) return inside;
     const el = this.anchor.stopNear(p);
     if (el) return { kind: 'elevator', o: el, label: el.up ? (this.elevatorOpen() ? '승강차 · 하늘닻으로 오르기 (30 km)' : '승강차 (아직 멈춰 있다)') : '승강차 · 척추 전망대로 내려가기', short: '승강차' };
@@ -476,6 +491,7 @@ export class Game {
     if (t.kind === 'npc') return this.talkTo(t.o);
     if (t.kind === 'citizen') return this.citizens.open(t.o);
     if (t.kind === 'fauna') return this.fauna.interact(t.o);
+    if (t.kind === 'lander') return this.landerUse(t.o.kind);
     if (t.kind === 'cit-act') return this.citizens.activityInteract(t);
     if (t.kind === 'facility') { this.focusOn(t.o.npc); return this.services.open(t.o); }
     if (t.kind === 'unfly') return this.services.endFly();
@@ -494,6 +510,40 @@ export class Game {
       return;
     }
     this.discovery.interact(t);
+  }
+
+  /** 착륙선 선실: 교신 단말·별지도·표본함·일지 */
+  landerUse(kind) {
+    const s = this.state, ui = this.ui;
+    if (kind === 'term') { this.moaAI.open(); this.moaAI.note('(착륙선 교신 단말) 여기선 신호가 제일 깨끗해요. 라르크 호는 지금도 궤도를 돌고 있어요.'); return; }
+    if (kind === 'map') {
+      ui.serviceCard('라르크 호 · 별지도', '우리가 지나온 길과, 아직 가 보지 않은 별들', '탁자 위 빛 지도. 고향 쪽 항로와 우르 둘레, 그리고 모아가 표시해 둔 별 몇 개.', [{ label: '닫기', primary: true }],
+        `<div class="svc-list">
+          <div class="svc-row"><b>◉ 세렌</b> — 우르를 도는 위성. 지금 여기. 신호가 시작된 곳.</div>
+          <div class="svc-row"><b>◌ 우르</b> — 세렌이 도는 가스행성. 고리 너머로 보인다.</div>
+          <div class="svc-row"><b>? 잿빛 고리별</b> — 항로 바깥쪽. 고리가 둘인 행성. 모아: 「신호는 없지만, 반사광이 이상해요.」</div>
+          <div class="svc-row"><b>? 쌍둥이 얼음별</b> — 서로를 도는 두 얼음 행성. 아직 아무도 가 보지 않았다.</div>
+          <div class="svc-row"><b>? 세렌이 노래를 보낸 쪽</b> — 아웬의 옛 노래가 향한 별자리. 언젠가 대답이 그쪽에서 올지도.</div>
+        </div><p class="muted">모아: 「라르크 호의 연료와 기록 장치는 아직 넉넉해요. 세렌에서 할 일을 다 하면… 그다음은 그때 생각해요.」</p>`);
+      if (!s.flags.starmapSeen) { s.flags.starmapSeen = true; this.save(); }
+      return;
+    }
+    if (kind === 'samples') {
+      const have = [['세렌의 흙', true], ['빛갈대 씨앗', !!(s.codex && s.codex.reed)], ['노래수정 조각', (s.inv && s.inv.shard) > 0]];
+      ui.serviceCard('표본함', '여섯 칸 — 세렌 칸과, 아직 빈 다른 별의 칸', '탐사선이 처음부터 싣고 온 표본함. 칸마다 다른 별의 이름표 자리가 비어 있다.', [{ label: '닫기', primary: true }],
+        `<div class="svc-list">${have.map(([n, ok]) => `<div class="svc-row">${ok ? '●' : '○'} 세렌 · ${n}${ok ? '' : ' — 아직'}</div>`).join('')}
+          <div class="svc-row">○ (이름표 없음) — 다른 별</div><div class="svc-row">○ (이름표 없음) — 다른 별</div><div class="svc-row">○ (이름표 없음) — 다른 별</div></div>
+        <p class="muted">모아: 「빈 칸이 셋이나 남았네요. 처음 설계할 때부터 한 별로 끝날 여행이 아니었던 거죠.」</p>`);
+      return;
+    }
+    if (kind === 'log') {
+      const day = this.world.clock.day + 1;
+      ui.serviceCard('탐사 일지', `라르크 호 · 착륙 ${day}일째`, '착륙선 화면에 모아가 남긴 기록.', [{ label: '닫기', primary: true }],
+        `<div class="svc-list"><div class="svc-row">· 312일의 항해 끝에 세렌 궤도 진입. 들판의 빛 표지 확인.</div>
+        <div class="svc-row">· 조종사 단독 착륙. 모아는 라르크 호에 남아 착륙선 안테나로 교신.</div>
+        <div class="svc-row">· 배운 아웬 말 ${Object.keys(s.vocab || {}).length}개 · 얻은 음 ${s.tones.length}개 · 노래하는 탑 ${Object.keys(s.pylons).length}</div>
+        ${s.home != null ? '<div class="svc-row">· 하모네아에 집이 생김. 「손님」이 아니라 「이웃」.</div>' : ''}</div>`);
+    }
   }
 
   talkTo(n) {
@@ -722,7 +772,7 @@ export class Game {
     this.setMode('cinematic');
     this.director.pylon(P, () => {
       this.setMode('play');
-      this.ui.regionTitle(P.place.name, '탑이 다시 노래한다. 색이 돌아온다.', true);
+      this.ui.regionTitle(P.place.name, '듣던 탑이 노래로 대답한다. 땅이 함께 울린다.', true);
       for (const c of this.currents.list) if (c.def.unlock === id) { c.setEnabled(true); this.ui.toast(`해류가 다시 흐른다 · ${c.def.name}`, { kind: 'done' }); }
       if (!P.great && count <= PYLON_TONES.length) this.giveTone(PYLON_TONES[count - 1]);
       const keeper = KEEPERS[id];

@@ -29,14 +29,14 @@ export const LINES = {
   iel_3: { words: ['i', 'give', 'you', 'rise'], ko: '너에게 「솟음」을 줄게.' },
   iel_4: { words: ['come', '.', 'home', 'we'], ko: '오라. 우리 집으로.' },
   iel_5: { words: ['here', 'home', '.', 'see', 'memory', 'land'], ko: '여기가 우리 집이야. 땅의 기억을 읽어 봐.' },
-  iel_6: { words: ['song', 'sleep', '.', 'you', 'wake', '?'], ko: '우물의 노래가 잠들어 있어. 네가 깨워 줄래?' },
+  iel_6: { words: ['song', 'wait', '.', 'you', 'sing', '?'], ko: '우물이 네 노래를 기다려. 들려줄래?' },
   iel_7: { words: ['joy', '!', 'thanks', ',', 'small', 'star'], ko: '기뻐! 고마워, 작은 별.' },
   iel_8: { words: ['go', '@하모네아', '.', '@하우', 'wait', 'you'], ko: '하모네아로 가. 하우가 너를 기다려.' },
   iel_9: { words: ['flow', 'path', 'here'], ko: '흐름의 길이 여기 있어.' },
   iel_10: { words: ['you', 'always', 'home', 'here'], ko: '여기는 언제나 너의 집이야.' },
   // 온
   on_1: { words: ['you', 'path', '?', 'crystal', 'find'], ko: '네 탈것이니? 수정을 찾아 와.' },
-  on_2: { words: ['give', '.', 'i', 'wake', 'flow'], ko: '줘 봐. 내가 흐름을 깨울게.' },
+  on_2: { words: ['give', '.', 'i', 'make', 'flow'], ko: '줘 봐. 내가 흐름을 빚어 넣을게.' },
   on_3: { words: ['go', 'far', '!', 'wind', 'you'], ko: '멀리 가! 너는 바람이야.' },
   on_4: { words: ['star', 'seed', 'give', '?'], ko: '별씨를 가져왔니?' },
   // 하우
@@ -53,7 +53,7 @@ export const LINES = {
   hau_15: { words: ['you', 'name', 'song', 'make', '.', 'you', 'we'], ko: '네 이름 노래를 빚어라. 그러면 너는 우리다.' },
   hau_16: { words: ['home', 'give', 'you', '.', 'here', 'you', 'home'], ko: '집을 주마. 여기가 네 집이다.' },
   hau_9: { words: ['we', 'sing', 'you', 'name', 'always'], ko: '우리는 언제나 네 이름을 노래하리라.' },
-  hau_10: { words: ['all', 'tower', 'sing', '!', 'land', 'wake'], ko: '모든 탑이 노래한다! 땅이 깨어났다.' },
+  hau_10: { words: ['all', 'tower', 'sing', '!', 'land', 'sing'], ko: '모든 탑이 노래한다! 땅도 함께 노래한다.' },
   // 미르
   mir_1: { words: ['you', 'star', '?', 'star', 'far', '?'], ko: '너 별이야? 별은 멀어?' },
   mir_2: { words: ['i', 'dream', 'sky', 'ring', 'always'], ko: '나는 언제나 고리 너머 하늘을 꿈꿔.' },
@@ -61,11 +61,11 @@ export const LINES = {
   // 지역 지기
   keeper_1: { words: ['tower', 'listen', 'long', '.', 'we', 'wait'], ko: '탑이 오래 귀를 기울이고 있어. 우리는 기다려.' },
   keeper_2: { words: ['you', 'song', '?', 'tower', 'listen'], ko: '네 노래라면? 탑이 들을지도 몰라.' },
-  keeper_3: { words: ['thanks', '!', 'land', 'wake', 'again'], ko: '고마워! 땅이 다시 깨어났어.' },
+  keeper_3: { words: ['thanks', '!', 'tower', 'sing', 'again'], ko: '고마워! 탑이 다시 노래해.' },
   keeper_4: { words: ['we', 'sing', 'together', 'night'], ko: '밤에 우리 함께 노래하자.' },
   soel_1: { words: ['crystal', 'listen', 'all', 'song'], ko: '수정은 모든 노래를 들어.' },
-  ruon_1: { words: ['forest', 'dream', 'light', 'gone'], ko: '숲은 사라진 빛을 꿈꿔.' },
-  tar_1: { words: ['island', 'fall', '.', 'island', 'wait'], ko: '섬들이 내려앉았어. 섬들이 기다려.' },
+  ruon_1: { words: ['forest', 'dream', 'light', 'always'], ko: '숲은 늘 빛을 꿈꿔.' },
+  tar_1: { words: ['island', 'wait', '.', 'tower', 'sing', ',', 'island', 'rise'], ko: '섬들이 내려앉아 기다려. 탑이 노래하면 섬이 솟아.' },
   tar_2: { words: ['island', 'rise', '!', 'joy'], ko: '섬이 솟아! 기뻐!' },
   vei_1: { words: ['i', 'listen', 'star', 'long', 'time'], ko: '나는 오랜 시간 별을 들었어.' },
   vei_2: { words: ['star', 'answer', '.', 'you', 'answer'], ko: '별이 대답했어. 네가 그 대답이야.' },
@@ -81,7 +81,7 @@ export const LINES = {
   sol_4: { words: ['silence', 'come', '.', 'ring', 'listen', '.', 'we', 'wait'], ko: '침묵이 왔고, 고리는 귀가 되었다. 우리는 기다렸다.' },
   sol_5: { words: ['you', 'fall', '.', 'you', 'flow', '.', 'go', 'far'], ko: '뛰어내리고, 흘러라. 멀리 가거라.' },
   sol_6: { words: ['all', 'tower', 'sing', '!', 'world', 'chorus'], ko: '모든 탑이 노래한다! 온 세계의 합창이다.' },
-  sol_7: { words: ['ring', 'wake', '.', 'ship', 'leave', '.', 'we', 'answer'], ko: '고리가 깨어났다. 배들이 떠난다. 이제 우리가 대답한다.' },
+  sol_7: { words: ['ring', 'sing', '.', 'ship', 'leave', '.', 'we', 'answer'], ko: '고리가 노래한다. 배들이 떠난다. 이제 우리가 대답한다.' },
   sol_8: { words: ['you', 'name', 'ring', 'sing', 'always'], ko: '고리는 언제나 네 이름을 노래할 것이다.' },
   kael_1: { words: ['core', 'heart', 'world', '.', 'listen'], ko: '핵은 세계의 마음이야. 들어 봐.' },
   kael_2: { words: ['we', 'make', 'spine', 'core', 'song'], ko: '우리는 핵의 노래로 척추를 빚었어.' },
@@ -144,11 +144,11 @@ export const CONVOS = {
   ],
   'iel-well': [
     { s: 'iel', line: 'iel_6' },
-    { s: 'moa', t: '가운데 우물의 수정이 꺼져 있어요. 마을 사람들이 손님이 직접 깨우도록 남겨 둔 것 같아요 — 환영 의식인가 봐요. 「솟음」을 들려주세요.' },
+    { s: 'moa', t: '가운데 우물의 빛 핵이 잠잠해요. 마을 사람들이 손님의 첫 노래로 켜도록 남겨 둔 거래요 — 환영 의식이에요. 「솟음」을 들려주세요.' },
   ],
   'iel-well-done': [
     { s: 'iel', line: 'iel_7', act: [{ do: 'giveTone', n: 1 }] },
-    { s: 'moa', t: '두 번째 음이에요 — 「열림」. 잠긴 것, 잠든 것을 여는 소리 같아요.' },
+    { s: 'moa', t: '두 번째 음이에요 — 「열림」. 닫힌 것을 열고, 돌에 남은 옛 노래(메아리)를 들려주는 소리 같아요.' },
     { s: 'moa', t: '마을의 장인 「온」이 우리 착륙선을 궁금해한대요. 화물칸에 실어 온 호버 썰매 얘기를 하면 좋아할 거예요.' },
   ],
   'on-sled': [
@@ -378,7 +378,7 @@ export const QUESTS = {
   mq5: {
     title: '온 합창', kind: 'main',
     steps: [
-      { type: 'awaken', count: 5, text: '남은 공명탑 깨우기', marker: 'pylons' },
+      { type: 'awaken', count: 5, text: '남은 탑들에도 노래 들려주기', marker: 'pylons' },
       { type: 'talk', npc: 'hau', convo: 'hau-all', text: '하우에게 돌아가기' },
     ],
     onDone: [{ do: 'festival' }, { do: 'moa', t: '축제예요! 탑이 모두 노래하니 하늘길도 다 열렸어요. 이제 하늘배든 승강판이든 마음껏 타 봐요.' }],
@@ -399,7 +399,7 @@ export const QUESTS = {
   mq7: {
     title: '바다 건너', kind: 'main',
     steps: [
-      { type: 'awaken', great: true, count: 4, text: '먼 땅의 큰 공명탑 깨우기', marker: 'pylons', hint: '하늘닻에서 뛰어내리거나, 해안의 큰 해류를 타요' },
+      { type: 'awaken', great: true, count: 4, text: '먼 땅의 큰 탑에 노래 들려주기', marker: 'pylons', hint: '하늘닻에서 뛰어내리거나, 해안의 큰 해류를 타요' },
     ],
     next: 'mq8',
   },
@@ -421,7 +421,7 @@ export const QUESTS = {
   },
 };
 
-// 공명탑을 깨우는 선율 (얻은 음만 사용) — 순서대로 깨울수록 길어진다
+// 듣는 탑에 들려주는 선율 (얻은 음만 사용) — 차례로 들려줄수록 길어진다
 export const PYLON_ORDER_LENGTH = [3, 4, 5, 6, 7];
 
 // 지역 지기와 공명탑

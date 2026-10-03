@@ -115,6 +115,13 @@ button { font-family: inherit; color: inherit; }
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85), 0 0 2px rgba(0, 0, 0, 0.9); transition: opacity 0.5s;
 }
 .moa b { color: var(--teal); font-weight: 500; margin-right: 8px; letter-spacing: 0.08em; font-size: 13px; }
+.moa .sig { display: inline-flex; align-items: flex-end; gap: 5px; font-size: 10.5px; color: var(--ink-faint); margin-right: 10px; letter-spacing: 0.04em; vertical-align: 1px; }
+.moa .sig .bars { display: inline-flex; align-items: flex-end; gap: 1.5px; }
+.moa .sig .bars i { display: inline-block; width: 3px; background: rgba(255, 255, 255, 0.18); border-radius: 1px; }
+.moa .sig .bars i.on { background: var(--teal); }
+.moa .mt { display: block; margin-top: 2px; }
+.moa.rx .mt { animation: rxIn 0.5s steps(6, end) both; }
+@keyframes rxIn { 0% { opacity: 0.15; filter: blur(1.5px); } 30% { opacity: 0.7; } 45% { opacity: 0.35; } 100% { opacity: 1; filter: none; } }
 .touch .moa { bottom: calc(170px + var(--safe-b)); font-size: 15px; width: min(70vw, 560px); }
 .say {
   position: absolute; left: calc(18px + var(--safe-l)); bottom: calc(120px + var(--safe-b)); max-width: min(60vw, 480px);
@@ -402,3 +409,14 @@ body.busy .touchui *, body.busy .tones * { pointer-events: none !important; }
 .mp-in input { flex: 1; min-width: 0; font: inherit; font-size: 16px; padding: 9px 12px; border-radius: 12px; border: 1px solid rgba(127, 243, 230, 0.3); background: rgba(5, 8, 24, 0.55); color: #e8f4ff; outline: none; }
 .mp-in input:focus { border-color: #7ff3e6; }
 .icobtn.moa-btn { display: inline-flex; align-items: center; justify-content: center; }
+
+/* 카드 안 목록 (착륙선 별지도·표본함·일지 등) */
+.svc-list { display: flex; flex-direction: column; gap: 6px; text-align: left; margin: 10px 0; }
+.svc-row { padding: 8px 12px; border-radius: 8px; background: rgba(255, 255, 255, 0.05); font-size: 14px; line-height: 1.5; color: var(--ink); }
+.svc-row b { color: var(--gold); font-weight: 500; }
+.card p.muted { color: var(--ink-dim); font-size: 13px; line-height: 1.6; text-align: left; }
+.mp-sig { font-size: 11px; color: var(--ink-faint); padding: 0 14px 6px; display: flex; align-items: center; gap: 8px; }
+.mp-sig .bars { display: inline-flex; align-items: flex-end; gap: 1.5px; }
+.mp-sig .bars i { display: inline-block; width: 3px; background: rgba(255, 255, 255, 0.18); border-radius: 1px; }
+.mp-sig .bars i.on { background: var(--teal); }
+.mp-badge { cursor: pointer; }

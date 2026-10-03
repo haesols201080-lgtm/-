@@ -75,7 +75,7 @@ export const CIT_LINES = {
     { words: ['day', 'good', '.', 'wind', 'flow'], ko: '좋은 날이야. 바람이 흘러.' },
     { words: ['you', 'where', 'go', '?'], ko: '어디 가는 길이야?' },
     { words: ['child', 'learn', 'song', 'first'], ko: '아이가 첫 노래를 배웠어.' },
-    { words: ['tower', 'wake', '.', 'joy', 'all'], ko: '탑이 깨어났어. 모두 기뻐해.' },
+    { words: ['tower', 'sing', '.', 'joy', 'all'], ko: '탑이 노래해. 모두 기뻐해.' },
   ],
   sit: [
     { words: ['rest', 'good', '.'], ko: '쉬는 건 좋아.' },

@@ -3,10 +3,38 @@ import { LANDING_START, LANDER_YAW } from '../data/places.js';
 const KEY = 'seren.save.v1';
 const SETTINGS_KEY = 'seren.settings.v1';
 export const SAVE_VERSION = 1;
+// 이야기 판: 2 = 새 이야기(착륙 → 첫 접촉 → 이웃 → 이름 노래 → 듣는 탑들이 노래 → 온 하늘에 대답).
+// 옛 이야기로 저장한 판은 불러올 때 지금까지 한 일(얻은 음·노래하게 한 탑·이름 노래·하늘닻)에 맞는 새 장(章)으로 옮긴다.
+export const STORY_VERSION = 2;
+const CHAIN = ['mq0', 'mq1', 'mq1b', 'mq2', 'mq2b', 'mq3', 'mq4', 'mq5', 'mq6', 'mq7', 'mq8'];
+const GREAT = ['rift-pylon', 'plains-pylon', 'ice-pylon', 'falls-pylon'];
+function remapStory(s) {
+  const P = Object.keys(s.pylons || {}), g = P.filter((id) => GREAT.includes(id)).length, c = P.length - g;
+  const t = s.tones || [], f = s.flags || {};
+  let k;
+  if (g >= 4) k = 'mq8';
+  else if (g > 0 || f.anchorVisit) k = 'mq7';
+  else if (c >= 5 && s.nameSong) k = 'mq6';
+  else if (s.nameSong) k = 'mq5';
+  else if (c >= 3) k = 'mq4';
+  else if (t.includes(2)) k = f.helpedNeighbor ? 'mq3' : 'mq2b';
+  else if (f.skimmer) k = 'mq2';
+  else if (t.includes(1)) k = 'mq1b';
+  else if (t.includes(0)) k = 'mq1';
+  else k = 'mq0';
+  const q = s.quests || {};
+  const side = (q.done || []).filter((id) => !id.startsWith('mq'));
+  const sideActive = (q.active || []).filter((id) => !id.startsWith('mq'));
+  s.quests = { active: [k, ...sideActive], done: [...CHAIN.slice(0, CHAIN.indexOf(k)), ...side], step: { [k]: 0 }, data: { [k]: {} } };
+  for (const id of sideActive) { s.quests.step[id] = (q.step || {})[id] || 0; s.quests.data[id] = (q.data || {})[id] || {}; }
+  f.storyMigrated = k;
+  s.flags = f;
+}
 
 export function defaultState() {
   return {
     version: SAVE_VERSION,
+    storyVer: STORY_VERSION,
     created: Date.now(),
     saved: 0,
     playTime: 0,
@@ -22,7 +50,7 @@ export function defaultState() {
     glyphs: {}, // 글자돌 id → true
     echoes: {}, // 메아리 id → true
     codex: {}, // 도감 id → true
-    pylons: {}, // 깨운 공명탑
+    pylons: {}, // 노래하게 한 공명탑 (듣던 탑이 대답한 것)
     quests: { active: [], done: [], step: {}, data: {} },
     inv: { starseed: 0, shard: 0, flower: 0, fruit: 0, trinket: 0, tea: 0, cookie: 0, meal: 0, lantern: 0, mapshard: 0, book: 0, parcel: 0 },
     venue: { exhibits: {}, archives: {}, museums: {}, buffs: {}, days: {}, job: null, earned: 0, spent: 0, worked: 0 }, // 건물의 일 (v0.7)
@@ -50,6 +78,7 @@ export function defaultSettings() {
     invertY: false,
     hints: true,
     subtitlesSpeed: 1,
+    moaClaude: true, // 아티팩트에서 모아가 Claude 로 대답 (끄면 기본 모드)
   };
 }
 
@@ -96,6 +125,7 @@ export function saveSettings(s) {
 
 function migrate(s) {
   const d = defaultState();
+  if ((s.storyVer || 1) < STORY_VERSION) { remapStory(s); s.storyVer = STORY_VERSION; }
   // 빠진 항목은 기본값으로 채움 (얕은 병합 + 한 단계 객체)
   for (const k of Object.keys(d)) {
     if (s[k] === undefined) s[k] = d[k];

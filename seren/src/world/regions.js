@@ -30,7 +30,7 @@ export const REGIONS = [
   {
     id: 'canyon', name: '부유 협곡', short: '협곡',
     center: [7600, -8200], size: 1.0,
-    desc: '붉은 지층이 계단처럼 깎인 북동쪽 협곡. 공명으로 떠 있던 바위섬들이 침묵 속에 내려앉았다.',
+    desc: '붉은 지층이 계단처럼 깎인 북동쪽 협곡. 공명으로 뜨는 바위섬들이 탑이 듣는 동안 땅 가까이 내려와 쉰다.',
     pal: { grass: 0xb07a4a, grass2: 0xc99a62, soil: 0xb8794f, rock: 0xc0603f, rock2: 0xe0a070, glow: 0xffc86a, glowAmt: 0.3 },
   },
   {

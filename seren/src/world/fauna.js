@@ -408,7 +408,7 @@ const HAB = {
   8: [['beast', 0.32, 3, 6], ['hopper', 0.26, 4, 7], ['bird', 0.3, 6, 9]],
   10: [['beast', 0.18, 3, 5], ['bird', 0.3, 6, 9], ['hopper', 0.15, 3, 5]],
 };
-const CELL = 256, NEAR = 430, FAR = 560;
+const CELL = 190, NEAR = 400, FAR = 540;
 const _w = new Float32Array(16);
 
 export class Fauna {
@@ -444,7 +444,7 @@ export class Fauna {
       const shore = h > 0.3 && h < 5;
       if (cond === 'shore' ? !shore : h < 1.6) break;
       const city = this.game.city;
-      if (sp !== 'bird' && sp !== 'jelly' && city && (city.noFlora(x, z) || city.urban(x, z))) break;
+      if (sp !== 'bird' && sp !== 'jelly' && city && city.noFlora(x, z)) break;
       if (this.world.cleared && this.world.cleared(x, z)) break;
       site = { key, sp, x, z, r: sp === 'beast' ? 60 : sp === 'bird' ? 45 : 24, n: n0 + Math.floor(r() * (n1 - n0 + 1)), mode: 'wild', cond, seed: r(), live: false };
       break;

@@ -182,7 +182,7 @@ export class Quests {
     const glyphs = GLYPH_STONES.filter((s) => g.state.glyphs[s.id]).length;
     const d = g.world.clock.daysToEclipse();
     const ecl = d < 0.05 ? '지금 일식' : `일식까지 ${Math.ceil(d)}일`;
-    return { title: '다시 울리자', text: `메아리 ${echoes}/${ECHOES.length} · 글자돌 ${glyphs}/${GLYPH_STONES.length} · ${ecl}`, kind: 'side' };
+    return { title: '세렌의 기억', text: `메아리 ${echoes}/${ECHOES.length} · 글자돌 ${glyphs}/${GLYPH_STONES.length} · ${ecl}`, kind: 'side' };
   }
 
   _requestTargets() {
