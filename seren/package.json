@@ -1,0 +1,17 @@
+{
+  "name": "seren",
+  "version": "0.1.0",
+  "private": true,
+  "description": "세렌 — 울림이 남는 별. 3D 오픈월드 외계 행성 탐험 게임 (three.js)",
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "watch": "node tools/build.mjs --watch",
+    "shot": "node tools/shot.mjs",
+    "check": "node tools/check.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "three": "^0.186.1"
+  }
+}
