@@ -343,13 +343,18 @@ function decideUses(pid, slots, ctx, rnd) {
  * 아주 작은 층(버섯 집의 줄기, 둥근 지붕 아래 다락)은 현관·다락으로 — 단, 건물에 쓰임을 담을 큰 층이 따로 있을 때만.
  * 건물 전체가 작으면(작은 둥근 서고·가게) 1층이 본래 쓰임을 지킨다: 밖에서 「서고」인 건물이 안에서 남의 현관이 되지 않게.
  */
+// 쓰임마다 층이 이만큼은 되어야 그 쓰임의 핵심 가구(recipes.ESSENTIAL: 서고의 안내대·서가 셋·찾기 단말, 공장의 기계, 창고의 큰 선반,
+// 재배실의 재배 선반 둘, 매장의 계산대·진열대 둘 …)가 놓이고 사람이 지나간다 — 작은 탑의 심(나선 계단 + 작은 승강기, 약 8칸)을 빼고 약 30 m².
+// 가늘어지는 첨탑 끝의 층처럼 이보다 작으면 그 층은 설비층(맨 위면 전망층)으로.
+const FLOOR_MIN = { library: 40, farm: 40, factory: 40, storage: 40, hall: 40, schoolhall: 40, museum: 36, school: 36, mart: 36, shops: 36, dept: 36, food: 36, cafe: 36, canteen: 36, care: 36, civic: 36, transit: 36, plant: 36 };
 function tinyFloors(slots, uses) {
   const N = slots.length;
   const big = Math.max(0, ...slots.map((s) => s.n));
   for (let k = 0; k < N; k++) {
-    if (slots[k].n >= (k === 0 ? 40 : 24) || uses[k] === 'house') continue;
+    if (uses[k] === 'house') continue;
+    if (slots[k].n >= Math.max(k === 0 ? 40 : 24, FLOOR_MIN[uses[k]] || 0)) continue;
     if (k === 0 && big < 60) continue;
-    uses[k] = k === 0 ? 'stem' : 'tech';
+    uses[k] = k === 0 ? 'stem' : k === N - 1 && slots[k].n >= 24 ? 'observation' : 'tech';
   }
 }
 

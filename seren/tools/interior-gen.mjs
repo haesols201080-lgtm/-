@@ -83,12 +83,16 @@ const cmd = process.argv[2];
 if (cmd === 'show') {
   const [, , , kind, use, hw, hd, h] = process.argv;
   const r = fakeRec(kind, use, +hw, +hd, +h);
+  // bridge=k : 일괄 검사의 k 번째 건물처럼 공중다리 하나 (높이·방향)
+  const bk = process.argv.find((a) => a.startsWith('bridge='));
+  if (bk) { const k = +bk.slice(7), th = k * 2.399; r.bridges = [{ bi: 0, y: r.base + r.sy * (0.4 + ((k * 0.37) % 0.35)), ux: Math.cos(th), uz: Math.sin(th) }]; }
   const t0 = performance.now();
   const B = makeBuilding(r, ctxFor());
   const t1 = performance.now();
   console.log(`${kind}/${use} ${hw}x${hd}x${h} → ${B.floors.length}층 (지상 ${B.floors.length - B.ground}) size=${B.size} gfa=${B.gfa} core=${B.core ? B.core.types.join('+') : '없음'} roof=${!!B.roof} atrium=${!!B.atrium} ${(t1 - t0).toFixed(0)}ms`);
   console.log('zones:', B.zones.map((Z) => `${Z.use}[${Z.from}-${Z.to}]${Z.org ? ' ' + Z.org.split(':')[1] : ''}`).join(' | '));
-  const want = process.argv[8] ? process.argv[8].split(',').map(Number) : B.floors.map((F) => F.i);
+  const fa = process.argv.slice(8).find((a) => /^[\d,]+$/.test(a));
+  const want = fa ? fa.split(',').map(Number) : B.floors.map((F) => F.i);
   for (const F of B.floors) {
     if (!want.includes(F.i)) continue;
     const L = layoutFloor(B, F, { door: B.door });
@@ -109,7 +113,7 @@ if (cmd === 'show') {
 if (!cmd || cmd === 'all') {
   const KINDS = Object.entries(SPEC).filter(([, S]) => S.enter && !S.fixed).map(([k]) => k);
   const USES = ['home', 'office', 'market', 'cafe', 'school', 'heal', 'library', 'museum', 'hall', 'factory', 'depot', 'lab', 'terminal', 'garden', 'plant', 'hotel', 'admin', 'farm'];
-  const SIZES = [[9, 9, 9], [14, 12, 22], [20, 16, 60], [28, 22, 140], [40, 16, 16]];
+  const SIZES = [[9, 9, 9], [14, 12, 22], [20, 16, 60], [28, 22, 140], [40, 16, 16], [8, 8, 130]]; // 마지막: 가늘고 높은 첨탑 (심이 층을 거의 다 차지)
   let n = 0, fail = 0, floors = 0, rooms = 0, ms = 0, mz = 0;
   const LK = { stair: '계단', spiral: '나선 계단', lift: '승강기', cargo: '화물 승강기' };
   const stats = { cells: 0, outside: 0, links: 0, order: 0, special: 0, doorD: 0, noTerrace: 0, persist: 0, bridges: 0, bridgeNoLift: 0, walkRooms: 0, walkLost: 0, essRooms: 0, essN: 0, essMiss: {}, byPid: {} };
@@ -208,7 +212,9 @@ if (!cmd || cmd === 'all') {
           if (L.room[e.c] !== L.lifthall + 1) problems.push(`${tag}: ${F.label}층 공중다리 문이 승강기 홀과 떨어짐`);
           { // 홀 안에서 문 칸 → 승강기 앞 칸이 이어지나 (같은 방이라도 끊기지 않게)
             const hid = L.room[e.c], seen = new Set([e.c]), q = [e.c]; let ok = false;
+            // 승강기 앞 = 심의 홀 칸 + 승강기·계단 문 바로 앞 칸 (홀 칸이 없는 작은 심 — 나선 계단 + 작은 승강기 — 도)
             const core = B.core ? new Set(B.core.lobby.map(([i, j]) => j * G.gw + i)) : null;
+            if (core) for (const p of B.core.parts) if (p.kind !== 'shaft' && p.door) core.add((p.door.c[1] + p.door.dir[1]) * G.gw + p.door.c[0] + p.door.dir[0]);
             while (q.length) { const c = q.pop(); if (!core || core.has(c)) { ok = true; break; } for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const i = c % G.gw + di, j = ((c / G.gw) | 0) + dj; const k = j * G.gw + i; if (i >= 0 && j >= 0 && i < G.gw && j < G.gh && !seen.has(k) && L.room[k] === hid) { seen.add(k); q.push(k); } } }
             if (!ok) problems.push(`${tag}: ${F.label}층 공중다리 통로가 승강기 앞까지 끊김`);
           }
@@ -229,9 +235,13 @@ if (!cmd || cmd === 'all') {
             }
           }
           const N = navGrid(B, L, fx);
-          const startRoom = L.lifthall != null ? L.lifthall : (L.rooms.find((R) => R.main && R.n) || L.rooms.find((R) => R.circ && R.n) || {}).id;
+          // 시작: 사람이 이 층에 들어서는 곳 (layout 5a 와 같은 규칙) — 승강기 홀 · 승강기·계단 문 바로 앞 칸 · 정문 (홀이 빈 작은 탑도)
+          const startRoom = L.lifthall != null && L.rooms[L.lifthall].n ? L.lifthall : (L.rooms.find((R) => R.main && R.n) || L.rooms.find((R) => R.circ && R.n) || {}).id;
+          const startC = new Set();
+          if (B.core) for (const p of B.core.parts) if (p.kind !== 'shaft' && p.door && F.reach) { const i = p.door.c[0] + p.door.dir[0], j = p.door.c[1] + p.door.dir[1]; if (i >= 0 && j >= 0 && i < L.gw && j < L.gh) startC.add(j * L.gw + i); }
+          if (L.ents.main) startC.add(L.ents.main.c);
           const seen = new Uint8Array(N.gw * N.gh), q = [];
-          for (let k = 0; k < N.ok.length; k++) { const c = ((k / N.gw) >> 1) * L.gw + ((k % N.gw) >> 1); if (N.ok[k] && L.room[c] === startRoom + 1) { seen[k] = 1; q.push(k); } }
+          for (let k = 0; k < N.ok.length; k++) { const c = ((k / N.gw) >> 1) * L.gw + ((k % N.gw) >> 1); if (N.ok[k] && ((startRoom != null && L.room[c] === startRoom + 1) || startC.has(c))) { seen[k] = 1; q.push(k); } }
           const wall = (a, b, x, y) => { const ci0 = a >> 1, cj0 = b >> 1, ci1 = x >> 1, cj1 = y >> 1; if (ci0 !== ci1) { const e = Math.max(ci0, ci1); if (N.wallV[cj0 * (N.cgw + 1) + e] || N.wallV[cj1 * (N.cgw + 1) + e]) return true; } if (cj0 !== cj1) { const e = Math.max(cj0, cj1); if (N.wallH[e * N.cgw + ci0] || N.wallH[e * N.cgw + ci1]) return true; } return false; };
           for (let h = 0; h < q.length; h++) { const k = q[h], a = k % N.gw, b = (k / N.gw) | 0; for (const [da, db] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const x = a + da, y = b + db; if (x < 0 || y < 0 || x >= N.gw || y >= N.gh) continue; const e = y * N.gw + x; if (seen[e] || !N.ok[e] || wall(a, b, x, y)) continue; seen[e] = 1; q.push(e); } }
           const got = new Set();

@@ -744,7 +744,7 @@ export class Venues {
     const items = [];
     const doc = pickFar(offices);
     if (doc) g.city.fixDoor(doc);
-    if (doc) { const I = g.interiors.info(doc); const d = Math.hypot(doc.x - here.x, doc.z - here.z); items.push({ label: `문서 전하기 → ${I.name}`, sub: `${Math.round(d)} m · ${won(2 + Math.round(d / 300))}`, onClick: () => this._takeJob({ kind: 'deliver', label: `문서 → ${I.name}`, x: doc.door.x, z: doc.door.z, reward: 2 + Math.round(d / 300), word: 'carry' }) }); }
+    if (doc) { const I = { name: g.interiors.title(doc) }; const d = Math.hypot(doc.x - here.x, doc.z - here.z); items.push({ label: `문서 전하기 → ${I.name}`, sub: `${Math.round(d)} m · ${won(2 + Math.round(d / 300))}`, onClick: () => this._takeJob({ kind: 'deliver', label: `문서 → ${I.name}`, x: doc.door.x, z: doc.door.z, reward: 2 + Math.round(d / 300), word: 'carry' }) }); }
     const mk = g.city.marks && g.city.marks.length ? g.city.marks[Math.floor(rnd() * g.city.marks.length)] : null;
     if (mk) { const d = Math.hypot(mk.x - here.x, mk.z - here.z); items.push({ label: `측량 · ${mk.name}의 높이 재기`, sub: `${(d / 1000).toFixed(1)} km · ${won(3 + Math.round(d / 800))}`, onClick: () => this._takeJob({ kind: 'visit', label: `측량 → ${mk.name}`, x: mk.x, z: mk.z, r: 60, reward: 3 + Math.round(d / 800), word: 'far' }) }); }
     const roles = [['tend', '정원지기'], ['sell', '장터지기'], ['music', '악사'], ['carry', '짐꾼']];
@@ -761,7 +761,7 @@ export class Venues {
     if (!cands.length) { g.ui.toast('지금은 맡길 짐이 없어요', { kind: 'muted' }); return; }
     const dst = cands[Math.floor(Math.random() * cands.length)];
     g.city.fixDoor(dst);
-    const I = g.interiors.info(dst), d = Math.hypot(dst.x - here.x, dst.z - here.z);
+    const I = { name: g.interiors.title(dst) }, d = Math.hypot(dst.x - here.x, dst.z - here.z);
     const reward = 2 + Math.round(d / 250);
     g.ui.serviceCard('물류 창고', '배달 창구', `${I.name}로 갈 짐이 있어요. ${Math.round(d)} m.`, [
       { label: `짐 맡기 · ${won(reward)}`, sub: '그 건물 문 앞까지 가면 전해져요', primary: true, onClick: () => this._takeJob({ kind: 'deliver', label: `짐 → ${I.name}`, x: dst.door.x, z: dst.door.z, reward, word: 'carry', parcel: true }) },

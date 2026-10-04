@@ -497,7 +497,7 @@ export class Outdoors {
     g.state.waypoint = { x: best.door.x, z: best.door.z };
     g.updateWaypoint();
     audio.chime('soft');
-    g.ui.toast(`표식 · ${I.info(best).name}`, { kind: 'place', sub: `${Math.round(bd)} m · 나침반의 흰 점을 따라가세요` });
+    g.ui.toast(`표식 · ${I.title(best)}`, { kind: 'place', sub: `${Math.round(bd)} m · 나침반의 흰 점을 따라가세요` });
   }
 
   // 탑: 사무 → 일거리 게시판 / 집 → 주민 부탁함

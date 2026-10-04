@@ -226,6 +226,12 @@ export function layoutFloor(B, F, ctx = {}) {
   if (F.bridges && F.bridges.length) {
     const hall = L.lifthall != null ? rooms[L.lifthall] : newRoom('corridor', { circ: true });
     const hid = hall.id + 1;
+    // 작은 심(층을 거의 다 차지하는)에서는 승강기 홀이 칸을 못 가졌을 수 있다 → 계단·승강기 문 앞 칸을 홀로 (다리에서 온 길이 닿을 곳)
+    if (L.lifthall != null && !hall.n && B.core) for (const p of B.core.parts) {
+      if (p.kind === 'shaft' || !p.door) continue;
+      const [ci, cj] = p.door.c, [fi, fj] = p.door.dir, c = g.ok(ci + fi, cj + fj) ? g.c(ci + fi, cj + fj) : -1;
+      if (c >= 0 && inside[c] && !room[c]) setCell(c, hall);
+    }
     const coreCell = (c) => room[c] && room[c] !== hid;
     // 홀에서 (계단·승강기 칸을 피해) 걸어서 닿는 칸 — 심이 바깥벽까지 막은 뒤쪽 자투리에는 문을 내지 않는다
     const reach = new Uint8Array(g.n);
@@ -403,10 +409,18 @@ export function layoutFloor(B, F, ctx = {}) {
     const sameHome = (R, S) => R.unit == null ? S.unit == null : (S.unit === R.unit || S.id === R.unit || (R.unitRoot && S.unit === R.id) || (S.unitRoot && R.unit === S.id));
     for (let pass = 0; pass < 3; pass++) {
       let changed = 0;
-      // 오가는 공간의 줄기: 승강기 홀(없으면 정문 칸)에서 오가는 공간끼리 벽 없이 이어진 칸들
+      // 오가는 공간의 줄기: 사람이 이 층에 들어서는 곳 — 승강기 홀, 승강기·계단 문 바로 앞 칸(홀이 없는 작은 탑은 승강기가 서가·홀로 곧장 열린다),
+      // 정문 칸 — 에서 오가는 공간끼리 벽 없이 이어진 칸들
       const net = new Uint8Array(g.n), nq = [];
       const isFlow = (c) => room[c] && flowRoom(rooms[room[c] - 1]);
-      for (let c = 0; c < g.n; c++) if ((L.lifthall != null && room[c] === L.lifthall + 1) || (L.lifthall == null && L.ents.main && c === L.ents.main.c && isFlow(c))) { net[c] = 1; nq.push(c); }
+      const root = (c) => { if (c >= 0 && !net[c] && isFlow(c)) { net[c] = 1; nq.push(c); } };
+      if (L.lifthall != null) for (let c = 0; c < g.n; c++) if (room[c] === L.lifthall + 1) root(c);
+      if (B.core) for (const p of B.core.parts) {
+        if (p.kind === 'shaft' || !p.door) continue;
+        const [ci, cj] = p.door.c, [fi, fj] = p.door.dir;
+        if (g.ok(ci + fi, cj + fj)) root(g.c(ci + fi, cj + fj));
+      }
+      if (L.ents.main) root(L.ents.main.c);
       for (let h = 0; h < nq.length; h++) g.nb(nq[h], (e) => { if (!net[e] && isFlow(e)) { net[e] = 1; nq.push(e); } });
       for (const R of rooms) {
         if (!R.n || CORE.includes(R.type) || R.sealed) continue;
@@ -825,8 +839,8 @@ function subdivideUnit(B, F, L, g, rnd, T, U, isEntry) {
     if (t === 'bedroom2') T.setCell(c, sub.bedroom2 || (sub.bedroom2 = T.newRoom('bedroom', { unit: U.id, org: U.org })));
     else if (t) T.setCell(c, mk(t));
   }
-  // 작은 방(3칸 미만)은 거실로
-  for (const R of Object.values(sub)) if (R.n > 0 && R.n < 4) for (const c of cells) if (room[c] === R.id + 1) T.setCell(c, living);
+  // 작은 방(3칸 미만)은 거실로 — 잠방은 잠 고치(2 × 1 m + 앞 0.8 m)가 놓일 2 × 3 m 자리(2×2 덩어리 둘)가 없으면 거실로
+  for (const R of Object.values(sub)) if (R.n > 0 && (R.n < 4 || (R.type === 'bedroom' && (R.n < 6 || fat(g, room, R) < 2)))) for (const c of cells) if (room[c] === R.id + 1) T.setCell(c, living);
   U.subs = Object.values(sub).filter((R) => R.n > 0).map((R) => R.id);
 }
 
@@ -862,8 +876,8 @@ function subdivideGuest(B, F, L, g, rnd, T, U, isEntry) {
     if (mirror) s = 1 - s;
     if (s < 0.5 && dep[c] < 3) T.setCell(c, bath);
   }
-  // 욕실이 너무 작거나, 욕실을 떼면 잠자리를 놓을 자리(8 m²)가 안 남으면 떼지 않는다
-  if (bath.n < 4 || U.n < 8) for (const c of cells) if (room[c] === bath.id + 1) T.setCell(c, U);
+  // 욕실이 너무 작거나, 욕실을 떼면 객실이 잠자리·책상을 놓을 넓이(MIN_ROOM.guestroom)·모양(2×2 덩어리 둘)이 안 되면 떼지 않는다
+  if (bath.n < 4 || U.n < MIN_ROOM.guestroom || fat(g, room, U) < 2) for (const c of cells) if (room[c] === bath.id + 1) T.setCell(c, U);
   U.subs = bath.n ? [bath.id] : [];
 }
 

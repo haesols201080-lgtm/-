@@ -83,90 +83,96 @@ export function planCore(B) {
   const fl = B.floors.filter((F) => !F.mezz);
   const nUp = fl.filter((F) => !F.below).length;
   const openPref = ['mart', 'food', 'factory', 'depot', 'terminal', 'plant', 'museum', 'library', 'hall', 'farm', 'garden'].includes(FUSE[B.floors[B.ground].use]?.op) || ['market', 'factory', 'depot', 'terminal', 'plant', 'farm'].includes(B.pid);
-  // 모든 층의 교집합 (작은 층부터 빼 보며)
-  let serve = fl.slice();
-  for (let attempt = 0; attempt < fl.length; attempt++) {
-    const I = new Uint8Array(N).fill(1);
-    for (const F of serve) for (let c = 0; c < N; c++) if (!F.mask[c]) I[c] = 0;
-    // 합 표(직사각형이 다 들어가는지 O(1))
-    const S = new Int32Array((gw + 1) * (gh + 1));
-    for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) S[(j + 1) * (gw + 1) + i + 1] = I[j * gw + i] + S[j * (gw + 1) + i + 1] + S[(j + 1) * (gw + 1) + i] - S[j * (gw + 1) + i];
-    const full = (i0, j0, w, d) => i0 >= 0 && j0 >= 0 && i0 + w <= gw && j0 + d <= gh && S[(j0 + d) * (gw + 1) + i0 + w] - S[j0 * (gw + 1) + i0 + w] - S[(j0 + d) * (gw + 1) + i0] + S[j0 * (gw + 1) + i0] === w * d;
-    // 덮개 무게중심 (가장 작은 층)
-    let small = serve[0];
-    for (const F of serve) if (F.n < small.n) small = F;
-    let cx = 0, cz = 0, cn = 0;
-    for (let c = 0; c < N; c++) if (small.mask[c]) { cx += c % gw; cz += (c / gw) | 0; cn++; }
-    cx /= cn || 1; cz /= cn || 1;
-    // 정문 칸 (1층 덮개에서 정면 +j 끝 가운데)
-    const G0 = B.floors[B.ground];
-    let doorJ = 0;
-    for (let j = gh - 1; j >= 0; j--) if (G0.mask[j * gw + Math.floor(gw / 2)]) { doorJ = j; break; }
-    const bridgeDirs = [];
-    for (const F of B.floors) for (const b of F.bridges || []) { const [ux, uz] = b.dir; bridgeDirs.push(Math.abs(ux) > Math.abs(uz) ? [Math.sign(ux), 0] : [0, Math.sign(uz)]); }
-    // 심이 층을 둘로 가르지 않는가: 심 부품 칸을 뺀 나머지 칸이 한 덩어리여야 (승강기 홀에서 모든 곳에 닿게)
-    const G0mask = B.floors[B.ground].mask;
-    const splits = (L, cand) => {
-      const { o, i0, j0 } = cand;
-      const blocked = new Uint8Array(N);
-      for (const p of L.parts) for (let i = p.i0; i < p.i0 + p.w; i++) for (let j = p.j0; j < p.j0 + p.d; j++) { const [a, b] = rot(o, L.w, L.d, i, j); blocked[(j0 + b) * gw + i0 + a] = 1; }
-      for (const M of [I, G0mask]) {
-        const seen = new Uint8Array(N);
-        let comps = 0;
-        for (let c0 = 0; c0 < N; c0++) {
-          if (!M[c0] || blocked[c0] || seen[c0]) continue;
-          const q = [c0]; seen[c0] = 1;
-          for (let h = 0; h < q.length; h++) { const c = q[h], i = c % gw, j = (c / gw) | 0; for (const [di, dj] of DIRS) { const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= gw || b >= gh) continue; const e = b * gw + a; if (M[e] && !blocked[e] && !seen[e]) { seen[e] = 1; q.push(e); } } }
-          if (q.length >= 4) comps++;
-          if (comps > 1) return true;
-        }
-      }
-      return false;
-    };
-    for (const list of coreOptions(B, nUp)) {
-      const L = layoutComps(list);
-      let best = null, bs = Infinity;
-      const cands = [];
-      for (let o = 0; o < 4; o++) {
-        const W = o % 2 ? L.d : L.w, Dd = o % 2 ? L.w : L.d;
-        const [fx, fz] = DIRS[o];
-        for (let j0 = 0; j0 + Dd <= gh; j0++) for (let i0 = 0; i0 + W <= gw; i0++) {
-          if (!full(i0, j0, W, Dd)) continue;
-          // 정면 앞 두 칸이 비어야 (홀에서 들어갈 수 있게)
-          const fc = L.mini ? 1 : 2; // 정면 앞 빈 칸 (작은 나선 계단은 한 칸)
-          const fi0 = fx > 0 ? i0 + W : fx < 0 ? i0 - fc : i0, fj0 = fz > 0 ? j0 + Dd : fz < 0 ? j0 - fc : j0;
-          const fw = fx ? fc : W, fd = fz ? fc : Dd;
-          if (!full(fi0, fj0, fw, fd)) continue;
-          const mx = i0 + W / 2, mz = j0 + Dd / 2;
-          let s;
-          if (openPref) s = mz * 2.2 + Math.abs(mx - gw / 2) * 0.8 + (o === 0 ? 0 : 6); // 뒤쪽(−z), 정면은 문 쪽을 보게
-          else {
-            s = Math.hypot(mx - cx - 0.5, mz - cz - 0.5) * 2 + (o === 0 ? 0 : o === 2 ? 1.5 : 0.8);
-            // 둘레 복도 자리: 사방으로 2칸이 더 남으면 좋다
-            if (!full(i0 - 2, j0 - 2, W + 4, Dd + 4)) s += 25;
+  // 모든 층의 교집합 (작은 층부터 빼 보며).
+  // 여섯 층 넘는 탑은 승강기가 있는 심을 먼저 — 모든 층에 안 들어가면 위의 좁은 층(4분의 1까지)을 심이 지나지 않는 층으로 두고라도.
+  // 그래도 안 되면 승강기 없는 심으로 (가는 달걀 탑이 나선 계단 하나로 스무 층을 오르지 않게)
+  for (const strict of nUp >= 6 ? [true, false] : [false]) {
+    let serve = fl.slice();
+    const maxDrop = strict ? Math.floor(nUp / 4) : fl.length;
+    for (let attempt = 0; attempt < fl.length && attempt <= maxDrop; attempt++) {
+      const I = new Uint8Array(N).fill(1);
+      for (const F of serve) for (let c = 0; c < N; c++) if (!F.mask[c]) I[c] = 0;
+      // 합 표(직사각형이 다 들어가는지 O(1))
+      const S = new Int32Array((gw + 1) * (gh + 1));
+      for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) S[(j + 1) * (gw + 1) + i + 1] = I[j * gw + i] + S[j * (gw + 1) + i + 1] + S[(j + 1) * (gw + 1) + i] - S[j * (gw + 1) + i];
+      const full = (i0, j0, w, d) => i0 >= 0 && j0 >= 0 && i0 + w <= gw && j0 + d <= gh && S[(j0 + d) * (gw + 1) + i0 + w] - S[j0 * (gw + 1) + i0 + w] - S[(j0 + d) * (gw + 1) + i0] + S[j0 * (gw + 1) + i0] === w * d;
+      // 덮개 무게중심 (가장 작은 층)
+      let small = serve[0];
+      for (const F of serve) if (F.n < small.n) small = F;
+      let cx = 0, cz = 0, cn = 0;
+      for (let c = 0; c < N; c++) if (small.mask[c]) { cx += c % gw; cz += (c / gw) | 0; cn++; }
+      cx /= cn || 1; cz /= cn || 1;
+      // 정문 칸 (1층 덮개에서 정면 +j 끝 가운데)
+      const G0 = B.floors[B.ground];
+      let doorJ = 0;
+      for (let j = gh - 1; j >= 0; j--) if (G0.mask[j * gw + Math.floor(gw / 2)]) { doorJ = j; break; }
+      const bridgeDirs = [];
+      for (const F of B.floors) for (const b of F.bridges || []) { const [ux, uz] = b.dir; bridgeDirs.push(Math.abs(ux) > Math.abs(uz) ? [Math.sign(ux), 0] : [0, Math.sign(uz)]); }
+      // 심이 층을 둘로 가르지 않는가: 심 부품 칸을 뺀 나머지 칸이 한 덩어리여야 (승강기 홀에서 모든 곳에 닿게)
+      const G0mask = B.floors[B.ground].mask;
+      const splits = (L, cand) => {
+        const { o, i0, j0 } = cand;
+        const blocked = new Uint8Array(N);
+        for (const p of L.parts) for (let i = p.i0; i < p.i0 + p.w; i++) for (let j = p.j0; j < p.j0 + p.d; j++) { const [a, b] = rot(o, L.w, L.d, i, j); blocked[(j0 + b) * gw + i0 + a] = 1; }
+        for (const M of [I, G0mask]) {
+          const seen = new Uint8Array(N);
+          let comps = 0;
+          for (let c0 = 0; c0 < N; c0++) {
+            if (!M[c0] || blocked[c0] || seen[c0]) continue;
+            const q = [c0]; seen[c0] = 1;
+            for (let h = 0; h < q.length; h++) { const c = q[h], i = c % gw, j = (c / gw) | 0; for (const [di, dj] of DIRS) { const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= gw || b >= gh) continue; const e = b * gw + a; if (M[e] && !blocked[e] && !seen[e]) { seen[e] = 1; q.push(e); } } }
+            if (q.length >= 4) comps++;
+            if (comps > 1) return true;
           }
-          // 정문 앞 6 m 는 비운다
-          if (j0 + Dd > doorJ - 6 && Math.abs(mx - gw / 2) < W / 2 + 3) s += 60;
-          // 공중다리 쪽 바깥벽을 심이 막지 않게 (심과 그 벽 사이에 두 칸 통로)
-          for (const [di, dj] of bridgeDirs) {
-            const ok = di > 0 ? full(i0 + W, j0, 2, Dd) : di < 0 ? full(i0 - 2, j0, 2, Dd) : dj > 0 ? full(i0, j0 + Dd, W, 2) : full(i0, j0 - 2, W, 2);
-            if (!ok) s += 40;
-          }
-          cands.push([s, { o, i0, j0, W, Dd }]);
-          if (s < bs) { bs = s; best = { o, i0, j0, W, Dd }; }
         }
+        return false;
+      };
+      for (const list of coreOptions(B, nUp)) {
+        if (strict && !list.some((t) => COMP[t].kind === 'lift')) continue;
+        const L = layoutComps(list);
+        let best = null, bs = Infinity;
+        const cands = [];
+        for (let o = 0; o < 4; o++) {
+          const W = o % 2 ? L.d : L.w, Dd = o % 2 ? L.w : L.d;
+          const [fx, fz] = DIRS[o];
+          for (let j0 = 0; j0 + Dd <= gh; j0++) for (let i0 = 0; i0 + W <= gw; i0++) {
+            if (!full(i0, j0, W, Dd)) continue;
+            // 정면 앞 두 칸이 비어야 (홀에서 들어갈 수 있게)
+            const fc = L.mini ? 1 : 2; // 정면 앞 빈 칸 (작은 나선 계단은 한 칸)
+            const fi0 = fx > 0 ? i0 + W : fx < 0 ? i0 - fc : i0, fj0 = fz > 0 ? j0 + Dd : fz < 0 ? j0 - fc : j0;
+            const fw = fx ? fc : W, fd = fz ? fc : Dd;
+            if (!full(fi0, fj0, fw, fd)) continue;
+            const mx = i0 + W / 2, mz = j0 + Dd / 2;
+            let s;
+            if (openPref) s = mz * 2.2 + Math.abs(mx - gw / 2) * 0.8 + (o === 0 ? 0 : 6); // 뒤쪽(−z), 정면은 문 쪽을 보게
+            else {
+              s = Math.hypot(mx - cx - 0.5, mz - cz - 0.5) * 2 + (o === 0 ? 0 : o === 2 ? 1.5 : 0.8);
+              // 둘레 복도 자리: 사방으로 2칸이 더 남으면 좋다
+              if (!full(i0 - 2, j0 - 2, W + 4, Dd + 4)) s += 25;
+            }
+            // 정문 앞 6 m 는 비운다
+            if (j0 + Dd > doorJ - 6 && Math.abs(mx - gw / 2) < W / 2 + 3) s += 60;
+            // 공중다리 쪽 바깥벽을 심이 막지 않게 (심과 그 벽 사이에 두 칸 통로)
+            for (const [di, dj] of bridgeDirs) {
+              const ok = di > 0 ? full(i0 + W, j0, 2, Dd) : di < 0 ? full(i0 - 2, j0, 2, Dd) : dj > 0 ? full(i0, j0 + Dd, W, 2) : full(i0, j0 - 2, W, 2);
+              if (!ok) s += 40;
+            }
+            cands.push([s, { o, i0, j0, W, Dd }]);
+            if (s < bs) { bs = s; best = { o, i0, j0, W, Dd }; }
+          }
+        }
+        if (!best) continue;
+        // 점수 좋은 차례로 층을 가르지 않는 자리 (서른 곳까지 — 모두 가르면 가장 좋은 자리)
+        cands.sort((a, b) => a[0] - b[0]);
+        for (const [, c] of cands.slice(0, 30)) if (!splits(L, c)) { best = c; break; }
+        return finish(B, L, best, list, serve);
       }
-      if (!best) continue;
-      // 점수 좋은 차례로 층을 가르지 않는 자리 (서른 곳까지 — 모두 가르면 가장 좋은 자리)
-      cands.sort((a, b) => a[0] - b[0]);
-      for (const [, c] of cands.slice(0, 30)) if (!splits(L, c)) { best = c; break; }
-      return finish(B, L, best, list, serve);
+      // 아무것도 안 들어가면 맨 위층부터 하나씩 빼 본다 (그 층은 쓸 수 없는 층)
+      const top = serve.filter((F) => !F.below);
+      if (top.length <= 1) break;
+      const drop = top[top.length - 1];
+      serve = serve.filter((F) => F !== drop);
     }
-    // 아무것도 안 들어가면 맨 위층부터 하나씩 빼 본다 (그 층은 쓸 수 없는 층)
-    const top = serve.filter((F) => !F.below);
-    if (top.length <= 1) break;
-    const drop = top[top.length - 1];
-    serve = serve.filter((F) => F !== drop);
   }
   B.core = null; B.links = [];
   for (const F of B.floors) F.reach = F.i === B.ground; // 심이 없으면 1층만

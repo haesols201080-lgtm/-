@@ -157,7 +157,7 @@ export class Indoor {
     list.forEach((s, k) => { draw(k, s.text, s.sub, false, s.staff); quads.push({ ...s, k, w: 1.3, h: 0.17 }); });
     if (hall) {
       const k = list.length;
-      draw(k, `${F.label}층 · ${FUSE[F.use] ? FUSE[F.use].name : ''}`, this.I.info(this.r).name, true, false);
+      draw(k, `${F.label}층 · ${FUSE[F.use] ? FUSE[F.use].name : ''}`, this.I.title(this.r), true, false);
       // 승강기 홀 벽: 홀의 가운데에서 승강기를 등진 쪽 (심 정면 방향)
       const core = this.B.core;
       const hx = this.G.ox + hall.cx + 0.5, hz = this.G.oz + hall.cz + 0.5;

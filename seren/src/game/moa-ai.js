@@ -286,7 +286,7 @@ export class MoaAI {
       for (const R of [600, 1800, 5000]) {
         let best = null, bd = Infinity;
         for (const r of C.recsNear(P.x, P.z, R)) { if (g.interiors.info(r).pid !== pid) continue; const d = Math.hypot(r.x - P.x, r.z - P.z); if (d < bd) { bd = d; best = r; } }
-        if (best) { C.fixDoor(best); return { name: `${g.interiors.info(best).name} (${label})`, x: best.door.x, z: best.door.z, ...this._where(best.door.x, best.door.z) }; }
+        if (best) { C.fixDoor(best); return { name: `${g.interiors.title(best)} (${label})`, x: best.door.x, z: best.door.z, ...this._where(best.door.x, best.door.z) }; }
       }
     }
     if (/역|빛길/.test(s) && g.transit && g.transit.stations) {
@@ -326,7 +326,7 @@ export class MoaAI {
     let near = null, nd = Infinity;
     for (const p of PLACES) { const d = Math.hypot(p.pos[0] - P.x, p.pos[1] - P.z); if (d < nd) { nd = d; near = p; } }
     const I = g.interiors;
-    const inside = I && I.inPocket && I.cur ? `건물 안: ${I.info(I.cur.r).name} (${I.cur.info.P.desc})` : null;
+    const inside = I && I.inPocket && I.cur ? `건물 안: ${I.title(I.cur.r)} (${I.cur.info.P.desc})` : null;
     L.push(`자리: ${reg ? reg.name : ''}${zone ? ' · ' + zone : ''}${near && nd < 3000 ? ` · 가까운 곳 「${near.name}」 ${Math.round(nd)} m` : ''}${inside ? ' · ' + inside : ''} · 높이 ${Math.round(P.y)} m`);
     const c = g.world.clock;
     const hh = Math.floor((c.time % 1) * 24);
@@ -443,7 +443,7 @@ export class MoaAI {
       let near = null, nd = Infinity;
       for (const p of PLACES) { const d = Math.hypot(p.pos[0] - P.x, p.pos[1] - P.z); if (d < nd) { nd = d; near = p; } }
       const I = g.interiors;
-      if (I && I.inPocket && I.cur) return `「${I.info(I.cur.r).name}」 안이에요. ${I.cur.info.P.desc} 나갈 때는 들어온 문 앞에서 E.`;
+      if (I && I.inPocket && I.cur) return `「${I.title(I.cur.r)}」 안이에요. ${I.cur.info.P.desc} 나갈 때는 들어온 문 앞에서 E.`;
       return `${reg ? reg.name : '세렌'}${zone ? ', ' + zone : ''}${yeyo(zone || (reg ? reg.name : '세렌'))}.${near ? ` 가장 가까운 곳은 「${near.name}」(${this._where(near.pos[0], near.pos[1]).dir}쪽 ${Math.round(nd)} m)이고요.` : ''}`;
     }
 

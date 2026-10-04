@@ -5,7 +5,7 @@ import { hashStr, mulberry32 } from '../core/noise.js';
 
 export const WORLD_SEED = 'seren-harmonea-1';
 /** 실내 생성기 판 — 판이 바뀌어도 저장된 구조는 그대로 쓴다(이미 본 건물은 바뀌지 않는다) */
-export const GEN_VERSION = 6;
+export const GEN_VERSION = 7;
 
 export function uidOf(r) {
   if (r.uid) return r.uid;

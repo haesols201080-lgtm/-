@@ -96,12 +96,16 @@ export class Interiors {
   profile(kind) { const A = this.city && this.city.arch; return facadeProfile(kind, A && A[kind] && A[kind].hi); }
   /** 건물 짜임 (처음이면 만든다) */
   plan(r) { return this.store.plan(r); }
-  /** 건물의 대표 이름: 짜임이 있으면 조직 이름 */
+  /**
+   * 건물의 대표 이름 = 그 건물을 운영하는 대표 조직의 이름 (문 앞 표지·공중다리 표지·건물 안 지도·단말이 모두 같은 이름).
+   * 짜임이 아직 없으면 여기서 만든다(지연 생성 · 저장되니 한 건물에 한 번) — 문 앞에서는 임시 이름, 안에서는 조직 이름처럼 갈리지 않게.
+   */
   title(r) {
-    const I = this.info(r);
     if (this.game.state.home === r.id) return '우리 집';
-    const e = this.store.mem.get(uidOf(r));
-    if (e && e.B.mainOrg) { const o = e.B.orgs.find((q) => q.id === e.B.mainOrg); if (o && o.op !== 'home') return o.name; }
+    const I = this.info(r);
+    let B = null;
+    try { B = r.door ? this.store.plan(r) : null; } catch { B = null; }
+    if (B && B.mainOrg) { const o = B.orgs.find((q) => q.id === B.mainOrg); if (o && o.op !== 'home') return o.name; }
     return I.name;
   }
 
@@ -191,7 +195,7 @@ export class Interiors {
   _placeIn(cur) {
     const g = this.game, p = g.player, d = cur.door;
     const k = cur.cabin ? 1.3 : 3.2; // 건물: 정문 안쪽 3.2 m (카메라가 문 쪽 벽에 눌리지 않게)
-    p.teleport(d.x - d.nx * k, (cur.indoor ? cur.indoor.yOf(cur.B.ground) : cur.fy) + 0.3, d.z - d.nz * k);
+    p.teleport(d.x - d.nx * k, (cur.indoor ? cur.indoor.yOf(cur.B.ground) : cur.fy) + 0.3, d.z - d.nz * k, 0.1);
     p.yaw = Math.atan2(-d.nx, -d.nz);
     g.rig.yaw = p.yaw + Math.PI;
     g.rig.pitch = -0.12;
@@ -209,7 +213,7 @@ export class Interiors {
       const R = L && (L.lifthall != null ? L.rooms[L.lifthall] : L.rooms.find((q) => q.circ && q.n) || L.rooms.find((q) => q.n));
       if (R) [x, z] = ind.world(ind.B.G.ox + R.cx + 0.5, ind.B.G.oz + R.cz + 0.5);
     }
-    g.player.teleport(x, ind.yOf(i) + 0.3, z);
+    g.player.teleport(x, ind.yOf(i) + 0.3, z, 0.1);
     if (yaw != null) { g.player.yaw = yaw; g.rig.yaw = yaw + Math.PI; }
     g.rig._init = false;
     g.rig.floorLock = ind.yOf(i);
@@ -246,7 +250,7 @@ export class Interiors {
     const rooms = g.state.rooms || (g.state.rooms = {});
     const rm = rooms[key] || (rooms[key] = { v: 0, d: g.world.clock.day });
     rm.v++;
-    const title = mine ? '우리 집' : I.name, sub = mine ? '하모네아가 내어 준 집' : I.P.desc;
+    const title = mine ? '우리 집' : this.title(r), sub = mine ? '하모네아가 내어 준 집' : I.P.desc;
     this._load(() => {
       this.open(r);
       const cur = this.cur;
@@ -376,20 +380,26 @@ export class Interiors {
       }
       if (Math.abs(p.y - fy) > 2.6) return null;
       if (i === B.ground && Math.hypot(p.x - cur.door.x, p.z - cur.door.z) < 2.6) return { kind: 'exit', label: '정문 · 밖으로 나가기', short: '나가기' };
+      // 승강기 문과 공중다리 문이 둘 다 가까우면 더 가까운 쪽 (다리 문 바로 옆에 승강기 홀이 있는 층)
+      let near = null, nd = 1e9;
       for (const L of out.lifts) {
         if (!L.stops) continue;
         const [x, z] = ind.world(L.x + L.front[0] * 0.8, L.z + L.front[1] * 0.8);
-        if (Math.hypot(p.x - x, p.z - z) < 1.7) return { kind: 'ilift', o: L, label: `${L.cargo ? '화물 승강기' : '승강기'} · 층 고르기`, short: '승강기' };
+        const d = Math.hypot(p.x - x, p.z - z);
+        if (d < 1.7 && d < nd) { nd = d; near = { kind: 'ilift', o: L, label: `${L.cargo ? '화물 승강기' : '승강기'} · 층 고르기`, short: '승강기' }; }
       }
       for (const e of out.L.ents.bridge || []) {
         const G = B.G, ti = e.c % G.gw, tj = (e.c / G.gw) | 0;
         const [x, z] = ind.world(G.ox + ti + 0.5 + e.dir[0] * 0.4, G.oz + tj + 0.5 + e.dir[1] * 0.4);
-        if (Math.hypot(p.x - x, p.z - z) < 2.0) {
+        const d = Math.hypot(p.x - x, p.z - z);
+        if (d < 2.0 && d < nd) {
           const BL = this.city.bridgeList && this.city.bridgeList[e.bi];
           const other = BL ? (BL.a === cur.r ? BL.b : BL.a) : null;
-          return { kind: 'bridge', o: { F: B.floors[i], at: [G.ox + ti + 0.5 + e.dir[0] * 2.4, G.oz + tj + 0.5 + e.dir[1] * 2.4], dir: e.dir, BL }, label: `공중다리 · ${other ? `건너편 「${this.title(other)}」` : '건너편 탑'}으로`, short: '공중다리' };
+          nd = d;
+          near = { kind: 'bridge', o: { F: B.floors[i], at: [G.ox + ti + 0.5 + e.dir[0] * 2.4, G.oz + tj + 0.5 + e.dir[1] * 2.4], dir: e.dir, BL }, label: `공중다리 · ${other ? `건너편 「${this.title(other)}」` : '건너편 탑'}으로`, short: '공중다리' };
         }
       }
+      if (near) return near;
       const T = out.L.ents.terrace;
       if (T) {
         const G = B.G, ti = T.c % G.gw, tj = (T.c / G.gw) | 0;

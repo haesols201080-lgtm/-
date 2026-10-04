@@ -74,9 +74,10 @@ export class Player {
     this.events.push('state:' + s);
   }
 
-  teleport(x, y, z) {
-    // y 를 주면 그 높이 바로 아래의 바닥에, 안 주면 그 자리의 맨 위 바닥에
-    const g = y === undefined ? this.world.colliders.ground(x, z, 1e5, 1e5) : this.world.colliders.ground(x, z, y, 3);
+  teleport(x, y, z, reach = 3) {
+    // y 를 주면 그 높이(+reach m 까지)의 바닥에, 안 주면 그 자리의 맨 위 바닥에.
+    // 바닥 높이를 정확히 아는 곳(실내 층·다리·테라스)은 reach 를 작게 — 층고가 3 m 남짓한 층에서 윗층 바닥판에 올라서지 않게
+    const g = y === undefined ? this.world.colliders.ground(x, z, 1e5, 1e5) : this.world.colliders.ground(x, z, y, reach);
     this.pos.set(x, y ?? g.h, z);
     if (y === undefined || y < g.h) this.pos.y = g.h;
     this.vel.set(0, 0, 0);

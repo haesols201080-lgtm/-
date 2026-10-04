@@ -63,7 +63,7 @@ for (const pid of want) {
       seen.add(F.tag);
       tested++;
       const [x, z] = ind.world(F.ax, F.az);
-      g.player.teleport(x, ind.yOf(ind.cur) + 0.15, z);
+      g.player.teleport(x, ind.yOf(ind.cur) + 0.15, z, 0.1);
       const t = o.target(g.player.pos);
       if (t) hit++; else fails.push(`표적 없음:${F.tag}@${F.ax.toFixed(1)},${F.az.toFixed(1)}`);
     }
@@ -155,7 +155,7 @@ for (const pid of want) {
       if (!sh) return { ...res, err: '책 서가 없음' };
       // 그 서가 앞에 서서 (가까운 서가는 책 한 권씩)
       const [sx, sz] = ind.world(sh.ax, sh.az);
-      g.player.teleport(sx, ind.yOf(i) + 0.15, sz);
+      g.player.teleport(sx, ind.yOf(i) + 0.15, sz, 0.1);
       const n0 = spines();
       const t = o.target(g.player.pos);
       res.target = t && t.label;
@@ -259,7 +259,7 @@ for (const pid of want) {
       if (st && !F) { const T = o.tenants.find((q) => q.k === (o.S.shift || {}).k) || o.tenants[0]; for (const i of T.floors) { g.interiors.placeAt(i, g.player.pos.x, g.player.pos.z); out = ind.built.get(i); F = out && st.at(out); if (F) { res.stepFloor = g.interiors.cur.B.floors[i].label; break; } } }
       if (F) {
         const [x, z] = ind.world(F.ax, F.az);
-        g.player.teleport(x, ind.yOf(ind.cur) + 0.15, z);
+        g.player.teleport(x, ind.yOf(ind.cur) + 0.15, z, 0.1);
         const t = o.target(g.player.pos);
         res.step = t ? t.label : '과제 표적 없음';
         try { if (t) o.use(t); } catch (e) { res.stepErr = e.message; }
@@ -275,7 +275,7 @@ for (const pid of want) {
     return res;
   });
   if (shots) {
-    await page.evaluate(() => { const g = SEREN.game, ind = g.interiors.cur.indoor, out = ind.built.get(ind.cur); const R = out.L.rooms.find((q) => q.main) || out.L.rooms.find((q) => q.n > 30); if (R) { const [x, z] = ind.world(g.interiors.cur.B.G.ox + R.cx + 0.5, g.interiors.cur.B.G.oz + R.cz + 0.5); g.player.teleport(x, ind.yOf(ind.cur) + 0.2, z); } g.ui.closeCard(); });
+    await page.evaluate(() => { const g = SEREN.game, ind = g.interiors.cur.indoor, out = ind.built.get(ind.cur); const R = out.L.rooms.find((q) => q.main) || out.L.rooms.find((q) => q.n > 30); if (R) { const [x, z] = ind.world(g.interiors.cur.B.G.ox + R.cx + 0.5, g.interiors.cur.B.G.oz + R.cz + 0.5); g.player.teleport(x, ind.yOf(ind.cur) + 0.2, z, 0.1); } g.ui.closeCard(); });
     await page.waitForTimeout(1200);
     await page.screenshot({ path: join(root, 'shots', `ops-${pid}.png`), timeout: 240000 });
   }

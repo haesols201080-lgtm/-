@@ -1,6 +1,6 @@
 // 공중다리 시험 (헤드리스): 다리 위에 서서 → 탑 A 의 다리 층으로 들어가고 → 다리 문으로 다시 나와
 // → 유리 통로를 실제로 걸어 건너 → 탑 B 의 다리 층으로 들어간다. 층 바닥 높이 = 다리 바닥 높이인지, 모아·지도 찾기가 되는지.
-//   node tools/bridge-flow.mjs [몇 개] [shots]
+//   node tools/bridge-flow.mjs [몇 개] [shots] [bi=3,17]
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -26,8 +26,11 @@ const waitIn = () => page.waitForFunction(() => SEREN.game.interiors.inPocket &&
 const waitOut = () => page.waitForFunction(() => !SEREN.game.interiors.inPocket && !SEREN.game.interiors._busy, null, { timeout: 90000, polling: 300 });
 const shot = async (name) => { if (shots) await page.screenshot({ path: join(root, 'shots', `${name}.png`), timeout: 300000 }); };
 let fail = 0;
-for (let k = 0; k < Math.min(N, total); k++) {
-  const bi = Math.floor((k * total) / Math.max(1, N));
+// bi=3,17 : 그 다리들만
+const only = (process.argv.find((a) => a.startsWith('bi=')) || '').slice(3).split(',').filter(Boolean).map(Number);
+const list = only.length ? only : Array.from({ length: Math.min(N, total) }, (_, k) => Math.floor((k * total) / Math.max(1, N)));
+for (let k = 0; k < list.length; k++) {
+  const bi = list[k];
   const res = { bi };
   try {
     // 1) 다리 위, 탑 A 끝 가까이
@@ -48,9 +51,12 @@ for (let k = 0; k < Math.min(N, total); k++) {
     await waitIn();
     await page.waitForTimeout(800);
     Object.assign(res, await page.evaluate(() => {
-      const g = SEREN.game, I = g.interiors, BL = window.__BL, cur = I.cur, F = cur.B.floors[cur.indoor.cur];
+      const g = SEREN.game, I = g.interiors, BL = window.__BL, cur = I.cur, ind = cur.indoor, F = cur.B.floors[ind.cur];
+      // 들어선 자리에서 다리 문 앞으로 다가가 본다 (문 바로 옆에 승강기가 있으면 들어선 자리에서는 더 가까운 승강기가 잡힌다)
+      const out = ind.built.get(ind.cur), e = (out.L.ents.bridge || []).find((q) => q.bi === g.city.bridgeList.indexOf(BL));
+      if (e) { const G = cur.B.G, [x, z] = ind.world(G.ox + (e.c % G.gw) + 0.5 - e.dir[0] * 0.3, G.oz + ((e.c / G.gw) | 0) + 0.5 - e.dir[1] * 0.3); g.player.teleport(x, ind.yOf(ind.cur) + 0.15, z, 0.1); }
       const t = I.target(g.player.pos);
-      return { inA: cur.r === BL.a, floorA: F.label, useA: F.use, dyA: Math.round((F.y - BL.y) * 100) / 100, doorA: t && t.kind, labelDoorA: t && t.label };
+      return { inA: cur.r === BL.a, floorA: F.label, useA: F.use, dyA: Math.round((F.y - BL.y) * 100) / 100, doorA: t && t.kind, labelDoorA: t && t.label, entA: !!e, pyA: Math.round((g.player.pos.y - ind.yOf(ind.cur)) * 100) / 100 };
     }));
     if (!res.inA || res.doorA !== 'bridge' || Math.abs(res.dyA) > 0.05) throw new Error('탑 A 다리 층이 맞지 않음');
     await shot(`bridge-${k}-inA`);
