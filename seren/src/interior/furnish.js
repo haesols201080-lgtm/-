@@ -4,8 +4,9 @@
 //  · 하나 놓을 때마다 검사: 자리가 방 안이고 비었나, 앞이 비었나, 그리고 문에서 이 방의 모든 가구 앞까지 걸어서 닿나.
 //    막히면 그 자리는 버리고 다른 자리를 찾는다(물건을 지워서 맞추지 않고 놓는 규칙이 막지 않게).
 //  · 결과: [{ id, t, x, z(틀 좌표 m, 가운데), rot(0..3: 정면 +z,+x,−z,−x), w, d, h, room, ax, az(쓰는 사람이 서는 곳), tag }]
-import { FIX, ROOMS, flowRoom } from './catalog.js';
+import { FIX, ROOMS, flowRoom, PART_T } from './catalog.js';
 import { rngFor, shuffle } from './ids.js';
+import { sdfSpan, WALL } from './volume.js';
 
 const S = 2; // 칸 하나를 2×2 로 (0.5 m)
 const FR = [[0, 1], [1, 0], [0, -1], [-1, 0]]; // 정면 방향 (rot)
@@ -288,7 +289,7 @@ export class Furnisher {
     for (const q of this.list) {
       const f = FIX[q.t];
       if (!f) continue;
-      const fp = footprint(occ, f, q.x, q.z, q.rot);
+      const fp = footprint(occ, f, q.x - (q.ndx || 0), q.z - (q.ndz || 0), q.rot);
       for (let b = fp.b0; b <= fp.b1; b++) for (let a = fp.a0; a <= fp.a1; a++) if (a >= 0 && b >= 0 && a < occ.gw && b < occ.gh && !f.walk) occ.o[occ.k(a, b)] = 2;
       const [fx, fz] = FR[q.rot], fw = q.rot % 2 ? fp.D : fp.W;
       const mark = (a, b) => { if (a >= 0 && b >= 0 && a < occ.gw && b < occ.gh && occ.o[occ.k(a, b)] === 0) occ.o[occ.k(a, b)] = 3; };
@@ -323,6 +324,77 @@ export class Furnisher {
       }
     }
     return out;
+  }
+  /** 칸 c 와 이웃 칸 e 사이에 그려지는 칸막이가 c 쪽으로 들어온 두께 (render.partitions 와 같은 규칙: 오가는 공간끼리·설비 관 둘레는 없고, 유리는 받침 반) */
+  _wallIn(c, e) {
+    const L = this.L;
+    if (e < 0 || !L.room[c] || !L.room[e] || L.room[c] === L.room[e]) return 0;
+    const A = L.rooms[L.room[c] - 1], Bq = L.rooms[L.room[e] - 1];
+    if (A.type === 'shaft' || Bq.type === 'shaft' || (flowRoom(A) && flowRoom(Bq))) return 0;
+    return (ROOMS[A.type] && ROOMS[A.type].glass) || (ROOMS[Bq.type] && ROOMS[Bq.type].glass) ? 0.05 : PART_T / 2;
+  }
+  /**
+   * 칸막이·바깥벽에 닿은 가구를 벽 속에서 밀어내기 (놓기가 다 끝난 뒤 한 번).
+   * 자리 장부(0.5 m 칸)는 칸 경계까지를 방으로 재지만, 칸막이는 칸 경계 가운데에 0.14 m 두께로 서서 반이 이 방에 들어온다 —
+   * 경계에 등·옆을 댄 가구는 칸막이 속에 7 cm 파고들고, 얇은 부분(선반 기둥)의 면이 칸막이 면과 같은 면이 되어 깜빡였다.
+   * 밀어낸 자리가 다른 가구와 겹치면 그 가구는 그대로 둔다. 쓰는 자리(ax·az)는 앞자리 칸 그대로.
+   */
+  nudgeWalls() {
+    const L = this.L, G = this.B.G, gw = L.gw, gh = L.gh, V = this.B.V, Fl = this.B.floors[L.i];
+    // 칸 좌표 (칸 경계 = 정수): 틀 좌표에서 G.ox·G.oz 를 뺀 것 (격자 칸 수가 홀수면 틀의 칸 경계는 .5 에 있다)
+    const cell = (i, j) => (i >= 0 && j >= 0 && i < gw && j < gh ? j * gw + i : -1);
+    const rect = (q) => { const f = FIX[q.t], odd = q.rot % 2 === 1, W = odd ? f.d : f.w, D = odd ? f.w : f.d; return [q.x - G.ox - W / 2, q.z - G.oz - D / 2, q.x - G.ox + W / 2, q.z - G.oz + D / 2]; };
+    let moved = 0, stuck = 0;
+    for (const q of this.list) {
+      const f = FIX[q.t];
+      if (!f || f.walk) continue;
+      const [x0, z0, x1, z1] = rect(q);
+      // 한 옆(at, 바깥 쪽 sgn)이 칸 경계 X 에서 gap 만큼 떨어져 있을 때, 그 경계를 따라 [lo, hi] 칸들의 칸막이 두께 → 밀어낼 거리
+      const side = (lo, hi, at, axis, sgn) => {
+        const X = sgn < 0 ? Math.floor(at + 0.011) : Math.ceil(at - 0.011);
+        const gap = sgn < 0 ? at - X : X - at;
+        let need = 0;
+        for (let u = Math.floor(lo + 0.01); u < hi - 0.01; u++) {
+          const a = sgn < 0 ? X : X - 1, b = sgn < 0 ? X - 1 : X; // 안쪽 칸 · 바깥쪽 칸 (그 축의 칸 번호)
+          const inC = axis === 'x' ? cell(a, u) : cell(u, a), outC = axis === 'x' ? cell(b, u) : cell(u, b);
+          if (inC >= 0) need = Math.max(need, this._wallIn(inC, outC));
+        }
+        return need > gap + 0.002 ? need - gap + 0.005 : 0;
+      };
+      // 바깥벽: 바닥 칸은 칸 가운데가 안쪽 벽면보다 0.2 m 안이면 들어가니, 칸 경계에 댄 가구는 바깥벽 속으로 0.3 m 까지 들어갈 수 있다 —
+      // 옆마다 세 점에서 안쪽 벽면까지의 거리(부피 거리장 + 벽 두께)를 재어, 벽면 밖으로 나간 만큼 더 민다
+      const yA = Fl.y + 0.05, yB = Fl.y + Math.max(0.1, Math.min(f.h, Fl.ceil - Fl.y) - 0.05);
+      // (지하층·중2층의 바깥 가장자리는 덮개 칸 경계 그대로라 바깥벽 속으로 들어가지 않는다)
+      //  (벽 속에 든 점이라도 벽이 그 옆 쪽에 있을 때만 — 등이 벽에 든 가구의 옆면 끝점은 등 쪽 벽 속이지 옆 벽이 아니다: 거리장의 기울기로 가린다)
+      const sd = (x, z) => sdfSpan(V, G.ox + x, G.oz + z, yA, yB) + WALL;
+      const ext = Fl.below || Fl.mezz ? () => 0 : (ax, az, bx, bz, nx, nz) => {
+        let m = -1;
+        for (const k of [0.02, 0.5, 0.98]) {
+          const x = ax + (bx - ax) * k, z = az + (bz - az) * k, d = sd(x, z);
+          if (d <= -0.005) continue;
+          const gx = sd(x + 0.05, z) - sd(x - 0.05, z), gz = sd(x, z + 0.05) - sd(x, z - 0.05), gl = Math.hypot(gx, gz) || 1;
+          if ((gx * nx + gz * nz) / gl > 0.5) m = Math.max(m, d);
+        }
+        return m > -0.005 ? m + 0.01 : 0;
+      };
+      const l = Math.max(side(z0, z1, x0, 'x', -1), ext(x0, z0, x0, z1, -1, 0)), r = Math.max(side(z0, z1, x1, 'x', 1), ext(x1, z0, x1, z1, 1, 0));
+      const b = Math.max(side(x0, x1, z0, 'z', -1), ext(x0, z0, x1, z0, 0, -1)), t = Math.max(side(x0, x1, z1, 'z', 1), ext(x0, z1, x1, z1, 0, 1));
+      let dx = 0, dz = 0;
+      if (l && !r) dx = l; else if (r && !l) dx = -r;
+      if (b && !t) dz = b; else if (t && !b) dz = -t;
+      if ((l && r) || (b && t)) { stuck++; (this.stats.stuckWhy || (this.stats.stuckWhy = {}))['both:' + q.t] = ((this.stats.stuckWhy || {})['both:' + q.t] || 0) + 1; } // 양쪽이 다 벽인 좁은 틈 (밀 곳이 없다)
+      if (!dx && !dz) continue;
+      // 밀어낸 자리가 다른 가구(실제 크기)와 겹치지 않을 때만
+      const n = [x0 + dx, z0 + dz, x1 + dx, z1 + dz];
+      const hit = this.list.some((p) => { if (p === q || FIX[p.t].walk || p.room !== q.room) return false; const m = rect(p); return n[0] < m[2] - 0.001 && n[2] > m[0] + 0.001 && n[1] < m[3] - 0.001 && n[3] > m[1] + 0.001; });
+      if (hit) { stuck++; const w = this.stats.stuckWhy || (this.stats.stuckWhy = {}); w['hit:' + q.t] = (w['hit:' + q.t] || 0) + 1; continue; }
+      q.x += dx; q.z += dz;
+      q.ndx = dx; q.ndz = dz; // 걸음 칸(nav)·자리 장부는 밀기 전 자리(칸 경계)로 잰다 — 밀어낸 몇 cm 로 앞 칸이 막히지 않게
+      moved++;
+    }
+    this.stats.nudged = moved;
+    this.stats.wallStuck = stuck;
+    return moved;
   }
   /** 벽을 따라 줄지어 (등을 벽에): 바깥벽(창) 쪽을 피할지(tall) · 간격 gap m · 최대 n */
   alongWalls(R, t, o = {}) {

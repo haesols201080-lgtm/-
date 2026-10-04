@@ -307,6 +307,8 @@ export const OP_NAME = {
   garden: '정원', plant: '발전소', tech: '설비', parking: '주차장', amenity: '쉼터', observation: '전망대', mezz: '중2층',
 };
 
+/** 방 사이 칸막이 두께 (칸 경계 가운데에 선다 — 두 방에 반씩): render.partitions 가 그리고, furnish 가 벽에 붙는 가구를 그만큼 띄운다 */
+export const PART_T = 0.14;
 /** 사람이 오가는 공간(복도·승강기 홀·로비·넓은 홀)끼리는 벽 없이 이어진다 — 그리기(render)·걸음 칸(nav)·검사가 같은 규칙 */
 export function flowRoom(R) { return !!R && (R.circ || (R.main && !R.boh)) && !['stair', 'lift', 'cargo', 'shaft'].includes(R.type) && !R.sealed; }
 

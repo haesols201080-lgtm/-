@@ -84,11 +84,14 @@ export function planCore(B) {
   const nUp = fl.filter((F) => !F.below).length;
   const openPref = ['mart', 'food', 'factory', 'depot', 'terminal', 'plant', 'museum', 'library', 'hall', 'farm', 'garden'].includes(FUSE[B.floors[B.ground].use]?.op) || ['market', 'factory', 'depot', 'terminal', 'plant', 'farm'].includes(B.pid);
   // 모든 층의 교집합 (작은 층부터 빼 보며).
-  // 여섯 층 넘는 탑은 승강기가 있는 심을 먼저 — 모든 층에 안 들어가면 위의 좁은 층(4분의 1까지)을 심이 지나지 않는 층으로 두고라도.
+  // 여섯 층 넘는 탑은 승강기가 있는 심을 먼저 — 모든 층에 안 들어가면 위의 좁은 층(4분의 1까지, 아주 작은 층은 몇 개든)을 심이 지나지 않는 층으로 두고라도.
   // 그래도 안 되면 승강기 없는 심으로 (가는 달걀 탑이 나선 계단 하나로 스무 층을 오르지 않게)
   for (const strict of nUp >= 6 ? [true, false] : [false]) {
     let serve = fl.slice();
-    const maxDrop = strict ? Math.floor(nUp / 4) : fl.length;
+    // 맨 위에서부터 이어진 아주 작은 층(심을 빼면 거의 남지 않는 40 m² 아래 — 첨탑 끝·거품 꼭대기)은 몇 개든 심 밖으로 둘 수 있다
+    let smallTop = 0;
+    for (let k = fl.length - 1; k >= 0 && !fl[k].below && fl[k].n < 40; k--) smallTop++;
+    const maxDrop = strict ? Math.max(Math.floor(nUp / 4), smallTop) : fl.length;
     for (let attempt = 0; attempt < fl.length && attempt <= maxDrop; attempt++) {
       const I = new Uint8Array(N).fill(1);
       for (const F of serve) for (let c = 0; c < N; c++) if (!F.mask[c]) I[c] = 0;
@@ -231,7 +234,9 @@ function finish(B, L, best, list, serve) {
     const ok = (i, j) => i >= 0 && j >= 0 && i < gw && j < B.G.gh && H.mask[j * gw + i] && !F.mask[j * gw + i] && !coreC.has(j * gw + i);
     if (!searchMezzStair(gw, F.mask, F.y - H.y, ok, null)) { F.dead = true; B.links = B.links.filter((k) => k.mezz !== F.i); }
   }
-  // 심이 닿지 않는 층(맨 위의 작은 층 등)은 쓰지 않는다
+  // 심이 닿지 않는 층(맨 위의 작은 층 등)은 쓰지 않는다 — 심의 맨 위보다 높은 층(가늘어지는 첨탑·달걀 탑의 끝)은 껍질 속 빈 공간
+  const topServed = Math.max(...serveIdx);
+  for (const F of B.floors) if (!F.mezz && !F.below && F.i > topServed) F.dead = true;
   for (const F of B.floors) F.reach = !F.dead && (F.mezz || serveIdx.includes(F.i));
   return B.core;
 }

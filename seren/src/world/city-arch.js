@@ -897,7 +897,8 @@ export function cityArchetypes() {
       const P = [], n = hi ? 14 : 4;
       for (const [y0, y1, t] of SEG) tier(P, n, 0.9, 0.9, y0, y1, t, { k: 6 }, y1 < 0.9 ? GARDEN : PEARL2);
       for (const [g0, g1] of [[0.36, 0.41], [0.7, 0.75]]) {
-        P.push(solid(new THREE.CylinderGeometry(0.3, 0.3, g1 - g0, hi ? 12 : 5).translate(0, (g0 + g1) / 2, 0), 0x9fd8e8, 0.15));
+        // 가운데 유리 기둥 = 심(계단·승강기)이 정원 층을 지나는 통로 — 작은 탑에서도 나선 계단 + 승강기가 들어갈 굵기 (실내 부피 SPEC.cols 와 같은 반지름)
+        P.push(solid(new THREE.CylinderGeometry(0.45, 0.45, g1 - g0, hi ? 12 : 5).translate(0, (g0 + g1) / 2, 0), 0x9fd8e8, 0.15));
         if (hi) for (const [x, z] of squircle(8, 0.8, 0.8, 6)) P.push(solid(new THREE.CylinderGeometry(0.025, 0.025, g1 - g0, 5).translate(x, (g0 + g1) / 2, z), PEARL2));
         if (hi) for (const [x, z] of squircle(6, 0.6, 0.6, 2)) P.push(solid(new THREE.IcosahedronGeometry(0.09, 0).scale(1, 0.25, 1).translate(x, g0 + 0.015, z), 0x3f8f5a, 0.15));
       }
@@ -1268,7 +1269,7 @@ export const SPEC = {
   crown: { plan: [6, 1, 0.85], enter: true, cols: [bx(1, 0.85, 0, 0.86), bx(0.5, 0.42, 0.86, 0.93)] },
   terrace: { plan: [8, 1, 1], enter: true, cols: [0, 1, 2, 3, 4, 5].map((i) => { const d = 1 - (i / 6) * 0.62; return bx(1, d, i / 6, (i + 1) / 6, 0, -(1 - d)); }) },
   cantilever: { plan: [8, 0.72, 0.72], enter: true, cols: [bx(0.72, 0.72, 0, 0.92), bx(0.6, 0.66, 0.52, 0.68, 0.4, 0), bx(0.5, 0.46, 0.92, 1, -0.1, 0, 0.35)] },
-  skygarden: { plan: [6, 0.9, 0.9], enter: true, cols: [bx(0.9, 0.9, 0, 0.36), cy(0.3, 0.36, 0.41), bx(0.9, 0.9, 0.41, 0.7), cy(0.3, 0.7, 0.75), bx(0.9, 0.9, 0.75, 0.96)] },
+  skygarden: { plan: [6, 0.9, 0.9], enter: true, cols: [bx(0.9, 0.9, 0, 0.36), cy(0.45, 0.36, 0.41), bx(0.9, 0.9, 0.41, 0.7), cy(0.45, 0.7, 0.75), bx(0.9, 0.9, 0.75, 0.96)] },
   triad: { plan: [2.6, 0.38, 0.38], round: true, cols: [[0, 1.0], [2.094, 0.84], [4.189, 0.7]].map(([a, h]) => cy(0.36, 0, h, Math.cos(a) * 0.56, Math.sin(a) * 0.56)) },
   halolab: { plan: [2, 0.5, 0.5], round: true, enter: true, cols: [cy(0.5, 0, 0.2), cy(0.4, 0.2, 0.86), cy(0.6, 0.86, 0.97)] },
   coiltower: { plan: [2, 1, 1], round: true, cols: [cy(1, 0, 0.09), cy(0.84, 0.09, 0.9, 0, 0, 0)] },
@@ -1630,3 +1631,25 @@ export const PROPCOL = {
   pod: [['b', 0, 0, 0.95, 2.2, 0, 1.4]],
   console: [['c', 0, 0, 0.42, 0, 1.5]],
 };
+
+/**
+ * 공중다리 높이 y 에서 다리 층(바닥 아래 0.2 m ~ 위 2.6 m)이 탑의 몸통 안인가 (cityfabric._bridges · 실내 검사기가 같이 쓴다).
+ * 다리 끝은 탑 가운데에서 0.3 × 탑 폭(반)까지 들어가니, 그 높이의 부피(SPEC.cols)가 그보다 넉넉히(0.4) 굵어야 다리 끝이 벽 안에서 끝난다 —
+ * 하늘정원 탑의 정원 층·끊긴 줄기·가는 꼭대기는 아니다.
+ */
+export function bridgeBodyAt(rec, y) {
+  const S = SPEC[rec.kind];
+  if (!S || !S.cols || !S.cols.length || S.fixed) return true;
+  const m = Math.min(rec.sx, rec.sz), need = 0.4 * m;
+  for (const dy of [0.2, 1.4, 2.6]) {
+    const t = (y + dy - rec.base) / rec.sy;
+    let ok = false;
+    for (const p of S.cols) {
+      const c = p[0] === 'c', y0 = c ? p[4] : p[5], y1 = c ? p[5] : p[6];
+      if (t < y0 || t > y1) continue;
+      if ((c ? p[3] * m : Math.min(p[3] * rec.sx, p[4] * rec.sz)) >= need) { ok = true; break; }
+    }
+    if (!ok) return false;
+  }
+  return true;
+}

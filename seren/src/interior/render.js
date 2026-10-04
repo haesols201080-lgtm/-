@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { GB } from './geom.js';
 import { PAT, interiorMaterial, windowMaterial } from './material.js';
 import { drawFixture } from './props.js';
-import { FIX, ROOMS, flowRoom } from './catalog.js';
+import { FIX, ROOMS, flowRoom, PART_T } from './catalog.js';
 import { sdfSpan, sdfAt, WALL } from './volume.js';
 import { SLAB } from './program.js';
 import { glowMaterial } from '../world/materials.js';
@@ -47,7 +47,12 @@ export function buildFloor(ctx) {
   // ── 꼭짓점 거리 (안쪽 벽면 = 0, 안 < 0) ──
   const sd = new Float32Array((gw + 1) * (gh + 1));
   const span1 = F.vault ? F.y + 2.7 : F.ceil;
-  for (let j = 0; j <= gh; j++) for (let i = 0; i <= gw; i++) sd[j * (gw + 1) + i] = isMezz ? 1 : sdfSpan(V, ox + i, oz + j, F.y, span1) + WALL;
+  // 지하층: 바깥 부피는 땅 위에만 있으니 그 층의 바닥 덮개(1층 발자국을 줄인 것)로 — 꼭짓점 둘레 네 칸 중 덮개 칸 수로 거리를 만들어
+  // 벽면이 덮개 가장자리(칸 경계 바로 밖)에 서게 한다 (전에는 지하 높이에서 부피가 늘 「바깥」이라 바닥판·바닥 충돌체·바깥벽이 모두 빠졌다)
+  const inMask = (i, j) => i >= 0 && j >= 0 && i < gw && j < gh && !!F.mask[j * gw + i];
+  for (let j = 0; j <= gh; j++) for (let i = 0; i <= gw; i++) {
+    sd[j * (gw + 1) + i] = isMezz ? 1 : below ? 0.49 - (inMask(i - 1, j - 1) + inMask(i, j - 1) + inMask(i - 1, j) + inMask(i, j)) / 4 : sdfSpan(V, ox + i, oz + j, F.y, span1) + WALL;
+  }
   const S = (i, j) => sd[j * (gw + 1) + i];
   /** 칸 안의 한 점에서 거리 (네 꼭짓점 보간) */
   const sdAt = (x, z) => {
@@ -81,8 +86,14 @@ export function buildFloor(ctx) {
     const c = j * gw + i;
     if (roomX[c] || L.void[c]) continue;
     if (Math.min(S(i, j), S(i + 1, j), S(i, j + 1), S(i + 1, j + 1)) >= 0) continue;
-    let best = 0;
-    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const a = i + di, b = j + dj; if (a >= 0 && b >= 0 && a < gw && b < gh && roomX[b * gw + a] && !['stair', 'lift', 'cargo', 'shaft'].includes(rooms[roomX[b * gw + a] - 1].type)) { best = roomX[b * gw + a]; break; } }
+    // 벽 안쪽(벽면에서 가장 먼) 이웃의 방으로 — 처음 찾은 이웃으로 하면 벽을 따라 옆방이 배정되어 바깥벽 바로 안쪽에 엉뚱한 칸막이가 섰다
+    let best = 0, bs = Infinity;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const a = i + di, b = j + dj;
+      if (a < 0 || b < 0 || a >= gw || b >= gh || !roomX[b * gw + a] || ['stair', 'lift', 'cargo', 'shaft'].includes(rooms[roomX[b * gw + a] - 1].type)) continue;
+      const sv = S(a, b) + S(a + 1, b) + S(a, b + 1) + S(a + 1, b + 1);
+      if (sv < bs) { bs = sv; best = roomX[b * gw + a]; }
+    }
     if (best) roomX[c] = best;
   }
   const RX = (c) => (roomX[c] ? rooms[roomX[c] - 1] : null);
@@ -170,11 +181,23 @@ export function buildFloor(ctx) {
       if (pts.length === 2) segs.push([pts[0], pts[1], j * gw + i]);
       else if (pts.length === 4) { const cv = (v[0] + v[1] + v[2] + v[3]) / 4; if (cv < 0) { segs.push([pts[0], pts[3], j * gw + i]); segs.push([pts[1], pts[2], j * gw + i]); } else { segs.push([pts[0], pts[1], j * gw + i]); segs.push([pts[2], pts[3], j * gw + i]); } }
     }
+    // 이 점(벽 바로 안쪽) 가까이(0.15 m)의 칸 경계를 따라 칸막이가 서는가 (partitions 와 같은 규칙: 다른 방끼리, 오가는 공간끼리·설비 관 둘레는 없음)
+    const partitionMeets = (x, z) => {
+      const fx = x - ox, fz = z - oz, i = Math.floor(fx), j = Math.floor(fz);
+      const R = (a, b2) => (a >= 0 && b2 >= 0 && a < gw && b2 < gh ? RX(b2 * gw + a) : null);
+      const wall = (A, Bq) => A && Bq && A !== Bq && A.type !== 'shaft' && Bq.type !== 'shaft' && !(flowRoom(A) && flowRoom(Bq));
+      const li = Math.round(fx), lj = Math.round(fz);
+      if (Math.abs(fx - li) < 0.15 && wall(R(li - 1, j), R(li, j))) return true;
+      if (Math.abs(fz - lj) < 0.15 && wall(R(i, lj - 1), R(i, lj))) return true;
+      return false;
+    };
+    // 창살 자리(벽면에서 0.1 m 안)가 가구와 겹치는가
+    const fixAgainst = (x, z) => fix.some((q) => { const f = FIX[q.t]; if (!f) return false; const odd = q.rot % 2 === 1, W = (odd ? f.d : f.w) / 2 + 0.06, D = (odd ? f.w : f.d) / 2 + 0.06; return Math.abs(q.x - x) < W && Math.abs(q.z - z) < D; });
     const mod = F.mod || B.module || 3.6;
     const spand = SPAND[F.ftype || 1] ?? 0.15;
     const bay = B.bay || 2.2;
     let acc = 0;
-    for (const [a, b, c] of segs) {
+    for (let [a, b, c] of segs) {
       const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
       if (len < 1e-4) continue;
       // 안쪽 법선: 거리의 기울기 반대
@@ -182,6 +205,8 @@ export function buildFloor(ctx) {
       const gx = sdAt(mx + 0.05, mz) - sdAt(mx - 0.05, mz), gz = sdAt(mx, mz + 0.05) - sdAt(mx, mz - 0.05);
       const nl = Math.hypot(gx, gz) || 1;
       const nx = -gx / nl, nz = -gz / nl;
+      // 벽 면은 늘 안쪽을 보게 (행진 사각형의 선분 방향은 칸마다 제각각 — 면의 앞쪽이 바깥이면 벽에 붙은 상자의 뒷면과 같은 쪽을 봐 겹친 면이 된다)
+      if (-(b[1] - a[1]) * nx + (b[0] - a[0]) * nz < 0) [a, b] = [b, a];
       // 이 벽에 붙은 방 (창이 필요한 방인가)
       const ci = Math.floor(mx + nx * 0.6 - ox), cj = Math.floor(mz + nz * 0.6 - oz);
       const R = ci >= 0 && cj >= 0 && ci < gw && cj < gh ? RX(cj * gw + ci) : null;
@@ -212,6 +237,8 @@ export function buildFloor(ctx) {
         const s0 = acc, s1 = acc + len;
         for (let s = Math.ceil(s0 / bay) * bay; s < s1; s += bay) {
           const t = (s - s0) / len, px = a[0] + (b[0] - a[0]) * t, pz = a[1] + (b[1] - a[1]) * t;
+          if (partitionMeets(px + nx * 0.3, pz + nz * 0.3)) continue; // 칸막이가 바깥벽에 닿는 자리에는 창살을 세우지 않는다 (칸막이 끝면과 겹친다)
+          if (fixAgainst(px + nx * 0.05, pz + nz * 0.05)) continue; // 벽에 붙은 가구 뒤도 (창살이 가구 속을 지나간다 — 어차피 가려진다)
           gb.box(px + nx * 0.05, 0, pz + nz * 0.05, 0.08, Math.min(h0, h1), 0.1, Math.atan2(b[0] - a[0], b[1] - a[1]) + Math.PI / 2, 0xc8ccd4, 0, PAT.metal);
         }
       }
@@ -536,7 +563,7 @@ function partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st) {
   const wallH = (x, z) => (F.vault ? Math.min(4.2, ceilAt(x, z)) : ceilAt(x, z));
   const wallC = mix(st.wall, 0xffffff, 0.12);
   const doorC = st.brand ?? 0x2f8f83;
-  const T = 0.14;
+  const T = PART_T;
   /** 한 모서리 선분: (x0,z0)→(x1,z1), 종류 */
   const runs = [];
   const edge = (x0, z0, x1, z1, kind, a, b, door, key) => { runs.push({ x0, z0, x1, z1, kind, a, b, door }); if (key && (kind === 'solid' || kind === 'glass' || kind === 'rail')) out.walls.add(key); };
@@ -557,6 +584,8 @@ function partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st) {
       if (isMezz && L.mstair && dj === 1 && j === L.mstair.J && i >= L.mstair.i0 && i <= L.mstair.i1) continue;
       if ((A && voidB) || (Bq && voidA) || (isMezz && (!!A !== !!Bq) && L.void[A ? e : c] !== 2)) { edge(x0, z0, x1, z1, 'rail', A, Bq, null, key); continue; }
       if (!A || !Bq || A === Bq) continue;
+      // 설비 관은 그 자체가 막힌 상자(벽) — 둘레에 칸막이를 또 세우면 칸막이 끝면이 관의 면과 겹친다
+      if (A.type === 'shaft' || Bq.type === 'shaft') continue;
       // 복도·승강기 홀·로비·넓은 홀끼리는 벽 없이 이어진다
       if (flowRoom(A) && flowRoom(Bq)) continue;
       // 같은 세대의 열린 방(거실-부엌) · 열린 문은 벽 없이
@@ -624,7 +653,7 @@ function partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st) {
       const dmx = (dc[0] + dc[2]) / 2, dmz = (dc[1] + dc[3]) / 2, dlen = Math.hypot(dc[2] - dc[0], dc[3] - dc[1]);
       const dv = dc[0] === dc[2];
       const head = e.kind === 'opening' ? Math.min(H, 2.9) : Math.min(H, 2.4);
-      const openW = Math.max(0.9, dlen - 0.24);
+      const openW = Math.max(0.9, dlen - 0.26); // 문틀 기둥 안쪽 면과 1 cm 띄운다 (닫힌 문의 끝면이 기둥 면과 겹치지 않게)
       // 기둥 둘 + 인방 + 인방 위 벽
       for (const sgn of [-1, 1]) {
         const px = dv ? dmx : dmx + sgn * (dlen / 2 - 0.06), pz = dv ? dmz + sgn * (dlen / 2 - 0.06) : dmz;

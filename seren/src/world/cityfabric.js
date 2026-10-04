@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { heightAt, setPads, setRuralBlocks } from './heightfield.js';
 import { mulberry32 } from '../core/noise.js';
-import { cityArchetypes, SPEC, PROPCOL, doorGeo, propArchetypes, fountainWaterGeo, FOUNTAIN } from './city-arch.js';
+import { cityArchetypes, SPEC, PROPCOL, doorGeo, propArchetypes, fountainWaterGeo, FOUNTAIN, bridgeBodyAt } from './city-arch.js';
 import { buildPlan, layoutBlock, layoutCore, uvToWorld, locate } from './cityplan.js';
 import { planUniforms, applyPlanUniforms } from './city-ground.js';
 import { litMaterial } from './materials.js';
@@ -1151,7 +1151,14 @@ export class CityFabric {
       const [x2, z2, b2, t2, r2, rec2] = T[best];
       const span = bd - (r1 + r2) * 0.55;
       if (span < 12) continue;
-      const y = Math.max(b1, b2) + (Math.min(t1, t2) - Math.max(b1, b2)) * (0.4 + rnd() * 0.35);
+      let y = Math.max(b1, b2) + (Math.min(t1, t2) - Math.max(b1, b2)) * (0.4 + rnd() * 0.35);
+      // 다리 끝이 두 탑의 몸통(바깥벽)에 닿는 높이로 — 하늘정원 탑의 정원 층·좁아진 윗단처럼 몸통이 끊기거나 가늘어진 높이면
+      // 다른 높이를 차례로 (다리가 허공의 정원 층에서 끝나거나 실내 다리 문이 벽에서 멀리 떨어지지 않게)
+      if (rec1 && rec2 && !(bridgeBodyAt(rec1, y) && bridgeBodyAt(rec2, y))) {
+        y = null;
+        for (const f of [0.45, 0.55, 0.65, 0.5, 0.6, 0.7, 0.4]) { const yy = Math.max(b1, b2) + (Math.min(t1, t2) - Math.max(b1, b2)) * f; if (bridgeBodyAt(rec1, yy) && bridgeBodyAt(rec2, yy)) { y = yy; break; } }
+        if (y == null) continue;
+      }
       const mx = (x1 + x2) / 2, mz = (z1 + z2) / 2, rot = -Math.atan2(z2 - z1, x2 - x1);
       const half = bd / 2 - Math.min(r1, r2) * 0.3;
       if (this._excluded(mx, mz, 4) || this._under(mx, mz, half) < y + 8) continue;

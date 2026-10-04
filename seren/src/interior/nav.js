@@ -25,7 +25,8 @@ export function navGrid(B, L, fix) {
     const f = FIX[q.t];
     if (!f || f.walk) continue;
     const odd = q.rot % 2 === 1, W = odd ? q.d : q.w, D = odd ? q.w : q.d;
-    const a0 = Math.floor((q.x - W / 2 + 0.01 - ox) * S), a1 = Math.floor((q.x + W / 2 - 0.01 - ox) * S), b0 = Math.floor((q.z - D / 2 + 0.01 - oz) * S), b1 = Math.floor((q.z + D / 2 - 0.01 - oz) * S);
+    const qx = q.x - (q.ndx || 0), qz = q.z - (q.ndz || 0); // 칸막이 두께만큼 밀어낸 가구도 자리 장부의 자리로 (furnish.nudgeWalls)
+    const a0 = Math.floor((qx - W / 2 + 0.01 - ox) * S), a1 = Math.floor((qx + W / 2 - 0.01 - ox) * S), b0 = Math.floor((qz - D / 2 + 0.01 - oz) * S), b1 = Math.floor((qz + D / 2 - 0.01 - oz) * S);
     for (let b = Math.max(0, b0); b <= Math.min(gh - 1, b1); b++) for (let a = Math.max(0, a0); a <= Math.min(gw - 1, a1); a++) ok[b * gw + a] = 0;
   }
   // 벽: 1 m 칸 사이의 벽 모서리 (문·열린 곳은 통한다)

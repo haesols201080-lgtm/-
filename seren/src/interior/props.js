@@ -51,15 +51,16 @@ export function drawFixture(gb, F, st) {
       f.geo(new THREE.TorusKnotGeometry(0.42, 0.1, 48, 6), 0, 1.6, 0, G, 1.4, PAT.crystal);
       break;
     }
-    case 'bench': f.box(0, 0.36, 0, W, 0.1, D, P, 0, PAT.fabric); f.box(-W / 2 + 0.2, 0, 0, 0.12, 0.36, D * 0.8, steel); f.box(W / 2 - 0.2, 0, 0, 0.12, 0.36, D * 0.8, steel); f.box(0, 0.37, D / 2 - 0.02, W, 0.02, 0.04, G, 1.4); break;
-    case 'sofa': f.box(0, 0.2, 0, W, 0.25, D, B, 0, PAT.fabric); f.box(0, 0.2, -D / 2 + 0.15, W, 0.6, 0.3, B, 0, PAT.fabric); f.box(-W / 2 + 0.1, 0.2, 0, 0.2, 0.35, D, B, 0, PAT.fabric); f.box(W / 2 - 0.1, 0.2, 0, 0.2, 0.35, D, B, 0, PAT.fabric); f.box(0, 0, 0, W - 0.2, 0.2, D - 0.2, dark); break;
+    case 'bench': f.box(0, 0.36, 0, W, 0.1, D, P, 0, PAT.fabric); f.box(-W / 2 + 0.2, 0, 0, 0.12, 0.36, D * 0.8, steel); f.box(W / 2 - 0.2, 0, 0, 0.12, 0.36, D * 0.8, steel); f.box(0, 0.37, D / 2 - 0.01, W - 0.04, 0.02, 0.04, G, 1.4); break; // 빛 띠: 앞면 1 cm 앞·양끝 2 cm 안 (자리 판과 면이 겹치지 않게)
+    case 'sofa': // 자리·등받이는 팔걸이 사이에, 자리는 등받이 앞에서부터 (면이 겹치지 않게)
+      f.box(0, 0.2, 0.15, W - 0.4, 0.25, D - 0.3, B, 0, PAT.fabric); f.box(0, 0.2, -D / 2 + 0.15, W - 0.4, 0.6, 0.3, B, 0, PAT.fabric); f.box(-W / 2 + 0.1, 0.2, 0, 0.2, 0.35, D, B, 0, PAT.fabric); f.box(W / 2 - 0.1, 0.2, 0, 0.2, 0.35, D, B, 0, PAT.fabric); f.box(0, 0, 0, W - 0.2, 0.2, D - 0.2, dark); break;
     case 'lowtable': f.box(0, 0.38, 0, W, 0.06, D, pearl, 0, PAT.stone); f.cyl(0, 0, 0, 0.18, 0.38, GOLD); break;
     case 'armchair': f.cyl(0, 0.12, 0, 0.42, 0.3, B, 0, PAT.fabric, 0, 14); f.box(0, 0.2, -0.3, 0.8, 0.6, 0.2, B, 0, PAT.fabric); f.cyl(0, 0, 0, 0.2, 0.12, steel); break;
     case 'infokiosk': case 'terminal': case 'catalog': {
       f.cyl(0, 0, 0, 0.28, 0.08, dark);
       f.box(0, 0.08, 0, 0.14, H - 0.7, 0.1, steel, 0, PAT.metal);
-      f.box(0, H - 0.75, 0.02, W * 0.9, 0.62, 0.06, 0x101820, 0);
-      f.box(0, H - 0.72, 0.06, W * 0.8, 0.54, 0.01, F.t === 'infokiosk' ? G : B, 1.3, PAT.screen);
+      f.box(0, H - 0.75, 0.03, W * 0.9, 0.62, 0.06, 0x101820, 0); // 화면 틀: 앞면이 기둥 앞면(0.05)보다 1 cm 앞
+      f.box(0, H - 0.72, 0.065, W * 0.8, 0.54, 0.01, F.t === 'infokiosk' ? G : B, 1.3, PAT.screen);
       break;
     }
     case 'vending': {
@@ -115,7 +116,7 @@ export function drawFixture(gb, F, st) {
     // ── 마트 ──
     case 'gondola': {
       // 양면 진열대: 가운데 판 + 선반 다섯 층 (양쪽), 머리에 구역 표시
-      f.box(0, 0, 0, 0.1, H, D, P, 0, PAT.panel);
+      f.box(0, 0.14, 0, 0.1, H - 0.14, D, P, 0, PAT.panel); // 가운데 판은 받침 위에서부터 (받침과 앞뒤 면이 겹치지 않게)
       f.box(0, 0, 0, W, 0.14, D, dark);
       for (let l = 0; l < 4; l++) for (const sd of [-1, 1]) f.box(sd * W * 0.27, 0.32 + l * 0.38, 0, W * 0.44, 0.03, D, pearl, 0, PAT.metal);
       f.box(0, H, 0, W * 0.3, 0.22, D * 0.6, B, 0.9, PAT.screen);
@@ -124,18 +125,19 @@ export function drawFixture(gb, F, st) {
       break;
     }
     case 'wallshelf': case 'medshelf': case 'bookshelf': case 'bookcase': case 'fuelrack': {
-      f.box(0, 0, -D / 2 + 0.04, W, H, 0.08, P, 0, PAT.panel);
+      // 뒤판·선반판은 양옆 기둥 사이에만, 선반판은 뒤판 앞에서부터 (기둥·뒤판과 면이 겹치지 않게)
+      f.box(0, 0, -D / 2 + 0.04, W - 0.08, H, 0.08, P, 0, PAT.panel);
       const books = F.t === 'bookshelf' || F.t === 'bookcase';
       const lv = books ? SHELF_LEVELS : 4;
-      for (let l = 0; l < lv; l++) f.box(0, 0.25 + l * ((H - 0.4) / lv), 0, W, 0.03, D, books ? 0x8a6a4a : pearl, 0, PAT.metal);
+      for (let l = 0; l < lv; l++) f.box(0, 0.25 + l * ((H - 0.4) / lv), 0.04, W - 0.08, 0.03, D - 0.08, books ? 0x8a6a4a : pearl, 0, PAT.metal);
       f.box(-W / 2 + 0.02, 0, 0, 0.04, H, D, steel); f.box(W / 2 - 0.02, 0, 0, 0.04, H, D, steel);
-      f.box(0, H - 0.08, D / 2, W, 0.08, 0.02, F.t === 'medshelf' ? 0x8ff0c0 : B, 1.2);
+      f.box(0, H - 0.08, D / 2 + 0.01, W + 0.01, 0.08, 0.02, F.t === 'medshelf' ? 0x8ff0c0 : B, 1.2);
       shelfSlots(lv, 0.27, (H - 0.4) / lv, D - 0.1, 0.02, books ? SPINES : 5, F.t === 'bookcase' ? 1 : books ? SHELF_COLS : 2);
       break;
     }
     case 'chiller': case 'coldbox': case 'freezer': {
       f.box(0, 0, 0, W, H, D, 0xe4ecf2, 0, PAT.metal);
-      f.box(0, 0.2, D / 2 - 0.01, W - 0.1, H - 0.4, 0.02, 0x9fdcf0, 0.25, PAT.glassfrost);
+      f.box(0, 0.2, D / 2 + 0.005, W - 0.1, H - 0.4, 0.02, 0x9fdcf0, 0.25, PAT.glassfrost); // 앞 유리: 본체 앞면보다 1.5 cm 앞 (같은 면이면 깜빡인다)
       f.box(0, H - 0.12, D / 2 + 0.01, W, 0.06, 0.01, 0x9ff6ff, 1.6);
       for (let l = 0; l < 4; l++) f.box(0, 0.35 + l * 0.4, 0, W - 0.15, 0.02, D - 0.2, steel);
       shelfSlots(4, 0.37, 0.4, D - 0.3, 0, 4, 2);

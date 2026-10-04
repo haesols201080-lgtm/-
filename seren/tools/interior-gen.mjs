@@ -1,7 +1,7 @@
 // 실내 생성기 시험 (브라우저 없이): 들어갈 수 있는 모든 모양 × 쓰임 × 크기로 건물 짜임·층 평면을 만들고 검사한다.
 //   node tools/interior-gen.mjs            요약 + 검사
 //   node tools/interior-gen.mjs show slab office 30 22 120   한 건물의 층 평면을 글자로
-import { cityArchetypes, SPEC } from '../src/world/city-arch.js';
+import { cityArchetypes, SPEC, bridgeBodyAt } from '../src/world/city-arch.js';
 import { makeBuilding } from '../src/interior/program.js';
 import { layoutFloor } from '../src/interior/layout.js';
 import { facadeProfile, sdfAt, cellX, cellZ } from '../src/interior/volume.js';
@@ -85,7 +85,7 @@ if (cmd === 'show') {
   const r = fakeRec(kind, use, +hw, +hd, +h);
   // bridge=k : 일괄 검사의 k 번째 건물처럼 공중다리 하나 (높이·방향)
   const bk = process.argv.find((a) => a.startsWith('bridge='));
-  if (bk) { const k = +bk.slice(7), th = k * 2.399; r.bridges = [{ bi: 0, y: r.base + r.sy * (0.4 + ((k * 0.37) % 0.35)), ux: Math.cos(th), uz: Math.sin(th) }]; }
+  if (bk) { const k = +bk.slice(7), th = k * 2.399; let y = r.base + r.sy * (0.4 + ((k * 0.37) % 0.35)); if (!bridgeBodyAt(r, y)) for (const f of [0.45, 0.55, 0.65, 0.5, 0.6, 0.7, 0.4]) if (bridgeBodyAt(r, r.base + r.sy * f)) { y = r.base + r.sy * f; break; } r.bridges = [{ bi: 0, y, ux: Math.cos(th), uz: Math.sin(th) }]; }
   const t0 = performance.now();
   const B = makeBuilding(r, ctxFor());
   const t1 = performance.now();
@@ -116,14 +116,21 @@ if (!cmd || cmd === 'all') {
   const SIZES = [[9, 9, 9], [14, 12, 22], [20, 16, 60], [28, 22, 140], [40, 16, 16], [8, 8, 130]]; // 마지막: 가늘고 높은 첨탑 (심이 층을 거의 다 차지)
   let n = 0, fail = 0, floors = 0, rooms = 0, ms = 0, mz = 0;
   const LK = { stair: '계단', spiral: '나선 계단', lift: '승강기', cargo: '화물 승강기' };
-  const stats = { cells: 0, outside: 0, links: 0, order: 0, special: 0, doorD: 0, noTerrace: 0, persist: 0, bridges: 0, bridgeNoLift: 0, walkRooms: 0, walkLost: 0, essRooms: 0, essN: 0, essMiss: {}, byPid: {} };
+  const stats = { nudged: 0, wallStuck: 0, cells: 0, outside: 0, links: 0, order: 0, special: 0, doorD: 0, noTerrace: 0, persist: 0, bridges: 0, bridgeNoLift: 0, walkRooms: 0, walkLost: 0, essRooms: 0, essN: 0, essMiss: {}, byPid: {} };
   const problems = [];
   for (const kind of KINDS) for (const use of USES) for (const [hw, hd, h] of SIZES) {
     const S = SPEC[kind];
     if (S.low && h > 40) continue;
     const r = fakeRec(kind, use, hw, hd, h, { x: 1000 + n * 37, z: -2000 + n * 11 });
     // 높은 탑에는 공중다리 하나 (바깥 cityfabric._bridges 처럼: 높이의 40~75% · 아무 방향)
-    const addBridge = (rr, k) => { if (h >= 100) { const th = k * 2.399; rr.bridges = [{ bi: 0, y: rr.base + rr.sy * (0.4 + ((k * 0.37) % 0.35)), ux: Math.cos(th), uz: Math.sin(th) }]; } };
+    //  (도시와 같은 높이 규칙 bridgeBodyAt: 몸통이 끊기거나 가늘어진 높이면 다른 높이를 차례로)
+    const addBridge = (rr, k) => {
+      if (h < 100) return;
+      const th = k * 2.399;
+      let y = rr.base + rr.sy * (0.4 + ((k * 0.37) % 0.35));
+      if (!bridgeBodyAt(rr, y)) { y = null; for (const f of [0.45, 0.55, 0.65, 0.5, 0.6, 0.7, 0.4]) if (bridgeBodyAt(rr, rr.base + rr.sy * f)) { y = rr.base + rr.sy * f; break; } }
+      if (y != null) rr.bridges = [{ bi: 0, y, ux: Math.cos(th), uz: Math.sin(th) }];
+    };
     addBridge(r, n);
     n++;
     try {
@@ -223,7 +230,8 @@ if (!cmd || cmd === 'all') {
         }
         // 실제로 걸어서 닿나 (가구·벽까지 넣은 0.5 m 걸음 칸): 승강기 홀(없으면 정문 홀)에서 범람 → 모든 방에 닿아야
         {
-          const fx = furnishFloor(B, L).list;
+          const FUr = furnishFloor(B, L), fx = FUr.list;
+          stats.nudged += FUr.stats.nudged || 0; stats.wallStuck += FUr.stats.wallStuck || 0;
           // 방마다 꼭 있어야 하는 가구 (그 쓰임의 일이 일어나는 자리): 하나라도 없으면 센다
           for (const R of L.rooms) {
             const need = R.n ? ESSENTIAL[R.type] : null;
@@ -279,6 +287,7 @@ if (!cmd || cmd === 'all') {
   }
   console.log(`건물 ${n} · 실패 ${fail} · 층 ${floors} · 방 ${rooms} · 평균 ${(ms / n).toFixed(1)} ms · 중2층 계단 ${mz}`);
   console.log(`바깥 부피 밖 칸 ${stats.outside}/${stats.cells} · 이음 검사 ${stats.links} · 쓰임 차례 검사 ${stats.order} (전문 건물 ${stats.special}) · 정문-바깥 문 (가장 가까운 칸 기준) 최대 ${stats.doorD.toFixed(1)} m · 테라스 문 없는 큰 테라스 ${stats.noTerrace} · 저장 왕복 ${stats.persist} · 공중다리 문 ${stats.bridges} (승강기 안 서는 층 ${stats.bridgeNoLift}, 문 → 바깥 외벽 최대 ${(stats.bridgeWall || 0).toFixed(1)} m, 다리 폭 밖으로 비킨 문 ${stats.bridgeOff || 0} · 최대 ${(stats.bridgeSide || 0).toFixed(1)} m)`);
+  console.log(`칸막이에 닿은 가구: 벽 두께만큼 밀어냄 ${stats.nudged} · 밀 곳이 없어 칸막이에 파고든 채 ${stats.wallStuck}`);
   console.log(`걸어서 닿는가 (가구·벽 포함 0.5 m 칸): 방 ${stats.walkRooms} 중 못 가는 방 ${stats.walkLost}`);
   console.log(`핵심 가구 (방마다 그 쓰임의 일이 일어나는 자리): 방 ${stats.essRooms} 중 빠진 것 ${stats.essN}${stats.essN ? ` — ${Object.entries(stats.essMiss).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => `${k} ${v}`).join(', ')}` : ''}`);
   console.log('1층 짜임의 가짓수 (같은 쓰임 안에서):', Object.entries(stats.byPid).map(([k, v]) => `${k} ${v.sig.size}`).join(' · '));

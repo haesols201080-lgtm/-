@@ -115,7 +115,8 @@ export class Ops {
       mesh.userData.cap = mesh.count; // 그릴 수 있는 최대 수 (count 는 매번 실제 그린 수로 줄어든다)
       out.group.add(mesh);
       out.items = mesh;
-      out.itemsDirty = true;
+      // 만들자마자 실제 물건 자리로 (그리기 전 프레임에 모든 칸이 원점의 단위 상자로 겹쳐 보이지 않게)
+      this._drawItems(out);
     }
   }
   _floorGone(i, out) { if (out.items) { out.items.geometry.dispose(); out.items.material.dispose(); } }
@@ -227,8 +228,10 @@ export class Ops {
         const st = n.shelf[`${fid}/${si}`] || (n.bins && n.bins.find((b) => b.key === `${fid}/${si}`));
         if (!st || !st.g || st.n <= 0) return;
         const G = GOODS[st.g] || ITEMS[st.g] || {};
-        const [w, h, d] = SHAPE[G.shape] || SHAPE.box;
+        const [w0, h, d] = SHAPE[G.shape] || SHAPE.box;
         const per = Math.max(1, s.n);
+        // 칸 너비에 per 개가 다 들어가지 않으면 물건 폭을 줄인다 (나란히 놓인 물건끼리 겹쳐 면이 깜빡이지 않게)
+        const w = Math.min(w0, (Math.max(0.2, s.w) / per) * 0.94);
         const shown = Math.min(st.n, per * (s.stack || 1), 40);
         const a = (s.rot || 0) * Math.PI / 2;
         q.setFromAxisAngle(up, a);

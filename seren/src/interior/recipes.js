@@ -29,6 +29,7 @@ export function furnishFloor(B, L) {
     const main = R.find((q) => q.main && q.n) || order.find((q) => !q.circ && q.n > 6);
     if (main) ensureEssentials(Fu, main, { B, L }, [['timeclock', 'clock', 1, null, ['terminal']]]);
   }
+  Fu.nudgeWalls();
   return { list: Fu.list, stats: Fu.stats, occ: Fu.occ };
 }
 
