@@ -155,11 +155,19 @@ for (const pid of want) {
             // 나선 계단 가장자리: 몇 디딤판마다 기둥 쪽·계단실 네 귀퉁이 쪽으로 걸어 들어가 본다 — 발밑이 꺼지면(우물로 떨어짐) 실패
             if (part.kind === 'spiral' && ri > 1 && ri < R0.length - 2 && ri % 4 === 0 && !edgeFall) {
               const p = g.player.pos, y0 = p.y, sx = p.x, sz = p.z;
-              for (const [tx, tz] of [Pw(0, 0), Pw(-across / 2, -along / 2), Pw(across / 2, -along / 2), Pw(-across / 2, along / 2), Pw(across / 2, along / 2)]) {
-                let low = 0;
+              const fy = ind.yOf(i);
+              for (const [q, [tx, tz]] of [Pw(0, 0), Pw(-across / 2, -along / 2), Pw(across / 2, -along / 2), Pw(-across / 2, along / 2), Pw(across / 2, along / 2)].entries()) {
+                // 떨어짐 = 발이 땅에서 떨어진 채(공중) 0.8 m 넘게 내려감, 또는 이 층 바닥 아래(우물)로 내려감 — 디딤판을 따라 걸어 내려가는 것은 떨어짐이 아니다
+                let fall = 0, airY = null, below = 0;
                 const DT = 1 / 60;
-                for (let f = 0; f < 70; f++) { window.__walkTo(tx, tz, DT, 0.05); low = Math.min(low, p.y - y0); }
-                if (low < -0.8) { edgeFall = `경로점 ${ri} 에서 ${tx === Pw(0, 0)[0] && tz === Pw(0, 0)[1] ? '기둥' : '귀퉁이'} 쪽으로 ${(-low).toFixed(1)} m 떨어짐`; break; }
+                for (let f = 0; f < 70; f++) {
+                  window.__walkTo(tx, tz, DT, 0.05);
+                  if (g.player.state === 'air') { if (airY === null) airY = p.y; }
+                  else if (airY !== null) { fall = Math.max(fall, airY - p.y); airY = null; }
+                  below = Math.min(below, p.y - fy);
+                }
+                if (airY !== null) { window.__settle(60); fall = Math.max(fall, airY - p.y); below = Math.min(below, p.y - fy); }
+                if (fall > 0.8 || below < -0.3) { edgeFall = `경로점 ${ri} 에서 ${q ? '귀퉁이' : '기둥'} 쪽으로 ${fall > 0.8 ? `${fall.toFixed(1)} m 떨어짐` : ''}${below < -0.3 ? ` 층 바닥 아래 ${(-below).toFixed(1)} m (우물)` : ''}`; break; }
                 window.__walkTo(sx, sz, 3, 0.2);
                 if (Math.abs(p.y - y0) > 0.3) window.__walkTo(sx, sz, 3, 0.2);
               }
