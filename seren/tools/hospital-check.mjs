@@ -40,18 +40,22 @@ const r1 = await ev(() => {
 const far = r1.zones.filter((z) => z.d == null || z.d > 2500);
 ok(far.length === 0, `생활권 ${r1.zones.length}곳 모두 2.5 km 안에 병실 있는 치유원 (가장 먼 곳 ${Math.max(...r1.zones.map((z) => z.d || 0))} m · 치유원 ${r1.heal} · 앞 40 중 병실 없는 진료소 ${r1.noWard})${far.length ? ` — 없는 곳: ${far.map((z) => z.z).join(', ')}` : ''}`);
 
-// 2) 떨어짐 · 회복
-const r2 = await ev(async () => {
+// 2) 떨어짐 · 회복 — 헤드리스는 초당 1프레임 남짓이라 물리를 페이지 안에서 직접 1/60 초씩 돌린다 (게임의 걸음과 같은 순서: 이동 → 사건 → 체력)
+const fall = await ev(() => {
   const g = SEREN.game, p = g.player, H = g.state.health;
   H.hp = H.max;
-  p.teleport(-2210, undefined, 5255); const y = p.pos.y;
-  p.pos.y = y + 120; p.vel.set(0, -50, 0); p.setState ? p.setState('air') : (p.state = 'air'); // teleport 는 땅에 붙이므로 높이를 바로
-  for (let k = 0; k < 600 && p.state !== 'ground'; k++) await new Promise((r) => setTimeout(r, 30));
-  await new Promise((r) => setTimeout(r, 500));
+  p.teleport(-2210, undefined, 5255);
+  p.pos.y += 120; p.vel.set(0, -50, 0); p.setState('air'); // teleport 는 땅에 붙이므로 높이를 바로
+  let k = 0, impact = 0;
+  while (p.state !== 'ground' && k < 3000) { p.update(1 / 60, g.input, g.rig); if (p.events.includes('land')) impact = p.impact; g._playerEvents(); g.health.update(1 / 60); k++; }
+  return { state: p.state, steps: k, impact: Math.round(impact) };
+});
+console.log(`  (떨어짐: ${fall.steps} 걸음 · 부딪힌 속도 ${fall.impact} m/s · ${fall.state})`);
+const r2 = await ev(() => {
+  const g = SEREN.game, H = g.state.health;
   const afterFall = H.hp;
   g.venues.inv.meal = (g.venues.inv.meal || 0) + 1; g.venues.useItem('meal');
-  const afterMeal = H.hp;
-  return { afterFall, afterMeal, max: H.max };
+  return { afterFall, afterMeal: H.hp, max: H.max };
 });
 ok(r2.afterFall < r2.max && r2.afterFall > 0, `세게 떨어짐 → 체력 ${r2.afterFall}/${r2.max}`);
 ok(r2.afterMeal > r2.afterFall, `먹으면 회복 → ${r2.afterMeal}`);

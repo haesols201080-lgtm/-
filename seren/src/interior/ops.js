@@ -126,7 +126,7 @@ export class Ops {
     // 이 층의 사람들 (없으면 새로)
     if (this.agents && !this.agents.list.some((a) => a.floor === i)) {
       const out = this.cur.indoor.built.get(i);
-      if (out && T.type.people) T.type.people(this, T, out, i);
+      if (out && T.type.people) { T.type.people(this, T, out, i); this.agents.prewarm(i); } // 이미 지내던 모습으로 (입구에 겹쳐 나타나지 않게)
     }
     // 면접관: 면접이 기다리면 면접 자리에 (이 층이면)
     const ap = this.S.apps.find((a) => a.status === 'interview' && a.uid === this.cur.uid);

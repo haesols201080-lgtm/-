@@ -126,8 +126,11 @@ export class Interiors {
     for (const Z of C.zones) {
       const R = Z.rOut || 400, d = (r) => Math.hypot(r.x - Z.cx, r.z - Z.cz);
       const inZ = C.recs.filter((r) => r.door && !r.custom && d(r) < R && !banks.has(r));
+      const big = (a, b) => (b.top - b.gy) * b.sx * b.sz / (1 + d(b) / 200) - (a.top - a.gy) * a.sx * a.sz / (1 + d(a) / 200);
       let h = inZ.filter((r) => r.use === 'heal').sort((a, b) => d(a) - d(b))[0];
-      if (!h) h = inZ.filter((r) => ['office', 'hall', 'library', 'museum', 'market'].includes(r.use)).sort((a, b) => (b.top - b.gy) * b.sx * b.sz / (1 + d(b) / 200) - (a.top - a.gy) * a.sx * a.sz / (1 + d(a) / 200))[0];
+      if (!h) h = inZ.filter((r) => ['office', 'hall', 'library', 'museum', 'market'].includes(r.use)).sort(big)[0];
+      // 공공 건물이 없는 작은 마을(바닷가 마을 등): 마을에서 가장 큰 건물 하나를 마을 치유원으로 (장소 빌더가 지은 집도)
+      if (!h) h = C.recs.filter((r) => r.door && d(r) < R && !banks.has(r) && C.recs.indexOf(r) >= 0).sort(big)[0];
       if (h) set.add(h);
     }
     this._hosps = set;

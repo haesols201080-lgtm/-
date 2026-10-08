@@ -48,10 +48,9 @@ export class Health {
   update(dt) {
     const g = this.game, p = g.player, H = this.H;
     if (g.mode !== 'play' || H.down) { this._fade(dt); return; }
-    for (const e of p.events) {
-      if ((e === 'land' || e === 'hardland') && p.impact > FALL_SAFE && p.state !== 'ride') this.hurt((p.impact - FALL_SAFE) * 2.4, '세게 떨어짐');
-      if (e === 'bump' && p.skimSpeed > 18) this.hurt((p.skimSpeed - 18) * 1.1, '썰매로 부딪힘');
-    }
+    // 세게 내려앉으면 'hardland' 와 'land' 가 함께 온다 — 한 번의 착지는 한 번만 다친다
+    if ((p.events.includes('land') || p.events.includes('hardland')) && p.impact > FALL_SAFE && p.state !== 'ride') this.hurt((p.impact - FALL_SAFE) * 2.4, '세게 떨어짐');
+    if (p.events.includes('bump') && p.skimSpeed > 18) this.hurt((p.skimSpeed - 18) * 1.1, '썰매로 부딪힘');
     const since = (g.state.playTime || 0) - (H.hurtAt || 0);
     if (since > 15 && H.hp < H.max * REGEN_TO) { H.hp = Math.min(H.max * REGEN_TO, H.hp + dt * 0.6); if (g.ui.health) g.ui.health(H.hp, H.max, false); }
     this._fade(dt);

@@ -8,13 +8,15 @@
 import { AWEN_H } from '../data/body.js';
 import * as THREE from 'three';
 import { Crowd, AwenMotion } from '../world/crowd.js';
-import { ROLES, INDOOR, CIT_LINES, SYL_A, SYL_B, GOODS } from '../data/citizens.js';
+import { ROLES, INDOOR, CIT_LINES, SYL_A, SYL_B, GOODS, JOB_LINES, CASUAL_LINES, BUSY_LINES } from '../data/citizens.js';
 import { hashStr, mulberry32 } from '../core/noise.js';
 import { audio } from '../core/audio.js';
 import { heightAt } from '../world/heightfield.js';
 import { glowMaterial } from '../world/materials.js';
 import { bus } from '../core/events.js';
 import { won } from '../data/money.js';
+import { AMBIENT, AMBIENT_AFTER_NAME } from '../data/story.js';
+import { dayPlan, excursion, memOf, remember, memoryLines, lifeLine } from './life.js';
 
 const TAU = Math.PI * 2;
 const GLOWS = [0x7ff3e6, 0xffc46a, 0xff9fd0, 0xb9a6ff].map((h) => new THREE.Color(h));
@@ -41,6 +43,7 @@ export class Citizens {
     this.vis = []; // 이번 프레임에 그린 사람
     this.scanT = 0;
     this.sayT = 3;
+    this.stats = { stuck: 0, detours: 0, snaps: 0, holds: 0, greet: 0, npcTalk: 0 }; // 막힘 풀기·인사·주민끼리 말 (검사용)
     this.game.lines = this.game.lines || {};
     this.markers = [];
     this.activity = null; // 진행 중인 함께 하기
@@ -144,25 +147,62 @@ export class Citizens {
     }
   }
 
-  /** 지금 그 사람이 어디서 무엇을 하는가. null = 집(건물) 안 */
+  /**
+   * 지금 그 사람이 어디서 무엇을 하는가. null = 집(건물) 안.
+   * 하루 블록 (v24): 집 → 걸어서 자리로 → 일 (중간에 쉬는 시간: 둘레의 쉼·이웃 자리로 갔다 옴) → 일 끝 → 볼일(장터·쉼터, 그 사람 날마다) → 귀가.
+   * 반환: { at } 자리에서 · { at, x, z, yaw, act } 다른 자리에서(쉬기·볼일) · { walk, from, to, f } 걷는 중
+   */
   _state(p, t, T) {
     if (p.flee || p.engaged) return { at: true };
     const R = ROLES[p.leader ? p.leader.role : p.role];
     const hours = R ? R.hours : [];
     const door = p.home ? p.home.door : null;
-    const [sx, sz] = this._slot(p, T);
+    const [sx, sz, syaw] = this._slot(p, T);
+    const slot = { x: sx, z: sz, yaw: syaw };
     const dist = door ? Math.hypot(door.x - sx, door.z - sz) : 0;
     const w = door ? Math.max(0.006, dist / p.speed / DAY) : 0;
+    const day = Math.floor(this.game.world.clock.time);
+    // 혼자 움직이는 어른만 쉬는 시간·볼일이 있다 (무리 놀이·악사·듣는 이·아이는 그 자리의 일과대로)
+    const solo = !p.leader && !['listen', 'play', 'music', 'meditate', 'chat'].includes(p.role) && p.age !== 'child';
     for (const [a0, b0] of hours) {
       const a = a0 + p.jit + (p.role === 'listen' ? 0.02 : 0), b = b0 + p.jit2 - (p.role === 'listen' ? 0.01 : 0);
-      if (inWin(t, a, b) >= 0) return { at: true };
+      const pk = `${day}|${a.toFixed(3)}`;
+      if (solo && (!p._plan || p._plan.k !== pk)) p._plan = { k: pk, ...dayPlan(p, day, a, b) };
+      const plan = solo ? p._plan : null;
+      const tt = inWin(t, a, b);
+      if (tt >= 0) {
+        if (plan && plan.brk && tt >= plan.brk.s && tt <= plan.brk.e) { const S = this._outing(p, 'break', plan.pickB); if (S) return excursion(tt, plan.brk.s, plan.brk.e, slot, S, p.speed, DAY); }
+        return { at: true };
+      }
       if (!door) continue;
       const ti = inWin(t, a - w, a);
-      if (ti >= 0) return { walk: true, from: door, to: { x: sx, z: sz }, f: (ti - (a - w)) / w };
-      const to = inWin(t, b, b + w);
-      if (to >= 0) return { walk: true, from: { x: sx, z: sz }, to: door, f: (to - b) / w, home: true };
+      if (ti >= 0) return { walk: true, from: door, to: slot, f: (ti - (a - w)) / w };
+      const E = plan && plan.errand ? this._outing(p, 'errand', plan.pickE) : null;
+      if (E) {
+        const ew = plan.errand.dur, te = inWin(t, b, b + ew);
+        if (te >= 0) return excursion(te, b, b + ew, slot, E, p.speed, DAY, false);
+        const w2 = Math.max(0.006, Math.hypot(door.x - E.x, door.z - E.z) / p.speed / DAY), to2 = inWin(t, b + ew, b + ew + w2);
+        if (to2 >= 0) return { walk: true, from: E, to: door, f: (to2 - b - ew) / w2, home: true };
+      } else {
+        const to = inWin(t, b, b + w);
+        if (to >= 0) return { walk: true, from: slot, to: door, f: (to - b) / w, home: true };
+      }
     }
     return null;
+  }
+  /** 쉬는 시간·볼일에 갈 둘레 자리 (실제 도시·마을 자리 — 쉼 의자·이웃 자리·장터·악사 둘레) */
+  _outing(p, kind, pick) {
+    const c = p._outs || (p._outs = {});
+    if (!(kind in c)) {
+      const want = kind === 'break' ? ['sit', 'chat', 'stroll', 'tend'] : ['sell', 'music', 'sit'];
+      const s = p.spot, near = (q) => q !== s && want.includes(q.type) && Math.abs(q.y - s.y) < 6 && Math.hypot(q.x - s.x, q.z - s.z) < 80;
+      c[kind] = (this.game.city ? this.game.city.spotsNear(s.x, s.z, 80) : []).filter(near).concat((this.game.world.placeSpots || []).filter(near));
+    }
+    const L = c[kind];
+    if (!L.length) return null;
+    const q = L[Math.floor(pick * L.length) % L.length];
+    const a = (hashStr(p.key) % 628) / 100, r = 1.6 + (p.i % 3) * 0.6;
+    return { x: q.x + Math.sin(a) * r, z: q.z + Math.cos(a) * r, yaw: a + Math.PI, act: kind, sit: q.type === 'sit' };
   }
 
   // ── 매 프레임 ─────────────────────────────
@@ -213,8 +253,31 @@ export class Citizens {
         tx = p.pos.x; tz = p.pos.z; tyaw = p.yaw;
       } else if (p.engaged) {
         tx = p.pos.x; tz = p.pos.z; tyaw = Math.atan2(pp.x - p.pos.x, pp.z - p.pos.z);
-      } else { [tx, tz, tyaw] = this._slot(p, T); }
+      } else if (st.x != null) { tx = st.x; tz = st.z; tyaw = st.yaw; } else { [tx, tz, tyaw] = this._slot(p, T); }
       if (!p.placed) { p.pos.set(tx, heightAt(tx, tz), tz); p.yaw = tyaw; p.placed = true; }
+      // 막힘 풀기 (v24 「가만히 서 있는 주민」): 가야 할 곳이 있는데 2.5초 동안 0.4 m 도 다가가지 못하면 옆으로 비켜 돌아가 보고,
+      //  세 번 넘게 막히면 (보이지 않는 먼 곳이면) 목적지로 옮기고, 보이는 곳이면 그 자리에서 잠깐 쉬었다가 다시 — 영영 멈추지 않는다
+      if (!p.flee && !p.engaged) {
+        const gd = Math.hypot(tx - p.pos.x, tz - p.pos.z);
+        if (p._hold && T < p._hold) { tx = p.pos.x; tz = p.pos.z; }
+        else if (p._detour && T < p._detour.until) { tx = p._detour.x; tz = p._detour.z; }
+        else if (gd > 0.8) {
+          const pr = p._pr || (p._pr = { d: gd, t: T });
+          if (gd < pr.d - 0.4) { pr.d = gd; pr.t = T; p._stuckN = 0; }
+          else if (T - pr.t > 2.5) {
+            pr.t = T; pr.d = gd; p._stuckN = (p._stuckN || 0) + 1; this.stats.stuck++;
+            if (p._stuckN > 3) {
+              p._stuckN = 0;
+              if (Math.hypot(p.pos.x - pp.x, p.pos.z - pp.z) > 45) { p.pos.x = tx; p.pos.z = tz; this.stats.snaps++; }
+              else { p._hold = T + 12; this.stats.holds++; }
+            } else {
+              const sd = p._stuckN % 2 ? 1 : -1, ux = (tx - p.pos.x) / gd, uz = (tz - p.pos.z) / gd;
+              p._detour = { x: p.pos.x - uz * sd * 2.4 + ux * 0.6, z: p.pos.z + ux * sd * 2.4 + uz * 0.6, until: T + 1.8 };
+              this.stats.detours++;
+            }
+          }
+        } else { p._pr = null; p._stuckN = 0; }
+      }
       // 걷기: 목표를 향해 (따라잡을 땐 조금 빨리)
       const dx = tx - p.pos.x, dz = tz - p.pos.z, d = Math.hypot(dx, dz);
       let moving = 0;
@@ -289,6 +352,12 @@ export class Citizens {
       armL = 0.15 + (a.speak ? 0.4 + Math.sin(T * 3.1) * 0.15 : 0); armR = 0.15; elL = a.speak ? 1.0 + Math.sin(T * 3.1) * 0.25 : 0.25;
     } else if (p.caught) {
       armL = armR = 2.6 + Math.sin(T * 8) * 0.2; elL = elR = 0.3; out = 0.35;
+    } else if (st && st.act) {
+      // 쉬는 시간·볼일: 앉을 자리면 앉고, 아니면 둘레를 보거나 물건을 고른다 (실제 자리 앞에서만)
+      const ph = T + p.ph * 10;
+      if (st.act === 'break' && st.sit) { kneel = 0.48; armL = armR = 0.35; elL = elR = 0.8; head = 0.12 + Math.sin(ph * 0.4) * 0.08; }
+      else if (st.act === 'break') { head = Math.sin(ph * 0.35) * 0.15; armL = 0.12; armR = Math.sin(ph * 0.5) > 0.7 ? 1.9 : 0.1; elR = 0.5; } // 기지개
+      else { const g2 = Math.max(0, Math.sin(ph * 0.8)); head = 0.25; armR = 0.3 + g2 * 0.6; elR = 0.6 + g2 * 0.5; armL = 0.2; }
     } else if (!st || !st.walk) {
       const ph = T + p.ph * 10;
       switch (p.role) {
@@ -306,6 +375,8 @@ export class Citizens {
         default: break;
       }
     }
+    // 지나가며 아는 이웃에게 인사 (손 들기)
+    if ((a.greetT = Math.max(0, (a.greetT || 0) - dt)) > 0) { armR = 2.1 + Math.sin(T * 9) * 0.25; elR = 0.4; }
     p._drop = false;
     const k8 = Math.min(1, dt * 8), k5 = Math.min(1, dt * 5);
     a.armL += (armL - a.armL) * k8;
@@ -356,13 +427,57 @@ export class Citizens {
   /** 가까이 지나가면 혼잣말·인사 */
   _ambientTalk(dt, pp) {
     this.sayT -= dt;
+    // 지나가며 아는 이웃끼리 인사 (같은 자리·같은 집 — 모르는 사이는 하지 않는다), 0.5초마다
+    if ((this._grT = (this._grT || 0) - dt) < 0) {
+      this._grT = 0.5;
+      const V = this.vis;
+      for (let i = 0; i < V.length; i++) for (let j = i + 1; j < V.length; j++) {
+        const a = V[i], b = V[j];
+        if (a.indoorRole || b.indoorRole || (a.anim.greetT || 0) > 0 || (b.anim.greetT || 0) > 0) continue;
+        const know = a.spot === b.spot || (a.home && a.home === b.home);
+        if (!know || Math.hypot(a.pos.x - b.pos.x, a.pos.z - b.pos.z) > 2.4 || ((a.v || 0) < 0.3 && (b.v || 0) < 0.3)) continue;
+        if ((a._grDay || -1) === Math.floor(this.game.world.clock.time) && Math.random() < 0.8) continue;
+        a.anim.greetT = b.anim.greetT = 1.2; a._grDay = b._grDay = Math.floor(this.game.world.clock.time); this.stats.greet++;
+      }
+    }
     if (this.sayT > 0 || this.game.mode !== 'play') return;
+    // 가까운 이웃 무리는 서로 이야기한다 (플레이어에게 하는 말이 아니라 — 지나가다 듣는 것)
+    if (Math.random() < 0.35) {
+      const grp = this.vis.filter((q) => q.role === 'chat' && !q.engaged && Math.hypot(q.pos.x - pp.x, q.pos.z - pp.z) < 14);
+      const a = grp[0], b = a && grp.find((q) => q !== a && q.spot === a.spot);
+      if (a && b) {
+        this.game.say(a, this._line(a), true);
+        setTimeout(() => { if (b.placed && !b.engaged) this.game.say(b, this._line(b, Math.random() < 0.5 ? 'chat' : undefined), true); }, 2600);
+        this.stats.npcTalk++; this.sayT = 12 + Math.random() * 8; return;
+      }
+    }
     const p = this.nearest(pp, 7);
     if (!p || p.flee) { this.sayT = 1.5; return; }
     this.game.say(p, this._line(p), true);
     this.sayT = 8 + Math.random() * 7;
   }
 
+  /**
+   * 그 사람의 일터·하는 일에 맞는 말 하나 (최근에 한 말 m.rec 은 빼고) — 건물 속 사람은 그 층 운영(op)의 일하는 이/찾아온 이 말,
+   * 붐비면 붐빈다는 말, 가끔은 일과 상관없는 생활 말. casualOnly: 생활 말만. 새로 할 말이 없으면 null (짧게 끝낸다).
+   */
+  _jobLine(p, m, casualOnly = false) {
+    const g = this.game, r = mulberry32(hashStr(`${p.key}|${Math.floor(g.time / 30)}|${m.n}`));
+    const cand = [];
+    if (!casualOnly && p.indoorRole && g.ops && g.ops.cur) {
+      const T = g.ops.byFloor(p.floor), J = T && JOB_LINES[T.op];
+      if (J) (p.staff ? J.staff : J.visitor).forEach((L, k) => cand.push([L, `job_${T.op}_${p.staff ? 's' : 'v'}${k}`, 3]));
+      const crowd = g.ops.agents ? g.ops.agents.list.filter((a) => a.floor === p.floor).length : 0;
+      if (crowd > 14) BUSY_LINES.forEach((L, k) => cand.push([L, `busy_${k}`, 2]));
+    }
+    if (casualOnly || r() < 0.35) CASUAL_LINES.forEach((L, k) => cand.push([L, `casual_${k}`, 1]));
+    const left = cand.filter(([, id]) => !m.rec.includes(id));
+    if (!left.length) return null;
+    let sum = left.reduce((a, c) => a + c[2], 0), x = r() * sum;
+    for (const [L, id, w] of left) { x -= w; if (x <= 0) return { id, words: L.words, ko: L.ko }; }
+    const [L, id] = left[left.length - 1];
+    return { id, words: L.words, ko: L.ko };
+  }
   /** 그 사람이 할 말 하나 */
   _line(p, kind) {
     const t = this.game.world.clock.time % 1;
@@ -465,16 +580,64 @@ export class Citizens {
     return o ? { label: o.label, sub: o.sub, onClick: o.fn, disabled: !!o.off } : null;
   }
 
+  /** 지금 자리의 이름 (기억에 남는 「어디서 만났나」): 건물 안이면 건물, 밖이면 구역·장소 */
+  _placeName() {
+    const g = this.game, I = g.interiors;
+    if (I && I.inPocket && I.cur && I.cur.r) return I.title(I.cur.r);
+    const pp = g.player.pos, z = g.moaAI && g.moaAI.zoneName(pp.x, pp.z), r = g.world.regionAt(pp.x, pp.z);
+    return z || (r && r.name) || '';
+  }
+  /**
+   * 이야기 나누기 (v24 기억 대화): 이 주민의 기억(만난 횟수·마지막 만남·함께 한 일)에 맞춘 인사 → (함께 한 일의 후일담) →
+   * 지금 하는 일·때의 말. 최근에 한 말은 피하고, 새로 할 말이 없으면 짧게. 기억은 저장 슬롯(state.cit.mem)에.
+   */
   talk(p) {
     if (this.game.venues) this.game.venues.onTalk(p);
     const g = this.game;
-    const day = Math.floor(g.world.clock.time);
+    const now = g.world.clock.time, day = Math.floor(now);
     const first = this.S.talked[p.key] !== day;
-    const lines = [this._line(p)];
-    if (first && p.fr >= 1) lines.push(this._line(p, p.fr >= 3 ? 'friend' : undefined));
+    const m = memOf(this.S, p.key), place = this._placeName();
+    const reg = (L) => { const line = { id: `${L.id}_${hashStr(L.ko) % 997}`, words: L.words, ko: L.ko }; g.lines[line.id] = line; return line; };
+    const mem = memoryLines(p, m, { day: now, time: now, place });
+    const lines = mem.map(reg);
+    const st = p.indoorRole ? null : this._state(p, now % 1, g.time);
+    const life = p.indoorRole ? this._jobLine(p, m) : lifeLine(p, st, now);
+    const fresh = life && !m.rec.includes(life.id) ? life : this._jobLine(p, m, true);
+    if (fresh) { lines.push(reg(fresh)); mem.push({ tag: fresh.id }); }
+    else if (lines.length < 2) lines.push(this._line(p));
+    if (first && p.fr >= 3) lines.push(this._line(p, 'friend'));
     g.dialogue.startCustom(lines.map((l) => ({ lineObj: l })), p, () => {
       if (first) { this.S.talked[p.key] = day; this.addFriend(p, 1); }
+      m.n++;
+      if (m.first == null) m.first = now;
+      m.last = { day: now, place };
+      for (const L of mem) if (L.tag) m.rec.push(L.tag);
+      if (m.rec.length > 10) m.rec.splice(0, m.rec.length - 10);
       this.release(p);
+    });
+  }
+
+  /**
+   * 주민 무리 밖의 사람(거리의 아웬·이름 있는 인물)과의 짧은 이야기 — 같은 기억(state.cit.mem[key])·같은 말 고르기를 쓴다.
+   * 기억 인사 → (함께 한 일의 후일담) → 그 사람이 지나가며 하던 말 하나.
+   */
+  smallTalk(n, key) {
+    const g = this.game, now = g.world.clock.time;
+    const p = { key, name: n.name };
+    const m = memOf(this.S, key), place = this._placeName();
+    const reg = (L) => { const line = { id: `${L.id}_${hashStr(L.ko) % 997}`, words: L.words, ko: L.ko }; g.lines[line.id] = line; return line; };
+    const mem = memoryLines(p, m, { day: now, time: now, place });
+    const lines = mem.map(reg);
+    const pool = g.state.nameSong ? [...AMBIENT, ...AMBIENT_AFTER_NAME] : AMBIENT, k = Math.floor(Math.random() * pool.length);
+    lines.push(reg({ id: `amb_${k}`, words: pool[k].words, ko: pool[k].ko }));
+    n.talking = true; n.target = null; n.v = 0;
+    g.dialogue.startCustom(lines.map((l) => ({ lineObj: l })), n, () => {
+      n.talking = false;
+      m.n++;
+      if (m.first == null) m.first = now;
+      m.last = { day: now, place };
+      for (const L of mem) if (L.tag) m.rec.push(L.tag);
+      if (m.rec.length > 10) m.rec.splice(0, m.rec.length - 10);
     });
   }
 
@@ -484,7 +647,7 @@ export class Citizens {
     g.state.inv[what]--;
     g.particles.emit({ pos: _v.set(p.pos.x, p.pos.y + 2.2 * p.scale, p.pos.z), count: 24, spread: 2, up: 2, life: 1.2, size: [0.2, 0.6], color: what === 'flower' ? 0xff9fd0 : 0xffc46a, alpha: 1, add: true, drag: 1.5 });
     audio.chime('soft');
-    g.dialogue.startCustom([{ lineObj: this._line(p, 'gift') }], p, () => { this.addFriend(p, what === 'flower' ? 2 : 1); if (what === 'fruit') g.lang.learn('eat', 'guess'); this.release(p); });
+    g.dialogue.startCustom([{ lineObj: this._line(p, 'gift') }], p, () => { this.addFriend(p, what === 'flower' ? 2 : 1); memOf(this.S, p.key).gift++; remember(this.S, p.key, 'gift', g.world.clock.time); if (what === 'fruit') g.lang.learn('eat', 'guess'); this.release(p); });
   }
 
   tradeCard(p) {
@@ -508,9 +671,9 @@ export class Citizens {
   }
 
   // ── 함께 하기 ─────────────────────────────
-  _reward(people, { seeds = 0, words = [], friend = 1, flower = 0 } = {}) {
+  _reward(people, { seeds = 0, words = [], friend = 1, flower = 0, kind = null } = {}) {
     const g = this.game;
-    for (const q of people) this.addFriend(q, friend);
+    for (const q of people) { this.addFriend(q, friend); if (kind) remember(this.S, q.key, kind, g.world.clock.time); } // 함께 한 일은 그 주민의 기억에
     if (seeds) g.giveItem('starseed', seeds);
     if (flower) { const n = g.giveItem('flower', flower); if (n) g.ui.toast(`울림꽃 +${n}`, { kind: 'item' }); }
     for (const [w, how] of words) g.lang.learn(w, how);
@@ -564,11 +727,11 @@ export class Citizens {
         if (!n) {
           this._end();
           g.dialogue.startCustom([{ lineObj: this._line(kids[0], 'tagWin') }], kids[0], () => {});
-          this._reward(kids, { seeds: 1, words: [['catch', 'teach'], ['play', 'teach']] });
+          this._reward(kids, { seeds: 1, words: [['catch', 'teach'], ['play', 'teach']], kind: 'tag' });
         } else if (left <= 0) {
           this._end();
           g.dialogue.startCustom([{ lineObj: this._line(kids[0], 'tagLose') }], kids[0], () => {});
-          this._reward(kids.filter((k) => k.caught), { friend: 1, words: [['play', 'guess']] });
+          this._reward(kids.filter((k) => k.caught), { friend: 1, words: [['play', 'guess']], kind: 'tag' });
         }
       },
       R, s,
@@ -607,7 +770,7 @@ export class Citizens {
     g.resonance.startSong({ x: p.pos.x, y: p.pos.y, z: p.pos.z, id: p.key }, melody, () => {
       this._end();
       g.dialogue.startCustom([{ lineObj: this._line(p, 'music') }], p, () => {});
-      this._reward([p], { friend: 1, words: [['song', 'teach'], ['good', 'guess']] });
+      this._reward([p], { friend: 1, words: [['song', 'teach'], ['good', 'guess']], kind: 'song' });
       // 둘레의 듣는 이들이 기뻐한다
       for (const q of this.vis) if (q.leader === p) { q.anim.speakT = 1.5; }
     }, `${p.name}의 노래를 들으세요…`);
@@ -625,7 +788,7 @@ export class Citizens {
     g.resonance.startSong({ x: p.pos.x, y: p.pos.y, z: p.pos.z, id: p.key }, melody, () => {
       this._end();
       g.dialogue.startCustom([{ lineObj: this._line(p, 'thanks') }], p, () => {});
-      this._reward([p], { seeds: 1, words: [['make', 'guess'], ['work', 'teach']] });
+      this._reward([p], { seeds: 1, words: [['make', 'guess'], ['work', 'teach']], kind: 'tune' });
     }, '장치가 내는 가락을 들으세요…');
     const chk = setInterval(() => { if (!g.resonance.puzzle) { clearInterval(chk); if (this.activity && this.activity.people[0] === p) this._end(); } }, 600);
   }
@@ -656,7 +819,7 @@ export class Citizens {
         const n = beds.filter((b) => !b.done).length;
         for (const b of beds) if (b.done && b.sprout.scale.x < 3) b.sprout.scale.multiplyScalar(1 + dt * 2);
         g.ui.say('꽃 가꾸기', `<b>물 줄 싹 ${n}</b> · 싹 앞에서 E${g.state.tones.includes(2) ? ' 또는 「흐름」(3)' : ''}`);
-        if (!n) { this._end(); g.dialogue.startCustom([{ lineObj: this._line(p, 'tend') }], p, () => {}); this._reward([p], { flower: 1, words: [['water', 'teach'], ['flower', 'teach'], ['grow', 'guess']] }); }
+        if (!n) { this._end(); g.dialogue.startCustom([{ lineObj: this._line(p, 'tend') }], p, () => {}); this._reward([p], { flower: 1, words: [['water', 'teach'], ['flower', 'teach'], ['grow', 'guess']], kind: 'garden' }); }
         else if (left <= 0) this._end();
       },
     };
@@ -693,7 +856,7 @@ export class Citizens {
       people: [p], marks: [pick], kind: 'carry',
       get held() { return held; },
       pickUp: () => { held = true; pick.remove(crate); g.engine.scene.add(crate); drop = this._mark(to.x, ty, to.z, 0x7ff3e6); this.activity.marks.push(drop); audio.chime('soft'); },
-      dropOff: () => { g.engine.scene.remove(crate); this._end(); g.dialogue.startCustom([{ lineObj: this._line(p, 'thanks') }], p, () => {}); this._reward([p], { seeds: 1, words: [['work', 'teach'], ['give', 'guess']] }); },
+      dropOff: () => { g.engine.scene.remove(crate); this._end(); g.dialogue.startCustom([{ lineObj: this._line(p, 'thanks') }], p, () => {}); this._reward([p], { seeds: 1, words: [['work', 'teach'], ['give', 'guess']], kind: 'carry' }); },
       pickPos: s, dropPos: { x: to.x, y: ty, z: to.z },
       update: (dt) => {
         left -= dt;
@@ -720,7 +883,7 @@ export class Citizens {
           this._end();
           g.particles.emit({ pos: _v.set(p.spot.x, p.spot.y + 2, p.spot.z), count: 40, spread: 3, up: 1, life: 2, size: [0.3, 0.9], color: 0xb9a6ff, alpha: 0.9, add: true, drag: 1 });
           g.dialogue.startCustom([{ lineObj: this._line(p, 'meditate') }], p, () => {});
-          this._reward(group, { words: [['still', 'teach'], ['rest', 'teach'], ['together', 'guess']] });
+          this._reward(group, { words: [['still', 'teach'], ['rest', 'teach'], ['together', 'guess']], kind: 'meditate' });
         } else if (left <= 0) this._end();
       },
     };
@@ -750,7 +913,7 @@ export class Citizens {
     const fam = this.indoor.filter((q) => q.A && (q.A.act === 'cook' || q.A.act === 'eat' || q.A.act === 'kidplay'));
     for (const q of fam) q.anim.speakT = 2;
     g.dialogue.startCustom([{ lineObj: this._line(p, 'cook') }, { s: 'moa', t: '빛열매 수프예요. 따뜻해요… 이 집 사람들이 노래하듯 웃어요.' }], p, () => {
-      this._reward(fam.length ? fam : [p], { words: [['eat', 'teach'], ['home', 'guess'], ['together', 'guess']] });
+      this._reward(fam.length ? fam : [p], { words: [['eat', 'teach'], ['home', 'guess'], ['together', 'guess']], kind: 'meal' });
       if (g.rest) g.rest(((g.world.clock.time % 1) + 0.06) % 1);
       this.release(p);
     });
@@ -761,7 +924,7 @@ export class Citizens {
     this.kidT = 6;
     for (const q of kids) q.anim.speakT = 3;
     this.game.say(p, this._line(p, 'kidplay'), true);
-    this._reward(kids.length ? kids : [p], { words: [['play', 'teach'], ['run', 'guess']] });
+    this._reward(kids.length ? kids : [p], { words: [['play', 'teach'], ['run', 'guess']], kind: 'kid' });
     this.release(p);
   }
   /** 학교에서 새 말 배우기 (하루 한 번) */

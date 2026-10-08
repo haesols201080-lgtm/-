@@ -602,6 +602,8 @@ export class Game {
     if (npc) return { kind: 'npc', o: npc, label: `${josa(npc.name, '와')} 마주하기`, short: '말 걸기' };
     const cit = this.citizens.target(p);
     if (cit) return cit;
+    const amb = this.npcs.nearest(p, 3.2, (n) => n.ambient);
+    if (amb) return { kind: 'npc', o: amb, label: `${amb.name} · 지나가는 이웃`, short: '말 걸기' };
     const fa = this.fauna && this.fauna.target(p);
     if (fa) return fa;
     const ld = this.structures.landerTarget && this.structures.landerTarget(p);
@@ -679,8 +681,11 @@ export class Game {
   }
 
   talkTo(n) {
+    // 거리의 아웬 · (드물게) 할 이야기가 없는 인물: 주민과 같은 기억 대화로 — 말을 걸었는데 아무 일도 없지 않게
+    if (n.ambient) return this.citizens.smallTalk(n, n.key || n.id);
     const convo = this.quests.talkFor(n.id) || this.extraTalk(n.id);
     if (convo) this.dialogue.start(convo, n);
+    else this.citizens.smallTalk(n, 'npc:' + n.id);
   }
 
   /** 퀘스트 밖의 대화 (지역 지기, 미르, 온 등). checkOnly 면 「!」 표시 여부만 */
@@ -847,7 +852,7 @@ export class Game {
     const dur = audio.sing(notes, { pos, gain: ambient ? 0.22 : 0.34, pitch }) || notes.length * 0.2;
     if (npc) npc.fig.speak(dur);
     this.lang.hear(line, npc ? npc.id : null);
-    if (ambient) this.ui.say(npc && !npc.ambient ? npc.name : '지나가는 아웬', this.lang.render(line, { size: 22 }));
+    if (ambient) this.ui.say(npc && npc.name ? npc.name : '지나가는 아웬', this.lang.render(line, { size: 22 }));
     return dur;
   }
 

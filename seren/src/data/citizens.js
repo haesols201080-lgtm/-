@@ -155,3 +155,90 @@ export const GOODS = [
   { id: 'flower', name: '울림꽃', price: 2, desc: '노래에 맞춰 피는 꽃. 선물하면 크게 기뻐한다.' },
   { id: 'trinket', name: '작은 고리 모형', price: 4, desc: '하늘고리를 본뜬 장식. 모아 두면 일지에 남는다.' },
 ];
+
+// 일터마다의 말 (v24 「직업·시설별 생활 대사」): 건물 운영(op)마다 일하는 이(staff)·찾아온 이(visitor) — 그 공간에서 실제로 일하고 지내는 이야기.
+// 단어는 lexicon 에 있는 것만 (뜻은 한국어 쪽이 정확하고, 단어는 노래·글자로 들리는 줄거리).
+const L = (w, ko) => ({ words: w.split(' '), ko });
+export const JOB_LINES = {
+  mart: {
+    staff: [L('find small , give small', '진열대 빈 칸부터 채워요. 오늘은 과일 칸이 빨리 비네요.'), L('carry long , tired', '아침 배송이 늦어서 상자를 한꺼번에 날랐어요.'), L('you find ?', '찾는 거 있어요? 저 끝 칸에 새로 들어왔어요.'), L('all come eat , good', '저녁 무렵엔 다들 먹을 걸 사러 와서 줄이 길어요.')],
+    visitor: [L('eat find , home', '저녁거리 사러 왔어요. 집에 식구가 많아서요.'), L('good flower , here', '여기 꽃차가 제일 좋아요. 다른 데는 금방 떨어져요.'), L('wait long ?', '계산 줄이 길면 그냥 다음에 올까 봐요.')],
+  },
+  food: {
+    staff: [L('eat make , all day', '하루 종일 국을 끓여요. 냄새에 배가 안 고파져요.'), L('you eat ?', '드실 거 정했어요? 오늘은 꽃국이 맛있어요.'), L('day long , rest no', '점심때는 쉴 틈이 없어요. 지금이 조금 한가해요.')],
+    visitor: [L('eat good , here', '이 집 밥이 생각나서 또 왔어요.'), L('friend wait , eat together', '벗을 기다리는 중이에요. 같이 먹기로 했거든요.'), L('work tired , eat', '일 끝나고 배가 고파서 들렀어요.')],
+  },
+  factory: {
+    staff: [L('make make , always', '기계가 쉬지 않으니 우리도 교대로 지켜요.'), L('keep core , good', '이 기계 소리가 고르면 잘 돌고 있는 거예요.'), L('work long , rest near', '교대가 곧 끝나요. 다음 조가 오면 쉬러 가요.'), L('crystal carry , make', '원료가 늦게 와서 줄이 잠깐 멈췄었어요.')],
+    visitor: [L('see make , good', '물건이 만들어지는 걸 보는 게 재밌어요.')],
+  },
+  depot: {
+    staff: [L('carry carry , find', '상자마다 갈 곳이 적혀 있어요. 틀리면 먼 구역까지 가 버려요.'), L('ship come , wait', '짐배가 들어오면 그때부터 바빠져요.'), L('tired , carry long', '오늘은 짐이 유난히 많네요.')],
+    visitor: [L('gift wait , here', '보낸 소포 찾으러 왔어요.')],
+  },
+  office: {
+    staff: [L('work long , light', '오늘 할 일을 나누는 중이에요. 회의가 길어졌어요.'), L('friend share , good', '옆자리 동료가 일을 많이 도와줘요.'), L('time go , home near', '이것만 끝내면 집에 가요.'), L('eat together , friend', '점심은 동료들이랑 아래층에서 먹어요.')],
+    visitor: [L('wait , answer', '서류 답을 기다리는 중이에요.')],
+  },
+  lab: {
+    staff: [L('crystal listen , learn', '수정이 내는 소리를 기록하고 있어요. 어제랑 미세하게 달라요.'), L('make again , again', '같은 실험을 몇 번째 하는지 몰라요. 그래도 조금씩 나아져요.'), L('friend find , joy', '동료가 새 결과를 찾아서 다들 들떠 있어요.')],
+    visitor: [L('see , learn', '연구동은 처음 와 봐요. 다 신기하네요.')],
+  },
+  school: {
+    staff: [L('child learn , good', '아이들이 노래를 빨리 배워요. 저보다 낫다니까요.'), L('learn time , listen', '다음 시간은 옛 노래 수업이에요.'), L('child play , tired', '쉬는 시간마다 아이들이 뛰어다녀서 정신이 없어요.')],
+    visitor: [L('friend play , together', '쉬는 시간에 벗이랑 놀 거예요.'), L('learn long , tired', '수업이 길어서 졸려요.'), L('song learn , joy', '오늘 새 노래를 배웠어요!'), L('home go , near', '이 시간만 끝나면 집에 가요.')],
+  },
+  clinic: {
+    staff: [L('heal , wait small', '오늘은 찾아온 이가 많아서 조금 기다려야 해요.'), L('rest , heal', '푹 쉬면 금방 나아요. 무리하지 마세요.'), L('work night , tired', '밤 근무가 끝났는데 아직 인계가 남았어요.'), L('listen heart , good', '울림을 들어 보니 많이 좋아졌어요.')],
+    visitor: [L('wait long , tired', '진료 차례를 기다리는 중이에요.'), L('heal , thanks', '여기 치유사들 덕분에 많이 나았어요.'), L('fall , heal', '넘어져서 다쳤어요. 별일 아니래요.')],
+  },
+  plant: {
+    staff: [L('light keep , always', '도시에 빛이 끊기지 않게 지켜요.'), L('core listen , good', '심장 소리가 고르네요. 오늘은 조용한 날이에요.')],
+    visitor: [],
+  },
+  terminal: {
+    staff: [L('ship come , wait small', '다음 배는 조금 늦어요. 바람이 세서요.'), L('path find , you ?', '어디 가세요? 고리 노선이면 저쪽이에요.'), L('all come , all go', '하루에 몇 천 명이 오가요. 얼굴은 다 못 외워요.')],
+    visitor: [L('wait ship , home', '집에 가는 배를 기다려요.'), L('far go , friend', '먼 구역에 사는 벗을 만나러 가요.'), L('wait long , tired', '배가 늦어서 한참 기다렸어요.')],
+  },
+  museum: {
+    staff: [L('old story , keep', '옛 이야기를 지키는 게 제 일이에요.'), L('you see ?', '저 전시 보셨어요? 새로 들어온 거예요.')],
+    visitor: [L('old song , joy', '옛 노래 기록을 보러 왔어요.'), L('child learn , here', '아이에게 보여 주려고 데려왔어요.')],
+  },
+  library: {
+    staff: [L('story keep , silence', '조용히 해 주세요. 다들 읽는 중이에요.'), L('story find , you ?', '찾는 책 있어요? 분류를 알려 드릴게요.')],
+    visitor: [L('story long , joy', '이 책 벌써 세 번째 읽어요.'), L('learn , here', '시험 공부하러 왔어요.')],
+  },
+  hall: {
+    staff: [L('song together , night', '오늘 밤 공연 준비 중이에요.')],
+    visitor: [L('song listen , joy', '합창 들으러 왔어요. 자리가 금방 차요.')],
+  },
+  hotel: {
+    staff: [L('far come , rest', '먼 구역에서 온 손님이 많아요. 다들 피곤해 보여요.'), L('home , open', '방은 다 정리됐어요. 손님 맞을 준비 끝!'), L('night work , tired', '밤 근무라 낮에 자요.')],
+    visitor: [L('far come , rest', '먼 데서 와서 하룻밤 묵어 가요.'), L('sky see , good', '위층 창에서 보이는 도시가 정말 예뻐요.')],
+  },
+  bank: {
+    staff: [L('keep , answer', '맡기실 거면 이쪽 창구로 오세요.'), L('time long , all come', '월말이라 오늘은 사람이 많네요.'), L('keep seed , good', '맡긴 별씨는 안전하게 지켜요.')],
+    visitor: [L('give seed , keep', '번 돈을 맡기러 왔어요.'), L('wait , answer', '상담 차례를 기다려요.')],
+  },
+  farm: {
+    staff: [L('grow , water', '물을 조금 덜 줬더니 더 잘 자라요.'), L('flower grow , joy', '새 싹이 올라왔어요.')],
+    visitor: [L('flower see , good', '꽃 구경하러 왔어요.')],
+  },
+  home: {
+    staff: [],
+    visitor: [L('home , rest', '집이 제일 편해요.'), L('child sleep , silence', '아이가 자고 있어요. 조용히요.'), L('eat together , all', '저녁은 다 같이 먹어요.')],
+  },
+};
+// 일과 상관없는 생활 말 (식사·퇴근 계획·산 물건·자주 가는 곳·날씨·동료)
+export const CASUAL_LINES = [
+  L('work go , eat home', '일 끝나면 집에 가서 밥 먹을 거예요.'),
+  L('gift find , friend', '벗에게 줄 선물을 찾고 있어요.'),
+  L('wind , sky good', '오늘 바람이 좋아서 하늘이 맑아요.'),
+  L('rest day , meadow go', '쉬는 날엔 들판에 가요. 바람 소리가 좋아요.'),
+  L('friend , song together', '벗이랑 저녁에 노래하러 가기로 했어요.'),
+  L('small make , home', '집에 둘 작은 장식을 샀어요.'),
+  L('tired , sleep long', '어제 늦게 자서 좀 피곤해요.'),
+  L('sea go , dream', '언젠가 바다 마을에 가 보고 싶어요.'),
+];
+// 붐빌 때 하는 말
+export const BUSY_LINES = [L('all come , here', '오늘은 사람이 정말 많네요.'), L('wait long , all', '다들 기다리느라 줄이 길어요.')];

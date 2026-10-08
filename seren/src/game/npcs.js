@@ -5,7 +5,8 @@ import { AwenFigure } from '../world/awen.js';
 import { NPCS, AMBIENT, AMBIENT_AFTER_NAME } from '../data/story.js';
 import { PLACE } from '../data/places.js';
 import { glowMaterial } from '../world/materials.js';
-import { mulberry32 } from '../core/noise.js';
+import { mulberry32, hashStr } from '../core/noise.js';
+import { SYL_A, SYL_B } from '../data/citizens.js';
 
 const AMBIENT_SPOTS = [
   { place: 'harmonea', n: 22, r: 1100, minR: 260 },
@@ -34,8 +35,10 @@ export class NPCs {
       if (!p) continue;
       for (let i = 0; i < s.n; i++) {
         const a = rnd() * Math.PI * 2, d = (s.minR || 0) + rnd() * (s.r - (s.minR || 0));
+        // 거리의 아웬도 한 사람 한 사람 (v24 「이슬터 일부 주민 대화 불가 + 행동 정지」): 이름·기억 열쇠가 있고, 말을 걸 수 있다
+        const key = `amb:${s.place}:${i}`, q = mulberry32(hashStr(key));
         this._spawn({
-          id: `amb-${k++}`, name: '아웬', ambient: true,
+          id: `amb-${k++}`, key, name: SYL_A[Math.floor(q() * SYL_A.length)] + SYL_B[Math.floor(q() * SYL_B.length)], ambient: true, place: s.place,
           x: p.pos[0] + Math.cos(a) * d, z: p.pos[1] + Math.sin(a) * d,
           hue: rnd(), glow: [0x7ff3e6, 0xffc46a, 0xff9fd0, 0xb9a6ff][Math.floor(rnd() * 4)], scale: 0.8 + rnd() * 0.35,
           home: { x: p.pos[0], z: p.pos[1], r: s.r, minR: s.minR || 0 },
@@ -43,6 +46,7 @@ export class NPCs {
       }
     }
     this.ambCooldown = 4;
+    this.stats = { stuck: 0 };
   }
 
   _spawnNamed(d) {
@@ -127,7 +131,7 @@ export class NPCs {
         const lead = n.lead && d2 > 40 * 40;
         const mid = n.dest && n.target !== n.dest; // 길목을 지나는 중 (멈추지 않고 다음으로)
         if (mid && d < 4) n.target = n.via && n.via.length ? n.via.shift() : n.dest;
-        else if (d < 1.5) { n.target = null; n.wait = 3 + Math.random() * 6; n.v = 0; n.dest = null; n.via = null; }
+        else if (d < 1.5) { n.target = null; n.wait = 3 + Math.random() * 6; n.v = 0; n.dest = null; n.via = null; n._pr = null; }
         else if (!lead) {
           // 먼저 그쪽으로 돌아서고(몸이 스스로 천천히), 천천히 출발해 도착할 땐 늦춘다
           const face = Math.atan2(tx, tz);
@@ -137,9 +141,17 @@ export class NPCs {
           n.v = (n.v || 0) + Math.max(-5 * dt, Math.min((n.speed > 3 ? 4 : 1.8) * dt, goal - (n.v || 0)));
           const sp = Math.min(n.v, d);
           n.pos.x += (tx / d) * sp * dt; n.pos.z += (tz / d) * sp * dt;
+          if (n.ambient) {
+            // 거리의 아웬은 벽·나무·소품을 뚫지 않는다 (주민과 같은 밀어내기) — 3초 동안 0.4 m 도 못 다가가면 다른 곳으로 (영영 멈추지 않게)
+            if (sp > 0.2) g.world.colliders.pushOut(n.pos, 0.42 * (n.scale || 1), 3.1 * (n.scale || 1), 0.6);
+            const pr = n._pr || (n._pr = { d, t: g.time });
+            if (d < pr.d - 0.4) { pr.d = d; pr.t = g.time; }
+            else if (g.time - pr.t > 3) { n.target = null; n.dest = null; n.via = null; n.wait = 0.5 + Math.random() * 1.5; n._pr = null; this.stats.stuck++; }
+          }
         } else n.v = 0;
       } else if (n.ambient || n.wander) {
         n.wait -= dt;
+        if (n.talking) n.wait = Math.max(n.wait, 2); // 이야기하는 동안은 그 자리에
         if (n.wait <= 0) {
           const h = n.home;
           if (night && n.ambient) {
@@ -166,8 +178,12 @@ export class NPCs {
         const gy = g.world.colliders.ground(n.pos.x, n.pos.z, n.pos.y + 0.3, 0.7).h;
         n.pos.y += (gy - n.pos.y) * Math.min(1, dt * 6);
       }
-      // 플레이어 바라보기
+      // 플레이어 바라보기 · 멈춰 있을 때는 둘레를 둘러본다 (마네킹처럼 굳어 있지 않게)
       n.fig.look = d2 < 14 * 14 && !n.target ? pp : null;
+      if (!n.fig.look && !n.target && (n.ambient || n.wander)) {
+        if (!n._lk || g.time > n._lkT) { const a = Math.random() * 6.28; n._lk = (n._lk || new THREE.Vector3()).set(n.pos.x + Math.sin(a) * 6, n.pos.y + 1.2 + Math.random(), n.pos.z + Math.cos(a) * 6); n._lkT = g.time + 2.5 + Math.random() * 4; }
+        n.fig.look = n._lk;
+      }
       if (!n.target) n.fig.face = null;
       if (night && n.ambient && !n.target) n.fig.gesture = 0.4 + Math.sin(g.time * 1.2 + n.pos.x) * 0.2;
       else n.fig.gesture = Math.max(0, n.fig.gesture - dt);

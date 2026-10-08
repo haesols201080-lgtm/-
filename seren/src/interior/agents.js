@@ -12,6 +12,7 @@ import { AwenMotion } from '../world/crowd.js';
 
 const GLOWS = [0x7ff3e6, 0xffc46a, 0xff9fd0, 0xb9a6ff].map((h) => new THREE.Color(h));
 let _id = 0;
+const SEATED = new Set(['sit', 'sitType', 'eat', 'study', 'lie']);
 
 export class Agents {
   /** ind: Indoor, ops: 운영 */
@@ -64,8 +65,58 @@ export class Agents {
     if (!N) return false;
     const p = findPath(N, a.gx, a.gz, gx, gz, 30000);
     if (!p) return false;
-    a.path = p; a.pk = 1;
+    a.path = p; a.pk = 1; a.dest = [gx, gz];
     return true;
+  }
+  /**
+   * 갈 자리를 이미 다른 사람이 쓰거나 가는 중이면 (같은 진열대·같은 줄·같은 전시) 바로 옆의 걸을 수 있는 빈 칸으로 —
+   * 두 사람이 한 점에 겹쳐 서지 않게. 반환 [x, z, 옮겼나]
+   */
+  _spot(a, x, z) {
+    const taken = (px, pz) => this.list.some((b) => b !== a && !b.done && b.floor === a.floor && Math.hypot((b.dest ? b.dest[0] : b.gx) - px, (b.dest ? b.dest[1] : b.gz) - pz) < 0.55);
+    if (!taken(x, z)) return [x, z, false];
+    const N = this.navOf(a.floor);
+    if (!N) return [x, z, false];
+    for (const r of [0.6, 0.95]) for (let k = 0; k < 8; k++) {
+      const t = (k / 8) * Math.PI * 2 + (a.ph * 6.28) % 0.8, x2 = x + Math.cos(t) * r, z2 = z + Math.sin(t) * r;
+      const c = snap(N, x2, z2, 0);
+      if (c && !taken(x2, z2)) return [x2, z2, true];
+    }
+    return [x, z, false];
+  }
+  /**
+   * 처음 채운 층: 사람들이 이미 한동안 그 건물에서 지낸 모습으로 시작한다 (v24 「건물 입장 시 한 지점 뭉침」) —
+   * 손님·관람객은 정문 안쪽에서 차례로 들어오도록 짜여 있어서, 그대로 두면 들어서는 순간 모두 입구 한 자리에 겹쳐 있다가 흩어졌다.
+   * 걷기·할 일(재고·값 치르기 같은 운영 효과 포함)만 secs 초 동안 빠르게 돌린다 — 그리기·몸짓·플레이어 비키기는 하지 않는다.
+   */
+  prewarm(floor, secs = 60, dt = 0.25) {
+    const L = this.list.filter((a) => a.floor === floor);
+    for (let t = 0; t < secs; t += dt) for (const a of L) if (!a.done) this._walk(a, dt);
+    for (const a of L) {
+      if (a.done) { this.remove(a); continue; }
+      this._place(a);
+      a.yaw = a.faceYaw ?? a.wantYaw ?? a.yaw;
+    }
+  }
+  /** 한 사람의 걸음·할 일 하나 (update 와 prewarm 이 같이 쓴다). 반환: 움직인 속도 */
+  _walk(a, dt) {
+    if (a.path && a.pk < a.path.length) {
+      const [tx, tz] = a.path[a.pk];
+      const dx = tx - a.gx, dz = tz - a.gz, d = Math.hypot(dx, dz);
+      const sp = a.speed * (a.carry ? 0.85 : 1);
+      let moving = 0;
+      if (d < 0.08) a.pk++;
+      else {
+        const k = Math.min(1, (sp * dt) / d);
+        a.gx += dx * k; a.gz += dz * k; moving = sp;
+        a.wantYaw = Math.atan2(dx, dz) + this.ind.B.theta;
+      }
+      if (a.pk >= a.path.length) a.path = null;
+      return moving;
+    }
+    if (a.wait > 0) a.wait -= dt;
+    else this._next(a);
+    return 0;
   }
 
   update(dt) {
@@ -75,20 +126,7 @@ export class Agents {
     for (const a of this.list.slice()) {
       if (a.done) { this.remove(a); continue; }
       // 걷기
-      let moving = 0;
-      if (a.path && a.pk < a.path.length) {
-        const [tx, tz] = a.path[a.pk];
-        const dx = tx - a.gx, dz = tz - a.gz, d = Math.hypot(dx, dz);
-        const sp = a.speed * (a.carry ? 0.85 : 1);
-        if (d < 0.08) a.pk++;
-        else {
-          const k = Math.min(1, (sp * dt) / d);
-          a.gx += dx * k; a.gz += dz * k; moving = sp;
-          a.wantYaw = Math.atan2(dx, dz) + ind.B.theta;
-        }
-        if (a.pk >= a.path.length) a.path = null;
-      } else if (a.wait > 0) a.wait -= dt;
-      else this._next(a);
+      const moving = this._walk(a, dt);
       // 플레이어를 비켜 간다 (같은 층)
       const [wx, wz] = ind.world(a.gx, a.gz);
       const pp = g.player.pos;
@@ -111,12 +149,14 @@ export class Agents {
     const s = a.plan[a.step++];
     a.faceYaw = null;
     if (s.go) {
-      const [x, z] = typeof s.go === 'function' ? s.go(a) : s.go;
+      const [x0, z0] = typeof s.go === 'function' ? s.go(a) : s.go;
+      const [x, z, moved] = this._spot(a, x0, z0);
+      a.offSeat = moved; // 자리를 남이 쓰면 옆에 서서 기다린다 (허공에 앉지 않게)
       if (!this._route(a, x, z)) { a.wait = 0.5; }
       return;
     }
     if (s.face != null) a.faceYaw = s.face + this.ind.B.theta;
-    if (s.act) { a.pose = s.act; a.wait = s.t ?? 2; }
+    if (s.act) { a.pose = a.offSeat && SEATED.has(s.act) ? 'wait' : s.act; a.wait = s.t ?? 2; }
     if (s.fx) { try { s.fx(a); } catch (e) { console.warn('[agents]', e); } }
     if (s.wait) a.wait = s.wait;
     if (s.until) { a.step--; a.wait = 0.5; if (s.until(a)) a.step++; }

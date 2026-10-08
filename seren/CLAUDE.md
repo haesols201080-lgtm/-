@@ -199,6 +199,11 @@ src/
 - **은행·치료비**: 돈의 규칙은 `game/bank.js`, 수치는 `data/balance.js` 한 곳. 검사 `node tools/bank-check.mjs`.
 - **소리 채널** `music · ambience · sfx · ui · voice` (+ master): 알림·메뉴·발견 소리는 `ui`, 세계의 사건은 `sfx`. **조명 밝기**는 공용 유니폼 `uLightScale` — 새 발광 셰이더는 발광 항에 곱할 것.
 - **충돌**: `pushOut` 은 머리 위에 얕게 걸친 것은 옆으로 밀지 않고(천장), 구조 벽(`wall: true`)은 맨 나중에 민다. 실내 가구는 천장까지 1.75 m 이상 남으면 윗면에 설 수 있다(`walk`). 실내에서 달리며 뛰어 벽에 부딪히기 검사 `node tools/wall-stress.mjs [쓰임|all] [층 수]` (TRACE='층 방 각도' 로 프레임 기록).
+- **기기·OS** (`interior/os.js`): 실내 장치는 `deviceOf(F)` 로 게시판·키오스크·카탈로그·조작반·탁자·컴퓨터 — 컴퓨터는 세렌OS(`SerenOS`: 잠금·로그인·창·앱 `v_*`), 상태 `state.os`(메일·설정), 메일 보내기 `osMail(game, {from, subj, body, key})`(같은 key 는 한 번만). 검사 `node tools/devices-check.mjs`.
+- **체력·병원** (`game/health.js`): `hurt(n, 까닭)`·`heal`·`full`, 체력 0 → `nearestHospital`(입원실 있는 치유원, `wardOf`) → `_bedSpot` → `interiors.enter` → `_wake`(치료비 `bank.careFee`·메일·저장). 생활권 병원은 `interiors.hospitalSet()`(구역마다 하나는 작은 건물이어도 병동). 착지 사건은 한 걸음에 한 번만 다친다. 검사 `node tools/hospital-check.mjs`.
+- **은행 건물**: `interiors.bankSet()`(구역마다 사무 건물 1~4곳 — 전문 건물, 방 `banking`·`bankconsult`·`vault`, 가구 `teller`·`atm`·`vaultdoor`), 운영 `ops-types.bank`.
+- **주민의 하루·기억** (`game/life.js`): `dayPlan`(쉬는 시간·볼일) · `excursion`(갔다 머물다 돌아오기) · 기억 `memOf(S, key)`/`remember(S, key, kind, day)` · 말 `memoryLines`·`lifeLine`. 함께 한 일을 새로 만들면 `citizens._reward(people, {kind})` 의 kind 를 넘기고 `life.js` 의 `SHARED` 에 후일담 한 줄. 일터 말은 `data/citizens.js` 의 `JOB_LINES[op]`(staff/visitor). 거리의 아웬(`npcs` 의 ambient)도 이름·기억 열쇠가 있고 `citizens.smallTalk` 로 이야기한다 — 새 인물 무리를 만들면 같은 길로(말 걸기 없는 사람을 두지 말 것).
+- **실내 사람 배치**: 층을 처음 채우면 `agents.prewarm(층)` 이 60 초를 앞당겨 돌린다(입구에 겹쳐 나타나지 않게). 새 `people()` 은 손님을 `arrival` 에서 시작해도 되지만, 같은 자리로 가는 사람은 `agents._spot` 이 옆 칸으로 나눈다. 검사 `node tools/npc-check.mjs`.
 
 ## 지켜야 할 것
 - 기존 저장 파일이 깨지지 않게: 저장 형식을 바꾸면 `state.js` 의 `migrate()` 를 손보세요.

@@ -488,7 +488,7 @@ export class CityFabric {
       else { hw = hd = q.r * 1.45; h = 9 + rnd() * 3; }
       const use = q.use || (rnd() < 0.82 ? 'home' : rnd() < 0.5 ? 'cafe' : 'market');
       const rec = this._bldgAt(zone, B, kind, q.x, q.z, q.fa ?? rnd() * TAU, hw, hd, h, { door: 1, use, deck: q.deck }, tints[Math.floor(rnd() * tints.length)], rnd);
-      if (rec) built++;
+      if (rec) { built++; if (rec.id == null && SPEC[kind].enter) this.extraNoDoor = (this.extraNoDoor || 0) + 1; } // 지었는데 문을 못 낸 집 (검사용 — 0 이어야)
     }
     this.extraBuilt = built;
   }
@@ -530,7 +530,8 @@ export class CityFabric {
       const ext = planExt(r, nx, nz);
       r.ext = ext;
       r.door = { x: r.x + nx * (ext + 0.25), z: r.z + nz * (ext + 0.25), nx, nz, yaw: Math.atan2(nx, nz) };
-      if (!this._excluded(r.door.x, r.door.z, 3)) { ok = true; break; }
+      // 장소 빌더가 큰 장소 안에 둔 집(B.extra)·중심 광장(B.core)은 그 장소 원은 건너뛴다 — 건물 자리와 같은 규칙 (전에는 물노래 섬의 집처럼 지어 놓고 문을 못 냈다)
+      if (!this._excluded(r.door.x, r.door.z, 3, !!(r.B && (r.B.core || r.B.extra)))) { ok = true; break; }
     }
     r.floorY = r.deck !== undefined ? r.deck + 0.15 : r.pad ? r.gy + 0.15 : Math.max(r.gy, r.mx, heightAt(r.door.x, r.door.z)) + 0.15; // 집터 위 건물은 집터 높이, 갑판 위는 갑판 높이
     if (!ok) return;
