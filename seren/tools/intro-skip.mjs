@@ -2,7 +2,8 @@
 // 문서가 요구한 입력 조건마다 따로 불러와서 (`?play=intro&at=초`):
 //  · rapid   : 우주 장면에서 빠르게 세 번 탭 → 들판, 블룸 NaN 주입(불꽃 재질), 들판에서 두 번 탭 → 본편
 //  · single  : 우주에서 한 번 탭 → 들판, 들판에서 한 번 탭 → 본편
-//  · natural : 탭 없이 끝까지 (우주 → 들판은 흰 빛 속의 연출된 넘어감, 들판 → 본편은 검은 막이 다 덮은 뒤)
+//  · natural : 탭 없이 우주 → 들판 (흰 빛 속의 연출된 넘어감)
+//  · ending  : 탭 없이 들판 → 본편 (끝나기 2 초 전부터 — 검은 막이 다 덮은 뒤 깨어남)
 //  · edge    : 우주 → 들판이 저절로 바뀌기 0.35 초 전에 탭, 들판이 시작되자마자 다시 탭
 // 매 프레임 (검은 막 불투명도, 흰 빛, 장면, 자막) 을 기록해:
 //  · 장면이 바뀐 첫 프레임에 검은 막이 완전히 덮여 있어야 한다 (우주 → 들판을 저절로 넘을 때만 흰 빛 0.3 이상이면 된다)
@@ -17,7 +18,7 @@ import { mkdirSync } from 'node:fs';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const SHOTS = args.includes('shots');
-const ONLY = (args.find((a) => a !== 'shots') || 'rapid,single,natural,edge').split(',');
+const ONLY = (args.find((a) => a !== 'shots') || 'rapid,single,natural,ending,edge').split(',');
 if (SHOTS) mkdirSync(join(root, 'shots'), { recursive: true });
 const W = 852, H = 393, TB = 32;
 const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'] });
@@ -98,9 +99,14 @@ const S = {
     await page.waitForTimeout(1200);
     await tap(1);
   }],
-  natural: [TB - 4, async ({ waitPhase, fails }) => {
+  // 탭 없이: 우주 → 들판 (흰 빛 속) — 들판 장면이 시작된 뒤 한 번 탭해 끝낸다 (헤드리스는 초당 한 프레임 남짓이라 들판 12.8 초를 다 보면 너무 길다)
+  natural: [TB - 4, async ({ page, tap, waitPhase, fails }) => {
     if (!(await waitPhase(['field'], false, 120000))) fails.push('저절로 들판으로 넘어가지 않음');
+    await page.waitForTimeout(1500);
+    await tap(1);
   }],
+  // 탭 없이: 들판 → 본편 (끝나기 2 초 전부터 — 들판 마지막 장면을 붙든 채 검은 막이 다 덮인 뒤 깨어남)
+  ending: [TB + 12.8 - 2, async () => {}],
   edge: [TB - 2.5, async ({ page, tap, fails }) => {
     // 저절로 바뀌기 0.35 초 전
     await page.waitForFunction((TB) => { const s = SEREN.game.director.seq; return s && s.t >= TB - 0.35; }, TB, { timeout: 120000, polling: 16 });
