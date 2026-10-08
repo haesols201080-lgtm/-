@@ -404,7 +404,7 @@ export function layoutFloor(B, F, ctx = {}) {
 
   // ── 5a. 한 방은 한 덩어리: 떨어진 조각(세대·객실을 나누다 생긴)은 맞닿은 방으로 — 같은 세대·객실의 방부터.
   //   (조각마다 문이 따로 달려 한쪽에서 다른 쪽으로 걸어갈 수 없는 방이 생기지 않게)
-  {
+  const onePiece = () => {
     const CORE = ['stair', 'lift', 'cargo', 'shaft'];
     const sameHome = (R, S) => R.unit == null ? S.unit == null : (S.unit === R.unit || S.id === R.unit || (R.unitRoot && S.unit === R.id) || (S.unitRoot && R.unit === S.id));
     for (let pass = 0; pass < 3; pass++) {
@@ -450,12 +450,17 @@ export function layoutFloor(B, F, ctx = {}) {
       }
       if (!changed) break;
     }
-  }
+  };
+  onePiece();
 
   thinMerge(); // 5a 가 조각을 옮긴 뒤 새로 생긴 띠 방도
 
   // ── 5d. 최소 방 크기 (v24): 방마다 그 쓰임의 정사각형(catalog.MIN_FIT 한 변)과 넓이가 들어가야 한다.
   //   바깥 크기에 맞추느라 찌그러진 방은 이웃과 합친다 — 큰 방의 상한은 두지 않는다 (사용자 원칙: 최소 크기 > 바깥 크기 맞추기)
+  //   합친 뒤 모서리로만 이어진 방(세대 거실이 대각선으로 갈라져 안쪽 방들이 현관과 끊기던 것)이 생기면 다시 한 덩어리로 → 다시 최소 크기
+  minSizeMerge(L, g, { setCell }, RING_MAIN[F.use]);
+  onePiece();
+  thinMerge();
   minSizeMerge(L, g, { setCell }, RING_MAIN[F.use]);
 
   // ── 5b. 중2층 계단: 위가 중2층이면 홀 바닥에서 중2층 앞 가장자리로 곧장 오르는 계단 (두 칸 너비, 칸은 홀 그대로 · void 3) ──

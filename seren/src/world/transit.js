@@ -10,20 +10,22 @@ import { hologramMaterial } from './hologram.js';
 import { PointLights } from './lights.js';
 import { PLACE } from '../data/places.js';
 import { bus } from '../core/events.js';
+import { LINES, RING_R, STATION } from '../data/transit-lines.js';
 
 const PAL = A.PAL;
-const RING_R = 1600;
-
-export const LINES = [
-  { id: 'l-meadow', name: '들판선', station: '이슬터역', to: 'dewfold', off: 200, unlock: 'quest:mq2', color: 0x7ff3e6 },
-  { id: 'l-glass', name: '황야선', station: '윤슬역', to: 'yunseul', off: 170, unlock: 'glass-pylon', color: 0xff9be0 },
-  { id: 'l-bloom', name: '숲선', station: '갓마을역', to: 'gatmaeul', off: 500, unlock: 'bloom-pylon', color: 0x6dfcd0 },
-  { id: 'l-canyon', name: '협곡선', station: '떠돌섬역', to: 'tteodol', off: 700, unlock: 'canyon-pylon', color: 0xffc86a },
-  { id: 'l-frost', name: '첨봉선', station: '별듣는역', to: 'observatory', off: 40, unlock: 'frost-pylon', color: 0xa8c8ff, slope: 0.2 },
-  { id: 'l-sea', name: '바다선', station: '물노래역', to: 'mulnorae', off: 420, unlock: 'sea-pylon', color: 0x7ff0ff },
-];
-
+export { LINES };
 const _v = new THREE.Vector3();
+
+/** 면 뒤집기 (part 가 만든 색인 없는 기하): 삼각형 꼭짓점 차례를 바꾸고 법선을 뒤집는다 — 안에서 보는 면 */
+function flipFaces(g) {
+  for (const k of Object.keys(g.attributes)) {
+    const a = g.attributes[k], n = a.itemSize, arr = a.array;
+    for (let t = 0; t + 2 < a.count; t += 3) for (let c = 0; c < n; c++) { const i1 = (t + 1) * n + c, i2 = (t + 2) * n + c, tmp = arr[i1]; arr[i1] = arr[i2]; arr[i2] = tmp; }
+  }
+  const nm = g.attributes.normal;
+  if (nm) for (let i = 0; i < nm.array.length; i++) nm.array[i] = -nm.array[i];
+  return g;
+}
 
 /** 점 배열 + 누적 길이 */
 function polyline(pts) {
@@ -70,28 +72,36 @@ export class Transit {
     this.juncAngles = juncA;
     const pts = [];
     const N = 220;
-    for (let i = 0; i <= N; i++) {
-      const a = (i / N) * Math.PI * 2;
+    /** 고리 관 높이 (각 a): 갈림역 둘레에서는 땅 + 5 m (역), 그 밖은 땅 + 28 m */
+    this.ringY = (a) => {
       let near = 0;
       for (const j of juncA) { const d = Math.abs(Math.atan2(Math.sin(a - j), Math.cos(a - j))); near = Math.max(near, 1 - Math.min(1, d / 0.12)); }
-      const x = Math.cos(a) * RING_R, z = Math.sin(a) * RING_R;
-      const g = heightAt(x, z);
       const k = near * near * (3 - 2 * near);
-      pts.push(new THREE.Vector3(x, g + 28 * (1 - k) + 5 * k, z));
+      return heightAt(Math.cos(a) * RING_R, Math.sin(a) * RING_R) + 28 * (1 - k) + 5 * k;
+    };
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      pts.push(new THREE.Vector3(Math.cos(a) * RING_R, this.ringY(a), Math.sin(a) * RING_R));
     }
     this.ring = polyline(pts);
+    this.ringSOf = (a) => ((((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI * 2)) * this.ring.length;
     this.ring.closed = true;
     this._tubeMesh(pts, 0xffd27a, true, true);
     this._supports(pts, 8);
+    this._tubeCols(pts);
     // 갈림역(하모네아 쪽)
     LINES.forEach((L, i) => {
       const a = juncA[i];
       const x = Math.cos(a) * RING_R, z = Math.sin(a) * RING_R;
-      this._station({ id: L.id + ':hub', name: `하모네아 ${L.name.replace('선', '')}문역`, line: L.id, hub: true, x, z, y: heightAt(x, z) + 5, dir: [-Math.sin(a), Math.cos(a)], color: 0xffd27a, ringS: (a < 0 ? a + Math.PI * 2 : a) / (Math.PI * 2) * this.ring.length });
+      this._station({ id: L.id + ':hub', name: `하모네아 ${L.name.replace('선', '')}문역`, line: L.id, hub: true, x, z, y: heightAt(x, z) + 5, dir: [-Math.sin(a), Math.cos(a)], color: 0xffd27a, ringS: this.ringSOf(a) });
     });
   }
 
   // ── 갈래선 ──────────────────────────────
+  /**
+   * 갈래선: 고리선에서 갈림역(하모네아 쪽 역) 끝을 지나 (STATION.hl + 70 m 뒤) 공중에서 바깥으로 갈라져 나와
+   * 지방 역으로 간다 — 예전처럼 갈림역 옆구리를 뚫고 나가지 않는다 (v24). 끝 역에는 역의 축을 따라 곧게 들어간다.
+   */
   _buildSpoke(L) {
     const P = PLACE[L.to];
     if (!P) return;
@@ -99,34 +109,53 @@ export class Transit {
     const d = Math.hypot(cx, cz);
     const ux = cx / d, uz = cz / d;
     const sx = cx - ux * L.off, sz = cz - uz * L.off;
-    const x0 = ux * RING_R, z0 = uz * RING_R;
-    const len = Math.hypot(sx - x0, sz - z0);
-    const N = Math.max(30, Math.round(len / 40));
+    const aj = Math.atan2(cz, cx) + (STATION.hl + 70) / RING_R; // 갈라지는 각 (역 끝 너머)
+    const jx = Math.cos(aj) * RING_R, jz = Math.sin(aj) * RING_R, tx = -Math.sin(aj), tz = Math.cos(aj);
+    // 평면 길: 갈라지는 자리에서 바깥으로 휘는 곡선 → 끝 역 160 m 앞 → 역 축을 따라 역으로
+    const ex = sx - ux * 160, ez = sz - uz * 160;
+    let vx = ex - jx, vz = ez - jz;
+    const vl = Math.hypot(vx, vz); vx /= vl; vz /= vl;
+    const c1 = [jx + Math.cos(aj) * 80, jz + Math.sin(aj) * 80], p2 = [jx + vx * 220, jz + vz * 220]; // 바깥(지름 방향)으로 떠난다 — 고리의 어느 쪽에서 와도 되돌아가지 않게
+    const plan = [];
+    for (let k = 0; k <= 16; k++) { const t = k / 16, a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t; plan.push([a * jx + b * c1[0] + c * p2[0], a * jz + b * c1[1] + c * p2[1]]); }
+    plan.push([ex, ez], [sx, sz]);
+    // 고르게 30 m 마다
+    const cum = [0];
+    for (let i = 1; i < plan.length; i++) cum.push(cum[i - 1] + Math.hypot(plan[i][0] - plan[i - 1][0], plan[i][1] - plan[i - 1][1]));
+    const len = cum[cum.length - 1];
+    const N = Math.max(30, Math.round(len / 30));
     const ds = len / N;
-    const ground = [], ys = [];
-    for (let i = 0; i <= N; i++) { const t = i / N; ground.push(Math.max(0, heightAt(x0 + (sx - x0) * t, z0 + (sz - z0) * t))); }
+    const xz = [];
+    for (let i = 0, q = 0; i <= N; i++) {
+      const s = (i / N) * len;
+      while (q < cum.length - 2 && cum[q + 1] < s) q++;
+      const t = (s - cum[q]) / Math.max(1e-6, cum[q + 1] - cum[q]);
+      xz.push([plan[q][0] + (plan[q + 1][0] - plan[q][0]) * t, plan[q][1] + (plan[q + 1][1] - plan[q][1]) * t]);
+    }
+    const ground = xz.map(([x, z]) => Math.max(0, heightAt(x, z))), ys = [];
     const win = Math.max(2, Math.round(260 / ds));
     for (let i = 0; i <= N; i++) {
       let m = -1e9;
       for (let j = Math.max(0, i - win); j <= Math.min(N, i + win); j++) m = Math.max(m, ground[j]);
       ys.push(m + 36);
     }
-    const g = (L.slope || 0.12) * ds;
+    const sl = L.slope || 0.12, g = sl * ds;
     for (let i = 1; i <= N; i++) ys[i] = Math.max(ys[i], ys[i - 1] - g);
     for (let i = N - 1; i >= 0; i--) ys[i] = Math.max(ys[i], ys[i + 1] - g);
-    // 양 끝은 역 높이로 (지면 + 5)
-    const yA = heightAt(x0, z0) + 5, yB = heightAt(sx, sz) + 5;
+    // 양 끝: 갈라지는 자리는 그 자리 고리 관 높이, 끝 역은 땅 + 5
+    const yA = this.ringY(aj), yB = heightAt(sx, sz) + 5;
     for (let i = 0; i <= N; i++) {
       const fromA = i * ds, fromB = (N - i) * ds;
-      ys[i] = Math.min(ys[i], yA + fromA * (L.slope || 0.12) * 1.2, yB + fromB * (L.slope || 0.12) * 1.2);
+      ys[i] = Math.min(ys[i], yA + fromA * sl * 1.2, yB + fromB * sl * 1.2);
       ys[i] = Math.max(ys[i], ground[i] + 4);
     }
+    ys[0] = yA;
     for (let pass = 0; pass < 3; pass++) for (let i = 1; i < N; i++) ys[i] = (ys[i - 1] + ys[i] * 2 + ys[i + 1]) / 4;
-    const pts = [];
-    for (let i = 0; i <= N; i++) { const t = i / N; pts.push(new THREE.Vector3(x0 + (sx - x0) * t, ys[i], z0 + (sz - z0) * t)); }
-    const line = { ...L, path: polyline(pts), open: true };
+    const pts = xz.map(([x, z], i) => new THREE.Vector3(x, ys[i], z));
+    const line = { ...L, path: polyline(pts), open: true, jS: this.ringSOf(aj) };
     line.meshes = this._tubeMesh(pts, L.color, false, false);
     this._supports(pts, 5);
+    this._tubeCols(pts);
     this.lines.push(line);
     this._station({ id: L.id + ':end', name: L.station, line: L.id, x: sx, z: sz, y: yB, dir: [ux, uz], color: L.color });
   }
@@ -143,6 +172,24 @@ export class Transit {
     const keelM = new THREE.Mesh(keel, this.mat);
     this.group.add(glass, keelM, rail);
     return { glass, rail, keel: keelM };
+  }
+
+  /** 관이 땅 가까이(밑면이 땅에서 2.4 m 안) 지나는 마디는 단단하다 — 유리관을 걸어서 뚫고 지나가지 않게 (10 m 조각마다, 그 밖은 관 밑으로 지나간다) */
+  _tubeCols(pts) {
+    const C = this.world.colliders;
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const a = pts[i], b = pts[i + 1];
+      const L = Math.hypot(b.x - a.x, b.z - a.z), n = Math.max(1, Math.ceil(L / 10));
+      const rot = Math.atan2(-(b.z - a.z), b.x - a.x);
+      for (let k = 0; k < n; k++) {
+        const t0 = k / n, t1 = (k + 1) / n;
+        const ax = a.x + (b.x - a.x) * t0, az = a.z + (b.z - a.z) * t0, bx = a.x + (b.x - a.x) * t1, bz = a.z + (b.z - a.z) * t1;
+        const y0 = a.y + (b.y - a.y) * t0, y1 = a.y + (b.y - a.y) * t1;
+        const g = Math.max(heightAt(ax, az), heightAt(bx, bz), heightAt((ax + bx) / 2, (az + bz) / 2));
+        if (Math.min(y0, y1) - 5.5 > g + 2.4) continue;
+        C.add({ type: 'box', x: (ax + bx) / 2, z: (az + bz) / 2, hx: L / n / 2 + 0.3, hz: 5.2, rot, y0: g - 2, y1: Math.max(y0, y1) + 5.2 });
+      }
+    }
   }
 
   _supports(pts, every) {
@@ -168,28 +215,45 @@ export class Transit {
     if (parts.length) { const m = new THREE.Mesh(merge(parts), this.mat); m.matrixAutoUpdate = false; this.group.add(m); }
   }
 
+  /**
+   * 역 (v24 「메인 도시 진입 통로」): 역 자리 땅은 heightfield 가 한 높이로 고른다(받침 + 앞마당 3 m). 승강장 = 그 높이.
+   *  · 받침: 양쪽 승강장(옆 x 6~17 m)이 땅 속 3 m 까지 이어진 단단한 단 — 떠 있는 얇은 판이 아니다. 가운데는 관이 지나는 도랑.
+   *  · 승강장 끝: 도랑 쪽에 유리 막(난간 높이)과 빛 띠, 지붕 밑동을 따라 낮은 벽(지붕 껍데기를 걸어 나가지 않게).
+   *  · 지붕: 바깥·안 두 겹(안에서 올려다봐도 지붕이 보인다) + 안쪽 갈비 아치 다섯 + 양 끝 빛 아치.
+   *  · 드나들기: 양 끝(노선 방향 ±37 m)이 앞마당 땅과 같은 높이 — 걸어서 들어오고 나간다. 갈래선은 역 끝 너머에서 고리와 갈라진다(역을 뚫지 않는다).
+   */
   _station(S) {
     const { x, z, y } = S;
     const yaw = Math.atan2(S.dir[0], S.dir[1]);
-    const parts = [];
-    const g = heightAt(x, z);
-    // 승강장: 관 양옆
-    for (const s of [-1, 1]) {
-      parts.push(part(xf(new THREE.BoxGeometry(9, 1.2, 70), { x: s * 10.5, y: y - 5.6 }), 0xe6e0ee, 0));
-      parts.push(part(xf(new THREE.BoxGeometry(0.4, 0.2, 70), { x: s * 6.2, y: y - 4.95 }), S.color, 1.6));
-      if (y - 6.2 - g > 0.5) parts.push(part(xf(new THREE.BoxGeometry(8, y - 6.2 - g + 2, 66), { x: s * 10.5, y: (y - 6.2 + g - 2) / 2 }), 0xd8d2e2, 0));
-    }
-    // 지붕: 진주빛 아치
-    const roof = new THREE.CylinderGeometry(17, 17, 74, 24, 1, true, -Math.PI / 2, Math.PI);
-    roof.rotateZ(Math.PI / 2);
-    roof.rotateY(Math.PI / 2);
-    parts.push(part(xf(roof, { y: y - 5 }), (px, py) => (py > y + 10.5 ? PAL.gold : 0xf2eef6), (px, py) => (py > y + 11.3 ? 1.0 : 0), -3.4));
-    for (const zz of [-36, 36]) parts.push(part(xf(new THREE.TorusGeometry(17, 0.5, 4, 24, Math.PI), { y: y - 5, z: zz }), S.color, 1.5));
-    // 계단 (승강장 → 땅)
+    const cs = Math.cos(yaw), sn = Math.sin(yaw);
+    const W = (lx, lz) => [x + cs * lx + sn * lz, z - sn * lx + cs * lz];
+    const { hw, hl } = STATION;
     const plat = y - 5;
-    if (plat - g > 1.5) {
-      const steps = Math.ceil((plat - g) / 0.5);
-      for (const s of [-1, 1]) for (let k = 0; k < Math.min(steps, 30); k++) parts.push(part(xf(new THREE.BoxGeometry(4, 0.5, 1.2), { x: s * 17, y: plat - 0.25 - k * 0.5, z: -30 + k * 1.2 }), 0xe6e0ee, 0));
+    const D = 3;
+    const parts = [];
+    const pale = 0xe6e0ee, stone = 0xd8d2e2;
+    // 받침 (승강장 둘) + 앞 가장자리 돌림띠
+    for (const s of [-1, 1]) {
+      parts.push(part(xf(new THREE.BoxGeometry(hw - 6, D, hl * 2), { x: s * (6 + (hw - 6) / 2), y: plat - D / 2 }), pale, 0));
+      parts.push(part(xf(new THREE.BoxGeometry(0.35, 0.03, hl * 2 - 3), { x: s * 6.7, y: plat + 0.015 }), S.color, 1.6));
+      // 도랑 쪽 유리 막 + 빛 손잡이 (양 끝 1.5 m 는 비움 — 승강장 끝으로 걸어 들어오는 자리)
+      parts.push(part(xf(new THREE.BoxGeometry(0.08, 1.2, hl * 2 - 3), { x: s * 6.08, y: plat + 0.6 }), 0xcff4ff, 0.25));
+      parts.push(part(xf(new THREE.BoxGeometry(0.12, 0.08, hl * 2 - 3), { x: s * 6.08, y: plat + 1.24 }), S.color, 1.4));
+      // 지붕 밑동: 낮은 벽 (받침 가장자리)
+      parts.push(part(xf(new THREE.BoxGeometry(0.6, 1.1, hl * 2), { x: s * (hw - 0.3), y: plat + 0.55 }), stone, 0));
+    }
+    // 관 도랑 바닥
+    parts.push(part(xf(new THREE.BoxGeometry(12, 0.5, hl * 2), { y: plat - 0.7 }), 0x9a96aa, 0)); // 윗면 plat − 0.45 (보통 걸음으로 오르내리는 높이)
+    // 지붕: 바깥 껍데기 + 안쪽 껍데기(뒤집은 면) + 갈비 아치 + 양 끝 빛 아치
+    // (예전 지붕은 옆으로 누운 반원통이라 반은 땅에 묻히고 한쪽 옆만 덮었다 — 축을 노선 방향(z)으로, 호는 위로)
+    const roof = new THREE.CylinderGeometry(hw, hw, hl * 2, 28, 1, true, Math.PI / 2, Math.PI).rotateX(Math.PI / 2);
+    parts.push(part(xf(roof, { y: plat }), (px, py) => (py > y + 10.5 ? PAL.gold : 0xf2eef6), (px, py) => (py > y + 11.3 ? 1.0 : 0), -3.4));
+    const inner = new THREE.CylinderGeometry(hw - 0.25, hw - 0.25, hl * 2, 28, 1, true, Math.PI / 2, Math.PI).rotateX(Math.PI / 2);
+    parts.push(flipFaces(part(xf(inner, { y: plat }), 0xe9e4f0, 0)));
+    for (const zz of [-27, -13.5, 0, 13.5, 27]) parts.push(part(xf(new THREE.TorusGeometry(hw - 0.4, 0.22, 4, 28, Math.PI), { y: plat, z: zz }), 0xd8d2e4, 0.05));
+    for (const zz of [-(hl - 1), hl - 1]) {
+      parts.push(part(xf(new THREE.TorusGeometry(hw, 0.55, 5, 28, Math.PI), { y: plat, z: zz }), S.color, 1.5));
+      for (const s of [-1, 1]) parts.push(part(xf(new THREE.BoxGeometry(1.6, 0.5, 1.6), { x: s * (hw - 0.3), y: plat + 0.25, z: zz }), stone, 0)); // 아치 발
     }
     const pm = new THREE.Mesh(merge(parts.map((p) => xf(p, { x, z, ry: yaw }))), this.mat);
     pm.matrixAutoUpdate = false;
@@ -199,23 +263,24 @@ export class Transit {
     sign.position.set(x, y + 9, z);
     sign.rotation.y = yaw + Math.PI / 2;
     this.group.add(sign);
-    // 충돌: 승강장 + 계단
-    const cs = Math.cos(yaw), sn = Math.sin(yaw);
+    // 충돌: 받침(걷는 면) · 유리 막 · 지붕 밑동 벽 · 도랑 바닥
+    const C = this.world.colliders;
     for (const s of [-1, 1]) {
-      const px = x + cs * s * 10.5, pz = z - sn * s * 10.5;
-      this.world.colliders.add({ type: 'box', x: px, z: pz, hx: 4.5, hz: 35, rot: yaw, y0: Math.min(g, plat) - 3, y1: plat });
-      if (plat - g > 1.5) {
-        const sx = x + cs * s * 17, sz = z - sn * s * 17;
-        const L = Math.min(30, Math.ceil((plat - g) / 0.5)) * 1.2;
-        // 경사로: 로컬 x 가 길이 방향이 되도록 회전을 90° 돌림
-        const rot = yaw + Math.PI / 2;
-        const cx2 = sx + Math.sin(yaw) * (-30 + L / 2), cz2 = sz + Math.cos(yaw) * (-30 + L / 2);
-        this.world.colliders.add({ type: 'ramp', x: cx2, z: cz2, hx: L / 2, hz: 2, rot, y0: g - 2, y1: plat - (L / 1.2) * 0.5, y1b: plat });
-      }
+      const [px, pz] = W(s * (6 + (hw - 6) / 2), 0);
+      C.add({ type: 'box', x: px, z: pz, hx: (hw - 6) / 2, hz: hl, rot: yaw, y0: plat - D, y1: plat, walk: true });
+      const [gx, gz] = W(s * 6.08, 0);
+      C.add({ type: 'box', x: gx, z: gz, hx: 0.06, hz: hl - 1.5, rot: yaw, y0: plat - 0.3, y1: plat + 1.28 });
+      const [wx, wz] = W(s * (hw - 0.3), 0);
+      C.add({ type: 'box', x: wx, z: wz, hx: 0.3, hz: hl, rot: yaw, y0: plat - 0.3, y1: plat + 6 });
     }
-    for (let k = 0; k < 6; k++) this.lights.add(x + Math.sin(yaw) * (-30 + k * 12), plat + 0.4, z + Math.cos(yaw) * (-30 + k * 12), S.color, 4, 0, 0);
+    C.add({ type: 'box', x, z, hx: 6, hz: hl, rot: yaw, y0: plat - 1.1, y1: plat - 0.45, walk: true });
+    // 식물이 받침·앞마당을 뚫고 자라지 않게
+    this.world.clearZones.push({ x, z, r: Math.hypot(hw, hl) + STATION.apron });
+    for (let k = 0; k < 6; k++) { const [lx, lz] = W(10.5, -30 + k * 12); this.lights.add(lx, plat + 0.4, lz, S.color, 4, 0, 0); }
     S.platY = plat;
     S.sign = sign;
+    S.ends = [-1, 1].map((e) => ({ e, sides: [-1, 1].map((s) => W(s * 11, e * (hl + STATION.apron + 2))) })); // 드나드는 자리 (검사 도구)
+    S.W = W;
     this.stations.push(S);
   }
 
@@ -273,13 +338,14 @@ export class Transit {
   /** 역 A → 역 B 의 경로 (점 배열) */
   routeBetween(A, B) {
     const pts = [];
-    const spoke = (S) => this.lines.find((l) => l.id === S.line).path.pts;
-    const hubOf = (S) => this.stations.find((s) => s.id === S.line + ':hub');
-    // A → 고리
+    const lineOf = (S) => this.lines.find((l) => l.id === S.line);
+    const spoke = (S) => lineOf(S).path.pts;
+    // A → 고리: 갈래선 끝 역이면 갈래를 거꾸로 타고 갈라지는 자리(jS)까지, 갈림역이면 그 역 자리에서 고리를 탄다
     if (!A.hub) pts.push(...spoke(A).slice().reverse());
-    const hA = A.hub ? A : hubOf(A), hB = B.hub ? B : hubOf(B);
-    if (hA !== hB) {
+    const sA = A.hub ? A.ringS : lineOf(A).jS, sB = B.hub ? B.ringS : lineOf(B).jS;
+    if (Math.abs(sA - sB) > 1) {
       const R = this.ring, L = R.length;
+      const hA = { ringS: sA }, hB = { ringS: sB };
       let d = hB.ringS - hA.ringS;
       if (d > L / 2) d -= L; if (d < -L / 2) d += L;
       const n = Math.max(2, Math.round(Math.abs(d) / 40));
@@ -330,7 +396,7 @@ export class Transit {
           const S = B;
           const cs = Math.cos(Math.atan2(S.dir[0], S.dir[1]));
           const sn = Math.sin(Math.atan2(S.dir[0], S.dir[1]));
-          player.pos.set(S.x + cs * 10.5, S.platY, S.z - sn * 10.5);
+          player.pos.set(S.x - cs * 10.5, S.platY, S.z + sn * 10.5); // 승강장 −x 쪽 (갈림역의 +x 쪽은 갈래 관이 가운데를 지난다)
           player.vel.set(0, 0, 0);
           onArrive && onArrive(S);
         }

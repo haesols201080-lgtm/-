@@ -2,6 +2,7 @@
 import { createNoise2D, fbm, ridged, smoothstep } from '../core/noise.js';
 import { REGIONS, WORLD } from './regions.js';
 import { FLATTEN } from '../data/places.js';
+import { stationSites, STATION } from '../data/transit-lines.js';
 import { ZONES, ZGEO, isRural, hasStreet, bandStart } from '../data/city.js';
 import { zoneBlocks } from './cityplan.js';
 
@@ -520,7 +521,33 @@ function levelCity(x, z, hNat) {
 export function cityMask(x, z) { return LEVEL ? levelCity(x, z, rawHeight(x, z, 0, new Float32Array(RC))) : 0; }
 
 // 장소 주변 평탄화 — 목표 높이가 없으면 그 자리의 원래 높이(중심점)를 쓴다 (도시 안이면 고른 바닥 높이)
-for (const f of FLATTEN) if (f.h === undefined) f.h = rawHeight(f.x, f.z, 1, new Float32Array(RC));
+// 빛길 역 자리: 역 받침(34 × 74 m)과 앞마당이 한 높이 — 한쪽 끝이 땅에 묻히거나 승강장이 떠 있지 않게 (v24 메인 도시 진입 통로)
+//  앞마당 너머 이어지는 비탈은 둘레 땅의 높이차에 맞춰 길게 (평균 경사 1:5 — 산꼭대기 역도 뛰지 않고 걸어 오른다)
+for (const S of stationSites()) FLATTEN.push({ x: S.x, z: S.z, r: Math.hypot(STATION.hw, STATION.hl) + STATION.apron, blend: 45, station: S.id, dir: S.dir });
+for (const f of FLATTEN) if (f.h === undefined && !f.station) f.h = rawHeight(f.x, f.z, 1, new Float32Array(RC));
+{
+  // 앞의 평탄화까지 적용한 높이 (역 단은 장소의 단 위에 놓인다)
+  const flatUpto = (x, z, n) => {
+    let h = rawHeight(x, z, 1, new Float32Array(RC));
+    for (let i = 0; i < n; i++) { const f = FLATTEN[i], R = f.r + f.blend, d = Math.hypot(x - f.x, z - f.z); if (d < R) h += (f.h - h) * smoothstep(R, f.r, d); }
+    return h;
+  };
+  for (let i = 0; i < FLATTEN.length; i++) {
+    const f = FLATTEN[i];
+    if (!f.station) continue;
+    // 장소의 평평한 단과 맞닿으면 그 단의 높이 (산꼭대기 관측소 옆 역이 단 아래 구덩이가 되지 않게)
+    const host = FLATTEN.find((q) => !q.station && Math.hypot(q.x - f.x, q.z - f.z) < q.r + f.r);
+    f.h = host ? host.h : flatUpto(f.x, f.z, i);
+    // 비탈 길이는 드나드는 두 길(노선 방향 양 끝 ±20°)의 땅 높이차로 정한다 — 옆이 벼랑인 갈림역(도시 단 가장자리)까지 크게 깎지 않게
+    let dmax = 0;
+    const base = Math.atan2(f.dir[1], f.dir[0]);
+    for (const R of [f.r + 45, f.r + 90, f.r + 150]) for (const a0 of [0, Math.PI]) for (const da of [-0.35, 0, 0.35]) {
+      const a = base + a0 + da;
+      dmax = Math.max(dmax, (Math.abs(flatUpto(f.x + Math.cos(a) * R, f.z + Math.sin(a) * R, i) - f.h) / (R - f.r)) * 45);
+    }
+    f.blend = f.station.endsWith(':hub') ? 45 : Math.min(240, Math.max(45, dmax * 5)); // 갈림역은 도시 단 위 — 도시 길로 드나든다 (둘레를 깎지 않는다)
+  }
+}
 
 /**
  * 지형 높이.
