@@ -85,13 +85,13 @@ const r4 = await ev(() => {
 ok(r4.open && r4.tab === 'quests', `J → 퀘스트 창 (${r4.tab})`);
 ok(r4.tabs && r4.tabs[0].startsWith('메인 퀘스트') && r4.tabs[1].startsWith('사이드 퀘스트') && r4.tabs[2].startsWith('지난 일'), `탭: ${r4.tabs && r4.tabs.join(' | ')}`);
 ok(r4.items >= 1 && r4.det && r4.off, `목록 ${r4.items} · 세부 단계(지금 ▶) · 「추적 끄기」 단추`);
-await page.click('.qlog [data-tab="side"]');
+await ev(() => document.querySelector('.qlog [data-tab="side"]').click());
 const r4b = await ev(() => ({ items: [...document.querySelectorAll('.qlog .ql-item .qt')].map((e) => e.textContent.trim().slice(0, 14)), btn: !!document.querySelector('.qlog .ql-det [data-track], .qlog .ql-det [data-untrack]') }));
 ok(r4b.items.length >= 4 && r4b.btn, `사이드 탭: ${r4b.items.join(' / ')}`);
-await page.click('.qlog .ql-det [data-track], .qlog .ql-det [data-untrack]');
+await ev(() => document.querySelector('.qlog .ql-det [data-track], .qlog .ql-det [data-untrack]').click());
 const r4c = await ev(() => SEREN.game.quests.tracked());
 ok(!!r4c, `창에서 추적 단추 → ${r4c}`);
-await page.click('.qlog [data-tab="past"]');
+await ev(() => document.querySelector('.qlog [data-tab="past"]').click());
 const r4d = await ev(() => [...document.querySelectorAll('.qlog .ql-item .qt')].map((e) => e.textContent.trim().slice(0, 12)));
 ok(r4d.some((t) => t.startsWith('세렌 도감 첫 장')) && r4d.some((t) => t.startsWith('착륙')), `지난 일: ${r4d.join(' / ')}`);
 await page.screenshot({ path: join(root, 'shots', 'quest-window.png'), timeout: 240000 });

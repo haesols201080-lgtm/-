@@ -108,8 +108,8 @@ export class Journal {
       const I = itemInfo(id);
       if (!I) continue;
       any = true;
-      const can = I.use === 'eat' || I.use === 'map' || I.use === 'read';
-      h += `<div class="bag-item"><span class="ic">${I.icon}</span><div class="tx"><b>${I.name} <small>${id === 'starseed' ? won(n) : `× ${n}`}</small></b><small>${I.tag} · ${I.desc}</small></div>${can && n ? `<button class="btn" data-use="${id}">${I.use === 'eat' ? '먹기' : I.use === 'read' ? '읽기' : '쓰기'}</button>` : ''}</div>`;
+      const can = I.use === 'eat' || I.use === 'map' || I.use === 'read' || I.use === 'heal';
+      h += `<div class="bag-item"><span class="ic">${I.icon}</span><div class="tx"><b>${I.name} <small>${id === 'starseed' ? won(n) : `× ${n}`}</small></b><small>${I.tag} · ${I.desc}</small></div>${can && n ? `<button class="btn" data-use="${id}">${I.use === 'eat' ? '먹기' : I.use === 'read' ? '읽기' : I.use === 'heal' ? '감기' : '쓰기'}</button>` : ''}</div>`;
     }
     h += '</div>';
     if (!any) h += '<p class="muted">아직 아무것도 없어요.</p>';

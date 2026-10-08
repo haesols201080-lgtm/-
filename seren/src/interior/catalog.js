@@ -20,6 +20,7 @@ export const FUSE = {
   confer: { name: '회의·교육층', plan: 'ring', mod: 1, op: 'office', roomd: 10 },
   exec: { name: '임원층', plan: 'ring', mod: 1, op: 'office', roomd: 9 },
   care: { name: '응급·접수', plan: 'open', mod: 1, op: 'clinic', pub: true, front: true },
+  carew: { name: '응급·입원', plan: 'open', mod: 1, op: 'clinic', pub: true, front: true }, // 한 층짜리 생활권 병원: 대기·진료 + 입원실
   school: { name: '교실', plan: 'ring', mod: 1, op: 'school', roomd: 9 },
   schoolhall: { name: '체육관·강당', plan: 'hall', mod: 2, op: 'school', pub: true },
   canteen: { name: '급식실', plan: 'open', mod: 1, op: 'food', pub: true },
@@ -29,6 +30,7 @@ export const FUSE = {
   hall: { name: '공연장', plan: 'hall', mod: 2, op: 'hall', pub: true },
   admin: { name: '행정', plan: 'ring', mod: 1, op: 'admin', roomd: 9 },
   civic: { name: '민원실', plan: 'open', mod: 1, op: 'admin', pub: true },
+  bank: { name: '은행', plan: 'open', mod: 2, op: 'bank', pub: true, front: true }, // v24: 영업장(창구·셀프 금융 단말) + 상담실 · 금고실 · 기록실 · 사무실
   residential: { name: '주거', plan: 'ring', mod: 1, op: 'home', roomd: 9 },
   house: { name: '집', plan: 'house', mod: 1, op: 'home' },
   hotel: { name: '객실', plan: 'ring', mod: 1, op: 'hotel', roomd: 8 },
@@ -121,6 +123,9 @@ export const ROOMS = {
   rehearsal: { name: '연습실', acc: 'staff', win: true, fl: 'wood', cl: 'plain', tone: 'warm', lux: 1 },
   // 행정
   counters: { name: '민원 창구', acc: 'public', win: true, fl: 'stone', cl: 'coffer', tone: 'brand', lux: 1.1 },
+  banking: { name: '영업장', acc: 'public', win: true, fl: 'stone', cl: 'coffer', tone: 'brand', lux: 1.15 },
+  bankconsult: { name: '상담실', acc: 'public', win: true, fl: 'carpet', cl: 'plain', tone: 'warm', lux: 0.95 },
+  vault: { name: '금고실', acc: 'staff', fl: 'tile', cl: 'plain', tone: 'base', lux: 0.8 },
   council: { name: '의회실', acc: 'public', win: true, fl: 'carpet', cl: 'coffer', tone: 'warm', lux: 1 },
   // 주거·호텔
   unit: { name: '집', acc: 'private', win: true, fl: 'wood', cl: 'plain', tone: 'warm', lux: 0.9 },
@@ -247,6 +252,9 @@ export const FIX = {
   lightrig: { name: '빛 조종대', w: 1.6, d: 0.8, h: 1.1, front: 1.0, use: 'lights' },
   ticketbooth: { name: '표 파는 창구', w: 2.4, d: 1.0, h: 1.05, front: 1.4, back: 1.0, use: 'tickets' },
   servicecounter: { name: '민원 창구', w: 2.0, d: 0.9, h: 1.05, front: 1.4, back: 1.0, use: 'civic' },
+  teller: { name: '은행 창구', w: 2.2, d: 0.9, h: 1.05, front: 1.6, back: 1.0, use: 'teller' },
+  atm: { name: '셀프 금융 단말', w: 0.9, d: 0.6, h: 1.7, wall: true, front: 1.1, use: 'atm' },
+  vaultdoor: { name: '금고 문', w: 2.4, d: 0.5, h: 2.6, wall: true, front: 1.2, use: 'vault' },
   numbers: { name: '번호표 기둥', w: 0.5, d: 0.5, h: 1.4, round: true, front: 0.9, use: 'queue' },
   counciltable: { name: '둥근 의회 탁자', w: 5.0, d: 5.0, h: 0.75, round: true, front: 1.0, seats: 10 },
   // 주거·호텔
@@ -320,7 +328,7 @@ export const MIN_FIT = {
   concourse: [3, 16], growhall: [4, 24], gardenhall: [4, 24], pool: [4, 24], gymroom: [3, 16], open: [3, 12], labroom: [3, 12], wardroom: [3, 12],
   dining: [3, 12], kitchen: [2, 8], sales: [3, 12], lobby: [3, 12], waiting: [3, 9], lounge: [3, 9], foyer: [3, 12], living: [3, 10], unit: [3, 15],
   guestroom: [3, 9], bedroom: [3, 8], meeting: [3, 9], manager: [3, 9], consult: [3, 9], treat: [3, 9], scan: [3, 9], office1: [3, 9], control: [3, 9],
-  teachers: [3, 9], dock: [3, 12], counters: [3, 9], rawstore: [3, 9], finished: [3, 9], corehall: [3, 9], coilroom: [3, 9], packing: [3, 9], parkbay: [3, 12],
+  teachers: [3, 9], dock: [3, 12], counters: [3, 9], banking: [4, 16], bankconsult: [3, 9], vault: [3, 9], rawstore: [3, 9], finished: [3, 9], corehall: [3, 9], coilroom: [3, 9], packing: [3, 9], parkbay: [3, 12],
   staffroom: [2, 6], nurse: [2, 6], pharmacy: [2, 6], hr: [2, 6], instrument: [2, 6], cleanroom: [2, 6], analysis: [2, 6], stockroom: [2, 6], archive: [2, 6],
   conserve: [2, 6], giftshop: [2, 6], backstage: [2, 6], laundry: [2, 6], maint: [2, 6], fuelstore: [2, 6], nutrient: [2, 6], deck: [2, 6], bar: [2, 6], kitchen1: [2, 5],
 };

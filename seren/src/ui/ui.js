@@ -64,6 +64,11 @@ export class UI {
     this.walletEl = $(`<div class="wallet" title="가진 돈"><span class="wv">0</span><span class="wu">${CUR}</span><span class="wd"></span></div>`);
     this.hud.appendChild(this.walletEl);
     this.walletEl.addEventListener('click', () => this.openMenu('journal'));
+    // 체력 (v24): 다 찼을 때는 숨고, 줄었거나 바뀌면 보인다 — 30% 아래면 붉게 맥박
+    this.hpEl = $(`<div class="hpbar hidden" title="체력"><i class="hp-ic">♥</i><span class="hp-track"><span class="hp-fill"></span></span><span class="hp-v"></span></div>`);
+    this.hud.appendChild(this.hpEl);
+    this.hurtEl = $(`<div class="hurt-flash"></div>`);
+    this.hud.appendChild(this.hurtEl);
     this.promptEl = $(`<div class="prompt glass hidden"></div>`);
     this.hud.appendChild(this.promptEl);
     this.moaEl = $(`<div class="moa" style="opacity:0"></div>`);
@@ -141,6 +146,19 @@ export class UI {
   setHud(on) { this.hud.classList.toggle('off', !on); }
 
   /** 지갑 (매 틀마다 불러도 된다 — 값이 바뀔 때만 고친다) */
+  /** 체력 막대: show 면 잠깐 보이고, 다 차면 4초 뒤 숨는다 */
+  health(hp, max, show = false) {
+    const el = this.hpEl;
+    if (!el) return;
+    const k = Math.max(0, Math.min(1, hp / max));
+    el.querySelector('.hp-fill').style.width = `${(k * 100).toFixed(1)}%`;
+    el.querySelector('.hp-v').textContent = Math.ceil(hp);
+    el.classList.toggle('low', k < 0.3);
+    if (k < 0.999 || show) { el.classList.remove('hidden'); clearTimeout(this._hpT); if (k >= 0.999) this._hpT = setTimeout(() => el.classList.add('hidden'), 4000); }
+    else { clearTimeout(this._hpT); this._hpT = setTimeout(() => el.classList.add('hidden'), 4000); }
+  }
+  hurtFlash(k) { if (this.hurtEl) this.hurtEl.style.opacity = k.toFixed(3); }
+
   updateWallet(v) {
     const n = Math.round((+v || 0) * 100) / 100;
     if (this._wallet === n) return;

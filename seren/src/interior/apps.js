@@ -17,6 +17,7 @@ import { hashStr, mulberry32 } from '../core/noise.js';
 import { audio } from '../core/audio.js';
 import { won } from '../data/money.js';
 import { josa } from '../core/josa.js';
+import { deviceOf, SerenOS, osMail } from './os.js';
 
 const HOUR = 1 / 24;
 const hh = (t) => { const m = Math.round((t % 1) * 24 * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
@@ -42,13 +43,17 @@ export class Apps {
     this.wrap = null;
     this.view = null;
     this._t = 0;
+    this.os = new SerenOS(this);
   }
   get S() { return this.ops.S; }
   get cur() { return this.ops.cur; }
   toast(s, kind) { this.game.ui.toast(s, kind ? { kind } : {}); }
 
   // ── 창 ─────────────────────────────────────
-  /** 단말 열기. name: home|jobs|directory|mine|econ|work|meeting|dispatch|analysis|catalog, ctx: { T, F, app } */
+  /**
+   * 기기 열기 (v24: 기기마다 다른 화면 문법 — os.js deviceOf). name: home|jobs|directory|mine|econ|work|meeting|dispatch|analysis|catalog, ctx: { T, F, app }
+   *  · 안내 빛판/안내대: 층 안내·찾기만 · 공용 단말: 건물·일자리 공고·내 지원 · 제어판·회의 탁자·찾기 단말: 그 일 하나 · 컴퓨터: 울림 OS
+   */
   open(name = 'home', ctx = {}) {
     if (!this.cur) return;
     if (this.game.tips && this.game.tips.first('osterm', () => this.open(name, ctx))) return;
@@ -57,18 +62,27 @@ export class Apps {
     this.ctx = ctx;
     const T = ctx.T || this.ops.byFloor(this.cur.indoor.cur);
     this.T = T;
+    const dev = (this.dev = deviceOf(name, ctx, this.cur));
     const org = T && T.org ? T.org.name : this.game.interiors.title(this.cur.r);
     const st = (T && T.Z && T.Z.style) || {};
     const col = '#' + ((st.glow ?? 0x7ff3e6) >>> 0).toString(16).padStart(6, '0');
-    const tabs = [['home', '홈'], ['jobs', '일자리'], ['directory', '안내'], ['mine', '내 일'], ['econ', '살림']];
-    const html = `<div class="os" style="--os:${col}"><div class="os-head"><b>${esc(org)}</b><span>울림판 · ${hh(this.game.world.clock.time)}</span></div>
-      <div class="os-nav">${tabs.map(([k, l]) => `<button class="os-tab" data-tab="${k}">${l}</button>`).join('')}</div><div class="os-body"></div></div>`;
+    if (dev.kind === 'computer') {
+      const wrap = this.game.ui._card('<div></div>', () => { if (this.wrap === wrap) this.wrap = null; }, { keys: false });
+      wrap.querySelector('.card').classList.add('svc-card', 'os-card', 'dev-computer');
+      this.wrap = wrap;
+      this.os.boot(ctx, dev, wrap);
+      audio.blip && audio.blip({ hz: 660, to: 990, dur: 0.14, gain: 0.05, bus: 'ui' });
+      return;
+    }
+    const tabs = dev.tabs || [];
+    const html = `<div class="os dev dev-${dev.kind}" style="--os:${col}"><div class="os-head"><b>${esc(dev.title)}</b><span>${esc(org)} · ${hh(this.game.world.clock.time)}</span></div>
+      ${tabs.length > 1 ? `<div class="os-nav">${tabs.map(([k, l]) => `<button class="os-tab" data-tab="${k}">${l}</button>`).join('')}</div>` : ''}<div class="os-body"></div></div>`;
     const wrap = this.game.ui._card(html, () => { if (this.wrap === wrap) this.wrap = null; }, { keys: false });
-    wrap.querySelector('.card').classList.add('svc-card', 'os-card');
+    wrap.querySelector('.card').classList.add('svc-card', 'os-card', `dev-${dev.kind}`);
     wrap.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); this.show(b.dataset.tab); }));
     this.wrap = wrap;
-    this.show(name, ctx);
-    audio.blip && audio.blip({ hz: 880, to: 1320, dur: 0.12, gain: 0.05 });
+    this.show(dev.kind === 'kiosk' && !tabs.some((t) => t[0] === name) ? 'home' : name, ctx);
+    audio.blip && audio.blip({ hz: 880, to: 1320, dur: 0.12, gain: 0.05, bus: 'ui' });
   }
   close() { if (this.wrap) { this.wrap.close(); this.wrap = null; } }
   /** 몸통 그리기: rows = [{ head } | { label, sub, act, disabled, primary } | { html }] */
@@ -90,6 +104,7 @@ export class Apps {
   }
   show(name, ctx = this.ctx || {}) {
     this.view = name;
+    if (this.dev && this.dev.kind === 'computer' && this.os[`v_${name}`]) { this.os[`v_${name}`](ctx); return; }
     const f = this[`_v_${name}`];
     if (f) f.call(this, ctx);
     else this._v_home(ctx);
@@ -200,6 +215,7 @@ export class Apps {
     if (old) S.apps.splice(S.apps.indexOf(old), 1);
     S.apps.push({ uid: p.uid, k: p.k, role: p.role, op: p.op, title: p.title, org: p.org, bname: p.bname, x: p.x, z: p.z, rid: p.rid, wage: p.wage, hours: p.hours, status: 'applied', t: g.world.clock.time });
     this.toast(`지원했다 · ${p.title} (${p.org}) — 면접 안내를 기다려요`, 'item');
+    osMail(g, { from: `${p.org} 채용 담당`, subj: `지원 받음 · ${p.title}`, body: `${p.title} 자리에 지원해 주셔서 고마워요.\n한 시간쯤 뒤 면접 안내를 보낼게요.\n일하는 곳: ${p.bname}\n시간: ${hh(p.hours[0])}~${hh(p.hours[1])} · 시간당 ${p.wage}`, key: `apply:${p.uid}:${p.k}:${p.role}:${Math.floor(g.world.clock.time)}` });
     audio.blip && audio.blip({ hz: 660, to: 990, dur: 0.15, gain: 0.05 });
     this.show('jobs');
   }
@@ -213,7 +229,8 @@ export class Apps {
       if (a.status === 'applied' && now - a.t > HOUR) {
         a.status = 'interview';
         a.t = now;
-        g.ui.toast(`면접 안내 · ${a.title} (${a.org}) — ${a.bname}의 채용 면접실로. 단말 「홈」에서 길 안내`, { kind: 'item' });
+        g.ui.toast(`면접 안내 · ${a.title} (${a.org}) — ${a.bname}의 채용 면접실로. 공용 단말 「건물」에서 길 안내`, { kind: 'item' });
+        osMail(g, { from: `${a.org} 채용 담당`, subj: `면접 안내 · ${a.title}`, body: `${a.bname}의 채용 면접실로 와 주세요.\n이틀 안에 오지 않으면 기회가 지나가요.\n면접관이 일터 문화에 대해 세 가지를 물어요.`, key: `iv:${a.uid}:${a.k}:${a.role}:${Math.floor(now)}` });
         audio.blip && audio.blip({ hz: 520, to: 1040, dur: 0.25, gain: 0.06 });
       }
       if (a.status === 'interview' && now - a.t > 2) { a.status = 'rejected'; a.retry = now; } // 이틀 넘게 안 가면 기회가 지나간다
@@ -267,7 +284,7 @@ export class Apps {
     const others = [];
     for (const [op, ty] of Object.entries(TYPES)) if (ty.roles) for (const [rid, q] of Object.entries(ty.roles)) if (rid !== a.role && op !== a.op && q.desc) others.push(q.desc);
     const rnd = mulberry32(hashStr(`${a.uid}|${a.role}|${Math.floor(g.world.clock.time)}`));
-    const q1 = [`「${a.title}」은 무슨 일을 하나요?`, shuffle([R.desc, ...shuffle(others, rnd).slice(0, 2)], rnd), null];
+    const q1 = [`${josa(`「${a.title}」`, '은')} 무슨 일을 하나요?`, shuffle([R.desc, ...shuffle(others, rnd).slice(0, 2)], rnd), null];
     q1[2] = q1[1].indexOf(R.desc);
     // 질문 2: 일의 셈 (시간·품삯)
     const h = Math.round((a.hours[1] - a.hours[0]) * 24);
@@ -290,13 +307,15 @@ export class Apps {
         a.status = 'done';
         const job = { uid: a.uid, k: a.k, role: a.role, op: a.op, title: a.title, org: a.org, bname: a.bname, wage: a.wage, hours: a.hours, x: a.x, z: a.z, rid: a.rid, since: g.world.clock.time, worked: 0, rating: 3 };
         this.S.jobs.push(job);
-        g.ui.serviceCard(`채용 면접 · ${a.org}`, '함께 일해요!', `${score}/3 · 「${a.title}」으로 일하게 됐어요. ${hh(a.hours[0])}~${hh(a.hours[1])} 사이에 이 건물의 출근 단말에서 출근하면 할 일이 나와요. 품삯은 퇴근할 때 일한 시간과 마친 과제만큼 회사 금고에서.`, [{ label: '출근 단말로 길 안내', primary: true, onClick: () => this._guideClock(job) }, { label: '알겠어요' }]);
+        g.ui.serviceCard(`채용 면접 · ${a.org}`, '함께 일해요!', `${score}/3 · ${josa(`「${a.title}」`, '로')} 일하게 됐어요. ${hh(a.hours[0])}~${hh(a.hours[1])} 사이에 이 건물의 출근 단말에서 출근하면 할 일이 나와요. 품삯은 퇴근할 때 일한 시간과 마친 과제만큼 회사 금고에서.`, [{ label: '출근 단말로 길 안내', primary: true, onClick: () => this._guideClock(job) }, { label: '알겠어요' }]);
         g.setFlag && g.setFlag('hiredIndoor');
+        osMail(g, { from: `${a.org} 사람 담당`, subj: `함께 일해요 · ${a.title}`, body: `${a.title} 자리로 함께하게 되어 기뻐요.\n일하는 곳: ${a.bname}\n시간: 날마다 ${hh(a.hours[0])}~${hh(a.hours[1])} · 시간당 ${a.wage}\n이 건물의 출근 단말에서 출근하면 내 자리 컴퓨터에 내 계정이 열려요.`, key: `hire:${a.uid}:${a.k}:${a.role}` });
         g.scan && g.scan('c_job');
         if (g.lang && WORD.work && !g.lang.known('work')) g.lang.learn('work', 'teach');
       } else {
         a.status = 'rejected';
         a.retry = g.world.clock.time + 1;
+        osMail(g, { from: `${a.org} 채용 담당`, subj: `면접 결과 · ${a.title}`, body: `이번에는 함께하지 못하게 됐어요.\n내일 다시 지원해 주세요 — 일자리 앱이나 공용 단말에서.`, key: `rej:${a.uid}:${a.k}:${a.role}:${Math.floor(g.world.clock.time)}` });
         g.ui.serviceCard(`채용 면접 · ${a.org}`, '이번에는…', `${score}/3 · 면접관: 「조금 더 이 일을 알아보고 오면 좋겠어요. 내일 다시 지원해 주세요.」 (일자리 앱)`, [{ label: '알겠어요' }]);
       }
     };

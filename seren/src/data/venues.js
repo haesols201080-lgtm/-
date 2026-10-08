@@ -29,7 +29,7 @@ export function itemInfo(id) {
   if (ITEMS[id]) return ITEMS[id];
   const G = GOODS[id];
   if (!G) return null;
-  return { name: G.name, tag: CATS[G.cat] || (G.cat === 'raw' ? '원료' : '물건'), desc: G.desc || '', price: G.price, use: G.eat ? 'eat' : null, buff: G.eat || null, icon: SHAPE_ICON[G.shape] || '·', cat: G.cat };
+  return { name: G.name, tag: CATS[G.cat] || (G.cat === 'raw' ? '원료' : '물건'), desc: G.desc || '', price: G.price, use: G.eat ? 'eat' : id === 'bandage' ? 'heal' : null, buff: G.eat || null, icon: SHAPE_ICON[G.shape] || '·', cat: G.cat };
 }
 /** 가방에 보이는 차례: 처음 것들 → 진열 구역 차례대로 도시의 물건 */
 export function bagOrder(inv) {

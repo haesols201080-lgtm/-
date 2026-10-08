@@ -5,6 +5,7 @@ import { heightAt } from './world/heightfield.js';
 import { listSlots, renameSlot, deleteSlot, defaultState } from './game/state.js';
 import { QUESTS } from './data/story.js';
 import { questType } from './game/quests.js';
+import { osMail } from './interior/os.js';
 
 const game = new Game();
 game.boot();
@@ -27,6 +28,7 @@ if (new URLSearchParams(location.search).has('debug')) {
 window.SEREN = {
   game, THREE, heightAt, defaultState,
   slots: { list: listSlots, rename: renameSlot, remove: deleteSlot },
+  osTools: { osMail },
   questTypes: () => {
     const ids = Object.keys(QUESTS), chain = [];
     for (let id = 'mq0'; id && !chain.includes(id); id = QUESTS[id] && QUESTS[id].next) chain.push(id);

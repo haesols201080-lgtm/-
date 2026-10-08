@@ -24,7 +24,7 @@ ok(fixJosa('솔이(가) 웃었다 · 숲(으)로 갔다') === '솔이 웃었다 
 // 소스에 남은 후보 병기
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', 'src');
 const bad = [];
-const walk = (d) => { for (const f of readdirSync(d)) { const p = join(d, f); if (statSync(p).isDirectory()) walk(p); else if (p.endsWith('.js') && !p.endsWith('josa.js')) readFileSync(p, 'utf8').split('\n').forEach((l, i) => { if (/(을\(를\)|를\(을\)|이\(가\)|가\(이\)|은\(는\)|는\(은\)|와\(과\)|과\(와\)|\(으\)로|아\(야\))/.test(l)) bad.push(`${p.slice(root.length + 1)}:${i + 1}`); }); } };
+const walk = (d) => { for (const f of readdirSync(d)) { const p = join(d, f); if (statSync(p).isDirectory()) walk(p); else if (p.endsWith('.js') && !p.endsWith('josa.js')) readFileSync(p, 'utf8').split('\n').forEach((l, i) => { if (/(을\(를\)|를\(을\)|이\(가\)|가\(이\)|은\(는\)|는\(은\)|와\(과\)|과\(와\)|\(으\)로|아\(야\))/.test(l) || /\$\{[^{}]+\}」(?:을|를|이|가|은|는|와|과|으로|로)(?=[ ,.!?)·`]|$)/.test(l)) bad.push(`${p.slice(root.length + 1)}:${i + 1}`); }); } };
 walk(root);
 ok(!bad.length, `후보 병기가 남은 곳 ${bad.length}: ${bad.slice(0, 12).join(', ')}`);
 console.log(`조사 ${T.length}개 · 소스 검사 · ${fails ? `실패 ${fails}` : '모두 통과'}`);

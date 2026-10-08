@@ -6,4 +6,7 @@ export const BAL = {
   CARE_MIN_FEE: 40,
   // 원장에 남기는 거래 수 (오래된 것부터 접는다 — 잔액은 늘 정확하다)
   LEDGER_MAX: 200,
+  // 응급 회복 (가방에서 쓰기): 물건 → 체력. 그 밖의 먹을 것은 FOOD_HEAL
+  HEAL: { medicine: 35, bandage: 25, vitamin: 12, meal: 15, tea: 8, cookie: 6 },
+  FOOD_HEAL: 6,
 };

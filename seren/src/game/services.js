@@ -201,7 +201,7 @@ export class Services {
     g.ui._card(`<div class="kicker">노래 서고 · 옛 책</div><h2>${b.title}</h2><div class="memo">${b.text}</div>`);
     if (first) {
       g.lang.learn(b.word, 'teach');
-      g.journalNote(`서고에서 「${b.title}」를 읽었다.`);
+      g.journalNote(`서고에서 ${josa(`「${b.title}」`, '을')} 읽었다.`);
       g.save();
     }
   }

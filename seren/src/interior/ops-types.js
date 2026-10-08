@@ -100,7 +100,7 @@ const mart = {
     }
     if (F.tag === 'stock') return { label: () => `물품 창고 선반 · ${ops.myJobHere() ? '상자 보기' : '직원만'}`, short: '창고', use: () => mart.stockView(ops, T, F, out) };
     if (F.tag === 'clock') return clockAct(ops, T);
-    if (F.tag === 'terminal' || F.tag === 'directory') return { label: F.tag === 'directory' ? '안내 빛판 · 층 안내·물건 찾기' : '울림판 단말', short: '단말', use: () => ops.apps.open(F.tag === 'directory' ? 'directory' : 'home', { T, F }) };
+    if (F.tag === 'terminal' || F.tag === 'directory') return { label: F.tag === 'directory' ? '안내 빛판 · 층 안내·물건 찾기' : '공용 단말 · 건물·일자리 공고', short: '단말', use: () => ops.apps.open(F.tag === 'directory' ? 'directory' : 'home', { T, F }) };
     if (F.tag === 'pallet' || F.tag === 'cart') return { label: '짐판 · 들어온 짐', short: '짐', use: () => mart.dockView(ops, T, F, out) };
     if (F.tag === 'locker') return { label: '보관함', short: '보관함', use: () => toast(ops, '직원들의 보관함 — 이름 노래가 새겨진 칸들') };
     return null;
@@ -466,7 +466,7 @@ const factory = {
     if (F.tag === 'qc') return { label: '검사대 · 완성품 검사', short: '검사', use: () => factory.qc(ops, T) };
     if (F.tag === 'tools' || F.tag === 'repair' || F.tag === 'parts') return { label: '정비 · 연장', short: '연장', use: () => toast(ops, '고장 난 기계 앞에서 E 로 정비할 수 있어요 (정비원)') };
     if (F.tag === 'clock') return clockAct(ops, T);
-    if (F.tag === 'terminal') return { label: '울림판 단말', short: '단말', use: () => ops.apps.open('home', { T, F }) };
+    if (F.tag === 'terminal') return { label: '공용 단말 · 건물·일자리 공고', short: '단말', use: () => ops.apps.open('home', { T, F }) };
     return null;
   },
   machineCard(ops, T, F, m) {
@@ -620,9 +620,10 @@ const office = {
     if (F.tag === 'desk') {
       const job = ops.myJobHere();
       const mine = job && ops.S.shift && job.k === T.k;
-      return { label: mine ? '내 자리 · 일하기 (단말)' : '책상 · 누군가의 자리', short: mine ? '일하기' : '자리', use: () => (mine ? ops.apps.open('work', { T, F }) : toast(ops, '다른 사람의 자리예요. 단말은 「울림판 단말」이나 내 자리에서', 'muted')) };
+      // 자리 컴퓨터 (울림 OS): 내 자리면 내 계정이 열리고, 남의 자리면 그 주민의 계정이라 잠금 화면
+      return { label: mine ? '내 자리 · 컴퓨터로 일하기' : job && job.k === T.k ? '내 자리 · 컴퓨터' : '책상 · 누군가의 자리 컴퓨터', short: mine ? '일하기' : '컴퓨터', use: () => ops.apps.open('work', { T, F }) };
     }
-    if (F.tag === 'terminal' || F.tag === 'directory') return { label: F.tag === 'directory' ? '안내 빛판 · 층 안내' : '울림판 단말 · 일자리·업무·안내', short: '단말', use: () => ops.apps.open(F.tag === 'directory' ? 'directory' : 'home', { T, F }) };
+    if (F.tag === 'terminal' || F.tag === 'directory') return { label: F.tag === 'directory' ? '안내 빛판 · 층 안내' : '공용 단말 · 건물·일자리 공고', short: '단말', use: () => ops.apps.open(F.tag === 'directory' ? 'directory' : 'home', { T, F }) };
     if (F.tag === 'interview') return { label: () => { const a = ops.S.apps.find((x) => x.uid === ops.cur.uid && x.k === T.k && x.status === 'interview'); return a ? `채용 면접실 · 면접 보기 (${a.title})` : '채용 면접실'; }, short: '면접', use: () => ops.apps.interview(T) };
     if (F.tag === 'meeting') return { label: '회의 탁자', short: '회의', use: () => { if (ops.myJobHere() && ops.S.shift) { ops.apps.open('meeting', { T, F }); } else toast(ops, '회의 중인 자리예요', 'muted'); } };
     if (F.tag === 'printer') return { label: '빛판 찍개', short: '찍기', use: () => toast(ops, '빛판에 문서를 새긴다 — 지잉') };
@@ -692,6 +693,95 @@ const civic = {
 };
 
 // ════════════════════════════════════════════════════════════
+// 은행 (v24): 셀프 금융 단말(입출금·잔액·최근 거래) · 창구(큰 금액·의료 부채 조회·나눠 갚기) · 상담실 · 금고실(직원만)
+//  돈의 규칙은 game/bank.js 하나 — 병원 자동 결제와 같은 장부(state.bank)를 쓴다 (이중 장부 없음)
+// ════════════════════════════════════════════════════════════
+const BANK_STEPS = [10, 50, 200];
+const bank = {
+  setup() {},
+  act(ops, T, F, out) {
+    if (F.tag === 'atm') return { label: '셀프 금융 단말 · 입금·출금·잔액·최근 거래', short: '단말', use: () => bank.atm(ops, T) };
+    if (F.tag === 'teller') return { label: '은행 창구 · 큰 금액 · 의료 부채 상환', short: '창구', use: () => bank.teller(ops, T, F, out) };
+    if (F.tag === 'queue') return { label: '번호표 뽑기', short: '번호표', use: () => { const V = ops.bstate(ops.cur.uid); V.ticket = (V.ticket || 100) + 1; toast(ops, `번호표 ${V.ticket}번 · 창구 위 빛판에 번호가 뜨면 가요`); } };
+    if (F.tag === 'consult') return { label: '상담 책상 · 계좌·부채 상담', short: '상담', use: () => bank.consult(ops, T) };
+    if (F.tag === 'vault') return { label: '금고 문', short: '금고', use: () => toast(ops, ops.myJobHere() && ops.S.shift ? '금고는 두 직원이 함께 열어요 — 지금은 닫아 둔다' : '금고실은 직원만 — 잠겨 있어요', 'muted') };
+    if (F.tag === 'wait') return { label: '대기 의자', short: '앉기', use: () => { ops.game.avatar && ops.game.avatar.act && ops.game.avatar.act('sit', 3); toast(ops, '차례를 기다린다'); } };
+    if (F.tag === 'clock') return clockAct(ops, T);
+    if (F.tag === 'terminal') return { label: '공용 단말 · 건물·일자리 공고', short: '단말', use: () => ops.apps.open('home', { T, F }) };
+    return null;
+  },
+  /** 잔액 줄 (가방 · 계좌 · 의료 부채) */
+  _sum(g) { const B = g.state.bank; return `가방 ${won(g.state.inv.starseed || 0)} · 계좌 ${won(B.balance)} · 의료 부채 ${won(B.debt)}`; },
+  /** 셀프 금융 단말 — 작은 금액의 입출금·잔액·최근 거래 (기기 화면: os.js 의 공용 단말 문법이 아니라 이 단말 하나의 일) */
+  atm(ops, T) {
+    const g = ops.game, Bk = g.bank, B = g.state.bank;
+    const items = [];
+    for (const n of BANK_STEPS) items.push({ label: `입금 ${won(n)}`, sub: '가방 → 계좌', stay: true, disabled: (g.state.inv.starseed || 0) < n, onClick: () => { Bk.deposit(n); bank.atm(ops, T); } });
+    items.push({ label: '가방의 돈 모두 입금', stay: true, disabled: !(g.state.inv.starseed > 0), onClick: () => { Bk.deposit(g.state.inv.starseed); bank.atm(ops, T); } });
+    for (const n of BANK_STEPS) items.push({ label: `출금 ${won(n)}`, sub: '계좌 → 가방', stay: true, disabled: B.balance < n, onClick: () => { Bk.withdraw(n); bank.atm(ops, T); } });
+    items.push({ label: '최근 거래 보기', stay: true, onClick: () => bank.history(ops, T, () => bank.atm(ops, T)) });
+    audio.blip && audio.blip({ hz: 700, to: 900, dur: 0.08, gain: 0.04, bus: 'ui' });
+    ui(ops).serviceCard('셀프 금융 단말', bank._sum(g), '작은 금액은 여기서 바로. 큰 금액·부채 상환은 창구에서.', items);
+  },
+  history(ops, T, back) {
+    const g = ops.game, L = g.state.bank.ledger.slice(-12).reverse();
+    const NAME = { deposit: '입금', withdraw: '출금', pay: '결제', care: '치료비', debt: '의료 부채 발생', repay: '부채 상환' };
+    const rows = L.map((e) => ({ label: `${NAME[e.kind] || e.kind} · ${won(e.total ?? Math.abs(e.amt))}`, sub: `${Math.floor(e.day) + 1}일째 ${e.where ? `· ${e.where} ` : ''}· 계좌 ${won(e.bal)} · 부채 ${won(e.debt)}`, stay: true }));
+    if (!rows.length) rows.push({ label: '거래가 아직 없어요' });
+    rows.push({ label: '← 돌아가기', onClick: back });
+    ui(ops).serviceCard('최근 거래', bank._sum(g), '저장 슬롯마다 따로 남는 장부예요.', rows);
+  },
+  /** 창구: 직원이 있어야 연다 (없으면 기다림) · 큰 금액 · 의료 부채 내역 · 원하는 만큼 갚기 */
+  teller(ops, T, F) {
+    const g = ops.game, Bk = g.bank, B = g.state.bank;
+    const staff = ops.agents.list.some((a) => a.staff && a.role === 'teller' && Math.hypot(a.gx - (F.bx ?? F.ax), a.gz - (F.bz ?? F.az)) < 2.5);
+    if (!staff && !open(ops, 0.3, 0.75)) { toast(ops, '창구는 낮에만 열어요 — 셀프 금융 단말은 늘 쓸 수 있어요', 'muted'); return; }
+    const debts = B.ledger.filter((e) => e.kind === 'debt' || e.kind === 'repay');
+    const ask = (title, max, fn) => {
+      const el = ui(ops).serviceCard('은행 창구', title, `얼마를? (최대 ${won(max)})`, [{ label: '← 창구로', onClick: () => bank.teller(ops, T, F) }], `<div class="os-search"><input type="number" min="0" step="1" max="${Math.floor(max * 100) / 100}" value="${Math.floor(Math.min(max, 100))}"><button class="btn primary" data-go>확인</button></div>`, { keys: false });
+      const inp = el.querySelector('input');
+      el.querySelector('[data-go]').addEventListener('click', (e) => { e.stopPropagation(); const v = Math.max(0, Math.min(max, +inp.value || 0)); ui(ops).closeCard(); fn(v); bank.teller(ops, T, F); });
+      inp.addEventListener('keydown', (e) => e.stopPropagation());
+    };
+    const items = [
+      { label: '큰 금액 입금', sub: '가방 → 계좌', disabled: !(g.state.inv.starseed > 0), onClick: () => ask('입금', g.state.inv.starseed, (v) => Bk.deposit(v)) },
+      { label: '큰 금액 출금', sub: '계좌 → 가방', disabled: !(B.balance > 0), onClick: () => ask('출금', B.balance, (v) => Bk.withdraw(v)) },
+      { label: `의료 부채 내역 (${debts.filter((e) => e.kind === 'debt').length}건)`, sub: B.debt > 0 ? `남은 부채 ${won(B.debt)} — 이자는 붙지 않아요` : '부채가 없어요', stay: true, onClick: () => bank.debts(ops, T, F) },
+      { label: '부채 일부 갚기', sub: '가방 → 계좌 순', disabled: !(B.debt > 0 && Bk.liquid() > 0), onClick: () => ask('부채 갚기', Math.min(B.debt, Bk.liquid()), (v) => { const p = Bk.repay(v); if (p > 0) toast(ops, `부채 ${won(p)}를 갚았어요 · 남은 부채 ${won(g.state.bank.debt)}`, 'item'); }) },
+      { label: '부채 모두 갚기', sub: B.debt > 0 ? won(B.debt) : '', disabled: !(B.debt > 0 && Bk.liquid() >= B.debt), onClick: () => { const p = Bk.repay(B.debt); toast(ops, `부채 ${won(p)}를 모두 갚았어요`, 'item'); bank.teller(ops, T, F); } },
+      { label: '최근 거래 보기', stay: true, onClick: () => bank.history(ops, T, () => bank.teller(ops, T, F)) },
+    ];
+    ops.say && ops.say(T, 'chat');
+    ui(ops).serviceCard('은행 창구', bank._sum(g), '창구 직원: 「무엇을 도와드릴까요? 의료 부채는 계좌를 열기 전에 생긴 것도 여기서 볼 수 있어요.」', items);
+  },
+  debts(ops, T, F) {
+    const g = ops.game, L = g.state.bank.ledger.filter((e) => e.kind === 'debt' || e.kind === 'repay').slice(-12).reverse();
+    const rows = L.map((e) => ({ label: `${e.kind === 'debt' ? '발생' : '상환'} · ${won(e.total)}`, sub: `${Math.floor(e.day) + 1}일째${e.where ? ` · ${e.where}` : ''} · 그때 남은 부채 ${won(e.debt)}`, stay: true }));
+    if (!rows.length) rows.push({ label: '부채 기록이 없어요' });
+    rows.push({ label: '← 창구로', onClick: () => bank.teller(ops, T, F) });
+    ui(ops).serviceCard('의료 부채 내역', `남은 부채 ${won(g.state.bank.debt)}`, '쓰러져 치유원에 실려 갔을 때 가진 돈이 없으면 최소 응급 치료비가 부채가 돼요. 이자는 붙지 않아요.', rows);
+  },
+  consult(ops, T) {
+    const g = ops.game, B = g.state.bank;
+    ui(ops).serviceCard('상담실', '계좌·부채 상담', `상담원: 「${B.debt > 0 ? `남은 의료 부채는 ${won(B.debt)}예요. 한 번에 갚지 않아도 돼요 — 창구에서 원하는 만큼씩.` : '부채가 없네요. 위험한 곳에 가기 전에 예금해 두어도 치료비는 가방과 계좌를 합한 돈의 절반이에요.'}」`, [{ label: '알겠어요' }]);
+  },
+  people(ops, T, out, i) {
+    for (const F of tagged(out, 'teller').slice(0, 4)) spawn(ops, staffSpec(ops, out, T, 'teller', '창구 담당', F), [{ go: BK(F) }, { face: yawTo(F) + Math.PI, act: 'type', t: 6 }], () => [{ face: yawTo(F) + Math.PI, act: Math.random() < 0.4 ? 'talk' : 'type', t: 6 }]);
+    for (const F of tagged(out, 'consult').slice(0, 2)) spawn(ops, staffSpec(ops, out, T, 'consultant', '상담원', F), [{ go: BK(F) }, { face: yawTo(F) + Math.PI, act: 'sitType', t: 10 }], () => [{ face: yawTo(F) + Math.PI, act: Math.random() < 0.3 ? 'talk' : 'sitType', t: 10 }]);
+    const atms = tagged(out, 'atm'), seats = tagged(out, 'wait'), tellers = tagged(out, 'teller');
+    // 손님: 단말 → 의자에서 기다림 → 창구 (실제 가구 앞만 — 허공에서 몸짓하지 않는다)
+    for (let k = 0; k < Math.min(5, atms.length + seats.length + 1); k++) {
+      const A = atms.length ? atms[k % atms.length] : null, S = seats.length ? pick(seats) : null, C = tellers.length ? pick(tellers) : null;
+      const steps = () => [A && { go: AT(A) }, A && { face: yawTo(A), act: 'type', t: 4 }, S && { go: AT(S) }, S && { act: 'sit', t: 8 }, C && { go: AT(C) }, C && { face: yawTo(C), act: 'talk', t: 5 }].filter(Boolean);
+      spawn(ops, { key: `${T.uid}:${i}:cust${k}`, role: 'customer', title: '은행 손님', floor: i, ...(() => { const [gx, gz] = arrival(ops, out); return { gx, gz }; })() }, steps(), steps);
+    }
+  },
+  roles: {
+    teller: { title: '창구 담당', wage: 2.0, hours: [0.32, 0.7], desc: '창구에서 손님의 입출금과 부채 상환을 처리한다', next(ops, T) { return { title: '창구 손님 맞기', steps: [{ label: '창구에서 손님 맞기', short: '맞기', at: (o) => tagged(o, 'teller')[0], do: () => { ops.game.venues._timing('입출금 처리', '빛이 가운데 올 때 E', 4, () => ops.taskDone(T)); return true; } }] }; } },
+  },
+};
+
+// ════════════════════════════════════════════════════════════
 // 연구소: 시료 → 손질 → 장비 측정 → 분석 → 진척
 // ════════════════════════════════════════════════════════════
 const PROJECTS = [
@@ -710,7 +800,7 @@ const lab = {
       return { label: `${FIX[F.t].name} · ${P.name} 측정`, short: '측정', use: () => lab.measure(ops, T, F, P) };
     }
     if (F.tag === 'analysis') return { label: () => `분석 단말 · 측정 자료 ${L.data}`, short: '분석', use: () => ops.apps.open('analysis', { T, F }) };
-    if (F.tag === 'terminal') return { label: '울림판 단말', short: '단말', use: () => ops.apps.open('home', { T, F }) };
+    if (F.tag === 'terminal') return { label: '공용 단말 · 건물·일자리 공고', short: '단말', use: () => ops.apps.open('home', { T, F }) };
     if (F.tag === 'clock') return clockAct(ops, T);
     return null;
   },
@@ -783,7 +873,7 @@ const school = {
     if (F.tag === 'instrument') return { label: '노래 악기', short: '연주', use: () => { audio.sing && audio.sing([0, 2, 4, 2], { gain: 0.3 }); toast(ops, '고리 하프가 울린다'); } };
     if (F.tag === 'hoop' || F.tag === 'exercise') return { label: '뜀터 · 뛰어오르기', short: '운동', use: () => { buff(ops, 'quick'); toast(ops, '뜀 운동 · 가벼운 발', 'item'); } };
     if (F.tag === 'clock') return clockAct(ops, T);
-    if (F.tag === 'terminal') return { label: '울림판 단말', short: '단말', use: () => ops.apps.open('home', { T, F }) };
+    if (F.tag === 'terminal') return { label: '공용 단말 · 건물·일자리 공고', short: '단말', use: () => ops.apps.open('home', { T, F }) };
     return null;
   },
   lesson(ops, T, P) {
@@ -841,7 +931,7 @@ const clinic = {
     if (F.tag === 'bed') return { label: '돌봄 침상', short: '침상', use: () => { const job = ops.myJobHere(); if (job && ops.S.shift) { ops.taskDone(T); toast(ops, '환자의 울림 결을 쟀다 · 고르다', 'item'); } else toast(ops, '쉬는 환자의 침상', 'muted'); } };
     if (F.tag === 'stock' || F.tag === 'shelf') return { label: '약 선반', short: '선반', use: () => toast(ops, `고른울림 약 ${Math.floor(T.node.stock.medicine || 0)}병`) };
     if (F.tag === 'clock') return clockAct(ops, T);
-    if (F.tag === 'terminal') return { label: '울림판 단말', short: '단말', use: () => ops.apps.open('home', { T, F }) };
+    if (F.tag === 'terminal') return { label: '공용 단말 · 건물·일자리 공고', short: '단말', use: () => ops.apps.open('home', { T, F }) };
     return null;
   },
   reception(ops, T, out) {
@@ -862,7 +952,7 @@ const clinic = {
     if (!V.visit || V.visit.step !== 'treat') { toast(ops, '진료를 먼저 받아요', 'muted'); return; }
     ops.game.avatar && ops.game.avatar.act && ops.game.avatar.act('lie', 3);
     audio.sing && audio.sing([4, 2, 0, 2, 4], { gain: 0.25, step: 0.35 });
-    setTimeout(() => { buff(ops, 'calm'); learn(ops, 'heal'); V.visit.step = 'pharmacy'; toast(ops, '울림이 고르게 됐다 · 맑은 울림 · 약제실에서 약을 받아요', 'item'); }, 2500);
+    setTimeout(() => { buff(ops, 'calm'); learn(ops, 'heal'); V.visit.step = 'pharmacy'; if (ops.game.health) ops.game.health.full(); toast(ops, '울림이 고르게 됐다 · 체력이 다 찼다 · 약제실에서 약을 받아요', 'item'); }, 2500);
   },
   pharmacy(ops, T) {
     const V = ops.bstate(ops.cur.uid), n = T.node;
@@ -898,7 +988,7 @@ const plant = {
     if (F.tag === 'coil') return { label: '공명 코일 · 점검', short: '점검', use: () => { const job = ops.myJobHere(); if (job && ops.S.shift) ops.game.venues._timing('코일 점검', '고리 빛이 가운데 올 때 E', 4, (h) => { ops.taskDone(T); toast(ops, `코일 결 ${h}/4`, 'item'); }); else toast(ops, '코일이 낮게 웅웅거린다'); } };
     if (F.tag === 'pump') return { label: '식힘 펌프', short: '펌프', use: () => toast(ops, '식힘 물이 돈다') };
     if (F.tag === 'clock') return clockAct(ops, T);
-    if (F.tag === 'terminal') return { label: '울림판 단말', short: '단말', use: () => ops.apps.open('home', { T, F }) };
+    if (F.tag === 'terminal') return { label: '공용 단말 · 건물·일자리 공고', short: '단말', use: () => ops.apps.open('home', { T, F }) };
     return null;
   },
   tick(ops, T, out, dt) {
@@ -935,7 +1025,7 @@ const terminal = {
     if (F.tag === 'departures') return { label: '떠나는 판', short: '보기', use: () => terminal.board(ops, T) };
     if (F.tag === 'wait') return { label: '긴 의자', short: '앉기', use: () => { ops.game.avatar && ops.game.avatar.act && ops.game.avatar.act('sit', 4); } };
     if (F.tag === 'clock') return clockAct(ops, T);
-    if (F.tag === 'terminal') return { label: '울림판 단말', short: '단말', use: () => ops.apps.open('home', { T, F }) };
+    if (F.tag === 'terminal') return { label: '공용 단말 · 건물·일자리 공고', short: '단말', use: () => ops.apps.open('home', { T, F }) };
     return null;
   },
   board(ops, T) {
@@ -1330,7 +1420,7 @@ const farm = {
 };
 const generic = {
   act(ops, T, F, out) {
-    if (F.tag === 'directory' || F.tag === 'terminal') return { label: F.tag === 'directory' ? '안내 빛판 · 층 안내' : '울림판 단말', short: '단말', use: () => ops.apps.open(F.tag === 'directory' ? 'directory' : 'home', { T, F }) };
+    if (F.tag === 'directory' || F.tag === 'terminal') return { label: F.tag === 'directory' ? '안내 빛판 · 층 안내' : '공용 단말 · 건물·일자리 공고', short: '단말', use: () => ops.apps.open(F.tag === 'directory' ? 'directory' : 'home', { T, F }) };
     if (F.tag === 'vending') return vendingAct(ops, T, F, out);
     if (F.tag === 'exercise') return { label: '뜀 운동판', short: '운동', use: () => { buff(ops, 'quick'); toast(ops, '몸이 가볍다 · 가벼운 발', 'item'); } };
     if (F.tag === 'scope') return { label: '별 망원기', short: '보기', use: () => { learn(ops, 'star'); toast(ops, '먼 탑들과 우르의 고리가 가까이 보인다'); } };
@@ -1368,7 +1458,7 @@ function clockAct(ops, T) {
 }
 
 export const TYPES = {
-  mart, food, factory, depot, office, admin: office, lab, school, clinic, plant, terminal, museum, library, hall, hotel, home, farm,
+  mart, food, factory, depot, office, admin: office, lab, school, clinic, plant, terminal, museum, library, hall, hotel, home, farm, bank,
   lobby: generic, generic, garden: generic, amenity: generic, observation: generic, parking: generic, tech: generic,
   // 중2층(관제·사무·대기)은 아래 홀(공장·창고·발전동·대합실·공연장)의 한 부분: 관제 조종대·출근 단말 같은 것은 그 홀의 운영(세입자·살림·기계)으로,
   // 그 밖의 책상·회의는 사무처럼. (전에는 중2층을 따로 된 세입자로 공장 동작에 넘겨 생산 자료가 없어 「생산 현황」이 멈췄다)

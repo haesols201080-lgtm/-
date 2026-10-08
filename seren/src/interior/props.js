@@ -56,11 +56,12 @@ export function drawFixture(gb, F, st) {
       f.box(0, 0.2, 0.15, W - 0.4, 0.25, D - 0.3, B, 0, PAT.fabric); f.box(0, 0.2, -D / 2 + 0.15, W - 0.4, 0.6, 0.3, B, 0, PAT.fabric); f.box(-W / 2 + 0.1, 0.2, 0, 0.2, 0.35, D, B, 0, PAT.fabric); f.box(W / 2 - 0.1, 0.2, 0, 0.2, 0.35, D, B, 0, PAT.fabric); f.box(0, 0, 0, W - 0.2, 0.2, D - 0.2, dark); break;
     case 'lowtable': f.box(0, 0.38, 0, W, 0.06, D, pearl, 0, PAT.stone); f.cyl(0, 0, 0, 0.18, 0.38, GOLD); break;
     case 'armchair': f.cyl(0, 0.12, 0, 0.42, 0.3, B, 0, PAT.fabric, 0, 14); f.box(0, 0.2, -0.3, 0.8, 0.6, 0.2, B, 0, PAT.fabric); f.cyl(0, 0, 0, 0.2, 0.12, steel); break;
-    case 'infokiosk': case 'terminal': case 'catalog': {
+    case 'infokiosk': case 'terminal': case 'catalog': case 'atm': {
       f.cyl(0, 0, 0, 0.28, 0.08, dark);
       f.box(0, 0.08, 0, 0.14, H - 0.7, 0.1, steel, 0, PAT.metal);
       f.box(0, H - 0.75, 0.03, W * 0.9, 0.62, 0.06, 0x101820, 0); // 화면 틀: 앞면이 기둥 앞면(0.05)보다 1 cm 앞
       f.box(0, H - 0.72, 0.065, W * 0.8, 0.54, 0.01, F.t === 'infokiosk' ? G : B, 1.3, PAT.screen);
+      if (F.t === 'atm') { f.box(0, 0.95, 0.06, W * 0.6, 0.06, 0.05, GOLD, 0.8, PAT.metal); f.box(0, 0.08, 0, W * 0.9, 0.85, D * 0.8, P, 0, PAT.panel); } // 카드 홈 · 몸통
       break;
     }
     case 'vending': {
@@ -71,12 +72,19 @@ export function drawFixture(gb, F, st) {
       break;
     }
     case 'water': f.cyl(0, 0, 0, 0.22, 1.0, pearl, 0, 0, 0, 10); f.cyl(0, 1.0, 0, 0.18, 0.28, 0x8fd8ff, 0.6, PAT.crystal, 0, 10); f.box(0, 0.8, 0.2, 0.12, 0.05, 0.1, G, 1.4); break;
-    case 'reception': case 'counter': case 'barcounter': case 'nursedesk': case 'ticketbooth': case 'servicecounter': case 'canteenline': {
+    case 'vaultdoor': { // 둥근 금고 문 (벽에 붙은 두꺼운 원판 + 바퀴 손잡이)
+      f.box(0, 0, -D / 2 + 0.06, W, H, 0.12, steel, 0, PAT.metal);
+      f.box(0, 0.12, -D / 2 + 0.2, W * 0.86, H * 0.86, 0.2, 0x9aa4b0, 0, PAT.metal); // 문짝
+      f.box(0, 1.15, -D / 2 + 0.34, 0.6, 0.08, 0.08, GOLD, 0.4, PAT.metal); f.box(0, 0.88, -D / 2 + 0.34, 0.08, 0.6, 0.08, GOLD, 0.4, PAT.metal); // 바퀴 손잡이
+      f.box(W * 0.36, 1.6, -D / 2 + 0.32, 0.12, 0.08, 0.04, G, 1.6); // 잠금 빛
+      break;
+    }
+    case 'reception': case 'counter': case 'barcounter': case 'nursedesk': case 'ticketbooth': case 'servicecounter': case 'canteenline': case 'teller': {
       f.box(0, 0, 0, W, H - 0.05, D, F.t === 'nursedesk' ? 0xe8f4f2 : P, 0, PAT.panel);
       f.box(0, H - 0.05, 0.05, W + 0.08, 0.06, D + 0.18, GOLD, 0, PAT.stone);
       f.box(0, H * 0.45, D / 2 + 0.01, W - 0.1, 0.05, 0.01, B, 1.6);
       if (F.t === 'canteenline') for (let k = 0; k < 4; k++) f.box((k - 1.5) * (W / 4), H - 0.02, 0, W / 4 - 0.2, 0.08, D * 0.6, 0xc8c2d2, 0.1, PAT.metal);
-      if (F.t === 'ticketbooth' || F.t === 'servicecounter') { f.box(0, H, -D / 2 + 0.05, W, 1.1, 0.04, 0xbfefff, 0.15, PAT.glassfrost); f.box(0, H + 1.15, -D / 2 + 0.05, W, 0.25, 0.08, B, 1.2, PAT.screen); }
+      if (F.t === 'ticketbooth' || F.t === 'servicecounter' || F.t === 'teller') { f.box(0, H, -D / 2 + 0.05, W, 1.1, 0.04, 0xbfefff, 0.15, PAT.glassfrost); f.box(0, H + 1.15, -D / 2 + 0.05, W, 0.25, 0.08, B, 1.2, PAT.screen); }
       if (F.t === 'counter' || F.t === 'barcounter') { shelfSlots(1, H + 0.02, 0, 0.3, 0.1, 3); }
       break;
     }

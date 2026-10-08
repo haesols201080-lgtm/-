@@ -180,6 +180,14 @@ function decideUses(pid, slots, ctx, rnd) {
   if (ctx.special && size !== 'tiny' && size !== 'small' && N >= 2) {
     let done = true;
     switch (pid) {
+      case 'bank': { // 은행 (v24): 1층 영업장(창구·셀프 금융 단말·상담실·금고실·기록실·관리실) → 위층은 그 은행의 사무
+        uses[0] = 'bank';
+        fill(1, top, 'office');
+        if (N >= 6) uses[top] = 'exec';
+        if (gfa > 1800) basements.push('parking');
+        notes.special = '은행';
+        break;
+      }
       case 'heal': { // 종합 치유원: 응급·접수 → 외래 진료 → 검사·영상 → (행정) → 병동 → 회복 정원
         uses[0] = 'care';
         const cl = Math.max(1, Math.round(N * 0.22));
@@ -352,6 +360,8 @@ function decideUses(pid, slots, ctx, rnd) {
       break;
     }
     case 'heal': {
+      // 생활권 병원(r.hospital): 작아도 입원실을 둔다 — 한 층이면 응급·입원(carew), 두 층 넘으면 위층이 병동
+      if (ctx.hospital && (size === 'tiny' || size === 'small')) { uses[0] = N === 1 ? 'carew' : 'care'; fill(1, top, 'ward'); break; }
       if (size === 'tiny' || size === 'small') { uses[0] = 'care'; fill(1, top, 'clinic'); break; }
       uses[0] = 'care';
       const wardFrom = Math.max(2, Math.floor(N * 0.45));
@@ -362,6 +372,7 @@ function decideUses(pid, slots, ctx, rnd) {
       if (wantBase) basements.push('supply');
       break;
     }
+    case 'bank': uses[0] = 'bank'; fill(1, top, 'office'); break; // 작은 은행 지점
     case 'library': uses[0] = 'library'; fill(1, top, 'library'); if (wantBase || N >= 3) basements.push('supply'); break;
     case 'museum': uses[0] = 'museum'; fill(1, top, 'museum'); if (wantBase || N >= 3) basements.push('supply'); break;
     case 'hall': uses[0] = 'hall'; fill(1, top, N > 3 ? 'office' : 'hall'); break;
@@ -561,10 +572,10 @@ function buildAt(r, ctx, S) {
   const slots = stackSlots(r, V, G, prof, { defMod: pid === 'home' ? 3.3 : 3.6, groundMods, cuts });
   if (!slots.length) return null;
   // 전문 건물인가 (한 기관이 건물 전체): 쓰임마다 비율이 다르다 — 큰 병원·학교·박물관은 대개 전문, 사무·마트는 섞인 건물이 많다
-  const SPECIAL_P = { heal: 0.7, school: 0.75, lab: 0.5, office: 0.3, market: 0.35, depot: 0.6, factory: 0.55, terminal: 0.5, farm: 0.6, hotel: 0.55 };
+  const SPECIAL_P = { bank: 1, heal: 0.7, school: 0.75, lab: 0.5, office: 0.3, market: 0.35, depot: 0.6, factory: 0.55, terminal: 0.5, farm: 0.6, hotel: 0.55 };
   // 학교는 늘 학교만 쓰는 건물 (섞인 건물에 학교를 넣지 않는다 — 높은 탑이어도 층마다 학교의 다른 시설)
   const special = !r.custom && (pid === 'school' || rngFor(seed, 'special')() < (SPECIAL_P[pid] || 0));
-  const D = decideUses(pid, slots, { district: r.style, custom: !!r.custom, special }, rnd);
+  const D = decideUses(pid, slots, { district: r.style, custom: !!r.custom, special, hospital: !!r.hospital }, rnd);
   // 공중다리가 닿는 층: 건너온 사람을 받는 공용층(하늘 쉼터)으로 — 이미 누구나 드나드는 층이면 그대로
   const bridgeSlot = new Set();
   for (const cy of cuts) {
@@ -671,7 +682,7 @@ function buildAt(r, ctx, S) {
   const zones = [];
   let prev = null;
   // 전문 건물: 모든 묶음이 한 조직 (병원의 식당·행정도 그 병원, 본사의 식당·회의층도 그 회사)
-  const mainOpOrg = { home: 'home', hotel: 'hotel', office: 'office', lab: 'lab', admin: 'admin', market: 'mart', cafe: 'food', school: 'school', heal: 'clinic', library: 'library', museum: 'museum', hall: 'hall', factory: 'factory', depot: 'depot', terminal: 'terminal', plant: 'plant', farm: 'farm', garden: 'garden' }[pid] || 'office';
+  const mainOpOrg = { bank: 'bank', home: 'home', hotel: 'hotel', office: 'office', lab: 'lab', admin: 'admin', market: 'mart', cafe: 'food', school: 'school', heal: 'clinic', library: 'library', museum: 'museum', hall: 'hall', factory: 'factory', depot: 'depot', terminal: 'terminal', plant: 'plant', farm: 'farm', garden: 'garden' }[pid] || 'office';
   let soleOrg = null;
   if (D.special) {
     soleOrg = orgFor(mainOpOrg, r, seed, 0);

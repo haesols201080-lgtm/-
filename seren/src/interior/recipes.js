@@ -47,6 +47,9 @@ export const ESSENTIAL = {
   waiting: [['seats', 'wait', 1, null, ['bench']], ['examdesk', 'doctor', 1, null, null, (c) => !c.L.rooms.some((q) => q.type === 'consult' && q.n)]],
   consult: [['examdesk', 'doctor', 1]],
   counters: [['servicecounter', 'civic', 1, null, ['examdesk', 'desk']]],
+  banking: [['teller', 'teller', 1, null, ['servicecounter']], ['atm', 'atm', 1, null, ['terminal']]],
+  bankconsult: [['desk', 'consult', 1]],
+  vault: [['vaultdoor', 'vault', 1, null, ['cabinet']]],
   stacks: [['reception', 'circulation', 1, null, ['desk']], ['bookshelf', 'books', 3, null, ['bookcase']], ['catalog', 'catalog', 1]],
   reading: [['readtable', 'read', 1, null, ['table2']]],
   gallery: [['case', 'exhibit', 2, null, ['plinth']]],
@@ -168,6 +171,18 @@ const RECIPE = {
   server(F, R) { F.rows(R, 'rack', { aisle: 1.0, margin: 0.8, tag: 'rack' }); F.alongWalls(R, 'terminal', { n: 1, tag: 'terminal' }); },
   hr(F, R) { const b = F.box(R); F.near(R, 'meettable', b.cx, b.cz, 0, { R: 2, tag: 'interview' }); F.alongWalls(R, 'terminal', { n: 1, tag: 'terminal' }); },
   records(F, R) { F.rows(R, 'cabinet', { aisle: 1.2, margin: 0.8, rot: 0, tag: 'records' }); },
+  // 은행 (v24): 뒤쪽 벽을 따라 창구 줄 · 벽에 셀프 금융 단말 · 번호표와 대기 의자
+  banking(F, R, c) {
+    const b = F.box(R);
+    for (let k = 0; k < Math.min(5, Math.floor(b.w / 3)); k++) F.try(R, 'teller', Math.round((b.x0 + 2 + k * 2.8) * 2) / 2, b.z0 + 1.5, 0, { tag: 'teller' });
+    F.alongWalls(R, 'atm', { n: Math.max(1, Math.min(4, Math.floor(R.n / 40))), tag: 'atm' });
+    F.near(R, 'numbers', b.cx, b.z1 - 4, 0, { R: 4, tag: 'queue' });
+    F.rows(R, 'seats', { aisle: 1.3, margin: 2.2, rot: 2, tag: 'wait', n: Math.max(1, Math.floor(R.n / 40)) });
+    F.alongWalls(R, 'infokiosk', { n: 1, tag: 'directory' });
+    c.plants(R, 2);
+  },
+  bankconsult(F, R) { F.rows(R, 'desk', { n: 1, tag: 'consult' }); F.alongWalls(R, 'armchair', { n: 2 }); },
+  vault(F, R) { F.alongWalls(R, 'vaultdoor', { n: 1, tag: 'vault' }); F.alongWalls(R, 'cabinet', { n: 2, tag: 'records' }); },
   office1(F, R, c) { F.rows(R, 'desk', { n: Math.max(1, Math.floor(R.n / 10)), aisle: 1.2, tag: 'desk' }); F.alongWalls(R, 'cabinet', { n: 1, avoidWindows: true }); F.alongWalls(R, 'terminal', { n: 1, tag: 'terminal' }); c.plants(R, 1); },
   // 연구
   labroom(F, R) {

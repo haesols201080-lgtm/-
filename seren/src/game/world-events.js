@@ -10,6 +10,7 @@ import { NPCS, MOA, GLYPH_STONES } from '../data/story.js';
 const FAR_NPCS = ['kael', 'moru', 'yuha', 'peon'];
 import { WORDS } from '../data/lexicon.js';
 import { bus } from '../core/events.js';
+import { josa } from '../core/josa.js';
 
 export class WorldEvents {
   constructor(game) {
@@ -190,7 +191,7 @@ const TEMPLATES = [
     const list = g.currents.list.filter((c) => c.enabled);
     const c = list[Math.floor(rnd() * list.length)];
     if (!c) return null;
-    return { kind: 'ride', current: c.id, title: '흐름을 타고', text: `「${c.def.name}」를 끝까지 타기`, reward: 1 };
+    return { kind: 'ride', current: c.id, title: '흐름을 타고', text: `${josa(`「${c.def.name}」`, '을')} 끝까지 타기`, reward: 1 };
   },
 ];
 

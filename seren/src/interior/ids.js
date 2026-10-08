@@ -5,7 +5,7 @@ import { hashStr, mulberry32 } from '../core/noise.js';
 
 export const WORLD_SEED = 'seren-harmonea-1';
 /** 실내 생성기 판 — 판이 바뀌면 저장된 짜임(PlanStore)을 버리고 다시 짓는다 (움직이는 상태는 state.bld·econ 에 따로 있어 남는다) */
-export const GEN_VERSION = 10; // 10: 천장·문·중2층을 가장 큰 주민 키(3.29 m)에 맞춤 · 8: 실내 배율 S · 실내 높이(iy·ic) · 방·구역 독립 공간(셀) · 최소 방 크기 · 겹치지 않는 문 · 9: 높은 층에는 작은 나선 계단을 쓰지 않음
+export const GEN_VERSION = 11; // 11: 은행 건물(영업장·창구·셀프 금융 단말·상담실·금고실) · 10: 천장·문·중2층을 가장 큰 주민 키(3.29 m)에 맞춤 · 8: 실내 배율 S · 실내 높이(iy·ic) · 방·구역 독립 공간(셀) · 최소 방 크기 · 겹치지 않는 문 · 9: 높은 층에는 작은 나선 계단을 쓰지 않음
 
 export function uidOf(r) {
   if (r.uid) return r.uid;

@@ -1073,7 +1073,7 @@ function openPlan(B, F, L, g, rnd, T) {
   const use = F.use;
   // 홀 이름
   const HALL = {
-    lobby: 'lobby', stem: 'vestibule', mart: 'sales', shops: 'sales', dept: 'sales', food: 'dining', cafe: 'dining', care: 'waiting', civic: 'counters',
+    lobby: 'lobby', stem: 'vestibule', mart: 'sales', shops: 'sales', dept: 'sales', food: 'dining', cafe: 'dining', care: 'waiting', carew: 'waiting', civic: 'counters', bank: 'banking',
     library: 'stacks', museum: 'gallery', hall: 'auditorium', schoolhall: 'gym', hotelfront: 'lobby', factory: 'production', storage: 'warehouse',
     transit: 'concourse', farm: 'growhall', garden: 'gardenhall', plant: 'corehall', parking: 'parkbay', supply: 'warehouse', amenity: 'lounge', observation: 'deck', mezz: 'office1', canteen: 'canteen',
   };
@@ -1086,7 +1086,9 @@ function openPlan(B, F, L, g, rnd, T) {
     cafe: { d: 5, list: [['kitchen', 0.5], ['pantry2', 3], ['wc', 3]] },
     canteen: { d: 6, list: [['kitchen', 0.5], ['pantry2', 5], ['staffroom', 4], ['wc', 4]] },
     care: { d: 6, list: [['consult', 4], ['treat', 6], ['pharmacy', 5], ['nurse', 4], ['wc', 3]] },
+    carew: { d: 6, list: [['wardroom', 0.35], ['consult', 4], ['treat', 5], ['nurse', 3], ['wc', 3]] },
     civic: { d: 6, list: [['office1', 0.4], ['records', 6], ['meeting', 6], ['wc', 3]] },
+    bank: { d: 6, list: [['vault', 5], ['bankconsult', 5], ['office1', 0.35], ['records', 4], ['security', 4], ['wc', 3]] }, // 큰 은행: 금고실·기록실·관리실까지
     library: { d: 6, list: [['archive', 0.4], ['reading', 8], ['office1', 4], ['wc', 3]] },
     museum: { d: 6, list: [['conserve', 7], ['storage', 0.35], ['office1', 4], ['wc', 3]], gallery: true },
     hall: { d: 6, list: [['backstage', 0.5], ['rehearsal', 7], ['wc', 3], ['storage', 3]] },
@@ -1109,7 +1111,7 @@ function openPlan(B, F, L, g, rnd, T) {
   // 작은 층(150 m² 아래): 뒤쪽 방은 이 쓰임에 꼭 있어야 하는 것만 (마트의 창고, 식당의 주방, 치유원의 진료실…) — 홀에 일할 자리가 남게
   const SMALL_BOH = {
     mart: [['stockroom', 0.9]], shops: [['storage', 0.9]], dept: [['stockroom', 0.9]], food: [['kitchen', 0.9]], cafe: [['kitchen', 0.9]], canteen: [['kitchen', 0.9]],
-    care: [['consult', 0.5], ['pharmacy', 0.4]], civic: [['office1', 0.9]], library: [], museum: [['storage', 0.9]], hall: [['backstage', 0.9]], schoolhall: [],
+    care: [['consult', 0.5], ['pharmacy', 0.4]], carew: [['wardroom', 0.55], ['consult', 0.4]], civic: [['office1', 0.9]], bank: [['bankconsult', 0.5], ['office1', 0.4]], library: [], museum: [['storage', 0.9]], hall: [['backstage', 0.9]], schoolhall: [],
     hotelfront: [['office1', 0.9]], factory: [['rawstore', 0.45], ['finished', 0.45]], storage: [['sorting', 0.9]], transit: [['platform', 0.9]], farm: [['packing', 0.9]],
     garden: [], plant: [['fuelstore', 0.9]], lobby: [['mailroom', 0.9]], observation: [['bar', 0.9]],
   };

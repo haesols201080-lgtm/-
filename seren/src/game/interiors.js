@@ -26,6 +26,7 @@ const PURPOSE = {
   market: { name: '노래 시장', desc: '먹을 것·쓸 것을 고르고 계산대에서 울로 값을 치른다.', npc: 7 },
   school: { name: '노래 학교', desc: '아이들이 처음으로 자기 이름을 노래하는 곳.', npc: 6, small: true },
   heal: { name: '치유원', desc: '지친 울림을 고르게 다듬어 주는 곳. 접수·진료·검사·입원.', npc: 3 },
+  bank: { name: '은행', desc: '계좌와 의료 부채를 다루는 곳. 셀프 금융 단말·창구·상담실.', npc: 4 },
   garden: { name: '하늘 정원', desc: '건물 한가운데를 숲으로 채운 정원.', npc: 4 },
   farm: { name: '재배원', desc: '빛잎·열매·꽃꿀을 기르는 실내 농장. 거둔 것은 창고로 간다.', npc: 4 },
   hall: { name: '공연장', desc: '동네 합창단이 저녁마다 노래한다.', npc: 6 },
@@ -87,11 +88,50 @@ export class Interiors {
       garden: farmKind ? ['farm', 'farm', 'garden'] : ['garden'], cafe: ['cafe'], museum: ['museum'], plant: ['plant'],
     };
     const list = byUse[r.use] || BY_STYLE[r.style] || BY_STYLE.capital;
-    const pid = list[Math.floor(rnd() * list.length)];
+    let pid = list[Math.floor(rnd() * list.length)];
+    if (r.use === 'office' && this.bankSet().has(r)) pid = 'bank'; // 은행 (v24): 생활권마다 알맞은 간격으로 몇 곳
+    if (this.hospitalSet().has(r)) { pid = 'heal'; r.hospital = true; } // 생활권마다 입원실 있는 치유원 하나는 꼭 (v24)
     const P = PURPOSE[pid];
     const floors = Math.max(1, Math.floor((r.top - r.gy) / 3.6));
     r.info = { pid, P, name: r.name || (r.custom && pid === 'home' ? `${PREFIX[Math.floor(rnd() * PREFIX.length)]} 꽃잎 집` : `${PREFIX[Math.floor(rnd() * PREFIX.length)]} ${P.name}`), floors, people: r.custom ? (pid === 'home' ? 3 + Math.floor(rnd() * 4) : 6 + Math.floor(rnd() * 8)) : floors * (pid === 'home' ? 30 + Math.floor(rnd() * 40) : 8 + Math.floor(rnd() * 20)) };
     return r.info;
+  }
+  /**
+   * 은행 자리 (v24): 도시 구역(생활권)마다 가운데에 가까운 사무 건물부터, 서로 700 m 넘게 떨어지게 1~4곳 — 모든 블록에 되풀이하지 않는다.
+   * 도시 기록이 정해진 뒤 한 번 정하고 기억한다(같은 도시면 늘 같은 건물).
+   */
+  bankSet() {
+    if (this._banks) return this._banks;
+    const C = this.game.city, set = new Set();
+    if (!C || !C.zones || !C.recs || !C.recs.length) return set;
+    for (const Z of C.zones) {
+      const R = Z.rOut || 400;
+      const cands = C.recs.filter((r) => r.door && r.use === 'office' && !r.custom && Math.hypot(r.x - Z.cx, r.z - Z.cz) < R).sort((a, b) => Math.hypot(a.x - Z.cx, a.z - Z.cz) - Math.hypot(b.x - Z.cx, b.z - Z.cz));
+      const want = R > 1200 ? 4 : R > 600 ? 2 : 1, picked = [];
+      for (const r of cands) { if (picked.every((q) => Math.hypot(q.x - r.x, q.z - r.z) > 700)) picked.push(r); if (picked.length >= want) break; }
+      for (const r of picked) set.add(r);
+    }
+    this._banks = set;
+    return set;
+  }
+  /**
+   * 생활권 병원 (v24 「주요 생활권마다 최소 한 곳의 병실 보유 병원」): 구역마다 가운데에 가장 가까운 치유원 하나를 「생활권 병원」으로 —
+   * 치유원이 없으면 가운데 가까운 큰 공공·사무 건물을 치유원으로. 생활권 병원은 작은 건물이어도 입원실·침상을 꼭 둔다(program).
+   */
+  hospitalSet() {
+    if (this._hosps) return this._hosps;
+    const C = this.game.city, set = new Set();
+    if (!C || !C.zones || !C.recs || !C.recs.length) return set;
+    const banks = this.bankSet();
+    for (const Z of C.zones) {
+      const R = Z.rOut || 400, d = (r) => Math.hypot(r.x - Z.cx, r.z - Z.cz);
+      const inZ = C.recs.filter((r) => r.door && !r.custom && d(r) < R && !banks.has(r));
+      let h = inZ.filter((r) => r.use === 'heal').sort((a, b) => d(a) - d(b))[0];
+      if (!h) h = inZ.filter((r) => ['office', 'hall', 'library', 'museum', 'market'].includes(r.use)).sort((a, b) => (b.top - b.gy) * b.sx * b.sz / (1 + d(b) / 200) - (a.top - a.gy) * a.sx * a.sz / (1 + d(a) / 200))[0];
+      if (h) set.add(h);
+    }
+    this._hosps = set;
+    return set;
   }
   /** 모양의 외벽 띠 (창 격자 → 층 높이) */
   profile(kind) { const A = this.city && this.city.arch; return facadeProfile(kind, A && A[kind] && A[kind].hi); }

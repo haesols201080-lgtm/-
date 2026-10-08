@@ -432,7 +432,7 @@ export class MoaAI {
       const iv = W && W.apps.find((a) => a.status === 'interview');
       if (iv) { const f2 = this.find('면접'); if (f2) this.mark(f2); return `「${iv.title}」(${iv.org}) 면접 안내가 와 있어요! ${iv.bname}의 채용 면접실로 가요${f2 ? ' — 길을 표시했어요' : ''}.`; }
       if (I && I.inPocket && I.cur && I.cur.indoor) { const f2 = this.find('단말'); if (f2) this.mark(f2); return `건물 안 울림판 단말의 「일자리」 앱에서 이 건물과 둘레 건물의 일자리에 지원할 수 있어요. 한 시간쯤 뒤 면접 안내가 오고, 그 건물 채용 면접실에서 면접을 봐요.${f2 ? ` 가까운 단말은 ${f2.name} — 길을 깔아 드렸어요.` : ''}`; }
-      return '일자리는 건물 안 울림판 단말의 「일자리」 앱에서 찾아요. 사무탑·마트·공장·연구동 아무 데나 들어가 보세요. 지원 → 면접 → 채용되면 그 건물 출근 단말에서 출근해요.';
+      return '일자리는 건물 안 공용 단말의 「일자리 공고」에서 찾아요. 사무탑·마트·공장·연구동 아무 데나 들어가 보세요. 지원 → 면접 → 채용되면 그 건물 출근 단말에서 출근해요.';
     }
     // 시설·장소·인물 찾기 (건물 안이면 그 건물 안부터)
     const f = this.find(q);

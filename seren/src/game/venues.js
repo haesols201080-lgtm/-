@@ -14,6 +14,7 @@ import { ITEMS, BUFFS, SHELVES, MENU, EXHIBITS, ARCHIVES, BAG_ORDER, WORK_TUNES,
 import { mulberry32 } from '../core/noise.js';
 import { won } from '../data/money.js';
 import { josa } from '../core/josa.js';
+import { BAL } from '../data/balance.js';
 
 const TAU = Math.PI * 2;
 const NOTE_HEX = ['#ff9f6a', '#ffd27a', '#7ff3e6', '#9fb8ff', '#d8a8ff'];
@@ -447,6 +448,7 @@ export class Venues {
     this.buff(I.buff);
     this._learn('eat');
     this.game.ui.toast(`${josa(I.name, '을')} 먹었다 · ${BUFFS[I.buff].name}`, { kind: 'item' });
+    if (this.game.health) this.game.health.heal(BAL.HEAL[id] ?? BAL.FOOD_HEAL); // 먹으면 조금 회복 (약은 많이)
   }
 
   buff(id) {
@@ -879,6 +881,12 @@ export class Venues {
     const I = itemInfo(id), g = this.game;
     if (!I || (this.inv[id] || 0) <= 0) return;
     if (I.use === 'eat') return this.eat(id);
+    if (I.use === 'heal') { // 붕대 같은 응급 회복
+      if (this.game.health && this.game.health.hp >= this.game.health.H.max) { this.game.ui.toast('지금은 다친 데가 없어요', { kind: 'muted' }); return; }
+      this.inv[id]--;
+      this.game.health && this.game.health.heal(BAL.HEAL[id] ?? 20, `${josa(I.name, '을')} 감았다`);
+      return;
+    }
     if (I.use === 'map') {
       this.inv[id]--;
       const p = g.player.pos, md = g.mapData;

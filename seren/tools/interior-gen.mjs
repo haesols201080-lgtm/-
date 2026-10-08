@@ -13,7 +13,7 @@ import { SPIRAL2_MAXH } from '../src/interior/spiral.js';
 
 const A = cityArchetypes();
 const profile = (k) => facadeProfile(k, A[k] && A[k].hi);
-const byUse = { home: 'home', office: 'office', market: 'market', school: 'school', heal: 'heal', library: 'library', hall: 'hall', factory: 'factory', depot: 'depot', lab: 'lab', terminal: 'terminal', garden: 'garden', cafe: 'cafe', museum: 'museum', plant: 'plant', hotel: 'hotel', admin: 'admin', farm: 'farm' };
+const byUse = { home: 'home', office: 'office', market: 'market', school: 'school', heal: 'heal', library: 'library', hall: 'hall', factory: 'factory', depot: 'depot', lab: 'lab', terminal: 'terminal', garden: 'garden', cafe: 'cafe', museum: 'museum', plant: 'plant', hotel: 'hotel', admin: 'admin', farm: 'farm', bank: 'bank' };
 export function fakeRec(kind, use, hw, hd, h, o = {}) {
   const S = SPEC[kind];
   const a = o.a ?? 0.3, x = o.x ?? 1000, z = o.z ?? -2000, gy = 50;
@@ -126,7 +126,7 @@ if (cmd === 'show') {
 // ── 일괄 검사 ──
 if (!cmd || cmd === 'all') {
   const KINDS = Object.entries(SPEC).filter(([, S]) => S.enter && !S.fixed).map(([k]) => k);
-  const USES = ['home', 'office', 'market', 'cafe', 'school', 'heal', 'library', 'museum', 'hall', 'factory', 'depot', 'lab', 'terminal', 'garden', 'plant', 'hotel', 'admin', 'farm'];
+  const USES = ['home', 'office', 'market', 'cafe', 'school', 'heal', 'library', 'museum', 'hall', 'factory', 'depot', 'lab', 'terminal', 'garden', 'plant', 'hotel', 'admin', 'farm', 'bank', 'hospital']; // hospital = 생활권 병원(작아도 입원실)
   const SIZES = [[9, 9, 9], [14, 12, 22], [20, 16, 60], [28, 22, 140], [40, 16, 16], [8, 8, 130]]; // 마지막: 가늘고 높은 첨탑 (심이 층을 거의 다 차지)
   let n = 0, fail = 0, floors = 0, rooms = 0, ms = 0, mz = 0;
   const LK = { stair: '계단', spiral: '나선 계단', lift: '승강기', cargo: '화물 승강기' };
@@ -135,7 +135,8 @@ if (!cmd || cmd === 'all') {
   for (const kind of KINDS) for (const use of USES) for (const [hw, hd, h] of SIZES) {
     const S = SPEC[kind];
     if (S.low && h > 40) continue;
-    const r = fakeRec(kind, use, hw, hd, h, { x: 1000 + n * 37, z: -2000 + n * 11 });
+    const r = fakeRec(kind, use === 'hospital' ? 'heal' : use, hw, hd, h, { x: 1000 + n * 37, z: -2000 + n * 11 });
+    if (use === 'hospital') r.hospital = true;
     // 높은 탑에는 공중다리 하나 (바깥 cityfabric._bridges 처럼: 높이의 40~75% · 아무 방향)
     //  (도시와 같은 높이 규칙 bridgeBodyAt: 몸통이 끊기거나 가늘어진 높이면 다른 높이를 차례로)
     const addBridge = (rr, k) => {

@@ -55,6 +55,7 @@ import { MoaAI } from './moa-ai.js';
 import { Venues } from './venues.js';
 import { Economy } from '../interior/econ.js';
 import { Bank } from './bank.js';
+import { Health } from './health.js';
 import { Ops } from '../interior/ops.js';
 import { Guide } from '../interior/guide.js';
 import { Outdoors } from './outdoors.js';
@@ -128,6 +129,7 @@ export class Game {
     this.interiors = new Interiors(this);
     this.econ = new Economy(this); // 도시 살림 (v0.9): 돈(울)·물건이 저절로 생기지 않고 흐른다
     this.bank = new Bank(this); // 은행·치료비 (v24): 슬롯마다 따로인 장부 (state.bank)
+    this.health = new Health(this); // 체력·쓰러짐·병원 이송 (v24, state.health)
     this.ops = new Ops(this); // 건물이 하는 일 (v0.9)
     this.guide = new Guide(this); // 실내 길 안내
     this.tips = new Tips(this);
@@ -475,6 +477,7 @@ export class Game {
         this.npcs.pushPlayer(this.player.pos);
         if (i < steps - 1) input.down.clear();
         this._playerEvents();
+        this.health.update(h); // 이 걸음의 착지·부딪힘으로 다치고, 가만히 있으면 천천히 회복
         this._frameEvents.push(...this.player.events);
       }
       this._stats(prev);
@@ -977,6 +980,7 @@ export class Game {
     setTimeout(() => {
       this.world.clock.skipTo(frac);
       this.ui.fade(false);
+      if (this.health) this.health.heal(this.health.H.max * 0.5, '푹 쉬었어요');
       this.ui.toast(`${this.world.clock.timeLabel()} · 세렌의 ${this.world.clock.day + 1}일째`);
     }, 1300);
   }

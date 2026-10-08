@@ -579,3 +579,75 @@ body.busy .touchui *, body.busy .tones * { pointer-events: none !important; }
 .imap-info .btn { margin: 4px 0 0; padding: 5px 12px; align-self: flex-start; }
 .imap .map-tools { z-index: 2; }
 @media (max-width: 720px) { .imap { flex-direction: column; } .imap-side { width: auto; max-height: 42%; } .imap-sec { height: 90px; } }
+
+/* ───────── 기기별 화면 문법 (v24 — 하나의 만능 카드가 아니라 기기마다 다른 꼴) ───────── */
+/* 안내 빛판·안내대: 벽에 붙은 어두운 판, 큰 글씨, 층 목록이 위에서 아래로 */
+.card.dev-board { width: min(94vw, 460px); background: linear-gradient(180deg, #060914, #0b1022); border: 2px solid var(--os, #7ff3e6); border-radius: 6px; box-shadow: 0 0 40px color-mix(in srgb, var(--os, #7ff3e6) 25%, transparent); }
+.dev-board .os-head { border-radius: 0; border-bottom-width: 3px; }
+.dev-board .os-head b { font-size: 20px; letter-spacing: 0.12em; }
+.dev-board .svc .btn.svc-b { border-radius: 2px; border-left: 4px solid var(--os, #7ff3e6); background: rgba(255, 255, 255, 0.03); }
+.dev-board .svc .btn.svc-b b { font-size: 17px; letter-spacing: 0.04em; }
+/* 공용 단말(키오스크): 손가락으로 누르는 큰 칸 */
+.card.dev-kiosk, .card.dev-catalog { width: min(96vw, 640px); border-radius: 22px; }
+.dev-kiosk .os-nav .os-tab { flex: 1; padding: 12px 8px; font-size: 15px; border-radius: 14px; text-align: center; }
+.dev-kiosk .svc { display: grid !important; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.dev-kiosk .svc .svc-h { grid-column: 1 / -1; }
+.dev-kiosk .svc .btn.svc-b { min-height: 72px; border-radius: 16px; justify-content: center; }
+.dev-catalog .os-search input { font-size: 16px; padding: 12px 14px; }
+/* 산업 제어판: 계기판 — 각진 칸, 고정폭 숫자, 호박색 */
+.card.dev-console { width: min(96vw, 600px); background: #0b0d0a; border: 1px solid #4a4a2a; border-radius: 4px; font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; }
+.dev-console .os-head { background: repeating-linear-gradient(135deg, #2a2412 0 10px, #1a170c 10px 20px); border-bottom: 2px solid #ffb84a; border-radius: 0; }
+.dev-console .os-head b { color: #ffcf7a; letter-spacing: 0.2em; }
+.dev-console .svc .btn.svc-b { border-radius: 2px; border: 1px solid #5a4a20; background: #14120b; }
+.dev-console .svc .btn.svc-b b { color: #ffcf7a; font-variant-numeric: tabular-nums; }
+.dev-console .svc .svc-h { color: #9fe870; }
+.dev-console .os-chart { background: #050604; border: 1px solid #2a3a1a; }
+.dev-console .os-bar { background: linear-gradient(#9fe870, #3a6a20); }
+/* 회의 탁자: 넓고 낮은 함께 보는 화면 */
+.card.dev-table { width: min(96vw, 720px); border-radius: 30px 30px 12px 12px; }
+
+/* ───────── 울림 OS (컴퓨터) ───────── */
+.card.dev-computer { width: min(97vw, 780px); padding: 0; text-align: left; overflow: hidden; max-height: 90vh; }
+.os2 { --os: #7ff3e6; --w1: #123a4a; --w2: #0a1a2c; display: flex; flex-direction: column; height: min(78vh, 600px); }
+.os2-top { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: rgba(0, 0, 0, 0.45); font-size: 12px; color: var(--ink-dim); border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.os2-top b { color: var(--ink); font-weight: 500; letter-spacing: 0.08em; }
+.os2-who { flex: 1; }
+.os2-clock { font-variant-numeric: tabular-nums; }
+.os2-x, .os2-wt button, .os2-bar button { font: inherit; color: var(--ink); background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 6px; padding: 4px 10px; cursor: pointer; pointer-events: auto; }
+.os2-screen { flex: 1; position: relative; overflow: hidden; background: radial-gradient(120% 90% at 20% 10%, var(--w1), var(--w2)); }
+.os2-desk { position: absolute; inset: 0; overflow-y: auto; padding: 18px; }
+.os2-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 14px; }
+.os2-ic { display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: 1px solid transparent; border-radius: 12px; padding: 10px 4px; color: var(--ink); font: inherit; font-size: 12.5px; cursor: pointer; pointer-events: auto; }
+.os2-ic:hover { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.12); }
+.os2-ic i { font-style: normal; width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; background: color-mix(in srgb, var(--os) 30%, rgba(0, 0, 0, 0.3)); border: 1px solid color-mix(in srgb, var(--os) 55%, transparent); }
+.os2-ic em { font-style: normal; background: #ff7a8a; color: #10121e; border-radius: 8px; padding: 0 5px; font-size: 11px; }
+.os2-win { position: absolute; inset: 10px; display: flex; flex-direction: column; background: rgba(10, 12, 28, 0.94); border: 1px solid color-mix(in srgb, var(--os) 50%, transparent); border-radius: 10px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5); }
+.os2-win.hidden, .os2-desk.hidden { display: none; }
+.os2-wt { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px 6px 14px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); background: color-mix(in srgb, var(--os) 14%, transparent); border-radius: 10px 10px 0 0; }
+.os2-wt b { font-weight: 500; font-size: 14px; }
+.os2-wt span { display: flex; gap: 6px; }
+.os2-win .os-body { flex: 1; max-height: none; overflow-y: auto; padding: 4px 16px 14px; }
+.os2-bar { display: flex; align-items: center; gap: 6px; padding: 6px 8px; background: rgba(0, 0, 0, 0.55); border-top: 1px solid rgba(255, 255, 255, 0.08); overflow-x: auto; }
+.os2-bar .sp { flex: 1; }
+.os2-bar .on { border-color: var(--os); background: color-mix(in srgb, var(--os) 22%, transparent); }
+.os2-tb { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.os2-lock { max-width: 420px; margin: 8% auto 0; text-align: center; color: var(--ink); }
+.os2-lt { font-size: 14px; color: var(--ink-dim); letter-spacing: 0.08em; }
+.os2-lc { font-size: 54px; font-weight: 200; margin: 6px 0 14px; font-variant-numeric: tabular-nums; }
+.os2-lock p { color: var(--ink-dim); line-height: 1.7; font-size: 14px; }
+.os2-av { width: 64px; height: 64px; margin: 0 auto 8px; border-radius: 50%; display: grid; place-items: center; font-size: 28px; background: color-mix(in srgb, var(--os) 30%, #1a1d3a); border: 2px solid var(--os); }
+.os2-doc { background: rgba(255, 255, 255, 0.04); border-radius: 8px; padding: 10px 14px; margin: 8px 0; }
+.os2-doc p { margin: 4px 0; color: var(--ink); font-size: 14px; line-height: 1.6; text-align: left; }
+@media (max-width: 620px) { .os2 { height: 82vh; } .os2-icons { grid-template-columns: repeat(auto-fill, minmax(74px, 1fr)); } .os2-win { inset: 4px; } }
+
+/* 체력 (v24) — 지갑 밑, 다쳤을 때만 */
+.hpbar { position: absolute; right: calc(14px + var(--safe-r)); top: calc(98px + var(--safe-t)); display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--line); background: rgba(14, 16, 40, 0.5); font-size: 12px; color: var(--ink); transition: opacity 0.6s; font-variant-numeric: tabular-nums; }
+.hpbar.hidden { opacity: 0; }
+.hp-ic { font-style: normal; color: #ff8fa3; }
+.hp-track { width: 92px; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.hp-fill { display: block; height: 100%; width: 100%; background: linear-gradient(90deg, #ff7a8a, #ffd89a); transition: width 0.4s; }
+.hpbar.low { border-color: rgba(255, 120, 130, 0.7); animation: hpPulse 1.1s ease-in-out infinite; }
+.hpbar.low .hp-fill { background: #ff5a6e; }
+@keyframes hpPulse { 50% { box-shadow: 0 0 14px rgba(255, 90, 110, 0.6); } }
+.hurt-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(255, 40, 60, 0) 45%, rgba(255, 40, 60, 0.55) 100%); }
+@media (max-width: 620px) { .hp-track { width: 64px; } }
