@@ -696,6 +696,9 @@ export class Approach {
     if (this.worldOn) return;
     this.worldOn = true;
     const g = this.game;
+    // 저절로 넘어갈 때는 흰 빛이 바뀌는 순간을 덮게 (빛은 벽시계로 사라지는데 연출 시간은 프레임당 0.05 초까지라,
+    //  느린 기기에서는 0.9 초 앞서 켠 빛이 다 사라진 뒤에야 장면이 바뀌었다). 넘기기는 검은 막이 이미 덮고 있다
+    if (!this._skipping) g.ui.flash('#fff1dc', 1800);
     g.engine.space = null;
     this.space.dispose();
     this.L.group.visible = false;
