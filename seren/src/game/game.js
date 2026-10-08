@@ -36,7 +36,7 @@ import { CURRENTS } from '../data/currents.js';
 import { LANDING_START } from '../data/places.js';
 import { LINES, MOA, KEEPERS, PYLON_TONES, CODEX, QUESTS } from '../data/story.js';
 import { UR_DIR } from '../world/sky-clock.js';
-import { defaultState, loadState, saveState, hasSave, loadSettings, deleteSave } from './state.js';
+import { defaultState, loadState, saveState, hasSave, loadSettings, saveSettings, deleteSave } from './state.js';
 import { Language } from './language.js';
 import { NPCs } from './npcs.js';
 import { Quests, awakenedCount } from './quests.js';
@@ -105,6 +105,7 @@ export class Game {
     this.avatar = new Avatar();
     this.avatar.addTo(this.engine.scene);
     this.rig = new CameraRig(this.engine.camera, this.world);
+    this.rig.view = this.settings.view === 'first' ? 'first' : 'third';
 
     this.ui = new UI(this);
     this.lang = new Language(this);
@@ -302,6 +303,29 @@ export class Game {
     this.updateWaypoint();
   }
 
+  /**
+   * 카메라가 몸(발 0.1 m ~ 머리 1.85 m, 반지름 0.38 m 의 캡슐)에 0.42 m 안으로 들어오면 몸을 숨긴다 — 좁은 방·벽 모서리에서
+   * 카메라가 몸 속에 들어가 모델 안쪽이 보이던 것 (v24 사용자 제보). 0.55 m 넘게 멀어지면 다시 보인다(깜빡이지 않게).
+   * 연출 카메라(override)·탈것 카메라일 때는 숨기지 않는다.
+   */
+  /** 시점 바꾸기 (V · 터치 「시점」 · 패드 오른쪽 막대 누르기): 3인칭 ↔ 1인칭, 설정에 남긴다 (슬롯과 상관없는 전역) */
+  toggleView() {
+    const v = this.rig.toggleView();
+    this.settings.view = v;
+    saveSettings(this.settings);
+    this.ui.toast(v === 'first' ? '1인칭 시점 — 활공·썰매·해류·탈것은 3인칭으로 바뀌어요 (V 로 되돌리기)' : '3인칭 시점');
+    if (this.ui.tView) this.ui.tView.classList.toggle('on', v === 'first');
+  }
+
+  _camInBody() {
+    if (this.rig.override || this.player.state === 'ride') { this._inBody = false; return false; }
+    const c = this.engine.camera.position, p = this.player.pos;
+    const y = Math.max(p.y + 0.1, Math.min(p.y + 1.85, c.y));
+    const d = Math.hypot(c.x - p.x, c.y - y, c.z - p.z) - 0.38;
+    this._inBody = this._inBody ? d < 0.55 : d < 0.42;
+    return this._inBody;
+  }
+
   save(force = false) {
     if (this.mode === 'title' || this.mode === 'boot' || this.mode === 'intro') return;
     const s = this.state;
@@ -399,7 +423,7 @@ export class Game {
       this.structures.aimAntenna(this.comm.shipDir(), this.comm.pulseK, this.time);
       playerUniform.value.copy(this.player.pos);
       this.rig.update(dt, free ? input : NO_INPUT, this.player);
-      if (!this.rig.override) this.interiors.clampCamera(this.engine.camera, this.rig.smoothTarget);
+      if (!this.rig.override) this.interiors.clampCamera(this.engine.camera, this.rig.smoothTarget, { fp: this.rig.fp, dir: this.rig.dir });
       if (mode === 'dialogue' && this.dialogue.active && this.dialogue.active.npc) this._dialogueCam(dt);
       else this._dlgCam = null;
       if (this.player.state === 'ride' && this.player.ride) {
@@ -409,7 +433,7 @@ export class Game {
         this.rig._applyOverride();
         this.rig.override = null;
       }
-      this.avatar.root.visible = !this._hideAvatar && (this.player.state !== 'ride' || !!(this.player.ride && this.player.ride.showAvatar));
+      this.avatar.root.visible = !this._hideAvatar && !this._camInBody() && (this.player.state !== 'ride' || !!(this.player.ride && this.player.ride.showAvatar));
       this.director.update(dt);
       this._effects(dt);
       this.dialogue.update(dt);
@@ -463,6 +487,7 @@ export class Game {
     if (i.pressed('map')) { if (this.ui.menuEl && this.ui.menuTab === 'map') this.ui.closeMenu(); else if (m === 'play' || m === 'menu') this.ui.openMenu('map'); }
     if (i.pressed('journal')) { if (this.ui.menuEl && this.ui.menuTab === 'journal') this.ui.closeMenu(); else if (m === 'play' || m === 'menu') this.ui.openMenu('journal'); }
     if (i.pressed('hud')) this.ui.setHud(this.ui.hud.classList.contains('off'));
+    if (i.pressed('view') && (m === 'play' || m === 'indoor')) this.toggleView();
     if (m === 'intro' && (i.pressed('jump') || i.pressed('interact') || i.pressed('confirm'))) this.director.skip();
     if (m === 'dialogue') {
       if (i.pressed('interact') || i.pressed('jump') || i.pressed('confirm') || i.pressed('click')) this.dialogue.next();

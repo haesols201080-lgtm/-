@@ -24,6 +24,7 @@ export class Settings {
       ${[['master', '전체'], ['music', '음악'], ['sfx', '효과음'], ['ambience', '바람·환경'], ['voice', '목소리']].map(([k, l]) => `<div class="setrow"><label>${l}</label><input type="range" min="0" max="1" step="0.05" value="${s.vol[k]}" data-vol="${k}"></div>`).join('')}
       <div class="section-title">조작</div>
       <div class="setrow"><label>시점 감도</label><input type="range" min="0.3" max="2.5" step="0.05" value="${s.sensitivity}" data-sens></div>
+      <div class="setrow"><label>시점 <small>(V)</small></label><div class="seg" data-view><button data-v="third" class="${s.view === 'first' ? '' : 'on'}">3인칭</button><button data-v="first" class="${s.view === 'first' ? 'on' : ''}">1인칭</button></div></div>
       <div class="setrow"><label>상하 반전</label><div class="seg" data-inv><button data-v="0" class="${s.invertY ? '' : 'on'}">끔</button><button data-v="1" class="${s.invertY ? 'on' : ''}">켬</button></div></div>
       <div class="setrow"><label>도움말</label><div class="seg" data-hints><button data-v="1" class="${s.hints ? 'on' : ''}">켬</button><button data-v="0" class="${s.hints ? '' : 'on'}">끔</button></div></div>
       <div class="section-title">모아</div>
@@ -50,6 +51,7 @@ export class Settings {
     el.querySelector('[data-sens]').addEventListener('input', (e) => { s.sensitivity = +e.target.value; g.input.sensitivity = s.sensitivity; saveSettings(s); });
     el.querySelectorAll('[data-inv] button').forEach((b) => b.addEventListener('click', () => { s.invertY = b.dataset.v === '1'; g.input.invertY = s.invertY; saveSettings(s); el.querySelectorAll('[data-inv] button').forEach((x) => x.classList.toggle('on', x === b)); }));
     el.querySelectorAll('[data-moa] button').forEach((b) => b.addEventListener('click', () => { s.moaClaude = b.dataset.v === '1'; saveSettings(s); el.querySelectorAll('[data-moa] button').forEach((x) => x.classList.toggle('on', x === b)); g.moaAI && g.moaAI._badge(); }));
+    el.querySelectorAll('[data-view] button').forEach((b) => b.addEventListener('click', () => { s.view = b.dataset.v; if (g.rig) g.rig.view = s.view; saveSettings(s); el.querySelectorAll('[data-view] button').forEach((x) => x.classList.toggle('on', x === b)); if (g.ui && g.ui.tView) g.ui.tView.classList.toggle('on', s.view === 'first'); }));
     el.querySelectorAll('[data-hints] button').forEach((b) => b.addEventListener('click', () => { s.hints = b.dataset.v === '1'; saveSettings(s); el.querySelectorAll('[data-hints] button').forEach((x) => x.classList.toggle('on', x === b)); }));
     el.querySelector('[data-save]')?.addEventListener('click', () => { g.save(true); g.ui.toast('저장했어요'); });
     el.querySelector('[data-full]').addEventListener('click', () => {

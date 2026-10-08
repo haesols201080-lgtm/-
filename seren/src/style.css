@@ -352,6 +352,8 @@ button { font-family: inherit; color: inherit; }
 .tbtn.act { width: 66px; height: 66px; right: calc(124px + var(--safe-r)); bottom: calc(30px + var(--safe-b)); border-color: var(--gold); color: var(--gold); }
 .tbtn.skim { width: 56px; height: 56px; right: calc(36px + var(--safe-r)); bottom: calc(140px + var(--safe-b)); }
 .tbtn.sprint { width: 56px; height: 56px; right: calc(112px + var(--safe-r)); bottom: calc(112px + var(--safe-b)); }
+.tbtn.view { width: 46px; height: 46px; right: calc(184px + var(--safe-r)); bottom: calc(122px + var(--safe-b)); font-size: 12px; }
+.tbtn.view.on { border-color: var(--gold); color: var(--gold); }
 .touch .tones { bottom: auto; top: auto; left: auto; transform: none; right: calc(14px + var(--safe-r)); bottom: calc(210px + var(--safe-b)); flex-direction: column; gap: 8px; }
 .touch .tone { width: 46px; height: 46px; }
 .touch .tone .k { display: none; }

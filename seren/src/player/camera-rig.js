@@ -1,7 +1,9 @@
-// 3인칭 카메라: 마우스/터치로 돌리고, 움직이면 천천히 뒤로 돌아오며, 속도에 따라 시야각이 넓어집니다.
+// 카메라: 3인칭(마우스/터치로 돌리고, 움직이면 천천히 뒤로 돌아오며, 속도에 따라 시야각이 넓어짐) · 1인칭(시점 바꾸기 V — 걷기·뛰기·헤엄 때 눈높이,
+//  활공·썰매·해류·탈것은 3인칭으로 저절로).
 import * as THREE from 'three';
 
 const DIST = { ground: 6.2, air: 7, glide: 9.5, skim: 8.5, swim: 6, current: 11, lift: 9, fly: 10.5 };
+const FP_STATES = new Set(['ground', 'air', 'swim']); // 1인칭이 되는 몸 상태
 
 export class CameraRig {
   constructor(camera, world) {
@@ -10,6 +12,10 @@ export class CameraRig {
     this.yaw = 0; // 0 = 북쪽(−Z)을 바라봄
     this.pitch = -0.22;
     this.dist = 6.2;
+    this.view = 'third'; // 'third' | 'first' (설정 view, V 로 바꾼다)
+    this.fp = 0; // 지금 1인칭 정도 0..1 (좁은 곳에서 저절로 · 시점 바꾸기)
+    this.dir = new THREE.Vector3(0, 0, 1); // 대상 → 카메라 방향 (보는 쪽의 반대)
+    this._look = new THREE.Vector3();
     this.zoom = 1;
     this.target = new THREE.Vector3();
     this.smoothTarget = new THREE.Vector3();
@@ -29,14 +35,15 @@ export class CameraRig {
     // 입력
     this.yaw -= input.look.x;
     this.pitch -= input.look.y;
-    this.pitch = Math.max(-1.35, Math.min(0.75, this.pitch));
+    const first = this.view === 'first' && FP_STATES.has(player.state) && !this.override;
+    this.pitch = Math.max(-1.35, Math.min(first ? 1.25 : 0.75, this.pitch)); // 1인칭은 위도 올려다본다
     if (input.wheel) this.zoom = Math.max(0.55, Math.min(2.2, this.zoom + input.wheel * 0.08));
 
     // 이동 중이면 등 뒤로 서서히 돌아옴 (특히 터치에서 편함)
     const s = player.state;
     const moving = player.hspeed > 2;
     const idleLook = input.lookActive > (input.lastDevice === 'touch' ? 0.9 : 2.2);
-    if (this.autoFollow && moving && idleLook && s !== 'swim') {
+    if (this.autoFollow && moving && idleLook && s !== 'swim' && !first) {
       const behind = player.yaw + Math.PI;
       let d = Math.atan2(Math.sin(behind - this.yaw), Math.cos(behind - this.yaw));
       const rate = s === 'glide' || s === 'skim' || s === 'current' || s === 'fly' ? 2.2 : 0.8;
@@ -57,6 +64,7 @@ export class CameraRig {
     // 큰 순간이동은 그대로
     if (this.smoothTarget.distanceToSquared(this.target) > 400) this.smoothTarget.copy(this.target);
 
+    if (first) return this._first(dt, player);
     const want = (DIST[s] || 7) * this.zoom + Math.min(4, player.hspeed * 0.05);
     this.dist += (want - this.dist) * Math.min(1, dt * 2.5);
 
@@ -109,7 +117,19 @@ export class CameraRig {
       this.shakeAmp *= Math.exp(-dt * 6);
     }
 
-    cam.lookAt(this.smoothTarget);
+    // 아주 좁은 곳(팔이 0.7 m 아래): 머리 뒤 12 cm 에서 뒤통수를 비추는 대신 눈높이로 옮겨 보는 쪽을 본다 (1인칭) —
+    //  카메라가 몸 속에 들어가 모델 안쪽이 보이던 것 (v24 사용자 제보). 몸은 game 이 카메라와 몸의 거리를 보고 숨긴다
+    const FP = 0.7;
+    this.fp = 0;
+    if (dist < FP && (s === 'ground' || s === 'air')) {
+      const k = 1 - dist / FP, e = k * k * (3 - 2 * k);
+      this.fp = e;
+      const eyeY = player.pos.y + 1.62;
+      const ex = player.pos.x, ez = player.pos.z;
+      cam.position.set(cam.position.x + (ex - cam.position.x) * e, cam.position.y + (eyeY - cam.position.y) * e, cam.position.z + (ez - cam.position.z) * e);
+      this._look.set(this.smoothTarget.x - dir.x * 6 * e, this.smoothTarget.y - dir.y * 6 * e + (eyeY - this.smoothTarget.y) * e, this.smoothTarget.z - dir.z * 6 * e);
+      cam.lookAt(this._look);
+    } else cam.lookAt(this.smoothTarget);
     // 속도감: 시야각
     const fv = this.fovBase + Math.min(20, Math.max(0, player.hspeed - 8) * 0.42);
     cam.fov += (fv - cam.fov) * Math.min(1, dt * 3);
@@ -123,9 +143,31 @@ export class CameraRig {
     }
     cam.near = nearC;
     cam.updateProjectionMatrix();
+    this.dir.copy(dir);
 
     if (this.override) this._applyOverride(dt);
   }
+
+  /** 1인칭: 눈높이(발 + 1.62 m, 계단에서는 부드럽게)에서 보는 쪽으로. 몸은 game._camInBody 가 숨긴다 */
+  _first(dt, player) {
+    const cam = this.camera;
+    const cp = Math.cos(this.pitch), sp = Math.sin(this.pitch);
+    this.dir.set(Math.sin(this.yaw) * cp, -sp, Math.cos(this.yaw) * cp);
+    const eyeY = this.smoothTarget.y + (player.state === 'swim' ? 0.4 : 0.07);
+    // 눈은 몸 가운데에서 보는 쪽으로 0.12 m (헬멧 앞) — 벽에 바짝 붙어도 몸 반지름(0.35 m) 안이라 벽을 넘지 않는다
+    cam.position.set(player.pos.x - Math.sin(this.yaw) * 0.12, eyeY, player.pos.z - Math.cos(this.yaw) * 0.12);
+    this._look.set(cam.position.x - this.dir.x * 10, cam.position.y - this.dir.y * 10, cam.position.z - this.dir.z * 10);
+    cam.lookAt(this._look);
+    this.fp = 1;
+    this.blocked = false;
+    const fv = this.fovBase + Math.min(14, Math.max(0, player.hspeed - 8) * 0.3);
+    cam.fov += (fv - cam.fov) * Math.min(1, dt * 3);
+    cam.near = 0.08;
+    cam.updateProjectionMatrix();
+  }
+
+  /** 시점 바꾸기: 3인칭 ↔ 1인칭 */
+  toggleView() { this.view = this.view === 'first' ? 'third' : 'first'; return this.view; }
 
   _applyOverride() {
     const o = this.override;

@@ -544,10 +544,17 @@ export class Interiors {
   }
 
   /** 실내에서는 카메라가 지금 층의 벽·바닥·천장 안에 머문다 (칸막이를 넘어 옆방을 들여다보지 않게) */
-  clampCamera(cam, target) {
+  clampCamera(cam, target, view = null) {
     const cur = this.cur;
     if (!cur || !this.inPocket) return;
     if (cam.near !== 0.15) { cam.near = 0.15; cam.updateProjectionMatrix(); }
+    // 1인칭(시점 바꾸기 · 아주 좁은 곳): 눈은 플레이어 몸 안 — 플레이어가 선 곳이 곧 방 안이다. 천장 밑으로만 맞추고 보는 쪽은 그대로
+    if (view && view.fp >= 0.5) {
+      const ind0 = cur.indoor, top = ind0 && !cur.cabin ? ind0.ceilY(ind0.cur) - 0.12 : cam.position.y;
+      if (cam.position.y > top) cam.position.y = top;
+      if (cam.near !== 0.08) { cam.near = 0.08; cam.updateProjectionMatrix(); }
+      return;
+    }
     if (cur.cabin) return this._clampCabin(cam, target);
     const ind = cur.indoor, i = ind.cur, out = ind.built.get(i);
     let fy = ind.yOf(i), bot = fy + 0.3, flat = ind.ceilY(i) - 0.3;
@@ -587,6 +594,15 @@ export class Interiors {
     // 벽을 등져 카메라가 너무 가까워지면, 뒤로 물러나는 대신 위로 올라 내려다본다 (머리·목도리에 가리지 않게)
     const near = Math.hypot(pos.x - target.x, pos.z - target.z);
     if (near < 2.6) pos.y = Math.min(topAt(pos.x, pos.z) - 0.05, Math.max(pos.y, target.y + (2.6 - near) * 1.1));
+    // 그래도 몸에 바짝 붙은 자리(머리 위 0.9 m 안, 옆으로 0.7 m 안)면 머리를 코앞에서 내려다보는 대신 눈높이 1인칭으로 —
+    //  가까운 면이 헬멧 속을 잘라 모델 안쪽이 보이던 것 (v24 사용자 제보). 몸은 game._camInBody 가 숨긴다
+    if (near < 0.7 && pos.y - target.y < 0.9 && view && view.dir) {
+      const eye = target.clone(); eye.y = Math.min(topAt(eye.x, eye.z) - 0.05, target.y + 0.07);
+      cam.position.copy(eye);
+      cam.lookAt(eye.x - view.dir.x * 6, eye.y - view.dir.y * 6, eye.z - view.dir.z * 6);
+      if (cam.near !== 0.08) { cam.near = 0.08; cam.updateProjectionMatrix(); }
+      return;
+    }
     cam.position.copy(pos);
     cam.lookAt(target);
   }

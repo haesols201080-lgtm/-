@@ -5,7 +5,7 @@ const KEYMAP = {
   KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
   Space: 'jump', ShiftLeft: 'sprint', ShiftRight: 'sprint', KeyE: 'interact', KeyF: 'skimmer', KeyQ: 'listen',
   Digit1: 'tone1', Digit2: 'tone2', Digit3: 'tone3', Digit4: 'tone4', Digit5: 'tone5',
-  KeyM: 'map', KeyJ: 'journal', Tab: 'map', Escape: 'pause', KeyP: 'pause', KeyC: 'camera', KeyH: 'hud', Backquote: 'dev', KeyT: 'moa',
+  KeyM: 'map', KeyJ: 'journal', Tab: 'map', Escape: 'pause', KeyP: 'pause', KeyC: 'camera', KeyV: 'view', KeyH: 'hud', Backquote: 'dev', KeyT: 'moa',
   Enter: 'confirm',
 };
 
@@ -155,7 +155,7 @@ export class Input {
     this._pad = { x: dz(gp.axes[0]), y: -dz(gp.axes[1]) };
     const rx = dz(gp.axes[2] || 0), ry = dz(gp.axes[3] || 0);
     if (rx || ry) { this.look.x += rx * dt * 2.6 * this.sensitivity; this.look.y += ry * dt * 2.0 * this.sensitivity; this.lookActive = 0; }
-    const map = { 0: 'jump', 2: 'interact', 1: 'skimmer', 5: 'sprint', 4: 'listen', 9: 'pause', 8: 'map', 12: 'tone1', 15: 'tone2', 13: 'tone3', 14: 'tone4', 3: 'tone5' };
+    const map = { 0: 'jump', 2: 'interact', 1: 'skimmer', 5: 'sprint', 4: 'listen', 9: 'pause', 8: 'map', 11: 'view', 12: 'tone1', 15: 'tone2', 13: 'tone3', 14: 'tone4', 3: 'tone5' };
     const held = new Set();
     for (const [i, a] of Object.entries(map)) if (gp.buttons[i]?.pressed) held.add(a);
     const prev = this._padHeld || new Set();

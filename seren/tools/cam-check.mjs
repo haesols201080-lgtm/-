@@ -25,7 +25,7 @@ await page.evaluate((DBG) => {
   g.ui.blink = (mid, done) => { mid(); if (done) done(); }; // 셀 넘기: 가림 막 없이 바로 (한 프레임 안에서 옆 셀을 짓는다)
   window.__dbg = DBG;
   const ray = new T.Raycaster();
-  const KEYS = ['n', 'path', 'near', 'beyond', 'ceil'];
+  const KEYS = ['n', 'path', 'near', 'beyond', 'ceil', 'body', 'hid'];
   // 잴 물체: 보이는 면만 (플레이어 몸·사람·입자·하늘은 빼고) — 앞·뒷면을 모두 맞힌다 (실내 벽은 안쪽 면만 그리므로 바깥에서는 뚫려 보인다)
   const skip = (o) => {
     for (let q = o; q; q = q.parent) {
@@ -81,6 +81,8 @@ await page.evaluate((DBG) => {
       if (!ind.inside(i, p.x, p.z)) { const out = ind.built.get(i), c = ind.cellAt(p.x, p.z), c2 = ind.cellAt(t.x, t.z); const R = c >= 0 && out.roomX[c] ? out.L.rooms[out.roomX[c] - 1] : null, R2 = c2 >= 0 && out.roomX[c2] ? out.L.rooms[out.roomX[c2] - 1] : null; bad.push(['beyond', window.__dbg ? `cam:${R ? R.type : c < 0 ? 'off' : 'none'} void${out.L.void[c]} tgt:${R2 ? R2.type : 'none'} pl:${ind.inside(i, g.player.pos.x, g.player.pos.z)} y${(p.y - ind.yOf(i)).toFixed(2)} cur${i}` : '']); }
       if (p.y > ind.ceilY(i) - 0.05 || p.y < ind.yOf(i) + 0.05) bad.push(['ceil', '']);
     }
+    // 몸 속: 카메라가 몸(캡슐 반지름 0.38 m) 겉면 0.12 m 안인데 몸이 보이면 실패 (game._camInBody 가 숨겨야 한다 — v24 사용자 제보)
+    { const pp = g.player.pos, yy = Math.max(pp.y + 0.1, Math.min(pp.y + 1.85, p.y)), ds = Math.hypot(p.x - pp.x, p.y - yy, p.z - pp.z) - 0.38, hid = g._camInBody(); if (hid) res.hid = (res.hid || 0) + 1; else if (ds < 0.12) bad.push(['body', '']); }
     res.n++;
     for (const [k, w] of bad) { res[k]++; res.what[w] = (res.what[w] || 0) + 1; }
     if (bad.length && res.ex.length < 6) res.ex.push(`${tag} ${bad.map((b) => b[0]).join('+')} arm=${d.toFixed(2)} near=${cam.near.toFixed(2)}`);
@@ -122,7 +124,7 @@ await page.evaluate((DBG) => {
     }
   };
 }, !!process.env.CAMDBG);
-const tot = { n: 0, path: 0, near: 0, beyond: 0, ceil: 0 };
+const tot = { n: 0, path: 0, near: 0, beyond: 0, ceil: 0, body: 0 };
 const what = {};
 const add = (r) => { for (const k of Object.keys(tot)) tot[k] += r[k] || 0; for (const [k, v] of Object.entries(r.what || {})) what[k] = (what[k] || 0) + v; };
 for (const pid of want) {
@@ -137,7 +139,7 @@ for (const pid of want) {
   try { await page.waitForFunction(() => SEREN.game.interiors.inPocket && !SEREN.game.interiors._busy, null, { timeout: 120000, polling: 300 }); } catch { console.log(JSON.stringify({ pid, err: '들어가기 시간 초과' })); continue; }
   // 실내: 층마다 (최대 3층) 벽에 붙은 칸에서 출발해 걷기 + 제자리 돌기
   const floors = await page.evaluate(() => { const B = SEREN.game.interiors.cur.B; const f = B.floors.filter((F) => F.reach && !F.dead).map((F) => F.i); return [...new Set([f[0], f[Math.floor(f.length / 2)], f[f.length - 1]])]; });
-  const r = { pid, name: await page.evaluate(() => SEREN.game.interiors.title(SEREN.game.interiors.cur.r)), n: 0, path: 0, near: 0, beyond: 0, ceil: 0, ex: [], what: {}, starts: 0, skipped: 0 };
+  const r = { pid, name: await page.evaluate(() => SEREN.game.interiors.title(SEREN.game.interiors.cur.r)), n: 0, path: 0, near: 0, beyond: 0, ceil: 0, body: 0, hid: 0, ex: [], what: {}, starts: 0, skipped: 0 };
   for (const fi of floors) {
     const rr = await page.evaluate(({ fi, NP }) => {
       const g = SEREN.game, I = g.interiors, ind = I.cur.indoor;
@@ -185,7 +187,7 @@ for (const pid of want) {
       } finally { window.__camEnd(); }
       return res;
     }, { fi, NP });
-    for (const k of ['n', 'path', 'near', 'beyond', 'ceil', 'starts', 'skipped']) r[k] += rr[k];
+    for (const k of ['n', 'path', 'near', 'beyond', 'ceil', 'body', 'hid', 'starts', 'skipped']) r[k] += rr[k] || 0;
     for (const [k, v] of Object.entries(rr.what)) r.what[k] = (r.what[k] || 0) + v;
     r.ex.push(...rr.ex.slice(0, 3));
     if (!(await page.evaluate(() => SEREN.game.interiors.inPocket))) break;
@@ -223,6 +225,6 @@ for (const pid of want) {
 }
 console.log(logs.length ? `기록:\n${[...new Set(logs)].slice(0, 6).join('\n')}` : '페이지 오류 없음');
 console.log('맞은 물체:', JSON.stringify(Object.entries(what).sort((a, b) => b[1] - a[1]).slice(0, process.env.CAMDBG ? 60 : 12)));
-console.log(`카메라 프레임 ${tot.n} · 사이에 벽 ${tot.path} · 가까운 면이 벽을 자름 ${tot.near} · 벽 너머(방 밖) ${tot.beyond} · 천장·바닥 밖 ${tot.ceil}`);
+console.log(`카메라 프레임 ${tot.n} · 사이에 벽 ${tot.path} · 가까운 면이 벽을 자름 ${tot.near} · 벽 너머(방 밖) ${tot.beyond} · 천장·바닥 밖 ${tot.ceil} · 몸 속인데 몸이 보임 ${tot.body}`);
 await browser.close();
-process.exit(tot.path + tot.near + tot.beyond + tot.ceil ? 1 : 0);
+process.exit(tot.path + tot.near + tot.beyond + tot.ceil + tot.body ? 1 : 0);

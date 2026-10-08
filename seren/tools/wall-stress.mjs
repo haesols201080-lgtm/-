@@ -85,9 +85,17 @@ for (const pid of want) {
           const inOk = ind.inside(cur, p.x, p.z) || ind.stairCell || I._nearPortal(ind, p);
           const below = p.y < ind.yOf(cur) - 0.3;
           const esc = window.__esc() - e0;
+          let why = '';
+          if (esc) {
+            // 안전장치가 본 자리: 그 칸의 방·셀·벽 거리·높이 (원인을 찾게)
+            const E = g.state.debug.escapes[g.state.debug.escapes.length - 1], fl = E.floor, out = ind.built.get(fl);
+            const c = ind.cellAt(E.x, E.z), rid = out && c >= 0 ? out.roomX[c] - 1 : -1, R = rid >= 0 ? out.L.rooms[rid] : null;
+            const [gx2, gz2] = ind.grid(E.x, E.z);
+            why = ` · 그때: 방 ${R ? R.type : '없음'}${out && c >= 0 && out.L.void[c] ? ' void' + out.L.void[c] : ''} · 셀 ${E.key} vs 그 칸 ${ind.keyAt(fl, E.x, E.z)} · 벽 거리 ${out && out.sdAt ? out.sdAt(gx2, gz2).toFixed(2) : '?'} · 높이 ${E.y}`;
+          }
           if (!inOk || below || esc) {
             const [gx, gz] = ind.grid(p.x, p.z);
-            res.fails.push(`${B.floors[i].label}층 ${nm} → ${Math.round((a * 180) / Math.PI)}°: ${!inOk ? '걸을 수 있는 칸 밖' : ''}${below ? ` 바닥 아래 ${(ind.yOf(cur) - p.y).toFixed(1)} m` : ''}${esc ? ` 안전장치 ${esc}번` : ''} (칸 ${gx.toFixed(1)},${gz.toFixed(1)} · 층 ${B.floors[cur].label} · 셀 ${ind.cellKey})`);
+            res.fails.push(`${B.floors[i].label}층 ${nm} → ${Math.round((a * 180) / Math.PI)}°: ${!inOk ? '걸을 수 있는 칸 밖' : ''}${below ? ` 바닥 아래 ${(ind.yOf(cur) - p.y).toFixed(1)} m` : ''}${esc ? ` 안전장치 ${esc}번${why}` : ''} (칸 ${gx.toFixed(1)},${gz.toFixed(1)} · 층 ${B.floors[cur].label} · 셀 ${ind.cellKey})`);
           }
         }
       }

@@ -110,6 +110,8 @@ export class UI {
     this.tAct = mk('act hidden', '살피기', 'interact', false);
     this.tSkim = mk('skim hidden', '썰매', 'skimmer', false);
     this.tSprint = mk('sprint', '달리기', 'sprint');
+    this.tView = mk('view', '시점', 'view', false);
+    this.tView.classList.toggle('on', !!(this.game.settings && this.game.settings.view === 'first'));
     this.hud.appendChild(t);
     const stick = this.stickEl, knob = stick.firstElementChild;
     this.game.input.onStick = (x, y, dx, dy, on) => {

@@ -2,6 +2,7 @@
 import { LANDING_START, LANDER_YAW } from '../data/places.js';
 const KEY = 'seren.save.v1';
 const SETTINGS_KEY = 'seren.settings.v1';
+export const SEEN_KEY = 'seren.seenVersion'; // 업데이트 내역을 열어 본 판 (슬롯과 상관없는 전역)
 export const SAVE_VERSION = 1;
 // 이야기 판: 2 = 새 이야기(착륙 → 첫 접촉 → 이웃 → 이름 노래 → 듣는 탑들이 노래 → 온 하늘에 대답).
 // 옛 이야기로 저장한 판은 불러올 때 지금까지 한 일(얻은 음·노래하게 한 탑·이름 노래·하늘닻)에 맞는 새 장(章)으로 옮긴다.
@@ -83,41 +84,121 @@ export function defaultSettings() {
     vol: { master: 0.9, music: 0.6, sfx: 0.85, ambience: 0.7, voice: 0.85 },
     sensitivity: 1,
     invertY: false,
+    view: 'third', // 시점: 'third' 3인칭 · 'first' 1인칭 (V · 터치 「시점」)
     hints: true,
     subtitlesSpeed: 1,
     moaClaude: true, // 아티팩트에서 모아가 Claude 로 대답 (끄면 기본 모드)
   };
 }
 
-export function hasSave() {
-  try { return !!localStorage.getItem(KEY); } catch { return false; }
+// ── 저장 슬롯 (v24 · 문서 P1 「단일 세이브 1개 구조를 폐기하고 여러 독립 저장 슬롯」) ──────────────
+//  슬롯마다 따로 된 열쇠 둘: 'seren.slot.<id>'(게임 상태 전체 — 세계·주민 기억·살림·퀘스트·가방·자리·시각·실내 상태)과
+//  'seren.slotmeta.<id>'(목록에 보일 요약: 이름·저장 시각·놀이 시간·자리·목표·저장 판·작은 그림). 목록은 요약만 읽어
+//  한 슬롯이 깨져도(읽기 실패·옛 판) 그 슬롯만 「불러올 수 없음」으로 보이고 다른 슬롯은 그대로다.
+//  같은 열쇠의 쓰기는 한 번에 일어나므로 저장 도중 탭이 닫혀도 다른 슬롯은 건드리지 않는다. 활성 슬롯 id 는 'seren.slots.v1'.
+//  설정·업데이트 내역을 본 판은 슬롯과 상관없는 전역 열쇠(SETTINGS_KEY·SEEN_KEY).
+const SLOT = 'seren.slot.', META = 'seren.slotmeta.', SLOTS_KEY = 'seren.slots.v1';
+export const MAX_SLOTS = 8;
+const ls = () => { try { return globalThis.localStorage || null; } catch { return null; } };
+function readJSON(k) { const L = ls(); if (!L) return null; const raw = L.getItem(k); return raw ? JSON.parse(raw) : null; }
+function slotIds() {
+  const L = ls(), ids = [];
+  if (!L) return ids;
+  for (let i = 0; i < L.length; i++) { const k = L.key(i); if (k && k.startsWith(META)) ids.push(k.slice(META.length)); else if (k && k.startsWith(SLOT) && !ids.includes(k.slice(SLOT.length))) ids.push(k.slice(SLOT.length)); }
+  return [...new Set(ids)];
+}
+/** 옛 단일 저장(seren.save.v1)이 있고 슬롯이 하나도 없으면 첫 슬롯으로 옮긴다 (옛 열쇠는 지운다 — 같은 진행이 두 군데 있지 않게) */
+function adoptLegacy() {
+  const L = ls();
+  if (!L) return;
+  try {
+    const raw = L.getItem(KEY);
+    if (!raw || slotIds().length) return;
+    const s = JSON.parse(raw);
+    const id = newSlotId();
+    L.setItem(SLOT + id, raw);
+    L.setItem(META + id, JSON.stringify({ id, name: '여정 1', created: s.created || Date.now(), saved: s.saved || Date.now(), playTime: s.playTime || 0, ver: s.version || 1, place: '', objective: '' }));
+    L.setItem(SLOTS_KEY, JSON.stringify({ active: id }));
+    L.removeItem(KEY);
+  } catch (e) { console.warn('[save] 옛 저장 옮기기 실패', e); }
+}
+function newSlotId() { return Date.now().toString(36) + Math.floor(Math.random() * 1296).toString(36); }
+
+/** 슬롯 목록 (최근 저장 순): [{ id, name, saved, playTime, place, objective, ver, thumb, broken }] */
+export function listSlots() {
+  adoptLegacy();
+  const out = [];
+  for (const id of slotIds()) {
+    let m = null;
+    try { m = readJSON(META + id); } catch { m = null; }
+    const hasData = !!(ls() && ls().getItem(SLOT + id));
+    if (!m) out.push({ id, name: '이름 없는 여정', saved: 0, playTime: 0, broken: !hasData ? '저장 내용이 없어요' : '요약을 읽지 못했어요 — 불러오기는 시도할 수 있어요' });
+    else out.push({ ...m, id, broken: hasData ? null : '저장 내용이 없어요' });
+  }
+  return out.sort((a, b) => (b.saved || 0) - (a.saved || 0));
+}
+export function activeSlot() { try { return (readJSON(SLOTS_KEY) || {}).active || null; } catch { return null; } }
+export function setActiveSlot(id) { try { ls() && ls().setItem(SLOTS_KEY, JSON.stringify({ active: id })); } catch { /* 무시 */ } }
+/** 새 슬롯 (빈 상태 — 첫 저장 때 내용이 생긴다). 꽉 찼으면 null */
+export function createSlot(name) {
+  if (listSlots().length >= MAX_SLOTS) return null;
+  const id = newSlotId();
+  const n = name && name.trim() ? name.trim().slice(0, 24) : `여정 ${listSlots().length + 1}`;
+  try { ls().setItem(META + id, JSON.stringify({ id, name: n, created: Date.now(), saved: 0, playTime: 0, ver: SAVE_VERSION, place: '', objective: '' })); } catch (e) { console.warn('[save] 슬롯 만들기 실패', e); return null; }
+  return id;
+}
+export function renameSlot(id, name) {
+  try { const m = readJSON(META + id) || { id }; m.name = (name || '').trim().slice(0, 24) || m.name; ls().setItem(META + id, JSON.stringify(m)); return true; } catch { return false; }
+}
+export function deleteSlot(id) {
+  try { ls().removeItem(SLOT + id); ls().removeItem(META + id); if (activeSlot() === id) ls().removeItem(SLOTS_KEY); } catch { /* 무시 */ }
+}
+/** 슬롯 비우기 (덮어써 새로 시작) — 이름은 남긴다 */
+export function clearSlot(id) {
+  try { ls().removeItem(SLOT + id); const m = readJSON(META + id) || { id, name: '여정' }; ls().setItem(META + id, JSON.stringify({ ...m, saved: 0, playTime: 0, place: '', objective: '', thumb: null, created: Date.now(), ver: SAVE_VERSION })); } catch { /* 무시 */ }
 }
 
-export function loadState() {
+export function hasSave() { return listSlots().some((m) => !m.broken || /요약/.test(m.broken)); }
+
+/** 슬롯 불러오기 (그 슬롯의 판에 맞춰 옮긴다). 실패하면 null — 다른 슬롯에는 영향 없음 */
+export function loadState(id = activeSlot()) {
+  if (!id) { const first = listSlots().find((m) => !m.broken); id = first && first.id; }
+  if (!id) return null;
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = ls().getItem(SLOT + id);
     if (!raw) return null;
-    return migrate(JSON.parse(raw));
+    const s = migrate(JSON.parse(raw));
+    setActiveSlot(id);
+    return s;
   } catch (e) {
-    console.warn('[save] 불러오기 실패', e);
+    console.warn('[save] 슬롯 불러오기 실패', id, e);
     return null;
   }
 }
 
-export function saveState(s) {
+/** 지금 슬롯에만 저장 (meta: 목록 요약 — 자리·목표·작은 그림) */
+export function saveState(s, id = activeSlot(), meta = {}) {
+  if (!id) return false;
   try {
     s.saved = Date.now();
-    localStorage.setItem(KEY, JSON.stringify(s));
+    ls().setItem(SLOT + id, JSON.stringify(s)); // 내용 먼저 (요약이 내용보다 앞서지 않게)
+    const m = readJSON(META + id) || { id, name: '여정', created: s.created || Date.now() };
+    const next = { ...m, id, saved: s.saved, playTime: s.playTime || 0, ver: s.version || SAVE_VERSION, ...meta };
+    if (meta.thumb === undefined) next.thumb = m.thumb || null;
+    ls().setItem(META + id, JSON.stringify(next));
     return true;
   } catch (e) {
     console.warn('[save] 저장 실패', e);
     return false;
   }
 }
-
-export function deleteSave() {
-  try { localStorage.removeItem(KEY); } catch { /* 무시 */ }
+/** 요약만 고치기 (작은 그림을 다음 프레임에 붙일 때) */
+export function patchSlotMeta(id, patch) {
+  try { const m = readJSON(META + id); if (!m) return; ls().setItem(META + id, JSON.stringify({ ...m, ...patch })); } catch (e) { console.warn('[save] 요약 저장 실패', e); }
 }
+
+/** 옛 호출: 지금 슬롯을 지운다 */
+export function deleteSave() { const id = activeSlot(); if (id) deleteSlot(id); }
 
 export function loadSettings() {
   try {
