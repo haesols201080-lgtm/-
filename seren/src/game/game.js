@@ -36,7 +36,7 @@ import { CURRENTS } from '../data/currents.js';
 import { LANDING_START } from '../data/places.js';
 import { LINES, MOA, KEEPERS, PYLON_TONES, CODEX, QUESTS } from '../data/story.js';
 import { UR_DIR } from '../world/sky-clock.js';
-import { defaultState, loadState, saveState, hasSave, loadSettings, saveSettings, deleteSave } from './state.js';
+import { defaultState, loadState, saveState, loadSettings, saveSettings, listSlots, activeSlot, setActiveSlot, createSlot, renameSlot, deleteSlot, clearSlot, patchSlotMeta, MAX_SLOTS } from './state.js';
 import { Language } from './language.js';
 import { NPCs } from './npcs.js';
 import { Quests, awakenedCount } from './quests.js';
@@ -54,6 +54,7 @@ import { Tips } from './tips.js';
 import { MoaAI } from './moa-ai.js';
 import { Venues } from './venues.js';
 import { Economy } from '../interior/econ.js';
+import { Bank } from './bank.js';
 import { Ops } from '../interior/ops.js';
 import { Guide } from '../interior/guide.js';
 import { Outdoors } from './outdoors.js';
@@ -61,6 +62,8 @@ import { Citizens } from './citizens.js';
 import { UI } from '../ui/ui.js';
 import { MapData } from '../ui/map.js';
 import { won } from '../data/money.js';
+import { atmosUniforms } from '../world/atmosphere.js';
+import { josa } from '../core/josa.js';
 
 export class Game {
   constructor() {
@@ -74,6 +77,7 @@ export class Game {
     this.audio = audio;
     this.music = music;
     for (const [k, v] of Object.entries(this.settings.vol)) audio.vol[k] = v;
+    this.applyDisplay();
     this.state = defaultState();
     this.time = 0;
     this.mode = 'boot';
@@ -123,6 +127,7 @@ export class Game {
     this.venues = new Venues(this);
     this.interiors = new Interiors(this);
     this.econ = new Economy(this); // 도시 살림 (v0.9): 돈(울)·물건이 저절로 생기지 않고 흐른다
+    this.bank = new Bank(this); // 은행·치료비 (v24): 슬롯마다 따로인 장부 (state.bank)
     this.ops = new Ops(this); // 건물이 하는 일 (v0.9)
     this.guide = new Guide(this); // 실내 길 안내
     this.tips = new Tips(this);
@@ -182,14 +187,17 @@ export class Game {
     this.mode = 'title';
     music.setMood('title');
     const auto = this.params.get('play');
-    if (auto) { // 테스트·바로가기: ?play=new | ?play=continue
-      if (auto === 'continue' && hasSave()) this.continueGame(); else this.newGame(auto !== 'intro'); // ?play=intro: 오프닝까지
-      return;
+    if (auto) { // 테스트·바로가기: ?play=new | ?play=intro (오프닝까지) — 「바로가기 여정」 슬롯 하나만 다시 쓴다 · ?play=continue[&slot=<id>]
+      const list = listSlots();
+      if (auto !== 'continue') { const q = list.find((m) => m.name === '바로가기 여정'); this.newGame(auto !== 'intro', q ? { id: q.id } : { name: '바로가기 여정' }); return; }
+      const want = this.params.get('slot') || activeSlot() || (list.find((m) => !m.broken) || {}).id;
+      if (want && this.continueGame(want) !== false) return;
+      if (!want) { this.newGame(true, { name: '바로가기 여정' }); return; } // 저장이 하나도 없으면 새로 (옛 바로가기와 같게)
     }
     this.ui.title({
-      hasSave: hasSave(),
-      onContinue: () => { audio.unlock(); this.continueGame(); },
-      onNew: () => { audio.unlock(); this.newGame(); },
+      slots: { list: listSlots, max: MAX_SLOTS, rename: renameSlot, remove: deleteSlot },
+      onLoad: (id) => { audio.unlock(); this.continueGame(id); },
+      onNew: (o) => { audio.unlock(); this.newGame(false, o); },
       onSettings: () => { audio.unlock(); this.ui.titleSettings(); },
     });
     const unlock = () => { audio.unlock(); removeEventListener('pointerdown', unlock); removeEventListener('keydown', unlock); };
@@ -197,8 +205,17 @@ export class Game {
     addEventListener('keydown', unlock);
   }
 
-  newGame(skipIntro = false) {
-    deleteSave();
+  /**
+   * 새 여정: o.id 가 있으면 그 슬롯을 비워 덮어쓰고(이름은 그대로), 없으면 새 슬롯을 만든다. 다른 슬롯은 건드리지 않는다.
+   * 슬롯이 가득 차 새로 못 만들면(타이틀은 막지만 바로가기로는 생길 수 있다) 남의 슬롯을 덮지 않고, 알린 뒤 저장 없이 논다.
+   */
+  newGame(skipIntro = false, o = {}) {
+    let id = o.id || null;
+    if (id) clearSlot(id);
+    else id = createSlot(o.name);
+    if (!id) { this.ui.toast('저장 슬롯이 가득 찼어요', { sub: '타이틀의 「새 여정」에서 슬롯 하나를 지우거나 덮어쓰세요' }); id = null; }
+    this.slot = id;
+    if (id) setActiveSlot(id);
     this.state = defaultState();
     this.services.applyState();
     this.ui.hideTitle();
@@ -235,9 +252,14 @@ export class Game {
     playApproach(this, begin);
   }
 
-  continueGame() {
-    const s = loadState();
-    if (!s) { this.newGame(); return; }
+  /** 슬롯 불러오기. 못 읽으면 새 게임으로 덮지 않고 타이틀에 머문 채 알린다 (그 슬롯도, 다른 슬롯도 그대로) */
+  continueGame(id = activeSlot()) {
+    const s = id ? loadState(id) : null;
+    if (!s) {
+      this.ui.toast('이 여정을 불러오지 못했어요', { sub: '저장 내용이 깨졌거나 비어 있어요. 다른 슬롯은 그대로예요.' });
+      return false;
+    }
+    this.slot = id;
     this.state = s;
     this.ui.hideTitle();
     this.world.clock.frozen = false;
@@ -317,6 +339,14 @@ export class Game {
     if (this.ui.tView) this.ui.tView.classList.toggle('on', v === 'first');
   }
 
+  /** 화면·빛 설정 (전역): 전체 밝기 = 톤매핑 노출, 조명 밝기 = 월드 발광 배율(uLightScale), 빛 번짐은 프레임마다 bloom 세기에 곱한다 */
+  applyDisplay() {
+    const s = this.settings, clamp = (v, a, b, d) => Math.max(a, Math.min(b, Number.isFinite(+v) ? +v : d));
+    s.bright = clamp(s.bright, 0.6, 1.5, 1); s.light = clamp(s.light, 0.4, 1.6, 1); s.bloom = clamp(s.bloom, 0, 1.6, 1);
+    if (this.engine && this.engine.renderer) this.engine.renderer.toneMappingExposure = s.bright;
+    atmosUniforms.uLightScale.value = s.light;
+  }
+
   _camInBody() {
     if (this.rig.override || this.player.state === 'ride') { this._inBody = false; return false; }
     const c = this.engine.camera.position, p = this.player.pos;
@@ -343,8 +373,39 @@ export class Game {
     const np = {};
     for (const n of this.npcs.list) if (!n.ambient && n.moved) np[n.id] = [n.home.x, n.home.z];
     s.flags.npcPos = np;
-    saveState(s);
+    if (!this.slot) return;
+    saveState(s, this.slot, this._slotMeta());
     if (force) this.saveT = 30;
+    this._thumbNext = true; // 다음 렌더 뒤에 작은 그림 (그린 바로 그 화면이어야 비어 있지 않다)
+  }
+
+  /** 슬롯 목록에 보일 요약: 자리(건물·층 또는 지역·구역)와 지금 목표 */
+  _slotMeta() {
+    const I = this.interiors, p = this.player.pos;
+    let place = '';
+    try {
+      if (I && I.inPocket && I.cur && I.cur.indoor && !I.outside) { const F = I.cur.B.floors[I.cur.indoor.cur]; place = `${I.title(I.cur.r)} · ${F ? F.label + '층' : ''}`; }
+      else if (p.y > 20000) place = '하늘닻';
+      else { const r = this.world.regionAt(p.x, p.z), z = this.moaAI && this.moaAI.zoneName(p.x, p.z); place = [r && r.name, z].filter(Boolean).join(' · '); }
+    } catch { place = ''; }
+    let objective = '';
+    try { const o = this.quests.objectiveText(); objective = o ? o.title : ''; } catch { objective = ''; }
+    return { place, objective };
+  }
+
+  /** 저장 직후 그린 화면을 160×90 JPEG 로 줄여 슬롯 요약에 붙인다 (실패해도 저장 자체는 이미 끝났다) */
+  _slotThumb() {
+    this._thumbNext = false;
+    if (!this.slot) return;
+    try {
+      const src = this.engine.renderer.domElement;
+      const c = this._thumbCv || (this._thumbCv = document.createElement('canvas'));
+      c.width = 160; c.height = 90;
+      const x = c.getContext('2d');
+      const ar = src.width / src.height, w = ar > 16 / 9 ? src.height * 16 / 9 : src.width, h = w * 9 / 16;
+      x.drawImage(src, (src.width - w) / 2, (src.height - h) / 2, w, h, 0, 0, 160, 90);
+      patchSlotMeta(this.slot, { thumb: c.toDataURL('image/jpeg', 0.6) });
+    } catch { /* 그림 없이 */ }
   }
 
   setQuality(name) {
@@ -461,10 +522,11 @@ export class Game {
     this.mapData.step(this.mode === 'menu' ? 6 : 1.2);
     this.world.update(dt, this.engine.camera, { game: this, player: this.player });
     this._atmosphereByPlace(dt);
-    if (this.engine.bloom) this.engine.bloom.strength = 0.42 - 0.13 * this.world.atmos.state.night; // 밤 번짐을 덜
+    if (this.engine.bloom) this.engine.bloom.strength = (0.42 - 0.13 * this.world.atmos.state.night) * (this.settings.bloom ?? 1); // 밤 번짐을 덜 · 설정 「빛 번짐」
     this.world.preRender(this.engine.camera);
     this._audio(dt);
     this.engine.render();
+    if (this._thumbNext) this._slotThumb();
     this.engine.adapt(dt);
     input.endFrame();
     this.frames++;
@@ -486,6 +548,7 @@ export class Game {
     }
     if (i.pressed('map')) { if (this.ui.menuEl && this.ui.menuTab === 'map') this.ui.closeMenu(); else if (m === 'play' || m === 'menu') this.ui.openMenu('map'); }
     if (i.pressed('journal')) { if (this.ui.menuEl && this.ui.menuTab === 'journal') this.ui.closeMenu(); else if (m === 'play' || m === 'menu') this.ui.openMenu('journal'); }
+    if (i.pressed('quests')) { if (this.ui.menuEl && this.ui.menuTab === 'quests') this.ui.closeMenu(); else if (m === 'play' || m === 'menu') this.ui.openMenu('quests'); }
     if (i.pressed('hud')) this.ui.setHud(this.ui.hud.classList.contains('off'));
     if (i.pressed('view') && (m === 'play' || m === 'indoor')) this.toggleView();
     if (m === 'intro' && (i.pressed('jump') || i.pressed('interact') || i.pressed('confirm'))) this.director.skip();
@@ -533,7 +596,7 @@ export class Game {
     const npc = this.npcs.nearest(p, 5.5, (n) => !n.ambient);
     if (npc && npc.service === 'lobby') return { kind: 'lobby', o: npc, label: '안내지기 · 이 건물 이야기', short: '안내' };
     if (npc && npc.service) { const F = this.facilities.byId.get(npc.service); return { kind: 'facility', o: F, label: `${F.info.keeper} · ${F.info.verb}`, short: F.info.name }; }
-    if (npc) return { kind: 'npc', o: npc, label: `${npc.name}와(과) 마주하기`, short: '말 걸기' };
+    if (npc) return { kind: 'npc', o: npc, label: `${josa(npc.name, '와')} 마주하기`, short: '말 걸기' };
     const cit = this.citizens.target(p);
     if (cit) return cit;
     const fa = this.fauna && this.fauna.target(p);
@@ -653,7 +716,7 @@ export class Game {
     T.refresh();
     if (!S.open) {
       const L = T.lines.find((l) => l.id === S.line);
-      this.ui.toast(`${L.name}은 멈춰 있다`, { kind: 'muted', sub: L.unlock.startsWith('quest:') ? '썰매를 고친 뒤에 다시 와 보자' : '그 지방의 공명탑이 노래하면 다시 달린다' });
+      this.ui.toast(`${josa(L.name, '은')} 멈춰 있다`, { kind: 'muted', sub: L.unlock.startsWith('quest:') ? '썰매를 고친 뒤에 다시 와 보자' : '그 지방의 공명탑이 노래하면 다시 달린다' });
       return;
     }
     const dests = T.stations.filter((d) => d !== S && d.open);

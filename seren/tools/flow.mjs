@@ -87,8 +87,8 @@ await step('큰 해류 열림?', () => ev(() => SEREN.game.currents.list.filter(
 await step('큰 공명탑 넷', async () => { for (const id of ['rift-pylon', 'plains-pylon', 'ice-pylon', 'falls-pylon']) { await ev((id) => { const g = SEREN.game; const P = g.structures.pylons.get(id); g.player.teleport(P.x + 30, P.y + 5, P.z + 30); g.awakenPylon(id); g.director.skip(); }, id); await run(0.3); } });
 await step('솔(마지막)', async () => { await ev(() => { const g = SEREN.game; const n = g.npcs.get('sol'); g.player.teleport(n.pos.x + 3, n.pos.y + 1, n.pos.z + 3); g.talkTo(n); }); await talkThrough(); await run(0.5); });
 await step('온 세계의 노래?', () => ev(() => ({ chorus: !!SEREN.game.state.flags.worldChorus, done: SEREN.game.quests.isDone('mq8'), lanes: SEREN.game.traffic.lanes.filter((l) => l.unlock && l.enabled).length })));
-await step('저장', () => ev(() => { SEREN.game.save(true); return localStorage.getItem('seren.save.v1').length; }));
-console.log('save bytes', await ev(() => localStorage.getItem('seren.save.v1').length));
+await step('저장', () => ev(() => { SEREN.game.save(true); return localStorage.getItem('seren.slot.' + SEREN.game.slot).length; }));
+console.log('save bytes', await ev(() => localStorage.getItem('seren.slot.' + SEREN.game.slot).length));
 console.log('understood iel_1?', await ev(() => SEREN.game.lang.isUnderstood(SEREN.game.lines.iel_1)));
 for (const l of logs.slice(0, 30)) console.log(l);
 await page.screenshot({ path: join(root, 'shots', 'flow-end.png'), timeout: 180000 }); // 도시가 무거워 헤드리스에서 느림

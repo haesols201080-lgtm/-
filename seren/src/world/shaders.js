@@ -50,6 +50,7 @@ uniform vec3 uUrLight;
 uniform float uNight;
 uniform float uEclipse;
 uniform float uGlow;
+uniform float uLightScale; // 설정 「조명 밝기」 (월드 빛 배율 — 낮밤·논리와 상관없이 보이는 세기만)
 uniform float uTime;
 uniform float uFogDensity;
 uniform float uFogFalloff;

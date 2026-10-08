@@ -160,7 +160,12 @@ export class Colliders {
   pushOut(pos, radius, height, step = 0.6) {
     const list = this.near(pos.x, pos.z, radius + 2, _list);
     let hitN = null;
-    for (const c of list) {
+    // 구조 벽(c.wall)은 맨 나중에 — 가구·장비가 밀어낸 자리를 벽이 다시 방 안으로 되돌린다 (벽이 늘 이긴다)
+    _walls.length = 0;
+    for (let k = 0, n = list.length; k <= n + _walls.length; k++) {
+      const c = k < n ? list[k] : _walls[k - n];
+      if (!c) break;
+      if (k < n && c.wall) { _walls.push(c); continue; }
       if (!c.solid) continue;
       if (pos.y + height < c.y0 || pos.y + step >= this._maxTop(c)) continue;
       if (c.type === 'cyl') {
@@ -170,6 +175,7 @@ export class Colliders {
         if (d < min) {
           // 윗면이 발 높이 근처면 넘어간다 (경사로·계단)
           if (c.walk && c.y1 <= pos.y + step) continue;
+          if (c.y0 > pos.y + step && pos.y + height - c.y0 < min - d) continue; // 머리 위에 살짝 걸친 것 → 천장 (아래 설명)
           const nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0;
           pos.x = c.x + nx * min; pos.z = c.z + nz * min;
           hitN = { x: nx, z: nz };
@@ -183,6 +189,10 @@ export class Colliders {
           const top = this._topAt(c, pos.x, pos.z, radius);
           if (c.walk && top !== null && top <= pos.y + step) continue;
           const px = ex - Math.abs(lx), pz = ez - Math.abs(lz);
+          // 머리가 아랫면 위로 들어간 깊이가 옆으로 겹친 깊이보다 얕으면 천장(위층 바닥판·문 위 인방·선반 밑면)에 머리가 닿은 것:
+          //  옆으로 밀지 않고 ceiling() 이 위로 못 오르게 막게 둔다. 전에는 넓은 바닥판에 머리가 닿으면 판 가장자리(수십 m 밖)로
+          //  밀어내 실내에서 뛰다가 벽 너머로 순간 이동했다 (v24 wall-stress).
+          if (c.y0 > pos.y + step && pos.y + height - c.y0 < Math.min(px, pz)) continue;
           let nlx = 0, nlz = 0;
           if (px < pz) { nlx = Math.sign(lx) || 1; lx = nlx * ex; } else { nlz = Math.sign(lz) || 1; lz = nlz * ez; }
           pos.x = c.x + lx * c.cos + lz * c.sin;
@@ -257,4 +267,5 @@ export class Colliders {
 }
 
 const _list = [];
+const _walls = []; // pushOut 이 맨 나중에 미는 구조 벽
 const _all = [-Infinity, Infinity];

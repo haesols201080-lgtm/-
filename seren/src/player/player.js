@@ -357,6 +357,9 @@ export class Player {
 
     const hit = this.world.colliders.pushOut(this.pos, RADIUS + 0.3, 1.0, 0.1);
     if (hit) this.glideSpeed *= 0.94;
+    // 천장 (머리 위에 걸친 판은 pushOut 이 옆으로 밀지 않는다 — 여기서 위로 못 오르게)
+    const ceil = this.world.colliders.ceiling(this.pos.x, this.pos.z, this.pos.y, HEIGHT);
+    if (this.pos.y + HEIGHT > ceil) { this.pos.y = ceil - HEIGHT; if (this.pitch > 0) this.pitch *= 0.5; }
 
     if (ctl && this.jumpBuffer > 0 && this.stateTime > 0.15) {
       this.jumpBuffer = 0;

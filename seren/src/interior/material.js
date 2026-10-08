@@ -141,7 +141,7 @@ void main() {
   vec3 col = alb * light;
   float fres = pow(clamp(1.0 - dot(N, V), 0.0, 1.0), 3.0);
   col += uLight * fres * 0.08;
-  col += em + vColor * vEmit;
+  col += (em + vColor * vEmit) * uLightScale; // 조명 밝기 설정
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>

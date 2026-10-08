@@ -25,7 +25,7 @@ void main() {
   gl_PointSize = clamp(px, uMinPx, 64.0);
   float fog = fogAmount(cameraPosition, position);
   float vis = mix(uDay, 1.0, clamp(uGlow, 0.0, 1.0));
-  vA = blink * vis * (1.0 - fog * 0.85) * clamp(px / uMinPx, 0.45, 1.0);
+  vA = blink * vis * uLightScale * (1.0 - fog * 0.85) * clamp(px / uMinPx, 0.45, 1.0);
   vColor = aColor;
 }`;
 

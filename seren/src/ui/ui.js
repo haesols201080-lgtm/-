@@ -1,5 +1,7 @@
 // 화면 UI: HUD(목표·나침반·알림·모아 자막·공명 단추), 대화창, 카드, 메뉴, 타이틀, 터치 조작.
 // 게임 로직은 game.ui.xxx() 만 부르고, DOM 은 여기서만 다룹니다.
+import { CHANGELOG, GAME_VERSION, KIND_LABEL } from '../data/changelog.js';
+import { SEEN_KEY } from '../game/state.js';
 import { NOTE_COLORS, NOTE_NAMES } from '../core/audio.js';
 import { glyphSVG } from '../game/language.js';
 import { WORD } from '../data/lexicon.js';
@@ -7,6 +9,7 @@ import { IS_TOUCH } from '../core/quality.js';
 import { MapView } from './map.js';
 import { InteriorMap } from './imap.js';
 import { Journal } from './journal.js';
+import { QuestLog } from './questlog.js';
 import { Settings } from './settings.js';
 import { CUR } from '../data/money.js';
 
@@ -30,6 +33,7 @@ export class UI {
     this.mapView = new MapView(game);
     this.imap = new InteriorMap(game); // 건물 안 지도 (v0.9)
     this.journal = new Journal(game);
+    this.questLog = new QuestLog(game);
     this.settingsView = new Settings(game);
     this.dialogue = this._dialogueApi();
     this.toastQ = [];
@@ -43,6 +47,7 @@ export class UI {
     this.hud.appendChild(this.vign);
     this.obj = $(`<div class="objective hidden"><div class="q"></div><div class="t"></div><div class="h hidden"></div></div>`);
     this.hud.appendChild(this.obj);
+    this.obj.addEventListener('click', () => this.openMenu('quests')); // 목표 칸을 누르면 퀘스트 창 (추적 바꾸기·끄기)
     this.compass = $(`<div class="compass"><div class="strip"></div><div class="center"></div></div>`);
     this.hud.appendChild(this.compass);
     this.compassStrip = this.compass.firstElementChild;
@@ -492,7 +497,7 @@ export class UI {
     this._menuPrev = g.mode;
     if (g.mode !== 'title') g.setMode('menu');
     const m = $(`<div class="menu"><div class="head"><div class="title">SEREN</div>
-      <button class="tab" data-t="map">지도</button><button class="tab" data-t="journal">일지</button><button class="tab" data-t="settings">설정</button>
+      <button class="tab" data-t="map">지도</button><button class="tab" data-t="quests">퀘스트</button><button class="tab" data-t="journal">일지</button><button class="tab" data-t="settings">설정</button>
       <div class="sp"></div><button class="btn" data-close>돌아가기</button></div><div class="body"></div></div>`);
     m.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => this.switchTab(b.dataset.t)));
     m.querySelector('[data-close]').addEventListener('click', () => this.closeMenu());
@@ -514,6 +519,7 @@ export class UI {
     if (tab === 'map' && inside && !this._worldMap) this.imap.attach(body, () => { this._worldMap = true; this.switchTab('map'); });
     else if (tab === 'map') { this.mapView.attach(body); if (inside) this.mapView.addInside(() => { this._worldMap = false; this.switchTab('map'); }); }
     else if (tab === 'journal') this.journal.render(body);
+    else if (tab === 'quests') this.questLog.render(body);
     else this.settingsView.render(body);
     this.menuTab = tab;
   }
@@ -547,25 +553,108 @@ export class UI {
   composeNote(n) { if (this._composeAdd) this._composeAdd(n); }
 
   // ── 타이틀 · 자막 ─────────────────────────
-  title({ hasSave, onContinue, onNew, onSettings }) {
+  /**
+   * 타이틀 (v24): 이어하기 → 저장 슬롯 목록, 새 여정 → 빈 슬롯 만들기 또는 확인을 거친 덮어쓰기, 설정, 작은 「업데이트 내역」.
+   * slots: { list(), max, rename(id, name), remove(id) } · onLoad(id) · onNew({ id?, name? })
+   */
+  title({ slots, onLoad, onNew, onSettings }) {
+    const list = slots.list();
+    const any = list.length > 0;
+    const seen = (() => { try { return localStorage.getItem(SEEN_KEY); } catch { return null; } })();
     const el = $(`<div class="title-screen">
       <div class="title-logo"><div class="en">SEREN</div><div class="ko">울림이 남는 별</div></div>
       <div class="title-menu">
-        ${hasSave ? '<button class="btn primary" data-c>이어하기</button>' : ''}
-        <button class="btn ${hasSave ? '' : 'primary'}" data-n>${hasSave ? '처음부터' : '시작하기'}</button>
+        ${any ? '<button class="btn primary" data-c>이어하기</button>' : ''}
+        <button class="btn ${any ? '' : 'primary'}" data-n>${any ? '새 여정' : '시작하기'}</button>
         <button class="btn" data-s>설정</button>
       </div>
-      <div class="title-foot">${this.touch ? '헤드폰을 권해요 · 가로 화면이 편해요' : '헤드폰을 권해요 · WASD 이동 · 마우스 시점 · Space 점프/활공 · 1–5 공명'}</div>
+      <div class="title-foot">${this.touch ? '헤드폰을 권해요 · 가로 화면이 편해요' : '헤드폰을 권해요 · WASD 이동 · 마우스 시점 · Space 점프/활공 · 1–5 공명 · V 시점'}</div>
+      <button class="title-notes" data-notes>업데이트 내역 · v${GAME_VERSION}${seen !== GAME_VERSION ? '<i class="dot" aria-label="새 내역"></i>' : ''}</button>
     </div>`);
-    el.querySelector('[data-c]')?.addEventListener('click', onContinue);
+    el.querySelector('[data-c]')?.addEventListener('click', () => this.slotList('load', { slots, onLoad, onNew }));
     el.querySelector('[data-n]').addEventListener('click', () => {
-      if (!hasSave) { onNew(); return; }
-      this.confirm('새로 시작하면 지금까지의 여정이 지워져요.', '처음부터 시작', onNew);
+      if (!any) { onNew({ name: '여정 1' }); return; }
+      this.slotList('new', { slots, onLoad, onNew });
     });
     el.querySelector('[data-s]').addEventListener('click', onSettings);
+    el.querySelector('[data-notes]').addEventListener('click', () => this.changelog());
     this.root.appendChild(el);
     this.titleEl = el;
     this.setHud(false);
+  }
+
+  /** 저장 슬롯 목록 (mode 'load' 이어하기 · 'new' 새 여정 — 새 슬롯 또는 덮어쓰기) */
+  slotList(mode, { slots, onLoad, onNew }) {
+    if (this.slotsEl) this.slotsEl.remove();
+    const el = $(`<div class="menu title-settings title-slots"><div class="head"><div class="title">${mode === 'load' ? '이어하기' : '새 여정'}</div><div class="sp"></div><button class="btn" data-close>돌아가기</button></div><div class="body"></div></div>`);
+    const body = el.querySelector('.body');
+    const fmtT = (ms) => { if (!ms) return '저장 전'; const d = new Date(ms); return `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+    const fmtP = (sec) => { const m = Math.floor((sec || 0) / 60); return m < 60 ? `${m}분` : `${Math.floor(m / 60)}시간 ${m % 60}분`; };
+    const esc = (t) => String(t || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    const close = () => { el.remove(); this.slotsEl = null; if (this.titleEl) this.titleEl.classList.remove('behind'); removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); close(); } };
+    const draw = () => {
+      const list = slots.list();
+      body.innerHTML = '';
+      if (mode === 'new') {
+        const full = list.length >= slots.max;
+        const nw = $(`<div class="slot new"><div class="sl-info"><div class="sl-name">새 슬롯에 시작</div>
+          <input class="sl-input" maxlength="24" placeholder="여정 이름" value="여정 ${list.length + 1}" ${full ? 'disabled' : ''}>
+          <div class="sl-sub">${full ? `슬롯이 가득 찼어요 (${slots.max}개) — 하나를 지우거나 아래에서 덮어쓰세요.` : '다른 여정은 그대로 남아요.'}</div></div>
+          <div class="sl-act"><button class="btn primary" data-start ${full ? 'disabled' : ''}>시작</button></div></div>`);
+        nw.querySelector('[data-start]').addEventListener('click', () => { const name = nw.querySelector('input').value; close(); onNew({ name }); });
+        body.appendChild(nw);
+      }
+      if (!list.length && mode === 'load') body.appendChild($('<p class="sl-empty">저장된 여정이 없어요.</p>'));
+      for (const m of list) {
+        const card = $(`<div class="slot${m.broken ? ' broken' : ''}">
+          <div class="sl-thumb">${m.thumb ? `<img alt="" src="${m.thumb}">` : '<span>세렌</span>'}</div>
+          <div class="sl-info"><div class="sl-name">${esc(m.name)}</div>
+            <div class="sl-sub">${m.broken ? `⚠ ${esc(m.broken)}` : `${esc(m.place || '어딘가')}${m.objective ? ` · ${esc(m.objective)}` : ''}`}</div>
+            <div class="sl-meta">${fmtT(m.saved)} · 놀이 ${fmtP(m.playTime)}${m.ver ? ` · 저장 판 ${m.ver}` : ''}</div></div>
+          <div class="sl-act">
+            ${mode === 'load' ? `<button class="btn primary" data-load ${m.broken && !/요약/.test(m.broken) ? 'disabled' : ''}>불러오기</button>` : '<button class="btn" data-over>여기에 새로</button>'}
+            <button class="btn" data-ren>이름</button><button class="btn" data-del>지우기</button>
+          </div></div>`);
+        card.querySelector('[data-load]')?.addEventListener('click', () => { close(); onLoad(m.id); });
+        card.querySelector('[data-over]')?.addEventListener('click', () => this.confirm(`「${esc(m.name)}」 여정을 지우고 이 슬롯에서 새로 시작할까요? 다른 슬롯은 그대로예요.`, '덮어쓰고 시작', () => { close(); onNew({ id: m.id }); }));
+        card.querySelector('[data-del]').addEventListener('click', () => this.confirm(`「${esc(m.name)}」 여정을 지울까요? 되돌릴 수 없어요.`, '지우기', () => { slots.remove(m.id); draw(); }));
+        card.querySelector('[data-ren]').addEventListener('click', () => {
+          const info = card.querySelector('.sl-name');
+          info.innerHTML = `<input class="sl-input" maxlength="24" value="${esc(m.name)}"> <button class="btn" data-ok>확인</button>`;
+          const inp = info.querySelector('input'); inp.focus(); inp.select();
+          const ok = () => { slots.rename(m.id, inp.value); draw(); };
+          info.querySelector('[data-ok]').addEventListener('click', ok);
+          inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') ok(); });
+        });
+        body.appendChild(card);
+      }
+    };
+    draw();
+    el.querySelector('[data-close]').addEventListener('click', close);
+    addEventListener('keydown', onKey, true);
+    this.root.appendChild(el);
+    this.slotsEl = el;
+    if (this.titleEl) this.titleEl.classList.add('behind');
+  }
+
+  /** 업데이트 내역 (최신 판부터, 지금 판 표시) — 열면 본 판으로 남긴다 (전역) */
+  changelog() {
+    const el = $(`<div class="menu title-settings title-notes-panel"><div class="head"><div class="title">업데이트 내역</div><div class="sp"></div><button class="btn" data-close>닫기</button></div><div class="body"></div></div>`);
+    const body = el.querySelector('.body');
+    for (const v of CHANGELOG) {
+      const sec = $(`<section class="cl-ver${v.ver === GAME_VERSION ? ' now' : ''}"><h3>v${v.ver}${v.ver === GAME_VERSION ? ' <span class="cl-now">지금 판</span>' : ''} <small>${v.date}</small></h3><div class="cl-title">${v.title}</div><ul></ul></section>`);
+      const ul = sec.querySelector('ul');
+      for (const [k, t] of v.items) ul.appendChild($(`<li><span class="cl-k ${k}">${KIND_LABEL[k]}</span>${t}</li>`));
+      body.appendChild(sec);
+    }
+    const close = () => { el.remove(); if (this.titleEl) this.titleEl.classList.remove('behind'); removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); close(); } };
+    el.querySelector('[data-close]').addEventListener('click', close);
+    addEventListener('keydown', onKey, true);
+    this.root.appendChild(el);
+    if (this.titleEl) { this.titleEl.classList.add('behind'); const d = this.titleEl.querySelector('.title-notes .dot'); if (d) d.remove(); }
+    try { localStorage.setItem(SEEN_KEY, GAME_VERSION); } catch { /* 무시 */ }
   }
 
   /** 타이틀 화면의 설정: 게임 안 메뉴(지도·일지·쉬기·저장)가 아니라 설정만 담은 창을 타이틀 위에 띄운다 */
@@ -597,6 +686,7 @@ export class UI {
 
   hideTitle() {
     if (this.titleSetEl) { this.titleSetEl.remove(); this.titleSetEl = null; }
+    if (this.slotsEl) { this.slotsEl.remove(); this.slotsEl = null; }
     if (!this.titleEl) return;
     const el = this.titleEl;
     el.classList.add('out');

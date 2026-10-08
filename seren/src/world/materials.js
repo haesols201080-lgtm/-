@@ -471,7 +471,7 @@ void main() {
   // 햇빛 받은 흰 벽이 블룸 문턱을 넘어 「빛나는」 것처럼 보이지 않게: 반사광만 부드럽게 눌러 준다 (빛은 em 으로 따로)
   float litL = dot(col, vec3(0.2126, 0.7152, 0.0722));
   col *= 1.0 / (1.0 + max(litL - 0.72, 0.0) * 1.15);
-  col += em;
+  col += em * uLightScale;
   col = applySilence(col, silenceAt(vWorld.xz));
   col = applyFog(col, vWorld);
   gl_FragColor = vec4(col, uOpacity);
@@ -574,7 +574,7 @@ varying vec3 vNormal;
 varying vec3 vIColor;
 #endif
 void main() {
-  vec3 c = uColor * uIntensity * (1.0 - 0.24 * uNight); // 밤에는 빛을 조금 누른다 (어둠 속에서 너무 눈부시지 않게)
+  vec3 c = uColor * uIntensity * (1.0 - 0.24 * uNight) * uLightScale; // 밤에는 빛을 조금 누른다 (어둠 속에서 너무 눈부시지 않게) · 조명 밝기 설정
 #ifdef USE_INSTANCING_COLOR
   c *= vIColor;
 #endif

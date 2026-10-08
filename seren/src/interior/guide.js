@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { findPath, snap } from './nav.js';
 import { partSpot, mezzSpot, LINKNAME } from './find.js';
 import { glowMaterial } from '../world/materials.js';
+import { josa } from '../core/josa.js';
 
 const DOT = 0.9; // 점 사이 m
 
@@ -123,7 +124,7 @@ export class Guide {
     for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
     const F = B.floors[goal.floor];
     this.text = next
-      ? `${goal.label} · ${F.label}층 — ${next.label}로 ${Math.round(len)} m${next.kind === 'lift' || next.kind === 'cargo' ? ` → ${B.floors[next.floor].label}층` : ` → ${next.floor > here ? '위' : '아래'}로 ${Math.abs(next.floor - here)}층`}`
+      ? `${goal.label} · ${F.label}층 — ${josa(next.label, '로')} ${Math.round(len)} m${next.kind === 'lift' || next.kind === 'cargo' ? ` → ${B.floors[next.floor].label}층` : ` → ${next.floor > here ? '위' : '아래'}로 ${Math.abs(next.floor - here)}층`}`
       : `${goal.label} — ${Math.round(len)} m`;
     this.len = len;
     this._draw(ind, here, pts);

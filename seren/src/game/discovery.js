@@ -10,6 +10,7 @@ import { glowMaterial } from '../world/materials.js';
 import { WORD } from '../data/lexicon.js';
 import { mulberry32 } from '../core/noise.js';
 import { bus } from '../core/events.js';
+import { josa } from '../core/josa.js';
 
 const PICKUP_SETS = {
   sled: { label: '공명 결정', at: 'crash', spots: [[-140, 90], [190, -60], [60, 240]] },
@@ -173,7 +174,7 @@ export class Discovery {
       if (st && st.type === 'pickup' && st.set === p.set) g.state.quests.data[id].picked = (g.state.quests.data[id].picked || 0) + 1;
     }
     g.audio.chime('word');
-    g.ui.toast(`${PICKUP_SETS[p.set].label}를 주웠다`, { kind: 'item' });
+    g.ui.toast(`${josa(PICKUP_SETS[p.set].label, '을')} 주웠다`, { kind: 'item' });
     g.ui.refreshObjective();
   }
 

@@ -15,6 +15,7 @@ import { BOOKS as OLD_BOOKS } from './facilities.js';
 import { NPCS } from './story.js';
 import { ZONE_NAMES } from './venues.js';
 import { REGIONS } from '../world/regions.js';
+import { josa as josaFn, hasFinal } from '../core/josa.js';
 
 /** 서가 분류 (서고의 서가마다 하나) */
 export const SUBJECTS = {
@@ -22,11 +23,9 @@ export const SUBJECTS = {
   tech: '기술', life: '살림·요리', city: '도시와 길', words: '말과 글', sky: '별과 하늘', heal: '몸과 치유', law: '나눔과 일',
 };
 
-// ── 받침에 맞는 조사 ──
-const hasFinal = (w) => { const ch = String(w).trim().slice(-1), c = ch.charCodeAt(0); if (ch >= '0' && ch <= '9') return '013678'.includes(ch); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 !== 0; };
-const finalL = (w) => { const ch = String(w).trim().slice(-1), c = ch.charCodeAt(0); if (ch >= '0' && ch <= '9') return '178'.includes(ch); return c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 === 8; };
-const J = (w, a, b) => `${w}${hasFinal(w) ? a : b}`;
-export const josa = { 을: (w) => J(w, '을', '를'), 이: (w) => J(w, '이', '가'), 은: (w) => J(w, '은', '는'), 와: (w) => J(w, '과', '와'), 아: (w) => J(w, '아', '야'), 로: (w) => (hasFinal(w) && !finalL(w) ? `${w}으로` : `${w}로`) };
+// ── 받침에 맞는 조사 (공용 src/core/josa.js) ──
+const J = (p) => (w) => josaFn(w, p);
+export const josa = { 을: J('을'), 이: J('이'), 은: J('은'), 와: J('와'), 아: J('아'), 로: J('로') };
 
 // ── 손으로 쓴 책 ─────────────────────────────────────────────
 const AUTHORED = [
@@ -317,7 +316,7 @@ function zoneBooks() {
     const name = P.name || Z.id;
     const [h0, h1] = Z.h || [10, 40];
     return { id: `z-${Z.id}`, subject: 'city', title: `${name} 거리 안내 (${Z.id})`, author: '길 안내소', pages: [
-      `${name}의 거리는 ${STYLE[Z.style] || '여러 탑'}으로 이루어져 있다. 거리는 고리 ${Math.round((Z.r1 - Z.r0) / (Z.ring || 80))}겹으로 퍼지고, 곧은길 ${Z.avenues || 4}가닥이 가운데로 모인다.`,
+      `${name}의 거리는 ${josaFn(STYLE[Z.style] || '여러 탑', '로')} 이루어져 있다. 거리는 고리 ${Math.round((Z.r1 - Z.r0) / (Z.ring || 80))}겹으로 퍼지고, 곧은길 ${Z.avenues || 4}가닥이 가운데로 모인다.`,
       `건물의 높이는 낮은 것이 ${h0}걸음, 높은 것이 ${h1}걸음쯤이다. ${Z.tall > 0.5 ? '높은 탑이 많아 공중다리로 이어진 곳이 있다.' : Z.tall > 0 ? '높은 탑은 몇 곳에 모여 있다.' : '높은 탑은 거의 없다.'}`,
       `${Z.mix === 'suburb' ? '집과 정원, 작은 가게와 재배원이 섞인 동네다.' : Z.mix === 'village' ? '마을 사람들이 서로 이름을 아는 작은 동네다.' : '가게와 회사, 집과 공공 건물이 고리마다 섞여 있다.'} ${P.desc || ''}`,
       '처음 온 사람은 건물 정문 옆의 울림판 단말과 거리의 안내 빛판을 쓰면 된다. 길을 잃으면 가장 높은 탑을 향해 걸으면 가운데 광장이 나온다.',
@@ -437,7 +436,7 @@ function tale(k) {
   } else if (frame === 5) {
     title = `${hero}의 이름 노래`;
     pages = [
-      `${josa.은(hero)} 먼 곳에서 ${place}로 이사 왔다. 이웃들은 친절했지만, 아직 아무도 ${hero}의 이름 노래를 몰랐다.`,
+      `${josa.은(hero)} 먼 곳에서 ${josaFn(place, '로')} 이사 왔다. 이웃들은 친절했지만, 아직 아무도 ${hero}의 이름 노래를 몰랐다.`,
       `이름 노래는 스스로 지어야 한다. ${josa.은(hero)} 며칠 동안 ${place}의 소리를 들었다. ${friend}의 울음, 바람, 그리고 저녁마다 들리는 「${song}」 음.`,
       `고리 모임 날, ${josa.은(hero)} 광장 가운데 서서 그 소리들을 이어 불렀다. 목소리가 떨렸다. 노래가 끝나자 아무 소리도 나지 않았다.`,
       `그때 맨 앞의 ${josa.이(role)} 같은 노래를 그대로 불러 돌려주었다. 이어서 모두가 불렀다. 그날부터 ${place}에는 ${hero}의 집이 하나 생겼다.`,

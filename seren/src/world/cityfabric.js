@@ -1328,7 +1328,7 @@ export class CityFabric {
           float edge = step(vUv.x, 0.015) + step(0.985, vUv.x) + step(vUv.y, 0.03) + step(0.97, vUv.y);
           float scan = 0.7 + 0.3 * sin(vWorld.y * 2.5 - uTime * 5.0);
           float flick = 0.85 + 0.15 * step(0.93, vnoise(vec2(uTime * 6.0, vSeed * 40.0)));
-          vec3 c = vCol * (g * 1.3 * scan + 0.08 + min(edge, 1.0) * 0.8) * flick * (0.45 + 0.9 * clamp(uGlow, 0.0, 1.0));
+          vec3 c = vCol * (g * 1.3 * scan + 0.08 + min(edge, 1.0) * 0.8) * flick * (0.45 + 0.9 * clamp(uGlow, 0.0, 1.0)) * uLightScale;
           c *= 1.0 - fogAmount(cameraPosition, vWorld);
           gl_FragColor = vec4(c, 1.0);
           #include <tonemapping_fragment>

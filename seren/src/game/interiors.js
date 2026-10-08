@@ -16,6 +16,7 @@ import { PlanStore } from '../interior/store.js';
 import { facadeProfile } from '../interior/volume.js';
 import { FUSE } from '../interior/catalog.js';
 import { uidOf } from '../interior/ids.js';
+import { josa } from '../core/josa.js';
 
 const PREFIX = ['새벽', '물결', '은하', '고요', '바람', '윤슬', '별빛', '노을', '이슬', '하늘', '메아리', '푸른', '은빛', '첫눈', '꽃잎', '먼별'];
 const PURPOSE = {
@@ -337,7 +338,7 @@ export class Interiors {
     // 공중다리는 양쪽 끝이 모두 문이라(bridgeAt) 따로 기억하지 않는다
     this.outside = kind === 'bridge' ? null : { r, floor: F.i, at: [x, z], kind, y };
     this.exit({ x, y: y + 0.1, z, yaw, title: name });
-    setTimeout(() => this.game.ui.toast(kind === 'bridge' ? '공중다리로 나왔다 · 유리 통로 끝의 문 앞에서 E — 건너편 탑이나 다시 이 탑으로' : `${name}로 나왔다 · 다시 들어갈 때는 나온 문 앞에서 E`, {}), 1500);
+    setTimeout(() => this.game.ui.toast(kind === 'bridge' ? '공중다리로 나왔다 · 유리 통로 끝의 문 앞에서 E — 건너편 탑이나 다시 이 탑으로' : `${josa(name, '로')} 나왔다 · 다시 들어갈 때는 나온 문 앞에서 E`, {}), 1500);
     if (kind === 'roof' && this.game.setFlag) this.game.setFlag('liftTop');
     if (kind === 'bridge') { if (this.game.setFlag) this.game.setFlag('skyBridge'); if (this.game.scan) this.game.scan('c_bridge'); }
   }
@@ -399,7 +400,7 @@ export class Interiors {
           const BL = this.city.bridgeList && this.city.bridgeList[e.bi];
           const other = BL ? (BL.a === cur.r ? BL.b : BL.a) : null;
           nd = d;
-          near = { kind: 'bridge', o: { F: B.floors[i], at: [G.ox + ti + 0.5 + e.dir[0] * 2.4, G.oz + tj + 0.5 + e.dir[1] * 2.4], dir: e.dir, BL }, label: `공중다리 · ${other ? `건너편 「${this.title(other)}」` : '건너편 탑'}으로`, short: '공중다리' };
+          near = { kind: 'bridge', o: { F: B.floors[i], at: [G.ox + ti + 0.5 + e.dir[0] * 2.4, G.oz + tj + 0.5 + e.dir[1] * 2.4], dir: e.dir, BL }, label: `공중다리 · ${josa(other ? `건너편 「${this.title(other)}」` : '건너편 탑', '로')}`, short: '공중다리' };
         }
       }
       if (near) return near;

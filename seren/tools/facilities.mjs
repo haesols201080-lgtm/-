@@ -197,14 +197,14 @@ ok((await ev(() => SEREN.game.player.state)) !== 'fly', '나룻배에서 내리�
 
 // ── 저장 → 다시 불러오기
 await ev(() => SEREN.game.save(true));
-const saved = await ev(() => JSON.parse(localStorage.getItem('seren.save.v1')).facility);
+const saved = await ev(() => JSON.parse(localStorage.getItem('seren.slot.' + SEREN.game.slot)).facility);
 ok(saved && saved.books['b-silence'] && saved.visited['dew-rest'] && saved.cosmetic === 1, '저장에 시설 상태가 남음');
 
 // ── 옛 저장(시설 항목 없음)을 불러와도 괜찮은가
 const old = await ev(() => {
-  const s = JSON.parse(localStorage.getItem('seren.save.v1'));
+  const s = JSON.parse(localStorage.getItem('seren.slot.' + SEREN.game.slot));
   delete s.facility; delete s.upgrades.detector;
-  localStorage.setItem('seren.save.v1', JSON.stringify(s));
+  localStorage.setItem('seren.slot.' + SEREN.game.slot, JSON.stringify(s));
   const g = SEREN.game;
   g.continueGame();
   const F = g.facilities.byId.get('cap-library');

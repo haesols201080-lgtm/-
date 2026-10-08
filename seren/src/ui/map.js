@@ -246,7 +246,7 @@ export class MapView {
         const [x, z] = this._toWorld((e.clientX - r.left) * this.dpr, (e.clientY - r.top) * this.dpr);
         g.state.waypoint = { x, z };
         g.updateWaypoint();
-        g.audio.blip({ hz: 880, to: 1320, dur: 0.12, gain: 0.08 });
+        g.audio.blip({ hz: 880, to: 1320, dur: 0.12, gain: 0.08, bus: 'ui' });
         this.draw();
       }
     };

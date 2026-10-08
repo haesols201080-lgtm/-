@@ -5,7 +5,7 @@ const KEYMAP = {
   KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
   Space: 'jump', ShiftLeft: 'sprint', ShiftRight: 'sprint', KeyE: 'interact', KeyF: 'skimmer', KeyQ: 'listen',
   Digit1: 'tone1', Digit2: 'tone2', Digit3: 'tone3', Digit4: 'tone4', Digit5: 'tone5',
-  KeyM: 'map', KeyJ: 'journal', Tab: 'map', Escape: 'pause', KeyP: 'pause', KeyC: 'camera', KeyV: 'view', KeyH: 'hud', Backquote: 'dev', KeyT: 'moa',
+  KeyM: 'map', KeyJ: 'quests', KeyI: 'journal', Tab: 'map', Escape: 'pause', KeyP: 'pause', KeyC: 'camera', KeyV: 'view', KeyH: 'hud', Backquote: 'dev', KeyT: 'moa',
   Enter: 'confirm',
 };
 

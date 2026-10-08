@@ -51,7 +51,7 @@ export class Dialogue {
     }
     if (e.s === 'moa') {
       g.ui.dialogue.moa(e.t);
-      g.audio.blip({ hz: 900, to: 1200, dur: 0.08, gain: 0.05 });
+      g.audio.blip({ hz: 900, to: 1200, dur: 0.08, gain: 0.05, bus: 'ui' });
     } else {
       const npc = this._speaker(e.speaker || e.s);
       const line = e.lineObj || { id: e.line, ...LINES[e.line] };

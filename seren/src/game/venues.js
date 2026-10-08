@@ -13,6 +13,7 @@ import { glyphSVG } from './language.js';
 import { ITEMS, BUFFS, SHELVES, MENU, EXHIBITS, ARCHIVES, BAG_ORDER, WORK_TUNES, ZONE_NAMES, itemInfo } from '../data/venues.js';
 import { mulberry32 } from '../core/noise.js';
 import { won } from '../data/money.js';
+import { josa } from '../core/josa.js';
 
 const TAU = Math.PI * 2;
 const NOTE_HEX = ['#ff9f6a', '#ffd27a', '#7ff3e6', '#9fb8ff', '#d8a8ff'];
@@ -445,7 +446,7 @@ export class Venues {
     if (!here) { if ((this.inv[id] || 0) <= 0) return; this.inv[id]--; }
     this.buff(I.buff);
     this._learn('eat');
-    this.game.ui.toast(`${I.name}을(를) 먹었다 · ${BUFFS[I.buff].name}`, { kind: 'item' });
+    this.game.ui.toast(`${josa(I.name, '을')} 먹었다 · ${BUFFS[I.buff].name}`, { kind: 'item' });
   }
 
   buff(id) {
@@ -763,7 +764,7 @@ export class Venues {
     g.city.fixDoor(dst);
     const I = { name: g.interiors.title(dst) }, d = Math.hypot(dst.x - here.x, dst.z - here.z);
     const reward = 2 + Math.round(d / 250);
-    g.ui.serviceCard('물류 창고', '배달 창구', `${I.name}로 갈 짐이 있어요. ${Math.round(d)} m.`, [
+    g.ui.serviceCard('물류 창고', '배달 창구', `${josa(I.name, '로')} 갈 짐이 있어요. ${Math.round(d)} m.`, [
       { label: `짐 맡기 · ${won(reward)}`, sub: '그 건물 문 앞까지 가면 전해져요', primary: true, onClick: () => this._takeJob({ kind: 'deliver', label: `짐 → ${I.name}`, x: dst.door.x, z: dst.door.z, reward, word: 'carry', parcel: true }) },
     ]);
   }

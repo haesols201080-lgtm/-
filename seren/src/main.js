@@ -2,6 +2,9 @@
 import * as THREE from 'three';
 import { Game } from './game/game.js';
 import { heightAt } from './world/heightfield.js';
+import { listSlots, renameSlot, deleteSlot, defaultState } from './game/state.js';
+import { QUESTS } from './data/story.js';
+import { questType } from './game/quests.js';
 
 const game = new Game();
 game.boot();
@@ -22,7 +25,13 @@ if (new URLSearchParams(location.search).has('debug')) {
 }
 
 window.SEREN = {
-  game, THREE, heightAt,
+  game, THREE, heightAt, defaultState,
+  slots: { list: listSlots, rename: renameSlot, remove: deleteSlot },
+  questTypes: () => {
+    const ids = Object.keys(QUESTS), chain = [];
+    for (let id = 'mq0'; id && !chain.includes(id); id = QUESTS[id] && QUESTS[id].next) chain.push(id);
+    return { main: ids.filter((id) => questType(QUESTS[id]) === 'main'), side: ids.filter((id) => questType(QUESTS[id]) === 'side'), chain };
+  },
   engine: game.engine,
   terrain: game.world.terrain,
   ready: () => game.mode !== 'boot' && game.settledFrames > 3,

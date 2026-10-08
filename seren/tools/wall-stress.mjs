@@ -2,6 +2,7 @@
 //  쓰임마다 건물 하나에 들어가 층마다 처음 서는 셀의 방들 가운데에서, 12 방향으로 빠르게 달리며 두 번 뛰어 벽·모서리에 부딪힌다.
 //  · 끝난 자리가 지금 셀의 걸을 수 있는 칸(또는 문턱)이 아니면, 층 바닥 아래로 내려갔으면, 안전장치가 되돌렸으면(state.debug.escapes) 실패.
 //   node tools/wall-stress.mjs [쓰임들|all] [층 수=2]
+//   TRACE='2층 식사 공간 180' : 그 달리기의 프레임마다 자리·상태·밟은 충돌체를 찍는다 (원인 찾기)
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -26,15 +27,31 @@ await page.evaluate(() => {
   const inp = g.input, poll = inp.poll.bind(inp);
   inp.poll = (dt) => { poll(dt); if (steer) { inp.move.x = 0; inp.move.y = 1; g.rig.yaw = steer.yaw; } };
   window.__frame = () => { g.updateSim(DT); g.interiors.update(DT); };
-  window.__run = (tx, tz, frames, jumps) => {
-    const p = g.player.pos;
+  window.__run = (tx, tz, frames, jumps, trace) => {
+    const p = g.player.pos, T = trace ? [] : null;
+    let px = p.x, pz = p.z;
+    const rec = (f) => {
+      if (!T) return;
+      const jump = Math.hypot(p.x - px, p.z - pz); px = p.x; pz = p.z;
+      if (jump > 0.35) {
+        const ind0 = g.interiors.cur.indoor, fy0 = ind0.yOf(ind0.cur);
+        for (const c of g.world.colliders.near(p.x, p.z, 2.5, [])) {
+          const [cx, cz] = ind0.grid(c.x, c.z);
+          T.push(`   · ${c.type} 칸 ${cx.toFixed(2)},${cz.toFixed(2)} [${(c.hx || c.r || 0).toFixed(2)}×${(c.hz || 0).toFixed(2)}] rot ${(c.rot || 0).toFixed(2)} y ${(c.y0 - fy0).toFixed(2)}~${(c.y1 - fy0).toFixed(2)} walk ${c.walk ? 1 : 0} solid ${c.solid ? 1 : 0}${c.what ? ' ' + c.what : ''}`);
+        }
+      }
+      const I = g.interiors, ind = I.cur.indoor, fy = ind.yOf(ind.cur), gr = g.world.colliders.ground(p.x, p.z, p.y + 0.05, 0.3, 0.15), c = gr.c;
+      const [gx, gz] = ind.grid(p.x, p.z), out = ind.built.get(ind.cur), ci = ind.cellAt(p.x, p.z), rid = out && ci >= 0 ? out.roomX[ci] - 1 : -1;
+      T.push(`${f} ${g.player.state} 칸 ${gx.toFixed(2)},${gz.toFixed(2)} y${(p.y - fy).toFixed(2)} 방 ${rid >= 0 ? out.L.rooms[rid].type : '-'} in ${ind.inside(ind.cur, p.x, p.z) ? 1 : 0} 셀 ${ind.cellKey}/${ind.keyAt(ind.cur, p.x, p.z)} 밟음 ${c ? `${c.type} ${(c.y1 - fy).toFixed(2)} [${(c.hx || c.r || 0).toFixed(2)}×${(c.hz || 0).toFixed(2)}]${c.what ? ' ' + c.what : ''}` : (gr.h - fy).toFixed(2)}`);
+    };
     for (let f = 0; f < frames; f++) {
       steer = { yaw: Math.atan2(-(tx - p.x), -(tz - p.z)) };
       if (jumps.includes(f)) g.player.jumpBuffer = 0.14;
-      window.__frame();
+      window.__frame(); rec(f);
     }
     steer = null;
-    for (let k = 0; k < 40; k++) window.__frame(); // 내려앉기
+    for (let k = 0; k < 40; k++) { window.__frame(); rec(frames + k); } // 내려앉기
+    return T;
   };
   window.__esc = () => ((g.state.debug && g.state.debug.escapes) || []).length;
 });
@@ -50,7 +67,7 @@ for (const pid of want) {
   }, pid);
   if (!ok) continue;
   try { await page.waitForFunction(() => SEREN.game.interiors.inPocket && !SEREN.game.interiors._busy, null, { timeout: 120000, polling: 300 }); } catch { fails++; ex.push(`${pid}: 들어가기 시간 초과`); continue; }
-  const r = await page.evaluate((NF) => {
+  const r = await page.evaluate(([NF, TRACE]) => {
     const g = SEREN.game, I = g.interiors, ind = I.cur.indoor, B = I.cur.B, G = B.G;
     try { g.ui.closeCard(); } catch {} g.mode = 'play';
     g.player.mods.speed = 1.5; // 달리기 (빠르게 부딪힌다)
@@ -79,7 +96,8 @@ for (const pid of want) {
           g.player.teleport(sx, fy + 0.3, sz, 0.1); g.player.vel.set(0, 0, 0);
           for (let k = 0; k < 6; k++) window.__frame();
           const e0 = window.__esc();
-          window.__run(tx, tz, 75, [12, 44]);
+          const tr = window.__run(tx, tz, 75, [12, 44], TRACE && TRACE === `${B.floors[i].label}층 ${nm} ${Math.round((a * 180) / Math.PI)}`);
+          if (tr) res.trace = tr;
           res.runs++;
           const p = g.player.pos, cur = ind.cur;
           const inOk = ind.inside(cur, p.x, p.z) || ind.stairCell || I._nearPortal(ind, p);
@@ -102,7 +120,8 @@ for (const pid of want) {
     }
     g.player.mods.speed = 1;
     return res;
-  }, NF);
+  }, [NF, process.env.TRACE || '']);
+  if (r.trace) console.log(r.trace.join('\n'));
   runs += r.runs; fails += r.fails.length;
   for (const f of r.fails.slice(0, 3)) if (ex.length < 40) ex.push(`${pid} ${r.name}: ${f}`);
   console.log(JSON.stringify({ pid, name: r.name, runs: r.runs, fails: r.fails.length, ex: r.fails.slice(0, 2) }));

@@ -33,6 +33,7 @@ export const atmosUniforms = {
   uNight: { value: 0 },
   uEclipse: { value: 0 },
   uGlow: { value: 0 },
+  uLightScale: { value: 1 }, // 설정 「조명 밝기」: 가로등·실내등·발광 장치의 세기 배율 (0.4~1.6)
   uTime: { value: 0 },
   uFogDensity: { value: 0.0001 },
   uFogFalloff: { value: 1 / 1100 },

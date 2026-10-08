@@ -17,6 +17,7 @@ import { WORDS, WORD } from '../data/lexicon.js';
 import { won } from '../data/money.js';
 import { bookById, bookColor } from '../data/books.js';
 import { stockFor, shelfTitles, subjectName, slotName, libState, readPage, SPINES } from './library.js';
+import { josa } from '../core/josa.js';
 
 // ── 도구 ─────────────────────────────────────────────────
 const tod = (ops) => ops.game.world.clock.time % 1;
@@ -270,7 +271,7 @@ const mart = {
         const F = pick(sh), want = (shelfGoods(T, F, out)[0] || {}).g;
         const ask = want ? gname(want) : CAT_NAME[catOfMart(F)] || '물건';
         return { title: `손님 안내 · ${ask}`, steps: [
-          { label: '안내 빛판 앞에서 손님 맞기', short: '맞기', at: () => info, do: () => { toast(ops, `손님: 「${ask}은(는) 어디 있어요?」`); ops.say(T, 'chat'); return true; } },
+          { label: '안내 빛판 앞에서 손님 맞기', short: '맞기', at: () => info, do: () => { toast(ops, `손님: 「${josa(ask, '은')} 어디 있어요?」`); ops.say(T, 'chat'); return true; } },
           { label: `${ask} 진열대까지 함께 가기`, short: '안내', at: () => F, do: () => { ops.taskDone(T); learn(ops, 'find'); toast(ops, '손님이 고맙다며 바구니에 담는다', 'item'); return true; } },
         ], next: () => roleOf('mart', 'guide').next(ops, T) };
       } },
@@ -323,7 +324,7 @@ const food = {
       if (!o.ready) { toast(ops, `${DISHES[o.d].name} — 부엌에서 짓고 있어요`, 'muted'); return; }
       ui(ops).serviceCard(T.org ? T.org.name : '식당', `${DISHES[o.d].name} 나왔어요`, '쟁반을 들고 빈 식탁에 앉아 먹거나 싸 가요.', [
         { label: '쟁반 들고 식탁으로', primary: true, onClick: () => { ops._tray = o.d; ops._order = null; ops.takeCarry({ g: o.d, n: 1, kind: 'tray', label: DISHES[o.d].name }); toast(ops, '빈 식탁에서 E 로 앉아 먹어요'); } },
-        { label: '싸 가기', sub: '가방에 넣는다', onClick: () => { const k = o.d === 'cookie' ? 'cookie' : o.d === 'tea' ? 'tea' : 'meal'; g.state.inv[k] = (g.state.inv[k] || 0) + 1; ops._order = null; toast(ops, `${DISHES[o.d].name}을(를) 쌌다`, 'item'); } },
+        { label: '싸 가기', sub: '가방에 넣는다', onClick: () => { const k = o.d === 'cookie' ? 'cookie' : o.d === 'tea' ? 'tea' : 'meal'; g.state.inv[k] = (g.state.inv[k] || 0) + 1; ops._order = null; toast(ops, `${josa(DISHES[o.d].name, '을')} 쌌다`, 'item'); } },
       ]);
       return;
     }
@@ -347,7 +348,7 @@ const food = {
     const [x, z] = ops.cur.indoor.world(F.x, F.z);
     g.player.yaw = Math.atan2(x - g.player.pos.x, z - g.player.pos.z);
     g.avatar && g.avatar.act && g.avatar.act('eat', 4);
-    setTimeout(() => { buff(ops, D.buff); learn(ops, 'eat'); toast(ops, `${D.name}을(를) 먹었다 · ${BUFFS[D.buff].name}`, 'item'); }, 2500);
+    setTimeout(() => { buff(ops, D.buff); learn(ops, 'eat'); toast(ops, `${josa(D.name, '을')} 먹었다 · ${BUFFS[D.buff].name}`, 'item'); }, 2500);
   },
   /** 요리사(사람 또는 플레이어)가 주문 하나를 짓는다: 재료를 실제로 쓴다 */
   make(T, q) {
@@ -803,7 +804,7 @@ const school = {
   },
   factQuiz(ops, s) {
     const Q = s.id === 'sky' ? ['세렌이 도는 큰 별은?', ['우르', '해', '라르크'], 0] : ['빛잎이 자라려면?', ['빛과 물', '어둠', '얼음'], 0];
-    ui(ops).serviceCard(s.name, Q[0], '선생님이 빛 칠판에 그림을 그린다.', Q[1].map((v, k) => ({ label: v, onClick: () => toast(ops, k === Q[2] ? '맞아요!' : `${Q[1][Q[2]]}예요`, k === Q[2] ? 'item' : 'muted') })));
+    ui(ops).serviceCard(s.name, Q[0], '선생님이 빛 칠판에 그림을 그린다.', Q[1].map((v, k) => ({ label: v, onClick: () => toast(ops, k === Q[2] ? '맞아요!' : `${josa(Q[1][Q[2]], '이에요')}`, k === Q[2] ? 'item' : 'muted') })));
   },
   assist(ops, T, out) {
     const st = tagged(out, 'student');
@@ -1052,12 +1053,12 @@ const library = {
       ops.dropCarry();
       ops.dirty(c.book.floor);
       audio.blip && audio.blip({ hz: 900, to: 1200, dur: 0.07, gain: 0.05 });
-      toast(ops, `「${c.label}」을(를) 빌렸다 · 일지 → 가방에서 읽어요 · 이레 안에 아무 서고 대출대에 돌려줘요`, 'item');
+      toast(ops, `${josa(`「${c.label}」`, '을')} 빌렸다 · 일지 → 가방에서 읽어요 · 이레 안에 아무 서고 대출대에 돌려줘요`, 'item');
       g.scan && g.scan('c_library');
       return;
     }
     const back = (b) => { const k = S.borrowed.indexOf(b); if (k >= 0) S.borrowed.splice(k, 1); if (b.uid === ops.cur.uid) ops.dirty(b.floor); };
-    const items = S.borrowed.map((b) => { const late = day - b.day > 7; return { label: `「${b.title}」 돌려주기`, sub: `${day - b.day}일째 빌림${late ? ' · 돌려줄 날이 지났어요' : ''}${b.uid === ops.cur.uid ? '' : ' · 다른 서고의 책 (이 대출대에서 받아 줘요)'}`, onClick: () => { back(b); toast(ops, `「${b.title}」을(를) 돌려주었다`); library.desk(ops, T, out); } }; });
+    const items = S.borrowed.map((b) => { const late = day - b.day > 7; return { label: `「${b.title}」 돌려주기`, sub: `${day - b.day}일째 빌림${late ? ' · 돌려줄 날이 지났어요' : ''}${b.uid === ops.cur.uid ? '' : ' · 다른 서고의 책 (이 대출대에서 받아 줘요)'}`, onClick: () => { back(b); toast(ops, `${josa(`「${b.title}」`, '을')} 돌려주었다`); library.desk(ops, T, out); } }; });
     if (S.borrowed.length > 1) items.push({ label: '모두 돌려주기', onClick: () => { for (const b of S.borrowed.slice()) back(b); toast(ops, '빌린 책을 모두 돌려주었다'); } });
     ui(ops).serviceCard('대출대', S.borrowed.length ? `빌린 책 ${S.borrowed.length}권` : '빌리기·돌려주기', S.borrowed.length ? '빌린 책은 어느 서고 대출대에 돌려줘도 돼요.' : '서가에서 책을 골라 「들고 가기」로 들고 오면 여기서 빌려 줘요. 한 번에 여섯 권, 이레 동안. 값은 받지 않아요.', items, `<div class="svc-stat"><span>읽은 책 ${Object.keys(S.done).length}권</span><span>펼쳐 본 책 ${Object.keys(S.read).length}권</span></div>`);
   },
@@ -1066,7 +1067,7 @@ const library = {
       const en = out.books && out.books.get(F.id);
       if (!en) return null;
       const c = library.carried(ops);
-      if (c && c.book.uid === ops.cur.uid) return { label: `서가 · 「${c.label}」 제자리에 꽂기`, short: '꽂기', use: () => { const fl = c.book.floor; ops.dropCarry(); ops.dirty(fl); toast(ops, `「${c.label}」을(를) 서가에 꽂았다`, 'muted'); } };
+      if (c && c.book.uid === ops.cur.uid) return { label: `서가 · 「${c.label}」 제자리에 꽂기`, short: '꽂기', use: () => { const fl = c.book.floor; ops.dropCarry(); ops.dirty(fl); toast(ops, `${josa(`「${c.label}」`, '을')} 서가에 꽂았다`, 'muted'); } };
       return { label: `서가 · ${en.annal ? `${library.zoneName(ops, T)} 연대 기록` : subjectName(en.subject)}`, short: '책 고르기', use: () => library.browse(ops, T, out, F) };
     }
     if (F.tag === 'catalog') return { label: '찾기 단말 · 책 찾기', short: '찾기', use: () => ops.apps.open('catalog', { T, F }) };
@@ -1222,15 +1223,15 @@ const home = {
     const g = ops.game, inv = g.state.inv;
     const opts = [['meal', { bread: 1, fruit: 1 }], ['juice', { fruit: 2 }], ['tea', { tealeaf: 2 }]].filter(([, need]) => Object.entries(need).every(([k, v]) => (inv[k] || 0) >= v));
     if (!opts.length) { toast(ops, '재료가 없어요 (빵·빛열매·찻잎은 마트에서)', 'muted'); return; }
-    ui(ops).serviceCard('우리 집 부엌', '무엇을 지을까요?', '가방의 재료를 실제로 쓴다.', opts.map(([k, need]) => ({ label: gname(k), sub: Object.entries(need).map(([a, v]) => `${gname(a)} ${v}`).join(' · '), onClick: () => { for (const [a, v] of Object.entries(need)) inv[a] -= v; inv[k] = (inv[k] || 0) + 1; learn(ops, 'eat'); toast(ops, `${gname(k)}을(를) 지었다`, 'item'); } })));
+    ui(ops).serviceCard('우리 집 부엌', '무엇을 지을까요?', '가방의 재료를 실제로 쓴다.', opts.map(([k, need]) => ({ label: gname(k), sub: Object.entries(need).map(([a, v]) => `${gname(a)} ${v}`).join(' · '), onClick: () => { for (const [a, v] of Object.entries(need)) inv[a] -= v; inv[k] = (inv[k] || 0) + 1; learn(ops, 'eat'); toast(ops, `${josa(gname(k), '을')} 지었다`, 'item'); } })));
   },
   stash(ops) {
     const g = ops.game, inv = g.state.inv, b = ops.bstate(ops.cur.uid);
     b.stash = b.stash || {};
     const ks = Object.keys(inv).filter((k) => k !== 'starseed' && inv[k] > 0);
     ui(ops).serviceCard('옷 고치', '집에 맡겨 둔 것', Object.entries(b.stash).filter(([, v]) => v > 0).map(([k, v]) => `${gname(k)} ${v}`).join(', ') || '비어 있다', [
-      ...ks.slice(0, 6).map((k) => ({ label: `${gname(k)} 맡기기`, stay: true, onClick: () => { inv[k]--; b.stash[k] = (b.stash[k] || 0) + 1; toast(ops, `${gname(k)}을(를) 맡겼다`); } })),
-      ...Object.keys(b.stash).filter((k) => b.stash[k] > 0).slice(0, 4).map((k) => ({ label: `${gname(k)} 꺼내기`, stay: true, onClick: () => { b.stash[k]--; inv[k] = (inv[k] || 0) + 1; toast(ops, `${gname(k)}을(를) 꺼냈다`); } })),
+      ...ks.slice(0, 6).map((k) => ({ label: `${gname(k)} 맡기기`, stay: true, onClick: () => { inv[k]--; b.stash[k] = (b.stash[k] || 0) + 1; toast(ops, `${josa(gname(k), '을')} 맡겼다`); } })),
+      ...Object.keys(b.stash).filter((k) => b.stash[k] > 0).slice(0, 4).map((k) => ({ label: `${gname(k)} 꺼내기`, stay: true, onClick: () => { b.stash[k]--; inv[k] = (inv[k] || 0) + 1; toast(ops, `${josa(gname(k), '을')} 꺼냈다`); } })),
     ]);
   },
   mail(ops) {

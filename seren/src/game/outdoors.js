@@ -19,6 +19,7 @@ import { mulberry32 } from '../core/noise.js';
 import { heightAt } from '../world/heightfield.js';
 import { SYL_A, SYL_B } from '../data/citizens.js';
 import { won } from '../data/money.js';
+import { josa } from '../core/josa.js';
 
 const TAU = Math.PI * 2;
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -492,7 +493,7 @@ export class Outdoors {
       for (const q of g.city.recsNear(p.x, p.z, R)) { if (I.info(q).pid !== pid) continue; const d = Math.hypot(q.door.x - p.x, q.door.z - p.z); if (d < bd) { bd = d; best = q; } }
       if (best) break;
     }
-    if (!best) { g.ui.toast(`가까이에 ${nm}이(가) 없어요`, { kind: 'muted' }); return; }
+    if (!best) { g.ui.toast(`가까이에 ${josa(nm, '이')} 없어요`, { kind: 'muted' }); return; }
     g.city.fixDoor(best);
     g.state.waypoint = { x: best.door.x, z: best.door.z };
     g.updateWaypoint();

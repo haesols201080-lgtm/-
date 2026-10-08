@@ -12,7 +12,7 @@ export class Audio {
   constructor() {
     this.ctx = null;
     this.enabled = true;
-    this.vol = { master: 0.9, music: 0.6, sfx: 0.85, ambience: 0.7, voice: 0.85 };
+    this.vol = { master: 0.9, music: 0.6, ambience: 0.7, sfx: 0.85, ui: 0.8, voice: 0.85 };
     this.listener = { x: 0, y: 0, z: 0, yaw: 0 };
   }
 
@@ -28,7 +28,8 @@ export class Audio {
     comp.threshold.value = -16; comp.knee.value = 12; comp.ratio.value = 3; comp.attack.value = 0.01; comp.release.value = 0.3;
     this.master.connect(comp).connect(ctx.destination);
     this.bus = {};
-    for (const k of ['music', 'sfx', 'ambience', 'voice']) {
+    // 채널: 음악 · 효과음(세계의 사건) · 환경음(바람·물·도시의 지속음) · 시스템·UI 음(알림·메뉴·저장) · 목소리 — 서로 묶지 않는다
+    for (const k of ['music', 'sfx', 'ambience', 'ui', 'voice']) {
       const g = ctx.createGain();
       g.gain.value = this.vol[k];
       g.connect(this.master);
@@ -248,7 +249,8 @@ export class Audio {
       pylon: [0, 2, 4, 5, 7, 9, 10, 12, 14],
     };
     const s = seqs[kind] || seqs.discover;
-    s.forEach((n, i) => this.tone(n, { delay: i * (kind === 'pylon' ? 0.16 : 0.09), gain: 0.22, dur: 2.2, soft: true, bus: 'sfx', wet: 0.6 }));
+    // 알림·발견·퀘스트 소리는 시스템·UI 채널, 탑의 노래(pylon)는 세계의 소리(효과음)
+    s.forEach((n, i) => this.tone(n, { delay: i * (kind === 'pylon' ? 0.16 : 0.09), gain: 0.22, dur: 2.2, soft: true, bus: kind === 'pylon' ? 'sfx' : 'ui', wet: 0.6 }));
   }
 
   // ── 지속음: 바람 / 스키머 웅웅 ──────────────

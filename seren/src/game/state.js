@@ -3,7 +3,8 @@ import { LANDING_START, LANDER_YAW } from '../data/places.js';
 const KEY = 'seren.save.v1';
 const SETTINGS_KEY = 'seren.settings.v1';
 export const SEEN_KEY = 'seren.seenVersion'; // 업데이트 내역을 열어 본 판 (슬롯과 상관없는 전역)
-export const SAVE_VERSION = 1;
+// 저장 판: 2 = 퀘스트 상태·추적·기록(quests.status/tracked/log), 체력(health), 은행(bank) — 모두 슬롯마다 따로.
+export const SAVE_VERSION = 2;
 // 이야기 판: 2 = 새 이야기(착륙 → 첫 접촉 → 이웃 → 이름 노래 → 듣는 탑들이 노래 → 온 하늘에 대답).
 // 옛 이야기로 저장한 판은 불러올 때 지금까지 한 일(얻은 음·노래하게 한 탑·이름 노래·하늘닻)에 맞는 새 장(章)으로 옮긴다.
 export const STORY_VERSION = 2;
@@ -52,7 +53,13 @@ export function defaultState() {
     echoes: {}, // 메아리 id → true
     codex: {}, // 도감 id → true
     pylons: {}, // 노래하게 한 공명탑 (듣던 탑이 대답한 것)
-    quests: { active: [], done: [], step: {}, data: {} },
+    // 퀘스트: 유형(main/side)은 데이터(story.js QUESTS 의 type·kind)에, 진행은 여기 — status: id → active|done|failed|held,
+    //  tracked: 추적할 id (null = 자동: 메인 먼저 · 'none' = 플레이어가 추적을 끔), log: id → { start, end, steps: [단계마다 마친 날] }
+    quests: { active: [], done: [], step: {}, data: {}, status: {}, tracked: null, log: {} },
+    // 체력 (v24): hp/max, down = 쓰러져 이송 중이면 { t, x, z } (같은 일을 두 번 하지 않게), hurtAt = 마지막으로 다친 놀이 시각
+    health: { hp: 100, max: 100, down: null, hurtAt: 0 },
+    // 은행 (v24): 입출금 계좌 잔액·의료 부채 잔액·거래 원장 [{ n, t, day, kind, amt, bal, debt, where, memo }] — 가방의 돈은 inv.starseed
+    bank: { balance: 0, debt: 0, ledger: [], seq: 0 },
     inv: { starseed: 0, seedstar: 0, shard: 0, flower: 0, fruit: 0, trinket: 0, tea: 0, cookie: 0, meal: 0, lantern: 0, mapshard: 0, book: 0, parcel: 0 },
     venue: { exhibits: {}, archives: {}, museums: {}, buffs: {}, days: {}, job: null, earned: 0, spent: 0, worked: 0 }, // 건물의 일 (v0.7)
     // 건물 속 (v0.9): 일자리·지원·교대·과제·호텔 방 / 건물마다 바뀐 상태(연구 진척·내 집 칸·맡긴 물건…) / 도시 살림(구역 돈·재고·살아 있는 건물)
@@ -81,7 +88,10 @@ export function defaultState() {
 export function defaultSettings() {
   return {
     quality: null,
-    vol: { master: 0.9, music: 0.6, sfx: 0.85, ambience: 0.7, voice: 0.85 },
+    // 소리 (v24): 전체(마스터 — 아래 채널에 마지막으로 곱한다) · 음악 · 환경음 · 효과음 · 시스템·UI 음 · 목소리(아웬의 노래하는 말)
+    vol: { master: 0.9, music: 0.6, ambience: 0.7, sfx: 0.85, ui: 0.8, voice: 0.85 },
+    // 화면·빛 (v24): bright = 전체 밝기(노출) · light = 조명 밝기(가로등·실내등·발광 장치) · bloom = 빛 번짐 — 게임 논리(낮밤·퀘스트)와 상관없다
+    bright: 1, light: 1, bloom: 1,
     sensitivity: 1,
     invertY: false,
     view: 'third', // 시점: 'third' 3인칭 · 'first' 1인칭 (V · 터치 「시점」)
@@ -133,7 +143,7 @@ export function listSlots() {
     try { m = readJSON(META + id); } catch { m = null; }
     const hasData = !!(ls() && ls().getItem(SLOT + id));
     if (!m) out.push({ id, name: '이름 없는 여정', saved: 0, playTime: 0, broken: !hasData ? '저장 내용이 없어요' : '요약을 읽지 못했어요 — 불러오기는 시도할 수 있어요' });
-    else out.push({ ...m, id, broken: hasData ? null : '저장 내용이 없어요' });
+    else out.push({ ...m, id, broken: !hasData ? '저장 내용이 없어요' : m.failed ? '불러오지 못했어요 — 저장 내용이 깨졌어요' : null });
   }
   return out.sort((a, b) => (b.saved || 0) - (a.saved || 0));
 }
@@ -172,6 +182,7 @@ export function loadState(id = activeSlot()) {
     return s;
   } catch (e) {
     console.warn('[save] 슬롯 불러오기 실패', id, e);
+    patchSlotMeta(id, { failed: true }); // 목록에 「불러오지 못했어요」로 남긴다 (다른 슬롯은 그대로)
     return null;
   }
 }
@@ -183,7 +194,7 @@ export function saveState(s, id = activeSlot(), meta = {}) {
     s.saved = Date.now();
     ls().setItem(SLOT + id, JSON.stringify(s)); // 내용 먼저 (요약이 내용보다 앞서지 않게)
     const m = readJSON(META + id) || { id, name: '여정', created: s.created || Date.now() };
-    const next = { ...m, id, saved: s.saved, playTime: s.playTime || 0, ver: s.version || SAVE_VERSION, ...meta };
+    const next = { ...m, id, saved: s.saved, playTime: s.playTime || 0, ver: s.version || SAVE_VERSION, failed: undefined, ...meta };
     if (meta.thumb === undefined) next.thumb = m.thumb || null;
     ls().setItem(META + id, JSON.stringify(next));
     return true;
@@ -203,7 +214,8 @@ export function deleteSave() { const id = activeSlot(); if (id) deleteSlot(id); 
 export function loadSettings() {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    return { ...defaultSettings(), ...(raw ? JSON.parse(raw) : {}) };
+    const d = defaultSettings(), s = raw ? JSON.parse(raw) : {};
+    return { ...d, ...s, vol: { ...d.vol, ...(s.vol || {}) } }; // 새 채널(ui)이 생겨도 옛 설정과 섞인다
   } catch { return defaultSettings(); }
 }
 
@@ -220,6 +232,12 @@ function migrate(s) {
     else if (d[k] && typeof d[k] === 'object' && !Array.isArray(d[k]) && s[k] && typeof s[k] === 'object') {
       for (const kk of Object.keys(d[k])) if (s[k][kk] === undefined) s[k][kk] = d[k][kk];
     }
+  }
+  // 1 → 2: 퀘스트 상태를 진행 목록에서 채운다 (이미 한 퀘스트·하는 중인 퀘스트의 순서·조건은 그대로)
+  if ((s.version || 1) < 2) {
+    const q = s.quests;
+    for (const id of q.done || []) q.status[id] = 'done';
+    for (const id of q.active || []) q.status[id] = 'active';
   }
   s.version = SAVE_VERSION;
   return s;

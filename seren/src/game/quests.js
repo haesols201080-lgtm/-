@@ -17,6 +17,9 @@ function statValue(state, path) {
 }
 import { bus } from '../core/events.js';
 
+/** 퀘스트 유형: 데이터의 type 이 먼저, 없으면 옛 kind ('side' 만 사이드 — 지금 있는 이야기 퀘스트는 모두 main) */
+export function questType(q) { return q ? (q.type || (q.kind === 'side' ? 'side' : 'main')) : 'main'; }
+
 export class Quests {
   constructor(game) {
     this.game = game;
@@ -30,6 +33,9 @@ export class Quests {
 
   isActive(id) { return this.s.active.includes(id); }
   isDone(id) { return this.s.done.includes(id); }
+  /** active | done | failed | held | null(시작 전) */
+  status(id) { return this.s.status[id] || (this.isDone(id) ? 'done' : this.isActive(id) ? 'active' : null); }
+  _day() { const c = this.game.world && this.game.world.clock; return c ? +(c.day + (c.time % 1)).toFixed(2) : 0; }
 
   start(id, silent = false) {
     const q = QUESTS[id];
@@ -37,8 +43,34 @@ export class Quests {
     this.s.active.push(id);
     this.s.step[id] = 0;
     this.s.data[id] = {};
-    if (!silent) this.game.ui.toast(q.kind === 'main' ? `이야기 · ${q.title}` : `부탁 · ${q.title}`, { kind: 'quest' });
+    this.s.status[id] = 'active';
+    this.s.log[id] = { start: this._day(), end: null, steps: [] };
+    if (!silent) this.game.ui.toast(questType(q) === 'main' ? `이야기 · ${q.title}` : `새 사이드 퀘스트 · ${q.title}`, { kind: 'quest', sub: questType(q) === 'side' ? 'J 퀘스트 창에서 추적할 수 있어요' : '' });
     this._enterStep(id);
+  }
+
+  /** 추적: id 를 고르거나, null(자동 — 메인 먼저)로 되돌리거나, 'none'(아무것도 추적하지 않음 — 정상 상태) */
+  track(id) {
+    this.s.tracked = id === 'none' || id === 'req' || id == null ? id : this.isActive(id) && this.status(id) === 'active' ? id : this.s.tracked;
+    this.game.ui.refreshObjective();
+    if (this.game.updateWaypoint) this.game.updateWaypoint();
+  }
+  untrack() { this.track('none'); }
+  /** 보류: 추적·목표에서 빠지고 진행은 그대로 남는다 · 다시 이어 가기 */
+  hold(id) { if (this.isActive(id) && questType(QUESTS[id]) === 'side') { this.s.status[id] = 'held'; if (this.s.tracked === id) this.s.tracked = null; this.track(this.s.tracked); } }
+  resume(id) { if (this.isActive(id) && this.s.status[id] === 'held') { this.s.status[id] = 'active'; this.track(id); } }
+  /** 실패 (사이드만 — 메인은 실패하지 않는다): 목록에서 빠지고 「실패」로 남는다 */
+  fail(id, why = '') {
+    const q = QUESTS[id];
+    if (!q || !this.isActive(id) || questType(q) === 'main') return;
+    this.s.active = this.s.active.filter((x) => x !== id);
+    this.s.status[id] = 'failed';
+    const L = this.s.log[id] || (this.s.log[id] = { start: null, steps: [] });
+    L.end = this._day(); L.why = why;
+    if (this.s.tracked === id) this.s.tracked = null;
+    this.game.ui.toast(`놓침 · ${q.title}`, { sub: why });
+    this.game.ui.refreshObjective();
+    if (this.game.updateWaypoint) this.game.updateWaypoint();
   }
 
   step(id) {
@@ -61,6 +93,8 @@ export class Quests {
     if (!st) return;
     if (st.onDone) this.game.actions.run(st.onDone, { quest: id });
     this.s.step[id]++;
+    const L = this.s.log[id] || (this.s.log[id] = { start: null, end: null, steps: [] });
+    L.steps.push(this._day());
     const q = QUESTS[id];
     if (this.s.step[id] >= q.steps.length) this._finish(id);
     else {
@@ -74,6 +108,9 @@ export class Quests {
     const q = QUESTS[id];
     this.s.active = this.s.active.filter((x) => x !== id);
     this.s.done.push(id);
+    this.s.status[id] = 'done';
+    if (this.s.log[id]) this.s.log[id].end = this._day();
+    if (this.s.tracked === id) this.s.tracked = null; // 마친 목표의 표식·방향은 바로 거둔다
     this.game.audio.chime('quest');
     this.game.ui.toast(`완료 · ${q.title}`, { kind: 'done' });
     if (q.reward) {
@@ -112,9 +149,36 @@ export class Quests {
     }
   }
 
+  /** 시작 조건이 맞나 (start: { after, talk, stat }) — talk 조건은 그 인물과 말할 때 game.extraTalk 가 연다 */
+  canStart(id) {
+    const q = QUESTS[id];
+    if (!q || this.isActive(id) || this.isDone(id) || this.s.status[id] === 'failed') return false;
+    const c = q.start || {};
+    if (c.newGame) return false;
+    if (c.after && !this.isDone(c.after)) return false;
+    if (c.stat && statValue(this.game.state, c.stat[0]) < c.stat[1]) return false;
+    return true;
+  }
+  /** 저절로 열리는 사이드 퀘스트 (인물에게 말을 걸어 여는 것은 빼고) — 가끔 확인 */
+  _autoStart() {
+    for (const [id, q] of Object.entries(QUESTS)) {
+      if (questType(q) !== 'side' || (q.start && q.start.talk)) continue;
+      if (this.canStart(id)) this.start(id);
+    }
+  }
+  /** 퀘스트와 관련된 인물·장소 (지금 단계 → 없으면 퀘스트 전체의 첫 인물/장소) */
+  related(id) {
+    const q = QUESTS[id];
+    if (!q) return '';
+    const st = this.step(id) || q.steps[0];
+    const name = (x) => (x.npc ? (this.game.npcs.get(x.npc) || {}).name || '' : x.place ? (PLACE[x.place] || {}).name || '' : '');
+    return name(st) || q.steps.map(name).find(Boolean) || '';
+  }
+
   update(dt) {
     const g = this.game;
     const pl = g.player;
+    if ((this._autoT = (this._autoT || 0) - dt) < 0) { this._autoT = 2; this._autoStart(); }
     if (!this._last) this._last = pl.pos.clone();
     const moved = Math.hypot(pl.pos.x - this._last.x, pl.pos.z - this._last.z);
     this._last.copy(pl.pos);
@@ -154,12 +218,17 @@ export class Quests {
 
   /** 추적 중인 이야기 (본편 우선) */
   tracked() {
-    const a = this.s.active;
-    const main = a.find((id) => QUESTS[id].kind === 'main');
+    const t = this.s.tracked;
+    if (t === 'none' || (t === 'req' && this.game.requests && this.game.requests.active.length)) return null;
+    if (t && this.isActive(t) && this.status(t) === 'active') return t;
+    const a = this.s.active.filter((id) => this.status(id) === 'active');
+    const main = a.find((id) => questType(QUESTS[id]) === 'main');
     return main || a[0] || null;
   }
 
   objectiveText() {
+    if (this.s.tracked === 'none') return null; // 추적을 끈 상태도 정상 (목표 칸·표식 없음)
+    if (this.s.tracked === 'req') { const r = this.game.requests && this.game.requests.active[0]; if (r) return { title: '부탁 · ' + r.title, text: r.text, kind: 'side', id: 'req' }; }
     const id = this.tracked();
     if (!id) return this._freeObjective();
     const q = QUESTS[id];
@@ -169,7 +238,7 @@ export class Quests {
     if (st.type === 'awaken') t += ` (${awakenedCount(this.game.state, !!st.great)}/${st.count})`;
     if (st.type === 'pickup') t += ` (${this.s.data[id].picked || 0}/${st.count})`;
     if (st.type === 'glyphs') t += ` (${st.ids.filter((x) => this.game.state.glyphs[x]).length}/${st.ids.length})`;
-    return { title: q.title, text: t, kind: q.kind };
+    return { title: q.title, text: t, kind: questType(q), id };
   }
 
   /** 본편이 없을 때: 부탁 → 남은 수집거리·다음 일식 */
@@ -206,6 +275,8 @@ export class Quests {
     return v.length ? v.concat(base) : base;
   }
   _targets0() {
+    if (this.s.tracked === 'none') return [];
+    if (this.s.tracked === 'req' && this.game.requests && this.game.requests.active.length) return this._requestTargets();
     const id = this.tracked();
     if (!id) return this._requestTargets();
     const st = this.step(id);

@@ -12,6 +12,7 @@ import { saveSettings } from './state.js';
 import { searchBuilding } from '../interior/find.js';
 import { FUSE } from '../interior/catalog.js';
 import { won } from '../data/money.js';
+import { josa } from '../core/josa.js';
 
 const TONE_NAMES = ['솟음', '열림', '흐름', '빛', '고요'];
 const TONE_USE = ['공중에서 한 번 더 솟아오름', '메아리·잠긴 것을 엶', '활공·썰매 중 앞으로 밀어 줌', '빛 구슬·밤길 밝힘', '하늘고래를 부르고 마음을 고름'];
@@ -435,8 +436,8 @@ export class MoaAI {
     }
     // 시설·장소·인물 찾기 (건물 안이면 그 건물 안부터)
     const f = this.find(q);
-    if (f && f.none) return `이 건물 안에서는 「${text.trim()}」을(를) 찾지 못했어요. 지도(M)의 층 목록이나 안내 빛판에서 다른 층을 살펴봐요.`;
-    if (f && f.inside) { this.mark(f); return `「${f.name}」 — ${f.sameFloor ? `이 층 ${f.d} m` : `${f.floor}층`}이에요. 바닥에 빛 길을 깔았어요${g.guide && g.guide.text ? ` (${g.guide.text})` : ''}.`; }
+    if (f && f.none) return `이 건물 안에서는 ${josa(`「${text.trim()}」`, '을')} 찾지 못했어요. 지도(M)의 층 목록이나 안내 빛판에서 다른 층을 살펴봐요.`;
+    if (f && f.inside) { this.mark(f); return `「${f.name}」 — ${josa(f.sameFloor ? `이 층 ${f.d} m` : `${f.floor}층`, '이에요')}. 바닥에 빛 길을 깔았어요${g.guide && g.guide.text ? ` (${g.guide.text})` : ''}.`; }
     if (f) { this.mark(f); return `「${f.name}」 — ${f.dir}쪽 ${f.d} m 예요. 나침반에 표시했어요.`; }
     if (/어디야|여기|위치|어디에있|어디지|어디인/.test(q)) {
       const reg = g.world.regionAt(P.x, P.z), zone = this.zoneName(P.x, P.z);

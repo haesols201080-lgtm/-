@@ -11,6 +11,7 @@ import { ferryGeo, boatMaterial } from '../world/boats.js';
 import { atmosUniforms } from '../world/atmosphere.js';
 import { mulberry32, hashStr } from '../core/noise.js';
 import { won } from '../data/money.js';
+import { josa } from '../core/josa.js';
 
 const UP_COST = [3, 5, 8];
 const DETECT_COST = [[3, 0], [6, 1], [9, 2]];
@@ -390,7 +391,7 @@ export class Services {
     const X = cands[Math.floor(Math.random() * Math.min(8, cands.length))];
     if (!X) { g.ui.toast('지금은 보낼 소포가 없어요', { kind: 'muted' }); return; }
     const d = Math.hypot(X.x - F.x, X.z - F.z);
-    const r = { kind: 'parcel', to: X.id, title: `${X.name}로 가는 소포`, text: `${this._regionName(X)} ${X.name}의 ${X.info.keeper}에게 소포 전하기 (${km(d)})`, reward: 2 + Math.min(4, Math.floor(d / 4000)) };
+    const r = { kind: 'parcel', to: X.id, title: `${josa(X.name, '로')} 가는 소포`, text: `${this._regionName(X)} ${X.name}의 ${X.info.keeper}에게 소포 전하기 (${km(d)})`, reward: 2 + Math.min(4, Math.floor(d / 4000)) };
     g.requests.add(r);
     this.useToday('parcel:' + F.id);
     s.waypoint = { x: X.x, z: X.z };
@@ -543,7 +544,7 @@ export class Services {
     if (silent) return;
     g.ui.toast(`발견 · ${F.name}`, { kind: 'place', sub: `${F.info.icon} ${F.info.name} — ${F.info.verb}` });
     g.audio.chime('discover');
-    if (!g.state.flags.moaFacility) { g.state.flags.moaFacility = true; setTimeout(() => g.ui.moa(`저 건물엔 ${F.info.keeper}가 있어요. 말을 걸면 이 건물이 하는 일을 도와줄 거예요.`), 2500); }
+    if (!g.state.flags.moaFacility) { g.state.flags.moaFacility = true; setTimeout(() => g.ui.moa(`저 건물엔 ${josa(F.info.keeper, '이')} 있어요. 말을 걸면 이 건물이 하는 일을 도와줄 거예요.`), 2500); }
   }
 
   update(dt) {

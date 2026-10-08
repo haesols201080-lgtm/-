@@ -301,10 +301,14 @@ export const CONVOS = {
   ],
 };
 
-// 퀘스트. kind: main | side | request
+// 퀘스트 (v24): type main | side — 지금 있는 이야기 퀘스트는 모두 main (순서·조건 그대로), side 는 새 선택형 퀘스트에만.
+//  kind 는 옛 이름 (type 과 같게 둔다). desc 짧은 설명 · start 시작 조건 { newGame | after: 퀘스트 id | talk: 인물 id | stat: [경로, 수] }
+//  · 완료 조건 = 단계를 모두 마침 · next 후속 퀘스트(마치면 바로 시작) · reward 보상. 진행 상태(status·단계·추적·기록)는 저장 슬롯(state.quests)에.
 export const QUESTS = {
   mq0: {
-    title: '착륙', kind: 'main',
+    title: '착륙', kind: 'main', type: 'main',
+    desc: '착륙선을 내려와 마중 나온 이 별의 사람을 처음 만나고, 그를 따라 첫 마을로 간다.',
+    start: { newGame: true },
     steps: [
       { type: 'move', dist: 12, text: '착륙선에서 내려 세렌의 땅을 걸어 보기', hint: 'WASD / 왼쪽 화면을 끌어 이동', onStart: [{ do: 'npcGo', npc: 'iel', place: 'crash', offset: [-30, -33], lead: false }] },
       { type: 'near', npc: 'iel', r: 9, text: '마중 나온 빛나는 형체에게 다가가기' },
@@ -314,7 +318,9 @@ export const QUESTS = {
     next: 'mq1',
   },
   mq1: {
-    title: '첫 말', kind: 'main',
+    title: '첫 말', kind: 'main', type: 'main',
+    desc: '이슬터에서 아웬의 말과 글자를 처음 배우고, 마을 우물에 첫 음을 들려준다.',
+    start: { after: 'mq0' },
     steps: [
       { type: 'talk', npc: 'iel', convo: 'iel-village', text: '이엘과 이야기하기' },
       { type: 'glyphs', ids: ['g-star', 'g-we', 'g-song'], text: '마을의 글자돌 읽기', marker: 'glyphs' },
@@ -325,7 +331,9 @@ export const QUESTS = {
     next: 'mq1b',
   },
   mq1b: {
-    title: '손님의 탈것', kind: 'main',
+    title: '손님의 탈것', kind: 'main', type: 'main',
+    desc: '장인 온과 함께 착륙선 썰매를 고쳐 세렌을 빠르게 누빌 탈것을 얻는다.',
+    start: { after: 'mq1' },
     steps: [
       { type: 'talk', npc: 'on', convo: 'on-sled', text: '장인 온에게 착륙선 썰매 이야기하기' },
       { type: 'pickup', set: 'sled', count: 3, text: '착륙지 둘레에서 공명 결정 찾기', onStart: [{ do: 'spawnPickups', set: 'sled' }] },
@@ -336,7 +344,9 @@ export const QUESTS = {
     next: 'mq2',
   },
   mq2: {
-    title: '빛의 수도', kind: 'main',
+    title: '빛의 수도', kind: 'main', type: 'main',
+    desc: '해류를 타고 빛의 수도 하모네아에 닿아, 척추 꼭대기에서 도시를 내려다본다.',
+    start: { after: 'mq1b' },
     steps: [
       { type: 'reach', place: 'spine', r: 260, text: '해류를 타고 하모네아의 척추로' },
       { type: 'talk', npc: 'hau', convo: 'hau-first', text: '노래지기 하우 만나기' },
@@ -346,10 +356,12 @@ export const QUESTS = {
     onDone: [{ do: 'moa', t: '저 아래 건물마다 쓰임이 있어요. 문으로 들어가면 층마다 가게·사무실·공장·병원이 진짜로 돌아가요 — 물건은 공장에서 물류 창고를 거쳐 진열대로 오고, 돈(울)은 일한 만큼 회사 금고에서 나와요. 건물 안 단말의 「일자리」로 일을 구해 봐요.' }],
   },
   mq2b: {
-    title: '이웃이 되기', kind: 'main',
+    title: '이웃이 되기', kind: 'main', type: 'main',
+    desc: '하모네아에서 일하고, 벌고, 쓰고, 이웃을 도우며 이 도시의 한 사람이 된다.',
+    start: { after: 'mq2' },
     steps: [
       { type: 'stat', path: 'venue.worked', count: 1, text: '도시에서 일 하나 해 보기', hint: '건물 안 울림판 단말의 「일자리」에서 지원 → 면접 → 출근 단말에서 출근, 또는 바깥 조작대의 일' },
-      { type: 'stat', path: 'venue.spent', count: 1, text: '번 돈(울)으로 무언가 사 보기', hint: '마트에서 바구니에 담아 계산대로, 찻집·식당의 주문대, 장터, 터미널의 표' },
+      { type: 'stat', path: 'venue.spent', count: 1, text: '번 돈(울)로 무언가 사 보기', hint: '마트에서 바구니에 담아 계산대로, 찻집·식당의 주문대, 장터, 터미널의 표' },
       { type: 'stat', path: 'venue.exhibits', count: 1, text: '박물관이나 연구동에서 전시 살펴보기' },
       { type: 'flag', k: 'helpedNeighbor', text: '이웃 돕기 — 주민의 부탁이나 맡은 일 끝내기', hint: '집 탑의 주민 부탁함, 사무탑·창고의 일거리, 「!」가 뜬 주민' },
       { type: 'talk', npc: 'hau', convo: 'hau-neighbor', text: '척추의 하우에게 돌아가기' },
@@ -358,14 +370,18 @@ export const QUESTS = {
     onDone: [{ do: 'moa', t: '지도에 아직 「듣고 있는」 공명탑 다섯 개를 표시했어요. 어느 쪽부터 가도 괜찮아요.' }],
   },
   mq3: {
-    title: '귀 기울인 탑들', kind: 'main',
+    title: '귀 기울인 탑들', kind: 'main', type: 'main',
+    desc: '오래 침묵한 공명탑 가운데 듣고 있는 탑에 처음으로 노래를 들려준다.',
+    start: { after: 'mq2b' },
     steps: [
       { type: 'awaken', count: 3, text: '듣고 있는 공명탑에 노래 들려주기', marker: 'pylons' },
     ],
     next: 'mq4',
   },
   mq4: {
-    title: '이름 노래', kind: 'main',
+    title: '이름 노래', kind: 'main', type: 'main',
+    desc: '밤의 전망대에서 나만의 이름 노래를 짓고, 하모네아에 우리 집을 얻는다.',
+    start: { after: 'mq3' },
     steps: [
       { type: 'talk', npc: 'hau', convo: 'hau-night', text: '척추의 하우에게 돌아가기' },
       { type: 'night', text: '밤이 될 때까지 기다리기', hint: '메뉴 → 쉬기 로 시간을 보낼 수 있어요' },
@@ -376,7 +392,9 @@ export const QUESTS = {
     next: 'mq5',
   },
   mq5: {
-    title: '온 합창', kind: 'main',
+    title: '온 합창', kind: 'main', type: 'main',
+    desc: '남은 공명탑들에도 노래를 들려줘 대륙 전체를 한 합창으로 잇는다.',
+    start: { after: 'mq4' },
     steps: [
       { type: 'awaken', count: 5, text: '남은 탑들에도 노래 들려주기', marker: 'pylons' },
       { type: 'talk', npc: 'hau', convo: 'hau-all', text: '하우에게 돌아가기' },
@@ -386,7 +404,9 @@ export const QUESTS = {
   },
   // ── 2부: 바다 건너 ──
   mq6: {
-    title: '하늘닻', kind: 'main',
+    title: '하늘닻', kind: 'main', type: 'main',
+    desc: '하늘배와 승강차를 타고 30 km 위 하늘닻에 올라 고리지기 솔을 만난다.',
+    start: { after: 'mq5' },
     steps: [
       { type: 'flag', k: 'rodeSky', text: '하늘배를 타고 다른 구역으로 날아가 보기', hint: '승강장 탑의 조작대, 또는 교통 터미널' },
       { type: 'flag', k: 'liftTop', text: '랜드마크나 거대 탑 꼭대기에 올라 보기', hint: '거대 탑 발치·랜드마크의 승강판 조작대' },
@@ -397,27 +417,78 @@ export const QUESTS = {
     next: 'mq7',
   },
   mq7: {
-    title: '바다 건너', kind: 'main',
+    title: '바다 건너', kind: 'main', type: 'main',
+    desc: '바다 건너 먼 땅의 큰 공명탑들을 깨운다.',
+    start: { after: 'mq6' },
     steps: [
       { type: 'awaken', great: true, count: 4, text: '먼 땅의 큰 탑에 노래 들려주기', marker: 'pylons', hint: '하늘닻에서 뛰어내리거나, 해안의 큰 해류를 타요' },
     ],
     next: 'mq8',
   },
   mq8: {
-    title: '온 세계의 노래', kind: 'main',
+    title: '온 세계의 노래', kind: 'main', type: 'main',
+    desc: '온 세계가 함께 부르는 노래를 하늘닻의 솔과 듣는다.',
+    start: { after: 'mq7' },
     steps: [
       { type: 'talk', npc: 'sol', convo: 'sol-final', text: '하늘닻의 솔에게 돌아가기' },
     ],
     reward: { starseed: 8 },
   },
   sq_mir: {
-    title: '별이 궁금한 아이', kind: 'side',
+    title: '별이 궁금한 아이', kind: 'side', type: 'side',
+    desc: '하모네아의 아이 미르는 하늘고래가 궁금하다. 가까이서 보고 들려주자.',
+    start: { after: 'mq2', talk: 'mir' },
     steps: [
       { type: 'talk', npc: 'mir', convo: 'mir-1', text: '하모네아의 아이와 이야기하기' },
       { type: 'scan', id: 'skywhale', text: '하늘고래를 가까이서 관찰하기', onStart: [{ do: 'moa', t: '하늘고래는 보통 높은 하늘을 떠돌아요. 「고요」나 활공으로 가까이 가 보세요.' }] },
       { type: 'talk', npc: 'mir', convo: 'mir-2', text: '미르에게 들려주기' },
     ],
     reward: { starseed: 3 },
+  },
+  // ── 사이드 (v24): 이야기 진행과 상관없이 고를 수 있는 부가 퀘스트 — 조건이 맞으면 저절로 열리고, 추적은 플레이어가 고른다
+  sq_codex: {
+    title: '세렌 도감 첫 장', kind: 'side', type: 'side',
+    desc: '모아가 궤도에서 세렌의 생물·식물 기록을 모은다. 가까이서 살펴(Q 듣기) 도감을 채워 보내자.',
+    start: { after: 'mq1' },
+    steps: [
+      { type: 'stat', path: 'codex', count: 3, text: '생물이나 식물 셋을 도감에 올리기' },
+      { type: 'stat', path: 'codex', count: 6, text: '도감을 여섯 칸까지 채우기' },
+    ],
+    reward: { starseed: 4 }, next: 'sq_codex2',
+  },
+  sq_codex2: {
+    title: '도감 둘째 장', kind: 'side', type: 'side',
+    desc: '첫 장을 받은 모아가 더 먼 곳의 기록을 부탁한다.',
+    start: { after: 'sq_codex' },
+    steps: [{ type: 'stat', path: 'codex', count: 12, text: '도감을 열두 칸까지 채우기' }],
+    reward: { starseed: 8 },
+  },
+  sq_echo: {
+    title: '메아리 따라가기', kind: 'side', type: 'side',
+    desc: '세렌 곳곳에 옛 노래의 메아리가 남아 있다. 둘을 찾아 들어 보자.',
+    start: { after: 'mq1b' },
+    steps: [
+      { type: 'stat', path: 'echoes', count: 1, text: '메아리 하나 찾아 듣기' },
+      { type: 'stat', path: 'echoes', count: 2, text: '메아리 하나 더 찾아 듣기' },
+    ],
+    reward: { starseed: 5 },
+  },
+  sq_reader: {
+    title: '서고의 손님', kind: 'side', type: 'side',
+    desc: '하모네아의 서고에서 책을 빌려 끝까지 읽어 보자. 다 읽은 책은 아무 서고 대출대에 돌려준다.',
+    start: { after: 'mq2' },
+    steps: [
+      { type: 'stat', path: 'lib.read', count: 1, text: '서고에서 책 한 권을 펼쳐 읽기' },
+      { type: 'stat', path: 'lib.done', count: 1, text: '책 한 권을 끝까지 읽기' },
+    ],
+    reward: { starseed: 3 },
+  },
+  sq_shift: {
+    title: '세 번의 교대', kind: 'side', type: 'side',
+    desc: '하모네아의 일터에서 교대를 세 번 마쳐 이웃들의 믿음을 얻자.',
+    start: { after: 'mq2b' },
+    steps: [{ type: 'stat', path: 'work.done', count: 3, text: '일터에서 교대 세 번 마치기' }],
+    reward: { starseed: 6 },
   },
 };
 

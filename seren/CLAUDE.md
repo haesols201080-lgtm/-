@@ -193,6 +193,12 @@ src/
 - **빛길 역**: 노선·역 크기·역 자리는 `data/transit-lines.js`(`LINES`·`STATION`·`stationSites()`) 하나 — 지형 평탄화(`heightfield`)와 역 모델(`transit._station`)이 같은 값을 쓴다. 역 터는 이웃 장소의 단이 있으면 그 높이. 거점 역의 갈래 관은 역 끝 너머 고리에서 갈라진다(`_buildSpoke`). 시험: `node tools/passage-check.mjs`(역마다 양 끝·양쪽 걸어 들어가기).
 - **거리 소품의 틈** (`cityfabric._propRoom`): 소품끼리·건물과 0.85 m 아래 틈이 생기는 자리에는 놓지 않는다(`force` 는 조작대처럼 꼭 있어야 하는 것만). 시험: `node tools/prop-gaps.mjs`.
 - 그 밖의 검사: `node tools/p0-geom.mjs`(착륙지 표지 고리와 기둥), `node tools/cam-check.mjs`(셀마다 걸으며 카메라가 벽을 넘지 않는가), `node tools/act-all.mjs`·`act-out.mjs`(실내·바깥 모든 상호작용).
+- **저장 슬롯** (`state.js`): 슬롯마다 `seren.slot.<id>`(상태) + `seren.slotmeta.<id>`(목록 요약). 게임은 `game.slot` 에만 저장한다. 슬롯마다 따로인 것 = `state` 전부(세계·주민 기억·경제·퀘스트·가방·자리·시각·실내·체력·은행). 전역 = 설정(`seren.settings.v1`)·업데이트 내역 본 판(`seren.seenVersion`)·건물 구조 캐시(`seren.bld.v1`, 씨앗으로 같게 만드는 구조뿐). 새 상태는 `defaultState()` 에, 형식이 바뀌면 `SAVE_VERSION` 을 올리고 `migrate()` 에. 바로가기 `?play=new` 는 「바로가기 여정」 슬롯 하나만 다시 쓴다. 검사 `node tools/slots-check.mjs`.
+- **퀘스트**: 데이터 `type`(main/side)·`desc`·`start`·`next`·`reward` — 지금 있는 이야기 퀘스트는 main 그대로, 새 선택형만 side. 진행은 `state.quests`(status·step·tracked·log). 추적 `quests.track(id | null 자동 | 'none' 끔 | 'req' 오늘의 부탁)`. 검사 `node tools/quests-check.mjs`, 본편은 `node tools/flow.mjs`.
+- **조사**: 이름·값 뒤 조사는 늘 `josa(말, '을')`(`core/josa.js`) — 「을(를)」 병기나 `${이름}을` 처럼 박아 두지 말 것. 검사 `node tools/josa-check.mjs`(소스에 병기가 남으면 실패).
+- **은행·치료비**: 돈의 규칙은 `game/bank.js`, 수치는 `data/balance.js` 한 곳. 검사 `node tools/bank-check.mjs`.
+- **소리 채널** `music · ambience · sfx · ui · voice` (+ master): 알림·메뉴·발견 소리는 `ui`, 세계의 사건은 `sfx`. **조명 밝기**는 공용 유니폼 `uLightScale` — 새 발광 셰이더는 발광 항에 곱할 것.
+- **충돌**: `pushOut` 은 머리 위에 얕게 걸친 것은 옆으로 밀지 않고(천장), 구조 벽(`wall: true`)은 맨 나중에 민다. 실내 가구는 천장까지 1.75 m 이상 남으면 윗면에 설 수 있다(`walk`). 실내에서 달리며 뛰어 벽에 부딪히기 검사 `node tools/wall-stress.mjs [쓰임|all] [층 수]` (TRACE='층 방 각도' 로 프레임 기록).
 
 ## 지켜야 할 것
 - 기존 저장 파일이 깨지지 않게: 저장 형식을 바꾸면 `state.js` 의 `migrate()` 를 손보세요.

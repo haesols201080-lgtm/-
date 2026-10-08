@@ -282,7 +282,9 @@ export function buildFloor(ctx) {
       }
       acc += len;
       // 충돌체: 벽면에서 바깥으로 0.25 m 두께
-      cols.push(colBox(ctx, mx - nx * 0.22, mz - nz * 0.22, len / 2 + 0.12, 0.22, -Math.atan2(b[1] - a[1], b[0] - a[0]), -1, Math.max(h0, h1) + 0.5, false));
+      const wc = colBox(ctx, mx - nx * 0.22, mz - nz * 0.22, len / 2 + 0.12, 0.22, -Math.atan2(b[1] - a[1], b[0] - a[0]), -1, Math.max(h0, h1) + 0.5, false);
+      wc.wall = true; // 구조 벽: pushOut 이 맨 나중에 (가구가 벽 너머로 밀어내지 못하게)
+      cols.push(wc);
       void c;
     }
   }
@@ -331,8 +333,13 @@ export function buildFloor(ctx) {
     const f = FIX[q.t];
     if (!f || f.solid === false) continue;
     const odd = q.rot % 2 === 1, W = odd ? q.d : q.w, D = odd ? q.w : q.d;
-    if (f.round) cols.push(colCyl(ctx, q.x, q.z, Math.min(W, D) / 2, f.walk ? f.h : Math.max(f.h, 0.4)));
-    else cols.push(colBox(ctx, q.x, q.z, W / 2, D / 2, 0, -0.2, f.h, !!f.walk || f.h < 0.95));
+    // 윗면에 설 수 있는 것: 낮은 것(0.95 m 밑) · 그 위에 서도 몸(1.75 m)이 천장 밑에 들어가는 것 — 몸이 그 위로 올라갈 수 있는 가구는
+    //  모두 내려앉을 수 있어야 한다 (v24 wall-stress: 1.3 m 상자·1.8 m 안내대 위로 뛰었다가 내려앉으면 「설 수 없는 윗면」이
+    //  옆으로 밀어내 얇은 칸막이 너머로 보냈다). 천장에 더 가까운 것은 공중 천장 막음 때문에 발이 그 위로 올라가지 못한다.
+    const top = f.round ? (f.walk ? f.h : Math.max(f.h, 0.4)) : f.h;
+    const walkTop = !!f.walk || top < 0.95 || ceilAt(q.x, q.z) - top >= 1.75;
+    if (f.round) cols.push(Object.assign(colCyl(ctx, q.x, q.z, Math.min(W, D) / 2, top), { walk: walkTop }));
+    else cols.push(colBox(ctx, q.x, q.z, W / 2, D / 2, 0, -0.2, f.h, walkTop));
   }
   // ── 6. 묶기 ──
   const group = new THREE.Group();
@@ -742,13 +749,13 @@ function partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st) {
     if (e.kind === 'solid') {
       gb.box(mx, 0, mz, vert ? T : len, H, vert ? len : T, 0, wallC, 0, PAT.panel, (ctx.style && ctx.style.wallPat) || 0);
       gb.box(mx, 0, mz, (vert ? T : len) + 0.02, 0.1, (vert ? len : T) + 0.02, 0, mix(st.floor, 0x000000, 0.2), 0); // 걸레받이
-      ctx.extraCols.push(colBox(ctx, mx, mz, hx + (vert ? 0.02 : 0.04), hz + (vert ? 0.04 : 0.02), 0, -0.3, H, false));
+      ctx.extraCols.push(Object.assign(colBox(ctx, mx, mz, hx + (vert ? 0.02 : 0.04), hz + (vert ? 0.04 : 0.02), 0, -0.3, H, false), { wall: true }));
     } else if (e.kind === 'glass') {
       glass.box(mx, 0.05, mz, vert ? 0.04 : len, H - 0.1, vert ? len : 0.04, 0, 0xcff4ff, 0.05);
       gb.box(mx, 0, mz, vert ? 0.1 : len, 0.08, vert ? len : 0.1, 0, 0x9aa4b0, 0, PAT.metal);
       gb.box(mx, H - 0.08, mz, vert ? 0.1 : len, 0.08, vert ? len : 0.1, 0, 0x9aa4b0, 0, PAT.metal);
       gb.box(mx, 1.05, mz, vert ? 0.05 : len, 0.03, vert ? len : 0.05, 0, st.glow ?? 0x7ff3e6, 1.0);
-      ctx.extraCols.push(colBox(ctx, mx, mz, hx + 0.02, hz + 0.02, 0, -0.3, H, false));
+      ctx.extraCols.push(Object.assign(colBox(ctx, mx, mz, hx + 0.02, hz + 0.02, 0, -0.3, H, false), { wall: true }));
     } else if (e.kind === 'rail') {
       glass.box(mx, 0.05, mz, vert ? 0.03 : len, 1.0, vert ? len : 0.03, 0, 0xcff4ff, 0.06);
       gb.box(mx, 1.05, mz, vert ? 0.07 : len, 0.05, vert ? len : 0.07, 0, st.glow ?? 0x7ff3e6, 1.4);

@@ -16,6 +16,7 @@ import { uidOf } from './ids.js';
 import { hashStr, mulberry32 } from '../core/noise.js';
 import { audio } from '../core/audio.js';
 import { won } from '../data/money.js';
+import { josa } from '../core/josa.js';
 
 const HOUR = 1 / 24;
 const hh = (t) => { const m = Math.round((t % 1) * 24 * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
@@ -467,7 +468,7 @@ export class Apps {
   _v_meeting() {
     const T = this.T, n = T.node;
     const low = Object.entries(n.stock).filter(([, v]) => v < 3).map(([k]) => k)[0];
-    const right = low ? `${gname(low)}이(가) 떨어져 가니 물류 창고에 먼저 주문하자` : '지금은 재고가 넉넉하니 일의 노래를 맞추자';
+    const right = low ? `${josa(gname(low), '이')} 떨어져 가니 물류 창고에 먼저 주문하자` : '지금은 재고가 넉넉하니 일의 노래를 맞추자';
     const opts = shuffle([right, '오늘은 문을 일찍 닫자', '값을 두 배로 올리자']);
     this.view = 'work';
     this._render('회의', `동료 셋이 의견을 냈어요. 장부(${low ? `${gname(low)} 재고 ${Math.floor(n.stock[low] || 0)}` : '재고 넉넉'})와 맞는 의견에 목소리를 보태요.`, opts.map((o) => ({ label: o, act: () => { if (o === right) this._done('회의가 한 음으로 모였다'); else this._done('다들 고개를 갸웃한다', false); this.close(); } })));

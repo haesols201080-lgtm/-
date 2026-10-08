@@ -8,10 +8,10 @@ import { bookById, bookColor } from '../data/books.js';
 import { libState, readPage } from '../interior/library.js';
 import { won } from '../data/money.js';
 
-const TABS = [['quests', '이야기'], ['bag', '가방'], ['words', '단어'], ['heard', '들은 말'], ['echoes', '메아리'], ['codex', '도감'], ['help', '도움말'], ['log', '기록']];
+const TABS = [['bag', '가방'], ['words', '단어'], ['heard', '들은 말'], ['echoes', '메아리'], ['codex', '도감'], ['help', '도움말'], ['log', '기록']];
 
 export class Journal {
-  constructor(game) { this.game = game; this.tab = 'quests'; }
+  constructor(game) { this.game = game; this.tab = 'bag'; } // 퀘스트는 따로 된 퀘스트 창(questlog.js)
 
   render(body) {
     const nav = document.createElement('div');
