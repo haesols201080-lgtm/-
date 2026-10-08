@@ -491,9 +491,10 @@ const factory = {
   },
   dashboard(ops, T, out) {
     const n = T.node;
-    const ms = tagged(out, 'machine').map((F) => n.mach[F.id]).filter(Boolean);
+    const ms = (tagged(out, 'machine').map((F) => n.mach[F.id]).filter(Boolean));
+    if (!ms.length && n.mach) ms.push(...Object.values(n.mach)); // 홀 층이 아직 그려지지 않았어도 공장의 기계 전부
     const z = ops.econ.S.Z[T.zone];
-    ui(ops).serviceCard('관제실', `${T.org ? T.org.name : '공장'} · 생산 현황`, `공정 묶음: ${n.recs.map((r) => RECIPES[r].name).join(' · ')}`, ms.map((m, k) => ({ label: `${k + 1}번 · ${RECIPES[m.rec].name}`, sub: m.broken ? '멈춤 (정비 필요)' : m.run ? `${Math.round(m.prog * 100)}%` : factory.canRun(T, m) ? '대기' : '원료 기다림', disabled: true })), `<div class="svc-stat"><span>금고 <b>${Math.round(n.cash)}</b></span><span>구역 빛 여유 <b>${Math.round(z ? z.energy : 0)}</b></span><span>판 값 <b>${Math.round(n.sales)}</b></span></div>`);
+    ui(ops).serviceCard('관제실', `${T.org ? T.org.name : '공장'} · 생산 현황`, `공정 묶음: ${(n.recs || []).map((r) => RECIPES[r].name).join(' · ') || '—'}`, ms.map((m, k) => ({ label: `${k + 1}번 · ${RECIPES[m.rec].name}`, sub: m.broken ? '멈춤 (정비 필요)' : m.run ? `${Math.round(m.prog * 100)}%` : factory.canRun(T, m) ? '대기' : '원료 기다림', disabled: true })), `<div class="svc-stat"><span>금고 <b>${Math.round(n.cash)}</b></span><span>구역 빛 여유 <b>${Math.round(z ? z.energy : 0)}</b></span><span>판 값 <b>${Math.round(n.sales)}</b></span></div>`);
   },
   qc(ops, T) {
     const ks = Object.keys(T.node.done).filter((k) => T.node.done[k] > 0);
@@ -1367,6 +1368,16 @@ function clockAct(ops, T) {
 
 export const TYPES = {
   mart, food, factory, depot, office, admin: office, lab, school, clinic, plant, terminal, museum, library, hall, hotel, home, farm,
-  lobby: generic, generic, garden: generic, amenity: generic, observation: generic, parking: generic, tech: generic, mezz: { act: (o, T, F, out) => (factory.act(o, T, F, out) || office.act(o, T, F, out)), people: generic.people },
+  lobby: generic, generic, garden: generic, amenity: generic, observation: generic, parking: generic, tech: generic,
+  // 중2층(관제·사무·대기)은 아래 홀(공장·창고·발전동·대합실·공연장)의 한 부분: 관제 조종대·출근 단말 같은 것은 그 홀의 운영(세입자·살림·기계)으로,
+  // 그 밖의 책상·회의는 사무처럼. (전에는 중2층을 따로 된 세입자로 공장 동작에 넘겨 생산 자료가 없어 「생산 현황」이 멈췄다)
+  mezz: {
+    act: (o, T, F, out) => {
+      const hb = o.cur && o.cur.indoor.built.get(out.i - 1), P = o.byFloor(out.i - 1);
+      const h = P && P !== T && P.type && P.type.act ? P.type.act(o, P, F, hb || out) : null;
+      return h || office.act(o, T, F, out);
+    },
+    people: generic.people,
+  },
 };
 export { DISHES, PROJECTS, SUBJECTS, gname };

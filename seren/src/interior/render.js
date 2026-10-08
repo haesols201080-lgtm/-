@@ -79,6 +79,9 @@ export function buildFloor(ctx) {
     const H = (a, b) => vaultH[b * (gw + 1) + a];
     return H(i, j) * (1 - u) * (1 - v) + H(i + 1, j) * u * (1 - v) + H(i, j + 1) * (1 - u) * v + H(i + 1, j + 1) * u * v;
   };
+  // 카메라가 쓰는 자리 검사 (interiors.clampCamera): 안쪽 벽면까지의 거리(안 < 0)와 그 자리의 천장 높이 — 그리는 것과 같은 자료
+  out.sdAt = isMezz ? null : sdAt;
+  out.ceilAt = ceilAt;
   // ── 칸마다 방(덮개 밖의 벽 앞 자투리도 가까운 방으로) ──
   const roomX = new Int16Array(N);
   for (let c = 0; c < N; c++) roomX[c] = room[c];
@@ -125,9 +128,11 @@ export function buildFloor(ctx) {
   };
   const clCol = (R) => { const cl = R ? (ROOMS[R.type] || {}).cl || 'plain' : 'plain'; return { col: mix(st.wall, 0xffffff, 0.3), pat: CL_PAT[cl] ?? PAT.cplain, prm: (st.ceilPat || 0) * 0.3 }; };
   const slabRects = []; // 충돌체용 바닥판 (칸 줄)
+  const ceilRects = []; // 충돌체용 천장 (그린 천장과 같은 칸 줄)
   for (let j = 0; j < gh; j++) {
-    let run = null;
+    let run = null, crun = null;
     const flush = () => { if (run) { slabRects.push(run); run = null; } };
+    const cflush = () => { if (crun) { ceilRects.push(crun); crun = null; } };
     for (let i = 0; i < gw; i++) {
       const c = j * gw + i;
       const R = RX(c);
@@ -145,16 +150,19 @@ export function buildFloor(ctx) {
       }
       // 천장 (뚫린 곳·계단 우물 위는 다음 층 계단이 있으니 열어 둔다 — 맨 위층 계단은 덮는다)
       if (anyIn && !L.void[c] && !(R && ['lift', 'cargo', 'shaft'].includes(R.type))) {
-        if (sc === 'well' && ctx.next) continue;
+        if (sc === 'well' && ctx.next) { cflush(); continue; }
+        if (ctx.next && sc) cflush(); // 계단 칸 위는 위층 계단·계단참이 천장 노릇 (계단을 오를 머리 자리를 막지 않게)
+        else if (crun && crun.i1 === i - 1) crun.i1 = i; else { cflush(); crun = { j, i0: i, i1: i }; }
         const { col, pat, prm } = clCol(R);
         if (vaultH) {
           const p00 = [ox + i, ceilAt(ox + i, oz + j), oz + j], p10 = [ox + i + 1, ceilAt(ox + i + 1, oz + j), oz + j], p11 = [ox + i + 1, ceilAt(ox + i + 1, oz + j + 1), oz + j + 1], p01 = [ox + i, ceilAt(ox + i, oz + j + 1), oz + j + 1];
           cgb.quad(p00, p10, p11, p01, col, 0, pat, prm);
         } else if (isMezz || Math.max(...v) < 0) cgb.ceilRect(ox + i, oz + j, ox + i + 1, oz + j + 1, ceilAll, col, 0, pat, prm);
         else polyCell(cgb, ox + i, oz + j, v, ceilAll, col, pat, prm, true);
-      }
+      } else cflush();
     }
     flush();
+    cflush();
   }
   // 바닥판 충돌체: 줄을 세로로 합쳐 사각형으로
   const merged = [];
@@ -163,8 +171,20 @@ export function buildFloor(ctx) {
     if (m) m.j1 = rr.j; else merged.push({ i0: rr.i0, i1: rr.i1, j0: rr.j, j1: rr.j });
   }
   for (const m of merged) cols.push(colBox(ctx, ox + (m.i0 + m.i1 + 1) / 2, oz + (m.j0 + m.j1 + 1) / 2, (m.i1 - m.i0 + 1) / 2 + 0.02, (m.j1 - m.j0 + 1) / 2 + 0.02, 0, -SLAB, 0, true));
-  // 천장 충돌체 (머리가 닿는 곳): 위층이 없을 때만 — 있으면 위층 바닥판이 천장
+  // 천장 충돌체 (머리가 닿는 곳): 맨 위층은 바닥판 칸 그대로 (전과 같이)
   if (!ctx.next) for (const m of merged) cols.push(colBox(ctx, ox + (m.i0 + m.i1 + 1) / 2, oz + (m.j0 + m.j1 + 1) / 2, (m.i1 - m.i0 + 1) / 2, (m.j1 - m.j0 + 1) / 2, 0, ceilAll, ceilAll + 1, false));
+  //   위층이 있으면: 그린 천장 칸마다 (계단 칸 빼고) — 위층 바닥판이 없는 칸(위층이 더 좁은 작은 건물·물러난 층)에서도
+  //   뛰어올라 천장을 뚫고 위층 높이에 닿지 않게 (전에는 위층 바닥판만 천장이라, 층 높이가 낮은 건물에서 뛰면 위층으로 판정되어 위층 가구가 잡혔다)
+  else if (!isMezz) {
+    const cm = [];
+    for (const rr of ceilRects) {
+      const m = cm.find((q) => q.i0 === rr.i0 && q.i1 === rr.i1 && q.j1 === rr.j - 1);
+      if (m) m.j1 = rr.j; else cm.push({ i0: rr.i0, i1: rr.i1, j0: rr.j, j1: rr.j });
+    }
+    // 위층이 있으면 그 바닥 아래까지만 (위층 바닥 위로 솟지 않게)
+    const top = Math.max(ceilAll + 0.05, Math.min(ceilAll + 0.3, ctx.next.y - F.y - 0.02));
+    for (const m of cm) cols.push(colBox(ctx, ox + (m.i0 + m.i1 + 1) / 2, oz + (m.j0 + m.j1 + 1) / 2, (m.i1 - m.i0 + 1) / 2, (m.j1 - m.j0 + 1) / 2, 0, ceilAll, top, false));
+  }
   // ── 3. 바깥벽 (행진 사각형 윤곽) + 창 ──
   if (!isMezz) {
     const segs = [];

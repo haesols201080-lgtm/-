@@ -28,12 +28,13 @@ export class Indoor {
   /** 플레이어 높이 → 층 번호 */
   floorAtY(y) {
     let best = this.cur, by = -Infinity;
+    const p = this.game.player.pos, c = this.cellAt(p.x, p.z);
     for (const F of this.B.floors) {
       if (!F.reach || F.dead) continue;
       const fy = this.yOf(F.i);
       if (fy <= y + 0.6 && fy > by) {
-        // 중2층은 그 칸 위에 있을 때만
-        if (F.mezz) { const p = this.game.player.pos; const c = this.cellAt(p.x, p.z); if (c < 0 || !F.mask[c]) continue; }
+        // 그 층 바닥이 발밑에 있을 때만 (중2층·위층이 더 좁은 작은 건물: 위층 바닥이 없는 칸에서 뛰어도 위층이 되지 않게) — 지금 층은 늘 후보
+        if (F.i !== this.cur && (c < 0 || !F.mask[c])) continue;
         by = fy; best = F.i;
       }
     }
@@ -224,7 +225,10 @@ export class Indoor {
     if (c < 0) return false;
     const R = out.roomX[c] ? out.L.rooms[out.roomX[c] - 1] : null;
     if (!R || out.L.void[c] === 1) return false;
-    return !['lift', 'cargo', 'shaft'].includes(R.type);
+    if (['lift', 'cargo', 'shaft'].includes(R.type)) return false;
+    // 바깥벽 안쪽인가 (벽 앞 자투리 칸은 칸 가운데가 벽 밖일 수 있다 — 거기 세우면 바닥 없는 곳에 선다)
+    if (out.sdAt) { const [gx, gz] = this.grid(x, z); if (out.sdAt(gx, gz) > -0.05) return false; }
+    return true;
   }
   /** 두 점 사이에 벽이 없나 (칸 모서리를 건너는 곳마다) */
   segClear(i, ax, az, bx, bz) {

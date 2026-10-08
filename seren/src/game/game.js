@@ -917,9 +917,17 @@ export class Game {
     const k = Math.min(1, dt * 3);
     this._dlgCam.pos.lerp(pos, k);
     this._dlgCam.look.lerp(look, k);
-    this.rig.override = { pos: this._dlgCam.pos, look: this._dlgCam.look };
+    // 벽·건물에 막히면 두 사람 사이에서 카메라까지 막힌 곳 앞으로 당긴다 (대화 카메라가 벽 속·벽 너머로 가지 않게)
+    const at = this._dlgCam.pos.clone(), C = this.world.colliders;
+    if (C && C.cast) {
+      const piv = new THREE.Vector3((p.x + n.pos.x) / 2, Math.max(p.y + 1.5, n.pos.y + 1.6 * s), (p.z + n.pos.z) / 2);
+      const v = at.clone().sub(piv), L = v.length();
+      if (L > 0.01) { v.divideScalar(L); const hit = C.cast(piv.x, piv.y, piv.z, v.x, v.y, v.z, L, 0.42); if (hit < L) at.copy(piv).addScaledVector(v, Math.max(0.12, hit - 0.15)); }
+    }
+    this.rig.override = { pos: at, look: this._dlgCam.look };
     this.rig._applyOverride();
     this.rig.override = null;
+    this.interiors.clampCamera(this.engine.camera, this._dlgCam.look);
   }
 
   /** 움직임의 손맛: 먼지·물보라·날개 궤적·반짝임 */

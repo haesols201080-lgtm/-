@@ -513,20 +513,37 @@ export class Interiors {
     if (!cur || !this.inPocket) return;
     if (cam.near !== 0.15) { cam.near = 0.15; cam.updateProjectionMatrix(); }
     if (cur.cabin) return this._clampCabin(cam, target);
-    const ind = cur.indoor, i = ind.cur;
-    const bot = ind.yOf(i) + 0.3, top = ind.ceilY(i) - 0.3;
-    const pad = 0.35;
-    const ok = (x, y, z) => y < top && y > bot && ind.inside(i, x, z) && ind.inside(i, x + pad, z) && ind.inside(i, x - pad, z) && ind.inside(i, x, z + pad) && ind.inside(i, x, z - pad) && ind.segClear(i, target.x, target.z, x, z);
-    const a = target.clone();
-    a.y = Math.min(top - 0.05, Math.max(bot + 0.05, a.y));
-    if (ok(cam.position.x, cam.position.y, cam.position.z)) return;
-    const b = cam.position.clone();
-    let lo = 0, hi = 1;
-    for (let k = 0; k < 12; k++) { const m = (lo + hi) / 2; const q = a.clone().lerp(b, m); if (ok(q.x, q.y, q.z)) lo = m; else hi = m; }
-    const pos = a.clone().lerp(b, lo);
+    const ind = cur.indoor, i = ind.cur, out = ind.built.get(i);
+    const fy = ind.yOf(i), bot = fy + 0.3, flat = ind.ceilY(i) - 0.3;
+    const pad = 0.4; // 카메라와 벽면 사이 (가까운 면 0.15 m 가 벽을 자르지 않게)
+    const topAt = (x, z) => { if (!out || !out.ceilAt) return flat; const [gx, gz] = ind.grid(x, z); return Math.min(flat, fy + out.ceilAt(gx, gz) - 0.3); };
+    // 카메라가 설 수 있는 자리: 방 칸 안 · 바깥벽 면에서 pad 넘게 안쪽(그리는 벽 면 = 같은 거리장) · 사방 pad 안에 칸막이가 없고 · 바닥과 그 자리 천장 사이
+    const okPt = (x, y, z) => {
+      if (y <= bot || y >= topAt(x, z) || !ind.inside(i, x, z)) return false;
+      if (out && out.sdAt) { const [gx, gz] = ind.grid(x, z); if (out.sdAt(gx, gz) > -pad) return false; }
+      return ind.segClear(i, x, z, x + pad, z) && ind.segClear(i, x, z, x - pad, z) && ind.segClear(i, x, z, x, z + pad) && ind.segClear(i, x, z, x, z - pad);
+    };
+    // 플레이어에서 카메라까지 칸막이를 건너지 않는가
+    const path = (x, z) => ind.segClear(i, target.x, target.z, x, z);
+    const p0 = cam.position;
+    if (okPt(p0.x, p0.y, p0.z) && path(p0.x, p0.z)) return;
+    // 카메라 팔을 따라 바깥에서 안쪽으로: 설 수 있고 길이 트인 가장 먼 자리 (플레이어가 벽에 붙어 머리 둘레가 「안 되는 자리」여도 그 너머는 찾는다)
+    const a = target.clone(), b = p0.clone();
+    a.y = Math.min(topAt(a.x, a.z) - 0.05, Math.max(bot + 0.05, a.y));
+    let pos = null;
+    for (let k = 24; k >= 1; k--) { const q = a.clone().lerp(b, k / 24); if (okPt(q.x, q.y, q.z) && path(q.x, q.z)) { pos = q; break; } }
+    if (!pos) {
+      // 팔 위 어디도 안 되면: 머리 위에서 조금 뒤로, 내려다본다 (벽 속·벽 너머로는 가지 않는다)
+      const dx = b.x - a.x, dz = b.z - a.z, l = Math.hypot(dx, dz) || 1;
+      for (const back of [0.6, 0.3, 0]) {
+        const q = a.clone(); q.x += (dx / l) * back; q.z += (dz / l) * back; q.y = Math.min(topAt(q.x, q.z) - 0.05, a.y + 1.1);
+        if (q.y > bot && ind.inside(i, q.x, q.z) && path(q.x, q.z)) { pos = q; break; }
+      }
+      if (!pos) pos = a.clone();
+    }
     // 벽을 등져 카메라가 너무 가까워지면, 뒤로 물러나는 대신 위로 올라 내려다본다 (머리·목도리에 가리지 않게)
     const near = Math.hypot(pos.x - target.x, pos.z - target.z);
-    if (near < 2.6) pos.y = Math.min(top - 0.1, Math.max(pos.y, target.y + (2.6 - near) * 1.1));
+    if (near < 2.6) pos.y = Math.min(topAt(pos.x, pos.z) - 0.05, Math.max(pos.y, target.y + (2.6 - near) * 1.1));
     cam.position.copy(pos);
     cam.lookAt(target);
   }

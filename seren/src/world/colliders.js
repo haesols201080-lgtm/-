@@ -198,59 +198,63 @@ export class Colliders {
 
   /**
    * 선분 던지기 (카메라 팔): (o) 에서 단위 방향 (d) 로 maxT 까지, 두께 pad 의 공이 처음 닿는 거리 (없으면 maxT).
-   * 가는 기둥(가로등 등, 바닥 반지름 minSize 미만)과 camera: false 인 것은 무시한다. 시작점이 이미 안이면 그 충돌체는 건너뛴다.
+   * 가는 기둥(가로등 등, 바닥 반지름 minSize 미만)과 camera: false 인 것은 무시한다.
+   * 시작점이 충돌체에 pad 보다 가까우면 (벽에 기대 선 플레이어의 머리) 그 충돌체는 시작점까지의 거리만큼만 두껍게 본다 —
+   * 전에는 이런 벽을 통째로 건너뛰어, 벽에 붙어 카메라를 돌리면 카메라 팔이 바로 옆 벽을 뚫고 나가 벽 너머를 비췄다.
+   * 시작점이 충돌체 안에 들어 있을 때만 건너뛴다. 상자·원기둥 모두 높이까지 함께 보는 3차원 구간으로 잰다.
    */
   cast(ox, oy, oz, dx, dy, dz, maxT, pad = 0.4, minSize = 0.45) {
     const mx = ox + dx * maxT * 0.5, mz = oz + dz * maxT * 0.5;
     const list = this.near(mx, mz, maxT * 0.5 + pad + 1, _list);
     let best = maxT;
     const hz2 = dx * dx + dz * dz;
+    const slab = (p, v, e) => {
+      if (Math.abs(v) < 1e-9) return Math.abs(p) <= e ? _all : null;
+      const a = (-e - p) / v, b = (e - p) / v;
+      return a < b ? [a, b] : [b, a];
+    };
     for (const c of list) {
       if (!c.solid || c.camera === false) continue;
       const big = c.type === 'cyl' ? c.r : Math.max(c.hx, c.hz);
       if (big < minSize) continue;
-      const top = this._maxTop(c);
-      // 수평 단면 안에 머무는 구간 [t0, t1]
-      let t0 = -Infinity, t1 = Infinity;
+      const top = this._maxTop(c), ymid = (c.y0 + top) / 2, yh = (top - c.y0) / 2;
+      const ey = Math.max(0, Math.abs(oy - ymid) - yh);
+      let t0, t1;
       if (c.type === 'cyl') {
-        const R = c.r + pad, fx = ox - c.x, fz = oz - c.z;
-        const cc = fx * fx + fz * fz - R * R;
-        if (hz2 < 1e-9) { if (cc > 0) continue; }
+        const fx = ox - c.x, fz = oz - c.z;
+        const er = Math.max(0, Math.hypot(fx, fz) - c.r);
+        const g = Math.max(er, ey);
+        if (g < 0.01) continue; // 시작점이 이 충돌체 안
+        const pe = Math.min(pad, g - 0.01);
+        const R = c.r + pe, cc = fx * fx + fz * fz - R * R;
+        if (hz2 < 1e-9) { if (cc > 0) continue; t0 = -Infinity; t1 = Infinity; }
         else {
           const b = fx * dx + fz * dz, disc = b * b - hz2 * cc;
           if (disc < 0) continue;
           const sq = Math.sqrt(disc);
           t0 = (-b - sq) / hz2; t1 = (-b + sq) / hz2;
         }
+        const sy = slab(oy - ymid, dy, yh + pe);
+        if (!sy) continue;
+        t0 = Math.max(t0, sy[0]); t1 = Math.min(t1, sy[1]);
       } else {
         const fx = ox - c.x, fz = oz - c.z;
         const lx = fx * c.cos - fz * c.sin, lz = fx * c.sin + fz * c.cos;
+        const ex = Math.max(0, Math.abs(lx) - c.hx), ez = Math.max(0, Math.abs(lz) - c.hz);
+        const g = Math.max(ex, ez, ey);
+        if (g < 0.01) continue; // 시작점이 이 충돌체 안
+        const pe = Math.min(pad, g - 0.01);
         const ldx = dx * c.cos - dz * c.sin, ldz = dx * c.sin + dz * c.cos;
-        const slab = (p, v, e) => {
-          if (Math.abs(v) < 1e-9) return Math.abs(p) <= e ? [-Infinity, Infinity] : null;
-          const a = (-e - p) / v, b = (e - p) / v;
-          return a < b ? [a, b] : [b, a];
-        };
-        const sx = slab(lx, ldx, c.hx + pad), sz = slab(lz, ldz, c.hz + pad);
-        if (!sx || !sz) continue;
-        t0 = Math.max(sx[0], sz[0]); t1 = Math.min(sx[1], sz[1]);
-        if (t0 > t1) continue;
+        const sx = slab(lx, ldx, c.hx + pe), sz = slab(lz, ldz, c.hz + pe), sy = slab(oy - ymid, dy, yh + pe);
+        if (!sx || !sz || !sy) continue;
+        t0 = Math.max(sx[0], sz[0], sy[0]); t1 = Math.min(sx[1], sz[1], sy[1]);
       }
-      if (t1 < 0 || t0 > best) continue;
-      if (t0 < 0) continue; // 시작점(플레이어 머리)이 이미 그 안 — 벽에 기대 선 경우 등
-      // 그 구간에서 높이가 기둥 [y0 - pad, 윗면 + pad] 와 겹치는 첫 지점
-      const lo = c.y0 - pad, hi = top + pad;
-      let ta = t0, tb = Math.min(t1, best);
-      if (Math.abs(dy) < 1e-9) { if (oy < lo || oy > hi) continue; }
-      else {
-        const ya = (lo - oy) / dy, yb = (hi - oy) / dy;
-        ta = Math.max(ta, Math.min(ya, yb)); tb = Math.min(tb, Math.max(ya, yb));
-        if (ta > tb) continue;
-      }
-      if (ta < best) best = Math.max(0, ta);
+      if (t0 > t1 || t1 < 0 || t0 > best) continue;
+      if (t0 < best) best = Math.max(0, t0);
     }
     return best;
   }
 }
 
 const _list = [];
+const _all = [-Infinity, Infinity];

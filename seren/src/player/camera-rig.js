@@ -83,7 +83,8 @@ export class CameraRig {
     if (C && C.cast) {
       const st = this.smoothTarget;
       const hit = C.cast(st.x, st.y, st.z, dir.x, dir.y, dir.z, dist, 0.42);
-      const want2 = Math.max(0.9, hit - 0.15);
+      // 닿은 곳보다 0.15 m 앞 — 머리 바로 옆이 벽이면 거의 머리까지 당기고, 아래에서 머리 위로 올린다 (최소 길이를 두면 그만큼 벽 속·벽 너머로 나간다)
+      const want2 = Math.max(0.12, hit - 0.15);
       if (want2 < this.armLen || this.armLen == null) this.armLen = want2;
       else this.armLen = Math.min(want2, this.armLen + dt * Math.max(2.5, (want2 - this.armLen) * 3));
       dist = Math.min(dist, this.armLen);
@@ -112,7 +113,15 @@ export class CameraRig {
     // 속도감: 시야각
     const fv = this.fovBase + Math.min(20, Math.max(0, player.hspeed - 8) * 0.42);
     cam.fov += (fv - cam.fov) * Math.min(1, dt * 3);
-    cam.near = s === 'glide' || s === 'current' || player.pos.y - player.groundH > 60 ? 1.2 : this.blocked ? 0.2 : 0.6; // 벽 가까이 당겨졌으면 가까운 면을 줄여 벽 속이 보이지 않게
+    // 가까운 면: 카메라 둘레의 벽·구조물까지 거리에 맞춰 줄인다 — 팔이 막히지 않아도 옆을 스치는 벽이 가까운 면에 잘려 뚫려 보이지 않게
+    let nearC = s === 'glide' || s === 'current' || player.pos.y - player.groundH > 60 ? 1.2 : this.blocked ? 0.2 : 0.6;
+    if (C && C.cast && nearC < 1) {
+      const p = cam.position, fx = Math.sin(this.yaw), fz = Math.cos(this.yaw);
+      let clear = 9;
+      for (const [dx, dz] of [[fz, -fx], [-fz, fx], [-fx, -fz]]) clear = Math.min(clear, C.cast(p.x, p.y, p.z, dx, 0, dz, 1.2, 0.05));
+      nearC = Math.max(0.1, Math.min(nearC, clear * 0.55));
+    }
+    cam.near = nearC;
     cam.updateProjectionMatrix();
 
     if (this.override) this._applyOverride(dt);
