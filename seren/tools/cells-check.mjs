@@ -155,21 +155,23 @@ for (const pid of want) {
             // 나선 계단 가장자리: 몇 디딤판마다 기둥 쪽·계단실 네 귀퉁이 쪽으로 걸어 들어가 본다 — 발밑이 꺼지면(우물로 떨어짐) 실패
             if (part.kind === 'spiral' && ri > 1 && ri < R0.length - 2 && ri % 4 === 0 && !edgeFall) {
               const p = g.player.pos, y0 = p.y, sx = p.x, sz = p.z;
+              // 매 방향 뒤에 정확히 그 자리(x·y·z)로 되돌린다 — 여러 층을 꿰는 계단실에서 x·z 로만 걸어 돌아가면 아래·위 층의 디딤판에 오를 수 있다
+              const back = () => { g.player.teleport(sx, y0, sz, 0.1); g.player.vel.set(0, 0, 0); window.__settle(4); };
               const fy = ind.yOf(i);
               for (const [q, [tx, tz]] of [Pw(0, 0), Pw(-across / 2, -along / 2), Pw(across / 2, -along / 2), Pw(-across / 2, along / 2), Pw(across / 2, along / 2)].entries()) {
                 // 떨어짐 = 발이 땅에서 떨어진 채(공중) 0.8 m 넘게 내려감, 또는 이 층 바닥 아래(우물)로 내려감 — 디딤판을 따라 걸어 내려가는 것은 떨어짐이 아니다
-                let fall = 0, airY = null, below = 0;
+                let fall = 0, airY = null, below = 0, airAt = '';
                 const DT = 1 / 60;
                 for (let f = 0; f < 70; f++) {
                   window.__walkTo(tx, tz, DT, 0.05);
-                  if (g.player.state === 'air') { if (airY === null) airY = p.y; }
+                  if (g.player.state === 'air') { if (airY === null) { airY = p.y; const [gx, gz] = ind.grid(p.x, p.z), dx = gx - info.cx, dz = gz - info.cz; airAt = `계단 로컬 (${(dx * LX[0] + dz * LX[1]).toFixed(2)}, ${(dx * LZ[0] + dz * LZ[1]).toFixed(2)}) 반지름 ${Math.hypot(dx, dz).toFixed(2)} · 높이 ${(p.y - fy).toFixed(2)}`; } }
                   else if (airY !== null) { fall = Math.max(fall, airY - p.y); airY = null; }
                   below = Math.min(below, p.y - fy);
                 }
                 if (airY !== null) { window.__settle(60); fall = Math.max(fall, airY - p.y); below = Math.min(below, p.y - fy); }
-                if (fall > 0.8 || below < -0.3) { edgeFall = `경로점 ${ri} 에서 ${q ? '귀퉁이' : '기둥'} 쪽으로 ${fall > 0.8 ? `${fall.toFixed(1)} m 떨어짐` : ''}${below < -0.3 ? ` 층 바닥 아래 ${(-below).toFixed(1)} m (우물)` : ''}`; break; }
-                window.__walkTo(sx, sz, 3, 0.2);
-                if (Math.abs(p.y - y0) > 0.3) window.__walkTo(sx, sz, 3, 0.2);
+                if (fall > 0.8 || below < -0.3) edgeFall = `경로점 ${ri} 에서 ${q ? `귀퉁이 ${q}` : '기둥'} 쪽으로${fall > 0.8 ? ` ${fall.toFixed(1)} m 떨어짐` : ''}${below < -0.3 ? ` 층 바닥 아래 ${(-below).toFixed(1)} m (우물)` : ''}${airAt ? ` — 발이 떨어진 곳 ${airAt}` : ''}`;
+                back();
+                if (edgeFall) break;
               }
             }
           }
