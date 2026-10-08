@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { GB } from './geom.js';
 import { spiralPlan, spiralRail } from './spiral.js';
+import { TALLEST } from '../data/body.js';
 import { PAT, interiorMaterial, windowMaterial } from './material.js';
 import { drawFixture } from './props.js';
 import { FIX, ROOMS, flowRoom, PART_T } from './catalog.js';
@@ -764,7 +765,8 @@ function partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st) {
       const dc = clip(ex0, ez0, ex1, ez1) || [ex0, ez0, ex1, ez1];
       const dmx = (dc[0] + dc[2]) / 2, dmz = (dc[1] + dc[3]) / 2, dlen = Math.hypot(dc[2] - dc[0], dc[3] - dc[1]);
       const dv = dc[0] === dc[2];
-      const head = e.kind === 'opening' ? Math.min(H, 2.9) : Math.min(H, 2.4);
+      // 문 높이: 가장 큰 주민(3.29 m)이 머리를 숙이지 않고 지나가게 (바깥 정문은 3.9 m) — 전에는 2.4 m 라 주민 머리가 인방을 뚫었다 (v24)
+      const head = e.kind === 'opening' ? Math.min(H - 0.05, TALLEST + 0.35) : Math.min(H - 0.1, TALLEST + 0.2);
       const openW = dlen - 0.02; // 문짝은 열린 폭 전체 (양쪽 1 cm)
       // 기둥 둘 + 인방 + 인방 위 벽 — 기둥은 열린 폭 바깥(칸막이 끝)에 세운다: 1 m 문이 기둥 사이 0.76 m 만 남아 몸(0.7 m)이 끼던 문제 (v24 끼임)
       for (const sgn of [-1, 1]) {

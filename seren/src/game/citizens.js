@@ -5,6 +5,7 @@
 //  · 말 걸기(E): 이야기 · 함께 놀기(술래잡기·노래 주고받기·꽃 가꾸기·짐 나르기·장치 음 맞추기·함께 고요해지기) · 장터 거래 ·
 //    선물 · 친해지면 집에 초대. 친한 정도는 저장된다.
 //  · 사람은 단단하다: 플레이어가 지나갈 수 없고, 사람도 플레이어를 피해 걷는다.
+import { AWEN_H } from '../data/body.js';
 import * as THREE from 'three';
 import { Crowd, AwenMotion } from '../world/crowd.js';
 import { ROLES, INDOOR, CIT_LINES, SYL_A, SYL_B, GOODS } from '../data/citizens.js';
@@ -232,7 +233,8 @@ export class Citizens {
         }
       } else p.v = 0;
       // 걸을 때는 건물 벽·나무·가로등을 뚫지 않고 미끄러지듯 돌아간다 (플레이어와 같은 밀어내기)
-      if (moving > 0.3) g.world.colliders.pushOut(p.pos, 0.3 * p.scale + 0.12, 1.8 * p.scale, 0.6);
+      // 충돌 높이는 실제 키(배율 1 에서 3.1 m — 전에는 1.8 m 라 머리 높이의 차양·표지판 밑을 그냥 지나 머리가 뚫고 나왔다)
+      if (moving > 0.3) g.world.colliders.pushOut(p.pos, 0.3 * p.scale + 0.12, AWEN_H * p.scale, 0.6);
       // 플레이어를 비켜 간다
       const ox = p.pos.x - pp.x, oz = p.pos.z - pp.z, od = Math.hypot(ox, oz);
       const minD = 0.55 * p.scale + 0.45;

@@ -4,6 +4,7 @@
 //  · 바깥보다 큰 실내는 없다: 층마다 바닥~천장의 모든 높이에서 바깥벽 안쪽인 칸만 쓴다.
 //  · 위로 좁아지는 건물은 아래 부피의 지붕이 위층의 테라스가 된다(바깥에서 보이는 단 = 안에서 나갈 수 있는 단).
 //  · 순서는 건물마다 다르지만 아무렇게나 섞지 않는다: 가게·공공은 아래, 사무·연구는 가운데, 주거·호텔은 위, 전망·식당은 꼭대기.
+import { TALLEST, HEADROOM } from '../data/body.js';
 import { volumeOf, gridOf, maskOf, sdfAt, FLH, BAY, CELL, cellX, cellZ } from './volume.js';
 import { FUSE } from './catalog.js';
 import { uidOf, seedOf, rngFor, pick, weighted, shuffle, GEN_VERSION } from './ids.js';
@@ -17,7 +18,9 @@ export const SLAB = 0.35; // 바닥판 두께
 const MIN_CELLS = 10; // 이보다 작은 층은 쓰지 않는다 (첨탑 끝)
 /** 실내 천장의 가장 낮은 높이 (m): 서서 2 m 뛰어올라도(머리 1.75 m) 머리가 천장에 닿을 뿐 뚫지 않고, 가구 위에 서도 넉넉하게 —
  *  바깥 외벽의 층 띠가 낮은 건물(2.2~2.6 m)도 실내는 이만큼 (실내는 바깥 부피에 끌려가지 않는다 · v24) */
-export const MIN_CEIL = 3.1;
+// 실내 천장의 가장 낮은 높이: 가장 큰 주민(아웬, 3.29 m) + 여유 — 사람 키(1.75 m)가 아니라 그 공간을 쓰는 가장 큰 몸이 기준 (v24 · 전에는 3.1 m 라 큰 주민의 머리가 천장을 뚫었다).
+//  사람의 제자리 점프 꼭대기(머리 3.52 m)도 이 아래 — 점프해도 천장에 머리를 박지 않는다.
+export const MIN_CEIL = Math.ceil((TALLEST + HEADROOM) * 10) / 10; // 3.7
 /** 쓰임마다 1층 덮개의 가장 깊은 안쪽(바깥벽에서 칸 수)이 이만큼은 되어야 방이 찌그러지지 않는다:
  *  고리형(심 + 복도 + 양쪽 방) 8 · 넓은 홀 5 · 작은 집·정원 4 */
 const NEED_DEPTH = { office: 8, lab: 8, admin: 8, hotel: 8, heal: 8, school: 8, market: 5, cafe: 5, hall: 5, factory: 5, depot: 5, museum: 5, library: 5, terminal: 5, plant: 5, garden: 4, farm: 4 };
@@ -593,8 +596,9 @@ function buildAt(r, ctx, S) {
       if (n2 >= n * 0.7) { mask = m2; n = n2; h += t.h; ceil = t.ceil; kk++; }
     }
     floors.push({ y: s.y, h, ceil, mod: s.mod, ftype: s.ftype, mask, n, use, vault: vault || s.vault, dep: D.deps[k] || null });
-    if (bigHall && ceil - s.y > 7.0) {
-      const my = s.y + Math.max(3.6, Math.min(4.6, (ceil - s.y) * 0.45));
+    // 중2층: 밑을 지나는 주민과 중2층 위의 주민 모두 머리 공간이 남을 때만 (밑: 중2층 바닥판 아래 MIN_CEIL, 위: 중2층 바닥에서 천장까지 MIN_CEIL)
+    if (bigHall && ceil - s.y >= 2 * MIN_CEIL + SLAB) {
+      const my = s.y + Math.max(MIN_CEIL + SLAB, Math.min(ceil - s.y - MIN_CEIL, Math.max(3.6, Math.min(4.6, (ceil - s.y) * 0.45))));
       const head = maskOf(V, G, my, my + 2.7).m;
       const mm = new Uint8Array(mask.length);
       let mn = 0;
@@ -630,7 +634,7 @@ function buildAt(r, ctx, S) {
   // 실내 높이 (v24): 바깥 층 띠와 따로 — 천장은 MIN_CEIL 이상, 층과 층 사이는 (실내 천장 + 바닥판) 이상.
   //   iy = 1층 바닥에서 이 층 바닥까지의 실내 높이(지하는 음수), ic = 이 층 바닥에서 천장까지. 중2층은 홀 바닥에서 바깥과 같은 높이 차.
   //   바깥과 맞닿는 것(테라스·옥상·공중다리 바닥 높이)은 그대로 F.y·F.ceil 을 쓴다.
-  for (const F of all) F.ic = F.mezz ? Math.max(F.ceil - F.y, 2.6) : Math.max(F.ceil - F.y, MIN_CEIL);
+  for (const F of all) F.ic = Math.max(F.ceil - F.y, MIN_CEIL);
   {
     let iy = 0, prevF = all[gi];
     all[gi].iy = 0;
