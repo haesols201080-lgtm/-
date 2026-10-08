@@ -46,7 +46,8 @@ async function scenario(name, at, script) {
   const waitPhase = (ph, uncovered = true, ms = 120000) => page.waitForFunction(([ph, un]) => { const l = window.__log; const e = l[l.length - 1]; return e && ph.includes(e.phase) && (!un || e.op < 0.05); }, [ph, uncovered], { timeout: ms, polling: 100 }).then(() => true, () => false);
   let dark = 0;
   await script({ page, tap, waitPhase, fails, setDark: (d) => (dark = d) });
-  if (!(await waitPhase(['wake', 'play'], false, 240000))) fails.push('본편으로 넘어가지 않음');
+  // ending 은 들판 처음을 건너뛰어 들판 둘레 세계가 깨어날 때 한꺼번에 지어진다 — 헤드리스에서는 몇 분 걸려 길게 기다린다
+  if (!(await waitPhase(['wake', 'play'], false, name === 'ending' ? 900000 : 240000))) fails.push('본편으로 넘어가지 않음');
   await page.waitForTimeout(400);
   const log = await page.evaluate(() => window.__log);
   for (let i = 1; i < log.length; i++) {
