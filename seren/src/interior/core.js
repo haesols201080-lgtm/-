@@ -5,6 +5,7 @@
 //  · 아주 높은 탑은 승강기를 낮은층용·높은층용으로 나눈다(높은층용은 로비에서 바로 올라가는 급행).
 //  · 심 앞(정면) 칸은 승강기 홀 — 복도와 이어진다. 계단 문·승강기 문은 모두 그쪽을 본다.
 import { FUSE } from './catalog.js';
+import { SPIRAL2_MAXH } from './spiral.js';
 
 // 부품: w×d 칸, 정면(+d 쪽)에 문. d 가 6 보다 작으면 뒤쪽에 붙고 앞은 승강기 홀
 const COMP = {
@@ -86,6 +87,11 @@ export function planCore(B) {
   // 모든 층의 교집합 (작은 층부터 빼 보며).
   // 여섯 층 넘는 탑은 승강기가 있는 심을 먼저 — 모든 층에 안 들어가면 위의 좁은 층(4분의 1까지, 아주 작은 층은 몇 개든)을 심이 지나지 않는 층으로 두고라도.
   // 그래도 안 되면 승강기 없는 심으로 (가는 달걀 탑이 나선 계단 하나로 스무 층을 오르지 않게)
+  // 작은 나선 계단(2×2)은 층 사이가 낮을 때만 오를 수 있다 (spiral.js) — 높은 층이 있으면 건너뛰고, 그 때문에 심이 나빠지면(승강기를 잃거나 층이 끊김)
+  //  B.coreTight 로 알려 실내 배율을 키워 다시 짓게 한다 (program.makeBuilding)
+  let skipped = null;
+  const gapMax = (serve) => { let m = 0; for (let k = 1; k < serve.length; k++) m = Math.max(m, (serve[k].iy ?? serve[k].y) - (serve[k - 1].iy ?? serve[k - 1].y)); return m; };
+  const hasLift = (list) => list.some((t) => COMP[t].kind === 'lift' || COMP[t].kind === 'cargo');
   for (const strict of nUp >= 6 ? [true, false] : [false]) {
     let serve = fl.slice();
     // 맨 위에서부터 이어진 아주 작은 층(심을 빼면 거의 남지 않는 40 m² 아래 — 첨탑 끝·거품 꼭대기)은 몇 개든 심 밖으로 둘 수 있다
@@ -130,8 +136,10 @@ export function planCore(B) {
         }
         return false;
       };
+      const tallGap = gapMax(serve) > SPIRAL2_MAXH;
       for (const list of coreOptions(B, nUp)) {
         if (strict && !list.some((t) => COMP[t].kind === 'lift')) continue;
+        const tooSmall = tallGap && list.includes('spiral2');
         const L = layoutComps(list);
         let best = null, bs = Infinity;
         const cands = [];
@@ -165,6 +173,8 @@ export function planCore(B) {
           }
         }
         if (!best) continue;
+        if (tooSmall) { if (!skipped || hasLift(list)) skipped = { lift: hasLift(list) }; continue; }
+        if (skipped && ((skipped.lift && !hasLift(list)) || serve.length < fl.length)) B.coreTight = true;
         // 점수 좋은 차례로 층을 가르지 않는 자리 (서른 곳까지 — 모두 가르면 가장 좋은 자리)
         cands.sort((a, b) => a[0] - b[0]);
         for (const [, c] of cands.slice(0, 30)) if (!splits(L, c)) { best = c; break; }
@@ -177,6 +187,7 @@ export function planCore(B) {
       serve = serve.filter((F) => F !== drop);
     }
   }
+  if (skipped) B.coreTight = true;
   B.core = null; B.links = [];
   for (const F of B.floors) F.reach = F.i === B.ground; // 심이 없으면 1층만
   return null;
@@ -231,6 +242,12 @@ function finish(B, L, best, list, serve) {
     const coreC = new Set();
     for (const p of parts) for (const [i, j] of p.cells) coreC.add(j * gw + i);
     for (const [i, j] of lobby) coreC.add(j * gw + i);
+    // 심 문 앞 두 칸 × 세 칸도 (layout.mezzStair 와 같은 규칙 — 계단 난간이 계단실·승강기 문을 막지 않게)
+    for (const p of parts) {
+      if (p.kind === 'shaft' || !p.door) continue;
+      const [ci, cj] = p.door.c, [fi, fj] = p.door.dir;
+      for (let k = 1; k <= 2; k++) for (let w = -1; w <= 1; w++) { const i = ci + fi * k + (fj ? w : 0), j = cj + fj * k + (fi ? w : 0); if (i >= 0 && j >= 0 && i < gw && j < B.G.gh) coreC.add(j * gw + i); }
+    }
     const ok = (i, j) => i >= 0 && j >= 0 && i < gw && j < B.G.gh && H.mask[j * gw + i] && !F.mask[j * gw + i] && !coreC.has(j * gw + i);
     if (!searchMezzStair(gw, F.mask, F.y - H.y, ok, null)) { F.dead = true; B.links = B.links.filter((k) => k.mezz !== F.i); }
   }

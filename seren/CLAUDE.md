@@ -184,6 +184,16 @@ src/
 - **실내로 옮기기**: 바닥 높이를 정확히 아는 곳은 `player.teleport(x, y, z, 0.1)` — 기본(위로 3 m 까지 찾기)은 층고 3.3 m 아래 층에서 윗층 바닥판에 올라선다.
 - **확인 도구**: `node tools/interior-gen.mjs`(모든 모양×쓰임×크기: 갇힌 방·정문·바깥 부피 밖 칸·승강기 칸·쓰임 차례·저장 왕복·중2층 계단·결정성·가짓수), `node tools/interior-gen.mjs show slab office 30 22 120 [층들] [bridge=k]`(층 평면을 글자로, bridge=k 면 일괄 검사의 k 번째처럼 공중다리 하나), `node tools/ops-flow.mjs [쓰임들|all] [shots] [map]`(한 번 불러와 쓰임마다 들어가 시설·사람·일자리·과제·모아·지도·저장 확인 + 별씨 합), `node tools/indoor.mjs 이름 '{"pid":"market"}' '[스크립트…]'`(한 건물 스크린샷), `node tools/zfight.mjs [쓰임들|all] [건물 수] [층 수]`(그린 층의 모든 삼각형에서 같은 평면·같은 쪽으로 넓이가 겹치는 면 = Z-fighting 찾기). 페이지 안: `SEREN.game.interiors.debugView('plan'|'room'|'off')`.
 
+## v24 (방·구역 셀 · 최소 방 크기 · 빛길 역)에서 알아 둘 것
+- **셀** (`interior/cells.js`): 실내는 실제 문으로 갈리는 방 무리(셀) 단위로 짓는다 — `building.setCell(key)` 가 지금 셀의 벽·가구·사람·충돌체·상호작용만 만든다. 셀 열쇠: `F층:뿌리방`(한 층의 무리), `S부품`(계단실 — 그 계단이 서는 모든 층), 아트리움 `A`, 중2층은 아래 홀과 한 셀. 문턱을 넘으면 `ui.blink` 로 짧게 가리고 옆 셀로. 다른 셀의 것을 고르거나 비추면 안 된다 — 새 상호작용·카메라 코드는 지금 셀(`ind.cellKey`)만 볼 것. 시험: `node tools/cells-check.mjs [쓰임들|all] [건물 수] [층 수]`(문마다 걸어서 넘기 · 계단 오르기 · 안전장치 기록).
+- **최소 방 크기** `catalog.MIN_FIT` = [방 안에 들어가야 할 정사각형 한 변, 넓이] — 큰 방 상한은 없다. `layout.minSizeMerge`(좁은 방은 이웃과 합침) → `onePiece`(합친 뒤 방을 다시 한 덩어리로) → 그래도 본실이 좁거나(`narrowMain`) 심이 좁으면(`B.coreTight`) `program.makeBuilding` 이 실내 배율 S 를 키워 다시 짓는다(최대 3). 새 방 종류는 `MIN_FIT` 에도 한 줄.
+- **문**: `layout.makeDoors` 는 같은·바로 옆 칸 경계에 문을 겹쳐 내지 않는다(`used`·`near`). 문틀 기둥은 열린 폭 바깥에 선다(1 m 문 = 1 m 지나갈 폭, 몸 지름 0.7 m).
+- **나선 계단** (`interior/spiral.js` 의 `spiralPlan`): render·core·검사기가 같은 식. 2×2 칸은 층 사이 `SPIRAL2_MAXH`(3.4 m) 아래만, 3×3 이상은 한 바퀴로 8 m 까지 오른다. 두 바퀴는 둘째 바퀴가 아래·위 계단참에 머리 공간을 남길 때만. 계단참 난간 틈 0.9 m. 모양을 바꾸면 `node tools/spiral-sim.mjs`(실제 충돌체 + 플레이어의 밀기·발밑으로 칸 크기 × 층 높이를 모두 걸어 봄, 몇 초)로 먼저.
+- **후처리 안전장치**: `engine.sanitize` 가 블룸 입력·최종 출력에 NaN·무한대 → 0 을 끼운다. 셰이더에서 `pow(x, e)` 의 x 가 음수가 될 수 있으면 `clamp` 로 감쌀 것(모바일 GPU 에서 NaN → 블룸이 검은 판으로 번짐). 시험: `node tools/intro-skip.mjs`.
+- **빛길 역**: 노선·역 크기·역 자리는 `data/transit-lines.js`(`LINES`·`STATION`·`stationSites()`) 하나 — 지형 평탄화(`heightfield`)와 역 모델(`transit._station`)이 같은 값을 쓴다. 역 터는 이웃 장소의 단이 있으면 그 높이. 거점 역의 갈래 관은 역 끝 너머 고리에서 갈라진다(`_buildSpoke`). 시험: `node tools/passage-check.mjs`(역마다 양 끝·양쪽 걸어 들어가기).
+- **거리 소품의 틈** (`cityfabric._propRoom`): 소품끼리·건물과 0.85 m 아래 틈이 생기는 자리에는 놓지 않는다(`force` 는 조작대처럼 꼭 있어야 하는 것만). 시험: `node tools/prop-gaps.mjs`.
+- 그 밖의 검사: `node tools/p0-geom.mjs`(착륙지 표지 고리와 기둥), `node tools/cam-check.mjs`(셀마다 걸으며 카메라가 벽을 넘지 않는가), `node tools/act-all.mjs`·`act-out.mjs`(실내·바깥 모든 상호작용).
+
 ## 지켜야 할 것
 - 기존 저장 파일이 깨지지 않게: 저장 형식을 바꾸면 `state.js` 의 `migrate()` 를 손보세요.
 - 본편 흐름이 끊기지 않았는지 `node tools/flow.mjs` 로 확인하세요(마지막 줄까지 퀘스트가 진행되어야 함).

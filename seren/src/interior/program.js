@@ -526,7 +526,8 @@ export function makeBuilding(r, ctx) {
   // v24 최소 방 크기: 층의 본실·세대 첫 방이 그 쓰임의 최소(정사각형 한 변·넓이)에 못 미치면 실내를 넓혀 다시 짓는다 —
   // 바깥 크기에 맞추려 방을 찌그러뜨리는 것보다 넉넉한 실내가 먼저 (큰 방의 상한은 없다). 쓰임 묶음마다 가장 좁은 층과 첫 층을 본다.
   const probeOff = typeof process !== 'undefined' && process.env && process.env.SEREN_S1;
-  for (let guard = 0; B && !probeOff && guard < 5 && S < 3 && narrowFloors(B) > 0; guard++) {
+  // 심도 같다: 층이 높아 작은 나선 계단(2×2)을 못 쓰는데 큰 심이 안 들어가면(B.coreTight) 넓혀 다시
+  for (let guard = 0; B && !probeOff && guard < 5 && S < 3 && (B.coreTight || narrowFloors(B) > 0); guard++) {
     S = Math.min(3, S + (S < 1.5 ? 0.25 : 0.5));
     B = buildAt(r, ctx, S);
   }

@@ -9,6 +9,7 @@ import { packB, unpackB, packL, unpackL } from '../src/interior/store.js';
 import { furnishFloor, ESSENTIAL } from '../src/interior/recipes.js';
 import { FIX, MIN_FIT_SKIP, minFit, fitSide } from '../src/interior/catalog.js';
 import { navGrid } from '../src/interior/nav.js';
+import { SPIRAL2_MAXH } from '../src/interior/spiral.js';
 
 const A = cityArchetypes();
 const profile = (k) => facadeProfile(k, A[k] && A[k].hi);
@@ -153,6 +154,18 @@ if (!cmd || cmd === 'all') {
       // ── 바깥과 안이 맞는가 ──
       const tag = `${kind}/${use}/${hw}x${h}`;
       stats.scale[B.V.S] = (stats.scale[B.V.S] || 0) + 1;
+      // 나선 계단: 2×2 칸은 층 사이 SPIRAL2_MAXH 아래만 (그보다 높으면 몸이 못 오른다 — spiral.js) · 심이 좁은 채 남은 건물
+      if (B.coreTight) { stats.coreTight = (stats.coreTight || 0) + 1; if ((stats.coreTight || 0) <= 6) problems.push(`${tag}: 심이 좁음 (높은 층에 작은 나선 계단밖에 안 들어감, S ${B.V.S})`); }
+      for (const lk of B.links || []) {
+        const p = B.core && B.core.parts[lk.part];
+        if (!p || p.kind !== 'spiral') continue;
+        stats.spirals = (stats.spirals || 0) + 1;
+        const fs = lk.floors.map((i) => B.floors[i]).sort((a, b) => a.iy - b.iy);
+        for (let k = 1; k < fs.length; k++) {
+          const gap = fs[k].iy - fs[k - 1].iy;
+          if (p.w <= 2 && p.d <= 2 && gap > SPIRAL2_MAXH + 1e-6) { stats.spiralBad = (stats.spiralBad || 0) + 1; if (stats.spiralBad <= 6) problems.push(`${tag}: 작은 나선 계단이 ${fs[k - 1].label}→${fs[k].label}층 ${gap.toFixed(1)} m 를 잇는다`); }
+        }
+      }
       const Vv = B.V, G = B.G;
       let outside = 0, cellsN = 0;
       for (const F of B.floors) {
@@ -310,6 +323,7 @@ if (!cmd || cmd === 'all') {
   console.log(`바깥 부피 밖 칸 ${stats.outside}/${stats.cells} · 이음 검사 ${stats.links} · 쓰임 차례 검사 ${stats.order} (전문 건물 ${stats.special}) · 정문-바깥 문 (가장 가까운 칸 기준) 최대 ${stats.doorD.toFixed(1)} m · 테라스 문 없는 큰 테라스 ${stats.noTerrace} · 저장 왕복 ${stats.persist} · 공중다리 문 ${stats.bridges} (승강기 안 서는 층 ${stats.bridgeNoLift}, 문 → 바깥 외벽 최대 ${(stats.bridgeWall || 0).toFixed(1)} m, 다리 폭 밖으로 비킨 문 ${stats.bridgeOff || 0} · 최대 ${(stats.bridgeSide || 0).toFixed(1)} m)`);
   console.log(`칸막이에 닿은 가구: 벽 두께만큼 밀어냄 ${stats.nudged} · 밀 곳이 없어 치움 ${stats.wallRemoved || 0} · 칸막이에 파고든 채 남은 표시 가구 ${stats.wallStuck}${stats.wallStuck ? ` (${Object.entries(stats.stuckWhy).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k} ${v}`).join(', ')})` : ''}`);
   console.log(`좁은 방 (최소 크기 미달): 방 ${stats.fitRooms} 중 ${stats.narrow} — ${Object.entries(stats.narrowT).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+  console.log(`나선 계단 ${stats.spirals || 0} · 오를 수 없는 작은 나선 계단 ${stats.spiralBad || 0} · 심이 좁은 채 남은 건물 ${stats.coreTight || 0}`);
   console.log(`실내 배율 S: ${Object.entries(stats.scale).sort((a, b) => a[0] - b[0]).map(([k, v]) => `${k}×${v}`).join(' · ')}`);
   if (process.env.NARROW) console.log(stats.narrowEx.join('\n'));
   console.log(`걸어서 닿는가 (가구·벽 포함 0.5 m 칸): 방 ${stats.walkRooms} 중 못 가는 방 ${stats.walkLost}`);

@@ -582,10 +582,17 @@ function mezzStair(B, F, M, L, g) {
   const { room, rooms } = L;
   const hall = rooms.find((R) => R.main) || rooms.slice().sort((a, b) => b.n - a.n)[0];
   const door = L.ents.main ? [g.i(L.ents.main.c), g.j(L.ents.main.c)] : null;
+  // 심(계단·승강기) 문 앞 두 칸 × 세 칸은 비운다 — 계단이 그 칸을 지나면 옆 난간이 계단실·승강기 문을 막는다 (v24 셀 검사: 공연장 계단 문)
+  const coreFront = new Set();
+  for (const p of (B.core && B.core.parts) || []) {
+    if (p.kind === 'shaft' || !p.door) continue;
+    const [ci, cj] = p.door.c, [fi, fj] = p.door.dir;
+    for (let k = 1; k <= 2; k++) for (let w = -1; w <= 1; w++) { const ii = ci + fi * k + (fj ? w : 0), jj = cj + fj * k + (fi ? w : 0); if (g.ok(ii, jj)) coreFront.add(g.c(ii, jj)); }
+  }
   const okCell = (strict) => (ii, jj) => {
     if (!g.ok(ii, jj)) return false;
     const c = g.c(ii, jj);
-    if (!F.mask[c] || L.void[c] || M.mask[c] || !room[c]) return false;
+    if (!F.mask[c] || L.void[c] || M.mask[c] || !room[c] || coreFront.has(c)) return false;
     const R = rooms[room[c] - 1];
     return strict ? R === hall : !['stair', 'lift', 'cargo', 'shaft', 'lifthall'].includes(R.type);
   };

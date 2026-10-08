@@ -3,6 +3,7 @@
 //  · 그리는 틀 = 건물 격자 틀(문 쪽 +z). 무리(group)를 건물 자리·실내 높이에 두고 θ 만큼 돌린다. 충돌체는 세계 좌표로 바꿔 넣는다.
 import * as THREE from 'three';
 import { GB } from './geom.js';
+import { spiralPlan } from './spiral.js';
 import { PAT, interiorMaterial, windowMaterial } from './material.js';
 import { drawFixture } from './props.js';
 import { FIX, ROOMS, flowRoom, PART_T } from './catalog.js';
@@ -445,10 +446,12 @@ function buildStair(ctx, out, gb, glass, p, lk, stairCells, st) {
     ctx.extraCols.push(colBox(ctx, mxr, mzr, vertR ? 0.05 : len / 2, vertR ? len / 2 : 0.05, 0, -0.2, 1.1, false));
   };
   if (p.kind === 'spiral') {
-    // 나선 계단: 앞(문 쪽) 한 줄 칸 = 계단참(층 바닥). 디딤판은 계단참 띠를 비켜 한 바퀴 안에서 돌아(앞 띠 한쪽 끝에서 떠나 반대쪽 끝에 닿는다)
-    //  위층 계단참 밑으로 지나가지 않는다 — 머리가 걸리지 않게. 계단참 뒤 가장자리는 난간(떠나는 끝·닿는 끝만 열림).
-    const R = Math.min(along, across) / 2 - 0.08, mr = (R + 0.2) / 2;
-    const zF = along / 2, edgeLz = zF - 1;
+    // 나선 계단: 앞(문 쪽) 한 줄 칸 = 계단참(층 바닥). 디딤판은 계단참 띠를 비켜 돌아(앞 띠 한쪽 끝에서 떠나 반대쪽 끝에 닿는다)
+    //  두 바퀴일 때만 계단참 위를 한 번 지나는데, 그때도 아래·위 계단참에 머리 공간이 남는다. 계단참 뒤 가장자리는 난간(떠나는 끝·닿는 끝만 열림).
+    // 모양(바퀴 수·떠나는 각·디딤판 수)은 spiral.spiralPlan — 검사기·심 고르기와 같은 식
+    const SP = spiralPlan(Math.round(along), Math.round(across), h);
+    const { R, mr, edgeLz, th } = SP;
+    const zF = along / 2;
     gb.cyl(cx, 0, cz, 0.18, Math.max(h, ctx.F.ic ?? ctx.F.ceil - ctx.F.y), st.tint ?? 0xe9c27c, 0, PAT.metal);
     for (const [i, j] of p.cells) {
       const c = j * gw + i, gx = B.G.ox + i + 0.5 - cx, gz = B.G.oz + j + 0.5 - cz;
@@ -456,8 +459,8 @@ function buildStair(ctx, out, gb, glass, p, lk, stairCells, st) {
       stairCells.set(c, lz > edgeLz - 0.01 ? 'land' : isBottom ? 'wellfloor' : 'well');
     }
     info.landing = P(0, (zF + edgeLz) / 2);
-    const th = Math.acos(Math.max(-1, Math.min(1, edgeLz / mr))) + 0.14; // 떠나는 각 (앞에서)
-    const gap = 0.75, xs = mr * Math.sin(th); // 떠나는 끝 lx = −xs, 닿는 끝 lx = +xs
+    // 떠나는 끝 lx = −xs, 닿는 끝 lx = +xs. 난간 틈은 몸(0.7 m)보다 넉넉히 — 가파른 한 바퀴 계단의 첫 디딤판에서 몸이 난간 끝에 걸리지 않게
+    const gap = 0.9, xs = mr * Math.sin(th);
     // 계단참 뒤 가장자리 난간: 아래층에서 올라오는 줄이 닿는 끝(+xs)과 위로 떠나는 끝(−xs)만 비운다 (맨 아래층은 뒤가 바닥이라 난간 없음)
     if (!isBottom) {
       const x0 = -across / 2 + 0.08, x1 = across / 2 - 0.08;
@@ -470,11 +473,9 @@ function buildStair(ctx, out, gb, glass, p, lk, stairCells, st) {
     }
     if (!h) return;
     const a0 = Math.atan2(LZ[1], LZ[0]); // 정면(문) 쪽 각
-    // 층 높이가 높으면(로비 7 m 등) 두 바퀴 — 한 바퀴에 몰면 디딤판 하나가 0.1 m 남짓으로 가팔라 오를 수 없다 (v24 셀 검사).
-    //  두 바퀴여도 한 바퀴의 높이가 2 m 넘게 남아 위 바퀴 디딤판 밑으로 머리가 지나가고, 떠나는·닿는 각은 한 바퀴와 같다(계단참 난간 틈 그대로)
-    const turns = h > 4.0 ? 2 : 1;
+    // 두 바퀴는 둘째 바퀴가 아래·위 계단참의 머리 공간을 남길 만큼 층이 높을 때만 (spiral.js) — 떠나는·닿는 각은 한 바퀴와 같다(계단참 난간 틈 그대로)
+    const { turns, n, da } = SP;
     info.turns = turns;
-    const span = Math.PI * 2 * turns - 2 * th, n = Math.max(10, Math.ceil(h / 0.21)), da = span / n;
     for (let k = 1; k <= n; k++) {
       // 문에서 보아 왼쪽(−lx)으로 떠나 한 바퀴 가까이 돌아 오른쪽(+lx)으로 닿는다
       const a = a0 + th + (k - 0.5) * da, y = (k / n) * h;
