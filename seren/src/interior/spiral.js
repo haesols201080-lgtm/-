@@ -5,13 +5,14 @@
 //  · 두 바퀴: 층이 높으면 덜 가파르게 — 다만 둘째 바퀴로 넘어가며 앞 띠(아래층 계단참) 위를 한 번 지나므로,
 //    그 디딤판 밑으로 아래 계단참에 선 사람의 머리 공간, 위로 위층 계단참 바닥판까지의 머리 공간이 모두 남을 때만.
 //    (전에는 「4 m 넘으면 두 바퀴」 — 4.2 m 층에서 그 디딤판이 계단참 1.3~2.9 m 높이를 지나 계단실에 들어서지도, 오르지도 못했다)
-//  · 2×2 칸(작은 줄기 속)은 몸(지름 0.7 m)이 기둥과 벽 사이 0.72 m 고리를 겨우 지나 한 바퀴가 짧다 — 3.4 m 아래 층만.
+//  · 2×2 칸(작은 줄기 속)은 몸(지름 0.7 m)이 기둥과 유리 난간 사이 고리를 겨우 지나 한 바퀴가 짧다 — 3.3 m 아래 층만.
+//  · 가운데 기둥과 디딤판 둘레 유리 난간은 단단하다(spiralRail) — 기둥 자리·네모난 계단실 귀퉁이에는 바닥이 없어 떨어졌다.
 const SLAB = 0.35; // program.SLAB 과 같게 (위층 계단참 바닥판 두께)
 const THICK = 0.35; // 디딤판 충돌체 두께 (render 와 같게)
 const HEAD = 1.95; // 머리 공간 (몸 키 1.75 + 여유)
 export const SPIRAL_RISE = 0.21;
 /** 작은 나선 계단(2×2 칸)으로 이을 수 있는 가장 높은 층 사이 높이 */
-export const SPIRAL2_MAXH = 3.4;
+export const SPIRAL2_MAXH = 3.3;
 
 /** 나선 계단 모양: 칸 수(along = 정면 방향, across = 옆), 층 사이 높이 h */
 export function spiralPlan(along, across, h) {
@@ -37,4 +38,27 @@ function twoTurnsFit(P, h) {
     if (y - THICK < HEAD || y > h - SLAB - HEAD) return false;
   }
   return true;
+}
+
+/**
+ * 디딤판 둘레 유리 난간의 충돌 조각 (계단 로컬: x = 옆, z = 정면 쪽): [가운데 x, 가운데 z, 반 길이, 각, 아래 y, 위 y] 목록.
+ *  조각의 각 a 는 정면(+z)에서 재고 조각의 긴 축은 반지름에 수직(충돌 상자 rot = a). 디딤판의 각 phi 와는 phi ≡ −a.
+ * 네모난 계단실의 네 귀퉁이(둥근 디딤판 바깥)에는 바닥이 없어(가운데층의 우물) 디딤판 가장자리에서 귀퉁이로 내디디면 아래층까지 떨어졌다 —
+ * 그려진 유리 난간을 단단하게 하되, 계단참 띠 위(계단참에서 디딤판으로 오르내리는 곳)는 비운다.
+ * 두 바퀴 계단은 둘째 바퀴가 계단참 위를 지나므로, 그 자리에는 디딤판 높이에만 난간을 둔다(밑은 계단참의 머리 공간 — twoTurnsFit 이 남겨 둔 높이).
+ */
+export function spiralRail(P, h, segs = 24) {
+  const rr = P.R + 0.08, out = [], hl = rr * Math.sin(Math.PI / segs) + 0.03, da = (Math.PI * 2) / segs;
+  const yAt = (phi) => (h * (phi - P.th)) / P.span; // 디딤판 각 → 높이
+  for (let k = 0; k < segs; k++) {
+    const a = (k + 0.5) * da;
+    const z = Math.cos(a) * rr, x = Math.sin(a) * rr;
+    if (z <= P.edgeLz - 0.05) { out.push([x, z, hl, a, -0.2, h + 1.1]); continue; }
+    if (P.turns < 2) continue;
+    // 계단참 위를 지나는 둘째 바퀴: 이 조각 양 끝 각의 디딤판 높이
+    const ph = (aa) => (aa < Math.PI ? Math.PI * 2 - aa : Math.PI * 4 - aa);
+    const y0 = Math.min(yAt(ph(a - da / 2)), yAt(ph(a + da / 2))), y1 = Math.max(yAt(ph(a - da / 2)), yAt(ph(a + da / 2)));
+    out.push([x, z, hl, a, y0 - 0.4, y1 + 1.1]);
+  }
+  return out;
 }

@@ -2,6 +2,7 @@
 //  · 문(셀 경계)마다: 문 앞 1.2 m 에서 문 너머 1.3 m 까지 걷는다 → 옆 셀로 바뀌는가 · 떨어지지 않는가 · 끼이지 않는가 →
 //    되돌아 걸으면 처음 셀인가. 그 층의 모든 셀을 차례로 (넘어간 셀에서 다시 그 셀의 문들).
 //  · 계단: 계단 문으로 계단실 셀에 들어가 계단을 걸어 위층 계단참까지 → 층이 바뀌는가 · 떨어지지 않는가 → 위층 계단 문으로 나간다.
+//    나선 계단은 오르는 도중 몇 디딤판마다 기둥 쪽·계단실 네 귀퉁이 쪽으로 걸어 들어가 발밑이 꺼지지 않는가도 본다.
 //  · 안전장치 기록(state.debug.escapes)은 늘지 않아야 한다 (늘면 그 자리가 실패).
 //   node tools/cells-check.mjs [쓰임들|all] [건물 수=1] [층 수=3]     (SEREN_HTML=다른 빌드)
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
@@ -144,12 +145,27 @@ for (const pid of want) {
           }
           g.player.teleport(route[0][0], ind.yOf(i) + 0.3, route[0][1], 0.1);
           window.__settle(8);
-          let ok = true, lowest = 1e9;
-          for (const [x, z] of route.slice(1)) {
+          let ok = true, lowest = 1e9, edgeFall = null;
+          const R0 = route.slice(1);
+          for (let ri = 0; ri < R0.length; ri++) {
+            const [x, z] = R0[ri];
             const hit = window.__walkTo(x, z, 4, 0.3);
             lowest = Math.min(lowest, g.player.pos.y - ind.yOf(i));
             if (!hit) { ok = false; break; }
+            // 나선 계단 가장자리: 몇 디딤판마다 기둥 쪽·계단실 네 귀퉁이 쪽으로 걸어 들어가 본다 — 발밑이 꺼지면(우물로 떨어짐) 실패
+            if (part.kind === 'spiral' && ri > 1 && ri < R0.length - 2 && ri % 4 === 0 && !edgeFall) {
+              const p = g.player.pos, y0 = p.y, sx = p.x, sz = p.z;
+              for (const [tx, tz] of [Pw(0, 0), Pw(-across / 2, -along / 2), Pw(across / 2, -along / 2), Pw(-across / 2, along / 2), Pw(across / 2, along / 2)]) {
+                let low = 0;
+                const DT = 1 / 60;
+                for (let f = 0; f < 70; f++) { window.__walkTo(tx, tz, DT, 0.05); low = Math.min(low, p.y - y0); }
+                if (low < -0.8) { edgeFall = `경로점 ${ri} 에서 ${tx === Pw(0, 0)[0] && tz === Pw(0, 0)[1] ? '기둥' : '귀퉁이'} 쪽으로 ${(-low).toFixed(1)} m 떨어짐`; break; }
+                window.__walkTo(sx, sz, 3, 0.2);
+                if (Math.abs(p.y - y0) > 0.3) window.__walkTo(sx, sz, 3, 0.2);
+              }
+            }
           }
+          if (edgeFall) fail(`${F.label}층 계단${lk.part}(${part.kind}): 가장자리 ${edgeFall}`);
           const dy = g.player.pos.y - ind.yOf(up);
           if (lowest < -0.6) fail(`${F.label}층 계단${lk.part}(${part.kind}): 오르다 떨어짐 (${lowest.toFixed(1)} m)`);
           else if (!ok || Math.abs(dy) > 0.5 || ind.cur !== up) fail(`${F.label}층 계단${lk.part}(${part.kind}): 위층(${B.floors[up].label})에 못 닿음 — 층 ${B.floors[ind.cur].label} · 높이차 ${dy.toFixed(2)}${ok ? '' : ' · 끼임'}`);

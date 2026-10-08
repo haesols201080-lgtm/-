@@ -3,7 +3,7 @@
 //  · 그리는 틀 = 건물 격자 틀(문 쪽 +z). 무리(group)를 건물 자리·실내 높이에 두고 θ 만큼 돌린다. 충돌체는 세계 좌표로 바꿔 넣는다.
 import * as THREE from 'three';
 import { GB } from './geom.js';
-import { spiralPlan } from './spiral.js';
+import { spiralPlan, spiralRail } from './spiral.js';
 import { PAT, interiorMaterial, windowMaterial } from './material.js';
 import { drawFixture } from './props.js';
 import { FIX, ROOMS, flowRoom, PART_T } from './catalog.js';
@@ -452,7 +452,10 @@ function buildStair(ctx, out, gb, glass, p, lk, stairCells, st) {
     const SP = spiralPlan(Math.round(along), Math.round(across), h);
     const { R, mr, edgeLz, th } = SP;
     const zF = along / 2;
-    gb.cyl(cx, 0, cz, 0.18, Math.max(h, ctx.F.ic ?? ctx.F.ceil - ctx.F.y), st.tint ?? 0xe9c27c, 0, PAT.metal);
+    const postH = Math.max(h, ctx.F.ic ?? ctx.F.ceil - ctx.F.y);
+    gb.cyl(cx, 0, cz, 0.18, postH, st.tint ?? 0xe9c27c, 0, PAT.metal);
+    // 가운데 기둥은 단단하게: 디딤판은 반지름 0.2 m 부터라, 기둥이 그림뿐이면 계단 한가운데에 발밑이 없어 우물 아래로 떨어졌다 (v24)
+    ctx.extraCols.push(colCyl(ctx, cx, cz, 0.18, postH + 0.2));
     for (const [i, j] of p.cells) {
       const c = j * gw + i, gx = B.G.ox + i + 0.5 - cx, gz = B.G.oz + j + 0.5 - cz;
       const lz = gx * LZ[0] + gz * LZ[1];
@@ -484,8 +487,18 @@ function buildStair(ctx, out, gb, glass, p, lk, stairCells, st) {
       gb.box(ccx, y - 0.12, ccz, R - 0.2, 0.12, w, -a, stepC, 0, PAT.stone);
       ctx.extraCols.push(colBox(ctx, ccx, ccz, (R - 0.2) / 2, w / 2, -a, y - 0.35, y, true));
     }
-    // 바깥 난간: 원통 유리 (디딤판 둘레)
-    glass.geo(new THREE.CylinderGeometry(R + 0.05, R + 0.05, h, 20, 1, true), cx, h / 2 + 0.5, cz, 0, 0xbff8ff, 0.1);
+    // 바깥 난간: 디딤판 둘레 유리 (spiral.spiralRail — 단단하다: 네모난 계단실 귀퉁이에는 바닥이 없어 디딤판 가장자리 너머로 떨어졌다).
+    //  계단참 띠 위는 비우고(오르내리는 곳), 두 바퀴면 둘째 바퀴가 계단참 위를 지나는 높이에만. 카메라는 유리를 지나 본다
+    const segs = 24, half = Math.PI / segs, rr = R + 0.08;
+    for (const [, , , a, y0, y1] of spiralRail(SP, h, segs)) {
+      const [ax, az] = P(Math.sin(a - half) * rr, Math.cos(a - half) * rr), [bx2, bz2] = P(Math.sin(a + half) * rr, Math.cos(a + half) * rr);
+      const len = Math.hypot(bx2 - ax, bz2 - az) + 0.06, ux = (bx2 - ax) / len, uz = (bz2 - az) / len, mx = (ax + bx2) / 2, mz = (az + bz2) / 2;
+      const g0 = Math.max(0, y0);
+      glass.box(mx, g0, mz, 0.03, y1 - 0.1 - g0, len, Math.atan2(ux, uz), 0xbff8ff, 0.1);
+      const col = colBox(ctx, mx, mz, len / 2, 0.03, Math.atan2(-uz, ux), y0, y1, false);
+      col.camera = false;
+      ctx.extraCols.push(col);
+    }
     return;
   }
   // 되돌이 계단: 앞 계단참(이 층) · 1번 줄(왼쪽, 뒤로) · 뒤 계단참 · 2번 줄(오른쪽, 앞으로) → 위층 앞 계단참

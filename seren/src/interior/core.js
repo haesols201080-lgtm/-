@@ -136,7 +136,7 @@ export function planCore(B) {
         }
         return false;
       };
-      const tallGap = gapMax(serve) > SPIRAL2_MAXH;
+      const tallGap = gapMax(serve) > SPIRAL2_MAXH + 1e-6;
       for (const list of coreOptions(B, nUp)) {
         if (strict && !list.some((t) => COMP[t].kind === 'lift')) continue;
         const tooSmall = tallGap && list.includes('spiral2');
