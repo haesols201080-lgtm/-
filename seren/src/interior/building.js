@@ -5,7 +5,8 @@
 import * as THREE from 'three';
 import { buildFloor, floorMaterials } from './render.js';
 import { FUSE, ROOMS } from './catalog.js';
-import { toWorld, toGrid } from './volume.js';
+import { toWorld, toGrid, toWorldExt, toGridExt } from './volume.js';
+import { floorGroups, parseKey, NOWALK } from './cells.js';
 
 export class Indoor {
   constructor(I, r, POCKET_Y) {
@@ -18,11 +19,16 @@ export class Indoor {
     this.t = 0;
     this.listeners = [];
     this.mats = new Map(); // 묶음(zone)마다 재질
+    // 셀 (v24): 지금 짓고 있는 공간 — 열쇠 'F층:뿌리방' | 'S심부품'(계단실) | 'A'(아트리움), 층마다 지은 방 묶음
+    this.cellKey = null;
+    this.parts = new Map();
+    this._grp = new Map();
+    this._jn = new Map();
   }
   get G() { return this.B.G; }
   F(i) { return this.B.floors[i]; }
   /** 그 층 바닥의 실내 높이 */
-  yOf(i) { return this.P0 + (this.B.floors[i].y - this.B.volume.floorY); }
+  yOf(i) { const F = this.B.floors[i]; return this.P0 + (F.iy ?? F.y - this.B.volume.floorY); }
   /** 층 평면 (만들거나 꺼내기) */
   plan(i) { return this.store.floor(this.r, i); }
   /** 플레이어 높이 → 층 번호 */
@@ -50,6 +56,9 @@ export class Indoor {
   /** 틀 좌표 → 세계 */
   world(gx, gz) { return toWorld(this.r, this.V, gx, gz); }
   grid(x, z) { return toGrid(this.r, this.V, x, z); }
+  /** 실내 틀 좌표 ↔ 바깥 세계의 실제 건물 자리 (실내 배율 S 를 걷어 낸 것 — 테라스·옥상·공중다리) */
+  worldExt(gx, gz) { return toWorldExt(this.r, this.V, gx, gz); }
+  gridExt(x, z) { return toGridExt(this.r, this.V, x, z); }
 
   // ── 층 그리기 ─────────────────────────────────
   _mats(F) {
@@ -57,14 +66,14 @@ export class Indoor {
     if (!this.mats.has(k)) this.mats.set(k, floorMaterials((this.B.zones[k] || {}).style || {}));
     return this.mats.get(k);
   }
-  build(i) {
+  build(i, rooms = null) {
     if (this.built.has(i)) return this.built.get(i);
     const F = this.B.floors[i];
     if (!F || !F.reach || F.dead) return null;
     const pl = this.plan(i);
     if (!pl || pl.L.closed) return null;
     const above = this.B.floors.find((q) => q.i > i && q.reach && !q.dead && !q.mezz);
-    const ctx = { B: this.B, F, L: pl.L, fix: pl.fix, r: this.r, V: this.V, y0: this.yOf(i), next: above || null, mats: this._mats(F) };
+    const ctx = { B: this.B, F, L: pl.L, fix: pl.fix, r: this.r, V: this.V, y0: this.yOf(i), next: above || null, mats: this._mats(F), rooms };
     const out = buildFloor(ctx);
     out.i = i; out.L = pl.L; out.fix = pl.fix; out.y0 = ctx.y0;
     const g = this.game, C = g.world.colliders;
@@ -105,23 +114,158 @@ export class Indoor {
     const g = this.game, C = g.world.colliders;
     for (const c of out.added) C.remove(c);
     g.engine.scene.remove(out.group);
-    out.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); if (o.material && o.material.isMeshBasicMaterial) o.material.dispose(); });
+    out.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); if (o.material && o.material.isMeshBasicMaterial && !o.material.userData.keep) o.material.dispose(); });
     if (out.winMat) out.winMat.dispose();
     this.built.delete(i);
   }
-  /** 지금 층을 i 로: 위·아래 층까지 그리고 나머지는 치운다 */
-  setFloor(i) {
+  // ── 셀 (v24 · 방·구역 단위 독립 공간) ───────────────
+  /** 그 층의 방 무리 뿌리 (cells.floorGroups) */
+  groups(i) {
+    if (!this._grp.has(i)) { const pl = this.plan(i); this._grp.set(i, pl && !pl.L.closed ? floorGroups(pl.L) : null); }
+    return this._grp.get(i);
+  }
+  /** 층을 꿰는 셀에 드는 무리 뿌리: 아트리움(뚫린 곳 둘레) · 중2층 통로(아래 홀) */
+  _joins(i) {
+    if (this._jn.has(i)) return this._jn.get(i);
+    const m = new Map();
+    this._jn.set(i, m);
+    const B = this.B, F = B.floors[i], pl = this.plan(i), root = this.groups(i);
+    if (!pl || !root) return m;
+    const L = pl.L, { gw, gh } = this.G;
+    const A = B.atrium;
+    if (A && B.atriumCells && !F.mezz) {
+      const i0 = B.ground + A.from, i1 = B.ground + A.to;
+      if (i >= i0 && i <= i1) for (const c of B.atriumCells) {
+        if (i === i0) { const r = L.room[c] - 1; if (r >= 0 && root[r] >= 0) m.set(root[r], 'A'); continue; }
+        if (L.void[c] !== 1) continue;
+        const ci = c % gw, cj = (c / gw) | 0;
+        for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const ii = ci + a, jj = cj + b;
+          if (ii < 0 || jj < 0 || ii >= gw || jj >= gh) continue;
+          const r = L.room[jj * gw + ii] - 1;
+          if (r >= 0 && root[r] >= 0) m.set(root[r], 'A');
+        }
+      }
+    }
+    if (F.mezz && L.mezzWalk != null && root[L.mezzWalk] >= 0) {
+      const hp = this.plan(i - 1), hr = this.groups(i - 1);
+      if (hp && hr) {
+        const H = hp.L.rooms.find((q) => q.main) || hp.L.rooms.filter((q) => q.n && !NOWALK.has(q.type) && q.type !== 'stair').sort((a, b) => b.n - a.n)[0];
+        if (H && hr[H.id] >= 0) m.set(root[L.mezzWalk], this._joins(i - 1).get(hr[H.id]) || `F${i - 1}:${hr[H.id]}`);
+      }
+    }
+    return m;
+  }
+  /** 층 i 의 방 r 이 드는 셀 열쇠 (걸어 들어갈 수 없는 방은 null) */
+  keyOf(i, r) {
+    const pl = this.plan(i);
+    const R = pl && pl.L.rooms[r];
+    if (!R) return null;
+    if (R.type === 'stair') return R.part != null ? `S${R.part}` : null;
+    if (NOWALK.has(R.type)) return null;
+    const root = this.groups(i);
+    if (!root || root[r] < 0) return null;
+    return this._joins(i).get(root[r]) || `F${i}:${root[r]}`;
+  }
+  /** 층 i 의 세계 (x, z) 자리의 방 번호 (지은 층이면 벽 앞 자투리까지 그 방) */
+  roomAt(i, x, z) {
+    const c = this.cellAt(x, z);
+    if (c < 0) return -1;
+    const out = this.built.get(i);
+    if (out && out.roomX) return out.roomX[c] - 1;
+    const pl = this.plan(i);
+    return pl ? pl.L.room[c] - 1 : -1;
+  }
+  keyAt(i, x, z) { const r = this.roomAt(i, x, z); return r >= 0 ? this.keyOf(i, r) : null; }
+  /** 층 i 에 걸을 수 있는 방이 있는 셀 열쇠들 (계단실 S 제외 — 검사 도구·지도가 쓴다) */
+  cellsOn(i) {
+    const pl = this.plan(i), out = new Set();
+    if (!pl || pl.L.closed) return [];
+    for (let r = 0; r < pl.L.rooms.length; r++) { if (!pl.L.rooms[r].n) continue; const k = this.keyOf(i, r); if (k && k[0] !== 'S') out.add(k); }
+    return [...out];
+  }
+  /** 셀 열쇠 → 층마다 지을 방 묶음 (계단실은 지금 층 둘레 ±2 층만) */
+  partsOf(key) {
+    const P = parseKey(key), out = new Map(), B = this.B;
+    if (!P) return out;
+    const add = (i, r) => { let st = out.get(i); if (!st) out.set(i, (st = new Set())); st.add(r); };
+    const fl = (i) => B.floors[i] && B.floors[i].reach && !B.floors[i].dead;
+    const groupRooms = (i, want) => {
+      const root = this.groups(i);
+      if (!root) return;
+      const jn = this._joins(i);
+      for (let r = 0; r < root.length; r++) { if (root[r] < 0) continue; if ((jn.get(root[r]) || `F${i}:${root[r]}`) === want) add(i, r); }
+    };
+    if (P.kind === 'F') {
+      if (!fl(P.floor)) return out;
+      groupRooms(P.floor, key);
+      const up = B.floors[P.floor + 1];
+      if (up && up.mezz && fl(P.floor + 1)) groupRooms(P.floor + 1, key);
+    } else if (P.kind === 'A' && B.atrium) {
+      for (let i = B.ground + B.atrium.from; i <= B.ground + B.atrium.to; i++) if (fl(i)) groupRooms(i, 'A');
+    } else if (P.kind === 'S') {
+      const lk = B.links.find((k) => k.part === P.part && k.kind !== 'roof');
+      const list = lk ? lk.floors.filter(fl).sort((a, b) => a - b) : [];
+      let k0 = list.indexOf(this.cur);
+      if (k0 < 0) { let bd = 1e9; list.forEach((i, k) => { const d = Math.abs(i - this.cur); if (d < bd) { bd = d; k0 = k; } }); }
+      for (let k = Math.max(0, k0 - 2); k <= Math.min(list.length - 1, k0 + 2); k++) {
+        const i = list[k], pl = this.plan(i);
+        const R = pl && pl.L.rooms.find((q) => q.type === 'stair' && q.part === P.part);
+        if (R) add(i, R.id);
+      }
+    }
+    return out;
+  }
+  /** 셀 하나만 짓는다: 그 셀의 방들(층마다) — 나머지는 치운다 */
+  setCell(key) {
+    const parts = this.partsOf(key);
+    if (!parts.size) return false;
+    const same = (a, b) => a && b && a.size === b.size && [...a].every((x) => b.has(x));
+    for (const [j, out] of [...this.built]) if (!same(parts.get(j), out.cellRooms)) this.dispose(j);
+    for (const [j, rooms] of parts) if (!this.built.has(j)) this.build(j, rooms);
+    const prev = this.cellKey;
+    this.cellKey = key;
+    this.parts = parts;
+    if (prev !== key) for (const f of this.listeners) f('cell', key);
+    return true;
+  }
+  /** 지금 셀에 드는 자리인가 (층 i, 틀 좌표) */
+  inCellGrid(i, gx, gz) {
+    const st = this.parts.get(i);
+    if (!st) return false;
+    const G = this.G, ci = Math.floor(gx - G.ox), cj = Math.floor(gz - G.oz);
+    if (ci < 0 || cj < 0 || ci >= G.gw || cj >= G.gh) return false;
+    const out = this.built.get(i);
+    const r = out && out.roomX ? out.roomX[cj * G.gw + ci] - 1 : -1;
+    return r >= 0 && st.has(r);
+  }
+  get stairCell() { return !!this.cellKey && this.cellKey[0] === 'S'; }
+  /** 층 i 에서 처음 설 셀: (x, z) 가 그 층의 걸을 수 있는 방이면 그 방의 셀, 아니면 승강기 홀 · 정문 홀 · 가장 큰 오가는 공간 */
+  homeKey(i, x, z) {
+    if (x != null) { const k = this.keyAt(i, x, z); if (k) return k; }
+    const pl = this.plan(i);
+    if (!pl || pl.L.closed) return null;
+    const L = pl.L;
+    if (L.lifthall != null && L.rooms[L.lifthall].n) { const k = this.keyOf(i, L.lifthall); if (k) return k; }
+    if (L.ents.main) { const r = L.room[L.ents.main.c] - 1; if (r >= 0) { const k = this.keyOf(i, r); if (k) return k; } }
+    const R = L.rooms.filter((q) => q.n && (q.circ || q.main) && !NOWALK.has(q.type) && q.type !== 'stair').sort((a, b) => b.n - a.n)[0] || L.rooms.filter((q) => q.n && !NOWALK.has(q.type) && q.type !== 'stair').sort((a, b) => b.n - a.n)[0];
+    return R ? this.keyOf(i, R.id) : null;
+  }
+  /** 지금 층을 i 로: 그 층에서 (x, z)(없으면 플레이어 자리)가 드는 셀(없으면 승강기 홀·정문 홀)만 짓는다 */
+  setFloor(i, x, z) {
     this.cur = i;
-    const want = new Set([i]);
-    const reach = this.B.floors.filter((F) => F.reach && !F.dead).map((F) => F.i);
-    const k = reach.indexOf(i);
-    if (k > 0) want.add(reach[k - 1]);
-    if (k >= 0 && k < reach.length - 1) want.add(reach[k + 1]);
-    // 중2층이 있는 큰 홀: 홀과 중2층은 늘 같이
-    for (const F of this.B.floors) if (F.mezz && (want.has(F.i) || want.has(F.i - 1))) { want.add(F.i); want.add(F.i - 1); }
-    for (const j of [...this.built.keys()]) if (!want.has(j)) this.dispose(j);
-    for (const j of want) this.build(j);
+    const p = this.game.player.pos;
+    const key = this.homeKey(i, x ?? p.x, z ?? p.z);
+    if (key) this.setCell(key);
     for (const f of this.listeners) f('floor', i);
+  }
+  /** 문턱을 넘어 옆 셀로: 짧게 가리고(ui.blink) 그 사이에 옆 셀을 짓는다 — 같은 좌표라 순간이동 없이 둘레만 바뀐다 */
+  _cross(key) {
+    this._xing = true;
+    const go = () => { try { this.setCell(key); } catch (e) { console.error('[cells]', e); } };
+    const done = () => { this._xing = false; };
+    const ui = this.game.ui;
+    if (ui && ui.blink) ui.blink(go, done); else { go(); done(); }
   }
   close() {
     for (const j of [...this.built.keys()]) this.dispose(j);
@@ -135,7 +279,7 @@ export class Indoor {
     const F = this.B.floors[out.i], L = out.L;
     const list = out.signs.slice(0, 46);
     // 승강기 홀: 층 번호와 쓰임 (큰 판)
-    const hall = L.lifthall != null ? L.rooms[L.lifthall] : null;
+    const hall = L.lifthall != null && (!out.cellRooms || out.cellRooms.has(L.lifthall)) ? L.rooms[L.lifthall] : null;
     const W = 512, H = 64, cols = 2, rows = 24;
     const cv = document.createElement('canvas');
     cv.width = W * cols; cv.height = H * rows;
@@ -191,9 +335,19 @@ export class Indoor {
   update(dt) {
     this.t += dt;
     const g = this.game, p = g.player.pos;
-    // 계단으로 다른 층에 올라섰나
+    // 계단으로 다른 층에 올라섰나: 계단실 안이면 같은 셀을 둘레 층으로 옮겨 짓고, 아니면 그 층에서 선 셀
     const fi = this.floorAtY(p.y);
-    if (fi !== this.cur) this.setFloor(fi);
+    if (fi !== this.cur) {
+      this.cur = fi;
+      if (this.stairCell) this.setCell(this.cellKey);
+      else { const k = this.keyAt(fi, p.x, p.z); if (k) this.setCell(k); }
+      for (const f of this.listeners) f('floor', fi);
+    }
+    // 문턱을 넘어 옆 셀(옆 방·복도·계단실)로
+    if (!this._xing) {
+      const k = this.keyAt(this.cur, p.x, p.z);
+      if (k && k !== this.cellKey && this.parts.has(this.cur)) this._cross(k);
+    }
     // 문: 사람이 다가가면 열린다 (플레이어 + 실내 사람)
     const people = [[p.x, p.y, p.z]];
     if (this.agents) for (const a of this.agents.near()) people.push([a.pos.x, a.pos.y, a.pos.z]);
@@ -226,6 +380,7 @@ export class Indoor {
     const R = out.roomX[c] ? out.L.rooms[out.roomX[c] - 1] : null;
     if (!R || out.L.void[c] === 1) return false;
     if (['lift', 'cargo', 'shaft'].includes(R.type)) return false;
+    if (out.cellRooms && !out.cellRooms.has(R.id)) return false; // 지금 셀 밖 (문 너머 옆 방)
     // 바깥벽 안쪽인가 (벽 앞 자투리 칸은 칸 가운데가 벽 밖일 수 있다 — 거기 세우면 바닥 없는 곳에 선다)
     if (out.sdAt) { const [gx, gz] = this.grid(x, z); if (out.sdAt(gx, gz) > -0.05) return false; }
     return true;
@@ -254,5 +409,5 @@ export class Indoor {
     return true;
   }
   /** 지금 층의 천장 (실내 높이) */
-  ceilY(i = this.cur) { const F = this.B.floors[i]; return this.yOf(i) + (F.ceil - F.y); }
+  ceilY(i = this.cur) { const F = this.B.floors[i]; return this.yOf(i) + (F.ic ?? F.ceil - F.y); }
 }

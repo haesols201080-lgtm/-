@@ -6,7 +6,7 @@
 //  · 집(house)·세대(unit): 현관 쪽 깊이·옆 자리로 씻는 방·부엌·잠방·거실을 나누고 방 사이에 문.
 //  · 출입구: 1층 정문은 바깥 문과 같은 자리(실내는 바깥 문 그 자리에서 열린다), 일하는 쪽은 뒤에 하역 문.
 //  · 결과는 순수 자료(Int16 방 번호 칸 + 방·문 목록) — 그리기·충돌·길찾기·지도·모아가 모두 이것을 읽는다.
-import { FUSE, ROOMS, flowRoom } from './catalog.js';
+import { FUSE, ROOMS, flowRoom, MIN_FIT_SKIP, minFit, fitSideIds } from './catalog.js';
 import { rngFor, pick, shuffle } from './ids.js';
 import { cellX, cellZ } from './volume.js';
 import { searchMezzStair } from './core.js';
@@ -454,6 +454,10 @@ export function layoutFloor(B, F, ctx = {}) {
 
   thinMerge(); // 5a 가 조각을 옮긴 뒤 새로 생긴 띠 방도
 
+  // ── 5d. 최소 방 크기 (v24): 방마다 그 쓰임의 정사각형(catalog.MIN_FIT 한 변)과 넓이가 들어가야 한다.
+  //   바깥 크기에 맞추느라 찌그러진 방은 이웃과 합친다 — 큰 방의 상한은 두지 않는다 (사용자 원칙: 최소 크기 > 바깥 크기 맞추기)
+  minSizeMerge(L, g, { setCell }, RING_MAIN[F.use]);
+
   // ── 5b. 중2층 계단: 위가 중2층이면 홀 바닥에서 중2층 앞 가장자리로 곧장 오르는 계단 (두 칸 너비, 칸은 홀 그대로 · void 3) ──
   const upF = B.floors[F.i + 1];
   if (!F.mezz && upF && upF.mezz && !upF.dead) L.mstair = mezzStair(B, F, upF, L, g);
@@ -496,6 +500,76 @@ export function layoutFloor(B, F, ctx = {}) {
   for (const R of rooms) if (R.n > 0) { R.cx /= R.n; R.cz /= R.n; }
   L.org = F.org;
   return L;
+}
+
+/**
+ * 5d. 최소 크기에 못 미치는 방 합치기 — 작은 방부터:
+ *  · 합칠 이웃 = 합친 방이 (이름을 잇는 쪽의) 최소를 채우는 이웃 가운데 같은 집·같은 종류·작은 쪽. 채우는 이웃이 없으면 가장 나아지는 쪽.
+ *  · 어느 이웃과 합쳐도 나아지지 않는 얇은 띠(복도와 바깥벽 사이가 얕은 곳)는 맞닿은 복도·홀로 (복도가 넓어진 자리) — 층의 본실·세대 첫 방은 남긴다.
+ *  · 합친 방은 더 중요한 쪽(층의 본실 > 세대·객실의 첫 방 > 가게 > 넓은 쪽)의 종류·이름을 잇는다.
+ */
+/** 방의 무게: 층의 본실(넓은 홀·둘레 복도 층의 업무 공간·교실…) 8 · 세대·객실의 첫 방 4 · 가게 2 */
+export function roomRank(R, mainT) { return (R.main || (mainT && R.type === mainT) ? 8 : 0) + (R.unitRoot || ((R.type === 'unit' || R.type === 'guestroom') && R.unit == null) ? 4 : 0) + (R.shop ? 2 : 0); }
+const NOFIT = ['stair', 'lift', 'cargo', 'shaft'];
+/** 최소 크기에 못 미치는 본실·세대 첫 방의 수 (program.makeBuilding 이 실내 배율을 키울지 정한다) */
+export function narrowMain(L) {
+  let n = 0;
+  const mainT = RING_MAIN[L.use];
+  for (const R of L.rooms) {
+    if (!R.n || NOFIT.includes(R.type) || MIN_FIT_SKIP.has(R.type) || R.circ || R.sealed || roomRank(R, mainT) < 4) continue;
+    const [mk, ma] = minFit(R.type);
+    if (R.n < ma || fitSideIds(L.room, L.gw, L.gh, R.id + 1, R.id + 1) < mk) n++;
+  }
+  return n;
+}
+
+function minSizeMerge(L, g, T, mainT) {
+  const { room, rooms } = L;
+  const CORE = NOFIT;
+  const skip = (R) => !R || !R.n || CORE.includes(R.type) || MIN_FIT_SKIP.has(R.type) || R.circ || R.sealed;
+  const fits = (R, k, n) => { const [mk, ma] = minFit(R.type); return k >= mk && n >= ma; };
+  const rank = (R) => roomRank(R, mainT);
+  const home = (R) => (R.unit != null ? R.unit : R.unitRoot || R.subs ? R.id : null);
+  const move = (from, to) => { for (let c = 0; c < g.n; c++) if (room[c] === from.id + 1) T.setCell(c, to); };
+  for (let pass = 0; pass < 8; pass++) {
+    let ch = 0;
+    const order = rooms.filter((R) => !skip(R)).sort((a, b) => a.n - b.n);
+    for (const R of order) {
+      if (skip(R)) continue; // 이번 차례에 이미 합쳐짐
+      const k = fitSideIds(room, g.gw, g.gh, R.id + 1, R.id + 1);
+      if (fits(R, k, R.n)) continue;
+      const edge = new Map();
+      for (let c = 0; c < g.n; c++) if (room[c] === R.id + 1) g.nb(c, (e) => {
+        const S = room[e] ? rooms[room[e] - 1] : null;
+        if (S && S !== R && !CORE.includes(S.type) && !S.sealed) edge.set(S, (edge.get(S) || 0) + 1);
+      });
+      let best = null, bs = -1e9, circ = null;
+      for (const [S, ed] of edge) {
+        if (S.circ || MIN_FIT_SKIP.has(S.type)) { if (S.circ && (!circ || ed > edge.get(circ))) circ = S; continue; }
+        const keep = rank(S) > rank(R) || (rank(S) === rank(R) && S.n > R.n) ? S : R;
+        const kS = fitSideIds(room, g.gw, g.gh, S.id + 1, S.id + 1);
+        const k2 = fitSideIds(room, g.gw, g.gh, R.id + 1, S.id + 1), n2 = R.n + S.n;
+        const ok = fits(keep, k2, n2);
+        if (!ok && k2 <= Math.max(k, kS) && n2 <= Math.max(R.n, S.n) * 1.6) continue; // 길어지기만 하는 합치기
+        // 다른 본실끼리(업무 공간 둘)는 합쳐도 되지만, 본실이 남의 집 방을 먹지는 않는다
+        if (rank(R) >= 8 && rank(S) >= 4 && rank(S) < 8) continue;
+        const hR = home(R), hS = home(S);
+        const sc = (ok ? 1000 : 0) + (k2 - k) * 40 + (hR != null && hR === hS ? 300 : hR != null && hS != null ? -400 : 0) + (S.type === R.type ? 120 : 0) - n2 * 0.6 + ed * 2;
+        if (sc > bs) { bs = sc; best = { S, keep }; }
+      }
+      if (best) {
+        const { S, keep } = best;
+        if (keep === R) move(S, R); else move(R, S);
+        ch++;
+        continue;
+      }
+      // 나아지는 이웃이 없다: 복도에 닿은 얇은 방은 복도로 (본실·세대 첫 방은 남긴다 — 건물 배율이 넓힌다)
+      if (circ && rank(R) < 4) { move(R, circ); ch++; }
+    }
+    if (!ch) break;
+  }
+  // 세대·객실의 방 목록 정리 (합쳐져 없어진 방)
+  for (const R of rooms) if (R.subs) R.subs = R.subs.filter((id) => rooms[id] && rooms[id].n > 0 && rooms[id].id !== R.id);
 }
 
 /** 중2층 계단 자리 (찾는 규칙은 core.js 의 searchMezzStair — 심을 놓을 때 이미 자리가 있는지 확인했다) */
@@ -1170,7 +1244,42 @@ function makeDoors(B, F, L, g, rnd) {
     for (const q of list) { const d = Math.hypot(g.i(q.c) - cx, g.j(q.c) - cz); if (d < bd) { bd = d; best = q; } }
     return best;
   };
-  const add = (R, q, kind = 'door', w = 1) => { doors.push({ a: R.id, b: q.S.id, c: q.c, dir: [q.di, q.dj], w, kind }); };
+  // 문이 차지한 칸막이 모서리 (cells.doorEdges 와 같은 열쇠) — 넓은 문이 제 방 끝을 넘어 이웃 문과 겹치면 서로의 문틀 기둥·문 너머 어둠의 옆벽이
+  // 상대 문을 막는다 (v24 셀 검사: 문 앞에서 끼임). 문은 두 방이 모두 맞닿은 칸에서만, 이미 문이 있는 모서리는 피해 폭을 줄이거나 옆으로 민다.
+  const used = new Set(), near = new Set(); // near: 문 바로 옆 모서리 — 문틀 기둥이 서는 자리라 다른 문을 붙여 내지 않는다
+  const ekey = (i, j, di, dj) => (di ? `v${di > 0 ? i + 1 : i},${j}` : `h${i},${dj > 0 ? j + 1 : j}`);
+  const claim = (i0, j0, di, dj, lo, hi) => {
+    const ti = dj ? 1 : 0, tj = di ? 1 : 0;
+    for (let o = lo; o <= hi; o++) used.add(ekey(i0 + ti * o, j0 + tj * o, di, dj));
+    near.add(ekey(i0 + ti * (lo - 1), j0 + tj * (lo - 1), di, dj));
+    near.add(ekey(i0 + ti * (hi + 1), j0 + tj * (hi + 1), di, dj));
+  };
+  const span = (c, di, dj, w) => { const out = [], i = g.i(c), j = g.j(c), o0 = -Math.floor((Math.max(1, w) - 1) / 2), o1 = Math.ceil((Math.max(1, w) - 1) / 2); for (let o = o0; o <= o1; o++) out.push([i + (dj ? o : 0), j + (di ? o : 0)]); return out; };
+  const add = (R, q, kind = 'door', w = 1) => {
+    const ti = q.dj ? 1 : 0, tj = q.di ? 1 : 0, i0 = g.i(q.c), j0 = g.j(q.c);
+    const ok = (o) => {
+      const i = i0 + ti * o, j = j0 + tj * o, i2 = i + q.di, j2 = j + q.dj;
+      const k = ekey(i, j, q.di, q.dj);
+      return g.ok(i, j) && g.ok(i2, j2) && room[g.c(i, j)] === R.id + 1 && room[g.c(i2, j2)] === q.S.id + 1 && !used.has(k) && !near.has(k) && L.void[g.c(i, j)] !== 3 && L.void[g.c(i2, j2)] !== 3;
+    };
+    if (!ok(0)) return false;
+    let lo = 0, hi = 0;
+    while (hi - lo + 1 < w && ok(hi + 1)) hi++;
+    while (hi - lo + 1 < w && ok(lo - 1)) lo--;
+    const ww = hi - lo + 1, a = lo + Math.floor((ww - 1) / 2);
+    claim(i0, j0, q.di, q.dj, lo, hi);
+    doors.push({ a: R.id, b: q.S.id, c: g.c(i0 + ti * a, j0 + tj * a), dir: [q.di, q.dj], w: ww, kind });
+    return true;
+  };
+  /** 경계 목록에서 가운데부터 (이미 문이 있는 모서리면 가까운 다른 자리로) — 놓은 자리 또는 null */
+  const place = (R, list, kind, w) => {
+    const q = pickMid(list);
+    if (!q) return null;
+    if (add(R, q, kind, w)) return q;
+    const rest = list.filter((x) => x !== q).sort((x, y) => Math.hypot(g.i(x.c) - g.i(q.c), g.j(x.c) - g.j(q.c)) - Math.hypot(g.i(y.c) - g.i(q.c), g.j(y.c) - g.j(q.c)));
+    for (const x of rest) if (add(R, x, kind, w)) return x;
+    return null;
+  };
   for (const R of rooms) {
     if (!R.n || R.circ || R.main && !R.boh) continue;
     if (R.type === 'shaft') continue;
@@ -1180,35 +1289,38 @@ function makeDoors(B, F, L, g, rnd) {
       const p = B.core.parts[R.part];
       const [ci, cj] = p.door.c, [fi, fj] = p.door.dir;
       const c = g.c(ci, cj), e = g.c(ci + fi, cj + fj);
-      if (g.ok(ci + fi, cj + fj) && room[e]) doors.push({ a: R.id, b: room[e] - 1, c, dir: [fi, fj], w: R.type === 'cargo' ? 2 : R.type === 'lift' ? 1 : 1, kind: R.type, link: R.link });
+      if (g.ok(ci + fi, cj + fj) && room[e]) {
+        const w = R.type === 'cargo' ? 2 : 1;
+        doors.push({ a: R.id, b: room[e] - 1, c, dir: [fi, fj], w, kind: R.type, link: R.link });
+        claim(ci, cj, fi, fj, -Math.floor((w - 1) / 2), Math.ceil((w - 1) / 2));
+      }
       continue;
     }
     // 세대 안 방: 그 세대의 거실로
     if (R.unit != null && !R.unitRoot) {
       const U = rooms[R.unit];
-      const q = pickMid(edges(R, (S) => S === U)) || pickMid(edges(R, (S) => S.unit === R.unit || S === U));
-      if (q) add(R, q, R.type === 'kitchen1' ? 'open' : 'door', R.type === 'kitchen1' ? 2 : 1);
+      const kind = R.type === 'kitchen1' ? 'open' : 'door', w = R.type === 'kitchen1' ? 2 : 1;
+      place(R, edges(R, (S) => S === U), kind, w) || place(R, edges(R, (S) => S.unit === R.unit || S === U), kind, w);
       continue;
     }
     if (R.house) {
       // 집 안: 거실·부엌은 홀로 열려 있고, 잠방·씻는 방·서재는 홀(없으면 거실)로 문
-      const q = pickMid(edges(R, (S) => S.circ)) || pickMid(edges(R, (S) => S.type === 'living')) || pickMid(edges(R, (S) => S.house));
       const open = R.type === 'living' || R.type === 'kitchen1';
-      if (q) add(R, q, open ? 'open' : 'door', open ? 2 : 1);
+      const kind = open ? 'open' : 'door', w = open ? 2 : 1;
+      place(R, edges(R, (S) => S.circ), kind, w) || place(R, edges(R, (S) => S.type === 'living'), kind, w) || place(R, edges(R, (S) => S.house), kind, w);
       // 계단·승강기 홀과 집 홀 사이
       continue;
     }
     // 보통 방: 복도·홀로 (큰 방·공용 방은 넓게)
     let list = edges(R, circ);
     if (!list.length) list = edges(R, (S) => !['stair', 'lift', 'cargo', 'shaft'].includes(S.type));
-    const q = pickMid(list);
-    if (!q) continue;
+    if (!list.length) continue;
     const pub = ROOMS[R.type] && ROOMS[R.type].acc === 'public';
     const wide = R.n > 60 || ['waiting', 'lounge', 'canteen', 'gym', 'foyer', 'auditorium', 'kiosk', 'bar', 'platform', 'gallery', 'gymroom', 'pool', 'deck', 'sorting', 'rawstore', 'finished', 'coilroom', 'fuelstore', 'packing', 'stockroom', 'kitchen', 'giftshop', 'counters', 'reading'].includes(R.type);
     const open = ['waiting', 'lounge', 'kiosk', 'bar', 'platform', 'foyer', 'deck', 'sorting', 'rawstore', 'finished', 'canteen'].includes(R.type);
-    add(R, q, open ? 'open' : R.boh ? 'staff' : 'door', open ? 3 : wide ? 2 : 1);
+    const q = place(R, list, open ? 'open' : R.boh ? 'staff' : 'door', open ? 3 : wide ? 2 : 1);
     // 큰 방은 둘째 문 (먼 쪽)
-    if (R.n > 90 && list.length > 6) {
+    if (q && R.n > 90 && list.length > 6) {
       let far = null, fd = -1;
       for (const x of list) { const d = Math.hypot(g.i(x.c) - g.i(q.c), g.j(x.c) - g.j(q.c)); if (d > fd) { fd = d; far = x; } }
       if (far && fd > 6) add(R, far, open ? 'open' : R.boh ? 'staff' : 'door', wide ? 2 : 1);
@@ -1218,8 +1330,7 @@ function makeDoors(B, F, L, g, rnd) {
   // 이어진 전시실: 넓은 열린 문으로 차례로
   if (L.galleries) for (let k = 1; k < L.galleries.length; k++) {
     const R = rooms[L.galleries[k]], P = rooms[L.galleries[k - 1]];
-    const q = pickMid(edges(R, (S) => S === P));
-    if (q) add(R, q, 'open', 3);
+    place(R, edges(R, (S) => S === P), 'open', 3);
   }
   // 갇힌 방이 없게: 문으로 이어진 방 그래프에서 홀·복도에 닿지 않는 방은 아무 이웃으로 문을 낸다
   for (let guard = 0; guard < 4; guard++) {
@@ -1232,8 +1343,7 @@ function makeDoors(B, F, L, g, rnd) {
     for (const R of rooms) {
       if (!R.n || seen.has(R.id) || ['shaft', 'lift', 'cargo'].includes(R.type) || (R.type === 'stair' && !R.stops && R.part != null)) continue;
       if (R.type === 'stair') continue;
-      const qq = pickMid(edges(R, (S) => seen.has(S.id) && !['shaft', 'lift', 'cargo', 'stair'].includes(S.type)));
-      if (qq) { add(R, qq, 'door', 1); fixed++; }
+      if (place(R, edges(R, (S) => seen.has(S.id) && !['shaft', 'lift', 'cargo', 'stair'].includes(S.type)), 'door', 1)) fixed++;
     }
     if (!fixed) break;
   }

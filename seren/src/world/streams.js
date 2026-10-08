@@ -79,7 +79,7 @@ void main() {
   if (!gl_FrontFacing) N = -N;
   vec3 col = shadeLit(vColor, N, 1.0);
   vec3 V = normalize(cameraPosition - vWorld);
-  col += vec3(0.85, 0.92, 1.0) * pow(1.0 - max(dot(N, V), 0.0), 3.0) * 0.35;
+  col += vec3(0.85, 0.92, 1.0) * pow(clamp(1.0 - dot(N, V), 0.0, 1.0), 3.0) * 0.35;
   float litL = dot(col, vec3(0.2126, 0.7152, 0.0722));
   col *= 1.0 / (1.0 + max(litL - 0.72, 0.0) * 1.15);
   col += vColor * vEmit * (0.7 + uGlow * 2.2);

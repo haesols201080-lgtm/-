@@ -46,8 +46,48 @@ export function planExt(r, nx, nz) {
   return Math.hypot(ru * Math.cos(th) * r.sx, ru * Math.sin(th) * r.sz);
 }
 
+// ── 소품끼리의 틈 (v24 P0 「캐릭터 구조물 끼임」) ──
+// 몸이 닿는 높이(2 m 아래)의 소품 충돌체끼리 사람이 지나갈 수 없는 틈(0.85 m 미만)이나 겹침을 만드는 자리에는 소품을 놓지 않는다.
+// (소품 충돌체는 플레이어 둘레만 충돌 세계에 들어가 _free 가 서로를 보지 못했다 — 빛갓나무와 떠 있는 쉼돌 사이에 몸이 끼던 문제)
+const PROP_GAP = 0.85, PROP_BODY = 2.0;
+function propShapes(kind, x, z, yaw, s, sx) {
+  const spec = PROPCOL[kind];
+  if (!spec) return [];
+  const c = Math.cos(yaw), sn = Math.sin(yaw), out = [];
+  for (const q of spec) {
+    if ((q[0] === 'c' ? q[4] : q[5]) * s > PROP_BODY) continue;
+    const lx = q[1] * s * sx, lz = q[2] * s;
+    const wx = x + lx * c + lz * sn, wz = z - lx * sn + lz * c;
+    if (q[0] === 'c') out.push({ c: 1, x: wx, z: wz, r: q[3] * s, R: q[3] * s });
+    else { const rot = yaw + (q[7] || 0), hx = q[3] * s * sx, hz = q[4] * s; out.push({ c: 0, x: wx, z: wz, hx, hz, cs: Math.cos(rot), sn: Math.sin(rot), R: Math.hypot(hx, hz) }); }
+  }
+  return out;
+}
+/** 상자 거리장 (안은 음수) — colliders 의 상자와 같은 회전 */
+function boxSd(b, px, pz) {
+  const dx = px - b.x, dz = pz - b.z;
+  const lx = Math.abs(dx * b.cs - dz * b.sn) - b.hx, lz = Math.abs(dx * b.sn + dz * b.cs) - b.hz;
+  return Math.hypot(Math.max(lx, 0), Math.max(lz, 0)) + Math.min(Math.max(lx, lz), 0);
+}
+function boxCorners(b) {
+  const out = [];
+  for (const [u, v] of [[b.hx, b.hz], [-b.hx, b.hz], [-b.hx, -b.hz], [b.hx, -b.hz]]) out.push([b.x + u * b.cs + v * b.sn, b.z - u * b.sn + v * b.cs]);
+  return out;
+}
+/** 두 충돌 모양 사이의 틈 (겹치면 0 이하) */
+function shapeGap(a, b) {
+  if (a.c && b.c) return Math.hypot(a.x - b.x, a.z - b.z) - a.r - b.r;
+  if (a.c) return boxSd(b, a.x, a.z) - a.r;
+  if (b.c) return boxSd(a, b.x, b.z) - b.r;
+  let m = Math.min(boxSd(a, b.x, b.z), boxSd(b, a.x, a.z));
+  for (const [x, z] of boxCorners(a)) m = Math.min(m, boxSd(b, x, z));
+  for (const [x, z] of boxCorners(b)) m = Math.min(m, boxSd(a, x, z));
+  return m;
+}
+
 export class CityFabric {
   constructor(world, q = {}, { transit, facilities, currents } = {}) {
+    this.propGeom = { propShapes, shapeGap, gap: PROP_GAP }; // 검사 도구(prop-gaps)가 쓴다
     this.world = world;
     world.city = this;
     this.scene = world.scene;
@@ -772,6 +812,7 @@ export class CityFabric {
     this.activeN++;
     this._propsDirty = true;
     B.props = [];
+    B.pshp = [];
     B.spots = [];
     for (const r of B.recs || []) if (r.door) this.fixDoor(r);
     const raw = B.raw || [];
@@ -792,13 +833,13 @@ export class CityFabric {
       if (!c) continue;
       // 템플릿 소품(노점·나무…)과 겹치면 옆으로 조금
       let { x, z } = c;
-      const hit = (px, pz) => B.props.some((q) => Math.hypot(q.x - px, q.z - pz) < 1.4 + (q.s || 1)) || this._doorBlocked(B, px, pz, 0.6);
+      const hit = (px, pz) => B.props.some((q) => Math.hypot(q.x - px, q.z - pz) < 1.4 + (q.s || 1)) || !this._propRoom(B, propShapes('console', px, pz, c.yaw, 1, 1)) || this._doorBlocked(B, px, pz, 0.6);
       if (hit(x, z)) {
         const tx = Math.cos(c.yaw), tz = -Math.sin(c.yaw);
         for (const k of [2.5, -2.5, 5, -5]) if (!hit(c.x + tx * k, c.z + tz * k)) { x = c.x + tx * k; z = c.z + tz * k; break; }
       }
       c.x = x; c.z = z;
-      this._prop(B, 'console', x, z, c.yaw, { y: c.y });
+      this._prop(B, 'console', x, z, c.yaw, { y: c.y, force: true }); // 쓰임이 있는 자리 — 옆으로 비켜도 틈이 없으면 그래도 놓는다 (뒤의 거리 소품이 비킨다)
       B.ext.push(c);
     }
   }
@@ -872,18 +913,32 @@ export class CityFabric {
   }
 
   /** 소품 하나 (세계 좌표) → 블록의 소품 목록 */
-  _prop(B, kind, x, z, yaw = 0, { s = 1, y, sx = 1 } = {}) {
+  _prop(B, kind, x, z, yaw = 0, { s = 1, y, sx = 1, force = false } = {}) {
     // 나무는 자리마다 세 종류 중 하나 (양식에 따라 비율이 다르다: 유리 도시는 결정 깃, 버섯 숲 도시는 빛갓)
     if (kind === 'tree') {
       const st = B.zone && B.zone.style, h = (Math.sin(x * 12.9898 + z * 78.233) * 43758.5453) % 1, q = h < 0 ? h + 1 : h;
       const w = st === 'glass' || st === 'frost' ? [0.2, 0.25] : st === 'bloom' ? [0.2, 0.75] : [0.4, 0.72];
       kind = q < w[0] ? 'tree' : q < w[1] ? 'treeB' : 'treeC';
     }
+    // 다른 소품과 사람이 못 지나갈 틈·겹침을 만들면 놓지 않는다 (force: 쓰임이 있는 조작대 — 자리를 먼저 고른 뒤)
+    const shp = propShapes(kind, x, z, yaw, s, sx);
+    if (shp.length && !force && !this._propRoom(B, shp)) return null;
     const gy = y ?? Math.max(heightAt(x, z), 0) + 0.02;
     const ki = this.pkind.indexOf(kind);
     const m = new THREE.Matrix4().compose(_p.set(x, gy, z), _q.setFromAxisAngle(_up, yaw), _s.set(s * sx, FLAT.has(kind) ? 1 : s, s));
     B.props.push({ ki, x, y: gy, z, s, yaw, sx, m: m.elements });
+    if (shp.length) (B.pshp || (B.pshp = [])).push(...shp);
     return gy;
+  }
+  /** 이 모양들을 놓아도 블록의 다른 소품과 틈이 넉넉한가 (틈 0.85 m 이상 — 겹침도 안 됨) */
+  _propRoom(B, shp) {
+    const L = B.pshp;
+    if (!L || !L.length) return true;
+    for (const a of shp) for (const b of L) {
+      if (Math.hypot(a.x - b.x, a.z - b.z) > a.R + b.R + PROP_GAP) continue;
+      if (shapeGap(a, b) < PROP_GAP) return false;
+    }
+    return true;
   }
 
   /** 블록 좌표로 소품 하나. face: 'out'|'in'|'u+'|'u-'|숫자, o.rel 이면 숫자 face 를 블록 평면의 각으로 */
@@ -897,15 +952,17 @@ export class CityFabric {
     const rr = o.col ? o.col.r * (o.s || 1) : 0.5;
     if (B.core && !this._clearAll(x, z, rr + 0.5)) return null;
     if (this._doorBlocked(B, x, z, rr)) return null;
-    for (const c of this.world.colliders.near(x, z, rr + 2)) {
-      if (!c.city || c.stream) continue;
-      if (c.y0 > h + 6) continue;
-      let d;
-      if (c.type === 'cyl') d = Math.hypot(x - c.x, z - c.z) - c.r;
-      else { const dx = x - c.x, dz = z - c.z; const lx = Math.abs(dx * c.cos - dz * c.sin) - c.hx, lz = Math.abs(dx * c.sin + dz * c.cos) - c.hz; d = Math.hypot(Math.max(lx, 0), Math.max(lz, 0)); }
-      if (d < rr * 0.8) return null;
-    }
     const yaw = typeof face === 'number' && o.rel ? this._yawUV(a, face) : this._yaw(a, face);
+    // 건물·구조물과도 사람이 못 지나갈 틈(0.85 m 미만)이나 겹침이 생기면 놓지 않는다 (소품의 몸 높이 충돌 모양으로 잰다)
+    const shp = propShapes(kind, x, z, yaw, o.s || 1, o.sx || 1);
+    for (const c of this.world.colliders.near(x, z, rr + 3)) {
+      if (!c.city || c.stream) continue;
+      if (c.y0 > h + PROP_BODY || c.y1 < h - 0.5) continue;
+      const w = c.type === 'cyl' ? { c: 1, x: c.x, z: c.z, r: c.r } : c.type === 'box' ? { c: 0, x: c.x, z: c.z, hx: c.hx, hz: c.hz, cs: c.cos, sn: c.sin } : null;
+      if (!w) continue;
+      if (shp.length) { for (const q of shp) if (shapeGap(q, w) < PROP_GAP) return null; }
+      else if ((w.c ? Math.hypot(x - w.x, z - w.z) - w.r : boxSd(w, x, z)) < rr * 0.8) return null;
+    }
     return this._prop(B, kind, x, z, yaw, { s: o.s || 1, sx: o.sx || 1, y: Math.max(h, 0) + 0.02 });
   }
 
@@ -970,10 +1027,10 @@ export class CityFabric {
         else if (sub) { if (rnd() < 0.5 && this._free(xc, zc, 0.9)) this._prop(B, 'tree', xc, zc, rnd() * TAU, { s: 0.8 + rnd() * 0.4 }); continue; }
         else if (rnd() < pd && this._free(xc, zc, 0.9)) this._prop(B, fernish && rnd() < 0.5 ? 'fern' : 'tree', xc, zc, rnd() * TAU, { s: 0.8 + rnd() * 0.4 });
         if (rnd() > pd || B.type === USE.FARM || !B.type) continue;
-        if (idx % 23 === 11 && this._free(xb, zb, 2.4)) { this._prop(B, 'shelter', xb, zb, face + Math.PI); this._spotXY(B, 'wait', xb - nx * 0.8, zb - nz * 0.8, face); }
-        else if (idx % 13 === 6 && (B.type === USE.COM || B.type === USE.PLZ || B.type === USE.RES) && this._free(xb, zb, 2.6)) { this._prop(B, 'kiosk', xb, zb, face); this._spotXY(B, 'sell', xb - nx * 2.6, zb - nz * 2.6, face); }
+        if (idx % 23 === 11 && this._free(xb, zb, 2.4)) { if (this._prop(B, 'shelter', xb, zb, face + Math.PI) != null) this._spotXY(B, 'wait', xb - nx * 0.8, zb - nz * 0.8, face); }
+        else if (idx % 13 === 6 && (B.type === USE.COM || B.type === USE.PLZ || B.type === USE.RES) && this._free(xb, zb, 2.6)) { if (this._prop(B, 'kiosk', xb, zb, face) != null) this._spotXY(B, 'sell', xb - nx * 2.6, zb - nz * 2.6, face); }
         else if (idx % 11 === 5 && this._free(xb, zb, 0.8)) this._prop(B, 'pillar', xb, zb, 0);
-        else if (idx % 5 === 0 && this._free(xb, zb, 1.2)) { this._prop(B, 'bench', xb, zb, face + Math.PI); this._spotXY(B, 'sit', xb, zb, face); }
+        else if (idx % 5 === 0 && this._free(xb, zb, 1.2)) { if (this._prop(B, 'bench', xb, zb, face + Math.PI) != null) this._spotXY(B, 'sit', xb, zb, face); }
         else if (idx % 7 === 3 && this._free(xb, zb, 1.0)) this._prop(B, 'planter', xb, zb, 0);
         else if (idx % 9 === 2 && this._free(xb, zb, 0.3)) this._prop(B, 'bollard', xb, zb, 0);
       }
@@ -997,7 +1054,7 @@ export class CityFabric {
         const [x, z, a] = uvToWorld(B, lc + off, v);
         if (heightAt(x, z) < 0.8 || !this._free(x, z, kind === 'bench' ? 1.2 : 0.8)) continue;
         if (kind === 'lamp') lamp(x, z, rnd() * TAU, 0.75);
-        else if (kind === 'bench') { const f = this._yaw(a, off > 0 ? 'u-' : 'u+'); this._prop(B, 'bench', x, z, f); this._spotXY(B, 'sit', x, z, f); }
+        else if (kind === 'bench') { const f = this._yaw(a, off > 0 ? 'u-' : 'u+'); if (this._prop(B, 'bench', x, z, f) != null) this._spotXY(B, 'sit', x, z, f); }
         else this._prop(B, kind, x, z, kind === 'tree' ? rnd() * TAU : 0, kind === 'tree' ? { s: 0.7 + rnd() * 0.3 } : {});
       }
     }
@@ -1463,7 +1520,7 @@ export function fountainWaterMaterial() {
         if (uWade.z > 0.0) { vec2 d = q - uWade.xy; float dl = length(d); g += (d / max(dl, 1e-3)) * cos(dl * 8.0 - t * 9.0) * 0.2 * uWade.z * exp(-dl * 0.9); }
         vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
         vec3 V = normalize(cameraPosition - vWorld);
-        float fres = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+        float fres = 0.04 + 0.96 * pow(clamp(1.0 - dot(N, V), 0.0, 1.0), 5.0);
         vec3 R = reflect(-V, N);
         vec3 sky = skyBase(vec3(R.x, abs(R.y), R.z));
         vec3 light = uAmbTop * 0.9 + uSunColor * 0.4 * max(uSunDir.y, 0.0);

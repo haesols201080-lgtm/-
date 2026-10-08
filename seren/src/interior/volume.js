@@ -55,9 +55,11 @@ export function facadeProfile(kind, geo) {
 
 /**
  * 건물 기록 → 부피. 격자 틀(문 쪽 = +z)로 옮긴 원통·상자 목록.
- * 반환: { cols, base, top, floorY, R(격자 반경 m), theta(틀의 세계 회전), ex, ez(틀 축의 세계 방향) }
+ * S: 실내 평면 배율 — 실내는 바깥 껍데기 부피에 끌려가지 않는다(v24): 좁거나 작은 건물은 가로·세로를 S 배로 넓혀 짓는다
+ *    (높이는 그대로 — 층 높이는 program 의 실내 높이 iy·ic 가 따로). 바깥과의 자리 대응(테라스·옥상·공중다리)은 ext 사상으로.
+ * 반환: { cols, base, top, floorY, R(격자 반경 m), theta(틀의 세계 회전), ex, ez(틀 축의 세계 방향), S }
  */
-export function volumeOf(r) {
+export function volumeOf(r, scale = 1) {
   const S = SPEC[r.kind];
   const dn = r.door ? [r.door.nx, r.door.nz] : [0, 1];
   const theta = Math.atan2(dn[0], dn[1]);
@@ -71,15 +73,16 @@ export function volumeOf(r) {
   let top = r.base, R = 0;
   for (const p of list) {
     const px = p[1] * sx, pz = p[2] * sz;
-    const [gx, gz] = toGrid(px * c + pz * s, -px * s + pz * c);
+    let [gx, gz] = toGrid(px * c + pz * s, -px * s + pz * c);
+    gx *= scale; gz *= scale;
     if (p[0] === 'c') {
-      const rr = p[3] * Math.min(sx, sz);
+      const rr = p[3] * Math.min(sx, sz) * scale;
       const col = { t: 'c', x: gx, z: gz, r: rr, y0: r.base + p[4] * sy, y1: r.base + p[5] * sy, dome: p[6] ? p[6] * sy : 0 };
       cols.push(col);
       R = Math.max(R, Math.hypot(gx, gz) + rr);
       top = Math.max(top, col.y1);
     } else {
-      const hx = p[3] * sx, hz = p[4] * sz;
+      const hx = p[3] * sx * scale, hz = p[4] * sz * scale;
       const rot = (r.rot || 0) + (p[7] || 0) - theta;
       const col = { t: 'b', x: gx, z: gz, hx, hz, rot, cs: Math.cos(rot), sn: Math.sin(rot), y0: r.base + p[5] * sy, y1: r.base + p[6] * sy };
       cols.push(col);
@@ -87,7 +90,7 @@ export function volumeOf(r) {
       top = Math.max(top, col.y1);
     }
   }
-  return { cols, base: r.base, top, floorY: r.floorY ?? r.gy, R: Math.ceil(R + 1), theta, ex, ez, sy };
+  return { cols, base: r.base, top, floorY: r.floorY ?? r.gy, R: Math.ceil(R + 1), theta, ex, ez, sy, S: scale };
 }
 
 /** 한 부피의 (x, z, y) 부호 거리 (안 < 0). 그 높이를 지나지 않으면 큰 값 */
@@ -165,5 +168,9 @@ export function toGrid(r, V, x, z) {
   const dx = x - r.x, dz = z - r.z;
   return [dx * V.ex[0] + dz * V.ex[1], dx * V.ez[0] + dz * V.ez[1]];
 }
+/** 실내 틀 좌표 → 바깥 세계 (x, z): 실내 배율 S 를 걷어 낸 실제 건물 자리 (테라스·옥상·공중다리로 나갈 때) */
+export function toWorldExt(r, V, gx, gz) { const S = V.S || 1; return toWorld(r, V, gx / S, gz / S); }
+/** 바깥 세계 (x, z) → 실내 틀 좌표 (배율 S 를 곱한) */
+export function toGridExt(r, V, x, z) { const S = V.S || 1; const [a, b] = toGrid(r, V, x, z); return [a * S, b * S]; }
 /** 틀의 방향(틀 yaw) → 세계 yaw */
 export const yawToWorld = (V, a) => a + V.theta;

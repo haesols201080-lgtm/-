@@ -76,7 +76,7 @@ void main() {
   vec3 lights = mix(vec3(1.0, 0.72, 0.38), vec3(0.5, 0.95, 0.9), smoothstep(0.3, 0.7, fbm3(p * 6.0)));
   col += lights * city * spark * landK * (1.0 - cl * 0.7) * night * 0.9;
   // 대기의 테와 노을
-  float fr = pow(1.0 - max(dot(N, V), 0.0), 2.6);
+  float fr = pow(clamp(1.0 - dot(N, V), 0.0, 1.0), 2.6);
   vec3 sky = mix(vec3(1.0, 0.5, 0.3), vec3(0.35, 0.72, 0.95), smoothstep(-0.05, 0.3, ndl));
   col += sky * fr * smoothstep(-0.25, 0.25, ndl) * 1.3;
   col += vec3(0.04, 0.08, 0.11) * day;
@@ -159,7 +159,7 @@ void main() {
   float lit = smoothstep(-0.1, 0.35, ndl);
   vec3 term = mix(vec3(1.0, 0.45, 0.25), vec3(1.0), smoothstep(-0.05, 0.4, ndl));
   col = col * vec3(1.0, 0.96, 0.9) * 2.0 * lit * term;
-  float fres = pow(1.0 - max(dot(N, Vd), 0.0), 2.5);
+  float fres = pow(clamp(1.0 - dot(N, Vd), 0.0, 1.0), 2.5);
   col += mix(vec3(0.9, 0.55, 0.35), vec3(1.0, 0.85, 0.6), lit) * fres * smoothstep(-0.3, 0.2, ndl) * 0.8;
   gl_FragColor = vec4(col, 1.0);
   ${OUT}
@@ -228,7 +228,7 @@ void main() {
   float sp = pow(max(dot(N, H), 0.0), 40.0) * 0.5 * d;
   vec3 col = vC * (vec3(1.0, 0.96, 0.9) * 1.4 * d + uShine * (0.35 + 0.65 * max(dot(N, uShineDir), 0.0)) + vec3(0.012, 0.014, 0.02));
   col += vec3(1.0) * sp + vC * vE * 2.2;
-  col += uShine * pow(1.0 - max(dot(N, Vd), 0.0), 3.0) * 0.25;
+  col += uShine * pow(clamp(1.0 - dot(N, Vd), 0.0, 1.0), 3.0) * 0.25;
   gl_FragColor = vec4(col, 1.0);
   ${OUT}
 }`,
@@ -248,7 +248,7 @@ uniform vec3 uC; uniform float uK; uniform float uT;
 varying vec2 vUv; varying float vF;
 void main() {
   float along = 1.0 - vUv.y;
-  float a = pow(along, 1.6) * pow(vF, 1.2) * (0.85 + 0.15 * sin(uT * 40.0 + vUv.y * 30.0));
+  float a = pow(clamp(along, 0.0, 1.0), 1.6) * pow(clamp(vF, 0.0, 1.0), 1.2) * (0.85 + 0.15 * sin(uT * 40.0 + vUv.y * 30.0)); // 보간 끝값이 1 을 살짝 넘으면 pow(음수) = NaN
   gl_FragColor = vec4(uC * uK * a, 1.0);
 }`,
     transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
@@ -273,7 +273,7 @@ uniform float uK; uniform float uT;
 varying float vF; varying vec3 vP;
 void main() {
   float fl = 0.75 + 0.25 * sin(uT * 37.0 + vP.x * 4.0) * sin(uT * 23.0 - vP.z * 5.0);
-  float a = (pow(vF, 1.3) * 1.4 + 0.3) * fl;
+  float a = (pow(clamp(vF, 0.0, 1.0), 1.3) * 1.4 + 0.3) * fl;
   vec3 col = mix(vec3(1.0, 0.42, 0.18), vec3(1.0, 0.72, 0.92), vF);
   gl_FragColor = vec4(col * a * uK, 1.0);
 }`,
@@ -316,7 +316,8 @@ class Space {
 varying vec3 vD;
 void main(){
   vec3 n = normalize(vec3(0.3, 0.85, 0.42));
-  float b = exp(-pow(dot(vD, n) / 0.2, 2.0)) * (0.45 + 0.55 * fbm3(vD * 7.0));
+  float q = dot(vD, n) / 0.2;
+  float b = exp(-q * q) * (0.45 + 0.55 * fbm3(vD * 7.0)); // pow(음수, 2.0) 은 모바일 GPU 에서 NaN
   vec3 col = vec3(0.004, 0.005, 0.012) + vec3(0.05, 0.05, 0.08) * b + vec3(0.06, 0.03, 0.05) * b * fbm3(vD * 13.0 + 3.0);
   gl_FragColor = vec4(col, 1.0);
 }`,
@@ -540,8 +541,14 @@ export class Approach {
   }
 
   _lines(t) {
+    if (this._skipping) return; // 넘기는 동안은 자막도 멈춤 (넘긴 뒤 새 장면의 자막부터)
     let idx = -1;
     this.lines.forEach((l, i) => { if (t >= l[0] && t < l[1]) idx = i; });
+    this._line(idx);
+  }
+
+  /** 자막 idx 를 보이기 (-1: 지우기) */
+  _line(idx) {
     if (idx === this.cur) return;
     this.cur = idx;
     const c = this.capC;
@@ -755,10 +762,27 @@ export class Approach {
     if (w > TW - 1.2) this._once('fade', () => g.ui.fade(true));
   }
 
-  /** 넘기기: 우주 → 들판, 들판 → 끝 */
+  /**
+   * 넘기기: 우주 → 들판, 들판 → 끝. 순서: 누름 → 검은 막이 다 덮음 → (막 뒤에서) 장면 바꾸기 → 새 장면을 몇 번 그림 → 막 걷기.
+   * 넘기는 중에 또 눌러도 한 번만 — 우주 장면을 끄고 세계 카메라로 바뀌는 사이의 프레임이 막 밖으로 새지 않는다.
+   */
   skip(seq) {
-    if (seq.t < TB) { seq.t = TB; this.cur = -1; return true; }
-    return false;
+    if (this._skipping) return true;
+    this._skipping = true;
+    const g = this.game, toField = seq.t < TB;
+    this._line(-1);
+    g.ui.coverThen(() => {
+      if (g.director.seq !== seq) { this._skipping = false; return; }
+      if (toField) {
+        seq.t = Math.max(seq.t, TB);
+        // 막 뒤에서 들판 첫 장면을 몇 번 그린 뒤 걷는다 (우주 장면 정리·세계 카메라·지형이 자리 잡게)
+        setTimeout(() => { this._skipping = false; if (g.director.seq === seq) g.ui.fade(false, true); }, 320);
+      } else {
+        seq.t = seq.duration; // 다음 프레임에 끝 → finish → 본편 시작(begin)이 막을 걷는다
+        this._skipping = false;
+      }
+    });
+    return true;
   }
 
   finish() {

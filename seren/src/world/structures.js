@@ -320,12 +320,16 @@ export class Structures {
     bparts.push(part(xf(new THREE.CylinderGeometry(0.9, 1.1, 0.3, 8), { x: bx, y: by + 0.15, z: bz }), 0x8e8a9c, 0));
     this._mesh(bparts, this.mats.stone);
     this._col({ type: 'cyl', x: bx, z: bz, r: 0.7, y0: by - 1, y1: by + 5.6 });
+    // 고리(반지름 1.1 + 굵기 0.05)는 돌다가 세로로 서면 가장 낮은 점이 가운데 아래 1.15 m — 기둥 꼭대기(by + 5.5)보다 늘 0.15 m 이상 위에
+    //  있도록 구슬·고리의 가운데를 6.95 m(흔들림 ±0.15)에 둔다 (v24: 돌던 고리가 기둥 꼭대기를 꿰뚫던 문제 — 회전은 그대로)
+    const TOP = 5.5, R = 1.1, TUBE = 0.05, BOB = 0.15, CY = TOP + R + TUBE + BOB + 0.15;
     const orb = new THREE.Mesh(new THREE.OctahedronGeometry(0.5, 1), glowMaterial({ color: 0x9ff6ff, intensity: 2.4 }));
-    orb.position.set(bx, by + 6.3, bz);
-    const halo = new THREE.Mesh(new THREE.TorusGeometry(1.1, 0.05, 4, 32), glowMaterial({ color: 0xffd27a, intensity: 2.0 }));
+    orb.position.set(bx, by + CY, bz);
+    const halo = new THREE.Mesh(new THREE.TorusGeometry(R, TUBE, 4, 32), glowMaterial({ color: 0xffd27a, intensity: 2.0 }));
     halo.position.copy(orb.position);
     this.group.add(orb, halo);
-    this.anims.push((t) => { orb.rotation.y = t * 0.6; halo.rotation.set(Math.PI / 2 + Math.sin(t * 0.7) * 0.4, t * 0.5, 0); orb.position.y = by + 6.3 + Math.sin(t * 1.2) * 0.15; });
+    this.beaconRing = { orb, halo, top: by + TOP, axis: [bx, bz], pillarR: 0.35, R, tube: TUBE };
+    this.anims.push((t) => { orb.rotation.y = t * 0.6; halo.rotation.set(Math.PI / 2 + Math.sin(t * 0.7) * 0.4, t * 0.5, 0); orb.position.y = by + CY + Math.sin(t * 1.2) * BOB; halo.position.y = orb.position.y; });
     this.markers.push({ id: 'crash', x, y, z });
   }
 

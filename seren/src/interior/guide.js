@@ -118,7 +118,7 @@ export class Guide {
     let pts = null;
     if (N) pts = findPath(N, px, pz, tx, tz, 40000);
     if (!pts) pts = [[px, pz], [tx, tz]];
-    this.leg = { floor: here, pts, next, tx, tz };
+    this.leg = { floor: here, cell: ind.cellKey, pts, next, tx, tz };
     let len = 0;
     for (let k = 1; k < pts.length; k++) len += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]);
     const F = B.floors[goal.floor];
@@ -141,6 +141,7 @@ export class Guide {
       const ux = (bx - ax) / L, uz = (bz - az) / L;
       for (let t = carry; t < L; t += DOT) {
         const gx = ax + ux * t, gz = az + uz * t;
+        if (ind.parts && ind.parts.size && !ind.inCellGrid(i, gx, gz)) { carry = t + DOT - L; continue; } // 지금 셀 밖(문 너머)은 그리지 않는다
         const [wx, wz] = ind.world(gx, gz);
         const [fx, fz] = ind.world(gx + ux * 0.22, gz + uz * 0.22), [sx, sz] = ind.world(gx - uz * 0.14, gz + ux * 0.14), [rx, rz] = ind.world(gx + uz * 0.14, gz - ux * 0.14), [kx, kz] = ind.world(gx - ux * 0.12, gz - uz * 0.12);
         // 화살촉 (두 삼각형)
@@ -167,7 +168,11 @@ export class Guide {
       this.beacon.userData.indoor = true;
       this.game.engine.scene.add(this.beacon);
     }
-    const [bx, bz] = pts[pts.length - 1];
+    // 빛 기둥: 목적지가 지금 셀 안이면 거기, 아니면 길이 지금 셀을 떠나는 문턱(다음 공간으로 가는 문)에
+    let [bx, bz] = pts[pts.length - 1];
+    if (ind.parts && ind.parts.size && !ind.inCellGrid(i, bx, bz)) {
+      for (let k = pts.length - 1; k > 0; k--) if (ind.inCellGrid(i, pts[k - 1][0], pts[k - 1][1]) && !ind.inCellGrid(i, pts[k][0], pts[k][1])) { [bx, bz] = pts[k - 1]; break; }
+    }
     const [wx, wz] = ind.world(bx, bz);
     this.beacon.position.set(wx, ind.yOf(i), wz);
     this.beacon.visible = true;
@@ -179,7 +184,7 @@ export class Guide {
     if (!cur) { this.clear(); return; }
     this.t += dt;
     const ind = cur.indoor, p = this.game.player.pos;
-    if (this.leg && this.leg.floor !== ind.cur) this.t = 1e9; // 층이 바뀌었다
+    if (this.leg && (this.leg.floor !== ind.cur || this.leg.cell !== ind.cellKey)) this.t = 1e9; // 층이나 공간(셀)이 바뀌었다
     if (this.t > 1.2) {
       // 길에서 벗어났거나 시간이 지나면 다시
       this.t = 0;

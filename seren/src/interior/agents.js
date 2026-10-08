@@ -154,7 +154,11 @@ export class Agents {
     if (an.speakT > 0) an.speak = 1;
   }
   /** 무리 그리기 (citizens.update 가 vis 로 그린다) — 지금 층 사람만 */
-  visible() { const cur = this.ind.cur; return this.list.filter((a) => a.floor === cur); }
+  visible() {
+    // 지금 셀(이 방·구역)에 있는 사람만 — 다른 방의 사람은 문 너머에서 보이지 않는다 (그 방은 짓지 않았다)
+    const ind = this.ind;
+    return this.list.filter((a) => ind.parts.has(a.floor) ? ind.inCellGrid(a.floor, a.gx, a.gz) : false);
+  }
   /** 둘레의 걸을 수 있는 칸 하나 (틀 좌표) */
   freeNear(i, gx, gz) { const N = this.navOf(i); if (!N) return [gx, gz]; const s = snap(N, gx, gz, 8); return s ? [N.ox + (s[0] + 0.5) / 2, N.oz + (s[1] + 0.5) / 2] : [gx, gz]; }
 }

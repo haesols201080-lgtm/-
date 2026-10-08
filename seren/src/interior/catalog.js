@@ -309,6 +309,38 @@ export const OP_NAME = {
 
 /** 방 사이 칸막이 두께 (칸 경계 가운데에 선다 — 두 방에 반씩): render.partitions 가 그리고, furnish 가 벽에 붙는 가구를 그만큼 띄운다 */
 export const PART_T = 0.14;
+/**
+ * 방의 가장 작은 크기 (v24): [그 방 안에 들어가야 하는 정사각형 한 변(칸 = m), 넓이(m²)]. 이보다 작으면 「좁은 방」.
+ * 바깥 껍데기에 맞추려 방을 찌그러뜨리지 않는다 — 실내 배율(program.interiorScale)과 방 나누기(layout)가 이 값을 지킨다. 큰 방은 상한 없음.
+ * 여기 없는 방은 [2, 4]. 복도·홀·심(계단·승강기·관)·발코니는 따로.
+ */
+export const MIN_FIT = {
+  classroom: [4, 24], sciroom: [4, 20], musicroom: [3, 12], auditorium: [5, 40], gym: [5, 40], canteen: [4, 24], stacks: [3, 16], reading: [3, 12],
+  gallery: [4, 20], council: [4, 20], rehearsal: [3, 12], stage: [4, 16], warehouse: [4, 30], production: [4, 30], sorting: [4, 20], platform: [3, 20],
+  concourse: [3, 16], growhall: [4, 24], gardenhall: [4, 24], pool: [4, 24], gymroom: [3, 16], open: [3, 12], labroom: [3, 12], wardroom: [3, 12],
+  dining: [3, 12], kitchen: [2, 8], sales: [3, 12], lobby: [3, 12], waiting: [3, 9], lounge: [3, 9], foyer: [3, 12], living: [3, 10], unit: [3, 15],
+  guestroom: [3, 9], bedroom: [3, 8], meeting: [3, 9], manager: [3, 9], consult: [3, 9], treat: [3, 9], scan: [3, 9], office1: [3, 9], control: [3, 9],
+  teachers: [3, 9], dock: [3, 12], counters: [3, 9], rawstore: [3, 9], finished: [3, 9], corehall: [3, 9], coilroom: [3, 9], packing: [3, 9], parkbay: [3, 12],
+  staffroom: [2, 6], nurse: [2, 6], pharmacy: [2, 6], hr: [2, 6], instrument: [2, 6], cleanroom: [2, 6], analysis: [2, 6], stockroom: [2, 6], archive: [2, 6],
+  conserve: [2, 6], giftshop: [2, 6], backstage: [2, 6], laundry: [2, 6], maint: [2, 6], fuelstore: [2, 6], nutrient: [2, 6], deck: [2, 6], bar: [2, 6], kitchen1: [2, 5],
+};
+export const MIN_FIT_SKIP = new Set(['corridor', 'lifthall', 'stair', 'lift', 'cargo', 'shaft', 'balcony', 'vestibule', 'entry']);
+export const minFit = (type) => MIN_FIT[type] || [2, 4];
+/** 방 R(번호 id) 안에 들어가는 가장 큰 정사각형 한 변 (칸) — 0/1 격자에서 가장 큰 정사각 */
+export function fitSide(room, gw, gh, id) { return fitSideIds(room, gw, gh, id, id); }
+/** 방 번호 a 또는 b 인 칸들(두 방을 합친다면)에 들어가는 가장 큰 정사각형 한 변 */
+export function fitSideIds(room, gw, gh, a, b) {
+  const dp = new Uint16Array(gw * gh);
+  let best = 0;
+  for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
+    const c = j * gw + i;
+    if (room[c] !== a && room[c] !== b) continue;
+    const v = i && j ? Math.min(dp[c - 1], dp[c - gw], dp[c - gw - 1]) + 1 : 1;
+    dp[c] = v;
+    if (v > best) best = v;
+  }
+  return best;
+}
 /** 사람이 오가는 공간(복도·승강기 홀·로비·넓은 홀)끼리는 벽 없이 이어진다 — 그리기(render)·걸음 칸(nav)·검사가 같은 규칙 */
 export function flowRoom(R) { return !!R && (R.circ || (R.main && !R.boh)) && !['stair', 'lift', 'cargo', 'shaft'].includes(R.type) && !R.sealed; }
 

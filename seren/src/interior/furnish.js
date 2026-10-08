@@ -345,6 +345,7 @@ export class Furnisher {
     const cell = (i, j) => (i >= 0 && j >= 0 && i < gw && j < gh ? j * gw + i : -1);
     const rect = (q) => { const f = FIX[q.t], odd = q.rot % 2 === 1, W = odd ? f.d : f.w, D = odd ? f.w : f.d; return [q.x - G.ox - W / 2, q.z - G.oz - D / 2, q.x - G.ox + W / 2, q.z - G.oz + D / 2]; };
     let moved = 0, stuck = 0;
+    const stuckList = [];
     for (const q of this.list) {
       const f = FIX[q.t];
       if (!f || f.walk) continue;
@@ -382,18 +383,23 @@ export class Furnisher {
       let dx = 0, dz = 0;
       if (l && !r) dx = l; else if (r && !l) dx = -r;
       if (b && !t) dz = b; else if (t && !b) dz = -t;
-      if ((l && r) || (b && t)) { stuck++; (this.stats.stuckWhy || (this.stats.stuckWhy = {}))['both:' + q.t] = ((this.stats.stuckWhy || {})['both:' + q.t] || 0) + 1; } // 양쪽이 다 벽인 좁은 틈 (밀 곳이 없다)
+      if ((l && r) || (b && t)) { stuck++; stuckList.push(q); (this.stats.stuckWhy || (this.stats.stuckWhy = {}))['both:' + q.t] = ((this.stats.stuckWhy || {})['both:' + q.t] || 0) + 1; } // 양쪽이 다 벽인 좁은 틈 (밀 곳이 없다)
       if (!dx && !dz) continue;
       // 밀어낸 자리가 다른 가구(실제 크기)와 겹치지 않을 때만
       const n = [x0 + dx, z0 + dz, x1 + dx, z1 + dz];
       const hit = this.list.some((p) => { if (p === q || FIX[p.t].walk || p.room !== q.room) return false; const m = rect(p); return n[0] < m[2] - 0.001 && n[2] > m[0] + 0.001 && n[1] < m[3] - 0.001 && n[3] > m[1] + 0.001; });
-      if (hit) { stuck++; const w = this.stats.stuckWhy || (this.stats.stuckWhy = {}); w['hit:' + q.t] = (w['hit:' + q.t] || 0) + 1; continue; }
+      if (hit) { stuck++; stuckList.push(q); const w = this.stats.stuckWhy || (this.stats.stuckWhy = {}); w['hit:' + q.t] = (w['hit:' + q.t] || 0) + 1; continue; }
       q.x += dx; q.z += dz;
       q.ndx = dx; q.ndz = dz; // 걸음 칸(nav)·자리 장부는 밀기 전 자리(칸 경계)로 잰다 — 밀어낸 몇 cm 로 앞 칸이 막히지 않게
       moved++;
     }
+    // 벽 속에서 밀어낼 곳이 없는 가구(v24 「벽뚫」): 쓰임의 일이 일어나는 자리(표시 tag 가 붙은 가구 — 진열대·계산대·책상·잠자리…)가 아니면 치운다.
+    //  표시 가구는 남긴다 (그 방의 일이 사라지지 않게 — 남은 수는 wallStuck 으로 센다)
+    let removed = 0;
+    for (const q of new Set(stuckList)) if (!q.tag && this.remove(q)) { removed++; stuck--; }
     this.stats.nudged = moved;
     this.stats.wallStuck = stuck;
+    this.stats.wallRemoved = removed;
     return moved;
   }
   /** 벽을 따라 줄지어 (등을 벽에): 바깥벽(창) 쪽을 피할지(tall) · 간격 gap m · 최대 n */

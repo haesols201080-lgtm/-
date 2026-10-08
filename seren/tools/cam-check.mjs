@@ -22,6 +22,7 @@ await page.evaluate((DBG) => {
   const g = SEREN.game, T = SEREN.THREE;
   if (g.tips) g.tips.first = () => false;
   g.ui.moa = () => {};
+  g.ui.blink = (mid, done) => { mid(); if (done) done(); }; // 셀 넘기: 가림 막 없이 바로 (한 프레임 안에서 옆 셀을 짓는다)
   window.__dbg = DBG;
   const ray = new T.Raycaster();
   const KEYS = ['n', 'path', 'near', 'beyond', 'ceil'];
@@ -141,21 +142,32 @@ for (const pid of want) {
     const rr = await page.evaluate(({ fi, NP }) => {
       const g = SEREN.game, I = g.interiors, ind = I.cur.indoor;
       if (ind.cur !== fi) { ind.setFloor(fi); if (g.ops) g.ops.floorChanged(fi); g.rig.floorLock = ind.yOf(fi); }
-      const out = ind.built.get(fi), G = ind.G, L = out.L, res = window.__camRes();
+      const G = ind.G, res = window.__camRes();
       res.starts = 0; res.skipped = 0;
-      // 출발 자리: 걸을 수 있는 칸 중 옆 칸이 다른 방·벽인 칸 (벽 앞·문 옆·구석)
+      // 출발 자리: 그 층의 셀(방·구역 독립 공간)마다, 걸을 수 있는 칸 중 옆 칸이 다른 방·벽인 칸 (벽 앞·문 옆·구석)
       const cells = [];
-      for (let c = 0; c < L.room.length; c++) {
-        const i = c % G.gw, j = (c / G.gw) | 0;
-        const [x, z] = ind.world(G.ox + i + 0.5, G.oz + j + 0.5);
-        if (!ind.inside(fi, x, z)) continue;
-        const edge = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => { const [x2, z2] = ind.world(G.ox + i + a + 0.5, G.oz + j + b + 0.5); return !ind.segClear(fi, x, z, x2, z2); });
-        if (edge) cells.push(c);
+      for (const key of ind.cellsOn(fi)) {
+        ind.cur = fi;
+        if (!ind.setCell(key)) continue;
+        const out = ind.built.get(fi);
+        if (!out) continue;
+        const mine = [];
+        for (let c = 0; c < out.L.room.length; c++) {
+          const i = c % G.gw, j = (c / G.gw) | 0;
+          const [x, z] = ind.world(G.ox + i + 0.5, G.oz + j + 0.5);
+          if (!ind.inside(fi, x, z)) continue;
+          const edge = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => { const [x2, z2] = ind.world(G.ox + i + a + 0.5, G.oz + j + b + 0.5); return !ind.segClear(fi, x, z, x2, z2); });
+          if (edge) mine.push(c);
+        }
+        for (let k = 0; k < Math.min(mine.length, 3); k++) cells.push({ key, c: mine[Math.floor(((k + 0.5) * mine.length) / Math.min(mine.length, 3))] });
       }
       window.__camBegin(true);
       try {
-        for (let k = 0; k < NP && cells.length; k++) {
-          const c = cells[Math.floor(((k + 0.5) * cells.length) / NP)];
+        for (let k = 0; k < NP * 3 && cells.length; k++) {
+          const { key, c } = cells[Math.floor(((k + 0.5) * cells.length) / (NP * 3)) % cells.length];
+          ind.cur = fi;
+          ind.setCell(key);
+          const out = ind.built.get(fi), L = out.L;
           const i = c % G.gw, j = (c / G.gw) | 0;
           const [x, z] = ind.world(G.ox + i + 0.5, G.oz + j + 0.5);
           g.player.teleport(x, ind.yOf(fi) + 0.3, z, 0.1);

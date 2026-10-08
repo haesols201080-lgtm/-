@@ -7,7 +7,7 @@ import { layoutFloor } from '../src/interior/layout.js';
 import { facadeProfile, sdfAt, cellX, cellZ } from '../src/interior/volume.js';
 import { packB, unpackB, packL, unpackL } from '../src/interior/store.js';
 import { furnishFloor, ESSENTIAL } from '../src/interior/recipes.js';
-import { FIX } from '../src/interior/catalog.js';
+import { FIX, MIN_FIT_SKIP, minFit, fitSide } from '../src/interior/catalog.js';
 import { navGrid } from '../src/interior/nav.js';
 
 const A = cityArchetypes();
@@ -82,7 +82,19 @@ function drawFix(B, L, FU) {
 const cmd = process.argv[2];
 if (cmd === 'show') {
   const [, , , kind, use, hw, hd, h] = process.argv;
-  const r = fakeRec(kind, use, +hw, +hd, +h);
+  // batch : 일괄 검사의 그 건물과 똑같이 (자리·씨앗·공중다리) — 일괄 검사의 문제 줄을 그대로 다시 볼 때
+  let r;
+  if (process.argv.includes('batch')) {
+    const KINDS = Object.entries(SPEC).filter(([, S]) => S.enter && !S.fixed).map(([k]) => k);
+    const USES = ['home', 'office', 'market', 'cafe', 'school', 'heal', 'library', 'museum', 'hall', 'factory', 'depot', 'lab', 'terminal', 'garden', 'plant', 'hotel', 'admin', 'farm'];
+    const SIZES = [[9, 9, 9], [14, 12, 22], [20, 16, 60], [28, 22, 140], [40, 16, 16], [8, 8, 130]];
+    let n = 0, found = -1;
+    for (const k of KINDS) for (const u of USES) for (const [a, b, c] of SIZES) { if (SPEC[k].low && c > 40) continue; if (k === kind && u === use && a === +hw && b === +hd && c === +h && found < 0) found = n; n++; }
+    if (found < 0) { console.log('일괄 검사에 없는 건물'); process.exit(1); }
+    r = fakeRec(kind, use, +hw, +hd, +h, { x: 1000 + found * 37, z: -2000 + found * 11 });
+    if (+h >= 100) { const th = found * 2.399; let y = r.base + r.sy * (0.4 + ((found * 0.37) % 0.35)); if (!bridgeBodyAt(r, y)) { y = null; for (const f of [0.45, 0.55, 0.65, 0.5, 0.6, 0.7, 0.4]) if (bridgeBodyAt(r, r.base + r.sy * f)) { y = r.base + r.sy * f; break; } } if (y != null) r.bridges = [{ bi: 0, y, ux: Math.cos(th), uz: Math.sin(th) }]; }
+    console.log(`일괄 검사 ${found} 번째 건물`);
+  } else r = fakeRec(kind, use, +hw, +hd, +h);
   // bridge=k : 일괄 검사의 k 번째 건물처럼 공중다리 하나 (높이·방향)
   const bk = process.argv.find((a) => a.startsWith('bridge='));
   if (bk) { const k = +bk.slice(7), th = k * 2.399; let y = r.base + r.sy * (0.4 + ((k * 0.37) % 0.35)); if (!bridgeBodyAt(r, y)) for (const f of [0.45, 0.55, 0.65, 0.5, 0.6, 0.7, 0.4]) if (bridgeBodyAt(r, r.base + r.sy * f)) { y = r.base + r.sy * f; break; } r.bridges = [{ bi: 0, y, ux: Math.cos(th), uz: Math.sin(th) }]; }
@@ -92,7 +104,8 @@ if (cmd === 'show') {
   console.log(`${kind}/${use} ${hw}x${hd}x${h} → ${B.floors.length}층 (지상 ${B.floors.length - B.ground}) size=${B.size} gfa=${B.gfa} core=${B.core ? B.core.types.join('+') : '없음'} roof=${!!B.roof} atrium=${!!B.atrium} ${(t1 - t0).toFixed(0)}ms`);
   console.log('zones:', B.zones.map((Z) => `${Z.use}[${Z.from}-${Z.to}]${Z.org ? ' ' + Z.org.split(':')[1] : ''}`).join(' | '));
   const fa = process.argv.slice(8).find((a) => /^[\d,]+$/.test(a));
-  const want = fa ? fa.split(',').map(Number) : B.floors.map((F) => F.i);
+  const lb = process.argv.find((a) => a.startsWith('label=')); // label=23,B1 : 층 이름으로
+  const want = lb ? B.floors.filter((F) => lb.slice(6).split(',').includes(String(F.label))).map((F) => F.i) : fa ? fa.split(',').map(Number) : B.floors.map((F) => F.i);
   for (const F of B.floors) {
     if (!want.includes(F.i)) continue;
     const L = layoutFloor(B, F, { door: B.door });
@@ -116,7 +129,7 @@ if (!cmd || cmd === 'all') {
   const SIZES = [[9, 9, 9], [14, 12, 22], [20, 16, 60], [28, 22, 140], [40, 16, 16], [8, 8, 130]]; // 마지막: 가늘고 높은 첨탑 (심이 층을 거의 다 차지)
   let n = 0, fail = 0, floors = 0, rooms = 0, ms = 0, mz = 0;
   const LK = { stair: '계단', spiral: '나선 계단', lift: '승강기', cargo: '화물 승강기' };
-  const stats = { nudged: 0, wallStuck: 0, cells: 0, outside: 0, links: 0, order: 0, special: 0, doorD: 0, noTerrace: 0, persist: 0, bridges: 0, bridgeNoLift: 0, walkRooms: 0, walkLost: 0, essRooms: 0, essN: 0, essMiss: {}, byPid: {} };
+  const stats = { fitRooms: 0, narrow: 0, narrowT: {}, narrowEx: [], scale: {}, nudged: 0, wallStuck: 0, stuckWhy: {}, cells: 0, outside: 0, links: 0, order: 0, special: 0, doorD: 0, noTerrace: 0, persist: 0, bridges: 0, bridgeNoLift: 0, walkRooms: 0, walkLost: 0, essRooms: 0, essN: 0, essMiss: {}, byPid: {} };
   const problems = [];
   for (const kind of KINDS) for (const use of USES) for (const [hw, hd, h] of SIZES) {
     const S = SPEC[kind];
@@ -139,6 +152,7 @@ if (!cmd || cmd === 'all') {
       if (!B) { problems.push(`${kind}/${use}/${hw}: 짜임 없음`); fail++; continue; }
       // ── 바깥과 안이 맞는가 ──
       const tag = `${kind}/${use}/${hw}x${h}`;
+      stats.scale[B.V.S] = (stats.scale[B.V.S] || 0) + 1;
       const Vv = B.V, G = B.G;
       let outside = 0, cellsN = 0;
       for (const F of B.floors) {
@@ -183,6 +197,13 @@ if (!cmd || cmd === 'all') {
         floors++;
         if (L.closed) { if (!F.below && !F.dead) problems.push(`${kind}/${use}/${hw}x${h}: ${F.label}층 닿지 않음 (${F.use} n=${F.n})`); continue; }
         rooms += L.rooms.filter((R) => R.n).length;
+        // 좁은 방 (v24 최소 방 크기): 그 방에 들어가야 하는 정사각형 한 변·넓이
+        for (const R of L.rooms) {
+          if (!R.n || MIN_FIT_SKIP.has(R.type) || R.circ) continue;
+          const [mk, ma] = minFit(R.type), k = fitSide(L.room, L.gw, L.gh, R.id + 1);
+          stats.fitRooms++;
+          if (k < mk || R.n < ma) { stats.narrow++; stats.narrowT[R.type] = (stats.narrowT[R.type] || 0) + 1; if (stats.narrowEx.length < 30) stats.narrowEx.push(`${tag} ${F.label}층 ${R.name} ${R.n}m² 정사각 ${k}/${mk}`); }
+        }
         // 문 그래프로 모든 방이 이어지나
         const adj = new Map();
         for (const d of L.doors) { if (d.b < 0) continue; (adj.get(d.a) || adj.set(d.a, []).get(d.a)).push(d.b); (adj.get(d.b) || adj.set(d.b, []).get(d.b)).push(d.a); }
@@ -231,7 +252,7 @@ if (!cmd || cmd === 'all') {
         // 실제로 걸어서 닿나 (가구·벽까지 넣은 0.5 m 걸음 칸): 승강기 홀(없으면 정문 홀)에서 범람 → 모든 방에 닿아야
         {
           const FUr = furnishFloor(B, L), fx = FUr.list;
-          stats.nudged += FUr.stats.nudged || 0; stats.wallStuck += FUr.stats.wallStuck || 0;
+          stats.nudged += FUr.stats.nudged || 0; stats.wallStuck += FUr.stats.wallStuck || 0; stats.wallRemoved = (stats.wallRemoved || 0) + (FUr.stats.wallRemoved || 0); if (FUr.stats.wallStuck) for (const [k, v] of Object.entries(FUr.stats.stuckWhy || {})) stats.stuckWhy[k] = (stats.stuckWhy[k] || 0) + v;
           // 방마다 꼭 있어야 하는 가구 (그 쓰임의 일이 일어나는 자리): 하나라도 없으면 센다
           for (const R of L.rooms) {
             const need = R.n ? ESSENTIAL[R.type] : null;
@@ -287,7 +308,10 @@ if (!cmd || cmd === 'all') {
   }
   console.log(`건물 ${n} · 실패 ${fail} · 층 ${floors} · 방 ${rooms} · 평균 ${(ms / n).toFixed(1)} ms · 중2층 계단 ${mz}`);
   console.log(`바깥 부피 밖 칸 ${stats.outside}/${stats.cells} · 이음 검사 ${stats.links} · 쓰임 차례 검사 ${stats.order} (전문 건물 ${stats.special}) · 정문-바깥 문 (가장 가까운 칸 기준) 최대 ${stats.doorD.toFixed(1)} m · 테라스 문 없는 큰 테라스 ${stats.noTerrace} · 저장 왕복 ${stats.persist} · 공중다리 문 ${stats.bridges} (승강기 안 서는 층 ${stats.bridgeNoLift}, 문 → 바깥 외벽 최대 ${(stats.bridgeWall || 0).toFixed(1)} m, 다리 폭 밖으로 비킨 문 ${stats.bridgeOff || 0} · 최대 ${(stats.bridgeSide || 0).toFixed(1)} m)`);
-  console.log(`칸막이에 닿은 가구: 벽 두께만큼 밀어냄 ${stats.nudged} · 밀 곳이 없어 칸막이에 파고든 채 ${stats.wallStuck}`);
+  console.log(`칸막이에 닿은 가구: 벽 두께만큼 밀어냄 ${stats.nudged} · 밀 곳이 없어 치움 ${stats.wallRemoved || 0} · 칸막이에 파고든 채 남은 표시 가구 ${stats.wallStuck}${stats.wallStuck ? ` (${Object.entries(stats.stuckWhy).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k} ${v}`).join(', ')})` : ''}`);
+  console.log(`좁은 방 (최소 크기 미달): 방 ${stats.fitRooms} 중 ${stats.narrow} — ${Object.entries(stats.narrowT).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+  console.log(`실내 배율 S: ${Object.entries(stats.scale).sort((a, b) => a[0] - b[0]).map(([k, v]) => `${k}×${v}`).join(' · ')}`);
+  if (process.env.NARROW) console.log(stats.narrowEx.join('\n'));
   console.log(`걸어서 닿는가 (가구·벽 포함 0.5 m 칸): 방 ${stats.walkRooms} 중 못 가는 방 ${stats.walkLost}`);
   console.log(`핵심 가구 (방마다 그 쓰임의 일이 일어나는 자리): 방 ${stats.essRooms} 중 빠진 것 ${stats.essN}${stats.essN ? ` — ${Object.entries(stats.essMiss).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => `${k} ${v}`).join(', ')}` : ''}`);
   console.log('1층 짜임의 가짓수 (같은 쓰임 안에서):', Object.entries(stats.byPid).map(([k, v]) => `${k} ${v.sig.size}`).join(' · '));

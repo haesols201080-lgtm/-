@@ -35,7 +35,7 @@ export function buildFloor(ctx) {
   const st = Z.style || {};
   const isMezz = !!F.mezz;
   const below = !!F.below;
-  const ceilAll = F.ceil - F.y; // 이 층 천장 (로컬)
+  const ceilAll = F.ic ?? F.ceil - F.y; // 이 층 천장 (로컬) — 실내 높이 (바깥 층 띠와 따로 · MIN_CEIL 이상)
   const gb = new GB(), glass = new GB(), win = new GB(), cgb = new GB(); // cgb: 천장 (따로 — 지도·점검 때 감출 수 있게)
   const winUV = [];
   const cols = [];
@@ -100,14 +100,27 @@ export function buildFloor(ctx) {
     if (best) roomX[c] = best;
   }
   const RX = (c) => (roomX[c] ? rooms[roomX[c] - 1] : null);
-  // 계단 칸 (층판을 계단참만 덮는다)
-  const stairCells = new Map(); // c → 'land' | 'well'
+  // ── 셀 (v24): ctx.rooms 가 있으면 그 방들만 짓는다 — 셀 밖 방과의 경계는 닫힌 벽(문 자리는 문틀 + 어두운 깊이), 셀 밖은 아무것도 없다
+  const cellRooms = ctx.rooms || null;
+  const inCellR = (R) => !cellRooms || (!!R && cellRooms.has(R.id));
+  const cellIn = (c) => inCellR(RX(c));
+  out.cellRooms = cellRooms;
+  // 계단 칸 (층판을 계단참만 덮는다): 'land' 바닥·천장 · 'well' 뚫림(바닥도 천장도 없음) · 'wellfloor' 계단이 시작하는 맨 아래층(바닥은 있고 천장은 없음)
+  const stairCells = new Map();
   // ── 1. 수직 심: 계단·승강기·관 ──
   const core = B.core;
   if (core && !isMezz) {
     for (const p of core.parts) {
       const R = rooms.find((q) => q.part === core.parts.indexOf(p));
       if (!R) continue;
+      // 이 셀에 드는 것만: 계단은 그 계단 칸이 셀일 때, 승강기는 승강기 문 앞 방이 셀일 때, 관은 둘레에 셀 방이 있을 때
+      if (cellRooms) {
+        let keep = false;
+        if (p.kind === 'stair' || p.kind === 'spiral') keep = cellRooms.has(R.id);
+        else if (p.kind === 'lift' || p.kind === 'cargo') keep = L.doors.some((d) => d.a === R.id && d.b >= 0 && cellRooms.has(d.b));
+        else for (const [ci, cj] of p.cells) { for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const ii = ci + a, jj = cj + b; if (ii >= 0 && jj >= 0 && ii < gw && jj < gh && cellIn(jj * gw + ii)) keep = true; } }
+        if (!keep) continue;
+      }
       const lk = B.links.find((k) => k.part === core.parts.indexOf(p) && k.kind !== 'roof');
       if (p.kind === 'stair' || p.kind === 'spiral') buildStair(ctx, out, gb, glass, p, lk, stairCells, st);
       else if (p.kind === 'lift' || p.kind === 'cargo') buildLift(ctx, out, gb, p, lk, R, st);
@@ -119,7 +132,7 @@ export function buildFloor(ctx) {
     }
   }
   // ── 1b. 중2층 계단 (홀 바닥 → 중2층 앞 가장자리): 디딤판·챌판·옆 유리 난간·경사 충돌체 ──
-  if (L.mstair && !isMezz) buildMezzStair(ctx, out, gb, glass, L.mstair, st);
+  if (L.mstair && !isMezz && (!cellRooms || inCellR(rooms.find((q) => q.main) || null) || [...cellRooms].some((id) => rooms[id] && rooms[id].main))) buildMezzStair(ctx, out, gb, glass, L.mstair, st);
   // ── 2. 바닥 · 천장 ──
   const flCol = (R) => {
     const fl = R ? (ROOMS[R.type] || {}).fl || 'tile' : 'tile';
@@ -139,7 +152,7 @@ export function buildFloor(ctx) {
       const v = [S(i, j), S(i + 1, j), S(i + 1, j + 1), S(i, j + 1)];
       const anyIn = isMezz ? !!room[c] : Math.min(...v) < 0;
       const sc = stairCells.get(c);
-      const skipFloor = !anyIn || L.void[c] || sc === 'well' || (R && (R.type === 'lift' || R.type === 'cargo' || R.type === 'shaft'));
+      const skipFloor = !anyIn || L.void[c] || sc === 'well' || (R && (R.type === 'lift' || R.type === 'cargo' || R.type === 'shaft')) || !cellIn(c);
       if (skipFloor) { flush(); }
       else {
         const full = isMezz || Math.max(...v) < 0;
@@ -149,8 +162,8 @@ export function buildFloor(ctx) {
         if (run && run.i1 === i - 1) run.i1 = i; else { flush(); run = { j, i0: i, i1: i }; }
       }
       // 천장 (뚫린 곳·계단 우물 위는 다음 층 계단이 있으니 열어 둔다 — 맨 위층 계단은 덮는다)
-      if (anyIn && !L.void[c] && !(R && ['lift', 'cargo', 'shaft'].includes(R.type))) {
-        if (sc === 'well' && ctx.next) { cflush(); continue; }
+      if (anyIn && !L.void[c] && !(R && ['lift', 'cargo', 'shaft'].includes(R.type)) && cellIn(c)) {
+        if ((sc === 'well' || sc === 'wellfloor') && ctx.next) { cflush(); continue; }
         if (ctx.next && sc) cflush(); // 계단 칸 위는 위층 계단·계단참이 천장 노릇 (계단을 오를 머리 자리를 막지 않게)
         else if (crun && crun.i1 === i - 1) crun.i1 = i; else { cflush(); crun = { j, i0: i, i1: i }; }
         const { col, pat, prm } = clCol(R);
@@ -182,7 +195,7 @@ export function buildFloor(ctx) {
       if (m) m.j1 = rr.j; else cm.push({ i0: rr.i0, i1: rr.i1, j0: rr.j, j1: rr.j });
     }
     // 위층이 있으면 그 바닥 아래까지만 (위층 바닥 위로 솟지 않게)
-    const top = Math.max(ceilAll + 0.05, Math.min(ceilAll + 0.3, ctx.next.y - F.y - 0.02));
+    const top = Math.max(ceilAll + 0.05, Math.min(ceilAll + 0.3, (ctx.next.iy ?? ctx.next.y) - (F.iy ?? F.y) - 0.02));
     for (const m of cm) cols.push(colBox(ctx, ox + (m.i0 + m.i1 + 1) / 2, oz + (m.j0 + m.j1 + 1) / 2, (m.i1 - m.i0 + 1) / 2, (m.j1 - m.j0 + 1) / 2, 0, ceilAll, top, false));
   }
   // ── 3. 바깥벽 (행진 사각형 윤곽) + 창 ──
@@ -230,8 +243,11 @@ export function buildFloor(ctx) {
       // 이 벽에 붙은 방 (창이 필요한 방인가)
       const ci = Math.floor(mx + nx * 0.6 - ox), cj = Math.floor(mz + nz * 0.6 - oz);
       const R = ci >= 0 && cj >= 0 && ci < gw && cj < gh ? RX(cj * gw + ci) : null;
+      if (cellRooms && !inCellR(R)) continue; // 셀 밖 방의 바깥벽은 짓지 않는다
       const wantWin = !below && R && (ROOMS[R.type] || {}).win && !tallBehind(fix, mx, mz, nx, nz);
-      const h0 = ceilAt(a[0], a[1]), h1 = ceilAt(b[0], b[1]);
+      let h0 = ceilAt(a[0], a[1]), h1 = ceilAt(b[0], b[1]);
+      // 계단실의 바깥벽은 위층 바닥까지 (천장 없는 우물 둘레에 층 사이 틈이 없게)
+      if (R && R.type === 'stair' && ctx.next) { const tn = (ctx.next.iy ?? ctx.next.y) - (F.iy ?? F.y); h0 = Math.max(h0, tn); h1 = Math.max(h1, tn); }
       const wallC = mix(st.wall, 0xffffff, 0.08);
       const wp = PAT.panel + 0, wprm = (st.wallPat || 0) * 0.2;
       if (!wantWin) {
@@ -271,6 +287,7 @@ export function buildFloor(ctx) {
   // ── 3b. 바깥벽의 문 (테라스·공중다리): 벽 안쪽 면에 문틀 · 미닫이 · 빛 띠 · 이름판 ──
   if (!isMezz) for (const d of L.doors) {
     if (d.b >= 0 || (d.kind !== 'terrace' && d.kind !== 'bridge')) continue;
+    if (!inCellR(rooms[d.a])) continue;
     const i = d.c % gw, j = (d.c / gw) | 0, [di, dj] = d.dir;
     const cx0 = ox + i + 0.5, cz0 = oz + j + 0.5;
     let t = 0.3;
@@ -297,7 +314,13 @@ export function buildFloor(ctx) {
   partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st);
   // ── 5. 가구·장비 ──
   for (const q of fix) {
-    const slots = drawFixture(gb, q, st);
+    // 셀 밖 가구: 물건 칸(자리 계산 — 가게·창고의 재고 장부가 쓴다)만, 모양·충돌체는 짓지 않는다
+    const here = !cellRooms || cellRooms.has(q.room);
+    const slots = drawFixture(here ? gb : new GB(), q, st);
+    if (!here) {
+      if (slots.length) { const a = (q.rot || 0) * Math.PI / 2, cs = Math.cos(a), sn = Math.sin(a); out.slots.set(q.id, slots.map((s2) => ({ ...s2, gx: q.x + s2.x * cs + s2.z * sn, gz: q.z - s2.x * sn + s2.z * cs, rot: q.rot, fix: q }))); }
+      continue;
+    }
     if (slots.length) {
       // 로컬 → 틀 좌표
       const a = (q.rot || 0) * Math.PI / 2, cs = Math.cos(a), sn = Math.sin(a);
@@ -318,6 +341,13 @@ export function buildFloor(ctx) {
   group.add(m1);
   if (cgb.count) { const mc = new THREE.Mesh(cgb.build(), mats.solid); mc.frustumCulled = false; group.add(mc); out.ceilMesh = mc; }
   if (glass.count) { const m2 = new THREE.Mesh(glass.build(), mats.glass); m2.frustumCulled = false; m2.renderOrder = 2; group.add(m2); }
+  // 문 너머의 어두운 깊이: 빛을 받지 않는 꼭짓점 색 (어디서 봐도 같은 어둠의 띠) + 충돌체
+  if (out.vest && out.vest.count) {
+    const mv = new THREE.Mesh(out.vest.build(), VEST_MAT);
+    mv.frustumCulled = false;
+    group.add(mv);
+    for (const c of out.vestCols || []) cols.push(c);
+  }
   if (win.count) {
     const wg = win.build();
     const wm = new THREE.Mesh(wg, windowMaterial(Math.max(0, F.y - B.volume.floorY) + (r.floorY || 0) - (r.gy || 0)));
@@ -333,6 +363,8 @@ export function buildFloor(ctx) {
 }
 
 // ── 도구 ────────────────────────────────────────────────────
+const VEST_MAT = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide, fog: false });
+VEST_MAT.userData.keep = true; // 층을 치울 때 같이 버리지 않는다 (모든 층이 나눠 쓴다)
 function cellBox(B, cells) {
   let i0 = 1e9, i1 = -1e9, j0 = 1e9, j1 = -1e9;
   for (const [i, j] of cells) { i0 = Math.min(i0, i); i1 = Math.max(i1, i); j0 = Math.min(j0, j); j1 = Math.max(j1, j); }
@@ -388,7 +420,7 @@ function buildStair(ctx, out, gb, glass, p, lk, stairCells, st) {
   const [fx, fz] = p.door.dir; // 정면 (틀 i,j 방향)
   const up = lk ? lk.floors.filter((i) => i > F.i).sort((a, b) => a - b)[0] : undefined;
   const Fu = up != null ? B.floors[up] : null;
-  const h = Fu ? Fu.y - F.y : 0;
+  const h = Fu ? (Fu.iy ?? Fu.y) - (F.iy ?? F.y) : 0;
   const roofUp = !Fu && B.links.some((k) => k.kind === 'roof' && k.floors.includes(F.i) && k.part === B.core.parts.indexOf(p));
   const { gw } = B.G;
   const cellsOf = () => p.cells.map(([i, j]) => j * gw + i);
@@ -400,45 +432,83 @@ function buildStair(ctx, out, gb, glass, p, lk, stairCells, st) {
   const ry = Math.atan2(LZ[0], LZ[1]);
   const info = { part: p, h, up, roof: roofUp, kind: p.kind, cx, cz, front: [fx, fz], landing: null };
   out.stairs.push(info);
+  // 이 계단이 서는 가장 아래층이면 우물 칸에도 바닥 (계단 뒤·밑이 낭떠러지가 되지 않게 — 아래에서 올라오는 줄이 없다)
+  const isBottom = !lk || !lk.floors.some((i) => i < F.i);
+  // 난간 한 줄 (계단 로컬 (lx0,lz)→(lx1,lz), 이 층 바닥 높이) — 유리 + 빛 손잡이 + 충돌체
+  const railX = (lx0, lx1, lz) => {
+    if (lx1 - lx0 < 0.1) return;
+    const [ax, az] = P(lx0, lz), [bx2, bz2] = P(lx1, lz);
+    const len = Math.hypot(bx2 - ax, bz2 - az), mxr = (ax + bx2) / 2, mzr = (az + bz2) / 2, rr = Math.atan2(bx2 - ax, bz2 - az);
+    glass.box(mxr, 0.05, mzr, 0.03, 1.0, len, rr, 0xcff4ff, 0.06);
+    gb.box(mxr, 1.05, mzr, 0.07, 0.05, len, rr, rail, 1.4);
+    const vertR = Math.abs(bx2 - ax) < 1e-3;
+    ctx.extraCols.push(colBox(ctx, mxr, mzr, vertR ? 0.05 : len / 2, vertR ? len / 2 : 0.05, 0, -0.2, 1.1, false));
+  };
   if (p.kind === 'spiral') {
-    const R = Math.min(along, across) / 2 - 0.08;
-    gb.cyl(cx, 0, cz, 0.18, Math.max(h, ctx.F.ceil - ctx.F.y), st.tint ?? 0xe9c27c, 0, PAT.metal);
-    for (const c of cellsOf()) stairCells.set(c, 'well');
-    if (!h) { for (const c of cellsOf()) stairCells.set(c, 'land'); return; }
-    const turns = h > 5 ? 2 : 1, n = Math.max(12, Math.ceil(h / 0.22)), da = (turns * Math.PI * 2) / n;
-    const a0 = Math.atan2(LZ[1], LZ[0]); // 정면(문) 쪽 각
-    for (let k = 1; k <= n; k++) {
-      const a = a0 + k * da, y = (k / n) * h;
-      const mr = (R + 0.2) / 2, ccx = cx + Math.cos(a) * mr, ccz = cz + Math.sin(a) * mr;
-      const w = R * da * 1.15;
-      const rot = -a;
-      gb.box(ccx, y - 0.12, ccz, R - 0.2, 0.12, w, -a + Math.PI / 2 - Math.PI / 2, stepC, 0, PAT.stone);
-      ctx.extraCols.push(colBox(ctx, ccx, ccz, (R - 0.2) / 2, w / 2, rot, y - 0.35, y, true));
+    // 나선 계단: 앞(문 쪽) 한 줄 칸 = 계단참(층 바닥). 디딤판은 계단참 띠를 비켜 한 바퀴 안에서 돌아(앞 띠 한쪽 끝에서 떠나 반대쪽 끝에 닿는다)
+    //  위층 계단참 밑으로 지나가지 않는다 — 머리가 걸리지 않게. 계단참 뒤 가장자리는 난간(떠나는 끝·닿는 끝만 열림).
+    const R = Math.min(along, across) / 2 - 0.08, mr = (R + 0.2) / 2;
+    const zF = along / 2, edgeLz = zF - 1;
+    gb.cyl(cx, 0, cz, 0.18, Math.max(h, ctx.F.ic ?? ctx.F.ceil - ctx.F.y), st.tint ?? 0xe9c27c, 0, PAT.metal);
+    for (const [i, j] of p.cells) {
+      const c = j * gw + i, gx = B.G.ox + i + 0.5 - cx, gz = B.G.oz + j + 0.5 - cz;
+      const lz = gx * LZ[0] + gz * LZ[1];
+      stairCells.set(c, lz > edgeLz - 0.01 ? 'land' : isBottom ? 'wellfloor' : 'well');
     }
-    // 바깥 난간: 빛 띠
+    info.landing = P(0, (zF + edgeLz) / 2);
+    const th = Math.acos(Math.max(-1, Math.min(1, edgeLz / mr))) + 0.14; // 떠나는 각 (앞에서)
+    const gap = 0.75, xs = mr * Math.sin(th); // 떠나는 끝 lx = −xs, 닿는 끝 lx = +xs
+    // 계단참 뒤 가장자리 난간: 아래층에서 올라오는 줄이 닿는 끝(+xs)과 위로 떠나는 끝(−xs)만 비운다 (맨 아래층은 뒤가 바닥이라 난간 없음)
+    if (!isBottom) {
+      const x0 = -across / 2 + 0.08, x1 = across / 2 - 0.08;
+      const cuts = [[xs - gap / 2, xs + gap / 2]];
+      if (h) cuts.push([-xs - gap / 2, -xs + gap / 2]);
+      cuts.sort((a, b2) => a[0] - b2[0]);
+      let a = x0;
+      for (const [c0, c1] of cuts) { railX(a, Math.min(c0, x1), edgeLz); a = Math.max(a, c1); }
+      railX(a, x1, edgeLz);
+    }
+    if (!h) return;
+    const a0 = Math.atan2(LZ[1], LZ[0]); // 정면(문) 쪽 각
+    // 층 높이가 높으면(로비 7 m 등) 두 바퀴 — 한 바퀴에 몰면 디딤판 하나가 0.1 m 남짓으로 가팔라 오를 수 없다 (v24 셀 검사).
+    //  두 바퀴여도 한 바퀴의 높이가 2 m 넘게 남아 위 바퀴 디딤판 밑으로 머리가 지나가고, 떠나는·닿는 각은 한 바퀴와 같다(계단참 난간 틈 그대로)
+    const turns = h > 4.0 ? 2 : 1;
+    info.turns = turns;
+    const span = Math.PI * 2 * turns - 2 * th, n = Math.max(10, Math.ceil(h / 0.21)), da = span / n;
+    for (let k = 1; k <= n; k++) {
+      // 문에서 보아 왼쪽(−lx)으로 떠나 한 바퀴 가까이 돌아 오른쪽(+lx)으로 닿는다
+      const a = a0 + th + (k - 0.5) * da, y = (k / n) * h;
+      const ccx = cx + Math.cos(a) * mr, ccz = cz + Math.sin(a) * mr;
+      const w = mr * da * 1.25;
+      gb.box(ccx, y - 0.12, ccz, R - 0.2, 0.12, w, -a, stepC, 0, PAT.stone);
+      ctx.extraCols.push(colBox(ctx, ccx, ccz, (R - 0.2) / 2, w / 2, -a, y - 0.35, y, true));
+    }
+    // 바깥 난간: 원통 유리 (디딤판 둘레)
     glass.geo(new THREE.CylinderGeometry(R + 0.05, R + 0.05, h, 20, 1, true), cx, h / 2 + 0.5, cz, 0, 0xbff8ff, 0.1);
-    info.landing = P(0, R * 0.6);
     return;
   }
   // 되돌이 계단: 앞 계단참(이 층) · 1번 줄(왼쪽, 뒤로) · 뒤 계단참 · 2번 줄(오른쪽, 앞으로) → 위층 앞 계단참
   const zF = along / 2, zB = -along / 2, LAND = 1.4;
   const xL = -across / 2 + 0.08, xR = across / 2 - 0.08, xM = 0;
-  // 앞 계단참 칸은 이 층 바닥판이 덮고, 나머지는 우물(다음 층 바닥판 없음)
+  // 앞 계단참 칸은 이 층 바닥판이 덮고, 나머지는 우물 — 맨 아래층은 우물에도 바닥(밑에서 올라오는 줄이 없다), 맨 위층도 우물은 연다(머리 공간)
   for (const [i, j] of p.cells) {
     const c = j * gw + i;
     const gx = B.G.ox + i + 0.5 - cx, gz = B.G.oz + j + 0.5 - cz;
     const lz = gx * LZ[0] + gz * LZ[1];
-    stairCells.set(c, !h && !roofUp ? 'land' : lz > zF - LAND - 0.01 ? 'land' : 'well');
+    stairCells.set(c, lz > zF - LAND - 0.01 ? 'land' : isBottom ? 'wellfloor' : 'well');
   }
   info.landing = P(0, zF - LAND / 2);
   if (!h) {
     if (roofUp) { // 옥상으로: 위로 짧은 줄 + 지붕 문
-      const top = ctx.F.ceil - ctx.F.y + SLAB;
+      const top = (ctx.F.ic ?? ctx.F.ceil - ctx.F.y) + SLAB;
       flight(ctx, gb, P, xL, xM, zF - LAND, zB + LAND, 0, top * 0.5, stepC, ry);
       flight(ctx, gb, P, xM, xR, zB + LAND, zF - LAND, top * 0.5, top, stepC, ry);
       landing(ctx, gb, P, xL, xR, zB, zB + LAND, top * 0.5, stepC);
       info.roofDoor = P(0, zF - LAND / 2);
       info.roofY = top;
+    } else if (!isBottom) {
+      // 맨 위층: 위로 가는 줄이 없으니 계단참 뒤 왼쪽(아래층 1번 줄 위)은 낭떠러지 — 난간. 오른쪽은 아래층에서 올라오는 2번 줄이 닿는 자리라 연다
+      railX(xL, xM - 0.06, zF - LAND);
     }
     return;
   }
@@ -545,7 +615,7 @@ function buildLift(ctx, out, gb, p, lk, R, st) {
   const bb = cellBox(B, p.cells);
   const cx = (bb.x0 + bb.x1) / 2, cz = (bb.z0 + bb.z1) / 2;
   const W = bb.x1 - bb.x0, D = bb.z1 - bb.z0;
-  const ceil = F.ceil - F.y;
+  const ceil = F.ic ?? F.ceil - F.y;
   const stops = !!(lk && lk.floors.includes(F.i));
   const [fx, fz] = p.door.dir;
   // 승강기 칸: 안쪽(문이 열리면 보이는 칸) — 바닥·뒷벽·천장 빛
@@ -580,13 +650,17 @@ function partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st) {
     }
   }
   const glassType = (a, b) => (a && ROOMS[a.type] && ROOMS[a.type].glass) || (b && ROOMS[b.type] && ROOMS[b.type].glass);
+  const cellRooms = ctx.rooms || null;
+  const inCell = (R) => !cellRooms || (!!R && cellRooms.has(R.id));
+  // 계단실 벽은 위층 바닥까지 (천장이 없는 우물 칸 둘레에 층 사이 틈이 생기지 않게)
+  const toNext = ctx.next ? (ctx.next.iy ?? ctx.next.y) - (F.iy ?? F.y) : 0;
   const wallH = (x, z) => (F.vault ? Math.min(4.2, ceilAt(x, z)) : ceilAt(x, z));
   const wallC = mix(st.wall, 0xffffff, 0.12);
   const doorC = st.brand ?? 0x2f8f83;
   const T = PART_T;
   /** 한 모서리 선분: (x0,z0)→(x1,z1), 종류 */
   const runs = [];
-  const edge = (x0, z0, x1, z1, kind, a, b, door, key) => { runs.push({ x0, z0, x1, z1, kind, a, b, door }); if (key && (kind === 'solid' || kind === 'glass' || kind === 'rail')) out.walls.add(key); };
+  const edge = (x0, z0, x1, z1, kind, a, b, door, key) => { runs.push({ x0, z0, x1, z1, kind, a, b, door, stairy: (a && a.type === 'stair') || (b && b.type === 'stair') }); if (key && (kind === 'solid' || kind === 'glass' || kind === 'rail')) out.walls.add(key); };
   for (let j = 0; j < gh; j++) for (let i = 0; i < gw; i++) {
     const c = j * gw + i;
     const A = roomX[c] ? rooms[roomX[c] - 1] : null;
@@ -602,7 +676,9 @@ function partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st) {
       // 뚫린 곳 가장자리 = 난간
       // 중2층 계단이 닿는 곳은 난간 없이 열어 둔다
       if (isMezz && L.mstair && dj === 1 && j === L.mstair.J && i >= L.mstair.i0 && i <= L.mstair.i1) continue;
-      if ((A && voidB) || (Bq && voidA) || (isMezz && (!!A !== !!Bq) && L.void[A ? e : c] !== 2)) { edge(x0, z0, x1, z1, 'rail', A, Bq, null, key); continue; }
+      const ina = inCell(A), inb = inCell(Bq);
+      if (cellRooms && !ina && !inb) continue; // 셀 밖끼리: 아무것도
+      if ((A && voidB && ina) || (Bq && voidA && inb) || (isMezz && (!!A !== !!Bq) && L.void[A ? e : c] !== 2 && (A ? ina : inb))) { edge(x0, z0, x1, z1, 'rail', A, Bq, null, key); continue; }
       if (!A || !Bq || A === Bq) continue;
       // 설비 관은 그 자체가 막힌 상자(벽) — 둘레에 칸막이를 또 세우면 칸막이 끝면이 관의 면과 겹친다
       if (A.type === 'shaft' || Bq.type === 'shaft') continue;
@@ -610,9 +686,11 @@ function partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st) {
       if (flowRoom(A) && flowRoom(Bq)) continue;
       // 같은 세대의 열린 방(거실-부엌) · 열린 문은 벽 없이
       const d = doorAt.get(key);
-      if (d && d.kind === 'open') { edge(x0, z0, x1, z1, 'opening', A, Bq, d); continue; }
+      const cross = !!cellRooms && ina !== inb; // 셀 경계
+      if (d && d.kind === 'open' && !cross) { edge(x0, z0, x1, z1, 'opening', A, Bq, d); continue; }
       if (d) { edge(x0, z0, x1, z1, 'door', A, Bq, d); continue; }
-      edge(x0, z0, x1, z1, glassType(A, Bq) ? 'glass' : 'solid', A, Bq, null, key);
+      // 셀 경계의 유리 칸막이는 막힌 벽으로 (너머의 방은 짓지 않으니 비쳐 보일 것이 없다)
+      edge(x0, z0, x1, z1, glassType(A, Bq) && !cross ? 'glass' : 'solid', A, Bq, null, key);
     }
   }
   // 바깥 윤곽 밖으로 나간 끝은 자른다
@@ -644,7 +722,7 @@ function partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st) {
     const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
     const vert = x0 === x1;
     const ry = vert ? 0 : Math.PI / 2;
-    const H = Math.min(wallH(x0, z0), wallH(x1, z1));
+    const H = e.stairy && toNext > 0 ? Math.max(toNext, Math.min(wallH(x0, z0), wallH(x1, z1))) : Math.min(wallH(x0, z0), wallH(x1, z1));
     const hx = vert ? T / 2 : len / 2, hz = vert ? len / 2 : T / 2;
     if (e.kind === 'solid') {
       gb.box(mx, 0, mz, vert ? T : len, H, vert ? len : T, 0, wallC, 0, PAT.panel, (ctx.style && ctx.style.wallPat) || 0);
@@ -673,16 +751,25 @@ function partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st) {
       const dmx = (dc[0] + dc[2]) / 2, dmz = (dc[1] + dc[3]) / 2, dlen = Math.hypot(dc[2] - dc[0], dc[3] - dc[1]);
       const dv = dc[0] === dc[2];
       const head = e.kind === 'opening' ? Math.min(H, 2.9) : Math.min(H, 2.4);
-      const openW = Math.max(0.9, dlen - 0.26); // 문틀 기둥 안쪽 면과 1 cm 띄운다 (닫힌 문의 끝면이 기둥 면과 겹치지 않게)
-      // 기둥 둘 + 인방 + 인방 위 벽
+      const openW = dlen - 0.02; // 문짝은 열린 폭 전체 (양쪽 1 cm)
+      // 기둥 둘 + 인방 + 인방 위 벽 — 기둥은 열린 폭 바깥(칸막이 끝)에 세운다: 1 m 문이 기둥 사이 0.76 m 만 남아 몸(0.7 m)이 끼던 문제 (v24 끼임)
       for (const sgn of [-1, 1]) {
-        const px = dv ? dmx : dmx + sgn * (dlen / 2 - 0.06), pz = dv ? dmz + sgn * (dlen / 2 - 0.06) : dmz;
+        const px = dv ? dmx : dmx + sgn * (dlen / 2 + 0.055), pz = dv ? dmz + sgn * (dlen / 2 + 0.055) : dmz; // 안쪽 면이 칸막이 끝면보다 5 mm 앞 (같은 면 깜빡임 없이)
         gb.box(px, 0, pz, dv ? 0.2 : 0.12, head, dv ? 0.12 : 0.2, 0, mix(wallC, doorC, 0.3), 0, PAT.metal);
         ctx.extraCols.push(colBox(ctx, px, pz, dv ? 0.1 : 0.06, dv ? 0.06 : 0.1, 0, -0.3, head, false));
       }
-      gb.box(dmx, head, dmz, dv ? 0.2 : dlen, 0.12, dv ? dlen : 0.2, 0, mix(wallC, doorC, 0.3), 0, PAT.metal);
+      gb.box(dmx, head, dmz, dv ? 0.2 : dlen + 0.24, 0.12, dv ? dlen + 0.24 : 0.2, 0, mix(wallC, doorC, 0.3), 0, PAT.metal);
       gb.box(dmx, head - 0.04, dmz, dv ? 0.22 : dlen - 0.1, 0.03, dv ? dlen - 0.1 : 0.22, 0, d.kind === 'staff' ? 0xffc46a : st.glow ?? 0x7ff3e6, 1.5);
       if (H > head + 0.12) gb.box(dmx, head + 0.12, dmz, dv ? T : dlen, H - head - 0.12, dv ? dlen : T, 0, wallC, 0, PAT.panel);
+      // 셀 경계의 문: 문 너머(짓지 않은 옆 셀)에 어두운 깊이 — 문이 열리면 검은 판이 아니라 빛이 거의 없는 다음 공간이 보인다
+      if (cellRooms && !['lift', 'cargo'].includes(d.kind)) {
+        const outB = inCell(rooms[d.a]) && !(d.b >= 0 && inCell(rooms[d.b]));
+        const outA = d.b >= 0 && inCell(rooms[d.b]) && !inCell(rooms[d.a]);
+        if (outA || outB) {
+          const sgn = outB ? 1 : -1; // 바깥(옆 셀) 쪽 = 문 방향(a → b)이면 +
+          vestibule(ctx, out, dmx, dmz, dv, di * sgn, dj * sgn, dlen, head, st);
+        }
+      }
       if (e.kind === 'door' && !['lift', 'cargo'].includes(d.kind)) {
         // 미닫이: 사람이 다가가면 옆으로 미끄러져 열린다 (주머니 벽 쪽으로)
         const panel = new GB();
@@ -699,6 +786,42 @@ function partitions(ctx, out, gb, glass, roomX, sdAt, ceilAt, st) {
       }
     }
   }
+}
+
+/**
+ * 문 너머의 어두운 깊이 (v24 · 문서 「문 없는 개구부 너머의 미로딩 인접 공간은 깊이 있는 어두운 공간으로」):
+ * 아직 짓지 않은 옆 셀 쪽으로 문 폭만큼의 짧은 공간 — 바닥·벽·천장이 이 방에서 이어지는 방향으로 나아가며 점점 어두워지고(빛 없는 꼭짓점 색),
+ * 끝은 거의 검다. 바닥판·옆벽·끝벽 충돌체가 있어 문턱을 넘는 동안 발이 빠지지 않는다(넘으면 그 자리에 진짜 옆 셀이 지어진다).
+ * (mx, mz) 문 가운데, nx·nz 바깥 방향(틀 칸 방향), w 문 폭, h 문 높이
+ */
+function vestibule(ctx, out, mx, mz, dv, nx, nz, w, h, st) {
+  const D = 1.8, hw = w / 2 + 0.05, top = h + 0.05;
+  const vb = out.vest || (out.vest = new GB());
+  const tx = dv ? 0 : 1, tz = dv ? 1 : 0; // 문 면을 따라 가는 방향
+  const P = (s, t, y) => [mx + nx * s + tx * t, y, mz + nz * s + tz * t]; // s: 문에서 바깥으로, t: 옆
+  const base = (k) => mix(st.floor ?? 0x6a6f7a, 0x000000, k), wallc = (k) => mix(st.wall ?? 0x9aa0aa, 0x000000, k);
+  const N = 4;
+  for (let q = 0; q < N; q++) {
+    const s0 = 0.02 + (D * q) / N, s1 = 0.02 + (D * (q + 1)) / N, k0 = 0.55 + 0.42 * (q / N), k1 = 0.55 + 0.42 * ((q + 1) / N);
+    // 바닥 · 천장 · 두 옆벽 (안쪽을 보게)
+    vb.quadc(P(s0, -hw, 0.004), P(s0, hw, 0.004), P(s1, hw, 0.004), P(s1, -hw, 0.004), base(k0), base(k0), base(k1), base(k1));
+    vb.quadc(P(s0, hw, top), P(s0, -hw, top), P(s1, -hw, top), P(s1, hw, top), wallc(k0 + 0.1), wallc(k0 + 0.1), wallc(k1 + 0.1), wallc(k1 + 0.1));
+    vb.quadc(P(s0, -hw, 0), P(s1, -hw, 0), P(s1, -hw, top), P(s0, -hw, top), wallc(k0), wallc(k1), wallc(k1), wallc(k0));
+    vb.quadc(P(s1, hw, 0), P(s0, hw, 0), P(s0, hw, top), P(s1, hw, top), wallc(k1), wallc(k0), wallc(k0), wallc(k1));
+  }
+  // 끝: 거의 검은 면 + 가운데 아주 희미한 잔광 (깊이감)
+  const e = 0.02 + D;
+  vb.quadc(P(e, hw, 0), P(e, -hw, 0), P(e, -hw, top), P(e, hw, top), 0x050608, 0x050608, 0x08090c, 0x08090c);
+  // 충돌체: 바닥판(밟을 수 있게) · 옆벽 · 끝벽
+  const cx = mx + nx * (D / 2), cz = mz + nz * (D / 2);
+  const ax = Math.abs(nx) > 0;
+  out.vestCols = out.vestCols || [];
+  out.vestCols.push(colBox(ctx, cx, cz, ax ? D / 2 : hw, ax ? hw : D / 2, 0, -SLAB, 0, true));
+  for (const sg of [-1, 1]) out.vestCols.push(colBox(ctx, cx + tx * sg * (hw + 0.1), cz + tz * sg * (hw + 0.1), ax ? D / 2 : 0.1, ax ? 0.1 : D / 2, 0, -0.3, top, false));
+  out.vestCols.push(colBox(ctx, mx + nx * (e + 0.12), mz + nz * (e + 0.12), ax ? 0.1 : hw + 0.2, ax ? hw + 0.2 : 0.1, 0, -0.3, top, false));
+  out.vestCols.push(colBox(ctx, cx, cz, ax ? D / 2 : hw, ax ? hw : D / 2, 0, top, top + 0.3, false));
+  out.portals = out.portals || [];
+  out.portals.push({ x: mx, z: mz, nx, nz, w, h });
 }
 
 /** 방 이름판의 글 (세대·객실은 번호) */

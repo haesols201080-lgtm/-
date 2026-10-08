@@ -118,7 +118,6 @@ export class Interiors {
     const B = ind.B;
     const cur = { r, info, indoor: ind, B, fy: POCKET_Y, cols: [], meshes: [], npcs: [], anims: [], key: uidOf(r), uid: uidOf(r), LH: 3 };
     this.cur = cur;
-    ind.setFloor(B.ground);
     // 정문 (실내 쪽): 1층 평면의 정문 칸
     const pl = ind.plan(B.ground);
     const e = pl && pl.L.ents.main;
@@ -129,7 +128,9 @@ export class Interiors {
       const nx = e.dir[0] * ind.V.ex[0] + e.dir[1] * ind.V.ez[0], nz = e.dir[0] * ind.V.ex[1] + e.dir[1] * ind.V.ez[1];
       cur.door = { x, z, nx, nz };
     } else cur.door = { x: r.door.x, z: r.door.z, nx: r.door.nx, nz: r.door.nz };
-    cur.LH = B.floors[B.ground].ceil - B.floors[B.ground].y;
+    // 처음 지을 셀: 정문 안쪽(플레이어가 설 자리)이 드는 공간
+    ind.setFloor(B.ground, cur.door.x - cur.door.nx * 3.2, cur.door.z - cur.door.nz * 3.2);
+    cur.LH = B.floors[B.ground].ic ?? B.floors[B.ground].ceil - B.floors[B.ground].y;
     if (this.game.ops) this.game.ops.open(cur);
   }
 
@@ -206,12 +207,12 @@ export class Interiors {
   placeAt(i, x, z, yaw) {
     const g = this.game, ind = this.cur && this.cur.indoor;
     if (!ind) return;
-    ind.setFloor(i);
+    ind.setFloor(i, x, z);
     // 그 자리가 이 층의 걸을 수 있는 칸이 아니면 (구조가 바뀌었거나 가구 속) 승강기 홀로
     if (!ind.inside(i, x, z)) {
-      const out = ind.built.get(i), L = out && out.L;
-      const R = L && (L.lifthall != null ? L.rooms[L.lifthall] : L.rooms.find((q) => q.circ && q.n) || L.rooms.find((q) => q.n));
-      if (R) [x, z] = ind.world(ind.B.G.ox + R.cx + 0.5, ind.B.G.oz + R.cz + 0.5);
+      const pl = ind.plan(i), L = pl && pl.L;
+      const R = L && (L.lifthall != null && L.rooms[L.lifthall].n ? L.rooms[L.lifthall] : L.rooms.find((q) => q.circ && q.n) || L.rooms.find((q) => q.n && !['lift', 'cargo', 'shaft', 'stair'].includes(q.type)));
+      if (R) { [x, z] = ind.world(ind.B.G.ox + R.cx + 0.5, ind.B.G.oz + R.cz + 0.5); ind.setFloor(i, x, z); }
     }
     g.player.teleport(x, ind.yOf(i) + 0.3, z, 0.1);
     if (yaw != null) { g.player.yaw = yaw; g.rig.yaw = yaw + Math.PI; }
@@ -330,7 +331,7 @@ export class Interiors {
   /** 테라스·옥상으로 나가기: 바깥의 실제 단·지붕 위로 */
   outTo(kind, F, at, yaw) {
     const cur = this.cur, ind = cur.indoor, B = cur.B, r = cur.r;
-    const [x, z] = ind.world(at[0], at[1]);
+    const [x, z] = ind.worldExt(at[0], at[1]); // 바깥의 실제 단·지붕·다리 자리 (실내 배율을 걷어 낸)
     const y = kind === 'roof' ? B.roof.y : kind === 'bridge' ? F.y : F.terrace.y;
     const name = kind === 'roof' ? '옥상' : kind === 'bridge' ? '공중다리' : '테라스';
     // 공중다리는 양쪽 끝이 모두 문이라(bridgeAt) 따로 기억하지 않는다
@@ -388,7 +389,9 @@ export class Interiors {
         const d = Math.hypot(p.x - x, p.z - z);
         if (d < 1.7 && d < nd) { nd = d; near = { kind: 'ilift', o: L, label: `${L.cargo ? '화물 승강기' : '승강기'} · 층 고르기`, short: '승강기' }; }
       }
+      const inCellC = (c) => !out.cellRooms || out.cellRooms.has(out.roomX[c] - 1); // 그 문이 지금 셀의 방에 있나
       for (const e of out.L.ents.bridge || []) {
+        if (!inCellC(e.c)) continue;
         const G = B.G, ti = e.c % G.gw, tj = (e.c / G.gw) | 0;
         const [x, z] = ind.world(G.ox + ti + 0.5 + e.dir[0] * 0.4, G.oz + tj + 0.5 + e.dir[1] * 0.4);
         const d = Math.hypot(p.x - x, p.z - z);
@@ -401,7 +404,7 @@ export class Interiors {
       }
       if (near) return near;
       const T = out.L.ents.terrace;
-      if (T) {
+      if (T && inCellC(T.c)) {
         const G = B.G, ti = T.c % G.gw, tj = (T.c / G.gw) | 0;
         const [x, z] = ind.world(G.ox + ti + 0.5 + T.dir[0] * 0.5, G.oz + tj + 0.5 + T.dir[1] * 0.5);
         if (Math.hypot(p.x - x, p.z - z) < 1.8) return { kind: 'terrace', o: { F: B.floors[i], at: [G.ox + ti + 0.5 + T.dir[0] * 1.6, G.oz + tj + 0.5 + T.dir[1] * 1.6] }, label: '테라스 문 · 바깥 단으로 나가기', short: '테라스' };
@@ -435,7 +438,7 @@ export class Interiors {
         // 다리 가운데 줄 위, 이 탑 바깥벽에서 1.6 m — 건너편을 보고 선다
         const sx = r === BL.a ? -1 : 1, along = sx * Math.max(0, BL.half - this._faceIn(r, BL) - 1.6);
         const x = BL.mx + BL.ux * along, z = BL.mz + BL.uz * along;
-        const [gx, gz] = this.cur.indoor.grid(x, z);
+        const [gx, gz] = this.cur.indoor.gridExt(x, z);
         return this.outTo('bridge', F, [gx, gz], Math.atan2(-sx * BL.ux, -sx * BL.uz));
       }
       const V = this.cur.indoor.V, [dx, dz] = t.o.dir;
@@ -488,8 +491,10 @@ export class Interiors {
     if (this.inPocket && cur.indoor) {
       const ind = cur.indoor;
       ind.update(dt);
-      g.rig.floorLock = ind.yOf(ind.cur);
+      // 계단실에서는 카메라가 층에 묶이지 않는다 (오르내리는 동안 따라 오르내림)
+      g.rig.floorLock = ind.stairCell ? null : ind.yOf(ind.cur);
       const fy = ind.yOf(ind.cur);
+      this._safety(dt, ind, p, fy);
       if (p.y < fy - 5 || p.y < POCKET_Y - 60) this._rescue();
       return;
     }
@@ -498,6 +503,37 @@ export class Interiors {
       return;
     }
     if (!this._busy) this.close();
+  }
+  /**
+   * 최후 안전장치 (v24 · 문서 P0 「벽 관통 및 공허 추락」): 땅에 선 채 지금 셀의 걸을 수 있는 칸에 있으면 0.4 초마다 「안전한 자리」로 기억하고,
+   * 셀 밖(벽 속·바깥 공허)에 0.35 초 넘게 있거나 바닥 아래로 떨어지면 그 자리로 되돌린다. 일어난 자리는 기록해 원인을 계속 고친다
+   * (state.debug.escapes — 근본 버그를 숨기는 대체책이 아니라 마지막 그물).
+   */
+  _safety(dt, ind, p, fy) {
+    const g = this.game, pl = g.player;
+    const ok = ind.inside(ind.cur, p.x, p.z) || ind.stairCell || this._nearPortal(ind, p);
+    if (ok && pl.state === 'ground' && Math.abs(p.y - fy) < 2.2) {
+      this._safeT = (this._safeT || 0) + dt;
+      if (this._safeT > 0.4) { this._safeT = 0; this._safe = { x: p.x, y: p.y, z: p.z, floor: ind.cur, key: ind.cellKey }; }
+    }
+    this._outT = ok && p.y > fy - 1.5 ? 0 : (this._outT || 0) + dt;
+    if (this._outT > 0.35 && !this._busy) {
+      this._outT = 0;
+      const s = this._safe;
+      const st = g.state.debug || (g.state.debug = {});
+      (st.escapes || (st.escapes = [])).push({ uid: this.cur.uid, floor: ind.cur, key: ind.cellKey, x: +p.x.toFixed(2), y: +(p.y - fy).toFixed(2), z: +p.z.toFixed(2), t: Date.now() });
+      if (st.escapes.length > 40) st.escapes.splice(0, st.escapes.length - 40);
+      console.warn('[interiors] 셀 밖으로 나감 — 안전한 자리로', this.cur.uid, ind.cellKey, p.x.toFixed(1), (p.y - fy).toFixed(2), p.z.toFixed(1));
+      if (s && s.floor != null) { if (s.key && s.key !== ind.cellKey) { ind.cur = s.floor; ind.setCell(s.key); } pl.teleport(s.x, s.y, s.z, 0.1); }
+      else this._rescue();
+    }
+  }
+  /** 문턱 바로 앞(문 너머 어두운 깊이 쪽) — 넘어가는 중이면 셀 밖이어도 괜찮다 */
+  _nearPortal(ind, p) {
+    const out = ind.built.get(ind.cur);
+    if (!out || !out.portals) return false;
+    const [gx, gz] = ind.grid(p.x, p.z);
+    return out.portals.some((q) => Math.abs((gx - q.x) * q.nx + (gz - q.z) * q.nz) < 2.0 && Math.abs((gx - q.x) * q.nz - (gz - q.z) * q.nx) < q.w / 2 + 0.3);
   }
   _rescue() {
     const cur = this.cur, ind = cur.indoor;
@@ -514,9 +550,16 @@ export class Interiors {
     if (cam.near !== 0.15) { cam.near = 0.15; cam.updateProjectionMatrix(); }
     if (cur.cabin) return this._clampCabin(cam, target);
     const ind = cur.indoor, i = ind.cur, out = ind.built.get(i);
-    const fy = ind.yOf(i), bot = fy + 0.3, flat = ind.ceilY(i) - 0.3;
+    let fy = ind.yOf(i), bot = fy + 0.3, flat = ind.ceilY(i) - 0.3;
+    if (ind.stairCell && ind.parts.size) {
+      // 계단실: 지은 층들의 맨 아래 바닥 ~ 맨 위 천장 사이 (계단을 오르내리는 동안 층 천장에 눌리지 않게)
+      const fl = [...ind.parts.keys()];
+      bot = Math.min(...fl.map((j) => ind.yOf(j))) + 0.3;
+      flat = Math.max(...fl.map((j) => ind.ceilY(j))) - 0.3;
+      fy = bot - 0.3;
+    }
     const pad = 0.4; // 카메라와 벽면 사이 (가까운 면 0.15 m 가 벽을 자르지 않게)
-    const topAt = (x, z) => { if (!out || !out.ceilAt) return flat; const [gx, gz] = ind.grid(x, z); return Math.min(flat, fy + out.ceilAt(gx, gz) - 0.3); };
+    const topAt = (x, z) => { if (!out || !out.ceilAt || ind.stairCell) return flat; const [gx, gz] = ind.grid(x, z); return Math.min(flat, fy + out.ceilAt(gx, gz) - 0.3); };
     // 카메라가 설 수 있는 자리: 방 칸 안 · 바깥벽 면에서 pad 넘게 안쪽(그리는 벽 면 = 같은 거리장) · 사방 pad 안에 칸막이가 없고 · 바닥과 그 자리 천장 사이
     const okPt = (x, y, z) => {
       if (y <= bot || y >= topAt(x, z) || !ind.inside(i, x, z)) return false;
@@ -626,7 +669,7 @@ export class Interiors {
     if (!R) return null;
     const ax = G.ox + R.i0 + 0.8, az = G.oz + R.j1 + 0.2, bx = G.ox + R.cx + 0.5, bz = G.oz + R.cz + 0.5;
     const [px, pz] = ind.world(ax, az), [lx, lz] = ind.world(bx, bz);
-    g.rig.override = { pos: new THREE.Vector3(px, y0 + Math.min(2.4, (B.floors[i].ceil - B.floors[i].y) - 0.4), pz), look: new THREE.Vector3(lx, y0 + 0.8, lz) };
+    g.rig.override = { pos: new THREE.Vector3(px, y0 + Math.min(2.4, (B.floors[i].ic ?? B.floors[i].ceil - B.floors[i].y) - 0.4), pz), look: new THREE.Vector3(lx, y0 + 0.8, lz) };
     return R.name;
   }
 

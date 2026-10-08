@@ -4,8 +4,8 @@
 import { hashStr, mulberry32 } from '../core/noise.js';
 
 export const WORLD_SEED = 'seren-harmonea-1';
-/** 실내 생성기 판 — 판이 바뀌어도 저장된 구조는 그대로 쓴다(이미 본 건물은 바뀌지 않는다) */
-export const GEN_VERSION = 7;
+/** 실내 생성기 판 — 판이 바뀌면 저장된 짜임(PlanStore)을 버리고 다시 짓는다 (움직이는 상태는 state.bld·econ 에 따로 있어 남는다) */
+export const GEN_VERSION = 8; // 8: 실내 배율 S · 실내 높이(iy·ic) · 방·구역 독립 공간(셀) · 최소 방 크기 · 겹치지 않는 문
 
 export function uidOf(r) {
   if (r.uid) return r.uid;

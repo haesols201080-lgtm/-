@@ -195,7 +195,7 @@ void main() {
   vec3 sunC = vec3(1.0, 0.96, 0.9) * 2.4;
   vec3 col = alb * sunC * lit * term * ringSh;
 
-  float fres = pow(1.0 - max(dot(N, V), 0.0), 2.5);
+  float fres = pow(clamp(1.0 - dot(N, V), 0.0, 1.0), 2.5);
   vec3 limbC = mix(vec3(0.9, 0.55, 0.35), vec3(1.0, 0.85, 0.6), lit);
   col += limbC * fres * smoothstep(-0.3, 0.2, ndl) * 0.9;
   // 일식 때 뒤에서 비치는 빛의 테

@@ -84,6 +84,9 @@ export class UI {
     if (this.touch) this._buildTouch();
     this.fadeEl = $(`<div class="fade"><div class="fade-msg"><div class="fm-k">들어가는 중</div><div class="fm-t"></div><div class="fm-s"></div><div class="fm-bar"><i></i></div></div></div>`);
     r.appendChild(this.fadeEl);
+    // 문턱을 넘어 옆 방(셀)으로 갈 때 아주 짧게 가리는 막 (화면 전체 · 로딩 글자 없음)
+    this.blinkEl = $(`<div class="blink"></div>`);
+    r.appendChild(this.blinkEl);
     this.flashEl = $(`<div class="flash"></div>`);
     r.appendChild(this.flashEl);
   }
@@ -224,6 +227,26 @@ export class UI {
   }
 
   fade(on, quick = false) { this.fadeEl.classList.toggle('quick', quick); this.fadeEl.classList.toggle('on', on); }
+
+  /** 화면을 다 가린 뒤에 fn (이미 다 가려져 있으면 다음 프레임에) — 장면을 바꾸는 순간이 막 뒤에서만 일어나게 */
+  coverThen(fn, quick = true) {
+    const el = this.fadeEl;
+    const opaque = el.classList.contains('on') && +getComputedStyle(el).opacity >= 0.999;
+    this.fade(true, quick);
+    setTimeout(() => requestAnimationFrame(fn), opaque ? 0 : quick ? 540 : 1240);
+  }
+  /** 짧은 가림 (문턱 넘기): 0.09 초에 어두워지고 → mid() (옆 셀 짓기) → 0.16 초에 밝아진 뒤 done() */
+  blink(mid, done) {
+    const el = this.blinkEl;
+    if (!el) { mid(); if (done) done(); return; }
+    el.style.transition = 'opacity 0.09s linear';
+    el.style.opacity = '1';
+    setTimeout(() => {
+      try { mid(); } finally {
+        requestAnimationFrame(() => { el.style.transition = 'opacity 0.16s ease'; el.style.opacity = '0'; setTimeout(() => { if (done) done(); }, 170); });
+      }
+    }, 95);
+  }
   /** 로딩 화면 글자 (건물에 드나들 때): 어두워진 화면 가운데 이름과 한 줄 설명, 흐르는 빛 막대 */
   loading(on, title = '', sub = '') {
     const m = this.fadeEl.querySelector('.fade-msg');

@@ -192,6 +192,8 @@ export class Ops {
     if (out.books && this.cur && this.cur.indoor.cur === out.i) [pgx, pgz] = this.cur.indoor.grid(this.game.player.pos.x, this.game.player.pos.z);
     out._bookAt = [pgx, pgz];
     for (const [fid, slots] of out.slots) {
+      // 지금 셀 밖 가구의 물건은 그리지 않는다 (그 방은 짓지 않았다)
+      if (out.cellRooms && slots[0] && slots[0].fix && !out.cellRooms.has(slots[0].fix.room)) continue;
       const bk = out.books && out.books.get(fid);
       slots.forEach((s, si) => {
         if (bk) {
@@ -287,6 +289,7 @@ export class Ops {
     const [gx, gz] = ind.grid(p.x, p.z);
     let best = null, bd = 1e9;
     for (const F of out.fix) {
+      if (out.cellRooms && !out.cellRooms.has(F.room)) continue; // 지금 셀(이 방·구역) 밖의 가구는 고르지 않는다
       const iv = this.apps.ivPending(F, i);
       const h = iv ? { label: `면접 보기 · ${iv.title} (${iv.org})`, short: '면접', use: () => this.apps.interview(this.tenants.find((q) => q.k === iv.k)), r: 2.2 } : out.T.type.act && out.T.type.act(this, out.T, F, out);
       if (!h) continue;

@@ -10,10 +10,44 @@ import { uidOf, seedOf, rngFor, pick, weighted, shuffle, GEN_VERSION } from './i
 import { ORG_POOLS, BRAND_PALS, MOTIFS, SIGNS } from '../data/orgs.js';
 import { SPEC } from '../world/city-arch.js';
 import { planCore } from './core.js';
+import { layoutFloor, narrowMain } from './layout.js';
 import { hashStr } from '../core/noise.js';
 
 export const SLAB = 0.35; // 바닥판 두께
 const MIN_CELLS = 10; // 이보다 작은 층은 쓰지 않는다 (첨탑 끝)
+/** 실내 천장의 가장 낮은 높이 (m): 서서 2 m 뛰어올라도(머리 1.75 m) 머리가 천장에 닿을 뿐 뚫지 않고, 가구 위에 서도 넉넉하게 —
+ *  바깥 외벽의 층 띠가 낮은 건물(2.2~2.6 m)도 실내는 이만큼 (실내는 바깥 부피에 끌려가지 않는다 · v24) */
+export const MIN_CEIL = 3.1;
+/** 쓰임마다 1층 덮개의 가장 깊은 안쪽(바깥벽에서 칸 수)이 이만큼은 되어야 방이 찌그러지지 않는다:
+ *  고리형(심 + 복도 + 양쪽 방) 8 · 넓은 홀 5 · 작은 집·정원 4 */
+const NEED_DEPTH = { office: 8, lab: 8, admin: 8, hotel: 8, heal: 8, school: 8, market: 5, cafe: 5, hall: 5, factory: 5, depot: 5, museum: 5, library: 5, terminal: 5, plant: 5, garden: 4, farm: 4 };
+/**
+ * 실내 평면 배율 S (v24): 바깥 1층 덮개의 가장 깊은 안쪽이 쓰임에 필요한 깊이보다 얕으면 가로·세로를 넓혀 짓는다 (최대 3배).
+ * 큰 건물은 1 (바깥 모양 그대로). 방을 바깥 크기에 맞추려 찌그러뜨리는 것보다 넉넉한 독립 공간을 먼저 (문서 원칙 10).
+ */
+export function interiorScale(r, pid) {
+  if (typeof process !== 'undefined' && process.env && process.env.SEREN_S1) return 1; // 검사 도구: 배율 없이 견주기
+  const V1 = volumeOf(r, 1), G1 = gridOf(V1);
+  const m = maskOf(V1, G1, V1.floorY, V1.floorY + 2.7).m;
+  const { gw, gh } = G1, n = gw * gh;
+  const d = new Int16Array(n).fill(-1), q = [];
+  for (let c = 0; c < n; c++) if (!m[c]) { d[c] = 0; q.push(c); }
+  for (let h = 0; h < q.length; h++) {
+    const c = q[h], i = c % gw, j = (c / gw) | 0;
+    for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ii = i + a, jj = j + b;
+      if (ii < 0 || jj < 0 || ii >= gw || jj >= gh) continue;
+      const e = jj * gw + ii;
+      if (d[e] < 0) { d[e] = d[c] + 1; q.push(e); }
+    }
+  }
+  let dmax = 0;
+  for (let c = 0; c < n; c++) if (m[c] && d[c] > dmax) dmax = d[c];
+  const tall = (r.top - r.gy) > 24;
+  const need = pid === 'home' ? (tall ? 7 : 4) : NEED_DEPTH[pid] ?? 6;
+  if (dmax >= need) return 1;
+  return Math.min(3, Math.ceil((need / Math.max(1, dmax)) * 4) / 4);
+}
 
 
 // ── 층 쌓기 ───────────────────────────────────────────────
@@ -486,11 +520,37 @@ function roofOf(V, G, F) {
  * 반환: 건물 짜임 B (저장 가능한 순수 자료 — 덮개는 Uint8Array)
  */
 export function makeBuilding(r, ctx) {
+  const pid = ctx.pid(r);
+  let S = interiorScale(r, pid);
+  let B = buildAt(r, ctx, S);
+  // v24 최소 방 크기: 층의 본실·세대 첫 방이 그 쓰임의 최소(정사각형 한 변·넓이)에 못 미치면 실내를 넓혀 다시 짓는다 —
+  // 바깥 크기에 맞추려 방을 찌그러뜨리는 것보다 넉넉한 실내가 먼저 (큰 방의 상한은 없다). 쓰임 묶음마다 가장 좁은 층과 첫 층을 본다.
+  const probeOff = typeof process !== 'undefined' && process.env && process.env.SEREN_S1;
+  for (let guard = 0; B && !probeOff && guard < 5 && S < 3 && narrowFloors(B) > 0; guard++) {
+    S = Math.min(3, S + (S < 1.5 ? 0.25 : 0.5));
+    B = buildAt(r, ctx, S);
+  }
+  return B;
+}
+
+/** 본실이 최소에 못 미치는 층 수 (쓰임 묶음마다 첫 층·가장 좁은 층만 짜 본다) */
+function narrowFloors(B) {
+  let bad = 0;
+  for (const Z of B.zones) {
+    const fl = B.floors.filter((F) => F.i >= Z.from && F.i <= Z.to && F.reach && !F.dead);
+    if (!fl.length) continue;
+    const probe = new Set([fl[0], fl.reduce((a, b) => (b.n < a.n ? b : a))]);
+    for (const F of probe) if (narrowMain(layoutFloor(B, F, { door: B.door }))) bad++;
+  }
+  return bad;
+}
+
+function buildAt(r, ctx, S) {
   const uid = uidOf(r), seed = seedOf(r);
   const rnd = rngFor(seed, 'program');
-  const V = volumeOf(r), G = gridOf(V);
-  const prof = ctx.profile(r.kind) || new Array(20).fill(1);
   const pid = ctx.pid(r);
+  const V = volumeOf(r, S), G = gridOf(V);
+  const prof = ctx.profile(r.kind) || new Array(20).fill(1);
   // 1층 높이: 로비·가게·공공 홀은 두 모듈(바깥의 상가 띠), 학교 교실·작은 집은 한 모듈
   const groundMods = pid === 'school' || (pid === 'home' && V.top - V.base < 24) || (pid === 'cafe' && V.top - V.base < 14) || V.top - V.base < 11 ? 1 : 2;
   const cuts = (r.bridges || []).map((b) => b.y);
@@ -566,6 +626,23 @@ export function makeBuilding(r, ctx) {
     else if (F.mezz) F.label = `${lv}.5`;
     else { lv++; F.label = `${lv}`; }
   });
+  // 실내 높이 (v24): 바깥 층 띠와 따로 — 천장은 MIN_CEIL 이상, 층과 층 사이는 (실내 천장 + 바닥판) 이상.
+  //   iy = 1층 바닥에서 이 층 바닥까지의 실내 높이(지하는 음수), ic = 이 층 바닥에서 천장까지. 중2층은 홀 바닥에서 바깥과 같은 높이 차.
+  //   바깥과 맞닿는 것(테라스·옥상·공중다리 바닥 높이)은 그대로 F.y·F.ceil 을 쓴다.
+  for (const F of all) F.ic = F.mezz ? Math.max(F.ceil - F.y, 2.6) : Math.max(F.ceil - F.y, MIN_CEIL);
+  {
+    let iy = 0, prevF = all[gi];
+    all[gi].iy = 0;
+    for (let i = gi + 1; i < all.length; i++) {
+      const F = all[i];
+      if (F.mezz) { F.iy = all[i - 1].iy + (F.y - all[i - 1].y); continue; }
+      iy += Math.max(F.y - prevF.y, prevF.ic + SLAB);
+      F.iy = iy;
+      prevF = F;
+    }
+    iy = 0;
+    for (let i = gi - 1; i >= 0; i--) { const F = all[i]; iy -= Math.max(all[i + 1].y - F.y, F.ic + SLAB); F.iy = iy; }
+  }
   // 테라스(아래 부피의 지붕) · 옥상
   for (let i = gi + 1; i < all.length; i++) {
     const F = all[i];
@@ -623,7 +700,7 @@ export function makeBuilding(r, ctx) {
   const mainOrg = soleOrg || orgs.find((o) => o.op === mainOp || (mainOp === 'mart' && (o.op === 'dept' || o.op === 'shops'))) || orgs[0] || null;
   // 빛깔: 묶음마다 (조직 상표 + 쓰임 빛깔 + 구역 색조)
   for (const Z of zones) { const org = orgs.find((o) => o.id === Z.org); Z.style = styleFor(Z.op, r, seed, org, zones.indexOf(Z)); }
-  const dg = r.door ? [(r.door.x - r.x) * V.ex[0] + (r.door.z - r.z) * V.ex[1], (r.door.x - r.x) * V.ez[0] + (r.door.z - r.z) * V.ez[1]] : [0, V.R];
+  const dg = r.door ? [((r.door.x - r.x) * V.ex[0] + (r.door.z - r.z) * V.ex[1]) * V.S, ((r.door.x - r.x) * V.ez[0] + (r.door.z - r.z) * V.ez[1]) * V.S] : [0, V.R];
   const B = {
     V, v: GEN_VERSION, uid, seed, kind: r.kind, use: r.use, pid, size: D.notes.size, gfa: D.notes.gfa, special: D.special || null,
     G, theta: V.theta, floors: all, ground: gi, zones, orgs, mainOrg: mainOrg ? mainOrg.id : null,

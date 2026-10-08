@@ -19,6 +19,14 @@ export class GB {
     for (const v of [a, b, c]) this._v(v[0], v[1], v[2], _n.x, _n.y, _n.z, _c, emit, pat, prm);
   }
   quad(a, b, c, d, color, emit = 0, pat = 0, prm = 0) { this.tri(a, b, c, color, emit, pat, prm); this.tri(a, c, d, color, emit, pat, prm); }
+  /** 꼭짓점마다 색이 다른 사각형 (빛 없는 어둠의 깊이 따위 — 색 띠) */
+  quadc(a, b, c, d, ca, cb, cc, cd) {
+    _a.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]); _b.set(c[0] - a[0], c[1] - a[1], c[2] - a[2]);
+    _n.crossVectors(_a, _b).normalize();
+    const nx = _n.x, ny = _n.y, nz = _n.z;
+    const put = (v, col) => { _c.set(col); this._v(v[0], v[1], v[2], nx, ny, nz, _c, 0, 0, 0); };
+    put(a, ca); put(b, cb); put(c, cc); put(a, ca); put(c, cc); put(d, cd);
+  }
   /** 바닥(위를 보는) 사각형 */
   floorRect(x0, z0, x1, z1, y, color, emit = 0, pat = 0, prm = 0) { this.quad([x0, y, z0], [x0, y, z1], [x1, y, z1], [x1, y, z0], color, emit, pat, prm); }
   /** 천장(아래를 보는) 사각형 */

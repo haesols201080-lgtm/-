@@ -172,7 +172,7 @@ void main() {
   alb *= vIColor;
 #endif
   vec3 col = shadeLit(alb, N, 1.0);
-  float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+  float fres = pow(clamp(1.0 - dot(N, V), 0.0, 1.0), 3.0);
   col += uRimColor * fres * uRim * (0.4 + 0.6 * (uAmbTop.g + uUrLight.r));
   if (uSpec > 0.0) {
     vec3 H = normalize(uSunDir + V);
@@ -205,7 +205,7 @@ void main() {
     float lit = mix(litP, step(1.0 - litP, r), aa);
     vec3 warm = lightPal(hash12(id + 3.1));
     vec3 R = reflect(-V, N);
-    float frw = 0.06 + 0.94 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+    float frw = 0.06 + 0.94 * pow(clamp(1.0 - dot(N, V), 0.0, 1.0), 5.0);
     // 방 안: 바닥 쪽이 어둡고, 블라인드가 내려온 창이 섞인다
     vec3 inside = mix(vec3(0.05, 0.06, 0.07), vec3(0.2, 0.19, 0.18), smoothstep(0.1, 0.9, f.y) * (0.4 + 0.6 * r));
     inside = mix(inside, vec3(0.62, 0.6, 0.57), step(0.7, hash12(id + 9.3)) * step(1.0 - 0.5 * hash12(id + 4.4), f.y) * aa);
@@ -259,7 +259,7 @@ void main() {
     }
     col *= 1.0 - engr * 0.4 * detail * (1.0 - glassMaskF);
     vec3 Rm = reflect(-V, N);
-    float frm = 0.05 + 0.95 * pow(1.0 - max(dot(N, V), 0.0), 5.0);
+    float frm = 0.05 + 0.95 * pow(clamp(1.0 - dot(N, V), 0.0, 1.0), 5.0);
     vec3 irid = 0.5 + 0.5 * cos(6.2831853 * (frm * 1.3 + dot(N, vec3(0.3, 0.2, 0.1)) + vec3(0.0, 0.33, 0.67)));
     vec3 refl = skyBase(normalize(vec3(Rm.x, abs(Rm.y) * 0.8 + 0.05, Rm.z)));
     col = mix(col, refl * (0.55 + 0.6 * alb) + irid * 0.06, uTech.z * (0.18 + 0.82 * frm));
@@ -284,7 +284,7 @@ void main() {
   vec3 Vv = normalize(cameraPosition - vWorld);
   vec3 Rg = reflect(-Vv, Nf);
   vec3 skyR = skyBase(normalize(vec3(Rg.x, abs(Rg.y) * 0.7 + 0.03, Rg.z)));
-  float frs = 0.06 + 0.94 * pow(1.0 - max(dot(Nf, Vv), 0.0), 5.0);
+  float frs = 0.06 + 0.94 * pow(clamp(1.0 - dot(Nf, Vv), 0.0, 1.0), 5.0);
   if (ftype > 5.5 && ftype < 6.5) {
     // 유리 격자: 마름모 골조 + 그 너머의 숲 (낮엔 초록·노을빛, 밤엔 생장등)
     vec2 g = vec2(vFac.x * 0.5 + vWorld.y * 0.35, vFac.x * 0.5 - vWorld.y * 0.35) / 3.2;

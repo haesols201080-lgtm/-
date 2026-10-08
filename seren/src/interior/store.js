@@ -40,7 +40,7 @@ function packB(B) {
   const N = B.G.gw * B.G.gh;
   return {
     v: B.v, uid: B.uid, seed: B.seed, kind: B.kind, use: B.use, pid: B.pid, size: B.size, gfa: B.gfa, special: B.special, G: B.G, theta: B.theta, ground: B.ground,
-    zones: B.zones, orgs: B.orgs, mainOrg: B.mainOrg, roof: B.roof, atrium: B.atrium, podium: B.podium, door: B.door, module: B.module, bay: B.bay, volume: B.volume,
+    zones: B.zones, orgs: B.orgs, mainOrg: B.mainOrg, roof: B.roof, atrium: B.atrium, podium: B.podium, door: B.door, module: B.module, bay: B.bay, volume: B.volume, S: B.V.S || 1,
     core: B.core, links: B.links, atriumCells: B.atriumCells ? rle(Uint8Array.from({ length: N }, (_, c) => (B.atriumCells.includes(c) ? 1 : 0))) : null,
     floors: B.floors.map((F) => ({ ...F, mask: rle(F.mask), terrace: F.terrace ? { ...F.terrace, mask: rle(F.terrace.mask) } : null })),
   };
@@ -48,7 +48,7 @@ function packB(B) {
 function unpackB(P, r) {
   const N = P.G.gw * P.G.gh;
   const B = { ...P };
-  B.V = volumeOf(r);
+  B.V = volumeOf(r, P.S || 1);
   B.floors = P.floors.map((F) => ({ ...F, mask: unrle(F.mask, N), terrace: F.terrace ? { ...F.terrace, mask: unrle(F.terrace.mask, N) } : null }));
   if (P.atriumCells) { const m = unrle(P.atriumCells, N); B.atriumCells = []; for (let c = 0; c < N; c++) if (m[c]) B.atriumCells.push(c); }
   return B;

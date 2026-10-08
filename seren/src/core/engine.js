@@ -14,6 +14,15 @@ if (!(gl_FragColor.r == gl_FragColor.r && gl_FragColor.g == gl_FragColor.g && gl
 ` + THREE.ShaderChunk.tonemapping_fragment;
 }
 
+/** 후처리 셰이더의 텍스처 읽기 바로 뒤에 NaN·무한대 → 0, 밝기 상한 (clamp 의 min/max 는 대부분의 GPU 에서 NaN 이 아닌 쪽을 돌려준다) */
+function sanitize(mat, anchor, v) {
+  if (!mat || !mat.fragmentShader.includes(anchor)) { console.warn('[engine] 후처리 안전장치를 끼울 자리를 못 찾음', anchor); return; }
+  mat.fragmentShader = mat.fragmentShader.replace(anchor, `${anchor}
+if ( !( abs( ${v}.r ) < 1e4 && abs( ${v}.g ) < 1e4 && abs( ${v}.b ) < 1e4 ) || ${v}.r != ${v}.r || ${v}.g != ${v}.g || ${v}.b != ${v}.b ) ${v}.rgb = vec3( 0.0 );
+${v}.rgb = clamp( ${v}.rgb, 0.0, 64.0 );`);
+  mat.needsUpdate = true;
+}
+
 class SkyWorldPass extends Pass {
   constructor(engine) {
     super();
@@ -74,8 +83,13 @@ export class Engine {
     this.composer = new EffectComposer(r, rt);
     this.composer.addPass(new SkyWorldPass(this));
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.42, 0.25, 1.1);
+    // 블룸 입력도 안전하게: 재질 하나가 낸 NaN·무한대(모바일 GPU 의 pow(음수)·반정밀도 넘침) 한 점이 흐림을 타고
+    // 화면 한가운데를 통째로 검은 판으로 덮던 문제 (v24 인트로 넘기기 — 판 뒤 가장자리로 세계가 보임)
+    sanitize(this.bloom.materialHighPassFilter, 'vec4 texel = texture2D( tDiffuse, vUv );', 'texel');
     this.composer.addPass(this.bloom);
-    this.composer.addPass(new OutputPass());
+    const out = new OutputPass();
+    sanitize(out.material, 'gl_FragColor = texture2D( tDiffuse, vUv );', 'gl_FragColor');
+    this.composer.addPass(out);
   }
 
   resize() {

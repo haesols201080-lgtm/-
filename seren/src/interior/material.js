@@ -139,7 +139,7 @@ void main() {
   // 창가: 낮엔 하늘빛이 벽·바닥을 데운다
   light += mix(uSkyHorizon, uSkyTop, 0.5) * uWarm * (1.0 - uNight) * 0.25;
   vec3 col = alb * light;
-  float fres = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+  float fres = pow(clamp(1.0 - dot(N, V), 0.0, 1.0), 3.0);
   col += uLight * fres * 0.08;
   col += em + vColor * vEmit;
   gl_FragColor = vec4(col, 1.0);
