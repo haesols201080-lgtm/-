@@ -771,7 +771,9 @@ export class Approach {
     this._skipping = true;
     const g = this.game, toField = seq.t < TB;
     this._line(-1);
+    seq.hold = true; // 막이 덮이는 동안 연출 시간을 멈춘다 (전환 직전에 누르면 덮이는 도중에 우주 → 들판이 저절로 바뀌던 것)
     g.ui.coverThen(() => {
+      seq.hold = false;
       if (g.director.seq !== seq) { this._skipping = false; return; }
       if (toField) {
         seq.t = Math.max(seq.t, TB);
@@ -787,6 +789,16 @@ export class Approach {
 
   finish() {
     const g = this.game;
+    // 저절로 끝날 때: 들판의 마지막 장면을 붙든 채 검은 막을 다 덮은 뒤 정리하고 본편(깨어남)으로 —
+    //  전에는 막을 올리자마자 begin 이 걷어 버려, 한 프레임 플레이 카메라가 보였다가 깨어남 장면으로 끊겼다
+    if (!this._covered) {
+      this._covered = true;
+      this._holding = true;
+      const ov = this._lastOv;
+      if (ov) g.rig.override = ov;
+      g.ui.coverThen(() => { this._holding = false; this.finish(); });
+      return;
+    }
     if (g.engine.space === this.space) { g.engine.space = null; this.space.dispose(); }
     if (this.proxy) {
       g.engine.scene.remove(this.proxy);
@@ -804,7 +816,7 @@ export class Approach {
 /** 오프닝 시작 (?at=초 로 중간부터) */
 export function playApproach(game, onEnd) {
   const A = new Approach(game, onEnd);
-  game.director.run(TOTAL, (k, t, dt) => A.frame(t, dt), () => A.finish());
+  game.director.run(TOTAL, (k, t, dt) => { A.frame(t, dt); A._lastOv = game.rig.override; }, () => A.finish());
   game.director.seq.onSkip = (seq) => A.skip(seq);
   const at0 = +(game.params.get('at') || 0);
   if (at0 > 0) game.director.seq.t = at0;

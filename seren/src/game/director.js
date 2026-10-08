@@ -23,6 +23,7 @@ export class Director {
   update(dt) {
     const s = this.seq;
     if (!s) return;
+    if (s.hold) return; // 넘기는 중 (막이 다 덮일 때까지 시간을 멈춘다 — 덮이는 도중에 장면이 저절로 바뀌지 않게)
     s.t += dt;
     const k = Math.min(1, s.t / s.duration);
     s.frame(k, s.t, dt);
