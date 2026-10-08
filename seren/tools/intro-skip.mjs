@@ -57,6 +57,7 @@ async function scenario(name, at, script) {
     if (a.phase === 'space' && b.phase === 'field' && b.cap) fails.push(`들판으로 넘어간 뒤 앞 자막이 남음: ${b.cap}`);
   }
   const ph = [...new Set(log.map((l) => l.phase))].join(' → ');
+  if (fails.length || process.env.LOG) console.log(`[${name}] 마지막 프레임들: ${JSON.stringify(log.slice(-16))}`);
   console.log(`[${name}] 프레임 ${log.length} · 장면 ${ph}${dark ? ` · 어두운 칸 ${(dark * 100).toFixed(1)}%` : ''} · ${errs.length ? `페이지 오류 ${errs.length}: ${errs[0]}` : '페이지 오류 없음'} · ${fails.length ? `실패 ${fails.length}\n  ${fails.join('\n  ')}` : '통과'}`);
   allFails += fails.length; allErrs += errs.length;
   await ctx.close();
