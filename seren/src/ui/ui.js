@@ -230,10 +230,16 @@ export class UI {
 
   /** 화면을 다 가린 뒤에 fn (이미 다 가려져 있으면 다음 프레임에) — 장면을 바꾸는 순간이 막 뒤에서만 일어나게 */
   coverThen(fn, quick = true) {
+    // 시간이 아니라 실제 불투명도로 기다린다: 느린 기기·버벅이는 프레임에서는 CSS 전환이 늦게 시작해, 정해진 0.54 초 뒤에도
+    //  막이 0.86 쯤만 덮인 채 장면이 바뀌어 뒤의 세계가 비쳤다 (v24 인트로 넘기기 검사). 다 덮인 프레임이 한 번 그려진 뒤 fn.
     const el = this.fadeEl;
-    const opaque = el.classList.contains('on') && +getComputedStyle(el).opacity >= 0.999;
     this.fade(true, quick);
-    setTimeout(() => requestAnimationFrame(fn), opaque ? 0 : quick ? 540 : 1240);
+    const t0 = performance.now(), limit = quick ? 2500 : 4000;
+    const check = () => {
+      if (+getComputedStyle(el).opacity >= 0.999 || performance.now() - t0 > limit) requestAnimationFrame(fn);
+      else requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
   }
   /** 짧은 가림 (문턱 넘기): 0.09 초에 어두워지고 → mid() (옆 셀 짓기) → 0.16 초에 밝아진 뒤 done() */
   blink(mid, done) {
