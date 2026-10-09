@@ -240,7 +240,43 @@ export function drawFixture(gb, F, st) {
       slots.push({ x: 0, y: F.t === 'plinth' ? 1.4 : 1.6, z: 0, w: 0.5, d: 0.5, n: 1, exhibit: true });
       break;
     }
-    case 'case': f.box(0, 0, 0, W, 0.8, D, P, 0, PAT.panel); f.box(0, 0.8, 0, W, 0.8, D, 0xbfefff, 0.06, PAT.glassfrost); f.box(0, 1.6, 0, W, 0.06, D, GOLD); slots.push({ x: 0, y: 0.9, z: 0, w: W * 0.6, d: D * 0.5, n: 1, exhibit: true }); break;
+    // ── 옷가게 (v24) ──
+    case 'clothesrack': { // 옷걸이: 받침 둘 · 위 가로대 — 옷은 재고만큼 물건 칸(걸린 옷 모양)으로 그린다
+      for (const sx of [-1, 1]) { f.box(sx * (W / 2 - 0.06), 0, 0, 0.08, 0.04, D, dark); f.cyl(sx * (W / 2 - 0.06), 0.04, 0, 0.022, 1.66, steel, 0, PAT.metal, 0, 8); }
+      f.box(0, 1.7, 0, W - 0.06, 0.03, 0.03, steel, 0, PAT.metal);
+      f.box(0, 1.73, 0, W * 0.5, 0.02, 0.02, G, 1.2);
+      slots.push({ x: 0, y: 0.92, z: 0, w: W - 0.25, d: 0.5, n: 6, hang: true });
+      break;
+    }
+    case 'fittingbooth': { // 탈의 칸: 세 벽 · 앞 휘장(반쯤 걷힘) · 안쪽 거울 · 옷걸이 못
+      const t = 0.06;
+      f.box(-W / 2 + t / 2, 0, 0, t, H - 0.1, D, P, 0, PAT.panel); f.box(W / 2 - t / 2, 0, 0, t, H - 0.1, D, P, 0, PAT.panel); f.box(0, 0, -D / 2 + t / 2, W, H - 0.1, t, P, 0, PAT.panel);
+      f.box(0, H - 0.12, 0, W, 0.08, D, GOLD);
+      f.box(-W * 0.3, 0.12, D / 2 - 0.04, W * 0.38, H - 0.3, 0.04, B, 0, PAT.fabric); // 휘장
+      f.box(0, 0.6, -D / 2 + 0.07, W * 0.5, 1.7, 0.02, 0xdff4ff, 0.25, PAT.screen); // 거울
+      f.box(W / 2 - 0.1, 1.9, -D / 2 + 0.2, 0.04, 0.04, 0.12, GOLD);
+      break;
+    }
+    case 'tailortable': { // 재단대: 넓은 상판 · 자 빛줄 · 천 두루마리 · 실패
+      f.box(0, 0, 0, W - 0.1, 0.86, D - 0.1, 0x9a7452, 0, PAT.wood);
+      f.box(0, 0.86, 0, W, 0.06, D, 0xc8a878, 0, PAT.wood);
+      f.box(0, 0.925, D / 2 - 0.12, W * 0.9, 0.005, 0.04, G, 1.3);
+      f.geo(capsG, -W * 0.25, 1.0, -0.1, B, 0.1, PAT.fabric, 0, [0.6, 0.12, 0.12]);
+      f.cyl(W * 0.3, 0.92, -0.15, 0.04, 0.08, GOLD); f.cyl(W * 0.36, 0.92, -0.1, 0.035, 0.07, st.brand2 ?? 0xff9fd0);
+      break;
+    }
+    case 'mannequin': { // 아웬 키 마네킹: 받침 · 긴 목 · 옷 입은 몸통
+      f.cyl(0, 0, 0, 0.3, 0.05, dark, 0, 0, 0, 16); f.cyl(0, 0.05, 0, 0.025, 0.9, steel, 0, PAT.metal, 0, 8);
+      f.cyl(0, 0.95, 0, 0.2, 0.75, B, 0.05, PAT.fabric, 0, 14, 0.26); f.cyl(0, 1.7, 0, 0.26, 0.35, B, 0.05, PAT.fabric, 0, 14, 0.18);
+      f.cyl(0, 2.05, 0, 0.05, 0.4, pearl, 0, 0, 0, 8); f.sph(0, 2.55, 0, 0.16, pearl);
+      break;
+    }
+    case 'mirror': { f.box(0, 0, 0, W, H, D * 0.5, GOLD, 0, PAT.metal); f.box(0, 0.08, D * 0.26, W - 0.12, H - 0.16, 0.01, 0xe8f6ff, 0.35, PAT.screen); break; }
+    case 'case': // 전시 유리장: 받침 + 네 모서리 기둥 + 뚜껑 테 — 유리는 render 가 투명한 유리로 (속의 전시품이 보이게)
+      f.box(0, 0, 0, W, 0.8, D, P, 0, PAT.panel);
+      for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) f.box(sx * (W / 2 - 0.02), 0.8, sz * (D / 2 - 0.02), 0.04, 0.8, 0.04, GOLD);
+      f.box(0, 1.6, 0, W, 0.06, D, GOLD);
+      slots.push({ x: 0, y: 0.9, z: 0, w: W * 0.6, d: D * 0.5, n: 1, exhibit: true }); break;
     // ── 주거·호텔 ──
     case 'bedpod': case 'bedpod1': {
       f.box(0, 0, 0, W, 0.35, D, st.soft ?? P, 0, PAT.panel);

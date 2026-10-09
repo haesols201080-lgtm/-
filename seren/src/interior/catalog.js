@@ -12,6 +12,7 @@ export const FUSE = {
   dept: { name: '백화점', plan: 'open', mod: 1, op: 'mart', pub: true, dept: true },
   food: { name: '식당가', plan: 'open', mod: 1, op: 'food', pub: true, court: true },
   cafe: { name: '찻집', plan: 'open', mod: 1, op: 'food', pub: true },
+  clothes: { name: '옷가게', plan: 'open', mod: 1, op: 'clothes', pub: true }, // v24: 매장(옷걸이·마네킹·거울·계산대) + 탈의실 + 재단실
   office: { name: '사무실', plan: 'ring', mod: 1, op: 'office', roomd: 9 },
   research: { name: '연구실', plan: 'ring', mod: 1, op: 'lab', roomd: 10 },
   clinic: { name: '진료', plan: 'ring', mod: 1, op: 'clinic', roomd: 8, pub: true },
@@ -116,6 +117,9 @@ export const ROOMS = {
   gallery: { name: '전시실', acc: 'public', fl: 'stone', cl: 'coffer', tone: 'brand', lux: 0.9 },
   conserve: { name: '보존 처리실', acc: 'staff', fl: 'grid', cl: 'grid', tone: 'cool', lux: 1.1 },
   giftshop: { name: '기념품 가게', acc: 'public', win: true, fl: 'tile', cl: 'coffer', tone: 'brand', lux: 1.1 },
+  boutique: { name: '옷 매장', acc: 'public', win: true, fl: 'wood', cl: 'coffer', tone: 'brand', lux: 1.15 },
+  fitting: { name: '탈의실', acc: 'public', fl: 'carpet', cl: 'plain', tone: 'warm', lux: 1.05 },
+  tailor: { name: '재단실', acc: 'public', win: true, fl: 'wood', cl: 'plain', tone: 'warm', lux: 1.05 },
   auditorium: { name: '객석', acc: 'public', fl: 'carpet', cl: 'truss', tone: 'brand', lux: 0.5 },
   stage: { name: '무대', acc: 'staff', fl: 'wood', cl: 'truss', tone: 'warm', lux: 1 },
   backstage: { name: '무대 뒤', acc: 'staff', fl: 'plain', cl: 'plain', tone: 'base', lux: 0.8 },
@@ -253,6 +257,12 @@ export const FIX = {
   ticketbooth: { name: '표 파는 창구', w: 2.4, d: 1.0, h: 1.05, front: 1.4, back: 1.0, use: 'tickets' },
   servicecounter: { name: '민원 창구', w: 2.0, d: 0.9, h: 1.05, front: 1.4, back: 1.0, use: 'civic' },
   teller: { name: '은행 창구', w: 2.2, d: 0.9, h: 1.05, front: 1.6, back: 1.0, use: 'teller' },
+  // 옷가게 (v24)
+  clothesrack: { name: '옷걸이', w: 1.8, d: 0.7, h: 1.8, front: 1.1, use: 'rack' },
+  fittingbooth: { name: '탈의 칸', w: 1.4, d: 1.4, h: 2.6, wall: true, front: 1.1, use: 'fitting' },
+  tailortable: { name: '재단대', w: 2.0, d: 1.0, h: 0.92, front: 1.2, back: 1.0, use: 'tailor' },
+  mannequin: { name: '마네킹', w: 0.7, d: 0.7, h: 2.9, round: true, front: 0.6 },
+  mirror: { name: '큰 거울', w: 1.2, d: 0.12, h: 2.6, wall: true, front: 1.0 },
   atm: { name: '셀프 금융 단말', w: 0.9, d: 0.6, h: 1.7, wall: true, front: 1.1, use: 'atm' },
   vaultdoor: { name: '금고 문', w: 2.4, d: 0.5, h: 2.6, wall: true, front: 1.2, use: 'vault' },
   numbers: { name: '번호표 기둥', w: 0.5, d: 0.5, h: 1.4, round: true, front: 0.9, use: 'queue' },
@@ -330,7 +340,7 @@ export const MIN_FIT = {
   guestroom: [3, 9], bedroom: [3, 8], meeting: [3, 9], manager: [3, 9], consult: [3, 9], treat: [3, 9], scan: [3, 9], office1: [3, 9], control: [3, 9],
   teachers: [3, 9], dock: [3, 12], counters: [3, 9], banking: [4, 16], bankconsult: [3, 9], vault: [3, 9], rawstore: [3, 9], finished: [3, 9], corehall: [3, 9], coilroom: [3, 9], packing: [3, 9], parkbay: [3, 12],
   staffroom: [2, 6], nurse: [2, 6], pharmacy: [2, 6], hr: [2, 6], instrument: [2, 6], cleanroom: [2, 6], analysis: [2, 6], stockroom: [2, 6], archive: [2, 6],
-  conserve: [2, 6], giftshop: [2, 6], backstage: [2, 6], laundry: [2, 6], maint: [2, 6], fuelstore: [2, 6], nutrient: [2, 6], deck: [2, 6], bar: [2, 6], kitchen1: [2, 5],
+  boutique: [3, 12], fitting: [2, 4], tailor: [2, 6], conserve: [2, 6], giftshop: [2, 6], backstage: [2, 6], laundry: [2, 6], maint: [2, 6], fuelstore: [2, 6], nutrient: [2, 6], deck: [2, 6], bar: [2, 6], kitchen1: [2, 5],
 };
 export const MIN_FIT_SKIP = new Set(['corridor', 'lifthall', 'stair', 'lift', 'cargo', 'shaft', 'balcony', 'vestibule', 'entry']);
 export const minFit = (type) => MIN_FIT[type] || [2, 4];

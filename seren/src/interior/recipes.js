@@ -42,6 +42,11 @@ export const ESSENTIAL = {
   sales: [['checkout', 'checkout', 1, null, ['selfcheck']], ['wallshelf', 'shelf', 2, { cat: 'pantry' }, ['gondola', 'chiller', 'display', 'produce']]],
   kiosk: [['checkout', 'checkout', 1, null, ['selfcheck']], ['wallshelf', 'shelf', 1, { cat: 'snack' }, ['display']]],
   giftshop: [['checkout', 'checkout', 1, null, ['selfcheck']], ['wallshelf', 'shelf', 1, { cat: 'gift' }, ['display']]],
+  boutique: [['checkout', 'checkout', 1, null, ['selfcheck']], ['clothesrack', 'rack', 2],
+    // 탈의실·재단실을 따로 둘 자리가 없는 작은 가게: 매장 안에 탈의 칸·재단대
+    ['fittingbooth', 'fitting', 1, null, null, (c) => !c.L.rooms.some((q) => q.type === 'fitting' && q.n)], ['tailortable', 'tailor', 1, null, null, (c) => !c.L.rooms.some((q) => q.type === 'tailor' && q.n)]],
+  fitting: [['fittingbooth', 'fitting', 1]],
+  tailor: [['tailortable', 'tailor', 1]],
   dining: [['counter', 'order', 1, null, ['checkout', 'selfcheck']], ['table2', 'table', 2, null, ['table4']]],
   canteen: [['canteenline', 'order', 1, null, ['counter', 'checkout']], ['table4', 'table', 1, null, ['table2']]],
   waiting: [['seats', 'wait', 1, null, ['bench']], ['examdesk', 'doctor', 1, null, null, (c) => !c.L.rooms.some((q) => q.type === 'consult' && q.n)]],
@@ -325,6 +330,19 @@ const RECIPE = {
     F.near(R, 'bench', b.cx, b.cz + 3, 0, { R: 4 });
   },
   conserve(F, R) { F.rows(R, 'restore', { aisle: 1.4, margin: 1.2, tag: 'restore', n: 3 }); F.alongWalls(R, 'cabinet', { n: 2 }); },
+  // 옷가게 (v24): 정문 옆 계산대 · 줄지은 옷걸이 · 벽의 마네킹과 큰 거울
+  boutique(F, R, c) {
+    const b = F.box(R), e = F.entry();
+    if (!c.L.rooms.some((q) => q.type === 'fitting' && q.n)) F.alongWalls(R, 'fittingbooth', { n: 1, tag: 'fitting' });
+    if (!c.L.rooms.some((q) => q.type === 'tailor' && q.n)) F.alongWalls(R, 'tailortable', { n: 1, tag: 'tailor' });
+    const ex = e ? e[0] : b.cx, ez = e ? e[1] : b.z1;
+    F.near(R, 'checkout', ex + (ex > b.cx ? -3 : 3), ez - 3, 0, { R: 4, tag: 'checkout', anyRot: true });
+    F.rows(R, 'clothesrack', { n: Math.max(2, Math.min(10, Math.round(R.n / 14))), tag: 'rack' });
+    F.alongWalls(R, 'mannequin', { n: R.n > 40 ? 3 : 1, avoidWindows: false });
+    F.alongWalls(R, 'mirror', { n: 1, avoidWindows: true });
+  },
+  fitting(F, R) { F.alongWalls(R, 'fittingbooth', { n: Math.max(1, Math.min(4, Math.floor(R.n / 4))), tag: 'fitting' }); F.alongWalls(R, 'mirror', { n: 1, avoidWindows: true }); },
+  tailor(F, R) { F.near(R, 'tailortable', F.box(R).cx, F.box(R).cz, 0, { R: 3, tag: 'tailor', anyRot: true }); F.alongWalls(R, 'mannequin', { n: 1 }); F.alongWalls(R, 'clothesrack', { n: 1, tag: 'altered' }); },
   giftshop(F, R) { F.alongWalls(R, 'wallshelf', { n: 2, tag: 'shelf', data: { cat: 'gift' } }); F.near(R, 'checkout', F.box(R).cx, F.box(R).cz, 0, { R: 3, tag: 'checkout', anyRot: true }); },
   auditorium(F, R, c) {
     const b = F.box(R);

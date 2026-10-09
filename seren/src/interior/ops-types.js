@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 // 쓰임마다 건물이 돌아가는 법 (v0.9) — 실제 시설의 일을 아웬 문명에 맞게.
 //  각 쓰임: setup(처음 채우기: 진열대·창고·기계·밭…) · act(시설마다 플레이어가 하는 일) · people(그 층의 사람과 일과) · tick(돌아가는 과정) · roles(일자리와 과제)
 //  · 마트: 진열 칸마다 실제 재고(구역 가게 재고에서 가져온 것). 손님은 바구니를 들고 집어 계산대에서 값을 치른다. 직원은 창고에서 상자를 날라 채우고,
@@ -18,6 +19,10 @@ import { won } from '../data/money.js';
 import { bookById, bookColor } from '../data/books.js';
 import { stockFor, shelfTitles, subjectName, slotName, libState, readPage, SPINES } from './library.js';
 import { josa } from '../core/josa.js';
+import { exhibitFor, DECOR, decorModel } from './exhibits.js';
+import { GB } from './geom.js';
+import { CLOTHES, TAILOR, clothName } from '../data/clothes.js';
+import { openWardrobe } from '../game/wardrobe.js';
 
 // ── 도구 ─────────────────────────────────────────────────
 const tod = (ops) => ops.game.world.clock.time % 1;
@@ -1076,7 +1081,7 @@ const museum = {
     if (F.tag === 'clock') return clockAct(ops, T);
     return null;
   },
-  exhibitOf(ops, F) { const k = hashStr(`${ops.cur.uid}|${F.id}`) % EXHIBITS.length; return EXHIBITS[k]; },
+  exhibitOf(ops, F) { return exhibitFor(ops.cur.uid, F.id); }, // 받침 위 모형(render)과 같은 전시
   list(ops, out) {
     return tagged(out, 'exhibit').map((F) => { const [x, z] = ops.cur.indoor.world(F.x, F.z); return { e: museum.exhibitOf(ops, F), x, z }; });
   },
@@ -1238,12 +1243,164 @@ const hall = {
 // ════════════════════════════════════════════════════════════
 // 호텔 · 집 · 쉼터 · 전망대 · 정원 · 농장 · 주차 · 설비 · 로비
 // ════════════════════════════════════════════════════════════
+// ── 옷가게 (v24 8장): 옷걸이(실제 재고) → 든 옷(최대 셋) → 탈의 칸에서 입어 보기(거울 쪽으로 돌아 봄) → 사기 · 재단사(치수·수선·맞춤) ──
+const TRY_MAX = 3;
+const clothes = {
+  setup(ops, T, out) {
+    const n = T.node, E = ops.econ;
+    let k = 0;
+    for (const [fid, slots] of out.slots) {
+      const F = slots[0].fix;
+      if (F.tag !== 'rack') continue;
+      slots.forEach((s, si) => {
+        const key = `${fid}/${si}`;
+        if (n.shelf[key]) return;
+        const g = ['garment', 'garment', 'scarf', 'shoes'][(k++ + hashStr(String(fid))) % 4];
+        const want = s.n - 1, got = E.take(T.zone, 'retail', g, want) + 0;
+        n.shelf[key] = { g, n: got + (got < want ? E.take(T.zone, 'depot', g, want - got) : 0), cap: s.n, cat: 'fashion' };
+      });
+    }
+  },
+  act(ops, T, F, out) {
+    if (F.tag === 'rack') return { label: () => `옷걸이 · 옷 고르기${ops.tryOn.length ? ` (든 옷 ${ops.tryOn.length})` : ''}`, short: '고르기', use: () => clothes.rack(ops, T, F, out) };
+    if (F.tag === 'fitting') return { label: () => (ops.tryOn.length ? `탈의 칸 · 입어 보기 (${ops.tryOn.length}벌)` : '탈의 칸 · 옷걸이에서 옷을 들고 와요'), short: '입어 보기', use: () => clothes.booth(ops, T, F, out) };
+    if (F.tag === 'checkout') return { label: () => (ops.tryOn.length ? `계산대 · 든 옷 ${ops.tryOn.length}벌 사기` : '계산대 · 옷걸이에서 고른 옷을 사요'), short: '계산', use: () => clothes.buyAll(ops, T) };
+    if (F.tag === 'tailor') return { label: '재단사 · 치수 재기·수선·맞춤', short: '재단', use: () => clothes.tailor(ops, T) };
+    if (F.tag === 'altered') return { label: '다 고친 옷 걸이 · 찾아가기', short: '찾기', use: () => clothes.pickup(ops, T) };
+    if (F.tag === 'clock') return clockAct(ops, T);
+    if (F.tag === 'terminal' || F.tag === 'directory') return { label: '공용 단말 · 건물·일자리 공고', short: '단말', use: () => ops.apps.open('home', { T, F }) };
+    return null;
+  },
+  /** 옷걸이: 그 물건(결 옷·목도리·뜬신)으로 지은 옷과 빛깔 — 고르면 옷걸이에서 실제로 한 벌 빠져 손에 든다 */
+  rack(ops, T, F, out) {
+    const slots = out.slots.get(F.id) || [];
+    const keys = slots.map((s, si) => `${F.id}/${si}`).filter((k) => T.node.shelf[k]);
+    const st = keys.map((k) => T.node.shelf[k]);
+    const left = st.reduce((a, q) => a + q.n, 0), good = st[0] && st[0].g;
+    const items = [];
+    for (const [id, C] of Object.entries(CLOTHES)) {
+      if (C.good !== good) continue;
+      for (const col of C.colors) items.push({
+        label: `<i class="cl-chip" style="background:#${col.toString(16).padStart(6, '0')}"></i> ${C.name} · ${won(C.price)}`,
+        sub: `${C.fit === 'awen' ? '아웬 치수 (수선 필요)' : '범용 · 누구에게나 맞음'}${C.work ? ' · 작업복' : ''}`,
+        stay: true, disabled: left <= 0,
+        onClick: () => {
+          if (ops.tryOn.length >= TRY_MAX) { toast(ops, `한 번에 ${TRY_MAX}벌까지 들 수 있어요 — 탈의 칸에서 입어 보거나 계산해요`, 'muted'); return; }
+          const key = keys.find((k) => T.node.shelf[k].n > 0);
+          if (!key) { toast(ops, '이 옷걸이는 비었어요', 'muted'); return; }
+          T.node.shelf[key].n--; out.itemsDirty = true;
+          ops.tryOn.push({ item: id, color: col, fit: C.fit === 'univ' ? 'univ' : 'awen', price: C.price, key, uid: ops.cur.uid, tuid: T.uid });
+          toast(ops, `${josa(C.name, '을')} 들었다 (${ops.tryOn.length}/${TRY_MAX}) · 탈의 칸에서 입어 봐요`);
+          clothes.rack(ops, T, F, out);
+        },
+      });
+    }
+    if (!items.length) items.push({ label: '빈 옷걸이예요', disabled: true });
+    ui(ops).serviceCard(`${T.org ? T.org.name : '옷가게'} · 옷걸이`, `${gname(good || 'garment')} ${left}벌`, '고르면 옷걸이에서 한 벌을 들어요. 입어 보는 건 탈의 칸에서만 — 매장에서 바로 입을 수는 없어요.', items);
+  },
+  /** 탈의 칸: 든 옷을 하나씩 입어 본다 (카메라가 앞으로 돌아 거울처럼) · 사기 · 벗기 */
+  booth(ops, T, F, out) {
+    const g = ops.game;
+    if (!ops.tryOn.length) { toast(ops, '옷걸이에서 입어 볼 옷을 들고 와요', 'muted'); return; }
+    const slotOf = (o) => CLOTHES[o.item].slot;
+    const trying = ops.trying || (ops.trying = { fid: F.id, floor: out.i, on: {} });
+    const look = () => { g.dress(trying.on); g.rig.yaw = g.player.yaw; g.rig._init = false; }; // 앞에서 본다
+    const items = [];
+    ops.tryOn.forEach((o, i) => {
+      const C = CLOTHES[o.item], on = trying.on[slotOf(o)] === o;
+      items.push({ head: `${C.name} · ${won(o.price)}` });
+      items.push({ label: on ? '벗기' : '입어 보기', sub: on ? (o.fit === 'awen' ? '아웬 치수 — 소매가 손을 덮고 단이 끌려요' : '잘 맞아요') : '', stay: true, onClick: () => {
+        if (on) delete trying.on[slotOf(o)]; else trying.on[slotOf(o)] = o;
+        look();
+        if (!on && o.fit === 'awen') toast(ops, '아웬 몸에 맞춘 옷이라 품도 소매도 너무 커요 — 사서 재단사에게 수선을 맡기면 맞아요', 'muted');
+        clothes.booth(ops, T, F, out);
+      } });
+      items.push({ label: `사기 · ${won(o.price)}`, sub: `가진 돈 ${won(g.state.inv.starseed || 0)}`, stay: true, disabled: (g.state.inv.starseed || 0) < o.price, onClick: () => { clothes.buy(ops, T, i); clothes.booth(ops, T, F, out); } });
+      items.push({ label: '옷걸이에 돌려놓기', stay: true, onClick: () => { clothes.putBack(ops, T, i); if (ops.tryOn.length) clothes.booth(ops, T, F, out); else { clothes.endTry(ops); ui(ops).closeCard(); } } });
+    });
+    // 카드를 다시 그리면 앞 카드가 닫히며 onClose 가 불린다 — 그때 입어 보던 옷을 벗기지 않게 (마지막 카드가 닫힐 때만)
+    const gen = ops._boothGen = (ops._boothGen || 0) + 1;
+    ui(ops).serviceCard('탈의 칸', '입어 보기', '입어 본 옷은 이 칸 안에서만 입고 있어요 — 나가면 벗어 둡니다.', items, '', { onClose: () => { if (gen === ops._boothGen) clothes.endTry(ops); } });
+  },
+  endTry(ops) { if (ops.trying) { ops.trying = null; ops.game.dress(); } },
+  /** 든 옷 하나 사기: 가방의 돈 → 가게 금고 · 내 옷(own)에 */
+  buy(ops, T, i) {
+    const g = ops.game, o = ops.tryOn[i];
+    if (!o) return false;
+    const paid = ops.econ.transfer('player', `n:${T.uid}`, o.price, `옷 · ${CLOTHES[o.item].name}`);
+    if (paid < o.price - 1e-6) { toast(ops, '돈이 모자라요', 'muted'); return false; }
+    T.node.sales += paid;
+    const W = g.state.wardrobe;
+    W.own.push({ id: `c${++W.seq}`, item: o.item, color: o.color, fit: o.fit });
+    ops.tryOn.splice(i, 1);
+    if (ops.trying) for (const k of Object.keys(ops.trying.on)) if (ops.trying.on[k] === o) delete ops.trying.on[k];
+    toast(ops, `${josa(CLOTHES[o.item].name, '을')} 샀다 · 집이나 묵는 방의 옷장에서 입어요${o.fit === 'awen' ? ' (먼저 재단사에게 수선)' : ''}`, 'item');
+    g.save();
+    return true;
+  },
+  buyAll(ops, T) {
+    if (!ops.tryOn.length) { toast(ops, '옷걸이에서 고른 옷이 없어요', 'muted'); return; }
+    const total = ops.tryOn.reduce((a, o) => a + o.price, 0), have = ops.game.state.inv.starseed || 0;
+    ui(ops).serviceCard('계산대', `든 옷 ${ops.tryOn.length}벌 · ${won(total)}`, `가진 돈 ${won(have)}`, [
+      { label: `모두 사기 · ${won(total)}`, primary: true, disabled: have < total, onClick: () => { while (ops.tryOn.length) if (!clothes.buy(ops, T, 0)) break; clothes.endTry(ops); } },
+      { label: '그만두기', sub: '든 옷은 그대로' },
+    ]);
+  },
+  putBack(ops, T, i) {
+    const o = ops.tryOn[i];
+    if (!o) return;
+    if (o.uid === (ops.cur && ops.cur.uid) && T.node.shelf[o.key]) T.node.shelf[o.key].n++;
+    ops.tryOn.splice(i, 1);
+    if (ops.trying) for (const k of Object.keys(ops.trying.on)) if (ops.trying.on[k] === o) delete ops.trying.on[k];
+    const out = ops.cur && ops.cur.indoor.built.get(ops.cur.indoor.cur); if (out) out.itemsDirty = true;
+  },
+  /** 재단사: 치수 재기(한 번) → 아웬 치수 옷 수선(몇 시간) · 맞춤 주문(다음 날) · 다 된 것 찾기 */
+  tailor(ops, T) {
+    const g = ops.game, W = g.state.wardrobe, now = g.world.clock.time;
+    const pay = (n, why) => { const v = ops.econ.transfer('player', `n:${T.uid}`, n, why); if (v < n - 1e-6) { toast(ops, '돈이 모자라요', 'muted'); return false; } T.node.sales += v; return true; };
+    const items = [];
+    if (!W.measured) items.push({ label: `치수 재기 · ${won(TAILOR.MEASURE)}`, sub: '어깨·팔·다리 길이를 빛줄자로 — 한 번 재면 어느 옷가게에서나', primary: true, onClick: () => { if (!pay(TAILOR.MEASURE, '치수 재기')) return; W.measured = true; ops.game.avatar && ops.game.avatar.act && ops.game.avatar.act('wait', 2); toast(ops, '재단사가 빛줄자로 몸을 잰다 · 「아웬보다 팔이 훨씬 짧군요!」 — 이제 수선·맞춤을 맡길 수 있어요', 'item'); g.save(); clothes.tailor(ops, T); } });
+    else {
+      const big = W.own.filter((o) => o.fit === 'awen' && !o.atTailor);
+      for (const o of big) items.push({ label: `수선 맡기기 · ${clothName(o)} · ${won(TAILOR.ALTER)}`, sub: '두어 시간 뒤 이 가게에서 찾아가요', stay: true, onClick: () => { if (!pay(TAILOR.ALTER, '수선')) return; o.atTailor = true; W.orders.push({ kind: 'alter', own: o.id, uid: ops.cur.uid, ready: now + 0.09 }); toast(ops, `${josa(clothName(o), '을')} 맡겼다 · 두어 시간 뒤에`); g.save(); clothes.tailor(ops, T); } });
+      for (const [id, C] of Object.entries(CLOTHES).filter(([, C]) => C.fit === 'awen').slice(0, 5)) items.push({ label: `맞춤 주문 · ${C.name} · ${won(C.price + TAILOR.ORDER)}`, sub: '내 치수로 새로 짓는다 · 다음 날', stay: true, onClick: () => { if (!pay(C.price + TAILOR.ORDER, '맞춤')) return; W.orders.push({ kind: 'order', item: id, color: C.colors[0], uid: ops.cur.uid, ready: now + TAILOR.ORDER_DAYS }); toast(ops, `${josa(C.name, '을')} 주문했다 · 내일 이 가게에서`); g.save(); clothes.tailor(ops, T); } });
+    }
+    const mine = W.orders.filter((q) => q.uid === ops.cur.uid);
+    if (mine.length) items.push({ label: `맡긴 것 찾기 (${mine.filter((q) => q.ready <= now).length}/${mine.length} 다 됨)`, stay: true, onClick: () => clothes.pickup(ops, T) });
+    ui(ops).serviceCard('재단실', W.measured ? '내 치수 있음' : '치수를 아직 안 쟀어요', '아웬의 기성복은 3 m 넘는 몸에 맞춰 지어요. 재단사가 내 몸에 맞게 고치거나 새로 지어 줘요.', items.length ? items : [{ label: '고칠 옷이 없어요', disabled: true }]);
+  },
+  pickup(ops, T) {
+    const g = ops.game, W = g.state.wardrobe, now = g.world.clock.time;
+    const ready = W.orders.filter((q) => q.uid === ops.cur.uid && q.ready <= now);
+    if (!ready.length) { const wait = W.orders.filter((q) => q.uid === ops.cur.uid); toast(ops, wait.length ? '아직 다 되지 않았어요' : '맡긴 옷이 없어요', 'muted'); return; }
+    for (const q of ready) {
+      if (q.kind === 'alter') { const o = W.own.find((x) => x.id === q.own); if (o) { o.fit = 'fit'; delete o.atTailor; } }
+      else W.own.push({ id: `c${++W.seq}`, item: q.item, color: q.color, fit: 'fit' });
+    }
+    W.orders = W.orders.filter((q) => !ready.includes(q));
+    toast(ops, `${ready.length}벌을 찾았다 · 이제 내 몸에 맞아요 — 옷장에서 입어요`, 'item');
+    g.save();
+  },
+  people(ops, T, out, i) {
+    const ck = tagged(out, 'checkout')[0], tl = tagged(out, 'tailor')[0], racks = tagged(out, 'rack'), booths = tagged(out, 'fitting');
+    if (ck) spawn(ops, staffSpec(ops, out, T, 'shop', '점원', ck), [{ go: BK(ck) }, { face: yawTo(ck) + Math.PI, act: 'scan', t: 4 }], () => (Math.random() < 0.35 && racks.length ? [{ go: AT(pick(racks)) }, { act: 'stock', t: 3 }, { go: BK(ck) }, { face: yawTo(ck) + Math.PI, act: 'wait', t: 5 }] : [{ face: yawTo(ck) + Math.PI, act: 'wait', t: 5 }]));
+    if (tl) spawn(ops, staffSpec(ops, out, T, 'work', '재단사', tl), [{ go: BK(tl) }, { face: yawTo(tl) + Math.PI, act: 'operate', t: 8 }], () => [{ face: yawTo(tl) + Math.PI, act: Math.random() < 0.3 ? 'look' : 'operate', t: 8 }]);
+    if (!racks.length || !open(ops, 0.3, 0.85)) return;
+    for (let k = 0; k < Math.min(5, racks.length + 1); k++) {
+      const steps = () => { const R1 = pick(racks), Bt = booths.length && Math.random() < 0.5 ? pick(booths) : null; return [{ go: AT(R1) }, { face: yawTo(R1), act: 'reach', t: 3 }, ...(Bt ? [{ go: AT(Bt) }, { act: 'wait', t: 6 }] : []), ...(ck ? [{ go: AT(ck) }, { face: yawTo(ck), act: 'talk', t: 2 }] : [])]; };
+      const [gx, gz] = arrival(ops, out);
+      spawn(ops, { key: `${T.uid}:${i}:cl${k}`, role: 'guest', title: '손님', floor: i, gx, gz }, steps(), steps);
+    }
+  },
+};
+
 const hotel = {
   act(ops, T, F, out) {
     const H = ops.S.hotel;
     if (F.tag === 'reception') return { label: H && H.uid === ops.cur.uid ? `안내대 · 묵는 방 ${H.room}` : '안내대 · 방 잡기 (하룻밤 5울)', short: '안내', use: () => hotel.checkin(ops, T, out) };
     if (F.tag === 'sleep') { const R = out.L.rooms[F.room]; const mine = H && H.uid === ops.cur.uid && H.floor === out.i && H.roomId === (R.unit ?? R.id); return { label: mine ? '잠 고치 · 아침까지 쉬기 (저장)' : '객실의 잠 고치', short: '쉬기', use: () => { if (mine) { ops.game.venues.buff('full'); ops.game.rest(0.27); ops.game.save(true); toast(ops, '푹 쉬었다 · 저장했어요', 'item'); } else toast(ops, '다른 손님의 방이에요', 'muted'); } }; }
     if (F.tag === 'cart' || F.tag === 'laundry') return { label: F.tag === 'cart' ? '정돈 수레' : '세탁 고치', short: '정돈', use: () => { const job = ops.myJobHere(); if (job && ops.S.shift) { ops.startTask(roleOf('hotel', 'keeper').next(ops, T)); } else toast(ops, '객실 관리 직원의 것', 'muted'); } };
+    if (F.t === 'wardrobe') { const R = out.L.rooms[F.room]; if (H && H.uid === ops.cur.uid && H.floor === out.i && R && H.roomId === (R.unit ?? R.id)) return { label: '옷 고치 · 옷 갈아입기 (묵는 방)', short: '옷장', use: () => openWardrobe(ops.game, '묵는 방 옷장') }; }
     if (F.tag === 'order') return food.act(ops, T, F, out);
     if (F.tag === 'table') return food.act(ops, T, F, out);
     if (F.tag === 'clock') return clockAct(ops, T);
@@ -1290,6 +1447,50 @@ const hotel = {
   },
 };
 const home = {
+  /** 우리 집 층이 지어질 때: 놓아 둔 물건(꾸미기)을 그린다 */
+  setup(ops, T, out) { home.drawDecor(ops, out); },
+  decorList(ops) { const b = ops.bstate(ops.cur.uid); return (b.decor = b.decor || []); },
+  drawDecor(ops, out) {
+    if (out.decorMesh) { out.group.remove(out.decorMesh); out.decorMesh.geometry.dispose(); out.decorMesh = null; }
+    out.extraTargets = [];
+    const list = home.decorList(ops).filter((d) => d.floor === out.i);
+    if (!list.length) return;
+    const gb = new GB(), y0 = 0;
+    for (const d of list) {
+      if (out.cellRooms && out.roomX) { const G = ops.cur.B.G, c = Math.floor(d.gz - G.oz) * G.gw + Math.floor(d.gx - G.ox); if (out.roomX[c] && !out.cellRooms.has(out.roomX[c] - 1)) continue; } // 지금 셀 밖
+      decorModel(gb, d.k, d.gx, y0, d.gz, d.ry || 0, (GOODS[d.k] || ITEMS[d.k] || {}).color ?? 0xffffff);
+      out.extraTargets.push({ gx: d.gx, gz: d.gz, r: 1.0, h: { label: `${DECOR[d.k] || gname(d.k)} · 놓아 둔 물건`, short: '치우기', use: () => home.decorCard(ops, d, out) } });
+    }
+    const ind = ops.cur.indoor, mats = ind._mats(ops.cur.B.floors[out.i]);
+    out.decorMesh = new THREE.Mesh(gb.build(), mats.solid);
+    out.decorMesh.frustumCulled = false; out.decorMesh.userData.indoor = true;
+    out.group.add(out.decorMesh);
+  },
+  decorCard(ops, d, out) {
+    const g = ops.game;
+    ui(ops).serviceCard('우리 집', DECOR[d.k] || gname(d.k), '놓아 둔 물건 — 돌리거나 가방에 다시 넣을 수 있어요.', [
+      { label: '조금 돌리기', stay: true, onClick: () => { d.ry = ((d.ry || 0) + Math.PI / 4) % (Math.PI * 2); home.drawDecor(ops, out); } },
+      { label: '가방에 넣기', onClick: () => { const L = home.decorList(ops); L.splice(L.indexOf(d), 1); g.state.inv[d.k] = (g.state.inv[d.k] || 0) + 1; home.drawDecor(ops, out); toast(ops, `${josa(DECOR[d.k] || gname(d.k), '을')} 가방에 넣었다`); g.save(); } },
+    ]);
+  },
+  /** 가방의 물건을 바로 앞 바닥에 놓기 (걸을 수 있는 칸 · 가구와 겹치지 않게) */
+  placeDecor(ops) {
+    const g = ops.game, inv = g.state.inv, ind = ops.cur.indoor, out = ind.built.get(ind.cur);
+    const ks = Object.keys(DECOR).filter((k) => inv[k] > 0);
+    if (!ks.length) { toast(ops, '놓을 만한 물건이 없어요 — 화분·등불·빛방울 등·장신구는 가게에서', 'muted'); return; }
+    ui(ops).serviceCard('우리 집 꾸미기', '무엇을 놓을까요?', '바라보는 쪽 1 m 앞 바닥에 놓아요. 놓은 물건은 저장 슬롯마다 따로 남아요.', ks.map((k) => ({ label: `${DECOR[k]} (${inv[k]})`, onClick: () => {
+      const p = g.player.pos, yaw = g.player.yaw, x = p.x + Math.sin(yaw) * 1.0, z = p.z + Math.cos(yaw) * 1.0;
+      const [gx, gz] = ind.grid(x, z);
+      if (!ind.inside(ind.cur, x, z)) { toast(ops, '거기는 놓을 수 없어요 (벽·가구)', 'muted'); return; }
+      const clash = out.fix.some((F) => Math.abs(gx - F.x) < F.w / 2 + 0.25 && Math.abs(gz - F.z) < F.d / 2 + 0.25) || home.decorList(ops).some((d) => d.floor === out.i && Math.hypot(d.gx - gx, d.gz - gz) < 0.6);
+      if (clash) { toast(ops, '가구나 다른 물건과 너무 가까워요', 'muted'); return; }
+      inv[k]--;
+      home.decorList(ops).push({ k, floor: out.i, gx, gz, ry: -yaw + ind.B.theta });
+      home.drawDecor(ops, out);
+      toast(ops, `${josa(DECOR[k], '을')} 놓았다`, 'item');
+      g.save();
+    } })));
+  },
   act(ops, T, F, out) {
     const g = ops.game;
     const R = out.L.rooms[F.room];
@@ -1301,6 +1502,7 @@ const home = {
     if (F.tag === 'sleep') return { label: mine ? '잠 고치 · 아침까지 자기 (저장)' : '잠 고치', short: '자기', use: () => (mine || R.house ? g.venues.sleep() : toast(ops, '남의 잠 고치예요', 'muted')) };
     if (F.tag === 'cook') return { label: mine ? '부엌 · 가방의 재료로 요리' : '부엌 조리대', short: '요리', use: () => home.cook(ops) };
     if (F.tag === 'eat') return { label: '식탁', short: '앉기', use: () => g.avatar && g.avatar.act && g.avatar.act('sit', 3) };
+    if (F.t === 'wardrobe' && mine) return { label: '옷 고치 · 옷 갈아입기 · 물건 맡기기·꾸미기', short: '옷장', use: () => ui(ops).serviceCard('옷 고치', '우리 집', '', [{ label: '옷 갈아입기', primary: true, onClick: () => openWardrobe(g, '우리 집 옷장') }, { label: '물건 맡기기·꺼내기', onClick: () => home.stash(ops) }, { label: '집 꾸미기 · 물건 놓기', sub: '바라보는 쪽 바닥에', onClick: () => home.placeDecor(ops) }]) };
     if (F.tag === 'storage') return { label: mine ? '옷 고치 · 물건 맡기기' : '옷 고치', short: '보관', use: () => (mine ? home.stash(ops) : null) };
     if (F.tag === 'mail' || F.tag === 'parcel') return { label: '우편함 · 우리 집 칸', short: '우편', use: () => home.mail(ops) };
     if (F.tag === 'vending') return vendingAct(ops, T, F, out);
@@ -1458,7 +1660,7 @@ function clockAct(ops, T) {
 }
 
 export const TYPES = {
-  mart, food, factory, depot, office, admin: office, lab, school, clinic, plant, terminal, museum, library, hall, hotel, home, farm, bank,
+  mart, food, factory, depot, office, admin: office, lab, school, clinic, plant, terminal, museum, library, hall, hotel, home, farm, bank, clothes,
   lobby: generic, generic, garden: generic, amenity: generic, observation: generic, parking: generic, tech: generic,
   // 중2층(관제·사무·대기)은 아래 홀(공장·창고·발전동·대합실·공연장)의 한 부분: 관제 조종대·출근 단말 같은 것은 그 홀의 운영(세입자·살림·기계)으로,
   // 그 밖의 책상·회의는 사무처럼. (전에는 중2층을 따로 된 세입자로 공장 동작에 넘겨 생산 자료가 없어 「생산 현황」이 멈췄다)

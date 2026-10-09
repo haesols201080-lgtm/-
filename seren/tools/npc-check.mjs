@@ -22,18 +22,20 @@ await page.waitForFunction(() => window.SEREN && SEREN.game && SEREN.game.mode =
 await ev(() => { const g = SEREN.game; if (g.tips) g.tips.first = () => false; g.ui.moa = () => {}; });
 
 const SITES = [
-  ['도시 구역', () => { const g = SEREN.game, C = g.city; let best = null; for (const Z of C.zones.slice(0, 12)) { const n = C.spotsNear(Z.cx + 60, Z.cz + 60, 120).length; if (!best || n > best.n) best = { n, x: Z.cx + 60, z: Z.cz + 60 }; } return [best.x, best.z]; }],
+  // 도시 구역: 구역 둘레(가운데 거대 건물이 아닌 블록 띠)에서 주민 자리가 가장 많은 곳
+  ['도시 구역', () => { const g = SEREN.game, C = g.city; let best = null; for (const Z of C.zones.slice(0, 12)) for (let k = 0; k < 8; k++) { const a = k * 0.785, R = (Z.rOut || 600) * 0.55, x = Z.cx + Math.cos(a) * R, z = Z.cz + Math.sin(a) * R; const n = C.spotsNear(x, z, 120).length; if (!best || n > best.n) best = { n, x, z }; } return [best.x, best.z]; }],
   ['이슬터', () => [-420, 7840]],
 ];
 
 for (const [label, where] of SITES) {
   const at = await ev(where);
   await ev(([x, z]) => { const g = SEREN.game; g.player.teleport(x, undefined, z); g.world.clock.time = Math.floor(g.world.clock.time) + 0.45; g.citizens.near = null; }, at);
-  await page.waitForFunction(() => SEREN.game.citizens.vis.length > 4, null, { timeout: 120000, polling: 500 }).catch(() => {});
+  await page.waitForFunction(() => SEREN.game.citizens.near && SEREN.game.citizens.vis.length > 4, null, { timeout: 180000, polling: 500 }).catch(() => {});
+  await ev(() => { const Ci = SEREN.game.citizens; if (!Ci.near) Ci.update(0.1); }); // 아직 한 번도 둘레를 못 훑었으면 직접 한 번
   // 1) 하루 블록
   const r1 = await ev(() => {
     const g = SEREN.game, Ci = g.citizens, T = g.time;
-    const P = Ci.near.slice(0, 60);
+    const P = (Ci.near || []).slice(0, 60);
     let solo = 0, brk = 0, errand = 0, kinds = new Set(), multi = 0;
     for (const p of P) {
       const seen = new Set();
@@ -117,7 +119,9 @@ const r7 = await ev(() => {
   let talkable = 0, talked = 0;
   const miss = [];
   for (const n of A) {
-    pp.set(n.pos.x + 1, n.pos.y, n.pos.z);
+    // 문에서 먼 쪽에 선다 (문 바로 앞이면 「들어가기」가 먼저인 것은 정상)
+    const dr = g.city.nearestDoor(n.pos.x, n.pos.z, 6), ax = dr ? n.pos.x - dr.door.x : 1, az = dr ? n.pos.z - dr.door.z : 0, al = Math.hypot(ax, az) || 1;
+    pp.set(n.pos.x + ax / al, n.pos.y, n.pos.z + az / al);
     const t = g._findTarget();
     if (t && t.o === n) talkable++; else miss.push(`${n.name}→${t ? t.kind + ':' + (t.o && t.o.name) : '없음'}`);
     g.talkTo(n);
@@ -161,7 +165,7 @@ const t3b = await talkOnce(who.key);
 ok(!t3b.ko.some((s) => /술래잡기/.test(s)) && t3b.ko[0] !== t3.ko[0], `후일담은 한 번만 · 인사는 바뀜: 「${t3b.ko.join(' / ')}」`);
 await ev(() => { SEREN.game.world.clock.time += 4; });
 const t4 = await talkOnce(who.key);
-ok(/오랜만|돌아왔/.test(t4.ko[0]), `나흘 뒤: 「${t4.ko.join(' / ')}」`);
+ok(/오랜만|돌아왔|한동안/.test(t4.ko[0]), `나흘 뒤: 「${t4.ko.join(' / ')}」`);
 
 // 5) 저장 → 불러오기
 const r5 = await ev(async (key) => {

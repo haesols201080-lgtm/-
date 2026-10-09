@@ -3,7 +3,7 @@
 //  · 실내 높이: POCKET_Y + (그 층 바닥 − 1층 바닥). 가로 자리는 바깥 건물과 같은 x, z (문도 바깥 문과 같은 자리).
 //  · 카메라: 지금 층 바닥~천장 사이, 벽(칸막이)을 넘지 않게(격자 칸 사이의 벽 모서리로 판정).
 import * as THREE from 'three';
-import { buildFloor, floorMaterials } from './render.js';
+import { buildFloor, floorMaterials, colBox } from './render.js';
 import { FUSE, ROOMS } from './catalog.js';
 import { toWorld, toGrid, toWorldExt, toGridExt } from './volume.js';
 import { floorGroups, parseKey, NOWALK } from './cells.js';
@@ -91,6 +91,19 @@ export class Indoor {
       d.mesh = m; d.open = 0;
       out.doorMeshes.push(m);
     }
+    // 직원 전용 문 (v24 「관계자 전용·보안 구역」): 한쪽만 직원 방(acc 'staff')인 문 — 출입 권한이 없으면 플레이어에게는 열리지 않고
+    // 문틀에 막이 선다(주민은 그대로 드나든다 — 따라 들어가 비집고 지나갈 수 없다). 그 방 안에 있으면 언제나 나갈 수 있다.
+    out.locks = [];
+    for (const d of out.doors) {
+      const A = pl.L.rooms[d.door.a], Bq = d.door.b >= 0 ? pl.L.rooms[d.door.b] : null;
+      const sa = !!(A && ROOMS[A.type] && ROOMS[A.type].acc === 'staff'), sb = !!(Bq && ROOMS[Bq.type] && ROOMS[Bq.type].acc === 'staff');
+      if (sa === sb) continue;
+      const dv = d.slide[1] === 1;
+      const spec = Object.assign(colBox({ r: this.r, V: this.V, y0: ctx.y0 }, d.x, d.z, dv ? 0.09 : d.w / 2 + 0.02, dv ? d.w / 2 + 0.02 : 0.09, 0, -0.2, 3.6, false), { wall: true });
+      const lk = { d, R: sa ? A : Bq, spec, col: null };
+      d.lock = lk;
+      out.locks.push(lk);
+    }
     // 승강기 문 (두 짝)
     for (const L of out.lifts) {
       if (!L.stops) continue;
@@ -113,6 +126,7 @@ export class Indoor {
     for (const f of this.listeners) f('dispose', i, out);
     const g = this.game, C = g.world.colliders;
     for (const c of out.added) C.remove(c);
+    for (const lk of out.locks || []) if (lk.col) { C.remove(lk.col); lk.col = null; }
     g.engine.scene.remove(out.group);
     out.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); if (o.material && o.material.isMeshBasicMaterial && !o.material.userData.keep) o.material.dispose(); });
     if (out.winMat) out.winMat.dispose();
@@ -351,11 +365,24 @@ export class Indoor {
     // 문: 사람이 다가가면 열린다 (플레이어 + 실내 사람)
     const people = [[p.x, p.y, p.z]];
     if (this.agents) for (const a of this.agents.near()) people.push([a.pos.x, a.pos.y, a.pos.z]);
+    const ops = g.ops, C = g.world.colliders;
+    const lockTick = (this._lkT = (this._lkT || 0) - dt) < 0;
+    if (lockTick) this._lkT = 0.25;
     for (const out of this.built.values()) {
+      // 잠긴 문: 지금 층에서, 플레이어가 그 직원 방 밖에 있고 출입 권한이 없으면 막는다 (0.25 초마다 다시 본다)
+      if (lockTick && out.locks && out.locks.length) {
+        const c = this.cellAt(p.x, p.z), here = out.i === this.cur && c >= 0 && out.roomX[c] ? out.L.rooms[out.roomX[c] - 1] : null;
+        for (const lk of out.locks) {
+          const shut = out.i === this.cur && here !== lk.R && !!ops && !ops.canEnter(lk.R, out.i);
+          lk.shut = shut;
+          if (shut && !lk.col) lk.col = C.add(lk.spec);
+          else if (!shut && lk.col) { C.remove(lk.col); lk.col = null; }
+        }
+      }
       for (const d of out.doors) {
         const [wx, wz] = this.world(d.x, d.z);
         let want = 0;
-        for (const q of people) if (Math.abs(q[1] - out.y0 - 1) < 2.5 && Math.hypot(q[0] - wx, q[2] - wz) < 2.0) { want = 1; break; }
+        for (let k = d.lock && d.lock.shut ? 1 : 0; k < people.length; k++) { const q = people[k]; if (Math.abs(q[1] - out.y0 - 1) < 2.5 && Math.hypot(q[0] - wx, q[2] - wz) < 2.0) { want = 1; break; } } // 잠긴 문은 플레이어(0 번)에게 열리지 않는다
         d.open += (want - d.open) * Math.min(1, dt * 6);
         d.mesh.position.set(d.x + d.slide[0] * d.open * d.w * 0.95, 0, d.z + d.slide[1] * d.open * d.w * 0.95);
       }

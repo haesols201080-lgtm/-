@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { litMaterial, glowMaterial } from '../world/materials.js';
 import { skiffGeo, boatMaterial } from '../world/boats.js';
+import { Outfit } from './outfit.js';
 
 const SUIT = 0xe9e2d4;
 const SUIT_DARK = 0x6a6f80;
@@ -46,17 +47,20 @@ export class Avatar {
     torso.position.y = 0.27;
     torso.scale.set(1.05, 1, 0.82);
     this.spine.add(torso);
+    this.parts = { torso, pelvis, armUp: [], armLo: [], pad: [], glove: [], thigh: [], shin: [], kneePad: [], boot: [], sole: [] }; // 옷이 덮으면 숨기는 몸 부분 (player/outfit.js)
     const belt = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.035, 6, 16), accent);
     belt.rotation.x = Math.PI / 2;
     belt.position.y = 0.06;
     belt.scale.set(1.08, 0.86, 1);
     this.spine.add(belt);
+    this.parts.belt = belt;
     const chest = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.05), dark);
     chest.position.set(0, 0.36, 0.15);
     this.spine.add(chest);
     const chestLight = new THREE.Mesh(new THREE.CircleGeometry(0.025, 12), this.glowMat);
     chestLight.position.set(0.06, 0.37, 0.177);
     this.spine.add(chestLight);
+    this.parts.chest = chest; this.parts.chestLight = chestLight;
 
     // 날개 팩
     this.pack = new THREE.Group();
@@ -82,6 +86,7 @@ export class Avatar {
     const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.165, 20, 14), suit);
     helmet.scale.set(0.95, 1.02, 1);
     this.head.add(helmet);
+    this.helmet = helmet;
     const vis = new THREE.Mesh(new THREE.SphereGeometry(0.152, 20, 14, -Math.PI * 0.42, Math.PI * 0.84, Math.PI * 0.28, Math.PI * 0.36), visor);
     vis.position.z = 0.03;
     vis.scale.set(1, 1, 1.03);
@@ -102,15 +107,18 @@ export class Avatar {
       const pad = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 8), accent);
       pad.scale.set(1, 0.8, 1);
       sh.add(pad);
-      sh.add(capsule(0.058, 0.2, suit));
+      const up = capsule(0.058, 0.2, suit);
+      sh.add(up);
       const el = new THREE.Group();
       el.position.y = -0.31;
       sh.add(el);
-      el.add(capsule(0.052, 0.2, suit));
+      const lo = capsule(0.052, 0.2, suit);
+      el.add(lo);
       const glove = new THREE.Mesh(new THREE.SphereGeometry(0.062, 10, 8), dark);
       glove.position.y = -0.33;
       glove.scale.set(0.9, 1.1, 0.8);
       el.add(glove);
+      this.parts.armUp.push(up); this.parts.armLo.push(lo); this.parts.pad.push(pad); this.parts.glove.push(glove);
       return { sh, el, glove };
     };
     this.armL = mkArm(-1);
@@ -126,11 +134,14 @@ export class Avatar {
       const hip = new THREE.Group();
       hip.position.set(side * 0.1, -0.04, 0);
       this.hips.add(hip);
-      hip.add(capsule(0.078, 0.3, dark));
+      const th = capsule(0.078, 0.3, dark);
+      hip.add(th);
       const knee = new THREE.Group();
       knee.position.y = -0.44;
       hip.add(knee);
-      knee.add(capsule(0.068, 0.3, suit));
+      const shin = capsule(0.068, 0.3, suit);
+      knee.add(shin);
+      this.parts.thigh.push(th); this.parts.shin.push(shin);
       const kneePad = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), accent);
       kneePad.position.set(0, -0.02, 0.04);
       knee.add(kneePad);
@@ -144,10 +155,12 @@ export class Avatar {
       const sole = new THREE.Mesh(new THREE.BoxGeometry(0.135, 0.025, 0.25), accent);
       sole.position.set(0, -0.075, 0.04);
       ankle.add(sole);
+      this.parts.kneePad.push(kneePad); this.parts.boot.push(boot); this.parts.sole.push(sole);
       return { hip, knee, ankle, boot };
     };
     this.legL = mkLeg(-1);
     this.legR = mkLeg(1);
+    this.outfit = new Outfit(this); // 입은 옷 (관절에 붙는 옷 조각)
 
     // 날개 (활공): 등판과 같은 평면(XY)에 펼쳐진다 — 몸을 앞으로 눕히면 수평이 된다
     this.wings = new THREE.Group();
@@ -518,6 +531,7 @@ export class Avatar {
     this.shadow.material.opacity = 0.32 * Math.max(0, 1 - above / 30);
 
     this._updateScarf(dt, p);
+    this.outfit.update(dt, speed || 0);
   }
 
   /** 걷기·달리기 (그리고 제자리 돌기의 작은 걸음) */

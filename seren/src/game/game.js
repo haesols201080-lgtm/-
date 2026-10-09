@@ -65,6 +65,7 @@ import { MapData } from '../ui/map.js';
 import { won } from '../data/money.js';
 import { atmosUniforms } from '../world/atmosphere.js';
 import { josa } from '../core/josa.js';
+import { wornLook } from '../player/outfit.js';
 
 export class Game {
   constructor() {
@@ -220,6 +221,7 @@ export class Game {
     if (id) setActiveSlot(id);
     this.state = defaultState();
     this.services.applyState();
+    this.dress();
     this.ui.hideTitle();
     this.mode = 'intro';
     this.world.clock.frozen = false;
@@ -271,6 +273,7 @@ export class Game {
     this.player.yaw = p.yaw || 0;
     this.rig.yaw = (p.yaw || 0) + Math.PI;
     this._applyState();
+    this.dress();
     this.rig.override = null;
     this.mode = 'play';
     this.ui.setHud(true);
@@ -342,6 +345,8 @@ export class Game {
   }
 
   /** 화면·빛 설정 (전역): 전체 밝기 = 톤매핑 노출, 조명 밝기 = 월드 발광 배율(uLightScale), 빛 번짐은 프레임마다 bloom 세기에 곱한다 */
+  /** 입은 옷을 아바타에 (불러오기·옷장·피팅룸 뒤). extra: 피팅룸에서 입어 보는 옷 { 부위: {item, color, fit} } */
+  dress(extra = null) { if (this.avatar && this.avatar.outfit) this.avatar.outfit.dress(wornLook(this.state.wardrobe, extra)); }
   applyDisplay() {
     const s = this.settings, clamp = (v, a, b, d) => Math.max(a, Math.min(b, Number.isFinite(+v) ? +v : d));
     s.bright = clamp(s.bright, 0.6, 1.5, 1); s.light = clamp(s.light, 0.4, 1.6, 1); s.bloom = clamp(s.bloom, 0, 1.6, 1);
@@ -630,7 +635,7 @@ export class Game {
     if (t.kind === 'venue') return this.venues.use(t);
     if (t.kind === 'outdoor') return this.outdoors.use(t);
     if (t.kind === 'exit') return this.interiors.exit();
-    if (t.kind === 'ilift' || t.kind === 'roofdoor' || t.kind === 'terrace' || t.kind === 'reenter') return this.interiors.use(t);
+    if (t.kind === 'ilift' || t.kind === 'roofdoor' || t.kind === 'terrace' || t.kind === 'reenter' || t.kind === 'lock') return this.interiors.use(t);
     if (t.kind === 'op' && this.ops) return this.ops.use(t);
     if (t.kind === 'lift') return this.interiors.up();
     if (t.kind === 'liftdown') return this.interiors.down();

@@ -60,6 +60,8 @@ export function defaultState() {
     health: { hp: 100, max: 100, down: null, hurtAt: 0 },
     // 은행 (v24): 입출금 계좌 잔액·의료 부채 잔액·거래 원장 [{ n, t, day, kind, amt, bal, debt, where, memo }] — 가방의 돈은 inv.starseed
     bank: { balance: 0, debt: 0, ledger: [], seq: 0 },
+    // 옷 (v24): 가진 옷(own: {id, item, color, fit 'awen'|'fit'|'univ'}) · 입은 옷(worn: 부위 → id) · 치수를 쟀나 · 주문 (재단사)
+    wardrobe: { own: [], worn: {}, measured: false, orders: [], seq: 0 },
     // 울림 OS (v24): 내 계정의 받은 메일 [{ n, day, from, subj, body, read, key }] · 계정마다 설정 { wall, notify }
     os: { mail: [], prefs: {}, seq: 0 },
     inv: { starseed: 0, seedstar: 0, shard: 0, flower: 0, fruit: 0, trinket: 0, tea: 0, cookie: 0, meal: 0, lantern: 0, mapshard: 0, book: 0, parcel: 0 },

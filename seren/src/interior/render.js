@@ -7,6 +7,8 @@ import { spiralPlan, spiralRail } from './spiral.js';
 import { TALLEST } from '../data/body.js';
 import { PAT, interiorMaterial, windowMaterial } from './material.js';
 import { drawFixture } from './props.js';
+import { exhibitModel, exhibitFor, exhibitScale, EXHIBIT_TOP } from './exhibits.js';
+import { uidOf } from './ids.js';
 import { FIX, ROOMS, flowRoom, PART_T } from './catalog.js';
 import { sdfSpan, sdfAt, WALL } from './volume.js';
 import { SLAB } from './program.js';
@@ -329,6 +331,12 @@ export function buildFloor(ctx) {
       // 로컬 → 틀 좌표
       const a = (q.rot || 0) * Math.PI / 2, cs = Math.cos(a), sn = Math.sin(a);
       out.slots.set(q.id, slots.map((s) => ({ ...s, gx: q.x + s.x * cs + s.z * sn, gz: q.z - s.x * sn + s.z * cs, rot: q.rot, fix: q })));
+      // 전시 받침: 그 전시의 실제 모형 (v24 「박물관 실제 전시품」) — 설명 카드(museum.exhibitOf)와 같은 전시를 고른다
+      for (const s of slots) if (s.exhibit) {
+        const e = exhibitFor(ctx.uid || (ctx.uid = uidOf(ctx.r)), q.id);
+        exhibitModel(gb, e.id, q.x + s.x * cs + s.z * sn, EXHIBIT_TOP[q.t] ?? s.y, q.z - s.x * sn + s.z * cs, a, exhibitScale(q, s), e.color);
+      }
+      if (q.t === 'case') { const odd = q.rot % 2 === 1; glass.box(q.x, 0.8, q.z, (odd ? q.d : q.w) - 0.05, 0.8, (odd ? q.w : q.d) - 0.05, 0, 0xcff4ff, 0.04); }
     }
     const f = FIX[q.t];
     if (!f || f.solid === false) continue;

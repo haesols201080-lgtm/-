@@ -21,6 +21,7 @@ await page.waitForFunction(() => window.SEREN && SEREN.game && SEREN.game.city &
 await page.evaluate((DBG) => {
   const g = SEREN.game, T = SEREN.THREE;
   if (g.tips) g.tips.first = () => false;
+  g.debugAccess = true; // 셀마다 걷는 검사 — 직원 문 잠금은 따로
   g.ui.moa = () => {};
   g.ui.blink = (mid, done) => { mid(); if (done) done(); }; // 셀 넘기: 가림 막 없이 바로 (한 프레임 안에서 옆 셀을 짓는다)
   window.__dbg = DBG;

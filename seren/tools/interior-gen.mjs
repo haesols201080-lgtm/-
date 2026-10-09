@@ -311,7 +311,8 @@ if (!cmd || cmd === 'all') {
         if (up && up.mezz && !up.dead && !F.mezz) { if (!L.mstair) problems.push(`${kind}/${use}/${hw}x${h}: 중2층 계단 없음`); else mz++; }
       }
       // 같은 건물은 늘 같은 짜임
-      const r2 = fakeRec(kind, use, hw, hd, h, { x: 1000 + (n - 1) * 37, z: -2000 + (n - 1) * 11 });
+      const r2 = fakeRec(kind, use === 'hospital' ? 'heal' : use, hw, hd, h, { x: 1000 + (n - 1) * 37, z: -2000 + (n - 1) * 11 });
+      if (use === 'hospital') r2.hospital = true; // 첫 건물과 같은 기록으로 (생활권 병원 표시까지)
       addBridge(r2, n - 1);
       const B2 = makeBuilding(r2, ctxFor());
       if (r.bridges && !B.floors.some((F) => F.bridges)) problems.push(`${tag}: 공중다리 높이에 층이 없음`);

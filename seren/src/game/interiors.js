@@ -447,6 +447,12 @@ export class Interiors {
         }
       }
       if (near) return near;
+      // 잠긴 직원 문 앞: 출입 인증 (왜 못 들어가는지 알려 준다 — 그냥 벽처럼 막히지 않게)
+      for (const lk of out.locks || []) {
+        if (!lk.shut) continue;
+        const [x, z] = ind.world(lk.d.x, lk.d.z);
+        if (Math.hypot(p.x - x, p.z - z) < 1.6) return { kind: 'lock', o: lk, label: `${lk.R.name || '직원 구역'} · 직원 전용 — 출입 인증`, short: '인증' };
+      }
       const T = out.L.ents.terrace;
       if (T && inCellC(T.c)) {
         const G = B.G, ti = T.c % G.gw, tj = (T.c / G.gw) | 0;
@@ -474,6 +480,7 @@ export class Interiors {
   /** game._interact 가 부르는 실내 행동 */
   use(t) {
     if (t.kind === 'ilift') return this.liftPanel(t.o);
+    if (t.kind === 'lock') { const g = this.game; audio.blip({ hz: 320, to: 220, dur: 0.16, gain: 0.06, bus: 'ui' }); g.ui.toast(g.ops ? g.ops.lockInfo(t.o.R) : '직원 전용', { kind: 'muted' }); return; }
     if (t.kind === 'roofdoor') return this.outTo('roof', t.o.F, t.o.S.roofDoor);
     if (t.kind === 'terrace') return this.outTo('terrace', t.o.F, t.o.at);
     if (t.kind === 'bridge') {

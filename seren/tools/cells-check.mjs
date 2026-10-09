@@ -23,6 +23,7 @@ await page.waitForFunction(() => window.SEREN && SEREN.game && SEREN.game.city &
 await page.evaluate(() => {
   const g = SEREN.game;
   if (g.tips) g.tips.first = () => false;
+  g.debugAccess = true; // 모든 문을 걸어서 넘는 검사 — 직원 문 잠금은 따로 (bank-flow)
   g.ui.moa = () => {};
   g.ui.blink = (mid, done) => { mid(); if (done) done(); }; // 시험: 가림 막 없이 바로 (셀 바꾸기 논리만 본다)
   const DT = 1 / 60;

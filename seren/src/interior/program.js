@@ -326,10 +326,11 @@ function decideUses(pid, slots, ctx, rnd) {
       break;
     }
     case 'market': {
-      if (size === 'tiny' || size === 'small') { uses[0] = 'mart'; fill(1, top, rnd() < 0.6 ? 'residential' : 'office'); if (N === 2 && slots[1].n < 60) uses[1] = 'house'; break; }
+      // 옷가게 (v24): 작은 가게 건물 셋 중 하나쯤은 옷가게, 중간 건물은 위층 상가 대신, 큰 백화점은 한 층을 옷 매장으로
+      if (size === 'tiny' || size === 'small') { uses[0] = rnd() < 0.32 ? 'clothes' : 'mart'; fill(1, top, rnd() < 0.6 ? 'residential' : 'office'); if (N === 2 && slots[1].n < 60) uses[1] = 'house'; break; }
       if (size === 'medium') {
         uses[0] = 'mart';
-        if (N >= 2) uses[1] = rnd() < 0.5 ? 'shops' : 'food';
+        if (N >= 2) uses[1] = rnd() < 0.5 ? (rnd() < 0.5 ? 'clothes' : 'shops') : 'food';
         fill(2, top, rnd() < 0.5 ? 'office' : 'residential');
         if (wantBase) basements.push('supply');
         break;
@@ -339,6 +340,7 @@ function decideUses(pid, slots, ctx, rnd) {
       basements.push('mart');
       uses[0] = 'dept';
       fill(1, retailTop - 1, 'dept');
+      if (retailTop >= 3) uses[retailTop - 1] = 'clothes';
       if (retailTop >= 1) uses[retailTop] = 'food';
       if (top > retailTop + 2) { if (rnd() < 0.4) uses[retailTop + 1] = 'hall'; towerMix(rnd() < 0.5 ? 'office' : 'residential', retailTop + 1); }
       else fill(retailTop + 1, top, 'dept');
@@ -394,7 +396,7 @@ function decideUses(pid, slots, ctx, rnd) {
 // 쓰임마다 층이 이만큼은 되어야 그 쓰임의 핵심 가구(recipes.ESSENTIAL: 서고의 안내대·서가 셋·찾기 단말, 공장의 기계, 창고의 큰 선반,
 // 재배실의 재배 선반 둘, 매장의 계산대·진열대 둘 …)가 놓이고 사람이 지나간다 — 작은 탑의 심(나선 계단 + 작은 승강기, 약 8칸)을 빼고 약 30 m².
 // 가늘어지는 첨탑 끝의 층처럼 이보다 작으면 그 층은 설비층(맨 위면 전망층)으로.
-const FLOOR_MIN = { library: 40, farm: 40, factory: 40, storage: 40, hall: 40, schoolhall: 40, museum: 36, school: 36, mart: 36, shops: 36, dept: 36, food: 36, cafe: 36, canteen: 36, care: 36, civic: 36, transit: 36, plant: 36 };
+const FLOOR_MIN = { clothes: 30, library: 40, farm: 40, factory: 40, storage: 40, hall: 40, schoolhall: 40, museum: 36, school: 36, mart: 36, shops: 36, dept: 36, food: 36, cafe: 36, canteen: 36, care: 36, civic: 36, transit: 36, plant: 36 };
 function tinyFloors(slots, uses) {
   const N = slots.length;
   const big = Math.max(0, ...slots.map((s) => s.n));
@@ -448,7 +450,7 @@ const DISTRICT_TINT = {
   bioindustry: 0xb4f07a, highrise: 0xc8d8ff, garden: 0x9fe08a, suburb: 0xffd0a0, village: 0xffd8a8, glass: 0xbff8ff,
   bloom: 0xff9fd0, canyon: 0xff9f7a, sea: 0x8ff0e0, frost: 0xd8f0ff,
 };
-const OP_FAMILY = { lobby: 'office', mart: 'mart', food: 'food', office: 'office', lab: 'lab', clinic: 'clinic', school: 'school', library: 'library', museum: 'museum', hall: 'hall', admin: 'admin', home: 'home', hotel: 'hotel', factory: 'factory', depot: 'depot', terminal: 'terminal', farm: 'farm', garden: 'garden', plant: 'plant', tech: 'tech', parking: 'tech', amenity: 'hotel', observation: 'hotel', mezz: 'office' };
+const OP_FAMILY = { lobby: 'office', mart: 'mart', clothes: 'mart', bank: 'office', food: 'food', office: 'office', lab: 'lab', clinic: 'clinic', school: 'school', library: 'library', museum: 'museum', hall: 'hall', admin: 'admin', home: 'home', hotel: 'hotel', factory: 'factory', depot: 'depot', terminal: 'terminal', farm: 'farm', garden: 'garden', plant: 'plant', tech: 'tech', parking: 'tech', amenity: 'hotel', observation: 'hotel', mezz: 'office' };
 
 function styleFor(op, r, seed, org, k) {
   const rnd = rngFor(seed, `style${k}`);

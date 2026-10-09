@@ -26,6 +26,8 @@ export class Ops {
     this.agents = null;
     this.apps = new Apps(game, this);
     this.basket = []; // [{ g, from: slotKey, price, uid }]
+    this.tryOn = []; // 옷가게에서 든 옷 [{ item, color, fit, price, key, uid }] (v24)
+    this.trying = null; // 탈의 칸에서 입어 보는 중 { fid, floor, on: {부위: 든 옷} }
     this.carry = null; // { g, n, from, kind: 'box'|'tray'|'crate'|'fuel'… }
     this.task = null; // 지금 하는 과제 { title, steps, k, pay, role }
     this._hudT = 0;
@@ -82,6 +84,12 @@ export class Ops {
     // 계산하지 않은 바구니는 진열대로 돌려놓는다
     if (this.basket.length) this.returnBasket(true);
     if (this.carry) this.dropCarry(true);
+    // 사지 않은 옷은 옷걸이로 (입어 보던 옷은 벗는다)
+    if (this.trying) { this.trying = null; g.dress(); }
+    if (this.tryOn.length) {
+      for (const o of this.tryOn) { const T = (this.tenants || []).find((q) => q.node && q.node.shelf[o.key] && (!o.tuid || q.uid === o.tuid)); if (T) T.node.shelf[o.key].n++; }
+      this.tryOn = []; g.ui.toast('사지 않은 옷은 옷걸이에 돌려놓았다', { kind: 'muted' });
+    }
     for (const T of this.tenants || []) g.econ.watch.delete(T.uid);
     if (this.agents) this.agents.clear();
     this.agents = null;
@@ -230,7 +238,8 @@ export class Ops {
         const st = n.shelf[`${fid}/${si}`] || (n.bins && n.bins.find((b) => b.key === `${fid}/${si}`));
         if (!st || !st.g || st.n <= 0) return;
         const G = GOODS[st.g] || ITEMS[st.g] || {};
-        const [w0, h, d] = SHAPE[G.shape] || SHAPE.box;
+        const hang = s.hang && st.g !== 'shoes'; // 옷걸이에 걸린 옷: 얇고 길게 (신은 가로대 밑 받침에)
+        const [w0, h, d] = hang ? [0.07, 0.72, 0.46] : SHAPE[G.shape] || SHAPE.box;
         const per = Math.max(1, s.n);
         // 칸 너비에 per 개가 다 들어가지 않으면 물건 폭을 줄인다 (나란히 놓인 물건끼리 겹쳐 면이 깜빡이지 않게)
         const w = Math.min(w0, (Math.max(0.2, s.w) / per) * 0.94);
@@ -245,11 +254,12 @@ export class Ops {
           const lx = s.x + (along ? 0 : off), lz = s.z + (along ? off : 0);
           // 고정물 로컬 → 틀 좌표 (fix 의 회전)
           const F = s.fix, cs = Math.cos(F.rot * Math.PI / 2), sn = Math.sin(F.rot * Math.PI / 2);
-          pos.set(F.x + lx * cs + lz * sn, s.y + h / 2 + layer * (h + 0.02), F.z - lx * sn + lz * cs);
+          pos.set(F.x + lx * cs + lz * sn, (s.hang && !hang ? 0.05 : s.y) + h / 2 + layer * (h + 0.02), F.z - lx * sn + lz * cs); // 옷걸이의 신은 받침 바닥에
           sc.set(w, h, d);
           mat.compose(pos, q, sc);
           m.setMatrixAt(k, mat);
           col.set(G.color ?? 0xcccccc);
+          if (hang) col.offsetHSL(((e * 0.37 + (+fid || 0) * 0.11) % 1) - 0.5, 0, (e % 3) * 0.05 - 0.05); // 걸린 옷은 한 벌마다 빛깔이 다르다
           m.setColorAt(k, col);
           k++;
         }
@@ -297,6 +307,8 @@ export class Ops {
       const d = Math.min(Math.hypot(gx - F.ax, gz - F.az), Math.hypot(gx - F.x, gz - F.z) - Math.max(F.w, F.d) / 2 - 0.4, F.bx != null ? Math.hypot(gx - F.bx, gz - F.bz) : 1e9);
       if (d < (h.r || 1.3) && d < bd) { bd = d; best = { F, h }; }
     }
+    // 가구가 아닌 것(우리 집에 놓아 둔 물건 등)
+    for (const X of out.extraTargets || []) { const d = Math.hypot(gx - X.gx, gz - X.gz); if (d < X.r && d < bd) { bd = d; best = { F: { id: -1, x: X.gx, z: X.gz }, h: X.h }; } }
     // 하고 있는 과제의 다음 자리는 늘 먼저
     if (this.task) { const tk = this.taskTarget(gx, gz, out); if (tk) return tk; }
     if (!best) return null;
@@ -457,6 +469,27 @@ export class Ops {
 
   // ── 교대 (일자리) ───────────────────────────────
   /** 이 건물에서 맡은 일자리 */
+  /**
+   * 직원 방(acc 'staff')에 들어갈 수 있나 (v24 「관계자 전용·보안 구역」): 이 건물에서 일하는 이(출입증) — 금고실은 교대 중에만,
+   * 면접 보러 온 이는 면접 자리가 있는 방만(방문증), 맡은 과제가 있으면 그 과제 동안. 그 밖에는 잠긴 문 앞에서 막힌다.
+   */
+  canEnter(R, i) {
+    const g = this.game;
+    if (g.debugAccess || !this.cur || !R) return true;
+    if (this.myJobHere()) return R.type !== 'vault' || !!this.S.shift;
+    if (this.task && this.task.uid === this.cur.uid) return true;
+    const ap = this.S.apps.find((a) => a.status === 'interview' && a.uid === this.cur.uid);
+    if (ap) { const iv = this.apps.ivSpot(); const pl = iv && iv.floor === i && this.cur.indoor.plan(i); const F = pl && pl.fix.find((f) => f.id === iv.fid); if (F && F.room === R.id) return true; }
+    return false;
+  }
+  /** 잠긴 문에서 E: 왜 못 들어가는지 · 어떻게 하면 들어갈 수 있는지 */
+  lockInfo(R) {
+    const g = this.game, name = (R && R.name) || '직원 구역';
+    if (this.myJobHere() && R.type === 'vault') return `${name} · 금고실은 교대 중인 직원만 열 수 있어요 (출근 단말에서 출근)`;
+    const ap = this.S.apps.find((a) => a.status === 'interview' && this.cur && a.uid === this.cur.uid);
+    if (ap) return `${name} · 방문증은 면접실만 열어요 — 면접 자리로 가세요`;
+    return `${name} · 직원 출입증이 필요해요 — 이 건물에서 일하게 되면 열려요 (공용 단말에서 일자리 지원)`;
+  }
   myJobHere() { if (!this.cur) return null; return this.S.jobs.find((j) => j.uid === this.cur.uid) || null; }
   clockIn(job) {
     const g = this.game, S = this.S;
@@ -507,6 +540,12 @@ export class Ops {
     const cur = this.cur;
     if (!cur) { this._hud(dt); return; }
     if (this.agents && this.game.interiors.inPocket) this.agents.update(dt);
+    // 탈의 칸 밖으로 나가면 입어 보던 옷은 벗는다 (매장 아무 데서나 입고 다니지 않게)
+    if (this.trying && this.cur) {
+      const ind = this.cur.indoor, pl = ind.plan(this.trying.floor), F = pl && pl.fix.find((f) => f.id === this.trying.fid);
+      const [gx, gz] = ind.grid(this.game.player.pos.x, this.game.player.pos.z);
+      if (!F || ind.cur !== this.trying.floor || Math.hypot(gx - F.x, gz - F.z) > 2.4) { this.trying = null; this.game.dress(); }
+    }
     for (const out of cur.indoor.built.values()) {
       if (out.T && out.T.type.tick) out.T.type.tick(this, out.T, out, dt);
       // 서가가 있는 층: 3 m 넘게 움직이면 가까운 서가의 책등을 다시

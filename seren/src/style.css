@@ -651,3 +651,5 @@ body.busy .touchui *, body.busy .tones * { pointer-events: none !important; }
 @keyframes hpPulse { 50% { box-shadow: 0 0 14px rgba(255, 90, 110, 0.6); } }
 .hurt-flash { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(ellipse at center, rgba(255, 40, 60, 0) 45%, rgba(255, 40, 60, 0.55) 100%); }
 @media (max-width: 620px) { .hp-track { width: 64px; } }
+/* 옷 빛깔 점 (옷걸이·옷장) */
+.cl-chip { display: inline-block; width: 0.8em; height: 0.8em; border-radius: 50%; vertical-align: -0.05em; margin-right: 0.3em; border: 1px solid rgba(255, 255, 255, 0.45); }
