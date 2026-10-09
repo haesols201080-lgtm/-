@@ -7,6 +7,7 @@ import { ITEMS, BUFFS, BAG_ORDER, itemInfo, bagOrder } from '../data/venues.js';
 import { bookById, bookColor } from '../data/books.js';
 import { libState, readPage } from '../interior/library.js';
 import { won } from '../data/money.js';
+import { DECOR } from '../interior/exhibits.js';
 
 const TABS = [['bag', '가방'], ['words', '단어'], ['heard', '들은 말'], ['echoes', '메아리'], ['codex', '도감'], ['help', '도움말'], ['log', '기록']];
 
@@ -109,7 +110,8 @@ export class Journal {
       if (!I) continue;
       any = true;
       const can = I.use === 'eat' || I.use === 'map' || I.use === 'read' || I.use === 'heal';
-      h += `<div class="bag-item"><span class="ic">${I.icon}</span><div class="tx"><b>${I.name} <small>${id === 'starseed' ? won(n) : `× ${n}`}</small></b><small>${I.tag} · ${I.desc}</small></div>${can && n ? `<button class="btn" data-use="${id}">${I.use === 'eat' ? '먹기' : I.use === 'read' ? '읽기' : I.use === 'heal' ? '감기' : '쓰기'}</button>` : ''}</div>`;
+      const place = DECOR[id] && n && g.ops && g.ops.inMyHome && g.ops.inMyHome(); // 우리 집 안이면 꺼내 놓기
+      h += `<div class="bag-item"><span class="ic">${I.icon}</span><div class="tx"><b>${I.name} <small>${id === 'starseed' ? won(n) : `× ${n}`}</small></b><small>${I.tag} · ${I.desc}</small></div>${can && n ? `<button class="btn" data-use="${id}">${I.use === 'eat' ? '먹기' : I.use === 'read' ? '읽기' : I.use === 'heal' ? '감기' : '쓰기'}</button>` : ''}${place ? `<button class="btn" data-place="${id}">꺼내 놓기</button>` : ''}</div>`;
     }
     h += '</div>';
     if (!any) h += '<p class="muted">아직 아무것도 없어요.</p>';
@@ -129,6 +131,7 @@ export class Journal {
     c.innerHTML = h;
     c.querySelectorAll('[data-read]').forEach((b) => b.addEventListener('click', () => { const e = LB.borrowed[+b.dataset.read]; const B = e && bookById(e.id); if (!B) return; g.ui.closeMenu && g.ui.closeMenu(); const S = libState(g); g.ui.reader(B, { kicker: '빌린 책', page: S.done[e.id] ? 0 : Math.min(Math.max(0, (S.read[e.id] || 1) - 1), B.pages.length - 1), onPage: (p) => readPage(g, e.id, p) }); }));
     c.querySelectorAll('[data-use]').forEach((b) => b.addEventListener('click', () => { g.venues.useItem(b.dataset.use); const body = c.parentElement; body.innerHTML = ''; this.render(body); }));
+    c.querySelectorAll('[data-place]').forEach((b) => b.addEventListener('click', () => { g.ui.closeMenu(); g.ops.placeDecor(b.dataset.place); }));
   }
 
   /** 도움말: 처음 해 볼 때 본 안내를 다시 보기 (아직 안 해 본 것은 이름만) */

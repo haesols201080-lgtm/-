@@ -204,6 +204,9 @@ src/
 - **은행 건물**: `interiors.bankSet()`(구역마다 사무 건물 1~4곳 — 전문 건물, 방 `banking`·`bankconsult`·`vault`, 가구 `teller`·`atm`·`vaultdoor`), 운영 `ops-types.bank`.
 - **주민의 하루·기억** (`game/life.js`): `dayPlan`(쉬는 시간·볼일) · `excursion`(갔다 머물다 돌아오기) · 기억 `memOf(S, key)`/`remember(S, key, kind, day)` · 말 `memoryLines`·`lifeLine`. 함께 한 일을 새로 만들면 `citizens._reward(people, {kind})` 의 kind 를 넘기고 `life.js` 의 `SHARED` 에 후일담 한 줄. 일터 말은 `data/citizens.js` 의 `JOB_LINES[op]`(staff/visitor). 거리의 아웬(`npcs` 의 ambient)도 이름·기억 열쇠가 있고 `citizens.smallTalk` 로 이야기한다 — 새 인물 무리를 만들면 같은 길로(말 걸기 없는 사람을 두지 말 것).
 - **실내 사람 배치**: 층을 처음 채우면 `agents.prewarm(층)` 이 60 초를 앞당겨 돌린다(입구에 겹쳐 나타나지 않게). 새 `people()` 은 손님을 `arrival` 에서 시작해도 되지만, 같은 자리로 가는 사람은 `agents._spot` 이 옆 칸으로 나눈다. 검사 `node tools/npc-check.mjs`.
+- **직원 구역**: 한쪽만 `acc 'staff'` 방인 문은 `ops.canEnter(R, 층)` 이 거짓이면 잠긴다(`building` 의 `out.locks` · 문 앞 표적 `lock`). 새 권한(방문증 등)은 `canEnter` 한 곳에. 문을 모두 걷는 검사는 `game.debugAccess = true`.
+- **전시품·집 꾸미기 모형**: `interior/exhibits.js`(`exhibitModel`·`exhibitFor`·`decorModel`). 새 전시는 `data/venues.EXHIBITS` 에 한 줄 + `exhibitModel` 에 모양 한 가지.
+- **옷**: 새 옷은 `data/clothes.CLOTHES`(slot·shape·fit·good·colors) + 새 모양이면 `player/outfit.js` 의 `_build`(관절에 붙는 회전체, 덮는 탐사복 부분 `hide`). 갈아입기는 옷장(`game/wardrobe.js`)에서만, 입어 보기는 옷가게 탈의 칸에서만(`game.dress(extra)`). 검사 `node tools/clothes-check.mjs`.
 
 ## 지켜야 할 것
 - 기존 저장 파일이 깨지지 않게: 저장 형식을 바꾸면 `state.js` 의 `migrate()` 를 손보세요.

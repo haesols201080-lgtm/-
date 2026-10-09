@@ -490,6 +490,9 @@ export class Ops {
     if (ap) return `${name} · 방문증은 면접실만 열어요 — 면접 자리로 가세요`;
     return `${name} · 직원 출입증이 필요해요 — 이 건물에서 일하게 되면 열려요 (공용 단말에서 일자리 지원)`;
   }
+  /** 지금 우리 집 안인가 (가방에서 꺼내 놓기) */
+  inMyHome() { const g = this.game; return !!(this.cur && g.interiors.inPocket && g.state.home != null && this.cur.r.id === g.state.home); }
+  placeDecor(k) { if (this.inMyHome()) TYPES.home.placeDecor(this, k); }
   myJobHere() { if (!this.cur) return null; return this.S.jobs.find((j) => j.uid === this.cur.uid) || null; }
   clockIn(job) {
     const g = this.game, S = this.S;
@@ -557,7 +560,7 @@ export class Ops {
     if (sh) {
       const job = this.S.jobs.find((j) => j.uid === sh.uid && j.k === sh.k);
       const t = this.game.world.clock.time % 1;
-      if (job && t > job.hours[1] && !sh.warned) { sh.warned = true; this.game.ui.toast('교대 시간이 끝났어요 — 출근 단말에서 퇴근', {}); }
+      if (job && job.hours && t > job.hours[1] && !sh.warned) { sh.warned = true; this.game.ui.toast('교대 시간이 끝났어요 — 출근 단말에서 퇴근', {}); }
     }
     this._hud(dt);
   }

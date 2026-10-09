@@ -62,6 +62,8 @@ export function defaultState() {
     bank: { balance: 0, debt: 0, ledger: [], seq: 0 },
     // 옷 (v24): 가진 옷(own: {id, item, color, fit 'awen'|'fit'|'univ'}) · 입은 옷(worn: 부위 → id) · 치수를 쟀나 · 주문 (재단사)
     wardrobe: { own: [], worn: {}, measured: false, orders: [], seq: 0 },
+    // 집 구하기 (v24): kind 'gift'(시민이 되며 받은 집)·'rent'·'own' · 집세 rent · 다음 낼 날 next · 밀린 수 late · 보증금 · 받은 집 giftHome
+    estate: { kind: null, uid: null, rent: 0, next: 0, late: 0, deposit: 0, giftHome: null },
     // 울림 OS (v24): 내 계정의 받은 메일 [{ n, day, from, subj, body, read, key }] · 계정마다 설정 { wall, notify }
     os: { mail: [], prefs: {}, seq: 0 },
     inv: { starseed: 0, seedstar: 0, shard: 0, flower: 0, fruit: 0, trinket: 0, tea: 0, cookie: 0, meal: 0, lantern: 0, mapshard: 0, book: 0, parcel: 0 },

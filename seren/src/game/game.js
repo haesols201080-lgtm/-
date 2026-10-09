@@ -66,6 +66,7 @@ import { won } from '../data/money.js';
 import { atmosUniforms } from '../world/atmosphere.js';
 import { josa } from '../core/josa.js';
 import { wornLook } from '../player/outfit.js';
+import { Estate } from './estate.js';
 
 export class Game {
   constructor() {
@@ -130,6 +131,7 @@ export class Game {
     this.interiors = new Interiors(this);
     this.econ = new Economy(this); // 도시 살림 (v0.9): 돈(울)·물건이 저절로 생기지 않고 흐른다
     this.bank = new Bank(this); // 은행·치료비 (v24): 슬롯마다 따로인 장부 (state.bank)
+    this.estate = new Estate(this); // 집 구하기 (v24): 세·사기·집세 (state.estate)
     this.health = new Health(this); // 체력·쓰러짐·병원 이송 (v24, state.health)
     this.ops = new Ops(this); // 건물이 하는 일 (v0.9)
     this.guide = new Guide(this); // 실내 길 안내
@@ -512,6 +514,7 @@ export class Game {
       if (mode === 'play' || mode === 'dialogue') this.quests.update(dt);
       this.events.update(dt);
       this.requests.update(dt);
+      this.estate.update(dt);
       this.services.update(dt);
       this.interiors.update(dt);
       this.econ.update(dt);

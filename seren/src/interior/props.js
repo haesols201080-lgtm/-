@@ -240,6 +240,19 @@ export function drawFixture(gb, F, st) {
       slots.push({ x: 0, y: F.t === 'plinth' ? 1.4 : 1.6, z: 0, w: 0.5, d: 0.5, n: 1, exhibit: true });
       break;
     }
+    // ── 집 구하기 사무소 (v24) ──
+    case 'agentdesk': { // 중개 책상: 상판 · 손님 쪽 의자 둘 · 빛판(집 모양 그림)
+      f.box(0, 0, 0, W - 0.1, 0.74, D - 0.1, P, 0, PAT.wood); f.box(0, 0.74, 0, W, 0.05, D, GOLD, 0, PAT.wood);
+      f.box(0, 0.79, -D / 2 + 0.15, 0.7, 0.45, 0.04, 0x101820); f.box(0, 0.82, -D / 2 + 0.17, 0.62, 0.38, 0.005, G, 1.1, PAT.screen);
+      for (const sx of [-0.45, 0.45]) { f.box(sx, 0, D / 2 + 0.45, 0.48, 0.45, 0.48, B, 0, PAT.fabric); f.box(sx, 0.45, D / 2 + 0.68, 0.48, 0.5, 0.06, B, 0, PAT.fabric); }
+      break;
+    }
+    case 'listingwall': { // 집 알림판: 판 · 칸마다 집 그림(빛) · 위 이름 띠
+      f.box(0, 0.3, 0, W, H - 0.4, D, 0x2a2e38, 0, PAT.panel);
+      for (let r = 0; r < 3; r++) for (let c = 0; c < 4; c++) { const x = -W / 2 + 0.32 + c * (W - 0.64) / 3, y = 0.55 + r * 0.62; f.box(x, y, D / 2 + 0.005, 0.42, 0.3, 0.01, [G, B, GOLD][(r + c) % 3], 0.9, PAT.screen); f.box(x, y + 0.3, D / 2 + 0.005, 0.3, 0.12, 0.01, [G, B, GOLD][(r + c) % 3], 0.6); }
+      f.box(0, H - 0.15, D / 2, W, 0.12, 0.02, GOLD, 1.2);
+      break;
+    }
     // ── 옷가게 (v24) ──
     case 'clothesrack': { // 옷걸이: 받침 둘 · 위 가로대 — 옷은 재고만큼 물건 칸(걸린 옷 모양)으로 그린다
       for (const sx of [-1, 1]) { f.box(sx * (W / 2 - 0.06), 0, 0, 0.08, 0.04, D, dark); f.cyl(sx * (W / 2 - 0.06), 0.04, 0, 0.022, 1.66, steel, 0, PAT.metal, 0, 8); }

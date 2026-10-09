@@ -309,7 +309,8 @@ function decideUses(pid, slots, ctx, rnd) {
     }
     case 'office': case 'lab': case 'admin': {
       const main = pid === 'office' ? 'office' : pid === 'lab' ? 'research' : 'admin';
-      if (size === 'tiny' || size === 'small') { uses[0] = pid === 'admin' ? 'civic' : main; fill(1, top, main); break; }
+      // 작은 사무 건물의 1층은 넷 중 하나쯤 집 구하기 사무소 (v24 부동산)
+      if (size === 'tiny' || size === 'small') { uses[0] = pid === 'admin' ? 'civic' : pid === 'office' && rnd() < 0.25 ? 'estate' : main; fill(1, top, main); break; }
       uses[0] = pid === 'admin' ? 'civic' : 'lobby';
       if (podium) fill(1, podium - 1, commerce ? (rnd() < 0.5 ? 'food' : 'shops') : pid === 'lab' ? 'research' : 'food');
       else if (N >= 6 && commerce && rnd() < 0.45) uses[1] = 'food';
@@ -450,7 +451,7 @@ const DISTRICT_TINT = {
   bioindustry: 0xb4f07a, highrise: 0xc8d8ff, garden: 0x9fe08a, suburb: 0xffd0a0, village: 0xffd8a8, glass: 0xbff8ff,
   bloom: 0xff9fd0, canyon: 0xff9f7a, sea: 0x8ff0e0, frost: 0xd8f0ff,
 };
-const OP_FAMILY = { lobby: 'office', mart: 'mart', clothes: 'mart', bank: 'office', food: 'food', office: 'office', lab: 'lab', clinic: 'clinic', school: 'school', library: 'library', museum: 'museum', hall: 'hall', admin: 'admin', home: 'home', hotel: 'hotel', factory: 'factory', depot: 'depot', terminal: 'terminal', farm: 'farm', garden: 'garden', plant: 'plant', tech: 'tech', parking: 'tech', amenity: 'hotel', observation: 'hotel', mezz: 'office' };
+const OP_FAMILY = { lobby: 'office', mart: 'mart', clothes: 'mart', bank: 'office', estate: 'office', food: 'food', office: 'office', lab: 'lab', clinic: 'clinic', school: 'school', library: 'library', museum: 'museum', hall: 'hall', admin: 'admin', home: 'home', hotel: 'hotel', factory: 'factory', depot: 'depot', terminal: 'terminal', farm: 'farm', garden: 'garden', plant: 'plant', tech: 'tech', parking: 'tech', amenity: 'hotel', observation: 'hotel', mezz: 'office' };
 
 function styleFor(op, r, seed, org, k) {
   const rnd = rngFor(seed, `style${k}`);

@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { mulberry32 } from '../core/noise.js';
 import { litMaterial } from '../world/materials.js';
+import { openLiftPanel } from '../ui/devices/liftpanel.js';
 import { audio } from '../core/audio.js';
 import { buildCabin } from './cabin.js';
 import { Indoor } from '../interior/building.js';
@@ -344,13 +345,13 @@ export class Interiors {
     const lk = B.links.find((k) => k.id === lift.link);
     if (!lk) return;
     const here = ind.cur;
-    const items = lk.floors.slice().sort((a, b) => b - a).map((i) => {
+    const floors = lk.floors.slice().sort((a, b) => b - a).map((i) => {
       const F = B.floors[i];
       const Z = B.zones[F.zone];
       const org = Z && Z.org ? B.orgs.find((o) => o.id === Z.org) : null;
-      return { label: `${F.label}층 · ${FUSE[F.use] ? FUSE[F.use].name : F.use}${i === here ? ' (여기)' : ''}`, sub: org ? org.name : F.below ? '지하' : ' ', disabled: i === here, onClick: () => this.ride(lift, i) };
+      return { i, label: String(F.label), name: FUSE[F.use] ? FUSE[F.use].name : F.use, org: org ? org.name : F.below ? '지하' : '', here: i === here };
     });
-    g.ui.serviceCard(lift.cargo ? '화물 승강기' : lk.bank === 'high' ? '승강기 · 높은층 급행' : lk.bank === 'low' ? '승강기 · 낮은층' : '승강기', '몇 층으로 갈까요?', lift.cargo ? '짐과 함께 타는 넓은 칸. 일하는 사람이 쓴다.' : '공명 부양 칸이 조용히 오르내린다.', items);
+    openLiftPanel(g, { title: lift.cargo ? '화물 승강기' : lk.bank === 'high' ? '높은층 급행' : lk.bank === 'low' ? '낮은층' : '승강기', cargo: !!lift.cargo, floors, onPick: (i) => this.ride(lift, i) });
   }
   ride(lift, to) {
     const g = this.game, cur = this.cur, ind = cur.indoor, B = cur.B;

@@ -404,7 +404,8 @@ export class UI {
   // opts.keys === false 면 E·스페이스·엔터로 닫히지 않는다 — 그 키를 쓰는 놀이 카드. wrap.close() 는 그 카드만 닫는다.
   _card(inner, onClose, opts = {}) {
     if (this._cardWrap) { this.closeCard(); if (this._cardWrap) this._cardWrap.close(); }
-    const wrap = $(`<div class="card-wrap"><div class="card glass">${inner}<div><button class="btn" data-close-card>닫기</button></div></div></div>`);
+    // side: 화면 오른쪽에 붙인 좁은 카드 · 어둡게 덮지 않음 (탈의 칸처럼 카드 너머의 내 모습을 봐야 할 때)
+    const wrap = $(`<div class="card-wrap${opts.side ? ' card-side' : ''}"><div class="card glass">${inner}<div><button class="btn" data-close-card>닫기</button></div></div></div>`);
     let closed = false;
     const close = () => {
       if (closed) return;
@@ -425,6 +426,29 @@ export class UI {
   }
 
   closeCard() { if (this._cardClose) { const c = this._cardClose; this._cardClose = null; c(); } }
+  /**
+   * 기기·물건마다 다른 화면을 올리는 빈 층 (v24 「범용 만능 UI 폐기」): 둥근 카드·공통 단추 목록 없이 node 를 그대로 올린다.
+   * 모양·조작은 각 기기(ui/devices/*)가 정한다. Esc 는 닫기, E·스페이스는 기기가 받는다(카드처럼 닫지 않음). 한 번에 하나(카드와 같은 자리).
+   */
+  mount(node, { onClose = null, cls = '' } = {}) {
+    if (this._cardWrap) { this.closeCard(); if (this._cardWrap) this._cardWrap.close(); }
+    const layer = document.createElement('div');
+    layer.className = `dev-layer ${cls}`;
+    layer.appendChild(node);
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      layer.remove();
+      if (this._cardWrap === layer) { this._cardWrap = null; this._cardClose = null; this.cardKeys = true; this.game.setMode('play'); }
+      onClose && onClose();
+    };
+    this.root.appendChild(layer);
+    this.game.setMode('card');
+    this._cardWrap = layer; this._cardClose = close; this.cardKeys = false;
+    layer.close = close;
+    return layer;
+  }
 
   glyphCard(wordId, first) {
     const w = WORD[wordId];
