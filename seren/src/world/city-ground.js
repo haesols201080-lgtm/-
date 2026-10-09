@@ -230,6 +230,9 @@ vec3 citySurface(CityS S, out vec3 em, out float spec) {
 }
 
 // 블록 안 (u: 고리 방향, v: 바깥 방향, L·D: 길이·깊이)
+// 공원용 값 잡음 (칸 해시 + 부드러운 보간) — 꽃 무리·자갈 섬이 격자로 보이지 않게
+float gHash(vec2 c) { return fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453); }
+float gNoise(vec2 x) { vec2 i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(mix(gHash(i), gHash(i + vec2(1.0, 0.0)), f.x), mix(gHash(i + vec2(0.0, 1.0)), gHash(i + vec2(1.0, 1.0)), f.x), f.y); }
 CityS cityBlock(float type, float vari, float stilt, float u, float v, float L, float D, float j, float m, float fw) {
   CityS S; S.q = vec2(u, v); S.fw = fw; S.var = vari; S.line = 0.0; S.glow = 0.0; S.kind = 1.0;
   int t = int(type + 0.5);
@@ -336,23 +339,83 @@ CityS cityBlock(float type, float vari, float stilt, float u, float v, float L, 
     }
     return S;
   }
-  if (t == 10) { // 계획 녹지
+  if (t == 10) { // 계획 녹지 — 블록마다 다른 공원 (다섯 배치 × 자리·크기·방향 흔들기: 같은 무늬가 줄지어 반복되지 않게)
     float pr = min(L, D) * 0.2;
     if (natural > 0.5) { // 보존 공원: 자연 그대로 + 둘레 길 + 정자 마당
       S.kind = (edge > 4.0 && edge < 7.0) ? 5.0 : 0.0;
       if (length(p - vec2(cu, cv)) < 6.5) S.kind = 1.0;
       return S;
     }
+    float r1 = fract(vari * 0.618034 + j * 0.137), r2 = fract(vari * 0.381966 + 0.17 + j * 0.291), r3 = fract(vari * 0.754878 + 0.41), r4 = fract(vari * 0.569840 + 0.33 + j * 0.53);
+    float lay = mod(floor(vari + j * 3.0), 5.0);
+    float pu = r4 > 0.5 ? L - u : u; // 좌우 뒤집기
+    vec2 q = vec2(pu, v);
+    float bloom = gNoise(q / (5.5 + r3 * 4.0) + vec2(vari * 1.7, j * 3.1)); // 꽃 무리·자갈 섬 자리
     S.kind = 3.0;
-    if (edge > 3.0 && edge < 6.0) S.kind = 5.0;
-    float dl = length(vec2(L, D));
-    float d1 = abs((p.x) * D - (p.y) * L) / dl, d2 = abs((p.x) * D + (p.y - D) * L) / dl;
-    if (min(d1, d2) < 1.6) S.kind = 5.0;
-    vec2 e = (p - vec2(cu, cv)) / vec2(pr, pr * 0.8);
-    float de = length(e) * pr;
-    if (de < pr + 4.0) S.kind = de < pr ? 6.0 : de < pr + 2.5 ? 5.0 : 4.0;
-    if (length(p - vec2(cu + pr + 12.0, cv)) < 6.5) S.kind = 1.0;
-    if (length(p - vec2(cu - pr - 14.0, cv)) < 7.0) S.kind = 11.0;
+    if (lay < 0.5) { // 연못 정원: 한쪽으로 비킨 연못 + 꽃 둑 + 대각선 길 하나 + 둘레 길 + 마당
+      if (edge > 3.0 && edge < 5.5) S.kind = 5.0;
+      float dl = length(vec2(L, D));
+      float dd = r2 > 0.5 ? abs(q.x * D - q.y * L) / dl : abs(q.x * D + (q.y - D) * L) / dl;
+      if (dd < 1.4) S.kind = 5.0;
+      vec2 pc = vec2(cu + (r1 - 0.5) * L * 0.34, cv + (r2 - 0.5) * D * 0.22);
+      float rr = pr * (0.75 + r3 * 0.55);
+      vec2 e = (q - pc) / vec2(rr, rr * (0.65 + r1 * 0.3));
+      float de = (length(e) + 0.12 * sin(atan(e.y, e.x) * 3.0 + r2 * 6.28)) * rr;
+      if (de < rr + 4.5) S.kind = de < rr ? 6.0 : de < rr + 1.4 ? 8.0 : 4.0;
+      vec2 yard = vec2(pc.x > cu ? L * 0.2 : L * 0.8, cv + (r3 - 0.5) * D * 0.3);
+      if (length(q - yard) < 6.0 + r1 * 2.0) S.kind = r3 > 0.5 ? 11.0 : 1.0;
+      else if (S.kind == 3.0 && bloom > 0.74) S.kind = 4.0;
+    } else if (lay < 1.5) { // 시냇물 공원: 긴 쪽을 따라 굽이치는 물길 + 꽃 둑 + 나란한 모래길 + 돌다리
+      float yc = cv + D * (0.14 + r3 * 0.08) * sin(q.x * 6.2832 / L * (0.8 + r1 * 0.9) + r2 * 6.2832);
+      float dw = abs(v - yc), w = 1.4 + r3 * 1.3;
+      float side = r2 > 0.5 ? 1.0 : -1.0;
+      if (abs(v - yc - side * (w + 5.5)) < 1.3) S.kind = 5.0;
+      if (dw < w + 1.8) S.kind = 4.0;
+      if (dw < w) S.kind = 6.0;
+      float bx = L * (0.25 + r1 * 0.5);
+      if (abs(q.x - bx) < 1.4 && dw < w + 2.2) S.kind = 1.0; // 돌다리
+      if (S.kind == 3.0 && bloom > 0.7) S.kind = 4.0;
+      if (S.kind == 3.0 && bloom < 0.12) S.kind = 8.0;
+    } else if (lay < 2.5) { // 정원 방: 생울타리로 나눈 칸들 — 칸마다 꽃밭·잔디 연못·결정 자갈·놀이 바닥
+      float nx = r1 > 0.5 ? 3.0 : 2.0;
+      vec2 cell = vec2((L - 6.0) / nx, (D - 6.0) / 2.0);
+      vec2 g = (q - 3.0) / cell, gi = floor(g), gf = fract(g) * cell;
+      float wall = min(min(gf.x, cell.x - gf.x), min(gf.y, cell.y - gf.y));
+      if (edge > 1.5 && edge < 3.0) S.kind = 5.0;
+      else if (gi.x >= 0.0 && gi.x < nx && gi.y >= 0.0 && gi.y < 2.0) {
+        float h = fract(sin(dot(gi + vari, vec2(12.9898, 78.233))) * 43758.5453);
+        if (wall < 1.3) S.kind = 5.0;
+        else if (wall < 2.2 && !(abs(gf.x - cell.x * 0.5) < 1.2 || abs(gf.y - cell.y * 0.5) < 1.2)) S.kind = 14.0; // 울타리 (가운데로 드나드는 틈)
+        else {
+          vec2 c0 = gf - cell * 0.5;
+          if (h < 0.3) S.kind = 4.0;
+          else if (h < 0.55) S.kind = length(c0) < min(cell.x, cell.y) * 0.22 ? 6.0 : 3.0;
+          else if (h < 0.8) S.kind = length(c0) < 2.5 ? 1.0 : 8.0;
+          else S.kind = 11.0;
+        }
+      }
+    } else if (lay < 3.5) { // 고리 산책로: 물결진 고리 길 + 안쪽 잔디의 꽃 섬·작은 연못, 바깥은 들풀
+      vec2 c0 = q - vec2(cu, cv);
+      float th = atan(c0.y, c0.x);
+      float ra = L * 0.36, rb = D * 0.32;
+      float k0 = length(c0 / vec2(ra, rb)) * (1.0 + 0.1 * sin(th * 3.0 + r2 * 6.28));
+      float dk = (k0 - 1.0) * min(ra, rb);
+      if (abs(dk) < 1.3) S.kind = 5.0;
+      else if (dk > 0.0) S.kind = bloom > 0.6 ? 4.0 : 0.0;
+      else {
+        vec2 pond = vec2((r1 - 0.5) * ra * 0.8, (r3 - 0.5) * rb * 0.6);
+        if (length(c0 - pond) < 4.0 + r2 * 3.0) S.kind = 6.0;
+        else if (length(c0 - pond) < 5.5 + r2 * 3.0) S.kind = 8.0;
+        else if (bloom > 0.68) S.kind = 4.0;
+      }
+      if (edge < 3.0) S.kind = 5.0;
+    } else { // 들꽃 초원: 이끼 들에 꽃 무리와 결정 바위, 한쪽에서 다른 쪽으로 굽은 오솔길 하나와 작은 웅덩이
+      float yc = cv + D * 0.24 * sin(q.x * 0.075 + r1 * 6.28) + D * 0.08 * sin(q.x * 0.21 + r2 * 6.28);
+      S.kind = bloom > 0.6 ? 4.0 : bloom < 0.16 ? 8.0 : 3.0;
+      if (abs(v - yc) < 1.1) S.kind = 5.0;
+      vec2 pw = vec2(L * (0.2 + r3 * 0.6), yc + (r2 > 0.5 ? 7.0 : -7.0));
+      if (length((q - pw) / vec2(1.0, 0.75)) < 3.5 + r1 * 2.5) S.kind = 6.0;
+    }
     if (edge < 1.5) S.kind = 1.0;
     return S;
   }

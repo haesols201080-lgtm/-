@@ -161,6 +161,15 @@ export class CityFabric {
     for (const P of this.plan.zones) for (const B of P.blocks) {
       if (!B.type || !B.why || (B.recs && B.recs.length) || B.type === USE.GRN || B.type === USE.PLZ || B.type === USE.FARM) continue;
       B.was = B.type; B.type = USE.GRN; this.greened++;
+      // 원래 쓰임의 소품(짐 상자·변압기·조작대…)은 공원에 어울리는 것만 남긴다 — 나무·등·의자·분수·꽃, 사람 자리는 쉬는 이로
+      if (B.raw && B.raw.length) {
+        const keep = [];
+        for (let k = 0; k + 5 < B.raw.length + 1; k += 6) {
+          const isSpot = B.raw[k] === 1, kind = B.raw[k + 1];
+          if (isSpot ? true : /^(tree|lamp|bench|fountain|flower|planter|bush|shrub|stone)/.test(kind)) keep.push(B.raw[k], isSpot ? 'stroll' : kind, B.raw[k + 2], B.raw[k + 3], B.raw[k + 4], B.raw[k + 5]);
+        }
+        B.raw = keep;
+      }
     }
     // 지형 셰이더에 계획을 넘긴다 (블록 바닥)
     this.planU = planUniforms(this.plan);
