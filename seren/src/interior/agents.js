@@ -143,6 +143,9 @@ export class Agents {
   _next(a) {
     if (a.step >= a.plan.length) {
       if (a.next) { const p = a.next(a); if (p && p.length) { a.plan = p; a.step = 0; return; } }
+      // 할 일을 마친 손님: 위층이면 승강기를 불러 타고 떠난다 (game/lifts — 플레이어와 같은 칸)
+      const lp = !a.staff && !a.keep && !a.leaving && this.leaveBy ? this.leaveBy(a) : null;
+      if (lp && lp.length) { a.leaving = true; a.plan = lp; a.step = 0; return; }
       a.done = true;
       return;
     }
@@ -197,7 +200,7 @@ export class Agents {
   visible() {
     // 지금 셀(이 방·구역)에 있는 사람만 — 다른 방의 사람은 문 너머에서 보이지 않는다 (그 방은 짓지 않았다)
     const ind = this.ind;
-    return this.list.filter((a) => ind.parts.has(a.floor) ? ind.inCellGrid(a.floor, a.gx, a.gz) : false);
+    return this.list.filter((a) => ind.parts.has(a.floor) ? ind.inCellGrid(a.floor, a.gx, a.gz) || ind.inCarGrid(a.floor, a.gx, a.gz) : false);
   }
   /** 둘레의 걸을 수 있는 칸 하나 (틀 좌표) */
   freeNear(i, gx, gz) { const N = this.navOf(i); if (!N) return [gx, gz]; const s = snap(N, gx, gz, 8); return s ? [N.ox + (s[0] + 0.5) / 2, N.oz + (s[1] + 0.5) / 2] : [gx, gz]; }

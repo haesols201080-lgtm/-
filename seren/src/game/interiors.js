@@ -9,7 +9,7 @@
 import * as THREE from 'three';
 import { mulberry32 } from '../core/noise.js';
 import { litMaterial } from '../world/materials.js';
-import { openLiftPanel } from '../ui/devices/liftpanel.js';
+import { LiftCars } from './lifts.js';
 import { audio } from '../core/audio.js';
 import { buildCabin } from './cabin.js';
 import { Indoor } from '../interior/building.js';
@@ -184,6 +184,7 @@ export class Interiors {
     const cur = this.cur;
     if (!cur) return;
     const g = this.game, C = g.world.colliders;
+    this.lifts = null;
     if (this.inPocket) this._pocket(false);
     if (g.ops && cur.indoor) g.ops.close(cur);
     if (cur.indoor) cur.indoor.close();
@@ -338,40 +339,13 @@ export class Interiors {
     }, to ? to.title || '바깥으로' : '밖으로', this.title(r));
   }
 
-  // ── 승강기 ─────────────────────────────────
-  /** 승강기 문 앞에서: 이 승강기가 서는 층을 골라 탄다 */
-  liftPanel(lift) {
-    const g = this.game, cur = this.cur, ind = cur.indoor, B = cur.B;
-    const lk = B.links.find((k) => k.id === lift.link);
-    if (!lk) return;
-    const here = ind.cur;
-    const floors = lk.floors.slice().sort((a, b) => b - a).map((i) => {
-      const F = B.floors[i];
-      const Z = B.zones[F.zone];
-      const org = Z && Z.org ? B.orgs.find((o) => o.id === Z.org) : null;
-      return { i, label: String(F.label), name: FUSE[F.use] ? FUSE[F.use].name : F.use, org: org ? org.name : F.below ? '지하' : '', here: i === here };
-    });
-    openLiftPanel(g, { title: lift.cargo ? '화물 승강기' : lk.bank === 'high' ? '높은층 급행' : lk.bank === 'low' ? '낮은층' : '승강기', cargo: !!lift.cargo, floors, onPick: (i) => this.ride(lift, i) });
-  }
-  ride(lift, to) {
-    const g = this.game, cur = this.cur, ind = cur.indoor, B = cur.B;
-    const from = ind.cur;
-    const F = B.floors[to];
-    audio.blip && audio.blip({ hz: 520, to: 780, dur: 0.25, gain: 0.08 });
-    const dist = Math.abs(F.y - B.floors[from].y);
-    this._load(() => {
-      ind.setFloor(to);
-      const out = ind.built.get(to);
-      const L = out && out.lifts.find((q) => q.link === lift.link);
-      const f = L ? L.front : lift.front;
-      const lx = (L ? L.x : lift.x) + f[0] * 1.4, lz = (L ? L.z : lift.z) + f[1] * 1.4;
-      const [x, z] = ind.world(lx, lz);
-      const wx = f[0] * ind.V.ex[0] + f[1] * ind.V.ez[0], wz = f[0] * ind.V.ex[1] + f[1] * ind.V.ez[1];
-      this.placeAt(to, x, z, Math.atan2(wx, wz));
-      if (L) { L.open = 1; L.want = 1; setTimeout(() => { L.want = 0; }, 3000); }
-      if (g.ops) g.ops.floorChanged(to);
-    }, `${F.label}층`, `${FUSE[F.use] ? FUSE[F.use].name : ''} · ${Math.round(dist)} m ${to > from ? '올라감' : '내려감'}`);
-  }
+  // ── 승강기 (game/lifts: 부르기 → 문 → 걸어 타기 → 층 단추 → 실제 이동 → 내리기) ─────────────
+  /** 승강장 부르기 단추 (문 앞에서 E) */
+  liftCall(lift) { return this.lifts ? this.lifts.openCall(lift) : null; }
+  /** 옛 이름 (검사 도구가 부른다) */
+  liftPanel(lift) { return this.liftCall(lift); }
+  /** 시험·자동화: 그 승강기로 to 층까지 사람이 하는 순서 그대로 (부르기 → 타기 → 단추 → 도착) — 약속 */
+  ride(lift, to) { return this.lifts ? this.lifts.ride(lift, to) : Promise.resolve(false); }
 
   /** 테라스·옥상으로 나가기: 바깥의 실제 단·지붕 위로 */
   outTo(kind, F, at, yaw) {
@@ -425,6 +399,9 @@ export class Interiors {
         if (Math.hypot(p.x - x, p.z - z) < 1.6 && p.y > fy + S.roofY - 1.5) return { kind: 'roofdoor', o: { S, F: B.floors[i] }, label: '옥상 문 · 지붕 위로 나가기', short: '옥상' };
       }
       if (Math.abs(p.y - fy) > 2.6) return null;
+      // 승강기 칸 안: 조작반 (칸 안에서는 다른 것을 고르지 않는다)
+      const car = this.lifts && this.lifts.inCar();
+      if (car) return { kind: 'icar', o: car, label: `${car.cargo ? '화물 승강기' : '승강기'} 조작반 · 층 단추`, short: '층 단추' };
       if (i === B.ground && Math.hypot(p.x - cur.door.x, p.z - cur.door.z) < 2.6) return { kind: 'exit', label: '정문 · 밖으로 나가기', short: '나가기' };
       // 승강기 문과 공중다리 문이 둘 다 가까우면 더 가까운 쪽 (다리 문 바로 옆에 승강기 홀이 있는 층)
       let near = null, nd = 1e9;
@@ -432,7 +409,7 @@ export class Interiors {
         if (!L.stops) continue;
         const [x, z] = ind.world(L.x + L.front[0] * 0.8, L.z + L.front[1] * 0.8);
         const d = Math.hypot(p.x - x, p.z - z);
-        if (d < 1.7 && d < nd) { nd = d; near = { kind: 'ilift', o: L, label: `${L.cargo ? '화물 승강기' : '승강기'} · 층 고르기`, short: '승강기' }; }
+        if (d < 1.7 && d < nd) { nd = d; near = { kind: 'ilift', o: L, label: `${L.cargo ? '화물 승강기' : '승강기'} · 부르기 단추 ▲▼`, short: '부르기' }; }
       }
       const inCellC = (c) => !out.cellRooms || out.cellRooms.has(out.roomX[c] - 1); // 그 문이 지금 셀의 방에 있나
       for (const e of out.L.ents.bridge || []) {
@@ -480,7 +457,8 @@ export class Interiors {
   }
   /** game._interact 가 부르는 실내 행동 */
   use(t) {
-    if (t.kind === 'ilift') return this.liftPanel(t.o);
+    if (t.kind === 'ilift') return this.liftCall(t.o);
+    if (t.kind === 'icar') return this.lifts && this.lifts.openPanel(t.o);
     if (t.kind === 'lock') { const g = this.game; audio.blip({ hz: 320, to: 220, dur: 0.16, gain: 0.06, bus: 'ui' }); g.ui.toast(g.ops ? g.ops.lockInfo(t.o.R) : '직원 전용', { kind: 'muted' }); return; }
     if (t.kind === 'roofdoor') return this.outTo('roof', t.o.F, t.o.S.roofDoor);
     if (t.kind === 'terrace') return this.outTo('terrace', t.o.F, t.o.at);
@@ -542,6 +520,8 @@ export class Interiors {
     for (const f of cur.anims) f(this.t);
     if (this.inPocket && cur.indoor) {
       const ind = cur.indoor;
+      if (!this.lifts || this.lifts.cur !== cur) this.lifts = new LiftCars(g, cur);
+      this.lifts.update(dt);
       ind.update(dt);
       // 계단실에서는 카메라가 층에 묶이지 않는다 (오르내리는 동안 따라 오르내림)
       g.rig.floorLock = ind.stairCell ? null : ind.yOf(ind.cur);

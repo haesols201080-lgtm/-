@@ -1584,6 +1584,7 @@ export const home = {
   canPlace(ops, out, gx, gz) {
     const ind = ops.cur.indoor, [x, z] = ind.world(gx, gz);
     if (!ind.inside(out.i, x, z)) return '벽이나 바깥이에요';
+    if (ind.inCarGrid(out.i, gx, gz)) return '승강기 칸 안에는 놓을 수 없어요';
     if (out.fix.some((F) => Math.abs(gx - F.x) < F.w / 2 + 0.2 && Math.abs(gz - F.z) < F.d / 2 + 0.2)) return '가구와 겹쳐요';
     if (home.decorList(ops).some((d) => d.floor === out.i && Math.hypot(d.gx - gx, d.gz - gz) < 0.55)) return '다른 물건과 너무 가까워요';
     return true;

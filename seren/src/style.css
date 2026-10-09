@@ -824,6 +824,19 @@ body.busy .touchui *, body.busy .tones * { pointer-events: none !important; }
 .lp-bell { background: linear-gradient(#ffe7a0, #d8b040); letter-spacing: 0; }
 .lp-plaque { font-size: 10px; opacity: .6; letter-spacing: .1em; }
 @media (max-width: 640px) { .liftp { flex-direction: column-reverse; } .lp-dir { width: 88vw; max-height: 26vh; } }
+/* 승강장 부르기 판: 화면 오른쪽에 붙어 문과 표시창(세계)을 가리지 않는다 */
+.liftc { display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 10px; padding-right: max(16px, 6vw); }
+.liftc > * { pointer-events: auto; }
+.lc-plate { width: 132px; padding: 12px 12px 14px; border-radius: 8px; background: linear-gradient(90deg, #9aa1ab, #dfe2e7 35%, #b0b6bf 60%, #e6e9ed 85%, #9aa1ab); box-shadow: inset 0 0 0 2px #6a707a, 0 14px 30px rgba(0,0,0,.5); display: grid; gap: 10px; justify-items: center; color: #2a2e36; }
+.lc-disp { width: 100%; height: 40px; background: #0c0a06; border: 3px solid #4a4f58; border-radius: 3px; display: flex; align-items: center; justify-content: center; gap: 8px; color: #ffb648; font: 700 22px ui-monospace, Menlo, monospace; text-shadow: 0 0 8px rgba(255, 170, 60, .8); }
+.lc-kind { font-size: 11px; letter-spacing: .1em; text-align: center; opacity: .8; } .lc-kind small { display: block; font-size: 10px; opacity: .7; letter-spacing: 0; }
+.lc-btns { display: grid; gap: 12px; }
+.lc-b { width: 56px; height: 56px; border-radius: 50%; border: 0; cursor: pointer; background: radial-gradient(circle at 40% 35%, #f4f6f8, #b8bec7 70%, #8a9099); box-shadow: inset 0 0 0 3px #7a808a, 0 3px 0 #5a6068; font-size: 18px; color: #3a3f48; }
+.lc-b:active { transform: translateY(2px); box-shadow: inset 0 0 0 3px #7a808a, 0 1px 0 #5a6068; }
+.lc-b.lit { box-shadow: inset 0 0 0 3px #ffb648, 0 0 16px #ffb648, 0 3px 0 #5a6068; color: #8a4a00; }
+.lc-floor { font: 600 11px ui-monospace, Menlo, monospace; opacity: .7; }
+.lc-note { max-width: 260px; background: rgba(8, 10, 16, .78); color: #e6ebf2; font-size: 12.5px; line-height: 1.5; padding: 8px 12px; border-radius: 4px; text-align: right; }
+.lc-leave { border: 0; background: rgba(0,0,0,.45); color: #fff; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 12px; }
 
 /* ── 출발 안내 넘김판 + 표 기계 ── */
 .dev-layer.dev-flap { background: rgba(4, 5, 10, .4); }

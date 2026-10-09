@@ -1,6 +1,6 @@
 // 기기 화면 모음 (v24 「기기별 UI」): 게임을 한 번 불러와 기기마다 본보기 내용으로 띄우고 한 장씩 찍는다 → shots/ui-이름.png
 //  node tools/ui-gallery.mjs [이름,이름…]   (이름 없으면 전부)
-import { chromium } from 'playwright';
+import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -14,7 +14,8 @@ await page.waitForFunction(() => window.SEREN && SEREN.ready && SEREN.ready(), n
 await page.evaluate(() => { const g = SEREN.game; if (g.tips) g.tips.first = () => false; });
 
 const G = {
-  lift: `D.openLiftPanel(g, { title: '승강기', floors: [12,11,10,9,8,7,6,5,4,3,2,1].map((n) => ({ i: n, label: String(n), name: n > 8 ? '사무' : n > 2 ? '주거' : n === 2 ? '상가' : '로비', org: n > 8 ? '하늘결 회사' : '', here: n === 1 })), onPick: () => {} })`,
+  lift: `D.openLiftPanel(g, { title: '승강기', floors: [12,11,10,9,8,7,6,5,4,3,2,1].map((n) => ({ i: n, label: String(n), name: n > 8 ? '사무' : n > 2 ? '주거' : n === 2 ? '상가' : '로비', org: n > 8 ? '하늘결 회사' : '' })), live: () => ({ label: '4', dir: 1, at: null, lit: new Set([9]), open: false, moving: true }), onPick: () => {}, onOpen: () => {}, onShut: () => {} })`,
+  liftc: `D.openLiftCall(g, { title: '승강기', floor: '1층 승강장', range: '1 ~ 12층', up: true, down: false, live: () => ({ label: '7', dir: -1, up: true, down: false, open: false }), onCall: () => 'called' })`,
   flap: `D.openFlap(g, { title: '떠나는 편', sub: '교통 터미널 · 하늘배·빛길 환승', cols: ['시각','행선지','타는 곳','값','상태'], rows: [['10:42','물노래','1번','3울','타는 중'],['10:49','빛갈대 들판','2번','2울','곧 떠남'],['10:57','하늘고리','3번','5울','돈 모자람']].map((c, k) => ({ cells: c.slice(0, 4), status: c[4], off: k === 2, fare: c[3], on: () => {} })), foot: '가진 돈 4울' })`,
   console: `D.openConsole(g, { title: '빚음 기계', plate: '울림차 공정 · 빛 4 단위', tone: 'green', gauges: [{ label: '공정 진행', v: 64, max: 100, unit: '%' }, { label: '원료로 더 돌릴 수 있는 번', v: 3, max: 10, low: 1 }], lamps: [{ label: '도는 중', on: true }, { label: '쉼', on: false, col: '#ffd27a' }, { label: '멈춤', on: false, col: '#ff5a3a' }], screen: ['공정       울림차', '넣는 것     찻잎 2 (있음 14)', '나오는 것   울림차 3'], keys: [{ label: '원료 넣고 돌리기', col: 'green', on: () => {} }, { label: '정비', col: 'amber', off: true, why: '멈춘 기계만' }] })`,
   plaque: `D.openPlaque(g, { mat: 'brass', side: 'right', kicker: '전시 설명', title: '첫 소리굽쇠', era: '노래 이전의 시대', text: '아웬이 처음으로 같은 높이의 음을 둘 맞춘 굽쇠. 이 굽쇠의 울림이 첫 공명탑의 기준음이 되었다.', foot: '이 박물관에서 본 전시 3/8' })`,

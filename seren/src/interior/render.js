@@ -648,18 +648,43 @@ function buildLift(ctx, out, gb, p, lk, R, st) {
   const ceil = F.ic ?? F.ceil - F.y;
   const stops = !!(lk && lk.floors.includes(F.i));
   const [fx, fz] = p.door.dir;
-  // 승강기 칸: 안쪽(문이 열리면 보이는 칸) — 바닥·뒷벽·천장 빛
-  const cab = p.kind === 'cargo' ? 0x9aa0aa : mix(st.wall, st.tint ?? 0xe9c27c, 0.15);
-  gb.floorRect(bb.x0 + 0.15, bb.z0 + 0.15, bb.x1 - 0.15, bb.z1 - 0.15, 0.02, p.kind === 'cargo' ? 0x6a6e78 : st.floor, 0, PAT.grid);
-  gb.ceilRect(bb.x0 + 0.15, bb.z0 + 0.15, bb.x1 - 0.15, bb.z1 - 0.15, 2.6, 0xffffff, 1.4, PAT.lightstrip);
-  // 막는 기둥 (사람은 문 앞에서 E 로 탄다)
-  ctx.extraCols.push(colBox(ctx, cx, cz, W / 2 - 0.05, D / 2 - 0.05, 0, -0.5, ceil, false));
+  // 문 높이 = 칸막이 문틀(partitions)과 같은 규칙 — 가장 큰 주민도 숙이지 않고 타는 칸 (v24 4단계 「승강기」)
+  const head = Math.min(ceil - 0.1, TALLEST + 0.2);
+  const top = Math.min(ceil - 0.02, head + 0.06);
+  const cargo = p.kind === 'cargo';
+  // 칸 (v24 4단계: 막는 기둥 대신 실제로 걸어 들어가는 공간) — 바닥·천장 빛·벽 안감·손잡이·안쪽 조작반.
+  //  칸이 이 층에 없을 때는 문짝과 문 막이(building)가 막는다. 칸 벽은 둘레 칸막이(partitions)가 세운다.
+  const i0 = PART_T / 2 + 0.01;
+  const x0 = bb.x0 + i0, x1 = bb.x1 - i0, z0 = bb.z0 + i0, z1 = bb.z1 - i0;
+  const cab = cargo ? 0x9aa0aa : mix(st.wall, st.tint ?? 0xe9c27c, 0.18);
+  gb.floorRect(x0, z0, x1, z1, 0.01, cargo ? 0x6a6e78 : mix(st.floor, 0x30343c, 0.35), 0, cargo ? PAT.grid : PAT.tile);
+  gb.ceilRect(x0, z0, x1, z1, top, 0xffffff, 1.3, PAT.lightstrip);
+  // 안감: 문 벽을 뺀 세 벽 (문 벽의 안쪽은 문틀 기둥 사이)
+  const sx = fz ? 1 : 0, sz = fx ? 1 : 0; // 문 벽을 따라가는 방향
+  for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    if (nx === fx && nz === fz) continue;
+    const wx = nx ? (nx > 0 ? x1 : x0) - nx * 0.02 : cx, wz = nz ? (nz > 0 ? z1 : z0) - nz * 0.02 : cz;
+    const len = nx ? z1 - z0 : x1 - x0;
+    gb.box(wx, 0.02, wz, nx ? 0.03 : len, top - 0.04, nx ? len : 0.03, 0, cab, 0, cargo ? PAT.rib : PAT.panel);
+    // 칸 벽 충돌체: 옆 방이 지금 셀 밖이면 칸막이(partitions)를 짓지 않으므로 칸이 스스로 막는다 (승강로·옆 방 공허로 나가지 않게)
+    ctx.extraCols.push(colBox(ctx, wx + nx * 0.04, wz + nz * 0.04, nx ? 0.07 : len / 2 + 0.05, nx ? len / 2 + 0.05 : 0.07, 0, -0.3, top + 0.4, false));
+    if (!cargo) gb.box(wx - nx * 0.05, 0.92, wz - nz * 0.05, nx ? 0.05 : len - 0.3, 0.05, nx ? len - 0.3 : 0.05, 0, 0xd8dce2, 0, PAT.metal); // 손잡이
+    else gb.box(wx - nx * 0.06, 0.35, wz - nz * 0.06, nx ? 0.08 : len - 0.2, 0.16, nx ? len - 0.2 : 0.08, 0, 0x50545c, 0, PAT.rib); // 짐 받이 띠
+  }
+  // 안쪽 조작반: 문 벽 안쪽 면, 문 오른쪽 (층 단추 불빛 몇 개)
+  const fw = (fx ? z1 - z0 : x1 - x0) / 2;
+  const dW = cargo ? 1.05 : 0.55;
+  const lat = Math.min(fw - 0.22, dW + 0.32);
+  const px = fx ? (fx > 0 ? x1 : x0) - fx * 0.03 : cx + sx * lat;
+  const pz = fz ? (fz > 0 ? z1 : z0) - fz * 0.03 : cz + sz * lat;
+  gb.box(px, 0.95, pz, sx ? 0.24 : 0.03, 0.62, sz ? 0.24 : 0.03, 0, 0xc8ccd4, 0, PAT.metal);
+  for (let k = 0; k < 6; k++) gb.box(px - fx * 0.02 + sx * ((k % 2) * 0.1 - 0.05), 1.06 + Math.floor(k / 2) * 0.12, pz - fz * 0.02 + sz * ((k % 2) * 0.1 - 0.05), sx ? 0.05 : 0.02, 0.05, sz ? 0.05 : 0.02, 0, 0xffd27a, 0.9);
+  // 바닥판(걸을 수 있는) · 천장 막이 (뛰어도 승강로로 솟지 않게)
+  ctx.extraCols.push(colBox(ctx, cx, cz, W / 2, D / 2, 0, -0.3, 0, true));
+  ctx.extraCols.push(colBox(ctx, cx, cz, W / 2, D / 2, 0, top, top + 0.4, false));
   const [dx, dz] = [cx + fx * (Math.abs(fx) ? W / 2 : 0), cz + fz * (Math.abs(fz) ? D / 2 : 0)];
-  const lift = { part: p, link: lk ? lk.id : null, stops, x: dx, z: dz, front: [fx, fz], cargo: p.kind === 'cargo', bank: lk ? lk.bank : null, open: 0 };
+  const lift = { part: p, room: R ? R.id : -1, link: lk ? lk.id : null, stops, x: dx, z: dz, front: [fx, fz], cargo, bank: lk ? lk.bank : null, open: 0, head, top, ceil, bb: { x0, x1, z0, z1, cx, cz } };
   out.lifts.push(lift);
-  // 층 표시 (문 위)
-  if (stops) gb.box(dx + fx * 0.08, 2.55, dz + fz * 0.08, Math.abs(fz) ? 0.9 : 0.04, 0.28, Math.abs(fx) ? 0.9 : 0.04, 0, 0x101820, 0);
-  void cab;
 }
 
 // ── 칸막이·문·난간 ──────────────────────────────────────────

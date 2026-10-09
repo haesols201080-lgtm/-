@@ -290,7 +290,7 @@ const sv = await page.evaluate(async () => {
   // 승강기 타기: 이 층의 승강기로 1층까지
   let lift = null;
   const settle = () => new Promise((res) => { let k = 0; const t = setInterval(() => { if ((!I._busy && k > 3) || ++k > 60) { clearInterval(t); res(); } }, 250); });
-  { const ind = I.cur.indoor, out = ind.built.get(ind.cur), L = out && out.lifts.find((q) => q.stops); if (L) { const ground = I.cur.B.ground; const from = ind.cur; I.ride(L, ground); await settle(); lift = { from, to: ind.cur, y: Math.round(g.player.pos.y - 8000) }; const L2 = ind.built.get(ind.cur).lifts.find((q) => q.stops && q.part === L.part) || ind.built.get(ind.cur).lifts.find((q) => q.stops); I.ride(L2, from); await settle(); lift.back = ind.cur; lift.yBack = Math.round(g.player.pos.y - 8000); } }
+  { const ind = I.cur.indoor, out = ind.built.get(ind.cur), L = out && out.lifts.find((q) => q.stops); if (L) { const ground = I.cur.B.ground; const from = ind.cur; I.lifts.ff = 20; const ok1 = await I.ride(L, ground); await settle(); lift = { from, to: ind.cur, y: Math.round(g.player.pos.y - 8000), ok1 }; const L2 = ind.built.get(ind.cur).lifts.find((q) => q.stops && q.part === L.part) || ind.built.get(ind.cur).lifts.find((q) => q.stops); lift.ok2 = await I.ride(L2, from); await settle(); I.lifts.ff = 1; lift.back = ind.cur; lift.yBack = Math.round(g.player.pos.y - 8000); } }
   g.save(true);
   const before = { floor: I.cur.indoor.cur, inside: g.state.inside, lift };
   I.exit();

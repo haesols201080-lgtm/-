@@ -104,14 +104,49 @@ export class Indoor {
       d.lock = lk;
       out.locks.push(lk);
     }
-    // 승강기 문 (두 짝)
+    // 승강기 (v24 4단계): 문 두 짝(문틀 높이 그대로) · 문 막이(닫혀 있는 동안 승강로로 못 들어가게) · 문 위 표시창(승강장 쪽과 칸 안쪽 —
+    //  칸이 지금 몇 층에 있고 어느 쪽으로 가는지) · 부르기 단추(▲▼, 누르면 불이 들어온다). 열리고 닫히는 것은 game/lifts 의 칸이 정한다.
     for (const L of out.lifts) {
       if (!L.stops) continue;
-      const W = L.cargo ? 1.6 : 1.1;
-      const mk = () => { const m = new THREE.Mesh(new THREE.BoxGeometry(L.front[1] ? W / 2 : 0.05, 2.35, L.front[0] ? W / 2 : 0.05), new THREE.MeshBasicMaterial({ color: 0xc8ccd4 })); m.frustumCulled = false; out.group.add(m); return m; };
+      const W = L.cargo ? 2.1 : 1.1;
+      const [fx, fz] = L.front, sx = fz ? 1 : 0, sz = fx ? 1 : 0;
+      const h = L.head - 0.02;
+      const mk = () => { const m = new THREE.Mesh(new THREE.BoxGeometry(fz ? W / 2 : 0.05, h, fx ? W / 2 : 0.05), new THREE.MeshBasicMaterial({ color: L.cargo ? 0x9aa0a8 : 0xc8ccd4 })); m.position.y = h / 2; m.frustumCulled = false; out.group.add(m); return m; };
       L.leaves = [mk(), mk()];
       L.W = W;
       L.open = 0; L.want = 0;
+      L.spec = Object.assign(colBox({ r: this.r, V: this.V, y0: ctx.y0 }, L.x + fx * 0.05, L.z + fz * 0.05, fz ? W / 2 + 0.05 : 0.1, fx ? W / 2 + 0.05 : 0.1, 0, -0.2, L.head, false), { wall: true });
+      L.col = C.add(L.spec);
+      // 표시창: 작은 글자 판 하나를 두 면(승강장 · 칸 안)에
+      if (typeof document !== 'undefined') {
+        const cv = document.createElement('canvas');
+        cv.width = 128; cv.height = 48;
+        const tex = new THREE.CanvasTexture(cv);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const mat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide });
+        const y = Math.min(L.head + 0.22, L.ceil - 0.16);
+        const ry = Math.atan2(fx, fz);
+        for (const sg of [1, -1]) {
+          const m = new THREE.Mesh(new THREE.PlaneGeometry(0.52, 0.2), sg > 0 ? mat : mat.clone());
+          if (sg < 0) m.material.map = tex;
+          m.position.set(L.x + fx * 0.1 * sg, y, L.z + fz * 0.1 * sg);
+          m.rotation.y = sg > 0 ? ry : ry + Math.PI;
+          m.frustumCulled = false; m.renderOrder = 3;
+          out.group.add(m);
+        }
+        L.disp = { cv, cx: cv.getContext('2d'), tex, key: '' };
+      }
+      // 부르기 단추: 승강장 쪽 문 오른편 벽의 작은 판 (위·아래 단추)
+      const bx = L.x + fx * 0.09 + sx * (W / 2 + 0.3), bz = L.z + fz * 0.09 + sz * (W / 2 + 0.3);
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(fz ? 0.16 : 0.03, 0.34, fx ? 0.16 : 0.03), new THREE.MeshBasicMaterial({ color: 0xb8bec7 }));
+      plate.position.set(bx, 1.15, bz); out.group.add(plate);
+      L.btn = {};
+      for (const [k, dy] of [['up', 0.07], ['down', -0.07]]) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(fz ? 0.06 : 0.02, 0.06, fx ? 0.06 : 0.02), new THREE.MeshBasicMaterial({ color: 0x5a6068 }));
+        m.position.set(bx + fx * 0.02, 1.15 + dy, bz + fz * 0.02); out.group.add(m);
+        L.btn[k] = m;
+      }
+      L.call = [bx + fx * 0.3, bz + fz * 0.3]; // 부르기 단추 앞 (틀 좌표)
     }
     this._signs(out);
     g.engine.scene.add(out.group);
@@ -127,6 +162,7 @@ export class Indoor {
     const g = this.game, C = g.world.colliders;
     for (const c of out.added) C.remove(c);
     for (const lk of out.locks || []) if (lk.col) { C.remove(lk.col); lk.col = null; }
+    for (const L of out.lifts || []) if (L.col) { C.remove(L.col); L.col = null; }
     g.engine.scene.remove(out.group);
     out.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); if (o.material && o.material.isMeshBasicMaterial && !o.material.userData.keep) o.material.dispose(); });
     if (out.winMat) out.winMat.dispose();
@@ -252,6 +288,13 @@ export class Indoor {
     const out = this.built.get(i);
     const r = out && out.roomX ? out.roomX[cj * G.gw + ci] - 1 : -1;
     return r >= 0 && st.has(r);
+  }
+  /** (층 i, 틀 좌표) 가 그 층에 와 있는 승강기 칸 안인가 (칸 안의 사람도 보이게) */
+  inCarGrid(i, gx, gz) {
+    const out = this.built.get(i);
+    if (!out) return false;
+    for (const L of out.lifts) if (L.here && L.bb && gx > L.bb.x0 && gx < L.bb.x1 && gz > L.bb.z0 && gz < L.bb.z1) return true;
+    return false;
   }
   get stairCell() { return !!this.cellKey && this.cellKey[0] === 'S'; }
   /** 층 i 에서 처음 설 셀: (x, z) 가 그 층의 걸을 수 있는 방이면 그 방의 셀, 아니면 승강기 홀 · 정문 홀 · 가장 큰 오가는 공간 */
@@ -388,11 +431,18 @@ export class Indoor {
       }
       for (const L of out.lifts) {
         if (!L.leaves) continue;
-        L.open += (L.want - L.open) * Math.min(1, dt * 4);
+        // 칸(game/lifts)이 L.open 을 정한다 — 칸이 없는 곳(검사 도구)만 L.want 를 따라간다
+        if (!L.car) L.open += (L.want - L.open) * Math.min(1, dt * 4);
         const [fx, fz] = L.front, sx = fz ? 1 : 0, sz = fx ? 1 : 0;
-        const off = (L.W / 4) + L.open * (L.W / 2 - 0.05);
-        L.leaves[0].position.set(L.x + fx * 0.05 - sx * off, 1.2, L.z + fz * 0.05 - sz * off);
-        L.leaves[1].position.set(L.x + fx * 0.05 + sx * off, 1.2, L.z + fz * 0.05 + sz * off);
+        const e = L.open * L.open * (3 - 2 * L.open);
+        const off = (L.W / 4) + e * (L.W / 2 - 0.05);
+        const y = L.leaves[0].position.y;
+        L.leaves[0].position.set(L.x + fx * 0.05 - sx * off, y, L.z + fz * 0.05 - sz * off);
+        L.leaves[1].position.set(L.x + fx * 0.05 + sx * off, y, L.z + fz * 0.05 + sz * off);
+        // 문 막이: 거의 다 열렸을 때만 걷힌다 (닫히는 문틈으로 비집고 들어가지 못하게)
+        const shut = L.open < 0.85;
+        if (shut && !L.col) L.col = C.add(L.spec);
+        else if (!shut && L.col) { C.remove(L.col); L.col = null; }
       }
     }
   }
@@ -406,7 +456,8 @@ export class Indoor {
     if (c < 0) return false;
     const R = out.roomX[c] ? out.L.rooms[out.roomX[c] - 1] : null;
     if (!R || out.L.void[c] === 1) return false;
-    if (['lift', 'cargo', 'shaft'].includes(R.type)) return false;
+    if (R.type === 'lift' || R.type === 'cargo') { const L = out.lifts.find((q) => q.room === R.id); return !!(L && L.here); } // 칸이 이 층에 있으면 칸 안도 걸을 수 있는 곳
+    if (R.type === 'shaft') return false;
     if (out.cellRooms && !out.cellRooms.has(R.id)) return false; // 지금 셀 밖 (문 너머 옆 방)
     // 바깥벽 안쪽인가 (벽 앞 자투리 칸은 칸 가운데가 벽 밖일 수 있다 — 거기 세우면 바닥 없는 곳에 선다)
     if (out.sdAt) { const [gx, gz] = this.grid(x, z); if (out.sdAt(gx, gz) > -0.05) return false; }

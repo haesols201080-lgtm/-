@@ -121,10 +121,10 @@ await ev(() => { const g = SEREN.game, F = g.facilities.byId.get('dew-greenhouse
 await settle();
 await shot('greenhouse');
 await ev(() => { SEREN.game.rig.override = null; SEREN.game.ui.root.style.display = ''; });
-const ss = await ev(() => SEREN.game.state.inv.starseed);
+const ss = await ev(() => SEREN.game.state.inv.seedstar || 0);
 r = await visit('dew-greenhouse');
 await click('1번 밭');
-ok((await ev(() => SEREN.game.state.inv.starseed)) === ss + 3, '온실: 거두기 (+3)');
+ok((await ev(() => SEREN.game.state.inv.seedstar || 0)) === ss + 3, '온실: 거두기 (별씨 +3)');
 
 // ── 음악당: 합창
 r = await visit('cap-hall');
