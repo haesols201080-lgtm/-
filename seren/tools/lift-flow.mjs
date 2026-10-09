@@ -145,7 +145,10 @@ const s2 = await page.evaluate(async () => {
   await new Promise((r) => setTimeout(r, 300));
   L = window.__L();
   const t = g._findTarget();
-  if (!t || t.kind !== 'ilift') return { err: `승강장 표적 없음 (${t && t.kind})` };
+  if (!t || t.kind !== 'ilift') {
+    const p = g.player.pos, [gx, gz] = ind.grid(p.x, p.z), out = ind.built.get(ind.cur), it = I.target(p);
+    return { err: `승강장 표적 없음 (${t && t.kind} ${t && t.label}) · 문에서 (${(gx - L.x).toFixed(2)}, ${(gz - L.z).toFixed(2)}) y${(p.y - ind.yOf(ind.cur)).toFixed(2)} · 실내 표적 ${it && it.kind} · 이 층 승강기 ${out ? out.lifts.filter((q) => q.stops).length : -1} · L 지음 ${!!out && out.lifts.includes(L)} · 셀 ${ind.cellKey} 건너는 중 ${!!ind._xing}` };
+  }
   I.use(t);
   const lay = g.ui._cardWrap;
   const acts = lay && lay.acts ? lay.acts.map((a) => a.label) : [];
