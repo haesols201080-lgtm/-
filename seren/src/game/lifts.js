@@ -383,6 +383,11 @@ export class LiftCars {
   openCall(L) {
     const g = this.game, ind = this.ind, car = this.car(L.link);
     if (!car) return null;
+    // 화물 승강기는 직원 구역 — 부르기 판의 출입증 읽개에 직원 출입증을 대야 부를 수 있다 (관계자 구역과 같은 규칙)
+    if (L.cargo && g.ops) {
+      const pl = ind.plan(ind.cur), R = pl && pl.L.rooms[L.room];
+      if (R && !g.ops.canEnter(R, ind.cur)) { audio.blip({ hz: 320, to: 220, dur: 0.16, gain: 0.06, bus: 'ui' }); g.ui.toast(`출입증 읽개가 붉게 깜빡인다 · ${g.ops.lockInfo(R)}`, { kind: 'muted' }); return null; }
+    }
     const here = ind.cur, F = this.B.floors[here];
     const up = car.stops.some((i) => ind.yOf(i) > ind.yOf(here) + 0.1), down = car.stops.some((i) => ind.yOf(i) < ind.yOf(here) - 0.1);
     const title = L.cargo ? '화물 승강기' : car.lk.bank === 'high' ? '높은층 급행' : car.lk.bank === 'low' ? '낮은층 승강기' : '승강기';

@@ -671,10 +671,16 @@ function buildLift(ctx, out, gb, p, lk, R, st) {
     if (!cargo) gb.box(wx - nx * 0.05, 0.92, wz - nz * 0.05, nx ? 0.05 : len - 0.3, 0.05, nx ? len - 0.3 : 0.05, 0, 0xd8dce2, 0, PAT.metal); // 손잡이
     else gb.box(wx - nx * 0.06, 0.35, wz - nz * 0.06, nx ? 0.08 : len - 0.2, 0.16, nx ? len - 0.2 : 0.08, 0, 0x50545c, 0, PAT.rib); // 짐 받이 띠
   }
-  // 안쪽 조작반: 문 벽 안쪽 면, 문 오른쪽 (층 단추 불빛 몇 개)
+  // 문 자리 = 실제 문 칸 (짝수 폭 칸은 문이 가운데에서 반 칸 비켜 있다 — 칸 가운데에 두면 문짝이 열린 틈을 다 못 덮고 문턱이 벽에 걸렸다)
+  const dw = cargo ? 2 : 1; // layout 의 문 폭 (칸)
+  const [ci, cj] = p.door.c;
+  const dcx = B.G.ox + ci + 0.5 + fx * 0.5 + (fz && dw === 2 ? 0.5 : 0), dcz = B.G.oz + cj + 0.5 + fz * 0.5 + (fx && dw === 2 ? 0.5 : 0);
+  const dlat = fz ? dcx - cx : dcz - cz; // 칸 가운데에서 문 가운데까지 (문 벽을 따라)
+  // 단추 판·조작반은 문 옆에서 칸 폭 안에 드는 쪽으로
   const fw = (fx ? z1 - z0 : x1 - x0) / 2;
   const dW = cargo ? 1.05 : 0.55;
-  const lat = Math.min(fw - 0.22, dW + 0.32);
+  const side = dlat + (dW + 0.32) <= fw - 0.15 ? 1 : -1;
+  const lat = dlat + side * (dW + 0.32);
   const px = fx ? (fx > 0 ? x1 : x0) - fx * 0.03 : cx + sx * lat;
   const pz = fz ? (fz > 0 ? z1 : z0) - fz * 0.03 : cz + sz * lat;
   gb.box(px, 0.95, pz, sx ? 0.24 : 0.03, 0.62, sz ? 0.24 : 0.03, 0, 0xc8ccd4, 0, PAT.metal);
@@ -682,8 +688,7 @@ function buildLift(ctx, out, gb, p, lk, R, st) {
   // 바닥판(걸을 수 있는) · 천장 막이 (뛰어도 승강로로 솟지 않게)
   ctx.extraCols.push(colBox(ctx, cx, cz, W / 2, D / 2, 0, -0.3, 0, true));
   ctx.extraCols.push(colBox(ctx, cx, cz, W / 2, D / 2, 0, top, top + 0.4, false));
-  const [dx, dz] = [cx + fx * (Math.abs(fx) ? W / 2 : 0), cz + fz * (Math.abs(fz) ? D / 2 : 0)];
-  const lift = { part: p, room: R ? R.id : -1, link: lk ? lk.id : null, stops, x: dx, z: dz, front: [fx, fz], cargo, bank: lk ? lk.bank : null, open: 0, head, top, ceil, bb: { x0, x1, z0, z1, cx, cz } };
+  const lift = { part: p, room: R ? R.id : -1, link: lk ? lk.id : null, stops, x: dcx, z: dcz, front: [fx, fz], side, cargo, bank: lk ? lk.bank : null, open: 0, head, top, ceil, bb: { x0, x1, z0, z1, cx, cz } };
   out.lifts.push(lift);
 }
 

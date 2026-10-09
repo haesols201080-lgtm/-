@@ -16,6 +16,7 @@ page.on('console', (m) => { if (m.type() === 'warning' && /셀 밖/.test(m.text(
 await page.goto('file://' + (process.env.SEREN_HTML || join(root, 'index.html')) + '?play=new&nowake=1&q=low&t=0.45');
 await page.waitForFunction(() => window.SEREN && SEREN.game && SEREN.game.city && SEREN.game.city.recs && SEREN.game.city.recs.length > 0 && SEREN.game.mode === 'play', null, { timeout: 400000, polling: 1000 });
 let fails = 0;
+const shot = async (p) => { try { await page.screenshot({ path: join(root, p), timeout: 150000 }); } catch (e) { console.log(`(사진 못 찍음: ${p})`); } };
 const ok = (c, m) => { console.log(`${c ? 'ok  ' : 'FAIL'} ${m}`); if (!c) fails++; };
 
 // 승강기가 셋 넘는 층에 서는 건물 하나
@@ -74,7 +75,16 @@ await page.evaluate(() => {
     if (!L) return;
     const [fx, fz] = L.front, y = ind.yOf(ind.cur), V = ind.V;
     const P = (gx, gz, h) => { const [x, z] = ind.world(gx, gz); return new (g.player.pos.constructor)(x, y + h, z); };
-    if (kind === 'hall') g.rig.override = { pos: P(L.x + fx * 4.2 + (fz ? 0.8 : 0), L.z + fz * 4.2 + (fx ? 0.8 : 0), 1.9), look: P(L.x, L.z, 1.7) };
+    if (kind === 'hall') {
+      // 승강장 안에 드는 가장 먼 자리 (벽 너머·건물 밖으로 나가지 않게)
+      const [ax, az] = ind.world(L.x + fx * 0.8, L.z + fz * 0.8);
+      let pos = null;
+      for (let d = 4.2; d >= 1.2 && !pos; d -= 0.3) for (const sd of [0.7, 0, -0.7]) {
+        const gx = L.x + fx * d + (fz ? sd : 0), gz = L.z + fz * d + (fx ? sd : 0), [x, z] = ind.world(gx, gz);
+        if (ind.inside(ind.cur, x, z) && ind.segClear(ind.cur, ax, az, x, z)) { pos = P(gx, gz, 1.9); break; }
+      }
+      g.rig.override = { pos: pos || P(L.x + fx * 1.2, L.z + fz * 1.2, 1.9), look: P(L.x, L.z, 1.7) };
+    }
     else { const b = L.bb; g.rig.override = { pos: P(b.cx - fx * (b.x1 - b.x0) * 0.42, b.cz - fz * (b.z1 - b.z0) * 0.42, 2.0), look: P(L.x + fx * 2, L.z + fz * 2, 1.4) }; }
     void V;
   };
@@ -122,7 +132,7 @@ ok(s1.col && s1.open === 0, '칸이 없는 동안 문은 닫혀 있고 문 막�
 ok(s1.n > 0.2, `닫힌 문을 지나 승강로로 들어가지 못한다 (문 면에서 ${s1.n} m)`);
 ok(/\|false$/.test(s1.disp || '') && s1.disp.startsWith(s1.top), `문 위 표시창: 칸은 ${s1.top}층 (${s1.disp})`);
 await page.evaluate(() => window.__frame('hall')); await page.waitForTimeout(2500);
-await page.screenshot({ path: join(root, 'shots/lift-1-hall.png') });
+await shot('shots/lift-1-hall.png');
 await page.evaluate(() => window.__frame(null));
 
 // 2) 부르기 단추 → 칸이 내려오고(표시창이 넘어간다) → 딩 · 문이 열린다
@@ -131,9 +141,11 @@ const s2 = await page.evaluate(async () => {
   const [fx, fz] = L.front;
   const [x, z] = ind.world(L.x + fx * 1.3, L.z + fz * 1.3);
   g.player.teleport(x, ind.yOf(ind.cur) + 0.2, z, 0.3);
-  await window.__run(2);
+  await window.__run(60, () => { const q = g._findTarget(); return !!q && q.kind === 'ilift' && !ind._xing; });
+  await new Promise((r) => setTimeout(r, 300));
   L = window.__L();
   const t = g._findTarget();
+  if (!t || t.kind !== 'ilift') return { err: `승강장 표적 없음 (${t && t.kind})` };
   I.use(t);
   const lay = g.ui._cardWrap;
   const acts = lay && lay.acts ? lay.acts.map((a) => a.label) : [];
@@ -149,6 +161,7 @@ const s2 = await page.evaluate(async () => {
   await new Promise((r) => setTimeout(r, 800));
   return { acts, cls, lit, frames: f, seen: [...seen], moved, open: L.open, col: !!L.col, here: L.here, plateGone: !g.ui._cardWrap };
 });
+if (s2.err) { ok(false, s2.err); await browser.close(); process.exit(1); }
 ok(s2.acts.length >= 1, `부르기 판: ${s2.acts.join(' / ')} (${s2.cls.includes('dev-liftc') ? '승강장 판' : s2.cls})`);
 ok(s2.lit, '누른 단추에 불이 들어온다 (세계의 단추 판)');
 ok(s2.moved && s2.frames > 0, `칸이 실제로 달려왔다 (${s2.frames} 프레임)`);
@@ -156,7 +169,7 @@ ok(s2.seen.length >= 3, `표시창이 층마다 넘어갔다: ${s2.seen.join('�
 ok(s2.open === 1 && !s2.col && s2.here, '도착: 문이 다 열리고 문 막이가 걷혔다');
 ok(s2.plateGone, '문이 열리자 부르기 판에서 물러섰다');
 await page.evaluate(() => window.__frame('hall')); await page.waitForTimeout(2500);
-await page.screenshot({ path: join(root, 'shots/lift-2-open.png') });
+await shot('shots/lift-2-open.png');
 await page.evaluate(() => window.__frame(null));
 
 // 3) 걸어 들어가기 → 조작반 → 층 단추 → 문이 닫히고 움직인다 → 도착 (같은 칸 같은 자리) → 문이 열린다
@@ -164,7 +177,14 @@ const s3 = await page.evaluate(async () => {
   const g = SEREN.game, I = g.interiors, LC = I.lifts, ind = I.cur.indoor, B = I.cur.B, car = window.__car; let L = window.__L();
   const from = ind.cur;
   const [cx, cz] = ind.world(L.bb.cx, L.bb.cz);
-  const walked = await window.__walk(cx, cz, 6);
+  // 문 앞 → 문 안쪽 → 칸 가운데 (문틀 기둥에 비스듬히 걸리지 않게 문을 똑바로 지난다)
+  const [fx0, fz0] = L.front;
+  const [ax, az] = ind.world(L.x + fx0 * 0.9, L.z + fz0 * 0.9), [bx, bz] = ind.world(L.x - fx0 * 0.6, L.z - fz0 * 0.6);
+  await window.__walk(ax, az, 4);
+  await window.__walk(bx, bz, 4);
+  const walked = await window.__walk(cx, cz, 4);
+  await window.__run(30, () => { const q = g._findTarget(); return !!q && q.kind === 'icar'; });
+  L = window.__L();
   const inCar = LC.inCar() === L;
   const yIn = +(g.player.pos.y - ind.yOf(from)).toFixed(2);
   const t = g._findTarget();
@@ -206,7 +226,7 @@ ok(s3.frames > 0 && s3.cur === s3.to, `${s3.from}층 → ${s3.to}층 도착`);
 ok(s3.inCar2 && s3.drift < 0.3 && Math.abs(s3.y2) < 0.3, `도착 층의 같은 칸 같은 자리 (어긋남 ${s3.drift} m, 높이 ${s3.y2} m)`);
 ok(s3.open2 === 1 && s3.panelGone && !s3.lit.length, '도착: 문이 열리고 조작반이 닫히고 단추 불이 꺼졌다');
 await page.evaluate(() => window.__frame('car')); await page.waitForTimeout(2500);
-await page.screenshot({ path: join(root, 'shots/lift-3-arrive.png') });
+await shot('shots/lift-3-arrive.png');
 await page.evaluate(() => window.__frame(null));
 
 // 4) 문틀에 서 있으면 문이 닫히지 않는다 → 걸어 나간다 (셀 밖 사고 없음)
@@ -284,7 +304,7 @@ const s5 = await page.evaluate(async () => {
   return { done, cur: B.floors[ind.cur].label, ground: B.floors[B.ground].label, inCar: !!I.lifts.inCar() };
 });
 ok(s5.done === true && s5.cur === s5.ground && s5.inCar, `자동 타기: ${s5.cur}층 (칸 안)`);
-await page.screenshot({ path: join(root, 'shots/lift-4-inside.png') });
+await shot('shots/lift-4-inside.png');
 
 ok(!errs.length, `페이지 오류 ${errs.length}${errs.length ? ': ' + errs.slice(0, 3).join(' | ') : ''}`);
 console.log(fails ? `실패 ${fails}` : '모두 통과');

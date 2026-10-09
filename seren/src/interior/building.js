@@ -137,7 +137,7 @@ export class Indoor {
         L.disp = { cv, cx: cv.getContext('2d'), tex, key: '' };
       }
       // 부르기 단추: 승강장 쪽 문 오른편 벽의 작은 판 (위·아래 단추)
-      const bx = L.x + fx * 0.09 + sx * (W / 2 + 0.3), bz = L.z + fz * 0.09 + sz * (W / 2 + 0.3);
+      const bx = L.x + fx * 0.09 + sx * (W / 2 + 0.3) * (L.side || 1), bz = L.z + fz * 0.09 + sz * (W / 2 + 0.3) * (L.side || 1);
       const plate = new THREE.Mesh(new THREE.BoxGeometry(fz ? 0.16 : 0.03, 0.34, fx ? 0.16 : 0.03), new THREE.MeshBasicMaterial({ color: 0xb8bec7 }));
       plate.position.set(bx, 1.15, bz); out.group.add(plate);
       L.btn = {};
@@ -146,7 +146,6 @@ export class Indoor {
         m.position.set(bx + fx * 0.02, 1.15 + dy, bz + fz * 0.02); out.group.add(m);
         L.btn[k] = m;
       }
-      L.call = [bx + fx * 0.3, bz + fz * 0.3]; // 부르기 단추 앞 (틀 좌표)
     }
     this._signs(out);
     g.engine.scene.add(out.group);
