@@ -107,7 +107,7 @@ const s1 = await page.evaluate(async () => {
   window.__car = car; window.__L = () => LC.liftOn(ind.cur, car.id) || L;
   // 승강장 문 앞 1.3 m
   const [fx, fz] = L.front;
-  const [x, z] = ind.world(L.x + fx * 1.3, L.z + fz * 1.3);
+  const [x, z] = ind.world(L.x + fx * 0.75, L.z + fz * 0.75);
   g.player.teleport(x, ind.yOf(here) + 0.2, z, 0.3);
   const V = ind.V, wx = -(fx * V.ex[0] + fz * V.ez[0]), wz = -(fx * V.ex[1] + fz * V.ez[1]);
   g.player.yaw = Math.atan2(wx, wz); g.rig.yaw = g.player.yaw + Math.PI;
@@ -120,7 +120,7 @@ const s1 = await page.evaluate(async () => {
   const n = (gx - L.x) * fx + (gz - L.z) * fz; // 문 면에서 승강장 쪽(+) 거리
   const L1 = window.__L();
   // 사진: 승강장에서 2.6 m 물러서 문을 본다
-  const [bx, bz] = ind.world(L.x + fx * 2.6, L.z + fz * 2.6);
+  const [bx, bz] = ind.world(L.x + fx * 0.75, L.z + fz * 0.75);
   g.player.teleport(bx, ind.yOf(here) + 0.2, bz, 0.3);
   g.player.yaw = Math.atan2(wx, wz); g.rig.yaw = g.player.yaw + Math.PI; g.rig._init = false;
   await window.__run(6);
@@ -139,7 +139,7 @@ await page.evaluate(() => window.__frame(null));
 const s2 = await page.evaluate(async () => {
   const g = SEREN.game, I = g.interiors, LC = I.lifts, ind = I.cur.indoor, car = window.__car; let L = window.__L();
   const [fx, fz] = L.front;
-  const [x, z] = ind.world(L.x + fx * 1.3, L.z + fz * 1.3);
+  const [x, z] = ind.world(L.x + fx * 0.75, L.z + fz * 0.75);
   g.player.teleport(x, ind.yOf(ind.cur) + 0.2, z, 0.3);
   await window.__run(60, () => { const q = g._findTarget(); return !!q && q.kind === 'ilift' && !ind._xing; });
   await new Promise((r) => setTimeout(r, 300));
@@ -242,7 +242,7 @@ const s4 = await page.evaluate(async () => {
   car.hold = 0;
   await window.__run(240);
   const held = car.want === 1 && L.open > 0.85;
-  const [hx, hz] = ind.world(L.x + fx * 2.0, L.z + fz * 2.0);
+  const [hx, hz] = ind.world(L.x + fx * 0.85, L.z + fz * 0.85);
   const out = await window.__walk(hx, hz, 6);
   await window.__run(Math.ceil(3 / (1 / 30) / LC.ff) + 60);
   const esc = (g.state.debug && g.state.debug.escapes || []).length;
@@ -263,7 +263,7 @@ const s4b = await page.evaluate(async () => {
   const other = car.stops.find((i) => i !== ind.cur);
   car.at = other; car.y = ind.yOf(other); car.go = null; car.v = 0; car.door = 0; car.want = 0; car.calls.clear(); car.idle = 999;
   const [fx, fz] = L.front;
-  const spot = ag.freeNear(ind.cur, L.x + fx * 4, L.z + fz * 4);
+  const spot = ag.freeNear(ind.cur, L.x + fx * 0.9, L.z + fz * 0.9);
   const a = ag.spawn({ key: 'test:npc', role: 'visitor', floor: ind.cur, gx: spot[0], gz: spot[1], plan: [{ act: 'look', t: 0.5 }] });
   LC._seen.add(a);
   let called = false, waited = false, boarded = false, vis = false;

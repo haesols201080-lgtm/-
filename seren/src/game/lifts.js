@@ -225,7 +225,7 @@ export class LiftCars {
     const rx = gx - L0.x, rz = gz - L0.z, dy = Math.max(0, p.y - ind.yOf(from));
     this._carrying = true;
     const mid = () => {
-      const [hx, hz] = ind.world(L0.x + L0.front[0] * 1.4, L0.z + L0.front[1] * 1.4);
+      const [hx, hz] = ind.world(L0.x + L0.front[0] * 0.5, L0.z + L0.front[1] * 0.5); // 문 바로 앞 칸의 셀
       ind.setFloor(to, hx, hz);
       const L1 = this.liftOn(to, car.id) || L0;
       L1.here = true; L1.car = car;
@@ -283,8 +283,9 @@ export class LiftCars {
     const others = car.stops.filter((i) => i !== a.floor);
     const dest = others[Math.floor(this.rnd() * others.length)];
     const [fx, fz] = L.front, sx = fz ? 1 : 0, sz = fx ? 1 : 0;
-    const side = (this.rnd() - 0.5) * 1.8, back = 1.3 + this.rnd() * 0.8;
-    const spot = [L.x + fx * back + sx * side, L.z + fz * back + sz * side];
+    // 문 바로 앞 칸 (승강장이 한 칸 깊이뿐인 층도 있다 — 더 멀면 다른 방이다), 옆으로 흩어져 선다
+    const side = (this.rnd() - 0.5) * 1.6, back = 0.6 + this.rnd() * 0.3;
+    const spot = this.ind.agents.freeNear(a.floor, L.x + fx * back + sx * side, L.z + fz * back + sz * side);
     const open = () => this.still(car) && car.at === a.floor && car.door >= 0.95;
     return [
       { go: spot },
@@ -308,7 +309,7 @@ export class LiftCars {
   /** 칸에서 내리기: 문이 열리면 걸어 나와 dest(없으면 그 층의 다른 셀 방, null 이면 문 앞에서 끝)로 */
   _alight(car, L, floor, dest) {
     const [fx, fz] = L.front, sx = fz ? 1 : 0, sz = fx ? 1 : 0;
-    const out1 = [L.x + fx * 1.5 + sx * (this.rnd() - 0.5), L.z + fz * 1.5 + sz * (this.rnd() - 0.5)];
+    const out1 = [L.x + fx * 0.8 + sx * (this.rnd() - 0.5) * 0.6, L.z + fz * 0.8 + sz * (this.rnd() - 0.5) * 0.6];
     if (dest === undefined) dest = this._roomSpot(floor);
     return [
       { until: () => this.still(car) && car.at === floor && car.door >= 0.95 },
