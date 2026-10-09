@@ -155,6 +155,13 @@ export class CityFabric {
     this.rawProps = this.plan.zones.reduce((s, P) => s + P.blocks.reduce((a, B) => a + (B.raw ? B.raw.length : 0), 0), 0);
     this.buildMs = performance.now() - t0;
     this._last = new THREE.Vector3(0, -1e6, 0);
+    // 쓰임은 정했지만 건물이 하나도 서지 못한 블록(빛길 관이 땅 가까이 지나는 곳·벼랑·피해야 할 자리) → 계획 녹지로:
+    //  포장된 빈 집터로 남아 「집이 사라진 터」처럼 보이던 것 (v24 사용자 제보). 까닭은 B.why, 원래 쓰임은 B.was
+    this.greened = 0;
+    for (const P of this.plan.zones) for (const B of P.blocks) {
+      if (!B.type || !B.why || (B.recs && B.recs.length) || B.type === USE.GRN || B.type === USE.PLZ || B.type === USE.FARM) continue;
+      B.was = B.type; B.type = USE.GRN; this.greened++;
+    }
     // 지형 셰이더에 계획을 넘긴다 (블록 바닥)
     this.planU = planUniforms(this.plan);
     if (world.terrain && world.terrain.material) applyPlanUniforms(world.terrain.material, this.planU);
@@ -383,13 +390,16 @@ export class CityFabric {
     return this._bldgAt(zone, B, kind, x, z, a, hw, hd, h, o, tint, rnd);
   }
 
+  /** 건물을 못 지은 까닭을 블록에 센다 (빈 블록 찾기: B.why) */
+  _no(B, why) { if (B) { const w = B.why || (B.why = {}); w[why] = (w[why] || 0) + 1; } return null; }
+
   /** 세계 좌표에 건물 하나 (a = 문 쪽 기준 각도: door 1 이면 (cos a, sin a) 쪽에 문) */
   _bldgAt(zone, B, kind, x, z, a, hw, hd, h, o, tint, rnd) {
     const S = SPEC[kind];
     if (!S || !this.list[kind]) return null;
     const R = Math.max(hw, hd);
     const deck = o.deck; // 땅이 아닌 갑판(꽃잎 섬·버섯 갓·하늘고리) 위: 그 높이가 바닥
-    if (deck === undefined && this._excluded(x, z, R * 0.85, B.core || B.extra)) return null;
+    if (deck === undefined && this._excluded(x, z, R * 0.85, B.core || B.extra)) return this._no(B, 'excluded');
     // 땅: 가운데와 네 귀퉁이
     const rot = -a + Math.PI / 2 + (o.rot || 0);
     const c = Math.cos(rot), s = Math.sin(rot);
@@ -397,14 +407,14 @@ export class CityFabric {
     let mn = hc, mx = hc;
     if (deck === undefined) for (const [lx, lz] of [[hw, hd], [-hw, hd], [hw, -hd], [-hw, -hd]]) { const h2 = heightAt(x + lx * c + lz * s, z - lx * s + lz * c); mn = Math.min(mn, h2); mx = Math.max(mx, h2); }
     const wet = deck === undefined && mn < 1.2;
-    if (wet && !(kind === 'stilt' || B.stilt)) return null;
+    if (wet && !(kind === 'stilt' || B.stilt)) return this._no(B, 'wet');
     // 벼랑에 걸치지 않게 (땅을 고른 도시에서는 늘 0 — 협곡 도시·시골에서 건물 한쪽이 흙에 묻히던 것)
-    if (mx - mn > Math.min(Math.min(hw, hd) * 0.5 + 3.5, 6)) return null;
+    if (mx - mn > Math.min(Math.min(hw, hd) * 0.5 + 3.5, 6)) return this._no(B, 'slope');
     // 시골: 땅은 자연 그대로, 건물 자리만 집터로 고른다(가운데와 네 귀퉁이 높이의 평균 — 길가 집은 길 높이 쪽으로)
     const pad = deck === undefined && zone.rural && !wet && kind !== 'stilt' && !S.fixed;
     let padH = hc;
     if (pad) {
-      if (mx - mn > Math.min(hw, hd) * 0.35 + 2.5) return null;
+      if (mx - mn > Math.min(hw, hd) * 0.35 + 2.5) return this._no(B, 'padSlope');
       let sum = hc, n = 1;
       for (const [lx, lz] of [[hw, hd], [-hw, hd], [hw, -hd], [-hw, -hd]]) { sum += heightAt(x + lx * c + lz * s, z - lx * s + lz * c); n++; }
       padH = sum / n;
@@ -412,9 +422,10 @@ export class CityFabric {
     }
     const gy = pad ? padH : deck ?? Math.max(hc, 0);
     const under = deck === undefined ? this._under(x, z, R + 2) : Infinity;
-    if (under - gy < 14) return null;
-    const room = deck === undefined ? Math.min(this._room(x, z, R, gy), under) : Infinity;
-    if (room < 0) return null;
+    // 빛길 관·낮은 해류 밑: 전에는 14 m 안 되면 아예 짓지 않아 블록 바닥(포장된 집터)만 남았다 → 관 밑 1.5 m 아래까지의 낮은 건물로 (7 m 도 안 되면 빈다)
+    if (under - gy < 7) return this._no(B, 'under');
+    const room = deck === undefined ? Math.min(this._room(x, z, R, gy), under - 1.5) : Infinity;
+    if (room < 0) return this._no(B, 'room');
     let base = deck !== undefined ? deck - 0.3 : (wet ? Math.min(mn, 0) : mn) - 1.2;
     let sy = h + (gy - base);
     // 물 위 집: 깊이와 상관없이 제 키(마루가 물·땅 위 1.2 m), 다리는 물속으로 — 깊은 물에서 늘어나 집이 물에 잠기지 않게
@@ -422,11 +433,11 @@ export class CityFabric {
     let sx, sz;
     if (S.fixed) {
       // 실제 미터로 지은 하나뿐인 건물(보조 랜드마크): 배율 1, 자리가 모자라면 짓지 않는다
-      if (base + S.fixed + 10 > room) return null;
+      if (base + S.fixed + 10 > room) return this._no(B, 'fixedRoom');
       sx = sy = sz = 1;
     } else {
       if (base + sy > room) sy = room - base;
-      if (sy < 5) return null;
+      if (sy < 5) return this._no(B, 'low');
       if (S.round) sx = sz = Math.min(hw, hd);
       else { sx = hw; sz = hd; }
     }

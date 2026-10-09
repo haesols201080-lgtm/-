@@ -54,7 +54,10 @@ function layoutComps(list) {
   const parts = [];
   let x = 0;
   for (const t of list) { const c = COMP[t]; parts.push({ type: t, kind: c.kind, i0: x, j0: 0, w: c.w, d: c.d }); x += c.w; }
-  const W = x, Dt = D + lobbyD + extra;
+  // 승강기 문 앞에는 적어도 두 칸(2 m) 홀 — 작은 심(나선 계단 + 작은 승강기)이나 얕은 승강기 앞이 한 칸 띠뿐이면
+  //  타고 내리는 사람이 설 곳이 없고 문 앞이 곧 옆 방이 된다 (v24 4단계 승강기: 부르고 기다리고 타는 자리)
+  const liftNeed = Math.max(0, ...list.filter((t) => COMP[t].kind === 'lift' || COMP[t].kind === 'cargo').map((t) => COMP[t].d + 2));
+  const W = x, Dt = Math.max(D + lobbyD + extra, liftNeed);
   const lobby = [];
   const occ = new Set();
   for (const p of parts) for (let i = p.i0; i < p.i0 + p.w; i++) for (let j = p.j0; j < p.j0 + p.d; j++) occ.add(i * 100 + j);
