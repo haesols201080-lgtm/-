@@ -70,5 +70,6 @@ export function openFlap(game, o) {
       return false;
     },
   });
+  lay.acts = o.rows.map((r, k) => ({ label: String(r.cells[1] || r.cells[0]), off: !!r.off || !!o.readonly, run: () => { choose(k); print(); ticket.click(); } }));
   return lay;
 }

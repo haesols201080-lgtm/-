@@ -53,5 +53,6 @@ export function openLiftPanel(game, o) {
       return false;
     },
   });
+  lay.acts = floors.map((f, k) => ({ label: `${f.label} ${f.name}`, off: !!f.off || !!f.here, run: () => press(k) }));
   return lay;
 }

@@ -77,13 +77,13 @@ src/
 - **대사**: `data/story.js` 의 `LINES` (단어 id 배열 + 한국어). 새 단어는 `data/lexicon.js` 에 (음 모티프가 겹치지 않게).
 - **대화**: `CONVOS` — `{s: 인물id, line}` / `{s:'moa', t}` / `{choice:[...]}`, `act` 로 동작 실행.
 - **모아 부르기** (`game/moa-ai.js`, T·HUD 빛 구슬): 대화창. 모아는 궤도의 라르크 호에 남은 함선 지능(땅 위에 함께 있지 않다). Claude 사용은 설정 `moaClaude` 로 끄고 켜며, `rate_limited` 면 15분 동안 기본 모드. claude.ai 아티팩트에서는 `claude.use('sample')`(아티팩트 capabilities `{sample: {}}` 로 발행)로 Claude 가 모아 역(RULES)을 맡고, 매 질문에 `context()`(목표·자리·때·가진 것·음·말·둘레 건물·아는 이·조작)를 붙인다. 도구 `mark_place`(나침반 표식, `find()` 로 시설 종류·장소·인물·집·목표를 찾음). Claude 가 없거나 허락이 없으면 `local()` 이 게임 상태로 바로 답한다. 모아 창이 열린 동안 `game.mode = 'moa'`(입력은 창이 받음). `ui.moa()` 혼잣말은 `moaAI.note()` 로 기록된다. 대화창의 말풍선은 `.mp-msg.from-moa/.from-me`(`.moa` 는 아래 자막 이름이라 쓰지 말 것).
-- **처음 해 보는 일 안내**: `data/tips.js` 의 `TIPS[id]`(제목·한 줄·순서) + 그 일을 시작하는 함수 첫 줄에 `if (this.game.tips && this.game.tips.first('id', () => 이함수(인자))) return;`. 본 것은 `state.tips`, 설정 「도움말」 끄면 안 띄움, 일지 → 도움말에서 다시 보기.
+- **처음 해 보는 일 안내**(화면 가장자리 메모 `relics.tipNote`): `data/tips.js` 의 `TIPS[id]`(제목·한 줄·순서) + 그 일을 시작하는 함수 첫 줄에 `if (this.game.tips && this.game.tips.first('id', () => 이함수(인자))) return;`. 본 것은 `state.tips`, 설정 「도움말」 끄면 안 띄움, 일지 → 도움말에서 다시 보기.
 - **공명 음을 요구하는 놀이**: 고를 수 있는 음 = `state.tones`(아는 음)뿐. 아는 음이 모자라면 듣기만 하는 판으로 바꾸거나(연구동 「같다/다르다」), 버튼을 막고 이유를 적는다(주민 「함께 고요해지기」).
 - **퀘스트**: `QUESTS` — 단계 type 은 `game/quests.js` 머리 주석 참고. 동작은 `game/actions.js` 의 `HANDLERS`. 도시의 삶을 본편에 엮을 때는 `stat`(예: `venue.worked`) 단계나 `flag` 단계 + 코드에서 `game.setFlag(k)` 를 씁니다(지금 깃발: `helpedNeighbor`·`rodeSky`·`liftTop`·`homeVisit`). 줄거리: 탐사선 「라르크」가 신호를 따라와 스스로 착륙 → 이웃이 되기 → 이름 노래로 시민(집 `state.home`) → 듣던 탑들이 다시 노래 → 온 하늘에 대답. 탑은 「잠든」 게 아니라 「듣는 쪽」입니다(쇠락한 문명이 아님).
 - **부탁(날마다)**: `game/world-events.js` 의 `TEMPLATES` 에 함수 추가.
 - **메아리·글자돌·도감**: `story.js` 의 `ECHOES`, `GLYPH_STONES`, `CODEX`.
 - **저장 항목**: `game/state.js` 의 `defaultState()` 에 추가(불러올 때 빠진 항목은 기본값으로 채워짐).
-- **시설**: `data/facilities.js` 의 `FACILITIES` 에 한 줄(`at` 장소 + `off`/`polar`/`toward`). 자리에 다른 구조물이 있으면 빌더가 나선으로 밀어서 빈 곳을 찾습니다. 새 종류는 `FACILITY_TYPES` + `world/facilities.js` 의 `_종류` 모델 + `game/services.js` 의 `_종류` 카드. 시설지기는 `npcs` 에 `service` 가 붙은 인물(`fac-시설id`)이라 `_findTarget` 이 「시설지기 · 하는 일」로 보여 줍니다.
+- **시설**: `data/facilities.js` 의 `FACILITIES` 에 한 줄(`at` 장소 + `off`/`polar`/`toward`). 자리에 다른 구조물이 있으면 빌더가 나선으로 밀어서 빈 곳을 찾습니다. 새 종류는 `FACILITY_TYPES` + `world/facilities.js` 의 `_종류` 모델 + `game/services.js` 의 `_종류` 화면(기기 문법 하나). 시설지기는 `npcs` 에 `service` 가 붙은 인물(`fac-시설id`)이라 `_findTarget` 이 「시설지기 · 하는 일」로 보여 줍니다.
 - **옛 책**: `data/facilities.js` 의 `BOOKS` (`at` = 서고 id, `word` = 읽으면 배우는 단어).
 - **도시 구역**: `data/city.js` 의 `ZONES` 에 한 줄(머리 주석에 항목 설명). `sectors` 는 부채꼴마다의 쓰임 비율, `mix` 는 `MIX` 의 비율 묶음.
 - **쓰임(토지 이용)**: `data/city.js` 의 `USE` 에 번호 + `world/cityplan.js` 의 `SCORE`(어디에 오기 좋은가) + `T[U.이름]` 템플릿(블록 좌표 u·v 미터로 `P.bldg`·`P.prop`·`P.spot`) + `world/city-ground.js` 의 `cityBlock()` 에 바닥 무늬 + `ui/map.js` 의 `USE_COL`.
@@ -91,9 +91,14 @@ src/
 - **거리 소품**: `city-arch.js` 의 `propArchetypes()`(미터 단위) + `PROPCOL`(충돌체 모양). 템플릿에서 `P.prop(B, '이름', u, v, face)` 로 놓는다.
 - **주민 역할**: `data/citizens.js` 의 `ROLES`(자리 종류 → 일하는 시각·사람 수·함께 할 것) + `CIT_LINES` 대사. 템플릿에서 `P.spot(B, '역할', u, v, face)` 로 자리를 놓는다. 실내는 `INDOOR` + `game/interiors.js` 의 가구 `anchors`. 새 놀이는 `game/citizens.js` 의 `_playOption`.
 - **실내 쓰임**: `game/interiors.js` 의 `PURPOSE`(가구·사람·안내지기 대사)와 `BY_STYLE`(양식 → 쓰임).
-- **건물의 일(실내 시설)**: `game/venues.js` 의 `_b_쓰임id(cur, K)` 가 실내가 열릴 때 시설을 놓는다 — `this._station({ x, z, r, label, short, use })`(다가가면 E), 모양은 `K.put`·`this._glow`, 움직임은 `this._anim(t => …)`, 실내 사람 자리는 `K.anchor`. 돈(울)은 `_pay`/`_wage`, 물건은 `_add`, 기운은 `buff(id)`(`data/venues.js` 의 `BUFFS`). 새 물건은 `ITEMS` + `BAG_ORDER` + `state.inv` 기본값.
+- **건물의 일에 함께 쓰는 놀이** (`game/venues.js`): 옛 「쓰임마다 시설 놓기」(`_b_*`)는 v0.9 건물 운영(`interior/ops-types.js`)으로 옮겨져 지웠다. 남은 것은 여러 운영이 함께 부르는 놀이 — 전시 명판 `exhibit`·해설사 `tour`·칠판 수업 `classQuiz`·실험대 `experiment`·분류대 `sortWork`·출력 조종대 `powerWork`·손일 띠 `_timing`·출발 넘김판 `tickets`·악보대 `concert`·사무탑 게시판 `jobBoard` — 와 돈(울) `_pay`/`_wage`, 물건 `_add`, 기운 `buff(id)`(`data/venues.js` 의 `BUFFS`), 가방에서 쓰기 `useItem`. 새 물건은 `ITEMS` + `BAG_ORDER` + `state.inv` 기본값.
 - **바깥 조작대(들어갈 수 없는 건물)**: `data/venues.js` 의 `OUTDOOR[모양] = { fn, name, label, short }` + `game/outdoors.js` 의 `_fn(c)`(`c.rec` 건물 기록, `c.x/z/y` 조작대 자리, `c.nx/nz` 바깥 방향, `c.key` 하루 한 번 열쇠 — `_doneToday`/`_markToday`). 자리는 `cityfabric.consolePos`(블록이 깨어날 때 소품 `console`).
-- **카드**: 한 번에 하나(`ui._card` 가 앞 카드를 닫는다). E·스페이스·엔터를 쓰는 놀이는 `_card(html, onClose, { keys: false })`, 놀이가 끝나면 `wrap.close()`(남의 카드를 닫지 않게). 시간은 `performance.now()` 벽시계로.
+- **화면은 기기마다 (v24 「범용 만능 UI 폐기」)**: 둥근 카드 + 단추 목록(옛 `ui._card`·`serviceCard`)은 **없앴다 — 다시 만들지 말 것**. 무언가를 쓰는 화면은 그 물건의 모양으로 `src/ui/devices/*` 에서 고른다(없으면 새 문법을 만든다):
+  `atm`(금융 단말) · `paper`(창구 전표·서류·계약서·숙박부·투표지·부탁 쪽지 — 종이 묶음·손글씨 칸·서명·도장) · `dressing`(옷걸이 꼬리표·탈의 칸·옷장·계산대 결제판 `counterPay`) · `placement`(물건 놓기) · `board`(집 알림판 · 일거리 코르크판 `openPinBoard`) ·
+  `liftpanel`(승강기 조작반) · `flapboard`(출발 넘김판 + 표 기계, `readonly` 판) · `console`(산업 조작반: 바늘 계기·표시등·녹색 화면·버섯 단추) · `plaque`(놋쇠·돌·유리·나무 명판, 해설사 말) · `chalkboard`(칠판) · `shelf`(진열대 앞면: mart·bakery·cold·stock·pallet·gift·stall·pharm) ·
+  `menuboard`(차림판 + 주문대 종 · 쟁반) · `workstrip`(박자 손일 띠) · `bench`(실험대·분류대·출력 조종대·악보대) · `homegear`(나눔 기계·부엌·맡기는 서랍) · `craft`(공방 작업대·쉼터 화롯가·온실 밭) · `meet`(사람 머리 위 이름표와 둘레 몸짓 · 면접) · `relics`(별지도·표본함·빛길 노선도·글자돌·메아리·처음 해 보기 메모) · 책장/펼친 책(`ui.bookShelf`·`ui.reader`) · 건물 단말의 몸(`apps._frame`: 키오스크·안내판·서고 단말·제어판·회의 탁자·컴퓨터).
+  모두 `ui.mount(node, { cls, onClose })` 위에 올라간다(한 번에 하나, Esc 닫기, 게임 모드 'card'). 기기 키는 `devices/common.js` 의 `mountDevice(game, el, { keys })`(기기가 떠 있는 동안만). 시간은 `performance.now()` 벽시계로.
+  **자동화**: 기기마다 `layer.acts = [{ label, off, run }]`(사람의 한 동작을 통째로 — 고르고·누르고·집기). 시험은 `SEREN.game.ui._cardWrap.acts` 로 누른다(DOM 모양에 묶이지 않게).
 
 ## 큰 세계에서 알아 둘 것 (v0.2)
 - 세계는 ±60 km (지형 쿼드트리 뿌리 131 km). 먼 땅은 `regions.js` 의 `far: true` 지역 + `heightfield.js` 의 `farMask` 로 바다 위에 올라옵니다.
@@ -213,3 +218,9 @@ src/
 - 본편 흐름이 끊기지 않았는지 `node tools/flow.mjs` 로 확인하세요(마지막 줄까지 퀘스트가 진행되어야 함).
 - 이야기를 바꾸면 `state.js` 의 `STORY_VERSION` 을 올리고 `remapStory` 로 옛 저장을 알맞은 장으로 옮기세요.
 - 큰 변경 뒤에는 `docs/DEVLOG.md` 에 무엇을 왜 바꿨는지 적어 주세요.
+
+## 기기 화면 (v24 「범용 만능 UI 폐기」)에서 알아 둘 것
+- 무엇을 쓰든 「그 물건의 앞면」이 뜬다 — 은행은 금융 단말과 창구 전표, 가게는 진열대 값표와 계산대 결제판, 찻집은 차림판과 종, 승강기는 층 단추, 터미널·나루·하늘배는 출발 넘김판과 표, 공장·바깥 탑은 조작반, 학교는 칠판, 박물관·랜드마크는 명판, 주민은 머리 위 이름표와 몸짓.
+- 기기 문법을 고를 때: 실제 그 장소에서 손에 닿는 물건이 무엇인지(종이·화면·단추·선반·책)부터. 같은 문법을 쓰더라도 겉모습(kind·mat·tone·surface)으로 그 장소답게.
+- 새 기기를 만들면 `layer.acts` 를 꼭 채운다(시험·모아·자동화가 쓴다). `act-all`·`act-out` 은 `ui.mount` 를 「반응」으로 센다.
+- 검사: `node tools/bank-flow.mjs`·`clothes-check.mjs`·`facilities.mjs`·`ops-flow.mjs all`·`act-all.mjs`·`devices-check.mjs`(모두 기기 acts 로 조작).

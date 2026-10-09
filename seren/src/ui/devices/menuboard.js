@@ -58,5 +58,7 @@ export function openMenuBoard(game, o) {
     },
   });
   lay.speak = speak;
+  lay.acts = o.ready ? [{ label: '쟁반 들기', off: false, run: () => tray.querySelector('[data-t]').click() }, { label: '봉투에 싸기', off: false, run: () => tray.querySelector('[data-b]').click() }]
+    : o.items.map((it, i) => ({ label: it.name, off: !!it.off, run: () => { choose(i); ring(); } }));
   return lay;
 }

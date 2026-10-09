@@ -56,6 +56,8 @@ export function openPaper(game, o) {
   el.querySelector('.pd-leave').addEventListener('click', () => layer.close());
   const layer = game.ui.mount(el, { cls: 'dev-paper', onClose: o.onClose });
   layer.speak = speak; layer.sheet = sheet;
+  // 자동화: 종이 묶음 집기 · 서명 (고르는 칸은 처음 고른 것 그대로)
+  Object.defineProperty(layer, 'acts', { get: () => [...(o.pads || []).map((p) => ({ label: p.label, off: false, run: () => { const F = p.form(); if (F) sheet(F); } })), ...(slot.querySelector('.sh-signbox:not([disabled])') ? [{ label: '서명', off: false, run: () => slot.querySelector('.sh-signbox').click() }] : [])] });
   if (o.form) sheet(o.form);
   return layer;
 }

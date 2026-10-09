@@ -39,5 +39,6 @@ export function workStrip(game, o) {
   requestAnimationFrame(tick);
   const lay = mountDevice(game, el, { cls: 'dev-strip', keys: (e) => { if (isUse(e)) { hit(); return true; } return false; } });
   blip(game, 'click');
+  lay.acts = [{ label: '손 대기', off: false, run: hit }];
   return lay;
 }

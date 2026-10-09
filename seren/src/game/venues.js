@@ -20,6 +20,7 @@ import { openChalk } from '../ui/devices/chalkboard.js';
 import { openFlap } from '../ui/devices/flapboard.js';
 import { workStrip } from '../ui/devices/workstrip.js';
 import { labBench, sorter, reactor, scoreStand } from '../ui/devices/bench.js';
+import { openPinBoard } from '../ui/devices/board.js';
 
 const TAU = Math.PI * 2;
 const NOTE_HEX = ['#ff9f6a', '#ffd27a', '#7ff3e6', '#9fb8ff', '#d8a8ff'];
@@ -292,6 +293,31 @@ export class Venues {
     }, 1300);
   }
 
+  /** 사무탑 바깥 게시판: 오늘의 일거리 쪽지 (문서 전하기 · 측량 · 안부) — 하나를 맡으면 나침반에 목적지 */
+  jobBoard(here = (this.cur && this.cur.r) || (this.game.interiors.cur && this.game.interiors.cur.r)) {
+    if (this.game.tips && this.game.tips.first('jobs', () => this.jobBoard(here))) return;
+    const g = this.game, J = this.S.job;
+    if (J) { openPinBoard(g, { title: '오늘의 일거리', sub: '맡은 일을 마치면 다른 쪽지를 맡을 수 있어요', cards: [], held: { label: J.label, note: J.kind === 'greet' ? '거리에서 그 일을 하는 주민과 이야기하면 끝나요' : '나침반·지도의 표시를 따라가요', quit: () => { this.S.job = null; this.inv.parcel = 0; g.ui.toast('맡은 일을 내려놓았다', { kind: 'muted' }); } } }); return; }
+    if (!here) return;
+    const rnd = mulberry32((this._day() * 977 + (here.idx || 0)) | 0);
+    const offices = g.city.recs.filter((r) => r !== here && r.zone === here.zone && (r.use === 'office' || r.use === 'hall' || r.use === 'school' || r.use === 'heal'));
+    const pickFar = (arr) => { const c = arr.filter((r) => { const d = Math.hypot(r.x - here.x, r.z - here.z); return d > 200 && d < 1100; }); return c.length ? c[Math.floor(rnd() * c.length)] : null; };
+    const cards = [];
+    const doc = pickFar(offices);
+    if (doc) { g.city.fixDoor(doc); const nm = g.interiors.title(doc), d = Math.hypot(doc.x - here.x, doc.z - here.z), pay = 2 + Math.round(d / 300); cards.push({ head: '문서 전하기', body: `${josa(nm, '로')} · ${Math.round(d)} m`, pay: won(pay), on: () => this._takeJob({ kind: 'deliver', label: `문서 → ${nm}`, x: doc.door.x, z: doc.door.z, reward: pay, word: 'carry' }) }); }
+    const mk = g.city.marks && g.city.marks.length ? g.city.marks[Math.floor(rnd() * g.city.marks.length)] : null;
+    if (mk) { const d = Math.hypot(mk.x - here.x, mk.z - here.z), pay = 3 + Math.round(d / 800); cards.push({ head: '측량', body: `${mk.name}의 높이 재기 · ${(d / 1000).toFixed(1)} km`, pay: won(pay), on: () => this._takeJob({ kind: 'visit', label: `측량 → ${mk.name}`, x: mk.x, z: mk.z, r: 60, reward: pay, word: 'far' }) }); }
+    const roles = [['tend', '정원지기'], ['sell', '장터지기'], ['music', '악사'], ['carry', '짐꾼']];
+    const [role, rname] = roles[Math.floor(rnd() * roles.length)];
+    cards.push({ head: '안부 전하기', body: `아무 ${rname}에게 — 거리에서 그 일을 하는 주민과 이야기하면 끝`, pay: won(2), on: () => this._takeJob({ kind: 'greet', role, label: `안부 → ${rname}`, reward: 2, word: 'friend' }) });
+    openPinBoard(g, { title: '오늘의 일거리', sub: '도시의 일은 노래로 나누어 맡아요 · 쪽지를 눌러 「맡기」', cards });
+  }
+  _takeJob(job) {
+    this.S.job = job;
+    if (job.parcel) this.inv.parcel = 1;
+    this.game.ui.toast(`일을 맡았다 · ${job.label}`, {});
+    audio.chime && audio.chime('soft');
+  }
   _finishJob() {
     const J = this.S.job;
     this.S.job = null;

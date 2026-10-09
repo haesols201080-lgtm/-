@@ -35,6 +35,7 @@ export function vending(game, o) {
   el.querySelector('.vd-reader').addEventListener('click', pay);
   el.querySelector('.vd-leave').addEventListener('click', () => lay.close());
   const lay = mountDevice(game, el, { cls: 'dev-vend', keys: (e) => { const d = digitOf(e); if (d >= 0 && d < o.items.length) { choose(d); return true; } if (isUse(e)) { if (dropped) take(); else pay(); return true; } return false; } });
+  lay.acts = o.items.map((it, i) => ({ label: it.name, off: !!it.off || it.n <= 0, run: () => { choose(i); pay(); } }));
   return lay;
 }
 
@@ -58,6 +59,7 @@ export function kitchen(game, o) {
   fire.addEventListener('click', cook);
   el.querySelector('.kt-leave').addEventListener('click', () => lay.close());
   const lay = mountDevice(game, el, { cls: 'dev-kitchen', keys: (e) => { const d = digitOf(e); if (d >= 0 && d < o.recipes.length) { choose(d); return true; } if (isUse(e)) { cook(); return true; } return false; } });
+  lay.acts = o.recipes.map((r, i) => ({ label: r.name, off: !r.ok, run: () => { choose(i); cook(); } }));
   return lay;
 }
 
@@ -76,5 +78,6 @@ export function chest(game, o) {
   let lay = null;
   draw();
   lay = mountDevice(game, el, { cls: 'dev-chest' });
+  Object.defineProperty(lay, 'acts', { get: () => [...o.bag().map((it) => ({ label: `맡기 ${it.name}`, off: false, run: () => { o.put(it.id); draw(); } })), ...o.box().map((it) => ({ label: `꺼내기 ${it.name}`, off: false, run: () => { o.take(it.id); draw(); } }))] });
   return lay;
 }

@@ -26,5 +26,6 @@ export function mountDevice(game, el, { cls = '', keys = null, onClose = null } 
 }
 
 /** 키 이름 → 숫자 (1..9 → 0..8), 아니면 -1 */
+// 시험·자동화용: 기기마다 lay.acts = [{ label, off, run }] — 사람이 하는 한 동작(고르고·누르고·집기)을 통째로 한다
 export const digitOf = (e) => (e.key >= '1' && e.key <= '9' ? +e.key - 1 : -1);
 export const isUse = (e) => e.key === 'e' || e.key === 'E' || e.key === 'Enter' || e.key === ' ';

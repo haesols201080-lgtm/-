@@ -5,16 +5,16 @@ import { esc, blip, mountDevice, isUse } from './common.js';
 
 /**
  * openPlaque(game, { mat: 'brass'|'stone'|'glass'|'wood', kicker, title, era, text, art (html), foot (html), say (해설사 말),
- *   actions: [{ label, on, stay }], cam: { pos: Vector3, look: Vector3 }, side: 'left'|'right', onClose })
+ *   actions: [{ label, on, stay, off }], cam: { pos: Vector3, look: Vector3 }, side: 'left'|'right', onClose })
  */
 export function openPlaque(game, o) {
   const el = document.createElement('div');
   el.className = `plq mat-${o.mat || 'brass'} side-${o.side || 'left'}`;
   el.innerHTML = `<div class="pq-face">${o.kicker ? `<small class="pq-k">${esc(o.kicker)}</small>` : ''}<h3>${esc(o.title)}</h3>${o.era ? `<div class="pq-era">${esc(o.era)}</div>` : ''}${o.art ? `<div class="pq-art">${o.art}</div>` : ''}<p>${esc(o.text || '')}</p>${o.foot ? `<div class="pq-foot">${o.foot}</div>` : ''}<i class="pq-bolt a"></i><i class="pq-bolt b"></i><i class="pq-bolt c"></i><i class="pq-bolt d"></i></div>
-    ${o.say ? `<div class="pq-say">${esc(o.say)}</div>` : ''}<div class="pq-acts">${(o.actions || []).map((a, i) => `<button class="pq-a" data-a="${i}">${esc(a.label)}</button>`).join('')}<button class="pq-a ghost" data-leave>물러서기 (Esc)</button></div>`;
+    ${o.say ? `<div class="pq-say">${esc(o.say)}</div>` : ''}<div class="pq-acts">${(o.actions || []).map((a, i) => `<button class="pq-a" data-a="${i}" ${a.off ? 'disabled' : ''}>${esc(a.label)}</button>`).join('')}<button class="pq-a ghost" data-leave>물러서기 (Esc)</button></div>`;
   const prev = game.rig ? game.rig.override : null;
   if (o.cam && game.rig) game.rig.override = { pos: o.cam.pos, look: o.cam.look };
-  const act = (i) => { const a = (o.actions || [])[i]; if (!a) return; blip(game, 'click'); if (!a.stay) lay.close(); a.on && a.on(); };
+  const act = (i) => { const a = (o.actions || [])[i]; if (!a || a.off) return; blip(game, 'click'); if (!a.stay) lay.close(); a.on && a.on(); };
   el.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => act(+b.dataset.a)));
   el.querySelector('[data-leave]').addEventListener('click', () => lay.close());
   const lay = mountDevice(game, el, {
@@ -22,5 +22,6 @@ export function openPlaque(game, o) {
     onClose: () => { if (o.cam && game.rig && game.rig.override && game.rig.override.pos === o.cam.pos) game.rig.override = prev && prev !== game.rig.override ? prev : null; o.onClose && o.onClose(); },
     keys: (e) => { if (isUse(e) && (o.actions || []).length) { act(0); return true; } return false; },
   });
+  lay.acts = (o.actions || []).map((a, i) => ({ label: a.label, off: !!a.off, run: () => act(i) }));
   return lay;
 }

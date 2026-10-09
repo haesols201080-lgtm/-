@@ -23,7 +23,7 @@ const cands = await page.evaluate((PER) => {
   g.econ.transfer(`z:${C.zones[0].id}:hh`, 'player', 200, '시험 용돈');
   window.__hit = 0;
   const wrap = (o, k) => { const f = o && o[k]; if (typeof f !== 'function') return; o[k] = function (...a) { window.__hit++; return f.apply(this, a); }; };
-  for (const k of ['toast', 'moa', 'say', 'regionTitle', 'flash', 'puzzle', '_card', 'glyphCard', 'memory', 'infoCard', 'serviceCard', 'bookShelf', 'reader', 'openMenu', 'compose', 'confirm', 'caption']) wrap(g.ui, k);
+  for (const k of ['toast', 'moa', 'say', 'regionTitle', 'flash', 'puzzle', 'mount', 'glyphCard', 'memory', 'infoCard', 'bookShelf', 'reader', 'openMenu', 'compose', 'confirm', 'caption']) wrap(g.ui, k);
   wrap(g.dialogue, 'start'); wrap(g.dialogue, 'startCustom');
   for (const k of ['enter', 'enterCabin', '_load']) wrap(g.interiors, k);
   wrap(g, 'rideElevator'); wrap(g, 'scan'); wrap(g, 'stationCard');

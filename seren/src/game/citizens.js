@@ -17,6 +17,8 @@ import { bus } from '../core/events.js';
 import { won } from '../data/money.js';
 import { AMBIENT, AMBIENT_AFTER_NAME } from '../data/story.js';
 import { dayPlan, excursion, memOf, remember, memoryLines, lifeLine } from './life.js';
+import { openMeet } from '../ui/devices/meet.js';
+import { openShelf } from '../ui/devices/shelf.js';
 
 const TAU = Math.PI * 2;
 const GLOWS = [0x7ff3e6, 0xffc46a, 0xff9fd0, 0xb9a6ff].map((h) => new THREE.Color(h));
@@ -539,11 +541,11 @@ export class Citizens {
     if ((inv.fruit || 0) > 0) items.push({ label: '빛열매 나눠 먹기', sub: `가진 것 ${inv.fruit}`, onClick: () => this.gift(p, 'fruit') });
     if (p.fr >= 3 && p.home && p.home.door) items.push({ label: '집에 놀러 가기', sub: `${p.name}의 집 · 함께 저녁을`, onClick: () => this.visitHome(p) });
     items.push({ label: '인사하고 헤어지기', onClick: () => this.release(p) });
-    const hearts = '♥'.repeat(p.fr) + '♡'.repeat(5 - p.fr);
     const age = p.age === 'child' ? '아이' : p.age === 'elder' ? '어르신' : '';
-    g.ui.serviceCard(`${p.indoorRole && p.title ? p.title : R.label || '주민'}${age ? ' · ' + age : ''}`, p.name, `${p.indoorRole && p.title ? `${p.title} — ${p.staff ? '일하는 중' : '이 건물에 온 이'}` : R.verb || ''}`, items, `<div class="svc-stat"><span>친한 정도 <b>${hearts}</b></span></div>`);
-    const off = bus.on ? null : null;
-    void off;
+    // 카드 대신 그 사람 머리 위의 이름표와 둘레의 몸짓 (v24 「기기별 UI」)
+    openMeet(g, { anchor: p.pos, head: (p.age === 'child' ? 1.25 : 1.95), name: p.name, hearts: p.fr,
+      role: `${p.indoorRole && p.title ? `${p.title} · ${p.staff ? '일하는 중' : '이 건물에 온 이'}` : `${R.label || '주민'}${R.verb ? ` · ${R.verb}` : ''}`}${age ? ` · ${age}` : ''}`,
+      opts: items.map((it) => ({ label: it.label, sub: it.sub, off: !!it.disabled, on: it.onClick })) });
     this._watchRelease(p);
   }
   _watchRelease(p) {
@@ -652,22 +654,23 @@ export class Citizens {
 
   tradeCard(p) {
     const g = this.game, inv = g.state.inv;
-    const items = GOODS.map((G) => ({
-      label: `${G.name} · ${won(G.price)}`, sub: `${G.desc} (가진 것 ${inv[G.id] || 0})`, disabled: (inv.starseed || 0) < G.price, stay: true,
-      onClick: () => {
-        if ((inv.starseed || 0) < G.price) return;
+    const COL = { fruit: '#ffb86a', flower: '#ff9fd0', trinket: '#9fd8ff' };
+    // 노점의 천: 바닥에 펼친 천 위에 물건 · 손글씨 값표 (진열대 앞면 'stall')
+    openShelf(g, { kind: 'stall', sign: `${p.name}의 노점`, title: '장터 · 울로 나눈다',
+      items: GOODS.map((G) => ({ name: G.name, price: won(G.price), n: 6, col: COL[G.id] || '#e8d8b8', shape: G.id === 'flower' ? 'flower' : G.id === 'fruit' ? 'round' : 'box', off: (inv.starseed || 0) < G.price, why: `${won(G.price)}이 필요해요` })),
+      onPick: (i) => {
+        const G = GOODS[i];
+        if ((inv.starseed || 0) < G.price) return '돈이 모자라요';
         // 노점의 물건도 구역 가게 재고에서, 값은 그 집(가구) 몫으로
-        if (g.econ && g.city) { if (g.econ.goodsOut(G.id, 1) < 1) { g.ui.toast('다 팔렸어요', { kind: 'muted' }); return; } g.econ.charge(G.price, `장터 · ${G.name}`, 'hh'); } else inv.starseed -= G.price;
+        if (g.econ && g.city) { if (g.econ.goodsOut(G.id, 1) < 1) return '다 팔렸어요'; g.econ.charge(G.price, `장터 · ${G.name}`, 'hh'); } else inv.starseed -= G.price;
         inv[G.id] = (inv[G.id] || 0) + 1;
         if (G.id === 'trinket') this.S.trinkets = (this.S.trinkets || 0) + 1;
         audio.chime('item');
-        g.ui.toast(`${G.name} +1 (${won(inv.starseed)})`, { kind: 'item' });
         g.say(p, this._line(p, 'thanks'), true);
-        this.tradeCard(p);
+        return true;
       },
-    }));
-    items.push({ label: '돌아가기', onClick: () => this.release(p) });
-    g.ui.serviceCard('장터', `${p.name}의 노점`, `${won(inv.starseed || 0)}`, items);
+      foot: () => `가진 돈 ${won(inv.starseed || 0)} · 빛열매 ${inv.fruit || 0} · 울림꽃 ${inv.flower || 0}`,
+      onClose: () => this.release(p) });
   }
 
   // ── 함께 하기 ─────────────────────────────

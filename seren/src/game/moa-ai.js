@@ -233,7 +233,7 @@ export class MoaAI {
           const f = this.find(String(input.query || ''));
           if (!f || f.none) throw new Error(f && f.none ? '이 건물 안에는 그런 곳이 없어요' : '그런 곳을 둘레에서 찾지 못했어요');
           this.mark(f);
-          return { name: f.name, distance_m: f.d, direction: f.dir, floor: f.floor || null, route: f.inside && g.guide ? g.guide.text : null };
+          return { name: f.name, distance_m: f.d, direction: f.dir, floor: f.floor || null, route: f.inside && this.game.guide ? this.game.guide.text : null };
         },
       },
     ];

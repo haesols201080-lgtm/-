@@ -1,6 +1,7 @@
 // 화면 UI: HUD(목표·나침반·알림·모아 자막·공명 단추), 대화창, 카드, 메뉴, 타이틀, 터치 조작.
 // 게임 로직은 game.ui.xxx() 만 부르고, DOM 은 여기서만 다룹니다.
 import { CHANGELOG, GAME_VERSION, KIND_LABEL } from '../data/changelog.js';
+import { glyphStone, echo } from './devices/relics.js';
 import { SEEN_KEY } from '../game/state.js';
 import { NOTE_COLORS, NOTE_NAMES } from '../core/audio.js';
 import { glyphSVG } from '../game/language.js';
@@ -399,32 +400,9 @@ export class UI {
     };
   }
 
-  // ── 카드 ─────────────────────────────
-  // 한 번에 하나: 새 카드를 열면 앞의 카드는 닫힌다(앞 카드의 onClose 도 불린다).
-  // opts.keys === false 면 E·스페이스·엔터로 닫히지 않는다 — 그 키를 쓰는 놀이 카드. wrap.close() 는 그 카드만 닫는다.
-  _card(inner, onClose, opts = {}) {
-    if (this._cardWrap) { this.closeCard(); if (this._cardWrap) this._cardWrap.close(); }
-    // side: 화면 오른쪽에 붙인 좁은 카드 · 어둡게 덮지 않음 (탈의 칸처럼 카드 너머의 내 모습을 봐야 할 때)
-    const wrap = $(`<div class="card-wrap${opts.side ? ' card-side' : ''}"><div class="card glass">${inner}<div><button class="btn" data-close-card>닫기</button></div></div></div>`);
-    let closed = false;
-    const close = () => {
-      if (closed) return;
-      closed = true;
-      wrap.remove();
-      if (this._cardWrap === wrap) { this._cardWrap = null; this._cardClose = null; this.cardKeys = true; this.game.setMode('play'); }
-      onClose && onClose();
-    };
-    wrap.querySelector('[data-close-card]').addEventListener('click', close);
-    wrap.addEventListener('pointerdown', (e) => { if (e.target === wrap) close(); });
-    this.root.appendChild(wrap);
-    this.game.setMode('card');
-    this._cardWrap = wrap;
-    this._cardClose = close;
-    this.cardKeys = opts.keys !== false;
-    wrap.close = close;
-    return wrap;
-  }
-
+  // ── 기기 화면 ─────────────────────────────
+  // v24 「범용 만능 UI 폐기」: 둥근 카드 + 단추 목록(_card·serviceCard)은 없앴다. 기기·물건·사람마다 제 화면을 ui/devices/* 가 만들어
+  // mount 로 올린다(한 번에 하나 — 새 화면을 올리면 앞 화면은 닫힌다). closeCard 는 지금 떠 있는 기기 화면을 닫는다.
   closeCard() { if (this._cardClose) { const c = this._cardClose; this._cardClose = null; c(); } }
   /**
    * 기기·물건마다 다른 화면을 올리는 빈 층 (v24 「범용 만능 UI 폐기」): 둥근 카드·공통 단추 목록 없이 node 를 그대로 올린다.
@@ -452,47 +430,37 @@ export class UI {
 
   glyphCard(wordId, first) {
     const w = WORD[wordId];
-    const notes = w.notes.map((n) => `<i style="--c:${hex(NOTE_COLORS[n % 5])}"></i>`).join('');
-    this._card(`<div class="kicker">${first ? '새 단어' : '글자돌'}</div><div class="big-glyph">${glyphSVG(wordId, 120)}</div><h2>${w.ko}</h2><div class="notes">${notes}</div><p>점의 높이가 음의 높이예요. 아웬의 글자는 악보이기도 해요.</p>`);
+    glyphStone(this.game, { first, svg: glyphSVG(wordId, 120), ko: w.ko, notes: w.notes.map((n) => hex(NOTE_COLORS[n % 5])) });
   }
 
   memory(e) {
-    this._card(`<div class="kicker">메아리 · 옛 기억</div><h2>${e.title}</h2><div class="memo">${e.text}</div>`);
+    echo(this.game, { kicker: e.kicker || '메아리 · 옛 기억', title: e.title, text: e.text });
   }
 
   infoCard(kicker, title, body) {
-    this._card(`<div class="kicker">${kicker}</div><h2>${title}</h2><p>${body}</p>`);
-  }
-
-  /**
-   * 시설 카드: 할 수 있는 일을 단추로.
-   * items: [{ label, sub, disabled, primary, onClick, stay }] — stay 면 누른 뒤에도 카드를 닫지 않는다
-   * opts: { onClose, keys } (_card 참고)
-   */
-  serviceCard(kicker, title, body, items, extra = '', opts = {}) {
-    const html = `<div class="kicker">${kicker}</div><h2>${title}</h2>${body ? `<p>${body}</p>` : ''}${extra}<div class="svc">${items.map((it, i) => it.head ? `<div class="svc-h">${it.head}</div>` : `<button class="btn svc-b${it.primary ? ' primary' : ''}" data-i="${i}" ${it.disabled ? 'disabled' : ''}><b>${it.label}</b>${it.sub ? `<small>${it.sub}</small>` : ''}</button>`).join('')}</div>`;
-    const wrap = this._card(html, opts.onClose, opts);
-    wrap.querySelector('.card').classList.add('svc-card');
-    wrap.querySelectorAll('[data-i]').forEach((b) => b.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const it = items[+b.dataset.i];
-      if (!it || it.disabled) return;
-      if (!it.stay) this.closeCard();
-      it.onClick && it.onClick(b);
-    }));
-    return wrap;
+    echo(this.game, { kicker, title, text: String(body).replace(/<[^>]+>/g, ' ') });
   }
 
   /**
    * 서가: 꽂힌 책을 책등처럼 늘어놓는다 → 고르면 onPick(id).
    * books: [{ id, title, author, color, n(같은 책 수), read(읽은 쪽), pages, done }]
    */
-  bookShelf(kicker, title, body, books, onPick, extra = '') {
-    const row = (b) => `<button class="book-spine${b.done ? ' done' : ''}" data-id="${escH(b.id)}" style="--bc:${hex(b.color)}"><b>${escH(b.title)}</b><small>${escH(b.author)}${b.n > 1 ? ` · ${b.n}부` : ''}${b.done ? ' · 다 읽음' : b.read ? ` · ${b.read}/${b.pages}쪽` : ''}</small></button>`;
-    const wrap = this._card(`<div class="kicker">${kicker}</div><h2>${title}</h2>${body ? `<p>${body}</p>` : ''}${extra}<div class="book-shelf">${books.map(row).join('')}</div>`);
-    wrap.querySelector('.card').classList.add('book-card');
-    wrap.querySelectorAll('[data-id]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); onPick(b.dataset.id); }));
-    return wrap;
+  bookShelf(kicker, title, body, books, onPick, extra = '', opts = {}) {
+    // 책장 (v24 「기기별 UI」): 나무 책장 칸에 선 책등 — 색·두께(쪽 수)·세로 제목. 책등을 누르면 빼서 펼친다. 아래 칸 앞의 작은 쪽지가 이 칸의 설명.
+    void extra;
+    const el = document.createElement('div');
+    el.className = 'bookcase';
+    const row = (b) => `<button class="bc-spine${b.done ? ' done' : ''}" data-id="${escH(b.id)}" style="--bc:${hex(b.color)};--w:${Math.max(26, Math.min(46, 22 + (b.pages || 8) * 0.9))}px" title="${escH(b.title)} · ${escH(b.author)}"><b>${escH(b.title)}</b><small>${escH(b.author)}</small>${b.n > 1 ? `<em>${b.n}</em>` : ''}${b.done ? '<i class="bc-mark"></i>' : b.read ? `<i class="bc-tab" style="--p:${Math.min(1, b.read / Math.max(1, b.pages))}"></i>` : ''}</button>`;
+    const per = 12, rows = [];
+    for (let k = 0; k < books.length; k += per) rows.push(books.slice(k, k + per));
+    el.innerHTML = `<div class="bc-top"><small>${escH(kicker)}</small><b>${escH(title)}</b></div>${rows.map((r) => `<div class="bc-board">${r.map(row).join('')}</div>`).join('') || '<div class="bc-board empty">빈 칸이에요</div>'}
+      <div class="bc-note">${escH(body || '')}</div><div class="bc-acts">${(opts.actions || []).map((a, i) => `<button class="bc-a" data-a="${i}" ${a.off ? 'disabled' : ''}>${escH(a.label)}${a.sub ? `<small>${escH(a.sub)}</small>` : ''}</button>`).join('')}<button class="bc-a ghost" data-leave>책장에서 물러서기 (Esc)</button></div>`;
+    el.querySelectorAll('[data-id]').forEach((b) => b.addEventListener('click', () => { b.classList.add('pull'); setTimeout(() => onPick(b.dataset.id), 180); }));
+    el.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => { const a = opts.actions[+b.dataset.a]; if (!a || a.off) return; if (!a.stay) lay.close(); a.on && a.on(); }));
+    el.querySelector('[data-leave]').addEventListener('click', () => lay.close());
+    const lay = this.mount(el, { cls: 'dev-books', onClose: opts.onClose });
+    lay.acts = [...books.map((b) => ({ label: b.title, off: false, run: () => onPick(b.id) })), ...(opts.actions || []).map((a, i) => ({ label: a.label, off: !!a.off, run: () => el.querySelector(`[data-a="${i}"]`).click() }))];
+    return lay;
   }
 
   /**
@@ -500,35 +468,44 @@ export class UI {
    * opts: { page, kicker, actions: [{ label, primary, onClick }], onPage(p), onClose }
    */
   reader(book, opts = {}) {
+    // 펼친 책 (v24 「기기별 UI」): 왼쪽 면에 책 이름·지은이·쪽 수, 오른쪽 면에 그 쪽의 글. 모서리를 눌러 넘긴다(←/→ · A/D · 스페이스).
+    //  할 수 있는 일(들고 가기·빌리기)은 책 아래 끈갈피로.
     let p = Math.max(0, Math.min(book.pages.length - 1, opts.page || 0));
     const acts = opts.actions || [];
     const key = (e) => {
-      if (this._cardWrap !== wrap) return;
+      if (this._cardWrap !== lay) return;
       const k = e.key;
       if (k === 'ArrowLeft' || k === 'a' || k === 'A') go(p - 1);
       else if (k === 'ArrowRight' || k === 'd' || k === 'D' || k === ' ') go(p + 1);
-      else if (k === 'Escape') wrap.close();
       else return;
       e.stopPropagation(); e.preventDefault();
     };
-    const wrap = this._card(`<div class="kicker">${opts.kicker || '책'}</div><h2>${escH(book.title)}</h2><div class="book-by">${escH(book.author)}</div><div class="book-page"></div><div class="book-nav"><button class="btn" data-prev>◀ 앞 쪽</button><span class="book-no"></span><button class="btn" data-next>다음 쪽 ▶</button></div>${acts.length ? `<div class="svc">${acts.map((a, i) => `<button class="btn svc-b${a.primary ? ' primary' : ''}" data-a="${i}"><b>${a.label}</b>${a.sub ? `<small>${a.sub}</small>` : ''}</button>`).join('')}</div>` : ''}`, () => { removeEventListener('keydown', key, true); opts.onClose && opts.onClose(); }, { keys: false });
-    wrap.querySelector('.card').classList.add('book-card');
-    const pg = wrap.querySelector('.book-page'), no = wrap.querySelector('.book-no'), prev = wrap.querySelector('[data-prev]'), next = wrap.querySelector('[data-next]');
+    const el = document.createElement('div');
+    el.className = 'openbook';
+    el.innerHTML = `<div class="ob-spread" style="--bc:${hex(book.color ?? 0x8a6a4a)}"><div class="ob-left"><small>${escH(opts.kicker || '책')}</small><h3>${escH(book.title)}</h3><div class="ob-by">${escH(book.author || '')}</div><div class="ob-no"></div><button class="ob-turn prev" data-prev title="앞 쪽">◀</button></div>
+      <div class="ob-right"><div class="ob-page"></div><button class="ob-turn next" data-next title="다음 쪽">▶</button></div></div>
+      <div class="ob-ribbons">${acts.map((a, i) => `<button class="ob-rib${a.primary ? ' p' : ''}" data-a="${i}">${escH(a.label)}${a.sub ? `<small>${escH(a.sub)}</small>` : ''}</button>`).join('')}<button class="ob-rib ghost" data-leave>책 덮기 (Esc)</button></div>`;
+    const pg = el.querySelector('.ob-page'), no = el.querySelector('.ob-no'), prev = el.querySelector('[data-prev]'), next = el.querySelector('[data-next]');
     const go = (np) => {
-      p = Math.max(0, Math.min(book.pages.length - 1, np));
+      const q = Math.max(0, Math.min(book.pages.length - 1, np));
+      if (q !== p) { pg.classList.remove('turn'); void pg.offsetWidth; pg.classList.add('turn'); }
+      p = q;
       pg.textContent = book.pages[p];
       no.textContent = `${p + 1} / ${book.pages.length}쪽`;
       prev.disabled = p === 0;
       next.disabled = p === book.pages.length - 1;
       opts.onPage && opts.onPage(p);
     };
-    prev.addEventListener('click', (e) => { e.stopPropagation(); go(p - 1); });
-    next.addEventListener('click', (e) => { e.stopPropagation(); go(p + 1); });
-    wrap.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); const a = acts[+b.dataset.a]; if (!a) return; if (!a.stay) wrap.close(); a.onClick && a.onClick(); }));
+    prev.addEventListener('click', () => go(p - 1));
+    next.addEventListener('click', () => go(p + 1));
+    el.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => { const a = acts[+b.dataset.a]; if (!a) return; if (!a.stay) lay.close(); a.onClick && a.onClick(); }));
+    el.querySelector('[data-leave]').addEventListener('click', () => lay.close());
     addEventListener('keydown', key, true);
+    const lay = this.mount(el, { cls: 'dev-book', onClose: () => { removeEventListener('keydown', key, true); opts.onClose && opts.onClose(); } });
     go(p);
-    wrap.page = () => p;
-    return wrap;
+    lay.page = () => p;
+    lay.acts = [{ label: '다음 쪽', off: false, run: () => go(p + 1) }, ...acts.map((a, i) => ({ label: a.label, off: false, run: () => el.querySelector(`.ob-rib[data-a="${i}"]`).click() }))];
+    return lay;
   }
 
   // ── 메뉴 ─────────────────────────────

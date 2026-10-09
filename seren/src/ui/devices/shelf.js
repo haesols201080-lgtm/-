@@ -63,5 +63,6 @@ export function openShelf(game, o) {
     },
   });
   lay.speak = speak;
+  lay.acts = [...items.map((it, i) => ({ label: it.name, off: !!o.readonly || !!it.off || it.n <= 0, run: () => pick(i) })), ...(o.action ? [{ label: o.action.label, off: !!o.action.off, run: () => actB.click() }] : [])];
   return lay;
 }

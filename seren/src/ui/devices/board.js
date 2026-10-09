@@ -24,5 +24,32 @@ export function openBoard(game, { title, listings, onPin }) {
   }));
   el.querySelector('.lb-leave').addEventListener('click', () => lay.close());
   const lay = game.ui.mount(el, { cls: 'dev-board' });
+  lay.acts = listings.map((q) => ({ label: q.name, off: false, run: () => onPin(q) }));
+  return lay;
+}
+
+/**
+ * 일거리 코르크판 (사무탑 게시판·창고 배달 창구): 압정으로 꽂힌 손글씨 쪽지. 쪽지를 누르면 떼어져 앞으로 나오고 「맡기」 도장.
+ * 이미 맡은 일이 있으면 판 아래 주머니에 그 쪽지가 꽂혀 있고 「그만두기」.
+ * openPinBoard(game, { title, sub, cards: [{ head, body, pay, on (없으면 보기만), take: 단추 글 }], held: { label, note, quit } | null })
+ */
+export function openPinBoard(game, o) {
+  const el = document.createElement('div');
+  el.className = 'pinb';
+  const PINS = ['#e84a3a', '#3a8ae8', '#e8c43a', '#3ac87a'];
+  el.innerHTML = `<div class="pb-head"><b>${esc(o.title)}</b><span>${esc(o.sub || '')}</span></div>
+    <div class="pb-cork">${o.held ? '' : o.cards.map((c, i) => `<div class="pb-card" data-i="${i}" style="--r:${((i * 53) % 9) - 4}deg;--pin:${PINS[i % 4]}"><i class="pb-pin"></i><b>${esc(c.head)}</b><p>${esc(c.body)}</p><em>${esc(c.pay || '')}</em>${c.on ? `<button class="pb-take">${esc(c.take || '맡기')}</button>` : ''}</div>`).join('') || '<p class="pb-none">오늘은 꽂힌 쪽지가 없어요</p>'}</div>
+    ${o.held ? `<div class="pb-pocket"><small>맡은 일</small><div class="pb-card held"><b>${esc(o.held.label)}</b><p>${esc(o.held.note || '')}</p><button class="pb-quit">그만두기</button></div></div>` : ''}<button class="pb-leave">물러서기 (Esc)</button>`;
+  el.querySelectorAll('.pb-card[data-i]').forEach((c) => c.addEventListener('click', (e) => {
+    const k = o.cards[+c.dataset.i];
+    if (e.target.closest('.pb-take') && k.on) { c.classList.add('taken'); setTimeout(() => { lay.close(); k.on(); }, 350); return; }
+    el.querySelectorAll('.pb-card.up').forEach((x) => x !== c && x.classList.remove('up'));
+    c.classList.toggle('up');
+  }));
+  const q = el.querySelector('.pb-quit');
+  if (q) q.addEventListener('click', () => { lay.close(); o.held.quit(); });
+  el.querySelector('.pb-leave').addEventListener('click', () => lay.close());
+  const lay = game.ui.mount(el, { cls: 'dev-board' });
+  lay.acts = o.held ? [{ label: '그만두기', off: false, run: () => q.click() }] : o.cards.map((c) => ({ label: c.head, off: !c.on, run: () => { lay.close(); c.on(); } }));
   return lay;
 }

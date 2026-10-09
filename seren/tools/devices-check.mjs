@@ -49,7 +49,7 @@ await page.evaluate(() => {
     }
     return null;
   };
-  window.__card = () => { const c = [...document.querySelectorAll('.card.os-card')].pop(); return c ? { cls: c.className, tabs: [...c.querySelectorAll('.os-tab')].map((b) => b.textContent.trim()), head: (c.querySelector('.os-head b, .os2-top b') || {}).textContent, text: c.textContent.slice(0, 400) } : null; };
+  window.__card = () => { const c = [...document.querySelectorAll('.term-screen.os-card')].pop(); return c ? { cls: c.className, tabs: [...c.querySelectorAll('.os-tab')].map((b) => b.textContent.trim()), head: (c.querySelector('.os-head b, .os2-top b') || {}).textContent, text: c.textContent.slice(0, 400) } : null; };
 });
 
 // 1) 사무탑: 안내 빛판 · 공용 단말
@@ -70,7 +70,7 @@ const r2 = await ev(() => {
   const g = SEREN.game, A = g.ops.apps, d = window.__find(['desk']);
   if (!d) return null;
   A.open('work', { T: d.T, F: d.F });
-  const c = document.querySelector('.card.dev-computer');
+  const c = document.querySelector('.term-screen.dev-computer');
   const out = { comp: !!c, lock: !!(c && c.querySelector('.os2-lock')), owner: c && (c.querySelector('.os2-lock b') || {}).textContent, login: !!(c && c.querySelector('[data-acct]')), icons: c ? c.querySelectorAll('.os2-ic').length : -1 };
   A.close();
   window.__desk = d;
@@ -86,7 +86,7 @@ const r3 = await ev(async () => {
   osMail(g, { from: '시험 조직 사람 담당', subj: '함께 일해요 · 시험 사무원', body: '첫 줄\n둘째 줄', key: 'test-hire' });
   osMail(g, { from: '시험 조직 사람 담당', subj: '함께 일해요 · 시험 사무원', body: '같은 열쇠', key: 'test-hire' });
   A.open('work', { T: d.T, F: d.F });
-  const c = () => document.querySelector('.card.dev-computer');
+  const c = () => document.querySelector('.term-screen.dev-computer');
   const out = {};
   out.icons = [...c().querySelectorAll('.os2-ic span')].map((e) => e.textContent.replace(/\s*\d+$/, '').trim());
   out.unread = A.os.unread();
@@ -121,7 +121,7 @@ const r4 = await ev(() => {
   const g = SEREN.game, A = g.ops.apps, t = window.__find(['terminal']);
   if (!t) return null;
   A.open('home', { T: t.T, F: t.F });
-  const c = document.querySelector('.card.dev-computer');
+  const c = document.querySelector('.term-screen.dev-computer');
   if (!c) return { comp: false, card: window.__card() };
   c.querySelector('[data-acct="guest"]').click();
   const icons = [...c.querySelectorAll('.os2-ic span')].map((e) => e.textContent.trim());

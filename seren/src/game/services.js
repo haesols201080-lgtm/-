@@ -12,6 +12,11 @@ import { atmosUniforms } from '../world/atmosphere.js';
 import { mulberry32, hashStr } from '../core/noise.js';
 import { won } from '../data/money.js';
 import { josa } from '../core/josa.js';
+import { openWorkbench, openHearth, openBeds } from '../ui/devices/craft.js';
+import { openPlaque } from '../ui/devices/plaque.js';
+import { openPinBoard } from '../ui/devices/board.js';
+import { openConsole } from '../ui/devices/console.js';
+import { openFlap } from '../ui/devices/flapboard.js';
 
 const UP_COST = [3, 5, 8];
 const DETECT_COST = [[3, 0], [6, 1], [9, 2]];
@@ -123,39 +128,30 @@ export class Services {
   // ── 공방 ─────────────────────────────────
   _workshop(F) {
     const g = this.game, s = g.state, up = g.player.upgrades;
-    const items = [{ head: '장비 손보기' }];
-    const opts = [
-      { k: 'glide', name: '날개 다듬기', desc: '활공이 더 멀리, 더 빠르게', max: 3 },
-      { k: 'skim', name: '썰매 공명 강화', desc: '썰매 최고 속도 +12%', max: 3, need: !!s.flags.skimmer },
-      { k: 'rise', name: '솟음 증폭', desc: '공중에서 「솟음」을 한 번 더', max: 2 },
-    ];
-    for (const o of opts) {
+    const seed = s.inv.seedstar || 0, shard = s.inv.shard || 0;
+    const parts = [];
+    for (const o of [
+      { k: 'glide', name: '날개', desc: '활공이 더 멀리, 더 빠르게', max: 3, icon: '⟁' },
+      { k: 'skim', name: '썰매 공명', desc: '썰매 최고 속도 +12%', max: 3, need: !!s.flags.skimmer, icon: '⌒' },
+      { k: 'rise', name: '솟음 증폭기', desc: '공중에서 「솟음」을 한 번 더', max: 2, icon: '⇡' },
+    ]) {
       const lv = up[o.k] || 0, c = UP_COST[lv];
-      items.push({
-        label: `${o.name} · ${lv}/${o.max}`,
-        sub: lv >= o.max ? '최고 단계' : o.need === false ? '썰매를 고친 뒤에 손볼 수 있어요' : `${o.desc} — 별씨 ${c}`,
-        disabled: lv >= o.max || o.need === false || (s.inv.seedstar || 0) < c,
-        onClick: () => { if (!this._pay(c, 0, 'seed')) return; up[o.k] = lv + 1; this._crafted(F, `${o.name} ${lv + 1}단계`); },
-      });
+      parts.push({ name: o.name, desc: o.desc, lv, max: o.max, icon: o.icon, cost: lv >= o.max ? '최고 단계' : `별씨 ${c}`,
+        off: lv >= o.max || o.need === false || seed < c, why: lv >= o.max ? '최고 단계예요' : o.need === false ? '썰매를 고친 뒤에 손볼 수 있어요' : `별씨 ${c}개가 필요해요`,
+        on: () => { if (!this._pay(c, 0, 'seed')) return; up[o.k] = lv + 1; this._crafted(F, `${o.name} ${lv + 1}단계`); } });
     }
     const dl = up.detector || 0;
     if (dl < 3) {
       const [c, sh] = DETECT_COST[dl];
-      items.push({
-        label: `울림 탐지기 · ${dl}/3`,
-        sub: `읽지 않은 글자돌과 잠긴 메아리를 나침반에 ${km(DETECT_RANGE[dl + 1])}까지 보여 준다 — 별씨 ${c}${sh ? ` · 결정 조각 ${sh}` : ''}`,
-        disabled: (s.inv.seedstar || 0) < c || (s.inv.shard || 0) < sh,
-        onClick: () => { if (!this._pay(c, sh, 'seed')) return; up.detector = dl + 1; this._crafted(F, `울림 탐지기 ${dl + 1}단계`); if (!dl) g.ui.moa('탐지기가 붙었어요. 나침반에 보라색 점이 뜨면 그쪽에 아직 읽지 않은 것이 있어요.'); },
-      });
-    } else items.push({ label: '울림 탐지기 · 3/3', sub: `${km(DETECT_RANGE[3])}까지 듣는다`, disabled: true });
-    items.push({ head: '꾸미기' });
+      parts.push({ name: '울림 탐지기', desc: `읽지 않은 글자돌·잠긴 메아리를 나침반에 ${km(DETECT_RANGE[dl + 1])}까지`, lv: dl, max: 3, icon: '◎', cost: `별씨 ${c}${sh ? ` · 결정 조각 ${sh}` : ''}`,
+        off: seed < c || shard < sh, why: `별씨 ${c}${sh ? ` · 결정 조각 ${sh}` : ''}이 필요해요`,
+        on: () => { if (!this._pay(c, sh, 'seed')) return; up.detector = dl + 1; this._crafted(F, `울림 탐지기 ${dl + 1}단계`); if (!dl) g.ui.moa('탐지기가 붙었어요. 나침반에 보라색 점이 뜨면 그쪽에 아직 읽지 않은 것이 있어요.'); } });
+    } else parts.push({ name: '울림 탐지기', desc: `${km(DETECT_RANGE[3])}까지 듣는다`, lv: 3, max: 3, icon: '◎', cost: '최고 단계', off: true, why: '최고 단계예요' });
     const next = (this.S.cosmetic + 1) % PALETTES.length;
-    items.push({
-      label: `날개·목도리 빛깔 → 「${PALETTES[next].name}」`, sub: `지금은 「${PALETTES[this.S.cosmetic % PALETTES.length].name}」 — 별씨 1`,
-      disabled: (s.inv.seedstar || 0) < 1,
-      onClick: () => { if (!this._pay(1, 0, 'seed')) return; this.S.cosmetic = next; this.applyCosmetic(); this._crafted(F, `빛깔 「${PALETTES[next].name}」`); },
-    });
-    g.ui.serviceCard(this._kicker(F), F.name, '공명 용광로가 별씨를 녹여, 장비에 새 노래를 새긴다. 결정 조각은 음악당과 온실에서 얻을 수 있어요.', items, this._stat());
+    parts.push({ name: '날개·목도리 빛깔', desc: `지금 「${PALETTES[this.S.cosmetic % PALETTES.length].name}」 → 「${PALETTES[next].name}」`, lv: 0, max: 0, icon: '✿', cost: '별씨 1', off: seed < 1, why: '별씨 1개가 필요해요',
+      on: () => { if (!this._pay(1, 0, 'seed')) return; this.S.cosmetic = next; this.applyCosmetic(); this._crafted(F, `빛깔 「${PALETTES[next].name}」`); } });
+    openWorkbench(g, { title: `${F.name} · 공명 용광로`, note: '별씨를 녹여 장비에 새 노래를 새긴다 · 결정 조각은 음악당과 온실에서',
+      mats: [{ name: '별씨', n: seed, col: '#ffe2a0' }, { name: '결정 조각', n: shard, col: '#9fd8ff' }, { name: '돈', n: won(s.inv.starseed || 0), col: '#e9c27c' }], parts });
   }
 
   _crafted(F, what) {
@@ -172,33 +168,21 @@ export class Services {
   _library(F) {
     const g = this.game, s = g.state;
     const books = BOOKS.filter((b) => b.at === F.id);
-    const items = [{ head: '옛 책' }];
-    for (const b of books) {
-      const read = !!this.S.books[b.id];
-      items.push({ label: `「${b.title}」`, sub: read ? '다시 읽기' : '처음 읽으면 아웬의 말 하나를 확실히 알게 된다', primary: !read, onClick: () => this.readBook(b) });
-    }
     const unknown = WORDS.filter((w) => !g.lang.known(w.id));
-    items.push({ head: '배우기' });
-    items.push({
-      label: '서고지기에게 말 배우기', sub: unknown.length ? `모르는 단어 하나를 배운다 — 2울 · 아직 모르는 말 ${unknown.length}개` : '세렌의 말을 모두 알아요',
-      disabled: !unknown.length || s.inv.starseed < 2,
-      onClick: () => {
-        if (!this._pay(2)) return;
-        const w = unknown[Math.floor(Math.random() * unknown.length)];
-        g.lang.learn(w.id, 'teach');
-        g.audio.sing(w.notes, { gain: 0.3 });
-        g.save();
-      },
-    });
     const n = Object.keys(this.S.books).length;
-    g.ui.serviceCard(this._kicker(F), F.name, `결정판에 새긴 옛 노래가 책장마다 빛난다. 세렌의 서고에서 읽은 책 ${n}/${BOOKS.length}권.`, items, this._stat());
+    // 결정판 책장: 옛 책 책등 · 아래 쪽지에 서고 이야기 · 서고지기에게 말 배우기는 책장 앞 끈갈피
+    g.ui.bookShelf(this._kicker(F), F.name, `결정판에 새긴 옛 노래가 책장마다 빛난다. 세렌의 서고에서 읽은 책 ${n}/${BOOKS.length}권.`,
+      books.map((b) => ({ id: b.id, title: b.title, author: '옛 노래', color: 0x5a7a9a, n: 1, pages: 8, read: 0, done: !!this.S.books[b.id] })),
+      (id) => { const b = books.find((q) => q.id === id); if (b) this.readBook(b); }, '',
+      { actions: [{ label: '서고지기에게 말 배우기', sub: unknown.length ? `2울 · 아직 모르는 말 ${unknown.length}개` : '세렌의 말을 모두 알아요', off: !unknown.length || (s.inv.starseed || 0) < 2,
+        on: () => { if (!this._pay(2)) return; const w = unknown[Math.floor(Math.random() * unknown.length)]; g.lang.learn(w.id, 'teach'); g.audio.sing(w.notes, { gain: 0.3 }); g.save(); } }] });
   }
 
   readBook(b) {
     const g = this.game;
     const first = !this.S.books[b.id];
     this.S.books[b.id] = true;
-    g.ui._card(`<div class="kicker">노래 서고 · 옛 책</div><h2>${b.title}</h2><div class="memo">${b.text}</div>`);
+    g.ui.reader({ title: b.title, author: '노래 서고 · 옛 책', color: 0x5a7a9a, pages: String(b.text).split(/\n\n+/).filter(Boolean) }, { kicker: '노래 서고 · 옛 책' });
     if (first) {
       g.lang.learn(b.word, 'teach');
       g.journalNote(`서고에서 ${josa(`「${b.title}」`, '을')} 읽었다.`);
@@ -211,26 +195,27 @@ export class Services {
     const g = this.game;
     const whole = !!F.def.world;
     const done = !!this.S.daily['map:' + F.id];
-    const items = [{
-      label: whole ? '세렌 전체를 펼치기' : '둘레 7 km 를 펼치기', sub: done ? '이미 펼쳤어요 · 지도 보기' : '지도의 안개가 걷힌다', primary: !done,
-      onClick: () => {
-        if (!done) {
-          this.S.daily['map:' + F.id] = true;
-          if (whole) g.mapData.reveal(0, 0, 90000);
-          else g.mapData.reveal(F.x, F.z, 7000);
-          g.audio.chime('discover');
-          g.ui.toast(whole ? '세렌의 모든 땅이 지도에 그려졌다' : '지도의 둘레가 밝혀졌다', { kind: 'place' });
-          g.save();
-        }
-        setTimeout(() => g.ui.openMenu('map'), done ? 0 : 600);
-      },
-    }, { head: '남은 것 찾기 · 가장 가까운 곳에 표식' }];
+    const spread = () => {
+      if (!done) {
+        this.S.daily['map:' + F.id] = true;
+        if (whole) g.mapData.reveal(0, 0, 90000);
+        else g.mapData.reveal(F.x, F.z, 7000);
+        g.audio.chime('discover');
+        g.ui.toast(whole ? '세렌의 모든 땅이 지도에 그려졌다' : '지도의 둘레가 밝혀졌다', { kind: 'place' });
+        g.save();
+      }
+      setTimeout(() => g.ui.openMenu('map'), done ? 0 : 600);
+    };
+    const finds = [];
     for (const kind of ['glyph', 'echo', 'place']) {
       const t = this.nearestLeft(kind);
       const name = { glyph: '읽지 않은 글자돌', echo: '잠긴 메아리', place: '못 가 본 곳' }[kind];
-      items.push({ label: name, sub: t ? `${t.name} · ${km(t.d)}` : '남은 것이 없어요', disabled: !t, onClick: () => this.mark(t) });
+      if (t) finds.push({ label: `${name} · ${t.name} (${km(t.d)}) ▸`, on: () => this.mark(t) });
     }
-    g.ui.serviceCard(this._kicker(F), F.name, whole ? '하늘닻의 유리 아래, 세렌 전체가 빛으로 떠 있다.' : '탁자 위에 둘레 14 km 의 땅이 빛으로 솟아 있다.', items);
+    // 지도 탁자: 빛으로 솟은 땅 위에 손을 펴면 펼쳐지고, 가장자리의 빛 핀으로 남은 것을 짚는다
+    openPlaque(g, { mat: 'glass', side: 'left', kicker: this._kicker(F), title: F.name, text: whole ? '하늘닻의 유리 아래, 세렌 전체가 빛으로 떠 있다.' : '탁자 위에 둘레 14 km 의 땅이 빛으로 솟아 있다.',
+      foot: finds.length ? '가장자리의 빛 핀 — 남은 것 가장 가까운 곳에 표식' : '남은 것이 없어요',
+      actions: [{ label: done ? '지도 보기 ▸' : whole ? '세렌 전체를 펼치기 ▸' : '둘레 7 km 를 펼치기 ▸', on: spread }, ...finds] });
   }
 
   /** 아직 남은 것 중 가장 가까운 것 */
@@ -255,17 +240,14 @@ export class Services {
   // ── 쉼터 ─────────────────────────────────
   _rest(F) {
     const g = this.game;
-    const items = [{ head: '쉬기 (시간이 흐른다)' }];
-    for (const [label, frac] of [['아침까지', 0.27], ['한낮까지', 0.5], ['저녁까지', 0.74], ['밤까지', 0.92]]) {
-      items.push({ label: `${label} 쉬기`, onClick: () => { g.rest(frac); this._burst(F, 0, 1.2, 1, 0xffb060, 20); } });
-    }
-    items.push({ head: '쉼터 사이 오가기' });
     const others = this.fac.list.filter((X) => X.type === 'rest' && X !== F && this.S.visited[X.id]);
     const pp = g.player.pos;
     others.sort((a, b) => Math.hypot(a.x - pp.x, a.z - pp.z) - Math.hypot(b.x - pp.x, b.z - pp.z));
-    for (const X of others) items.push({ label: X.name, sub: `${this._regionName(X)} · ${km(Math.hypot(X.x - pp.x, X.z - pp.z))}`, onClick: () => this.travelTo(X) });
-    if (!others.length) items.push({ label: '아직 기억한 쉼터가 없어요', sub: '다른 마을의 쉼터에 들르면, 쉼터지기들이 노래를 이어 길을 열어 줘요', disabled: true });
-    g.ui.serviceCard(this._kicker(F), F.name, '화롯불 곁에서 쉬어 가요. 들른 쉼터끼리는 노래로 이어져 있어 한숨에 오갈 수 있어요.', items);
+    openHearth(g, { title: F.name, note: '화롯불 곁에서 쉬어 가요 · 들른 쉼터끼리는 노래로 이어져 있어 한숨에 오갈 수 있어요', now: g.world.clock.time % 1,
+      times: [['아침', 0.27], ['한낮', 0.5], ['저녁', 0.74], ['밤', 0.92]].map(([label, frac]) => ({ label, frac })),
+      rest: (frac) => { g.rest(frac); this._burst(F, 0, 1.2, 1, 0xffb060, 20); },
+      stones: others.slice(0, 8).map((X) => ({ name: X.name, sub: `${this._regionName(X)} · ${km(Math.hypot(X.x - pp.x, X.z - pp.z))}`, on: () => this.travelTo(X) })),
+      empty: '아직 기억한 쉼터가 없어요 — 다른 마을의 쉼터에 들르면 노래돌이 하나씩 놓여요' });
   }
 
   _regionName(F) {
@@ -302,16 +284,13 @@ export class Services {
     const g = this.game, s = g.state;
     const G = this._garden(F);
     const now = g.world.clock.time;
-    const items = [];
-    G.forEach((t, i) => {
-      if (t === null) items.push({ label: `${i + 1}번 밭 · 비어 있다`, sub: '별씨 1개를 심는다 — 하루가 지나면 꽃이 핀다', disabled: (s.inv.seedstar || 0) < 1, onClick: () => { if (!this._pay(1, 0, 'seed')) return; G[i] = g.world.clock.time; g.audio.chime('soft'); g.ui.toast(`${i + 1}번 밭에 별씨를 심었다`, { kind: 'item' }); g.save(); } });
-      else {
+    openBeds(g, { title: F.name, note: `별씨는 세렌의 흙에서 빛꽃으로 자라고, 꽃은 별씨를 셋 맺는다 · 가진 별씨 ${s.inv.seedstar || 0}`,
+      beds: G.map((t, i) => {
+        if (t === null) return { state: 'empty', label: `${i + 1}번 밭`, sub: '별씨 1개를 심는다', off: (s.inv.seedstar || 0) < 1, why: '별씨가 없어요', on: () => { if (!this._pay(1, 0, 'seed')) return; G[i] = g.world.clock.time; g.audio.chime('soft'); g.ui.toast(`${i + 1}번 밭에 별씨를 심었다`, { kind: 'item' }); g.save(); } };
         const k = (now - t) / GROW;
-        if (k >= 1) items.push({ label: `${i + 1}번 밭 · 꽃이 활짝 피었다`, sub: '거두기 — 별씨 3 · 가끔 결정 조각이나 새 말', primary: true, onClick: () => this.harvest(F, i) });
-        else items.push({ label: `${i + 1}번 밭 · 자라는 중 ${Math.floor(k * 100)}%`, sub: `${Math.ceil((1 - k) * 24)}시간 뒤에 핀다 · 쉼터에서 쉬면 금방이에요`, disabled: true });
-      }
-    });
-    g.ui.serviceCard(this._kicker(F), F.name, '별씨는 세렌의 흙에서 빛꽃으로 자라고, 꽃은 별씨를 셋 맺는다.', items, this._stat());
+        if (k >= 1) return { state: 'ripe', label: `${i + 1}번 밭 · 꽃이 활짝 피었다`, sub: '거두기 — 별씨 3 · 가끔 결정 조각이나 새 말', on: () => this.harvest(F, i) };
+        return { state: 'grow', pct: k, label: `${i + 1}번 밭 · ${Math.floor(k * 100)}%`, sub: `${Math.ceil((1 - k) * 24)}시간 뒤에 핀다`, off: true, why: `${Math.ceil((1 - k) * 24)}시간 뒤에 핀다 · 쉼터에서 쉬면 금방` };
+      }) });
   }
 
   harvest(F, i) {
@@ -334,15 +313,12 @@ export class Services {
     const g = this.game;
     const done = this.usedToday('hall:' + F.id);
     const few = g.state.tones.length < 2;
-    const items = [
-      {
-        label: '오늘의 합창에 끼기', primary: !done && !few,
-        sub: done ? '오늘은 함께 불렀어요 · 내일 다시 와요' : few ? '공명 음을 둘 이상 알아야 해요' : '합창지기의 선율을 듣고 똑같이 연주하기 — 2울 · 결정 조각 1',
-        disabled: done || few, onClick: () => this.choir(F),
-      },
-      { label: '한 소절 듣기', sub: '합창지기가 노래한다 (자주 들으면 말을 짐작하게 돼요)', onClick: () => { const l = AMBIENT[Math.floor(Math.random() * AMBIENT.length)]; const id = `amb_${AMBIENT.indexOf(l)}`; g.lines[id] = { id, ...l }; g.say(F.npc, g.lines[id], true); F.extra.choir = Math.max(F.extra.choir, 0.5); } },
-    ];
-    g.ui.serviceCard(this._kicker(F), F.name, '아웬은 날마다 한 번, 같은 노래를 모두 함께 부른다. 그 노래로 도시의 울림을 고른다.', items);
+    const acts = [];
+    acts.push({ label: '합창단에 서기 ▸', off: done || few, on: () => this.choir(F) });
+    acts.push({ label: '한 소절 듣기', stay: true, on: () => { const l = AMBIENT[Math.floor(Math.random() * AMBIENT.length)]; const id = `amb_${AMBIENT.indexOf(l)}`; g.lines[id] = { id, ...l }; g.say(F.npc, g.lines[id], true); F.extra.choir = Math.max(F.extra.choir, 0.5); } });
+    // 음악당 입구의 나무 게시판: 오늘의 합창 안내
+    openPlaque(g, { mat: 'wood', side: 'left', kicker: this._kicker(F), title: '오늘의 합창', text: '아웬은 날마다 한 번, 같은 노래를 모두 함께 부른다. 그 노래로 도시의 울림을 고른다. 합창지기의 선율을 듣고 똑같이 연주하면 2울과 결정 조각 하나.',
+      foot: done ? '오늘은 함께 불렀어요 · 내일 다시 와요' : few ? '함께 부르려면 공명 음을 둘 이상 알아야 해요' : '', actions: acts });
   }
 
   choir(F) {
@@ -371,16 +347,13 @@ export class Services {
   // ── 소식탑 ───────────────────────────────
   _courier(F) {
     const g = this.game, R = g.requests;
-    const board = R.active.length
-      ? `<div style="text-align:left;margin:10px 0">${R.active.map((r) => `<div class="qitem"><div class="qt">${r.title}</div><div class="qs">${r.text} · ${won(r.reward)}</div></div>`).join('')}</div>`
-      : '<p>게시판이 비어 있다.</p>';
     const parcelDone = this.usedToday('parcel:' + F.id);
     const boardDone = this.usedToday('board');
-    const items = [
-      { label: '소포 나르기', sub: parcelDone ? '오늘 이 탑의 소포는 다 나갔어요' : '먼 시설로 가는 소포를 맡는다 — 받는 이에게 전하면 품삯(울)', primary: !parcelDone, disabled: parcelDone || R.active.length >= 6, onClick: () => this.parcel(F) },
-      { label: '새 부탁 받기', sub: boardDone ? '오늘 새로 온 부탁은 이미 받았어요' : '게시판에 하나를 더 붙인다', disabled: boardDone || R.active.length >= 6, onClick: () => { const r = R.addOne(); if (r) { this.useToday('board'); g.ui.toast(`새 부탁 · ${r.title}`, { kind: 'quest', sub: r.text }); } else g.ui.toast('지금은 새 부탁이 없어요', { kind: 'muted' }); } },
-    ];
-    g.ui.serviceCard(this._kicker(F), F.name, `일벌들이 꼭대기 창구에서 세렌 곳곳으로 소식을 나른다. 들어준 부탁 ${g.state.requestsDone}개.`, items, board);
+    const full = R.active.length >= 6;
+    const cards = R.active.map((r) => ({ head: r.title, body: r.text, pay: won(r.reward) }));
+    if (!parcelDone && !full) cards.push({ head: '소포 나르기', body: '먼 시설로 가는 소포 — 받는 이에게 전하면 품삯', pay: '울', take: '맡기', on: () => this.parcel(F) });
+    if (!boardDone && !full) cards.push({ head: '새 부탁', body: '오늘 새로 들어온 부탁 쪽지를 하나 더 꽂는다', take: '꽂기', on: () => { const r = R.addOne(); if (r) { this.useToday('board'); g.ui.toast(`새 부탁 · ${r.title}`, { kind: 'quest', sub: r.text }); } else g.ui.toast('지금은 새 부탁이 없어요', { kind: 'muted' }); } });
+    openPinBoard(g, { title: `${F.name} · 부탁 게시판`, sub: `일벌들이 꼭대기 창구에서 세렌 곳곳으로 소식을 나른다 · 들어준 부탁 ${g.state.requestsDone}개${parcelDone ? ' · 오늘 이 탑의 소포는 다 나갔어요' : ''}`, cards });
   }
 
   parcel(F) {
@@ -405,9 +378,13 @@ export class Services {
     const g = this.game;
     const used = this.usedToday('weather');
     const cur = this.S.weather;
-    const items = Object.entries(WEATHER).map(([k, w]) => ({ label: w.name, sub: used ? '하늘은 하루에 한 번만 고를 수 있어요' : w.sub, disabled: used, primary: cur && cur.kind === k, onClick: () => this.setWeather(F, k) }));
-    if (cur) items.push({ label: '원래 하늘로', sub: '고른 날씨를 거둔다', onClick: () => { this.S.weather = null; F.extra.beamT = 2; g.ui.toast('하늘이 제 노래로 돌아간다', { kind: 'muted' }); } });
-    g.ui.serviceCard(this._kicker(F), F.name, `구슬이 하늘에 노래를 쏘아 올려 구름과 빛을 고른다.${cur ? ` 지금 하늘: 「${WEATHER[cur.kind].name}」` : ''}`, items);
+    const COL = ['blue', 'amber', 'green', 'grey', 'red'];
+    const keys = Object.entries(WEATHER).map(([k, w], i) => ({ label: w.name, sub: w.sub, col: COL[i % COL.length], off: used, why: '하늘은 하루에 한 번만', on: () => this.setWeather(F, k) }));
+    if (cur) keys.push({ label: '원래 하늘로', sub: '고른 날씨를 거둔다', col: 'grey', on: () => { this.S.weather = null; F.extra.beamT = 2; g.ui.toast('하늘이 제 노래로 돌아간다', { kind: 'muted' }); } });
+    // 기상 구슬 조종대: 지금 하늘을 표시등으로, 고를 하늘은 단추로
+    openConsole(g, { title: `${F.name} · 구슬 조종대`, plate: '구슬이 하늘에 노래를 쏘아 올려 구름과 빛을 고른다', tone: 'blue',
+      lamps: Object.entries(WEATHER).map(([k, w]) => ({ label: w.name, on: !!(cur && cur.kind === k), col: '#9fd8ff' })),
+      screen: [cur ? `지금 하늘: 「${WEATHER[cur.kind].name}」` : '지금 하늘: 제 노래', used ? '오늘은 이미 하늘을 골랐어요' : '하루에 한 번 고를 수 있어요'], keys });
   }
 
   setWeather(F, kind) {
@@ -439,19 +416,15 @@ export class Services {
   _dock(F) {
     const g = this.game;
     const open = g.quests.isDone('mq2') || !!g.state.flags.elevator;
-    const items = [{ head: '연락선 · 들른 선착장 사이를 날아간다' }];
-    const pp = g.player.pos;
+    const pp = g.player.pos, tm = g.world.clock.time;
     const others = this.fac.list.filter((X) => X.type === 'dock' && X !== F && this.S.visited[X.id]);
     others.sort((a, b) => Math.hypot(a.x - pp.x, a.z - pp.z) - Math.hypot(b.x - pp.x, b.z - pp.z));
-    for (const X of others) items.push({ label: X.name, sub: `${this._regionName(X)} · ${km(Math.hypot(X.x - pp.x, X.z - pp.z))}`, disabled: !open, onClick: () => this.ferryTo(F, X) });
-    if (!others.length) items.push({ label: '아직 들른 선착장이 없어요', sub: '다른 마을의 선착장에 들르면 연락선 길이 열려요', disabled: true });
-    items.push({ head: '나룻배' });
-    items.push({
-      label: '나룻배 빌리기', primary: open, disabled: !open,
-      sub: !open ? '배들은 척추의 도시가 깨어난 뒤에 다녀요' : g.ui.touch ? '혼자 타는 작은 하늘배 · 막대로 방향, 점프로 오르기, 상호작용으로 내리기' : '혼자 타는 작은 하늘배 · 보는 쪽으로 W, Space 오르기, Shift 빠르게, E 내리기',
-      onClick: () => this.rentSkiff(F),
-    });
-    g.ui.serviceCard(this._kicker(F), F.name, '바닥의 세 고리가 세렌의 울림을 밀어내 배를 띄운다.', items);
+    const hm = (t) => { const m = Math.floor((((t % 1) + 1) % 1) * 1440); return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
+    const rows = others.slice(0, 7).map((X, k) => ({ cells: [hm(tm + 0.003 + k * 0.004), X.name, this._regionName(X), km(Math.hypot(X.x - pp.x, X.z - pp.z))], status: open ? '연락선' : '쉬는 중', off: !open, why: '배들은 척추의 도시가 깨어난 뒤에 다녀요', fare: '연락선 표', stub: ['연락선', X.name, this._regionName(X)], on: () => this.ferryTo(F, X) }));
+    rows.push({ cells: ['--:--', '나룻배 빌리기', '혼자 타는 작은 하늘배', '-'], status: open ? '빌릴 수 있음' : '쉬는 중', off: !open, why: '배들은 척추의 도시가 깨어난 뒤에 다녀요', fare: '빌림 표',
+      stub: ['나룻배 빌림', g.ui.touch ? '막대로 방향 · 점프 오르기 · 상호작용 내리기' : '보는 쪽으로 W · Space 오르기 · Shift 빠르게 · E 내리기'], on: () => this.rentSkiff(F) });
+    openFlap(g, { title: `${F.name} · 떠나는 배`, sub: '바닥의 세 고리가 세렌의 울림을 밀어내 배를 띄운다 · 들른 선착장 사이를 연락선이 오간다', cols: ['시각', '행선지', '지역', '거리', '상태'], rows, machine: '표 뽑기',
+      foot: others.length ? '' : '아직 들른 선착장이 없어요 — 다른 마을의 선착장에 들르면 연락선 길이 열려요' });
   }
 
   rentSkiff(F) {

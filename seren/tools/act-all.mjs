@@ -24,7 +24,7 @@ await page.evaluate(() => {
   // 반응 세기: 화면에 무언가를 띄우는 길을 모두 감싼다
   window.__hit = 0;
   const wrap = (o, k) => { const f = o[k]; if (typeof f !== 'function') return; o[k] = function (...a) { window.__hit++; return f.apply(this, a); }; };
-  for (const k of ['toast', 'moa', '_card', 'serviceCard', 'infoCard', 'bookShelf', 'reader', 'regionTitle']) wrap(g.ui, k);
+  for (const k of ['toast', 'moa', 'mount', 'infoCard', 'bookShelf', 'reader', 'regionTitle']) wrap(g.ui, k);
   for (const k of ['_load', 'liftPanel', 'ride', 'outTo', 'exit']) wrap(g.interiors, k);
   if (g.avatar) { wrap(g.avatar, 'act'); wrap(g.avatar, 'setHeld'); }
 });

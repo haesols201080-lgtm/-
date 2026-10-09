@@ -31,6 +31,7 @@ export function labBench(game, o) {
   draw();
   const lay = mountDevice(game, el, { cls: 'dev-lab', keys: (e) => { const d = digitOf(e); if (o.mode === 'name' && d >= 0 && o.pool.includes(d)) { el.querySelector(`[data-f="${d}"]`).click(); return true; } return false; } });
   lay.next = (n) => { Object.assign(o, n); busy = false; el.classList.remove('good', 'bad'); draw(); };
+  Object.defineProperty(lay, 'acts', { get: () => (o.mode === 'same' ? [{ label: '같다', run: () => el.querySelector('[data-a="same"]').click() }, { label: '다르다', run: () => el.querySelector('[data-a="diff"]').click() }] : o.pool.map((i) => ({ label: TONE_NAMES[i], run: () => { const b = el.querySelector(`[data-f="${i}"]`); b.click(); b.click(); } }))).map((a) => ({ off: false, ...a })) });
   return lay;
 }
 
@@ -49,6 +50,7 @@ export function sorter(game, o) {
   const tick = () => { if (done || !el.isConnected) return; const f = Math.min(1, (performance.now() - t0) / o.limit); timer.style.width = `${(1 - f) * 100}%`; box.style.left = `${8 + f * 64}%`; requestAnimationFrame(tick); };
   requestAnimationFrame(tick);
   const lay = mountDevice(game, el, { cls: 'dev-sort', keys: (e) => { const d = digitOf(e); if (d >= 0 && d < o.cols.length) { pick(d); return true; } return false; } });
+  lay.acts = o.names.map((nm, i) => ({ label: nm, off: false, run: () => pick(i) }));
   return lay;
 }
 
@@ -107,5 +109,6 @@ export function scoreStand(game, o) {
   el.querySelector('.sc-again').addEventListener('click', () => o.replay());
   el.querySelector('.sc-leave').addEventListener('click', () => lay.close());
   const lay = mountDevice(game, el, { cls: 'dev-score', keys: (e) => { const d = digitOf(e); if (d >= 0 && d < 5) { press(d); return true; } if (isUse(e)) { o.replay(); return true; } return false; } });
+  lay.acts = listen ? [] : o.pool.map((i) => ({ label: TONE_NAMES[i], off: false, run: () => press(i) }));
   return lay;
 }

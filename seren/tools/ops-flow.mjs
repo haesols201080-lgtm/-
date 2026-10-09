@@ -102,7 +102,6 @@ for (const pid of want) {
       for (const F of B.floors) { if (!F.reach || F.dead) continue; const pl = ind.plan(F.i); if (pl) for (const q of pl.fix) if (q.tag === 'shelf' && q.cat) cats.add(q.cat); }
       const out = ind.built.get(ind.cur);
       const T = out.T;
-      const orig = g.ui.serviceCard.bind(g.ui);
       const inv0 = { ...g.state.inv }, money0 = g.state.inv.starseed || 0;
       const picked = [];
       const shelves = out.fix.filter((F) => F.tag === 'shelf');
@@ -110,23 +109,20 @@ for (const pid of want) {
       for (const F of shelves) {
         if (picked.length >= 5) break;
         if (seenCat.has(F.cat)) continue;
-        let items = null;
-        g.ui.serviceCard = (t, s2, d, its) => { items = its; return null; };
+        // 진열대 앞면(기기)의 acts 로 물건 하나 집기
         try { const h = T.type.act(o, T, F, out); if (h) h.use(); } catch (e) { picked.push('오류 ' + e.message); }
-        g.ui.serviceCard = orig;
-        const it = items && items.find((x) => !x.disabled && x.onClick);
-        if (it) { const btn = document.createElement('button'); btn.innerHTML = '<b></b><small></small>'; it.onClick(btn); picked.push(`${F.cat}:${it.label.split(' · ')[0]}`); seenCat.add(F.cat); }
+        const L = g.ui._cardWrap, it = L && L.acts && L.acts.find((x) => !x.off);
+        if (it) { it.run(); picked.push(`${F.cat}:${it.label}`); seenCat.add(F.cat); }
+        g.ui.closeCard();
       }
       const basket = o.basket.length;
       const co = out.fix.find((F) => F.tag === 'checkout');
       let paid = false;
       if (co) {
-        let items = null;
-        g.ui.serviceCard = (t, s2, d, its) => { items = its; return null; };
+        // 계산대 결제판에 패 대기 (기기 acts)
         try { o.checkout(T, true); } catch (e) { paid = 'err ' + e.message; }
-        g.ui.serviceCard = orig;
-        const pay = items && items.find((x) => x.primary && !x.disabled);
-        if (pay) { pay.onClick(); paid = true; }
+        const L = g.ui._cardWrap, pay = L && L.acts && L.acts.find((x) => x.label.includes('결제'));
+        if (pay) { pay.run(); paid = o.basket.length === 0; }
       }
       g.ui.closeCard();
       const gained = Object.keys(g.state.inv).filter((k) => k !== 'starseed' && (g.state.inv[k] || 0) > (inv0[k] || 0));
@@ -171,11 +167,11 @@ for (const pid of want) {
       const pick = shelf.books.find((b) => b.id.startsWith('b-')) || shelf.books.find((b) => b.pages >= 3 && !/^[gn]-/.test(b.id)) || shelf.books[0];
       const words0 = g.lang.knownCount;
       shelf.onPick(pick.id);
-      const card = document.querySelector('.card.book-card');
-      const pageText = card && card.querySelector('.book-page').textContent;
+      const card = document.querySelector('.openbook');
+      const pageText = card && card.querySelector('.ob-page').textContent;
       res.reader = !!card && pageText && pageText.length > 10;
       for (let k = 0; k < 12; k++) card.querySelector('[data-next]').click();
-      res.pageNo = card.querySelector('.book-no').textContent;
+      res.pageNo = card.querySelector('.ob-no').textContent;
       res.done = !!(g.state.lib.done[pick.id]);
       res.wordsLearned = g.lang.knownCount - words0;
       // 들고 가기 → 그 책등이 빈다
@@ -198,13 +194,10 @@ for (const pid of want) {
         g.ui.journal._bag(div);
         res.bagBook = div.innerHTML.includes(pick.title) && !!div.querySelector('[data-read]');
         // 돌려주기 → 책등이 돌아온다
-        let items = null;
-        const os = g.ui.serviceCard.bind(g.ui);
-        g.ui.serviceCard = (k, title, body, its) => { items = its; return null; };
+        // 대출대 반납 카드에 서명 (종이 기기 acts — 고르는 칸은 첫 책)
         h.use();
-        g.ui.serviceCard = os;
-        const back = items && items.find((x) => x.label.includes('돌려주기'));
-        if (back) back.onClick();
+        const L = g.ui._cardWrap, sign = L && L.acts && L.acts.find((x) => x.label === '서명');
+        if (sign) sign.run();
         g.ui.closeCard();
         res.returned = g.state.lib.borrowed.length === 0;
         res.spinesAfterReturn = n0 - spines();

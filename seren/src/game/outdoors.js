@@ -20,6 +20,11 @@ import { heightAt } from '../world/heightfield.js';
 import { SYL_A, SYL_B } from '../data/citizens.js';
 import { won } from '../data/money.js';
 import { josa } from '../core/josa.js';
+import { openFlap } from '../ui/devices/flapboard.js';
+import { openConsole } from '../ui/devices/console.js';
+import { openPlaque } from '../ui/devices/plaque.js';
+import { openLiftPanel } from '../ui/devices/liftpanel.js';
+import { openPaper } from '../ui/devices/paper.js';
 
 const TAU = Math.PI * 2;
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -27,6 +32,7 @@ const angDiff = (a, b) => { let d = (a - b) % TAU; if (d > Math.PI) d -= TAU; if
 const BRANCH_COL = [0xff9fd0, 0x7ff3e6, 0xffd27a, 0xb9a6ff];
 const BRANCH_HEX = ['#ff9fd0', '#7ff3e6', '#ffd27a', '#b9a6ff'];
 const BRANCH_NAME = ['분홍 가지', '청록 가지', '금빛 가지', '보랏빛 가지'];
+const hm = (t) => { const m = Math.floor((((t % 1) + 1) % 1) * 1440); return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; };
 
 // 승강판이 닿는 꼭대기 (랜드마크 자기 좌표, 미터) · Rs: 오르내리는 기둥 자리(구조물 밖) · over: 꼭대기 위로 다가가는 높이
 const TOPS = {
@@ -133,14 +139,15 @@ export class Outdoors {
     dests.sort((a, b) => a.d - b.d);
     // 가까운 승강탑 넷 + 랜드마크 (구역마다)
     const pick = dests.filter((q) => q.r.kind === 'padtower').slice(0, 4).concat(dests.filter((q) => q.r.kind.startsWith('lm_')).slice(0, 4));
-    if (!pick.length) { g.ui.serviceCard('하늘배 승강탑', '행선지', '지금은 이 둘레에 다른 승강장이 없어요.', []); return; }
-    const inv = this.V.inv;
-    g.ui.serviceCard('하늘배 승강탑', '어디로 날아갈까요?', `가진 돈 ${won(inv.starseed || 0)} · 하늘배가 내려와 태우고 도시 위로 날아가요 (뛰기·E 로 빨리 가기)`, pick.map(({ r, d }) => {
-      const price = 1 + Math.round(d / 1800);
+    const inv = this.V.inv, tm = g.world.clock.time;
+    const rows = pick.map(({ r, d }, k) => {
+      const price = 1 + Math.round(d / 1800), poor = (inv.starseed || 0) < price;
       const nm = r.kind.startsWith('lm_') ? r.out.name : `${ZONE_NAMES[r.zone] || ''} 승강탑`;
-      return { label: `${nm} · ${won(price)}`, sub: `${(d / 1000).toFixed(1)} km`, disabled: (inv.starseed || 0) < price,
-        onClick: () => { const to = city.consolePos(r); if (!to) { g.ui.toast('그 승강장은 지금 닫혀 있어요', { kind: 'muted' }); return; } if (!this.V._pay(price)) return; this.V._learn('go'); this._fly(c, to, nm, 1); } };
-    }));
+      return { cells: [hm(tm + 0.002 + k * 0.003), nm, `${(d / 1000).toFixed(1)}km`, won(price)], status: poor ? '돈 모자람' : '부르면 옴', off: poor, why: `${won(price)}이 필요해요`, fare: won(price),
+        stub: ['하늘배 한 번 타기', nm, `${(d / 1000).toFixed(1)} km`, won(price)],
+        on: () => { const to = city.consolePos(r); if (!to) { g.ui.toast('그 승강장은 지금 닫혀 있어요', { kind: 'muted' }); return; } if (!this.V._pay(price)) return; this.V._learn('go'); this._fly(c, to, nm, 1); } };
+    });
+    openFlap(g, { title: '하늘배 승강탑', sub: '표를 뽑으면 하늘배가 내려와 태우고 도시 위로 날아가요 (뛰기·E 로 빨리 가기)', cols: ['시각', '행선지', '거리', '값', '상태'], rows, machine: '하늘배 부르기', foot: `가진 돈 ${won(inv.starseed || 0)}`, empty: '지금은 이 둘레에 다른 승강장이 없어요' });
   }
 
   /** 하늘배 비행: 조작대 → (내려온 배를 타고) 순항 높이 → 도착지 조작대 옆 */
@@ -334,19 +341,21 @@ export class Outdoors {
         }
         return false;
       });
-      g.ui.serviceCard(`가지 항구 · 드론 ${k}/${N}`, '이 드론은 어느 가지로?', '드론의 빛 띠 색과 같은 가지로 보내요. 가지 끝마다 같은 색 고리가 떠 있어요.', pads.map((p, i) => ({
-        label: BRANCH_NAME[i], sub: `높이 ${Math.round(p.y - r.base)} m`,
-        onClick: () => {
+      openConsole(g, { title: '가지 항구 관제', plate: `드론 ${k}/${N} · 빛 띠 색과 같은 가지로`, tone: 'blue',
+        lamps: [{ label: '들어오는 드론의 빛 띠', on: true, col: BRANCH_HEX[want] }],
+        screen: ['드론이 항구 앞에 떠 있다.', '가지 끝마다 같은 색 고리가 떠 있어요 — 같은 색 단추를 눌러 보내요.'],
+        keys: pads.map((p, i) => ({
+        label: BRANCH_NAME[i], sub: `높이 ${Math.round(p.y - r.base)} m`, hex: BRANCH_HEX[i],
+        on: () => {
           const ok = i === want;
           if (ok) right++;
           st.to = pads[i].clone(); st.ok = ok; st.ph = 0; st.leg = 0;
           g.ui.toast(ok ? '맞는 가지! 드론이 내려앉는다' : '다른 가지였어요 · 드론이 돌아간다', { kind: ok ? 'item' : 'muted' });
           setTimeout(next, 900);
         },
-      })), `<div class="mini-parcel" style="--c:${BRANCH_HEX[want]}"><div class="box">✈</div></div>`,
-      // 고르지 않고 닫으면 (Esc·바깥 누르기): 드론은 돌아가고 관제도 끝
-      { onClose: () => setTimeout(() => { if (!st.to) { st.to = hold.clone(); st.ok = false; st.leg = 2; st.ph = 0; clean(); } }, 0) });
-      document.querySelectorAll('.svc-b').forEach((b, i) => { b.style.borderColor = BRANCH_HEX[i]; b.style.boxShadow = `inset 4px 0 0 ${BRANCH_HEX[i]}`; });
+      })),
+      // 고르지 않고 물러서면 (Esc): 드론은 돌아가고 관제도 끝
+      onClose: () => setTimeout(() => { if (!st.to) { st.to = hold.clone(); st.ok = false; st.leg = 2; st.ph = 0; clean(); } }, 0) });
     };
     next();
   }
@@ -417,11 +426,11 @@ export class Outdoors {
     const p = [0, 1, 2].map(() => 0.35 + Math.random() * 0.6);
     const names = ['첫째 관', '둘째 관', '셋째 관'];
     let left = 3, right = 0;
-    const bar = (v) => `<span class="gauge"><i style="width:${Math.round(v * 100)}%;background:${v > 0.8 ? '#ff8a7a' : v > 0.55 ? '#ffd27a' : '#7ff3e6'}"></i></span>`;
-    const draw = (wrap) => wrap.querySelectorAll('.svc-b').forEach((b, i) => { b.querySelector('small').innerHTML = `압력 ${Math.round(p[i] * 100)} ${bar(p[i])}`; });
-    const wrap = g.ui.serviceCard(`${c.def.name} · 점검`, '압력 고르기', '가장 높은 압력의 관부터 풀어 주세요 (세 번). 잘못 풀면 다른 관의 압력이 오른다.', names.map((nm, i) => ({
-      label: nm, sub: ' ', stay: true,
-      onClick: () => {
+    const gauges = () => p.map((v, i) => ({ label: names[i], v: v * 100, max: 100, warn: 80, fmt: (x) => `${Math.round(x)}` }));
+    const lay = openConsole(g, { title: `${c.def.name} · 점검 함`, plate: '가장 높은 압력의 관부터 푼다 (세 번) — 잘못 풀면 다른 관이 오른다', tone: 'amber', gauges: gauges(),
+      screen: ['압력 고르기'],
+      keys: names.map((nm, i) => ({ label: `${nm} 풀기`, col: 'amber', stay: true, on: (api) => {
+        if (left <= 0) return;
         const hi = p.indexOf(Math.max(...p));
         const ok = i === hi;
         if (ok) right++;
@@ -430,15 +439,12 @@ export class Outdoors {
         left--;
         g.particles.emit({ pos: V3(r.x, r.base + r.sy * (0.6 + i * 0.15), r.z), count: 36, spread: 2.5, up: 7, life: 2.2, size: [1.2, 5], color: 0xf4f0ff, alpha: 0.55, drag: 0.8, gravity: -0.6 });
         audio.noise({ freq: 2400, q: 0.8, dur: 0.9, gain: 0.3, type: 'highpass', attack: 0.02 });
-        if (!ok) g.ui.toast('다른 관이 더 높았어요', { kind: 'muted' });
-        draw(wrap);
-        if (left <= 0) { wrap.close(); this._markToday(c.key + ':maint'); this.V._wage(1 + right, `점검 ${right}/3`); this.V._learn('work'); }
-      },
-    })));
-    draw(wrap);
+        api.gauges(gauges());
+        api.screen([ok ? `${nm}: 김이 뿜어지고 압력이 내려갔다` : `${nm}: 다른 관이 더 높았어요 — 나머지가 올랐다`, `남은 손질 ${left}`]);
+        if (left <= 0) { this._markToday(c.key + ':maint'); this.V._wage(1 + right, `점검 ${right}/3`); this.V._learn('work'); setTimeout(() => lay.close(), 900); }
+      } })) });
   }
 
-  // 안테나: 먼 신호 듣기 — 노래를 해독 (하루 한 번, 안테나마다)
   _signal(c) {
     if (this.game.tips && this.game.tips.first('signal', () => this._signal(c))) return;
     const g = this.game, r = c.rec, L = g.lang;
@@ -449,9 +455,12 @@ export class Outdoors {
     const play = () => audio.sing && audio.sing(w.notes, { gain: 0.3, step: 0.38 });
     play();
     this._pulse(V3(r.x, r.base + r.sy * 0.98, r.z), 0x7ff3e6, 60, 2.2);
-    g.ui.serviceCard(`${c.def.name} · 먼 신호`, '이 신호는 무슨 말일까요?', '먼 도시에서 노래로 보낸 신호가 들어왔어요. 글자와 노래를 보고 뜻을 골라요.', [
-      { label: '▶ 다시 듣기', stay: true, onClick: play },
-      ...opts.map((o) => ({ label: o.ko, onClick: () => {
+    openConsole(g, { title: `${c.def.name} · 수신기`, plate: '먼 도시에서 노래로 보낸 신호 — 글자와 노래를 보고 뜻을 고른다', tone: 'green',
+      lamps: [{ label: '신호 잡힘', on: true, col: '#7ff3e6' }],
+      screen: `<div class="cs-glyph">${glyphSVG(w.id, 96)}</div><div>이 신호는 무슨 말일까?</div>`,
+      keys: [
+      { label: '다시 듣기', col: 'grey', stay: true, on: play },
+      ...opts.map((o) => ({ label: o.ko, col: 'green', on: () => {
         this._markToday(c.key + ':signal');
         if (o.id === w.id) {
           L.learn(w.id, 'teach');
@@ -460,7 +469,7 @@ export class Outdoors {
           this.V._wage(2, `신호 해독 · 「${w.ko}」 · 둘레 1.5 km 지도가 밝혀졌다`);
         } else g.ui.toast(`「${w.ko}」였어요 · 내일 또 들어 봐요`, { kind: 'muted' });
       } })),
-    ], `<div class="mini-glyph big">${glyphSVG(w.id, 96)}</div>`);
+    ] });
   }
 
   // 생장 나무: 열매 거두기 (하루 한 번)
@@ -483,8 +492,8 @@ export class Outdoors {
     const outs = city.outRecs.filter((q) => q.zone === r.zone).length;
     const stat = FIND.filter(([pid]) => cnt[pid]).map(([pid, nm]) => `${nm} ${cnt[pid]}`).join(' · ');
     const zone = city.zones.find((z) => z.id === r.zone);
-    const items = FIND.filter(([pid]) => cnt[pid]).map(([pid, nm]) => ({ label: `${nm} 찾기`, sub: '가장 가까운 곳에 나침반 표식', onClick: () => this._find(pid, nm) }));
-    g.ui.serviceCard(`${ZONE_NAMES[r.zone] || r.zone} · 도시 안내판`, '어디를 찾나요?', `들어갈 수 있는 건물 ${zr.length}채 · 바깥 조작대가 있는 건물 ${outs}채${zone ? ` · 모든 건물 ${zone.buildings}채` : ''}<br><small>${stat}</small>`, items);
+    openPlaque(g, { mat: 'glass', side: 'left', kicker: `${ZONE_NAMES[r.zone] || r.zone} · 도시 안내 기둥`, title: '어디를 찾나요?', text: `들어갈 수 있는 건물 ${zr.length}채 · 바깥 조작대가 있는 건물 ${outs}채${zone ? ` · 모든 건물 ${zone.buildings}채` : ''}`, foot: stat,
+      actions: FIND.filter(([pid]) => cnt[pid]).map(([pid, nm]) => ({ label: `${nm} ▸`, on: () => this._find(pid, nm) })) });
   }
   _find(pid, nm) {
     const g = this.game, p = g.player.pos, I = g.interiors;
@@ -507,25 +516,26 @@ export class Outdoors {
     if (r.use === 'office') return this.V.jobBoard(r);
     if (g.tips && g.tips.first('wish', () => this._tower(c))) return;
     const W = this._wish(c), I = ITEMS[W.item], have = this.V.inv[W.item] || 0;
-    if (this._doneToday(c.key + ':wish')) { g.ui.serviceCard(`${c.def.name} · 주민 부탁함`, '오늘은 다 들어줬어요', `${W.who}: 「고마워요, 덕분에 살았어요.」 내일 또 들러 주세요.`, []); return; }
-    g.ui.serviceCard(`${c.def.name} · 주민 부탁함`, `${W.floor}층 ${W.who}의 부탁`, `「${W.why}」<br>필요한 것: <b>${I.icon} ${I.name} ${W.n}개</b> (가진 것 ${have}) · 구하는 곳: ${W.where}`, [
-      { label: `${I.name} ${W.n}개 건네기 · 고마움 ${won(W.reward)}`, sub: have >= W.n ? '부탁함에 넣으면 드론이 위층으로 올려 준다' : `${W.n - have}개가 모자라요`, primary: true, disabled: have < W.n,
-        onClick: () => {
-          this.V.inv[W.item] -= W.n;
-          this._markToday(c.key + ':wish');
-          // 작은 드론이 짐을 그 층까지 올린다
-          const d = this._drone(0xffd27a);
-          d.scale.setScalar(0.45);
-          const A = V3(c.x, c.y + 1.4, c.z), B = V3(r.x + c.nx * (planR(r) + 1.5), r.base + Math.min(r.sy * 0.9, 3.4 * W.floor), r.z + c.nz * (planR(r) + 1.5));
-          let ph = 0;
-          this.fx.push((dt) => { ph += dt; const e = Math.min(1, ph / 3.2); d.position.lerpVectors(A, B, e * e * (3 - 2 * e)); if (e >= 1) { this.group.remove(d); return true; } return false; });
-          this.V._learn('share');
-          g.setFlag('helpedNeighbor');
-          const got = g.econ && g.city ? g.econ.reward(W.reward, `부탁 · ${W.who}`, 'hh') : ((this.V.inv.starseed = (this.V.inv.starseed || 0) + W.reward), W.reward); this.V.S.earned += got;
-          g.ui.toast(`${W.who}: 「정말 고마워요!」 · +${won(W.reward)}`, { kind: 'item' });
-          if (Math.random() < 0.25) setTimeout(() => this.V._add('trinket', 1), 900);
-        } },
-    ]);
+    if (this._doneToday(c.key + ':wish')) { openPlaque(g, { mat: 'wood', kicker: `${c.def.name} · 주민 부탁함`, title: '오늘은 다 들어줬어요', text: `${W.who}: 「고마워요, 덕분에 살았어요.」 내일 또 들러 주세요.` }); return; }
+    const give = () => {
+      this.V.inv[W.item] -= W.n;
+      this._markToday(c.key + ':wish');
+      // 작은 드론이 짐을 그 층까지 올린다
+      const d = this._drone(0xffd27a);
+      d.scale.setScalar(0.45);
+      const A = V3(c.x, c.y + 1.4, c.z), B = V3(r.x + c.nx * (planR(r) + 1.5), r.base + Math.min(r.sy * 0.9, 3.4 * W.floor), r.z + c.nz * (planR(r) + 1.5));
+      let ph = 0;
+      this.fx.push((dt) => { ph += dt; const e = Math.min(1, ph / 3.2); d.position.lerpVectors(A, B, e * e * (3 - 2 * e)); if (e >= 1) { this.group.remove(d); return true; } return false; });
+      this.V._learn('share');
+      g.setFlag('helpedNeighbor');
+      const got = g.econ && g.city ? g.econ.reward(W.reward, `부탁 · ${W.who}`, 'hh') : ((this.V.inv.starseed = (this.V.inv.starseed || 0) + W.reward), W.reward); this.V.S.earned += got;
+      g.ui.toast(`${W.who}: 「정말 고마워요!」 · +${won(W.reward)}`, { kind: 'item' });
+      if (Math.random() < 0.25) setTimeout(() => this.V._add('trinket', 1), 900);
+    };
+    // 부탁함 속 쪽지: 누가·왜·무엇이 필요한지 — 물건을 함에 넣고 서명하면 드론이 위층으로 올려 준다
+    openPaper(g, { surface: 'desk', org: `${c.def.name} · 주민 부탁함`, who: `${W.floor}층 ${W.who}`, line: `「${W.why}」`, form: { title: '부탁 쪽지',
+      fields: [{ key: 'w', label: '필요한 것', type: 'show', value: `${I.icon} ${I.name} ${W.n}개` }, { key: 'h', label: '가진 것', type: 'show', value: `${have}개` }, { key: 'f', label: '구하는 곳', type: 'show', value: W.where }, { key: 'r', label: '고마움', type: 'show', value: won(W.reward) }],
+      sign: '함에 넣기', submit: () => (this.V.inv[W.item] || 0) < W.n ? { ok: false, stamp: '모자람', say: `${W.n - (this.V.inv[W.item] || 0)}개가 모자라요.` } : (give(), { ok: true, stamp: '전함', say: `${W.who}: 「정말 고마워요!」` }) } });
   }
   _wish(c) {
     const rnd = mulberry32((this._day() * 7919 + c.rec.idx * 104729 + c.rec.kind.length * 31) | 0);
@@ -538,35 +548,19 @@ export class Outdoors {
   // 보조 랜드마크: 하는 일 + 승강판
   _mark(c) {
     const g = this.game, k = c.rec.kind, T = this._top(c);
-    const lift = T ? [{ label: `승강판 · ${T.name}`, sub: '빛 원판을 타고 꼭대기로 (내려올 땐 뛰어내려 활공해도 돼요)', onClick: () => this._liftUp(c, T) }] : [];
-    if (k === 'lm_port') {
-      g.ui.serviceCard('하늘 나루', '출항과 승강판', '큰 하늘배가 구역과 구역 사이를 오간다. 도시 위로 날아 다른 구역의 랜드마크로 갈 수 있어요.', [
-        { label: '출항 · 행선지 고르기', sub: '다른 구역의 랜드마크·승강탑으로', primary: true, onClick: () => this._portList(c) },
-        ...lift,
-      ]);
-    } else if (k === 'lm_ear') {
-      const done = this._doneToday(c.key + ':ear');
-      g.ui.serviceCard('별귀 탑', '하늘 듣기와 승강판', '별귀는 하늘과 먼 땅의 소리를 모은다. 귀를 기울이면 둘레가 지도에 그려진다.', [
-        { label: done ? '오늘은 이미 들었어요' : '하늘 듣기', sub: '둘레 2.5 km 지도가 밝혀지고, 하늘의 일정을 알려 준다', primary: true, disabled: done, onClick: () => this._ear(c) },
-        ...lift,
-      ]);
-    } else if (k === 'lm_coil') {
-      g.ui.serviceCard('울림 코일 탑', '코일 조율과 승강판', '구역 전체에 울림을 나눠 주는 코일. 출력이 흔들리면 사람이 붙잡아 준다.', [
-        { label: '코일 조율 · 일하기', sub: '바늘을 띠 안에 붙잡으면 5울 + 구역에 울림 물결', primary: true, onClick: () => this.V.powerWork({ kicker: '울림 코일 탑 · 조율대', title: '코일 조율', pay: 5, onWin: () => this._surge(c) }) },
-        ...lift,
-      ]);
-    } else if (k === 'lm_garden') {
+    // 랜드마크 발치의 돌 명판: 이 탑이 무엇인지 새긴 글 + 할 수 있는 일(손 대는 자리) + 승강판
+    const stone = (title, text, acts, note = '') => openPlaque(g, { mat: 'stone', side: 'left', kicker: '랜드마크', title, text,
+      foot: [note, T ? `승강판 · ${T.name} — 빛 원판을 타고 꼭대기로 (내려올 땐 뛰어내려 활공해도 돼요)` : ''].filter(Boolean).join(' · '),
+      actions: [...acts, ...(T ? [{ label: '승강판 오르기 ▸', on: () => this._liftUp(c, T) }] : [])] });
+    if (k === 'lm_port') stone('하늘 나루', '큰 하늘배가 구역과 구역 사이를 오간다. 도시 위로 날아 다른 구역의 랜드마크로 갈 수 있어요.', [{ label: '출항판 보기 ▸', on: () => this._portList(c) }]);
+    else if (k === 'lm_ear') { const done = this._doneToday(c.key + ':ear'); stone('별귀 탑', '별귀는 하늘과 먼 땅의 소리를 모은다. 귀를 기울이면 둘레 2.5 km 가 지도에 그려지고 하늘의 일정을 알려 준다.', done ? [] : [{ label: '하늘 듣기 ▸', on: () => this._ear(c) }], done ? '오늘은 이미 들었어요' : ''); }
+    else if (k === 'lm_coil') stone('울림 코일 탑', '구역 전체에 울림을 나눠 주는 코일. 출력이 흔들리면 사람이 붙잡아 준다 — 바늘을 띠 안에 붙잡으면 5울과 구역에 울림 물결.', [{ label: '조율대에 서기 ▸', on: () => this.V.powerWork({ kicker: '울림 코일 탑 · 조율대', title: '코일 조율', pay: 5, onWin: () => this._surge(c) }) }]);
+    else if (k === 'lm_garden') {
       const done = this._doneToday(c.key + ':garden');
-      g.ui.serviceCard('매달린 정원', '열매와 승강판', '층층이 매달린 정원. 꼭대기 정원지기가 그날의 열매를 내려 준다.', [
-        { label: done ? '오늘 열매는 받았어요' : '정원 열매 받기', sub: '빛열매 3 + 울림꽃 1 (하루 한 번)', primary: true, disabled: done, onClick: () => { this._markToday(c.key + ':garden'); this._orbs(V3(c.rec.x, c.rec.base + 120, c.rec.z), 10, 0x8fe0a0); this.V._add('fruit', 3); this.V._add('flower', 1); this.V._learn('grow'); } },
-        ...lift,
-      ]);
+      stone('매달린 정원', '층층이 매달린 정원. 꼭대기 정원지기가 그날의 열매를 바구니에 담아 내려 준다 (빛열매 3 · 울림꽃 1).', done ? [] : [{ label: '바구니 받기 ▸', on: () => { this._markToday(c.key + ':garden'); this._orbs(V3(c.rec.x, c.rec.base + 120, c.rec.z), 10, 0x8fe0a0); this.V._add('fruit', 3); this.V._add('flower', 1); this.V._learn('grow'); } }], done ? '오늘 열매는 받았어요' : '');
     } else if (k === 'lm_tree') {
       const done = this._doneToday(c.key + ':seed');
-      g.ui.serviceCard('생명나무', '별씨와 승강판', '별씨는 이 나무의 빛 씨앗이다(별비의 밤에도 떨어진다). 온실에 심으면 빛꽃이 피고, 장인 온은 별씨를 녹여 장비를 손본다.', [
-        { label: done ? '오늘 별씨는 거뒀어요' : '별씨 거두기', sub: '별씨 3 (하루 한 번)', primary: true, disabled: done, onClick: () => { this._markToday(c.key + ':seed'); this._orbs(V3(c.rec.x, c.rec.base + 190, c.rec.z), 12, 0xffe2a0); { const n = g.giveItem('seedstar', 3); if (n) g.ui.toast(`생명나무의 별씨 +${n}`, { kind: 'item' }); } this.V._learn('share'); } },
-        ...lift,
-      ]);
+      stone('생명나무', '별씨는 이 나무의 빛 씨앗이다(별비의 밤에도 떨어진다). 온실에 심으면 빛꽃이 피고, 장인 온은 별씨를 녹여 장비를 손본다.', done ? [] : [{ label: '별씨 거두기 ▸', on: () => { this._markToday(c.key + ':seed'); this._orbs(V3(c.rec.x, c.rec.base + 190, c.rec.z), 12, 0xffe2a0); const n = g.giveItem('seedstar', 3); if (n) g.ui.toast(`생명나무의 별씨 +${n}`, { kind: 'item' }); this.V._learn('share'); } }], done ? '오늘 별씨는 거뒀어요' : '');
     }
   }
   _portList(c) {
@@ -578,14 +572,15 @@ export class Outdoors {
       const cur = by.get(r.zone);
       if (!cur || (r.kind.startsWith('lm_') && !cur.r.kind.startsWith('lm_')) || (r.kind.startsWith('lm_') === cur.r.kind.startsWith('lm_') && d < cur.d)) by.set(r.zone, { r, d });
     }
-    const list = [...by.values()].sort((a, b) => a.d - b.d).slice(0, 7);
-    if (!list.length) { g.ui.serviceCard('하늘 나루', '행선지', '지금은 떠나는 배가 없어요.', []); return; }
-    g.ui.serviceCard('하늘 나루 · 출항', '어느 구역으로?', `가진 돈 ${won(inv.starseed || 0)} · 큰 하늘배를 타고 도시 위를 건너요 (뛰기·E 로 빨리 가기)`, list.map(({ r, d }) => {
-      const price = 2 + Math.round(d / 3000);
+    const tm = g.world.clock.time;
+    const rows = [...by.values()].sort((a, b) => a.d - b.d).slice(0, 7).map(({ r, d }, k) => {
+      const price = 2 + Math.round(d / 3000), poor = (inv.starseed || 0) < price;
       const nm = `${ZONE_NAMES[r.zone] || r.zone} · ${r.kind.startsWith('lm_') ? r.out.name : '승강탑'}`;
-      return { label: `${nm} · ${won(price)}`, sub: `${(d / 1000).toFixed(1)} km`, disabled: (inv.starseed || 0) < price,
-        onClick: () => { const to = city.consolePos(r); if (!to) return; if (!this.V._pay(price)) return; this.V._learn('go'); this._fly(c, to, nm, 2.2); } };
-    }));
+      return { cells: [hm(tm + 0.004 + k * 0.006), nm, `${k + 1}번 나루판`, won(price)], status: poor ? '돈 모자람' : k === 0 ? '타는 중' : '곧 떠남', off: poor, why: `${won(price)}이 필요해요`, fare: won(price),
+        stub: [`${k + 1}번 나루판`, nm, `${(d / 1000).toFixed(1)} km`, won(price)],
+        on: () => { const to = city.consolePos(r); if (!to) return; if (!this.V._pay(price)) return; this.V._learn('go'); this._fly(c, to, nm, 2.2); } };
+    });
+    openFlap(g, { title: '하늘 나루 · 출항', sub: '큰 하늘배를 타고 도시 위를 건너요 (뛰기·E 로 빨리 가기)', cols: ['시각', '행선지', '타는 곳', '값', '상태'], rows, foot: `가진 돈 ${won(inv.starseed || 0)}`, empty: '지금은 떠나는 배가 없어요' });
   }
   _ear(c) {
     const g = this.game, r = c.rec;
@@ -594,7 +589,9 @@ export class Outdoors {
     this._pulse(V3(r.x, r.base + 372, r.z), 0x7ff3e6, 2500, 5);
     this.V._learn('star');
     const ev = g.events && g.events.forecast ? g.events.forecast() : null;
-    g.ui.serviceCard('별귀 탑', '하늘이 들려준 것', `둘레 2.5 km 가 지도에 그려졌다.${ev ? `<br>${ev}` : ''}`, []);
+    // 별귀의 수신기: 모은 소리를 받아 적는 화면
+    openConsole(g, { title: '별귀 탑 · 수신기', plate: '하늘과 먼 땅의 소리', tone: 'blue', gauges: [{ label: '들은 반지름', v: 2.5, max: 3, fmt: () => '2.5 km' }],
+      lamps: [{ label: '지도에 그림', on: true, col: '#7ff3e6' }], screen: ['둘레 2.5 km 가 지도에 그려졌다.', ...(ev ? [String(ev).replace(/<[^>]+>/g, ' ')] : ['오늘 하늘은 조용하다.'])] });
   }
   /** 코일 조율 성공: 구역에 울림 물결 + 코일 꼭대기가 한동안 환하게 */
   _surge(c) {
@@ -659,15 +656,14 @@ export class Outdoors {
     }
   }
   _megalift(c) {
-    const g = this.game, T = c.mega, M = g.megacity;
-    const items = [];
+    const g = this.game, T = c.mega;
     const tier = this._megaTop(c, 'tier');
-    if (tier) items.push({ label: `승강판 · ${tier.name}`, sub: '탑 허리의 하늘정원 (뛰어내려 활공해도 돼요)', primary: true, onClick: () => this._liftUp(c, tier) });
     const halo = T.grand ? this._megaTop(c, 'wheel') : T.id.startsWith('t-in') ? this._megaTop(c, 'crown') : null;
-    if (halo) items.push({ label: `승강판 · ${halo.name}`, sub: T.grand ? '탑을 두른 하늘바퀴 — 그 위에도 집과 정원이 있다' : '척추를 감싼 지름 3 km 의 공중 고리 구역', onClick: () => this._liftUp(c, halo) });
-    if (!items.length) { g.ui.toast('승강판이 정비 중이에요', { kind: 'muted' }); return; }
-    g.ui.serviceCard(`하모네아 · ${c.def.name}`, '어디로 오를까요?', `높이 ${Math.round(T.h)} m 의 탑. 빛 원판이 바깥으로 돌아 올라간다 (뛰기·E 로 빨리 가기).`, items);
-    void M;
+    const stops = [halo && { t: halo, label: T.grand ? '바퀴' : '고리', org: T.grand ? '탑을 두른 하늘바퀴 — 그 위에도 집과 정원' : '척추를 감싼 공중 고리 구역' }, tier && { t: tier, label: '정원', org: '탑 허리의 하늘정원' }].filter(Boolean);
+    if (!stops.length) { g.ui.toast('승강판이 정비 중이에요', { kind: 'muted' }); return; }
+    // 승강판 조작반: 위에서부터 멈추는 곳 · 맨 아래가 지금(지상)
+    openLiftPanel(g, { title: `하모네아 · ${c.def.name} · 높이 ${Math.round(T.h)} m`, floors: [...stops.map((q, i) => ({ i, label: q.label, name: q.t.name, org: q.org })), { i: -1, label: '땅', name: '지상 조작대', here: true }],
+      onPick: (i) => this._liftUp(c, stops[i].t) });
   }
   /** 거대 탑의 갈 곳: 'tier' 가장 높은 하늘정원 층 · 'wheel' 구역 하늘바퀴 · 'crown' 하늘고리 「관」 */
   _megaTop(c, kind) {

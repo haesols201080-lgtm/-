@@ -17,7 +17,7 @@ const fmtG = (g) => (g.fmt ? g.fmt(g.v) : `${Math.round(g.v * 10) / 10}${g.unit 
 
 /**
  * openConsole(game, { title, plate, tone: 'amber'|'green'|'blue', gauges: [{ label, v, max, unit, warn, low, fmt }],
- *   lamps: [{ label, on, col }], screen: [줄] | 'html', keys: [{ label, sub, col: 'red'|'green'|'amber'|'blue'|'grey', off, why, on, stay }], onClose })
+ *   lamps: [{ label, on, col }], screen: [줄] | 'html', keys: [{ label, sub, col: 'red'|'green'|'amber'|'blue'|'grey', hex (색 직접), off, why, on, stay }], onClose })
  * → 층 (lay.screen(lines) · lay.gauges(list) · lay.keys(list) 로 바꿔 그리기)
  */
 export function openConsole(game, o) {
@@ -34,7 +34,7 @@ export function openConsole(game, o) {
     screen(lines) { S.innerHTML = typeof lines === 'string' ? lines : (lines || []).map((s) => `<div>${esc(s)}</div>`).join(''); el.querySelector('.cs-crt').style.display = lines && lines.length ? '' : 'none'; },
     keys(list) {
       keys = list || [];
-      K.innerHTML = keys.map((k, i) => `<div class="cs-kw${k.off ? ' off' : ''}"><button class="cs-k col-${k.col || 'grey'}" data-k="${i}" ${k.off ? 'disabled' : ''}><i></i></button><b>${esc(k.label)}</b><small>${esc(k.off && k.why ? k.why : k.sub || '')}</small>${keys.length > 1 ? `<em>${i + 1}</em>` : ''}</div>`).join('');
+      K.innerHTML = keys.map((k, i) => `<div class="cs-kw${k.off ? ' off' : ''}"><button class="cs-k col-${k.col || 'grey'}" data-k="${i}" ${k.hex ? `style="--kc:${k.hex}"` : ''} ${k.off ? 'disabled' : ''}><i></i></button><b>${esc(k.label)}</b><small>${esc(k.off && k.why ? k.why : k.sub || '')}</small>${keys.length > 1 ? `<em>${i + 1}</em>` : ''}</div>`).join('');
       K.querySelectorAll('.cs-k').forEach((b) => b.addEventListener('click', () => api.press(+b.dataset.k)));
       K.style.display = keys.length ? '' : 'none';
     },
@@ -55,5 +55,6 @@ export function openConsole(game, o) {
     keys: (e) => { const d = digitOf(e); if (d >= 0 && d < keys.length) { api.press(d); return true; } if (isUse(e) && keys.length === 1) { api.press(0); return true; } return false; },
   });
   Object.assign(lay, api);
+  Object.defineProperty(lay, 'acts', { get: () => keys.map((k, i) => ({ label: k.label, off: !!k.off, run: () => api.press(i) })) });
   return lay;
 }

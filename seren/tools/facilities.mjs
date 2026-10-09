@@ -23,7 +23,7 @@ const settle = () => page.waitForFunction(() => SEREN.game.world.terrain.settled
 // 준비: 넉넉한 별씨, 모든 음, 척추의 도시 이후
 await ev(() => {
   const g = SEREN.game;
-  g.state.inv.starseed = 60; g.state.inv.shard = 6;
+  g.state.inv.starseed = 60; g.state.inv.seedstar = 30; g.state.inv.shard = 6; // 돈(울)과 재료(별씨)는 따로
   g.state.tones = [0, 1, 2, 3, 4];
   g.state.flags.elevator = true;
   g.ui.refreshButtons();
@@ -43,14 +43,16 @@ const visit = (id) => ev((id) => {
   const t = g._findTarget();
   if (!t || t.kind !== 'facility') return { err: 'target ' + JSON.stringify(t && { kind: t.kind, label: t.label }) };
   g._interact(t);
-  const card = document.querySelector('.svc-card');
-  return { label: t.label, title: card && card.querySelector('h2').textContent, buttons: card ? [...card.querySelectorAll('.svc-b')].map((b) => (b.disabled ? '(x) ' : '') + b.querySelector('b').textContent) : null };
+  // 기기 화면 (v24): 떠 있는 기기의 acts = [{ label, off, run }]
+  const L = g.ui._cardWrap;
+  return { label: t.label, title: L ? L.className : null, buttons: L && L.acts ? L.acts.map((a) => (a.off ? '(x) ' : '') + a.label) : null };
 }, id);
-const click = (text) => ev((text) => {
-  const b = [...document.querySelectorAll('.svc-card .svc-b')].find((x) => x.querySelector('b').textContent.includes(text));
-  if (!b) return 'no button ' + text;
-  if (b.disabled) return 'disabled ' + text;
-  b.click();
+const click = (text) => ev(async (text) => {
+  const L = SEREN.game.ui._cardWrap, a = L && L.acts && L.acts.find((x) => x.label.includes(text));
+  if (!a) return 'no button ' + text + ' — ' + (L && L.acts ? L.acts.map((x) => x.label).join(' / ') : '기기 없음');
+  if (a.off) return 'disabled ' + text;
+  a.run();
+  await new Promise((r) => setTimeout(r, 700)); // 망치·표 뽑기 같은 손동작이 끝날 때까지
   return 'clicked';
 }, text);
 const closeCard = () => ev(() => SEREN.game.ui.closeCard());
@@ -69,7 +71,7 @@ ok((await ev(() => SEREN.game.services._marks.length)) >= 0, `탐지기 표시 $
 
 // ── 서고
 r = await visit('cap-library');
-ok(r.buttons && r.buttons.filter((b) => b.startsWith('「')).length === 3, `서고 카드: ${r.buttons && r.buttons.join(' / ')}`);
+ok(r.buttons && r.buttons.filter((b) => !b.includes('말 배우기')).length === 3, `서고 책장: ${r.buttons && r.buttons.join(' / ')}`);
 await click('침묵의 연대기');
 ok(await ev(() => !!SEREN.game.state.facility.books['b-silence'] && SEREN.game.lang.known('silence')), '책 읽기 → 단어');
 await shot('book');

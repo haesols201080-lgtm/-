@@ -53,7 +53,7 @@ export class SerenOS {
   _frame() {
     const p = this.prefs();
     const W = WALLS[p.wall || 0];
-    this.wrap.querySelector('.card').innerHTML = `<div class="os2" style="--os:${this._col()};--w1:${W[1]};--w2:${W[2]}">
+    this.wrap.querySelector('.term-screen').innerHTML = `<div class="os2" style="--os:${this._col()};--w1:${W[1]};--w2:${W[2]}">
       <div class="os2-top"><b>울림 OS</b><span class="os2-who"></span><span class="os2-clock">${hh(this.game.world.clock.time)}</span><button class="os2-x" data-off title="끄기">끄기</button></div>
       <div class="os2-screen"><div class="os2-desk"></div><div class="os2-win hidden"><div class="os2-wt"><b></b><span><button data-min title="내리기">–</button><button data-close title="닫기">×</button></span></div><div class="os-body"></div></div></div>
       <div class="os2-bar"></div></div>`;

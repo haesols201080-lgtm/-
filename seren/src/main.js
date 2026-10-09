@@ -6,6 +6,24 @@ import { listSlots, renameSlot, deleteSlot, defaultState } from './game/state.js
 import { QUESTS } from './data/story.js';
 import { questType } from './game/quests.js';
 import { osMail } from './interior/os.js';
+// 기기 화면 (시험·갤러리용 핸들: tools/ui-gallery.mjs 가 기기를 바로 띄워 본다)
+import * as devConsole from './ui/devices/console.js';
+import * as devFlap from './ui/devices/flapboard.js';
+import * as devLift from './ui/devices/liftpanel.js';
+import * as devPlaque from './ui/devices/plaque.js';
+import * as devChalk from './ui/devices/chalkboard.js';
+import * as devShelf from './ui/devices/shelf.js';
+import * as devMenu from './ui/devices/menuboard.js';
+import * as devStrip from './ui/devices/workstrip.js';
+import * as devBench from './ui/devices/bench.js';
+import * as devHome from './ui/devices/homegear.js';
+import * as devCraft from './ui/devices/craft.js';
+import * as devMeet from './ui/devices/meet.js';
+import * as devRelics from './ui/devices/relics.js';
+import * as devBoard from './ui/devices/board.js';
+import * as devPaper from './ui/devices/paper.js';
+import * as devAtm from './ui/devices/atm.js';
+import * as devDress from './ui/devices/dressing.js';
 
 const game = new Game();
 game.boot();
@@ -29,6 +47,7 @@ window.SEREN = {
   game, THREE, heightAt, defaultState,
   slots: { list: listSlots, rename: renameSlot, remove: deleteSlot },
   osTools: { osMail },
+  devices: { ...devConsole, ...devFlap, ...devLift, ...devPlaque, ...devChalk, ...devShelf, ...devMenu, ...devStrip, ...devBench, ...devHome, ...devCraft, ...devMeet, ...devRelics, ...devBoard, ...devPaper, ...devAtm, ...devDress },
   questTypes: () => {
     const ids = Object.keys(QUESTS), chain = [];
     for (let id = 'mq0'; id && !chain.includes(id); id = QUESTS[id] && QUESTS[id].next) chain.push(id);

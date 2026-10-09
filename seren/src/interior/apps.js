@@ -18,6 +18,7 @@ import { audio } from '../core/audio.js';
 import { won } from '../data/money.js';
 import { josa } from '../core/josa.js';
 import { deviceOf, SerenOS, osMail } from './os.js';
+import { openInterview } from '../ui/devices/meet.js';
 
 const HOUR = 1 / 24;
 const hh = (t) => { const m = Math.round((t % 1) * 24 * 60); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`; };
@@ -67,8 +68,7 @@ export class Apps {
     const st = (T && T.Z && T.Z.style) || {};
     const col = '#' + ((st.glow ?? 0x7ff3e6) >>> 0).toString(16).padStart(6, '0');
     if (dev.kind === 'computer') {
-      const wrap = this.game.ui._card('<div></div>', () => { if (this.wrap === wrap) this.wrap = null; }, { keys: false });
-      wrap.querySelector('.card').classList.add('svc-card', 'os-card', 'dev-computer');
+      const wrap = this._frame('computer', '<div></div>');
       this.wrap = wrap;
       this.os.boot(ctx, dev, wrap);
       audio.blip && audio.blip({ hz: 660, to: 990, dur: 0.14, gain: 0.05, bus: 'ui' });
@@ -77,12 +77,23 @@ export class Apps {
     const tabs = dev.tabs || [];
     const html = `<div class="os dev dev-${dev.kind}" style="--os:${col}"><div class="os-head"><b>${esc(dev.title)}</b><span>${esc(org)} · ${hh(this.game.world.clock.time)}</span></div>
       ${tabs.length > 1 ? `<div class="os-nav">${tabs.map(([k, l]) => `<button class="os-tab" data-tab="${k}">${l}</button>`).join('')}</div>` : ''}<div class="os-body"></div></div>`;
-    const wrap = this.game.ui._card(html, () => { if (this.wrap === wrap) this.wrap = null; }, { keys: false });
-    wrap.querySelector('.card').classList.add('svc-card', 'os-card', `dev-${dev.kind}`);
+    const wrap = this._frame(dev.kind, html);
     wrap.querySelectorAll('[data-tab]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); this.show(b.dataset.tab); }));
     this.wrap = wrap;
     this.show(dev.kind === 'kiosk' && !tabs.some((t) => t[0] === name) ? 'home' : name, ctx);
     audio.blip && audio.blip({ hz: 880, to: 1320, dur: 0.12, gain: 0.05, bus: 'ui' });
+  }
+  /**
+   * 기기의 몸 (v24 「기기별 UI」): 공용 카드가 아니라 그 기기의 틀 — 키오스크(서 있는 기둥 화면) · 안내 빛판(벽에 붙은 판) ·
+   * 서고 찾기 단말(나무 몸통) · 제어판(줄무늬 철판) · 회의 탁자(탁자에 박힌 넓은 화면) · 컴퓨터(책상 위 화면 + 자판).
+   */
+  _frame(kind, inner) {
+    const el = document.createElement('div');
+    el.className = `term term-${kind}`;
+    el.innerHTML = `<div class="term-body"><div class="term-screen os-card dev-${kind}">${inner}</div></div>${kind === 'kiosk' ? '<div class="term-stand"></div>' : kind === 'computer' ? '<div class="term-keys"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>' : kind === 'table' ? '<div class="term-edge"></div>' : ''}<button class="term-leave">물러서기 (Esc)</button>`;
+    const wrap = this.game.ui.mount(el, { cls: `dev-term dev-term-${kind}`, onClose: () => { if (this.wrap === wrap) this.wrap = null; } });
+    el.querySelector('.term-leave').addEventListener('click', () => wrap.close());
+    return wrap;
   }
   close() { if (this.wrap) { this.wrap.close(); this.wrap = null; } }
   /** 몸통 그리기: rows = [{ head } | { label, sub, act, disabled, primary } | { html }] */
@@ -296,30 +307,26 @@ export class Apps {
     const q3 = [c[0], shuffle(c[1].slice(), rnd), null];
     q3[2] = q3[1].indexOf(c[1][c[2]]);
     const Q = [q1, q2, q3];
-    let k = 0, score = 0;
-    const ask = () => {
-      const [q, opts, ans] = Q[k];
-      g.ui.serviceCard(`채용 면접 · ${a.org}`, `${k + 1} / 3`, `면접관: 「${q}」`, opts.map((o, j) => ({ label: o, onClick: () => { if (j === ans) score++; k++; audio.blip && audio.blip({ hz: j === ans ? 880 : 330, to: j === ans ? 1100 : 300, dur: 0.1, gain: 0.05 }); if (k < 3) setTimeout(ask, 120); else setTimeout(done, 150); } })));
-      this.ops.say(T || this.ops.byFloor(cur.indoor.cur), 'chat');
-    };
-    const done = () => {
-      if (score >= 2) {
-        a.status = 'done';
-        const job = { uid: a.uid, k: a.k, role: a.role, op: a.op, title: a.title, org: a.org, bname: a.bname, wage: a.wage, hours: a.hours, x: a.x, z: a.z, rid: a.rid, since: g.world.clock.time, worked: 0, rating: 3 };
-        this.S.jobs.push(job);
-        g.ui.serviceCard(`채용 면접 · ${a.org}`, '함께 일해요!', `${score}/3 · ${josa(`「${a.title}」`, '로')} 일하게 됐어요. ${hh(a.hours[0])}~${hh(a.hours[1])} 사이에 이 건물의 출근 단말에서 출근하면 할 일이 나와요. 품삯은 퇴근할 때 일한 시간과 마친 과제만큼 회사 금고에서.`, [{ label: '출근 단말로 길 안내', primary: true, onClick: () => this._guideClock(job) }, { label: '알겠어요' }]);
-        g.setFlag && g.setFlag('hiredIndoor');
-        osMail(g, { from: `${a.org} 사람 담당`, subj: `함께 일해요 · ${a.title}`, body: `${a.title} 자리로 함께하게 되어 기뻐요.\n일하는 곳: ${a.bname}\n시간: 날마다 ${hh(a.hours[0])}~${hh(a.hours[1])} · 시간당 ${a.wage}\n이 건물의 출근 단말에서 출근하면 내 자리 컴퓨터에 내 계정이 열려요.`, key: `hire:${a.uid}:${a.k}:${a.role}` });
-        g.scan && g.scan('c_job');
-        if (g.lang && WORD.work && !g.lang.known('work')) g.lang.learn('work', 'teach');
-      } else {
+    // 면접실 탁자 건너 면접관과 마주 앉아 셋을 묻고 답한다 (v24 「기기별 UI」 — 카드 목록이 아닌 대화)
+    openInterview(g, { org: a.org, who: '면접관', Q,
+      onAnswer: (ok) => { audio.blip && audio.blip({ hz: ok ? 880 : 330, to: ok ? 1100 : 300, dur: 0.1, gain: 0.05 }); this.ops.say(T || this.ops.byFloor(cur.indoor.cur), 'chat'); },
+      onDone: (score) => {
+        if (score >= 2) {
+          a.status = 'done';
+          const job = { uid: a.uid, k: a.k, role: a.role, op: a.op, title: a.title, org: a.org, bname: a.bname, wage: a.wage, hours: a.hours, x: a.x, z: a.z, rid: a.rid, since: g.world.clock.time, worked: 0, rating: 3 };
+          this.S.jobs.push(job);
+          g.setFlag && g.setFlag('hiredIndoor');
+          osMail(g, { from: `${a.org} 사람 담당`, subj: `함께 일해요 · ${a.title}`, body: `${a.title} 자리로 함께하게 되어 기뻐요.\n일하는 곳: ${a.bname}\n시간: 날마다 ${hh(a.hours[0])}~${hh(a.hours[1])} · 시간당 ${a.wage}\n이 건물의 출근 단말에서 출근하면 내 자리 컴퓨터에 내 계정이 열려요.`, key: `hire:${a.uid}:${a.k}:${a.role}` });
+          g.scan && g.scan('c_job');
+          if (g.lang && WORD.work && !g.lang.known('work')) g.lang.learn('work', 'teach');
+          setTimeout(() => this._guideClock(job), 400); // 출근 단말까지 바닥 길 안내
+          return { ok: true, say: `함께 일해요! ${josa(`「${a.title}」`, '로')} ${hh(a.hours[0])}~${hh(a.hours[1])} 사이에 이 건물의 출근 단말에서 출근하면 할 일이 나와요. 품삯은 퇴근할 때 일한 시간과 마친 과제만큼 회사 금고에서 — 출근 단말까지 길을 표시해 둘게요.` };
+        }
         a.status = 'rejected';
         a.retry = g.world.clock.time + 1;
         osMail(g, { from: `${a.org} 채용 담당`, subj: `면접 결과 · ${a.title}`, body: `이번에는 함께하지 못하게 됐어요.\n내일 다시 지원해 주세요 — 일자리 앱이나 공용 단말에서.`, key: `rej:${a.uid}:${a.k}:${a.role}:${Math.floor(g.world.clock.time)}` });
-        g.ui.serviceCard(`채용 면접 · ${a.org}`, '이번에는…', `${score}/3 · 면접관: 「조금 더 이 일을 알아보고 오면 좋겠어요. 내일 다시 지원해 주세요.」 (일자리 앱)`, [{ label: '알겠어요' }]);
-      }
-    };
-    ask();
+        return { ok: false, say: '조금 더 이 일을 알아보고 오면 좋겠어요. 내일 다시 지원해 주세요.' };
+      } });
   }
   _guideClock(job) {
     const cur = this.cur, g = this.game;

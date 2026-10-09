@@ -3,6 +3,7 @@
 //   g.tips.show('indoor')                                       ← 안내만 (다음 행동 없이)
 // 본 안내는 state.tips 에 남는다. 설정의 「도움말」을 끄면 띄우지 않는다. 일지 → 도움말에서 다시 볼 수 있다.
 import { TIPS } from '../data/tips.js';
+import { tipNote } from '../ui/devices/relics.js';
 
 export class Tips {
   constructor(game) {
@@ -26,10 +27,8 @@ export class Tips {
     if (!T || this.seen[id] || !this._on()) return false;
     this.seen[id] = 1;
     const g = this.game;
-    // 카드가 열린 채(다른 시설 카드 위)라도 한 장만 — 안내 카드로 바꾼다
-    g.ui.serviceCard('처음 해 보기 · 안내', T.title, T.intro, [
-      { label: cont ? '알겠어요 · 시작하기' : '알겠어요', primary: true, onClick: () => cont && setTimeout(cont, 30) },
-    ], this._html(T));
+    // 화면 가장자리에 붙는 메모 (세계를 가리지 않는다) — 「알겠어요」로 떼면 하려던 일을 이어서
+    tipNote(g, { title: T.title, intro: T.intro, steps: T.steps, ok: cont ? '알겠어요 · 시작하기' : '알겠어요', onOk: () => cont && setTimeout(cont, 30) });
     g.save();
     return true;
   }

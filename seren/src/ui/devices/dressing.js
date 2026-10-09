@@ -142,12 +142,12 @@ export function wardrobeView(game, { where = '옷장' } = {}) {
 }
 
 // ── 계산대 (손님 쪽 화면 · 결제판) ───────────────
-export function counterPay(game, { org, lines, total, pay }) {
-  // lines: [{ name, price, color }] · pay() → true 면 결제됨
+export function counterPay(game, { org, lines, total, pay, drop = null }) {
+  // lines: [{ name, price, color }] · pay() → true 면 결제됨 · drop: { label, on } 돈이 모자랄 때 몇 개 내려놓기
   const host = document.createElement('div');
   host.className = 'pos';
   host.innerHTML = `<div class="pos-screen"><div class="pos-head">${esc(org)}</div><div class="pos-lines"></div><div class="pos-total"><span>모두</span><b>${esc(won(total))}</b></div><div class="pos-cash">가진 돈 ${esc(won(game.state.inv.starseed || 0))}</div></div>
-    <button class="pos-pad"><i></i><span>시민 패를 대세요</span></button><button class="pos-leave">그만두기 (Esc)</button>`;
+    <button class="pos-pad"><i></i><span>시민 패를 대세요</span></button>${drop ? `<button class="pos-drop">${esc(drop.label)}</button>` : ''}<button class="pos-leave">그만두기 (Esc)</button>`;
   const L = host.querySelector('.pos-lines'), pad = host.querySelector('.pos-pad');
   lines.forEach((l, i) => setTimeout(() => { const d = document.createElement('div'); d.className = 'pos-line'; d.innerHTML = `<i style="background:${hex(l.color)}"></i><span>${esc(l.name)}</span><b>${esc(won(l.price))}</b>`; L.appendChild(d); game.audio && game.audio.blip && game.audio.blip({ hz: 1250, to: 1400, dur: 0.05, gain: 0.04, bus: 'ui' }); }, 220 * i));
   let done = false;
@@ -159,7 +159,9 @@ export function counterPay(game, { org, lines, total, pay }) {
   };
   pad.addEventListener('click', go);
   host.querySelector('.pos-leave').addEventListener('click', () => lay.close());
+  if (drop) host.querySelector('.pos-drop').addEventListener('click', () => { lay.close(); drop.on(); });
   const un = keys({ e: go, enter: go });
   const lay = game.ui.mount(host, { cls: 'dev-pos', onClose: un });
+  lay.acts = [{ label: '패 대기 · 결제', off: false, run: go }, ...(drop ? [{ label: drop.label, off: false, run: () => { lay.close(); drop.on(); } }] : [])];
   return lay;
 }

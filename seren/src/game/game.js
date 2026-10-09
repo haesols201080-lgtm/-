@@ -4,6 +4,8 @@ import * as THREE from 'three';
 import { Engine } from '../core/engine.js';
 import { Input } from '../core/input.js';
 import { detectQuality } from '../core/quality.js';
+import { starMap, specimens, routeMap } from '../ui/devices/relics.js';
+import { openWorkbench } from '../ui/devices/craft.js';
 import { audio } from '../core/audio.js';
 import { music } from '../core/music.js';
 import { bus } from '../core/events.js';
@@ -659,32 +661,34 @@ export class Game {
     if (kind === 'door') { this.interiors.enterCabin(this.structures.lander); return; }
     if (kind === 'term') { this.moaAI.open(); this.moaAI.note('(착륙선 교신 단말) 여기선 신호가 제일 깨끗해요. 라르크 호는 지금도 궤도를 돌고 있어요.'); return; }
     if (kind === 'map') {
-      ui.serviceCard('라르크 호 · 별지도', '우리가 지나온 길과, 아직 가 보지 않은 별들', '탁자 위 빛 지도. 고향 쪽 항로와 우르 둘레, 그리고 모아가 표시해 둔 별 몇 개.', [{ label: '닫기', primary: true }],
-        `<div class="svc-list">
-          <div class="svc-row"><b>◉ 세렌</b> — 우르를 도는 위성. 지금 여기. 신호가 시작된 곳.</div>
-          <div class="svc-row"><b>◌ 우르</b> — 세렌이 도는 가스행성. 고리 너머로 보인다.</div>
-          <div class="svc-row"><b>? 잿빛 고리별</b> — 항로 바깥쪽. 고리가 둘인 행성. 모아: 「신호는 없지만, 반사광이 이상해요.」</div>
-          <div class="svc-row"><b>? 쌍둥이 얼음별</b> — 서로를 도는 두 얼음 행성. 아직 아무도 가 보지 않았다.</div>
-          <div class="svc-row"><b>? 세렌이 노래를 보낸 쪽</b> — 아웬의 옛 노래가 향한 별자리. 언젠가 대답이 그쪽에서 올지도.</div>
-        </div><p class="muted">모아: 「라르크 호의 연료와 기록 장치는 아직 넉넉해요. 세렌에서 할 일을 다 하면… 그다음은 그때 생각해요.」</p>`);
+      starMap(this, { title: '라르크 호 · 별지도 — 우리가 지나온 길과, 아직 가 보지 않은 별들',
+        foot: '모아: 「라르크 호의 연료와 기록 장치는 아직 넉넉해요. 세렌에서 할 일을 다 하면… 그다음은 그때 생각해요.」',
+        stars: [
+          { name: '세렌', sym: '◉', x: 0.42, y: 0.55, here: true, col: '#7ff3e6', note: '우르를 도는 위성. 지금 여기. 신호가 시작된 곳.' },
+          { name: '우르', sym: '◌', x: 0.3, y: 0.42, big: true, ring: true, col: '#e8c890', note: '세렌이 도는 가스행성. 고리 너머로 보인다.' },
+          { name: '잿빛 고리별', sym: '?', x: 0.78, y: 0.28, ring: true, mark: true, route: true, note: '항로 바깥쪽. 고리가 둘인 행성. 모아: 「신호는 없지만, 반사광이 이상해요.」' },
+          { name: '쌍둥이 얼음별', sym: '?', x: 0.86, y: 0.7, mark: true, route: true, note: '서로를 도는 두 얼음 행성. 아직 아무도 가 보지 않았다.' },
+          { name: '노래가 향한 별자리', sym: '?', x: 0.12, y: 0.15, mark: true, route: true, note: '아웬의 옛 노래가 향한 별자리. 언젠가 대답이 그쪽에서 올지도.' },
+          { name: '고향 쪽 항로', sym: '·', x: 0.08, y: 0.85, route: true, col: '#9fb8ff', note: '312일 동안 지나온 길. 그 끝에 우리가 떠나온 곳.' },
+        ] });
       if (!s.flags.starmapSeen) { s.flags.starmapSeen = true; this.save(); }
       return;
     }
     if (kind === 'samples') {
-      const have = [['세렌의 흙', true], ['빛갈대 씨앗', !!(s.codex && s.codex.reed)], ['노래수정 조각', (s.inv && s.inv.shard) > 0]];
-      ui.serviceCard('표본함', '여섯 칸 — 세렌 칸과, 아직 빈 다른 별의 칸', '탐사선이 처음부터 싣고 온 표본함. 칸마다 다른 별의 이름표 자리가 비어 있다.', [{ label: '닫기', primary: true }],
-        `<div class="svc-list">${have.map(([n, ok]) => `<div class="svc-row">${ok ? '●' : '○'} 세렌 · ${n}${ok ? '' : ' — 아직'}</div>`).join('')}
-          <div class="svc-row">○ (이름표 없음) — 다른 별</div><div class="svc-row">○ (이름표 없음) — 다른 별</div><div class="svc-row">○ (이름표 없음) — 다른 별</div></div>
-        <p class="muted">모아: 「빈 칸이 셋이나 남았네요. 처음 설계할 때부터 한 별로 끝날 여행이 아니었던 거죠.」</p>`);
+      const have = [['세렌의 흙', true, '#c8a070'], ['빛갈대 씨앗', !!(s.codex && s.codex.reed), '#9ff0b0'], ['노래수정 조각', (s.inv && s.inv.shard) > 0, '#9fd8ff']];
+      specimens(this, { title: '표본함 · 여섯 칸 — 세렌 칸과, 아직 빈 다른 별의 칸', cells: [...have.map(([n, ok, col]) => ({ name: `세렌 · ${n}${ok ? '' : ' (아직)'}`, full: ok, col })), { name: '(이름표 없음)' }, { name: '(이름표 없음)' }, { name: '(이름표 없음)' }],
+        foot: '모아: 「빈 칸이 셋이나 남았네요. 처음 설계할 때부터 한 별로 끝날 여행이 아니었던 거죠.」' });
       return;
     }
     if (kind === 'log') {
       const day = this.world.clock.day + 1;
-      ui.serviceCard('탐사 일지', `라르크 호 · 착륙 ${day}일째`, '착륙선 화면에 모아가 남긴 기록.', [{ label: '닫기', primary: true }],
-        `<div class="svc-list"><div class="svc-row">· 312일의 항해 끝에 세렌 궤도 진입. 들판의 빛 표지 확인.</div>
-        <div class="svc-row">· 조종사 단독 착륙. 모아는 라르크 호에 남아 착륙선 안테나로 교신.</div>
-        <div class="svc-row">· 배운 아웬 말 ${Object.keys(s.vocab || {}).length}개 · 얻은 음 ${s.tones.length}개 · 노래하는 탑 ${Object.keys(s.pylons).length}</div>
-        ${s.home != null ? '<div class="svc-row">· 하모네아에 집이 생김. 「손님」이 아니라 「이웃」.</div>' : ''}</div>`);
+      // 착륙선 화면의 기록 = 펼친 일지 (쪽마다 한 줄씩)
+      ui.reader({ title: `탐사 일지 · 착륙 ${day}일째`, author: '라르크 호 · 모아가 남긴 기록', color: 0x2a3a5a, pages: [
+        '312일의 항해 끝에 세렌 궤도 진입. 들판의 빛 표지 확인.',
+        '조종사 단독 착륙. 모아는 라르크 호에 남아 착륙선 안테나로 교신.',
+        `배운 아웬 말 ${Object.keys(s.vocab || {}).length}개 · 얻은 음 ${s.tones.length}개 · 노래하는 탑 ${Object.keys(s.pylons).length}`,
+        ...(s.home != null ? ['하모네아에 집이 생김. 「손님」이 아니라 「이웃」.'] : []),
+      ] }, { kicker: '착륙선 화면' });
     }
   }
 
@@ -736,17 +740,8 @@ export class Game {
       return;
     }
     const dests = T.stations.filter((d) => d !== S && d.open);
-    const html = `<div class="dests">${dests.map((d, i) => `<button class="btn" data-dest="${i}">${d.name}</button>`).join('')}</div>`;
-    this.ui.infoCard('빛길', S.name, '관 속의 캡슐이 하모네아를 도는 고리선과 여섯 갈래로 세렌을 잇는다. 어디로 갈까?');
-    const card = document.querySelector('.card');
-    const box = document.createElement('div');
-    box.innerHTML = html;
-    card.insertBefore(box, card.lastElementChild);
-    box.querySelectorAll('[data-dest]').forEach((b) => b.addEventListener('click', () => {
-      const D = dests[+b.dataset.dest];
-      this.ui.closeCard();
-      this.startRide(S, D);
-    }));
+    // 승강장 벽의 노선도: 고리선 위에 열린 역들 — 누르면 캡슐을 탄다
+    routeMap(this, { title: S.name, here: S.name, stops: dests.map((D) => ({ name: D.name, on: () => this.startRide(S, D) })) });
   }
 
   elevatorOpen() { return this.quests.isDone('mq2') || !!this.state.flags.elevator; }
@@ -820,36 +815,16 @@ export class Game {
   }
 
   upgradeCard() {
-    const s = this.state, p = this.player;
-    const opts = [
-      { k: 'glide', name: '날개 다듬기', desc: '활공이 더 멀리, 더 빠르게', max: 3 },
-      { k: 'skim', name: '썰매 공명 강화', desc: '썰매 최고 속도 +12%', max: 3 },
-      { k: 'rise', name: '솟음 증폭', desc: '공중에서 「솟음」을 한 번 더', max: 2 },
-    ];
+    const s = this.state, p = this.player, seed = s.inv.seedstar || 0;
     const cost = (lv) => [3, 5, 8][lv] ?? 99;
-    const html = opts.map((o) => {
-      const lv = p.upgrades[o.k] || 0;
-      const c = cost(lv);
-      const can = lv < o.max && (s.inv.seedstar || 0) >= c;
-      return `<div class="qitem" style="text-align:left"><div class="qt">${o.name} <small style="color:var(--ink-dim)">${lv}/${o.max}</small></div><div class="qs">${o.desc}</div>${lv < o.max ? `<button class="btn" data-up="${o.k}" ${can ? '' : 'disabled'} style="margin-top:8px">${won(c)}개로 손보기</button>` : '<div class="qs" style="color:var(--teal)">최고 단계</div>'}</div>`;
-    }).join('');
-    this.ui.infoCard('장인 온의 작업대', `가진 별씨 ${s.inv.seedstar || 0}개`, '별비가 내리는 밤에 떨어진 별씨를 모아 오세요.');
-    const card = document.querySelector('.card');
-    const box = document.createElement('div');
-    box.innerHTML = html;
-    card.insertBefore(box, card.lastElementChild);
-    box.querySelectorAll('[data-up]').forEach((b) => b.addEventListener('click', () => {
-      const k = b.dataset.up;
-      const lv = p.upgrades[k] || 0;
-      if ((s.inv.seedstar || 0) < cost(lv)) return;
-      s.inv.seedstar -= cost(lv); // 별씨(재료)를 녹여 장비를 손본다
-      p.upgrades[k] = lv + 1;
-      s.upgrades = { ...p.upgrades };
-      audio.chime('quest');
-      this.ui.closeCard();
-      this.ui.toast('장비를 손봤다', { kind: 'item' });
-      this.save();
-    }));
+    // 장인 온의 작업대: 별씨를 녹여 장비 부품에 새긴다 (공방 용광로와 같은 작업대)
+    openWorkbench(this, { title: '장인 온의 작업대', note: '별비가 내리는 밤에 떨어진 별씨를 모아 오세요', mats: [{ name: '별씨', n: seed, col: '#ffe2a0' }],
+      parts: [
+        { k: 'glide', name: '날개', desc: '활공이 더 멀리, 더 빠르게', max: 3, icon: '⟁' },
+        { k: 'skim', name: '썰매 공명', desc: '썰매 최고 속도 +12%', max: 3, icon: '⌒' },
+        { k: 'rise', name: '솟음 증폭기', desc: '공중에서 「솟음」을 한 번 더', max: 2, icon: '⇡' },
+      ].map((o) => { const lv = p.upgrades[o.k] || 0, c = cost(lv); return { ...o, lv, cost: lv >= o.max ? '최고 단계' : `별씨 ${c}`, off: lv >= o.max || seed < c, why: lv >= o.max ? '최고 단계예요' : `별씨 ${c}개가 필요해요`,
+        on: () => { if ((s.inv.seedstar || 0) < c) return; s.inv.seedstar -= c; p.upgrades[o.k] = lv + 1; s.upgrades = { ...p.upgrades }; audio.chime('quest'); this.ui.toast('장비를 손봤다', { kind: 'item' }); this.save(); } }; }) });
   }
 
   /** 아웬이 말한다: 노래 + 자막 + 학습. 반환: 노래 길이(초) */
@@ -1243,7 +1218,7 @@ export class Game {
     });
     bus.on('lineUnderstood', (e) => {
       if (e.id === 'iel_1') {
-        setTimeout(() => this.ui.infoCard('예전에 들었던 말', '「오라, 작은 별. 우리는 오래 기다렸어.」', '이엘이 처음 만났을 때 했던 말이에요. 그때는 한 마디도 알아듣지 못했죠.'), 1200);
+        setTimeout(() => this.ui.memory({ title: '「오라, 작은 별. 우리는 오래 기다렸어.」', text: '이엘이 처음 만났을 때 했던 말이에요. 그때는 한 마디도 알아듣지 못했죠.', kicker: '예전에 들었던 말' }), 1200);
       } else this.ui.toast('들었던 말 하나를 이제 이해한다', { kind: 'word', sub: '일지 → 들은 말' });
     });
     bus.on('tone', (e) => {

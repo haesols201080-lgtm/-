@@ -15,6 +15,7 @@ import { findPath } from './nav.js';
 import { audio } from '../core/audio.js';
 import { won } from '../data/money.js';
 import { bookColor } from '../data/books.js';
+import { counterPay } from '../ui/devices/dressing.js';
 
 const BOOK_NEAR = 8; // 이 거리(m) 안의 서가는 책을 한 권씩 그린다
 const SHAPE = { box: [0.2, 0.16, 0.16], round: [0.16, 0.16, 0.16], bottle: [0.1, 0.26, 0.1], jar: [0.14, 0.18, 0.14], crystal: [0.1, 0.24, 0.1], flat: [0.3, 0.05, 0.22], sack: [0.28, 0.24, 0.2], flower: [0.1, 0.3, 0.1] };
@@ -356,15 +357,10 @@ export class Ops {
     if (!this.basket.length) { g.ui.toast('바구니가 비어 있어요. 진열대에서 물건을 집어 와요', { kind: 'muted' }); return; }
     const total = Math.round(this.basketTotal() * 100) / 100;
     const have = g.state.inv.starseed || 0;
-    const rows = {};
-    for (const b of this.basket) rows[b.g] = (rows[b.g] || 0) + 1;
-    const list = Object.entries(rows).map(([k, n]) => `<div class="svc-row"><b>${(GOODS[k] || ITEMS[k] || {}).name || k}</b> × ${n} · ${Math.round(n * this.econ.price(k) * 100) / 100}</div>`).join('');
-    const wrap = g.ui.serviceCard(staffed ? '계산대' : '셀프 계산대', `모두 ${won(total)}`, `가진 돈 ${won(have)}. ${staffed ? '계산원이 물건을 하나씩 빛판에 대고 셉니다.' : '물건을 하나씩 빛판에 대어 세어요.'}`, [
-      { label: `값 치르기 · ${won(total)}`, primary: true, disabled: have < total, onClick: () => this._pay(T, staffed) },
-      { label: '몇 개 내려놓기', sub: '돈이 모자라면 비싼 것부터 진열대로 돌려놓는다', disabled: have >= total, onClick: () => { this._dropExpensive(have); this.checkout(T, staffed); } },
-      { label: '그만두기', sub: '바구니는 그대로 들고 있는다' },
-    ], `<div class="svc-list">${list}</div>`);
-    void wrap;
+    // 계산대 손님 쪽 화면 + 둥근 결제판 (계산원이 하나씩 빛판에 대면 줄이 하나씩 찍힌다)
+    const lines = this.basket.map((b) => ({ name: (GOODS[b.g] || ITEMS[b.g] || {}).name || b.g, price: Math.round(this.econ.price(b.g) * 100) / 100, color: (GOODS[b.g] || ITEMS[b.g] || {}).color ?? 0xd8c8a8 }));
+    counterPay(g, { org: `${T.org ? T.org.name : '가게'} · ${staffed ? '계산대' : '셀프 계산대'}`, lines, total, pay: () => this._pay(T, staffed),
+      drop: have < total ? { label: '비싼 것부터 진열대로 돌려놓기', on: () => { this._dropExpensive(have); this.checkout(T, staffed); } } : null });
   }
   _dropExpensive(budget) {
     this.basket.sort((a, b) => a.price - b.price);
@@ -379,7 +375,7 @@ export class Ops {
   _pay(T, staffed) {
     const g = this.game, total = this.basketTotal();
     const paid = this.econ.transfer('player', `n:${T.uid}`, total, `계산 · ${T.org ? T.org.name : '가게'}`);
-    if (paid < total - 1e-6) { g.ui.toast('돈이 모자라요', { kind: 'muted' }); return; }
+    if (paid < total - 1e-6) { g.ui.toast('돈이 모자라요', { kind: 'muted' }); return false; }
     T.node.sales += paid;
     // 하나씩 세는 동안 (계산원 몸짓 · 삑 소리)
     const items = this.basket.slice();
@@ -392,6 +388,7 @@ export class Ops {
     if (this.game.lang) { const L = this.game.lang; if (!L.known('share')) L.learn('share', 'teach'); }
     this.game.setFlag && this.game.setFlag('boughtIndoor');
     this.game.scan && this.game.scan('c_starseed');
+    return true;
   }
   /** 손에 짐을 든다 (상자·쟁반·짐판·결정…) — 몸이 짐을 드는 자세가 된다 */
   takeCarry(c) {

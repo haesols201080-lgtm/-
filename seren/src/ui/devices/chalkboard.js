@@ -40,5 +40,6 @@ export function openChalk(game, o) {
   lay.mark = (i, ok) => { const b = IN.querySelector(`[data-c="${i}"]`); if (b) b.classList.add(ok ? 'right' : 'wrong'); };
   el.querySelector('.ck-leave').addEventListener('click', () => lay.close());
   write(o);
+  Object.defineProperty(lay, 'acts', { get: () => [...(cur.choices || []).map((c, i) => ({ label: c.t, off: false, run: () => pick(i) })), ...(cur.extra || []).map((x) => ({ label: x.t, off: false, run: () => x.on && x.on(lay) }))] });
   return lay;
 }
