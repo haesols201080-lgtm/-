@@ -242,13 +242,15 @@ const s4 = await page.evaluate(async () => {
   car.hold = 0;
   await window.__run(240);
   const held = car.want === 1 && L.open > 0.85;
+  const [pgx, pgz] = ind.grid(g.player.pos.x, g.player.pos.z);
+  const dbg = { n: +((pgx - L.x) * fx + (pgz - L.z) * fz).toFixed(2), s: +(fz ? pgx - L.x : pgz - L.z).toFixed(2), W: L.W, want: car.want, door: +car.door.toFixed(2), hold: +car.hold.toFixed(2), at: car.at, cur: ind.cur, open: L.open, still: LC.still(car), calls: [...car.calls] };
   const [hx, hz] = ind.world(L.x + fx * 0.85, L.z + fz * 0.85);
   const out = await window.__walk(hx, hz, 6);
   await window.__run(Math.ceil(3 / (1 / 30) / LC.ff) + 60);
   const esc = (g.state.debug && g.state.debug.escapes || []).length;
-  return { held, out, key: ind.cellKey, hallKey: ind.keyAt(ind.cur, g.player.pos.x, g.player.pos.z), closed: L.open === 0 && !!L.col, esc };
+  return { held, dbg, out, key: ind.cellKey, hallKey: ind.keyAt(ind.cur, g.player.pos.x, g.player.pos.z), closed: L.open === 0 && !!L.col, esc };
 });
-ok(s4.held, '문틀에 서 있는 동안 문이 닫히지 않는다');
+ok(s4.held, `문틀에 서 있는 동안 문이 닫히지 않는다 ${s4.held ? '' : JSON.stringify(s4.dbg)}`);
 ok(s4.out && s4.key === s4.hallKey, `걸어 나와 승강장 셀 (${s4.key})`);
 ok(s4.closed, '내린 뒤 문이 닫히고 문 막이가 다시 선다');
 ok(s4.esc === 0, `셀 밖 사고 ${s4.esc}번`);
