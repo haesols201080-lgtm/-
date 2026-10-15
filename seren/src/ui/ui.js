@@ -1,0 +1,735 @@
+// 화면 UI: HUD(목표·나침반·알림·모아 자막·공명 단추), 대화창, 카드, 메뉴, 타이틀, 터치 조작.
+// 게임 로직은 game.ui.xxx() 만 부르고, DOM 은 여기서만 다룹니다.
+import { CHANGELOG, GAME_VERSION, KIND_LABEL } from '../data/changelog.js';
+import { glyphStone, echo } from './devices/relics.js';
+import { SEEN_KEY } from '../game/state.js';
+import { NOTE_COLORS, NOTE_NAMES } from '../core/audio.js';
+import { glyphSVG } from '../game/language.js';
+import { WORD } from '../data/lexicon.js';
+import { IS_TOUCH } from '../core/quality.js';
+import { MapView } from './map.js';
+import { InteriorMap } from './imap.js';
+import { Journal } from './journal.js';
+import { QuestLog } from './questlog.js';
+import { Settings } from './settings.js';
+import { CUR } from '../data/money.js';
+
+const $ = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+const hex = (c) => '#' + c.toString(16).padStart(6, '0');
+const escH = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+const ICON = {
+  menu: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>',
+  map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3 6l6-2 6 2 6-2v14l-6 2-6-2-6 2z"/><path d="M9 4v14M15 6v14"/></svg>',
+  book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M4 5c3-1 6-1 8 1 2-2 5-2 8-1v14c-3-1-6-1-8 1-2-2-5-2-8-1z"/><path d="M12 6v14"/></svg>',
+};
+
+export class UI {
+  constructor(game) {
+    this.game = game;
+    this.root = document.getElementById('ui');
+    if (IS_TOUCH) document.body.classList.add('touch');
+    this.touch = IS_TOUCH;
+    this._build();
+    this.mapView = new MapView(game);
+    this.imap = new InteriorMap(game); // 건물 안 지도 (v0.9)
+    this.journal = new Journal(game);
+    this.questLog = new QuestLog(game);
+    this.settingsView = new Settings(game);
+    this.dialogue = this._dialogueApi();
+    this.toastQ = [];
+  }
+
+  _build() {
+    const r = this.root;
+    this.hud = $(`<div id="hud"></div>`);
+    r.appendChild(this.hud);
+    this.vign = $(`<div class="vignette"></div>`);
+    this.hud.appendChild(this.vign);
+    this.obj = $(`<div class="objective hidden"><div class="q"></div><div class="t"></div><div class="h hidden"></div></div>`);
+    this.hud.appendChild(this.obj);
+    this.obj.addEventListener('click', () => this.openMenu('quests')); // 목표 칸을 누르면 퀘스트 창 (추적 바꾸기·끄기)
+    this.compass = $(`<div class="compass"><div class="strip"></div><div class="center"></div></div>`);
+    this.hud.appendChild(this.compass);
+    this.compassStrip = this.compass.firstElementChild;
+    this.alti = $(`<div class="alti hidden"></div>`);
+    this.hud.appendChild(this.alti);
+    const tb = $(`<div class="topbtns"></div>`);
+    for (const [k, tab] of [['map', 'map'], ['book', 'journal'], ['menu', 'settings']]) {
+      const b = $(`<button class="icobtn" aria-label="${tab}">${ICON[k]}</button>`);
+      b.addEventListener('click', () => this.openMenu(tab));
+      tb.appendChild(b);
+    }
+    this.hud.appendChild(tb);
+    // 지갑: 지금 가진 돈(울) — 늘 보이고, 바뀌면 잠깐 +/− 가 뜬다
+    this.walletEl = $(`<div class="wallet" title="가진 돈"><span class="wv">0</span><span class="wu">${CUR}</span><span class="wd"></span></div>`);
+    this.hud.appendChild(this.walletEl);
+    this.walletEl.addEventListener('click', () => this.openMenu('journal'));
+    // 체력 (v24): 다 찼을 때는 숨고, 줄었거나 바뀌면 보인다 — 30% 아래면 붉게 맥박
+    this.hpEl = $(`<div class="hpbar hidden" title="체력"><i class="hp-ic">♥</i><span class="hp-track"><span class="hp-fill"></span></span><span class="hp-v"></span></div>`);
+    this.hud.appendChild(this.hpEl);
+    this.hurtEl = $(`<div class="hurt-flash"></div>`);
+    this.hud.appendChild(this.hurtEl);
+    this.promptEl = $(`<div class="prompt glass hidden"></div>`);
+    this.hud.appendChild(this.promptEl);
+    this.moaEl = $(`<div class="moa" style="opacity:0"></div>`);
+    this.hud.appendChild(this.moaEl);
+    this.sayEl = $(`<div class="say" style="opacity:0"><div class="who"></div><div class="l"></div></div>`);
+    this.hud.appendChild(this.sayEl);
+    this.toastsEl = $(`<div class="toasts"></div>`);
+    this.hud.appendChild(this.toastsEl);
+    this.regionEl = $(`<div class="region"><div class="name"></div><div class="line"></div><div class="desc"></div></div>`);
+    this.hud.appendChild(this.regionEl);
+    this.puzzleEl = $(`<div class="puzzle hidden"><div class="label"></div><div class="slots"></div></div>`);
+    this.hud.appendChild(this.puzzleEl);
+    // 공명 단추
+    this.tonesEl = $(`<div class="tones"></div>`);
+    this.toneBtns = NOTE_NAMES.map((n, i) => {
+      const b = $(`<button class="tone locked" style="--c:${hex(NOTE_COLORS[i])}"><span class="n">${n}</span><span class="k">${i + 1}</span></button>`);
+      const fire = (e) => { e.preventDefault(); e.stopPropagation(); this.game.input.tap('tone' + (i + 1)); };
+      b.addEventListener('pointerdown', fire);
+      this.tonesEl.appendChild(b);
+      return b;
+    });
+    this.hud.appendChild(this.tonesEl);
+    if (this.touch) this._buildTouch();
+    this.fadeEl = $(`<div class="fade"><div class="fade-msg"><div class="fm-k">들어가는 중</div><div class="fm-t"></div><div class="fm-s"></div><div class="fm-bar"><i></i></div></div></div>`);
+    r.appendChild(this.fadeEl);
+    // 문턱을 넘어 옆 방(셀)으로 갈 때 아주 짧게 가리는 막 (화면 전체 · 로딩 글자 없음)
+    this.blinkEl = $(`<div class="blink"></div>`);
+    r.appendChild(this.blinkEl);
+    this.flashEl = $(`<div class="flash"></div>`);
+    r.appendChild(this.flashEl);
+  }
+
+  _buildTouch() {
+    const t = $(`<div class="touchui"></div>`);
+    this.stickEl = $(`<div class="stick"><i></i></div>`);
+    t.appendChild(this.stickEl);
+    t.appendChild($(`<div class="stick-hint"></div>`));
+    const mk = (cls, label, action, hold = true) => {
+      const b = $(`<div class="tbtn ${cls}">${label}</div>`);
+      b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.classList.add('down'); if (hold) this.game.input.press(action); else this.game.input.tap(action); });
+      const up = (e) => { e.preventDefault(); b.classList.remove('down'); if (hold) this.game.input.release(action); };
+      b.addEventListener('pointerup', up);
+      b.addEventListener('pointercancel', up);
+      b.addEventListener('pointerleave', up);
+      t.appendChild(b);
+      return b;
+    };
+    this.tJump = mk('jump', '점프<br><small>활공</small>', 'jump');
+    this.tAct = mk('act hidden', '살피기', 'interact', false);
+    this.tSkim = mk('skim hidden', '썰매', 'skimmer', false);
+    this.tSprint = mk('sprint', '달리기', 'sprint');
+    this.tView = mk('view', '시점', 'view', false);
+    this.tView.classList.toggle('on', !!(this.game.settings && this.game.settings.view === 'first'));
+    this.hud.appendChild(t);
+    const stick = this.stickEl, knob = stick.firstElementChild;
+    this.game.input.onStick = (x, y, dx, dy, on) => {
+      stick.classList.toggle('on', on);
+      if (on) { stick.style.left = x + 'px'; stick.style.top = y + 'px'; knob.style.transform = `translate(${dx * 32}px, ${dy * 32}px)`; }
+    };
+  }
+
+  refreshButtons() {
+    const s = this.game.state;
+    this.toneBtns.forEach((b, i) => b.classList.toggle('locked', !s.tones.includes(i)));
+    this.tonesEl.classList.toggle('hidden', s.tones.length === 0);
+    if (this.tSkim) this.tSkim.classList.toggle('hidden', !s.flags.skimmer);
+  }
+
+  flashTone(n) {
+    const b = this.toneBtns[n];
+    b.classList.add('hit');
+    setTimeout(() => b.classList.remove('hit'), 160);
+  }
+
+  setHud(on) { this.hud.classList.toggle('off', !on); }
+
+  /** 지갑 (매 틀마다 불러도 된다 — 값이 바뀔 때만 고친다) */
+  /** 체력 막대: show 면 잠깐 보이고, 다 차면 4초 뒤 숨는다 */
+  health(hp, max, show = false) {
+    const el = this.hpEl;
+    if (!el) return;
+    const k = Math.max(0, Math.min(1, hp / max));
+    el.querySelector('.hp-fill').style.width = `${(k * 100).toFixed(1)}%`;
+    el.querySelector('.hp-v').textContent = Math.ceil(hp);
+    el.classList.toggle('low', k < 0.3);
+    if (k < 0.999 || show) { el.classList.remove('hidden'); clearTimeout(this._hpT); if (k >= 0.999) this._hpT = setTimeout(() => el.classList.add('hidden'), 4000); }
+    else { clearTimeout(this._hpT); this._hpT = setTimeout(() => el.classList.add('hidden'), 4000); }
+  }
+  hurtFlash(k) { if (this.hurtEl) this.hurtEl.style.opacity = k.toFixed(3); }
+
+  updateWallet(v) {
+    const n = Math.round((+v || 0) * 100) / 100;
+    if (this._wallet === n) return;
+    const el = this.walletEl;
+    if (this._wallet != null) {
+      const d = Math.round((n - this._wallet) * 100) / 100;
+      const wd = el.querySelector('.wd');
+      wd.textContent = `${d > 0 ? '+' : '−'}${Math.abs(d).toLocaleString('ko-KR', { maximumFractionDigits: 2 })}`;
+      wd.className = `wd ${d > 0 ? 'up' : 'down'} on`;
+      clearTimeout(this._walletT);
+      this._walletT = setTimeout(() => { wd.className = 'wd'; }, 1600);
+      el.classList.remove('pulse'); void el.offsetWidth; el.classList.add('pulse');
+    }
+    this._wallet = n;
+    el.querySelector('.wv').textContent = n.toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+  }
+
+  // ── 목표 ────────────────────────────
+  refreshObjective() {
+    const o = this.game.quests.objectiveText();
+    if (!o) { this.obj.classList.add('hidden'); return; }
+    this.obj.classList.remove('hidden');
+    this.obj.classList.toggle('side', o.kind !== 'main');
+    this.obj.querySelector('.q').textContent = o.title;
+    this.obj.querySelector('.t').textContent = o.text;
+  }
+
+  hint(text) {
+    const h = this.obj.querySelector('.h');
+    h.textContent = text;
+    h.classList.remove('hidden');
+    clearTimeout(this._hintT);
+    this._hintT = setTimeout(() => h.classList.add('hidden'), 14000);
+  }
+
+  // ── 알림 ────────────────────────────
+  toast(text, opts = {}) {
+    const el = $(`<div class="toast ${opts.kind || ''}"></div>`);
+    el.textContent = text;
+    if (opts.sub) el.appendChild($(`<span class="sub"></span>`)).textContent = opts.sub;
+    this.toastsEl.appendChild(el);
+    while (this.toastsEl.children.length > 4) this.toastsEl.firstElementChild.remove();
+    setTimeout(() => { el.classList.add('out'); setTimeout(() => el.remove(), 700); }, opts.sub ? 5200 : 3600);
+  }
+
+  moa(text, dur) {
+    const el = this.moaEl;
+    // 모아는 궤도의 라르크 호에서 교신한다: 이름 옆에 경로·신호 세기, 짧은 무전 소리
+    const c = this.game.comm;
+    el.innerHTML = `<b>모아</b>${c ? c.badgeHTML() : ''}<span class="mt">${text}</span>`;
+    el.classList.remove('rx'); void el.offsetWidth; el.classList.add('rx');
+    if (c) c.pulse();
+    el.style.opacity = 1;
+    clearTimeout(this._moaT);
+    this._moaT = setTimeout(() => (el.style.opacity = 0), dur || Math.max(3500, text.length * 85));
+    this.game.journalNote && this.game.journalNote(text);
+    this.game.moaAI && this.game.moaAI.note(text);
+  }
+
+  /** 지나가는 아웬의 말 (왼쪽 아래) */
+  say(name, html) {
+    if (name === null) { this.sayEl.style.opacity = 0; clearTimeout(this._sayT); return; }
+    this.sayEl.querySelector('.who').textContent = name;
+    this.sayEl.querySelector('.l').innerHTML = html;
+    this.sayEl.style.opacity = 1;
+    clearTimeout(this._sayT);
+    this._sayT = setTimeout(() => (this.sayEl.style.opacity = 0), 5200);
+  }
+
+  prompt(text, short) {
+    if (!text) { this.promptEl.classList.add('hidden'); if (this.tAct) this.tAct.classList.add('hidden'); this._prompt = null; return; }
+    if (this._prompt === text) return;
+    this._prompt = text;
+    this.promptEl.innerHTML = `<span class="kbd">E</span>${text}`;
+    // 터치: 단추에는 짧은 말, 화면에는 전체 설명
+    this.promptEl.classList.remove('hidden');
+    if (this.tAct) {
+      this.tAct.classList.remove('hidden');
+      const s = short || (text.includes('읽') ? '읽기' : text.includes('열') ? '열기' : text.includes('줍') ? '줍기' : text.includes('탑') ? '손 대기' : '살피기');
+      this.tAct.textContent = s;
+    }
+  }
+
+  regionTitle(name, desc, first) {
+    const el = this.regionEl;
+    el.querySelector('.name').textContent = name;
+    el.querySelector('.desc').textContent = first ? desc : '';
+    el.classList.add('show');
+    clearTimeout(this._regT);
+    this._regT = setTimeout(() => el.classList.remove('show'), first ? 5200 : 3000);
+  }
+
+  fade(on, quick = false) { this.fadeEl.classList.toggle('quick', quick); this.fadeEl.classList.toggle('on', on); }
+
+  /** 화면을 다 가린 뒤에 fn (이미 다 가려져 있으면 다음 프레임에) — 장면을 바꾸는 순간이 막 뒤에서만 일어나게 */
+  coverThen(fn, quick = true) {
+    // 시간이 아니라 실제 불투명도로 기다린다: 느린 기기·버벅이는 프레임에서는 CSS 전환이 늦게 시작해, 정해진 0.54 초 뒤에도
+    //  막이 0.86 쯤만 덮인 채 장면이 바뀌어 뒤의 세계가 비쳤다 (v24 인트로 넘기기 검사). 다 덮인 프레임이 한 번 그려진 뒤 fn.
+    const el = this.fadeEl;
+    this.fade(true, quick);
+    const t0 = performance.now(), limit = quick ? 2500 : 4000;
+    const check = () => {
+      if (+getComputedStyle(el).opacity >= 0.999 || performance.now() - t0 > limit) requestAnimationFrame(fn);
+      else requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  }
+  /** 짧은 가림 (문턱 넘기): 0.09 초에 어두워지고 → mid() (옆 셀 짓기) → 0.16 초에 밝아진 뒤 done() */
+  blink(mid, done) {
+    const el = this.blinkEl;
+    if (!el) { mid(); if (done) done(); return; }
+    el.style.transition = 'opacity 0.09s linear';
+    el.style.opacity = '1';
+    setTimeout(() => {
+      try { mid(); } finally {
+        requestAnimationFrame(() => { el.style.transition = 'opacity 0.16s ease'; el.style.opacity = '0'; setTimeout(() => { if (done) done(); }, 170); });
+      }
+    }, 95);
+  }
+  /** 로딩 화면 글자 (건물에 드나들 때): 어두워진 화면 가운데 이름과 한 줄 설명, 흐르는 빛 막대 */
+  loading(on, title = '', sub = '') {
+    const m = this.fadeEl.querySelector('.fade-msg');
+    if (on) { m.querySelector('.fm-t').textContent = title; m.querySelector('.fm-s').textContent = sub; }
+    m.classList.toggle('show', on);
+  }
+
+  flash(color = '#ffffff', ms = 900) {
+    const el = this.flashEl;
+    el.style.transition = 'none';
+    el.style.background = color;
+    el.style.opacity = 0.8;
+    requestAnimationFrame(() => { el.style.transition = `opacity ${ms}ms ease`; el.style.opacity = 0; });
+  }
+
+  // ── 나침반 ───────────────────────────
+  /** 고도·속도 (높은 곳에서만) */
+  altimeter(y, speed) {
+    const on = y > 1800;
+    this.alti.classList.toggle('hidden', !on);
+    if (!on) return;
+    const t = `고도 ${y >= 10000 ? (y / 1000).toFixed(1) + ' km' : Math.round(y).toLocaleString() + ' m'} · ${Math.round(speed)} m/s`;
+    if (t !== this._altiT) { this.alti.textContent = t; this._altiT = t; }
+  }
+
+  updateCompass(camYaw, markers) {
+    // 화면 정면 = 카메라 방위 (북쪽 0, 시계방향 +)
+    const heading = ((-camYaw * 180) / Math.PI + 360) % 360;
+    const W = this.compass.clientWidth || 400;
+    const span = 140; // 보이는 각도
+    const toX = (deg) => {
+      let d = deg - heading;
+      d = ((d + 540) % 360) - 180;
+      if (Math.abs(d) > span / 2 + 6) return null;
+      return W / 2 + (d / span) * W;
+    };
+    let html = '';
+    const names = { 0: '북', 45: '북동', 90: '동', 135: '남동', 180: '남', 225: '남서', 270: '서', 315: '북서' };
+    for (let a = 0; a < 360; a += 15) {
+      const x = toX(a);
+      if (x === null) continue;
+      if (names[a] !== undefined) html += `<div class="tick ${a % 90 === 0 ? 'major' : ''}" style="left:${x}px">${names[a]}</div>`;
+      else html += `<div class="tick minor" style="left:${x}px"></div>`;
+    }
+    for (const m of markers) {
+      const x = toX(m.bearing);
+      if (x === null) continue;
+      html += `<div class="mk ${m.cls}" style="left:${x}px"><i></i>${m.label ? `<span>${m.label}</span>` : ''}</div>`;
+    }
+    if (html !== this._cHtml) { this.compassStrip.innerHTML = html; this._cHtml = html; }
+  }
+
+  // ── 공명탑 퍼즐 ──────────────────────────
+  puzzle(z, err = false) {
+    const el = this.puzzleEl;
+    if (!z) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    el.querySelector('.label').textContent = z.playing ? z.listenLabel || '탑의 노래를 들으세요…' : '같은 선율을 연주하세요';
+    el.querySelector('.slots').innerHTML = z.melody.map((n, i) => `<div class="slot ${i < z.i || z.playing ? 'on' : ''}" style="--c:${hex(NOTE_COLORS[n])}"></div>`).join('');
+    if (z.playing) {
+      // 탑이 노래하는 동안 한 음씩 불이 켜진다
+      const slots = el.querySelectorAll('.slot');
+      slots.forEach((s) => s.classList.remove('on'));
+      z.melody.forEach((n, i) => setTimeout(() => slots[i] && slots[i].classList.add('on'), 600 + i * 620));
+      setTimeout(() => slots.forEach((s) => s.classList.remove('on')), 600 + z.melody.length * 620 + 250);
+    }
+    el.classList.toggle('err', err);
+    if (err) setTimeout(() => el.classList.remove('err'), 450);
+  }
+
+  // ── 대화창 ───────────────────────────
+  _dialogueApi() {
+    const ui = this;
+    let box = null;
+    const ensure = () => {
+      if (box) return box;
+      box = $(`<div class="dialogue glass"><div class="who"></div><div class="text"></div><div class="tr-hint"></div><div class="choices"></div><div class="next">▶</div></div>`);
+      box.addEventListener('pointerdown', (e) => { if (e.target.closest('button')) return; e.preventDefault(); ui.game.dialogue.next(); });
+      ui.root.appendChild(box);
+      return box;
+    };
+    return {
+      line(name, title, line) {
+        const b = ensure();
+        b.classList.remove('hidden');
+        b.querySelector('.who').className = 'who';
+        b.querySelector('.who').innerHTML = `${name}<small>${title || ''}</small>`;
+        b.querySelector('.text').innerHTML = ui.game.lang.render(line);
+        const und = ui.game.lang.isUnderstood(line);
+        const unknown = line.words.filter((w) => WORD[w] && !ui.game.lang.known(w)).length;
+        b.querySelector('.tr-hint').textContent = und ? '' : `모르는 단어 ${unknown}개 — 들을수록, 글자돌을 읽을수록 알게 됩니다`;
+        b.querySelector('.choices').innerHTML = '';
+        b.querySelector('.next').classList.remove('hidden');
+      },
+      moa(text) {
+        const b = ensure();
+        b.classList.remove('hidden');
+        b.querySelector('.who').className = 'who moa';
+        b.querySelector('.who').innerHTML = `모아<small>라르크 호 · 궤도에서 교신</small>`;
+        if (ui.game.comm) ui.game.comm.pulse();
+        b.querySelector('.text').textContent = text;
+        b.querySelector('.tr-hint').textContent = '';
+        b.querySelector('.choices').innerHTML = '';
+        b.querySelector('.next').classList.remove('hidden');
+        ui.game.journalNote && ui.game.journalNote(text);
+      },
+      choices(list, cb) {
+        const b = ensure();
+        const c = b.querySelector('.choices');
+        c.innerHTML = '';
+        b.querySelector('.next').classList.add('hidden');
+        list.forEach((ch, i) => {
+          const btn = $(`<button class="btn">${ch.t}</button>`);
+          btn.addEventListener('click', (e) => { e.stopPropagation(); c.innerHTML = ''; cb(i); });
+          c.appendChild(btn);
+        });
+      },
+      hide() { if (box) box.classList.add('hidden'); },
+    };
+  }
+
+  // ── 기기 화면 ─────────────────────────────
+  // v24 「범용 만능 UI 폐기」: 둥근 카드 + 단추 목록(_card·serviceCard)은 없앴다. 기기·물건·사람마다 제 화면을 ui/devices/* 가 만들어
+  // mount 로 올린다(한 번에 하나 — 새 화면을 올리면 앞 화면은 닫힌다). closeCard 는 지금 떠 있는 기기 화면을 닫는다.
+  closeCard() { if (this._cardClose) { const c = this._cardClose; this._cardClose = null; c(); } }
+  /**
+   * 기기·물건마다 다른 화면을 올리는 빈 층 (v24 「범용 만능 UI 폐기」): 둥근 카드·공통 단추 목록 없이 node 를 그대로 올린다.
+   * 모양·조작은 각 기기(ui/devices/*)가 정한다. Esc 는 닫기, E·스페이스는 기기가 받는다(카드처럼 닫지 않음). 한 번에 하나(카드와 같은 자리).
+   */
+  mount(node, { onClose = null, cls = '' } = {}) {
+    if (this._cardWrap) { this.closeCard(); if (this._cardWrap) this._cardWrap.close(); }
+    const layer = document.createElement('div');
+    layer.className = `dev-layer ${cls}`;
+    layer.appendChild(node);
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      layer.remove();
+      if (this._cardWrap === layer) { this._cardWrap = null; this._cardClose = null; this.cardKeys = true; this.game.setMode('play'); }
+      onClose && onClose();
+    };
+    this.root.appendChild(layer);
+    this.game.setMode('card');
+    this._cardWrap = layer; this._cardClose = close; this.cardKeys = false;
+    layer.close = close;
+    return layer;
+  }
+
+  glyphCard(wordId, first) {
+    const w = WORD[wordId];
+    glyphStone(this.game, { first, svg: glyphSVG(wordId, 120), ko: w.ko, notes: w.notes.map((n) => hex(NOTE_COLORS[n % 5])) });
+  }
+
+  memory(e) {
+    echo(this.game, { kicker: e.kicker || '메아리 · 옛 기억', title: e.title, text: e.text });
+  }
+
+  infoCard(kicker, title, body) {
+    echo(this.game, { kicker, title, text: String(body).replace(/<[^>]+>/g, ' ') });
+  }
+
+  /**
+   * 서가: 꽂힌 책을 책등처럼 늘어놓는다 → 고르면 onPick(id).
+   * books: [{ id, title, author, color, n(같은 책 수), read(읽은 쪽), pages, done }]
+   */
+  bookShelf(kicker, title, body, books, onPick, extra = '', opts = {}) {
+    // 책장 (v24 「기기별 UI」): 나무 책장 칸에 선 책등 — 색·두께(쪽 수)·세로 제목. 책등을 누르면 빼서 펼친다. 아래 칸 앞의 작은 쪽지가 이 칸의 설명.
+    void extra;
+    const el = document.createElement('div');
+    el.className = 'bookcase';
+    const row = (b) => `<button class="bc-spine${b.done ? ' done' : ''}" data-id="${escH(b.id)}" style="--bc:${hex(b.color)};--w:${Math.max(26, Math.min(46, 22 + (b.pages || 8) * 0.9))}px" title="${escH(b.title)} · ${escH(b.author)}"><b>${escH(b.title)}</b><small>${escH(b.author)}</small>${b.n > 1 ? `<em>${b.n}</em>` : ''}${b.done ? '<i class="bc-mark"></i>' : b.read ? `<i class="bc-tab" style="--p:${Math.min(1, b.read / Math.max(1, b.pages))}"></i>` : ''}</button>`;
+    const per = 12, rows = [];
+    for (let k = 0; k < books.length; k += per) rows.push(books.slice(k, k + per));
+    el.innerHTML = `<div class="bc-top"><small>${escH(kicker)}</small><b>${escH(title)}</b></div>${rows.map((r) => `<div class="bc-board">${r.map(row).join('')}</div>`).join('') || '<div class="bc-board empty">빈 칸이에요</div>'}
+      <div class="bc-note">${escH(body || '')}</div><div class="bc-acts">${(opts.actions || []).map((a, i) => `<button class="bc-a" data-a="${i}" ${a.off ? 'disabled' : ''}>${escH(a.label)}${a.sub ? `<small>${escH(a.sub)}</small>` : ''}</button>`).join('')}<button class="bc-a ghost" data-leave>책장에서 물러서기 (Esc)</button></div>`;
+    el.querySelectorAll('[data-id]').forEach((b) => b.addEventListener('click', () => { b.classList.add('pull'); setTimeout(() => onPick(b.dataset.id), 180); }));
+    el.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => { const a = opts.actions[+b.dataset.a]; if (!a || a.off) return; if (!a.stay) lay.close(); a.on && a.on(); }));
+    el.querySelector('[data-leave]').addEventListener('click', () => lay.close());
+    const lay = this.mount(el, { cls: 'dev-books', onClose: opts.onClose });
+    lay.acts = [...books.map((b) => ({ label: b.title, off: false, run: () => onPick(b.id) })), ...(opts.actions || []).map((a, i) => ({ label: a.label, off: !!a.off, run: () => el.querySelector(`[data-a="${i}"]`).click() }))];
+    return lay;
+  }
+
+  /**
+   * 책 읽기: 쪽마다 넘긴다 (◀ ▶ 단추 · ←/→ · A/D, Esc 닫기).
+   * opts: { page, kicker, actions: [{ label, primary, onClick }], onPage(p), onClose }
+   */
+  reader(book, opts = {}) {
+    // 펼친 책 (v24 「기기별 UI」): 왼쪽 면에 책 이름·지은이·쪽 수, 오른쪽 면에 그 쪽의 글. 모서리를 눌러 넘긴다(←/→ · A/D · 스페이스).
+    //  할 수 있는 일(들고 가기·빌리기)은 책 아래 끈갈피로.
+    let p = Math.max(0, Math.min(book.pages.length - 1, opts.page || 0));
+    const acts = opts.actions || [];
+    const key = (e) => {
+      if (this._cardWrap !== lay) return;
+      const k = e.key;
+      if (k === 'ArrowLeft' || k === 'a' || k === 'A') go(p - 1);
+      else if (k === 'ArrowRight' || k === 'd' || k === 'D' || k === ' ') go(p + 1);
+      else return;
+      e.stopPropagation(); e.preventDefault();
+    };
+    const el = document.createElement('div');
+    el.className = 'openbook';
+    el.innerHTML = `<div class="ob-spread" style="--bc:${hex(book.color ?? 0x8a6a4a)}"><div class="ob-left"><small>${escH(opts.kicker || '책')}</small><h3>${escH(book.title)}</h3><div class="ob-by">${escH(book.author || '')}</div><div class="ob-no"></div><button class="ob-turn prev" data-prev title="앞 쪽">◀</button></div>
+      <div class="ob-right"><div class="ob-page"></div><button class="ob-turn next" data-next title="다음 쪽">▶</button></div></div>
+      <div class="ob-ribbons">${acts.map((a, i) => `<button class="ob-rib${a.primary ? ' p' : ''}" data-a="${i}">${escH(a.label)}${a.sub ? `<small>${escH(a.sub)}</small>` : ''}</button>`).join('')}<button class="ob-rib ghost" data-leave>책 덮기 (Esc)</button></div>`;
+    const pg = el.querySelector('.ob-page'), no = el.querySelector('.ob-no'), prev = el.querySelector('[data-prev]'), next = el.querySelector('[data-next]');
+    const go = (np) => {
+      const q = Math.max(0, Math.min(book.pages.length - 1, np));
+      if (q !== p) { pg.classList.remove('turn'); void pg.offsetWidth; pg.classList.add('turn'); }
+      p = q;
+      pg.textContent = book.pages[p];
+      no.textContent = `${p + 1} / ${book.pages.length}쪽`;
+      prev.disabled = p === 0;
+      next.disabled = p === book.pages.length - 1;
+      opts.onPage && opts.onPage(p);
+    };
+    prev.addEventListener('click', () => go(p - 1));
+    next.addEventListener('click', () => go(p + 1));
+    el.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', () => { const a = acts[+b.dataset.a]; if (!a) return; if (!a.stay) lay.close(); a.onClick && a.onClick(); }));
+    el.querySelector('[data-leave]').addEventListener('click', () => lay.close());
+    addEventListener('keydown', key, true);
+    const lay = this.mount(el, { cls: 'dev-book', onClose: () => { removeEventListener('keydown', key, true); opts.onClose && opts.onClose(); } });
+    go(p);
+    lay.page = () => p;
+    lay.acts = [{ label: '다음 쪽', off: false, run: () => go(p + 1) }, ...acts.map((a, i) => ({ label: a.label, off: false, run: () => el.querySelector(`.ob-rib[data-a="${i}"]`).click() }))];
+    return lay;
+  }
+
+  // ── 메뉴 ─────────────────────────────
+  openMenu(tab = 'map', force = false) {
+    const g = this.game;
+    if (this.menuEl) { this.switchTab(tab); return; }
+    if (!force && (g.mode === 'dialogue' || g.mode === 'title' || g.mode === 'intro' || g.mode === 'cinematic')) return;
+    this._menuPrev = g.mode;
+    if (g.mode !== 'title') g.setMode('menu');
+    const m = $(`<div class="menu"><div class="head"><div class="title">SEREN</div>
+      <button class="tab" data-t="map">지도</button><button class="tab" data-t="quests">퀘스트</button><button class="tab" data-t="journal">일지</button><button class="tab" data-t="settings">설정</button>
+      <div class="sp"></div><button class="btn" data-close>돌아가기</button></div><div class="body"></div></div>`);
+    m.querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => this.switchTab(b.dataset.t)));
+    m.querySelector('[data-close]').addEventListener('click', () => this.closeMenu());
+    this.root.appendChild(m);
+    this.menuEl = m;
+    this.switchTab(tab);
+  }
+
+  switchTab(tab) {
+    const m = this.menuEl;
+    if (!m) return;
+    m.querySelectorAll('.tab').forEach((b) => b.classList.toggle('on', b.dataset.t === tab));
+    const body = m.querySelector('.body');
+    this.mapView.detach();
+    this.imap.detach();
+    body.className = 'body' + (tab === 'map' ? ' map' : '');
+    body.innerHTML = '';
+    const inside = this.game.interiors.inPocket && this.game.interiors.cur && this.game.interiors.cur.indoor;
+    if (tab === 'map' && inside && !this._worldMap) this.imap.attach(body, () => { this._worldMap = true; this.switchTab('map'); });
+    else if (tab === 'map') { this.mapView.attach(body); if (inside) this.mapView.addInside(() => { this._worldMap = false; this.switchTab('map'); }); }
+    else if (tab === 'journal') this.journal.render(body);
+    else if (tab === 'quests') this.questLog.render(body);
+    else this.settingsView.render(body);
+    this.menuTab = tab;
+  }
+
+  closeMenu() {
+    if (!this.menuEl) return;
+    this.mapView.detach();
+    this.imap.detach();
+    this._worldMap = false;
+    this.menuEl.remove();
+    this.menuEl = null;
+    if (this._menuPrev !== 'title') this.game.setMode('play');
+  }
+
+  // ── 이름 노래 짓기 ─────────────────────────
+  compose(onDone) {
+    const g = this.game;
+    const el = $(`<div class="compose glass"><h3>나의 노래</h3><p>공명 단추로 여섯 음을 연주하세요. 이 선율이 하늘로 보내집니다.</p><div class="slots"></div><div><button class="btn" data-r>다시</button> <button class="btn primary" data-ok disabled>보내기</button></div></div>`);
+    const notes = [];
+    const draw = () => {
+      el.querySelector('.slots').innerHTML = Array.from({ length: 6 }, (_, i) => `<div class="slot ${i < notes.length ? 'on' : ''}" style="--c:${i < notes.length ? hex(NOTE_COLORS[notes[i]]) : '#fff'}"></div>`).join('');
+      el.querySelector('[data-ok]').disabled = notes.length < 6;
+    };
+    draw();
+    el.querySelector('[data-r]').addEventListener('click', () => { notes.length = 0; draw(); });
+    el.querySelector('[data-ok]').addEventListener('click', () => { el.remove(); this._composeAdd = null; onDone([...notes]); });
+    this.hud.appendChild(el);
+    this._composeAdd = (n) => { if (notes.length < 6) { notes.push(n); draw(); } };
+  }
+
+  composeNote(n) { if (this._composeAdd) this._composeAdd(n); }
+
+  // ── 타이틀 · 자막 ─────────────────────────
+  /**
+   * 타이틀 (v24): 이어하기 → 저장 슬롯 목록, 새 여정 → 빈 슬롯 만들기 또는 확인을 거친 덮어쓰기, 설정, 작은 「업데이트 내역」.
+   * slots: { list(), max, rename(id, name), remove(id) } · onLoad(id) · onNew({ id?, name? })
+   */
+  title({ slots, onLoad, onNew, onSettings }) {
+    const list = slots.list();
+    const any = list.length > 0;
+    const seen = (() => { try { return localStorage.getItem(SEEN_KEY); } catch { return null; } })();
+    const el = $(`<div class="title-screen">
+      <div class="title-logo"><div class="en">SEREN</div><div class="ko">울림이 남는 별</div></div>
+      <div class="title-menu">
+        ${any ? '<button class="btn primary" data-c>이어하기</button>' : ''}
+        <button class="btn ${any ? '' : 'primary'}" data-n>${any ? '새 여정' : '시작하기'}</button>
+        <button class="btn" data-s>설정</button>
+      </div>
+      <div class="title-foot">${this.touch ? '헤드폰을 권해요 · 가로 화면이 편해요' : '헤드폰을 권해요 · WASD 이동 · 마우스 시점 · Space 점프/활공 · 1–5 공명 · V 시점'}</div>
+      <button class="title-notes" data-notes>업데이트 내역 · v${GAME_VERSION}${seen !== GAME_VERSION ? '<i class="dot" aria-label="새 내역"></i>' : ''}</button>
+    </div>`);
+    el.querySelector('[data-c]')?.addEventListener('click', () => this.slotList('load', { slots, onLoad, onNew }));
+    el.querySelector('[data-n]').addEventListener('click', () => {
+      if (!any) { onNew({ name: '여정 1' }); return; }
+      this.slotList('new', { slots, onLoad, onNew });
+    });
+    el.querySelector('[data-s]').addEventListener('click', onSettings);
+    el.querySelector('[data-notes]').addEventListener('click', () => this.changelog());
+    this.root.appendChild(el);
+    this.titleEl = el;
+    this.setHud(false);
+  }
+
+  /** 저장 슬롯 목록 (mode 'load' 이어하기 · 'new' 새 여정 — 새 슬롯 또는 덮어쓰기) */
+  slotList(mode, { slots, onLoad, onNew }) {
+    if (this.slotsEl) this.slotsEl.remove();
+    const el = $(`<div class="menu title-settings title-slots"><div class="head"><div class="title">${mode === 'load' ? '이어하기' : '새 여정'}</div><div class="sp"></div><button class="btn" data-close>돌아가기</button></div><div class="body"></div></div>`);
+    const body = el.querySelector('.body');
+    const fmtT = (ms) => { if (!ms) return '저장 전'; const d = new Date(ms); return `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
+    const fmtP = (sec) => { const m = Math.floor((sec || 0) / 60); return m < 60 ? `${m}분` : `${Math.floor(m / 60)}시간 ${m % 60}분`; };
+    const esc = (t) => String(t || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    const close = () => { el.remove(); this.slotsEl = null; if (this.titleEl) this.titleEl.classList.remove('behind'); removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); close(); } };
+    const draw = () => {
+      const list = slots.list();
+      body.innerHTML = '';
+      if (mode === 'new') {
+        const full = list.length >= slots.max;
+        const nw = $(`<div class="slot new"><div class="sl-info"><div class="sl-name">새 슬롯에 시작</div>
+          <input class="sl-input" maxlength="24" placeholder="여정 이름" value="여정 ${list.length + 1}" ${full ? 'disabled' : ''}>
+          <div class="sl-sub">${full ? `슬롯이 가득 찼어요 (${slots.max}개) — 하나를 지우거나 아래에서 덮어쓰세요.` : '다른 여정은 그대로 남아요.'}</div></div>
+          <div class="sl-act"><button class="btn primary" data-start ${full ? 'disabled' : ''}>시작</button></div></div>`);
+        nw.querySelector('[data-start]').addEventListener('click', () => { const name = nw.querySelector('input').value; close(); onNew({ name }); });
+        body.appendChild(nw);
+      }
+      if (!list.length && mode === 'load') body.appendChild($('<p class="sl-empty">저장된 여정이 없어요.</p>'));
+      for (const m of list) {
+        const card = $(`<div class="slot${m.broken ? ' broken' : ''}">
+          <div class="sl-thumb">${m.thumb ? `<img alt="" src="${m.thumb}">` : '<span>세렌</span>'}</div>
+          <div class="sl-info"><div class="sl-name">${esc(m.name)}</div>
+            <div class="sl-sub">${m.broken ? `⚠ ${esc(m.broken)}` : `${esc(m.place || '어딘가')}${m.objective ? ` · ${esc(m.objective)}` : ''}`}</div>
+            <div class="sl-meta">${fmtT(m.saved)} · 놀이 ${fmtP(m.playTime)}${m.ver ? ` · 저장 판 ${m.ver}` : ''}</div></div>
+          <div class="sl-act">
+            ${mode === 'load' ? `<button class="btn primary" data-load ${m.broken && !/요약/.test(m.broken) ? 'disabled' : ''}>불러오기</button>` : '<button class="btn" data-over>여기에 새로</button>'}
+            <button class="btn" data-ren>이름</button><button class="btn" data-del>지우기</button>
+          </div></div>`);
+        card.querySelector('[data-load]')?.addEventListener('click', () => { close(); onLoad(m.id); });
+        card.querySelector('[data-over]')?.addEventListener('click', () => this.confirm(`「${esc(m.name)}」 여정을 지우고 이 슬롯에서 새로 시작할까요? 다른 슬롯은 그대로예요.`, '덮어쓰고 시작', () => { close(); onNew({ id: m.id }); }));
+        card.querySelector('[data-del]').addEventListener('click', () => this.confirm(`「${esc(m.name)}」 여정을 지울까요? 되돌릴 수 없어요.`, '지우기', () => { slots.remove(m.id); draw(); }));
+        card.querySelector('[data-ren]').addEventListener('click', () => {
+          const info = card.querySelector('.sl-name');
+          info.innerHTML = `<input class="sl-input" maxlength="24" value="${esc(m.name)}"> <button class="btn" data-ok>확인</button>`;
+          const inp = info.querySelector('input'); inp.focus(); inp.select();
+          const ok = () => { slots.rename(m.id, inp.value); draw(); };
+          info.querySelector('[data-ok]').addEventListener('click', ok);
+          inp.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') ok(); });
+        });
+        body.appendChild(card);
+      }
+    };
+    draw();
+    el.querySelector('[data-close]').addEventListener('click', close);
+    addEventListener('keydown', onKey, true);
+    this.root.appendChild(el);
+    this.slotsEl = el;
+    if (this.titleEl) this.titleEl.classList.add('behind');
+  }
+
+  /** 업데이트 내역 (최신 판부터, 지금 판 표시) — 열면 본 판으로 남긴다 (전역) */
+  changelog() {
+    const el = $(`<div class="menu title-settings title-notes-panel"><div class="head"><div class="title">업데이트 내역</div><div class="sp"></div><button class="btn" data-close>닫기</button></div><div class="body"></div></div>`);
+    const body = el.querySelector('.body');
+    for (const v of CHANGELOG) {
+      const sec = $(`<section class="cl-ver${v.ver === GAME_VERSION ? ' now' : ''}"><h3>v${v.ver}${v.ver === GAME_VERSION ? ' <span class="cl-now">지금 판</span>' : ''} <small>${v.date}</small></h3><div class="cl-title">${v.title}</div><ul></ul></section>`);
+      const ul = sec.querySelector('ul');
+      for (const [k, t] of v.items) ul.appendChild($(`<li><span class="cl-k ${k}">${KIND_LABEL[k]}</span>${t}</li>`));
+      body.appendChild(sec);
+    }
+    const close = () => { el.remove(); if (this.titleEl) this.titleEl.classList.remove('behind'); removeEventListener('keydown', onKey, true); };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); close(); } };
+    el.querySelector('[data-close]').addEventListener('click', close);
+    addEventListener('keydown', onKey, true);
+    this.root.appendChild(el);
+    if (this.titleEl) { this.titleEl.classList.add('behind'); const d = this.titleEl.querySelector('.title-notes .dot'); if (d) d.remove(); }
+    try { localStorage.setItem(SEEN_KEY, GAME_VERSION); } catch { /* 무시 */ }
+  }
+
+  /** 타이틀 화면의 설정: 게임 안 메뉴(지도·일지·쉬기·저장)가 아니라 설정만 담은 창을 타이틀 위에 띄운다 */
+  titleSettings() {
+    if (this.titleSetEl) return;
+    const el = $(`<div class="menu title-settings"><div class="head"><div class="title">설정</div><div class="sp"></div><button class="btn" data-close>돌아가기</button></div><div class="body"></div></div>`);
+    this.settingsView.render(el.querySelector('.body'), { title: true });
+    const close = () => {
+      el.remove();
+      this.titleSetEl = null;
+      if (this.titleEl) this.titleEl.classList.remove('behind');
+      removeEventListener('keydown', onKey, true);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); close(); } };
+    el.querySelector('[data-close]').addEventListener('click', close);
+    addEventListener('keydown', onKey, true);
+    this.root.appendChild(el);
+    this.titleSetEl = el;
+    if (this.titleEl) this.titleEl.classList.add('behind'); // 타이틀 글자·단추는 설정 창 뒤로 숨긴다
+  }
+
+  /** 페이지 안의 확인 창 (브라우저 confirm 대신 — 일부 환경에서는 confirm 이 막혀 있다) */
+  confirm(text, yesLabel, onYes) {
+    const el = $(`<div class="card-wrap" style="z-index:40"><div class="card glass"><p style="color:var(--ink);font-size:16px">${text}</p><div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap"><button class="btn" data-no>그만두기</button><button class="btn primary" data-yes>${yesLabel}</button></div></div></div>`);
+    el.querySelector('[data-no]').addEventListener('click', () => el.remove());
+    el.querySelector('[data-yes]').addEventListener('click', () => { el.remove(); onYes(); });
+    this.root.appendChild(el);
+  }
+
+  hideTitle() {
+    if (this.titleSetEl) { this.titleSetEl.remove(); this.titleSetEl = null; }
+    if (this.slotsEl) { this.slotsEl.remove(); this.slotsEl = null; }
+    if (!this.titleEl) return;
+    const el = this.titleEl;
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 1300);
+    this.titleEl = null;
+  }
+
+  caption(lines, onDone) {
+    const el = $(`<div class="caption"><div class="c"></div><div class="skip">눌러서 넘기기</div></div>`);
+    this.root.appendChild(el);
+    const c = el.querySelector('.c');
+    let i = 0, timer = null;
+    const next = () => {
+      clearTimeout(timer);
+      if (i >= lines.length) { c.classList.remove('on'); setTimeout(() => { el.remove(); onDone && onDone(); }, 1200); return; }
+      c.classList.remove('on');
+      setTimeout(() => {
+        c.innerHTML = lines[i++];
+        c.classList.add('on');
+        timer = setTimeout(next, 4200);
+      }, i === 0 ? 300 : 1300);
+    };
+    el.addEventListener('pointerdown', (e) => { e.preventDefault(); next(); });
+    this._captionNext = next;
+    next();
+  }
+}
