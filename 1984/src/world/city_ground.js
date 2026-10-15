@@ -10,7 +10,8 @@ export const KERB_H = 0.12;
 export const uRain = { value: 0 };
 
 export const T = { ASPHALT: 0, PAVING: 1, COBBLE: 2, SQUARE: 3, COMPOUND: 4, GRASS: 5, YARD: 6, CONCRETE: 7 };
-const RAISED = [false, true, false, true, false, true, true, true];
+// the square is level with the roads so convoys and rallies can cross it
+const RAISED = [false, true, false, false, false, true, true, true];
 const SURFACE = ['asphalt', 'paving', 'cobble', 'paving', 'concrete', 'grass', 'cobble', 'concrete'];
 
 // ---------------------------------------------------------------- materials
@@ -117,7 +118,7 @@ export class GroundMap {
     this.x0 = x0; this.z0 = z0; this.x1 = x1; this.z1 = z1; this.cell = cell;
     this.nx = Math.round((x1 - x0) / cell);
     this.nz = Math.round((z1 - z0) / cell);
-    this.t = new Uint8Array(this.nx * this.nz).fill(T.PAVING);
+    this.t = new Uint8Array(this.nx * this.nz).fill(T.CONCRETE);
     this.steps = [];          // extra height rects: { x0, z0, x1, z1, h, rot, cx, cz }
     this.overlays = [];       // irregular surfaces: { poly, bbox, surface }
   }

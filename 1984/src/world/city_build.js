@@ -1,18 +1,20 @@
-// Places Blender models in the city. Models used more than once become one
-// InstancedMesh per mesh part per map chunk (so frustum culling still works),
-// single ones are plain clones. Every placement gets colliders from a footprint
-// table (or the model bounds), and small props are hidden by distance.
+// Places Blender models in the city. A model used more than once becomes one
+// InstancedMesh per mesh part for the whole city (the models are light, so
+// one draw call per part beats chunking), single ones are plain clones. Every
+// placement gets colliders from a footprint table (or the model bounds).
+// The timber shoring at the ends of the prole terraces is cut off the models
+// and instanced separately, so it only props up walls whose neighbour is gone.
 import * as THREE from 'three';
-import { tf } from './city_util.js';
+import { tf, splitGeometry } from './city_util.js';
 
-// Local footprints [cx, cz, hx, hz, height?, blocksSight?] measured from the
-// Blender scripts (front is +Z). Canopies and cornices are left out so the
-// player can stand under them.
 const LIONS = [0, 1, 2, 3].map((k) => {
   const a = k * Math.PI / 2 + Math.PI / 4;
   return { x: Math.cos(a) * 8.6, z: -Math.sin(a) * 8.6, rot: a + Math.PI / 2 };
 });
 
+// Local footprints [cx, cz, hx, hz, height?, blocksSight?, rotY?] measured
+// from the Blender scripts (front is +Z). Canopies and cornices are left out
+// so the player can stand under them.
 export const FOOTPRINT = {
   victory_mansions: [[0, 0, 21.05, 7.05]],
   party_block_a: [[0, 0, 15.05, 6.05]],
@@ -32,7 +34,7 @@ export const FOOTPRINT = {
   pyramid_far: [[0, 0, 85, 85]],
   guard_tower: [[0, 0, 1.75, 1.75, 11.6, false]],
   mg_nest: [[0, 0, 2.1, 2.1, 0.98, false]],
-  fence_wire: [[0, -0.2, 3.0, 0.14, 3.9, false]],
+  fence_wire: [[0, 0, 3.0, 0.12, 3.9, false]],
   lamp_post: [[0, 0, 0.16, 0.16, 5.3, false]],
   telescreen_pole: [[0, 0, 0.15, 0.15, 5.4, false]],
   bench: [[0, 0, 1.0, 0.26, 0.9, false]],
@@ -48,19 +50,25 @@ export const FOOTPRINT = {
   monument: [[0, 0, 5.4, 5.4, 57], ...LIONS.map((l) => [l.x, l.z, 1.4, 3.0, 2.6, false, l.rot])],
 };
 
-// Draw distance per model (metres); anything not listed is always drawn.
-const MAX_DIST = {
-  bench: 110, bin: 90, sandbags: 130, rubble_pile: 170, lamp_post: 260, telescreen_pole: 220, telescreen_wall: 140,
-  mg_nest: 160, fence_wire: 320, guard_tower: 420, van: 200, truck: 220, dead_tree: 220, hedge: 220,
-  chestnut: 380, elm: 420, prole_terrace: 520, prole_terrace_b: 520, prole_ruin: 520, shop: 520, pub: 520,
+// Entrance door of the blocks built by party_block() in blender/buildings.py:
+// local x of the door column and the front face z.
+export const ENTRANCE = {
+  victory_mansions: [1.5, 7], party_block_a: [1.5, 6], party_block_b: [11 / 6, 7], party_block_c: [1.5, 7],
+  inner_block: [2, 8], community_centre: [2.125, 9],
 };
 
-const CHUNK = 128;
+// Half width of the house fronts of the terraces (shoring lies beyond).
+const TERRACE_HALF = { prole_terrace: 10.4, prole_terrace_b: 13, prole_ruin: 10.4, shop: 5.2, pub: 5.2 };
+
+// Draw distance per model for single clones (metres).
+const MAX_DIST = { bench: 110, bin: 90, sandbags: 130, van: 220, truck: 240, mg_nest: 200 };
+
 const tmpM = new THREE.Matrix4();
 const tmpQ = new THREE.Quaternion();
 const tmpS = new THREE.Vector3();
 const tmpP = new THREE.Vector3();
 const Y = new THREE.Vector3(0, 1, 0);
+const ID = new THREE.Matrix4();
 
 export class Placer {
   constructor(G, root) {
@@ -69,8 +77,10 @@ export class Placer {
     this.info = new Map();
     this.list = [];
     this.overrides = {};
-    this.culled = [];            // { obj, x, z, r, max }
-    this.footprints = [];        // [cx, cz, hx, hz, rot] of buildings, for the map
+    this.culled = [];            // { obj, x, z, max }
+    this.footprints = [];        // [cx, cz, hx, hz, rot, model] of buildings, for the map and the filler pass
+    this.meshes = new Map();     // model -> InstancedMesh[] / Object3D[]
+    this.onFootprint = null;
   }
 
   setOverride(model, map) { this.overrides[model] = { ...(this.overrides[model] || {}), ...map }; }
@@ -82,35 +92,35 @@ export class Placer {
     if (!g) { console.warn('[city] missing model', name); this.info.set(name, null); return null; }
     const scene = g.scene;
     scene.updateMatrixWorld(true);
-    const parts = [], nodes = {};
+    let parts = [];
+    const nodes = {};
     const box = new THREE.Box3();
     scene.traverse((o) => {
       if (o.isMesh) {
         if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
         parts.push({ geometry: o.geometry, matName: (o.material.name || '').replace(/\.\d+$/, ''), material: o.material, matrix: o.matrixWorld.clone() });
         box.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));
-      } else if (o !== scene && o.name) {
+      } else if (o !== scene && o.name && !o.children.some((c) => c.isMesh)) {
         nodes[o.name] = new THREE.Vector3().setFromMatrixPosition(o.matrixWorld);
       }
     });
-    const inf = { name, parts, nodes, box };
-    // timber shoring at a terrace's ends: block the feet of the baulks
-    if (/^prole|^shop$|^pub$/.test(name)) {
-      const body = FOOTPRINT[name] ? FOOTPRINT[name][0][2] : 10;
-      const ends = [];
+    const inf = { name, parts, nodes, box, shore: null };
+    const half = TERRACE_HALF[name];
+    if (half) {
+      // timber baulks at the gable ends: low wood triangles beyond the fronts
+      const body = [], L = [], R = [];
       for (const p of parts) {
-        if (p.matName !== 'wood') continue;
-        const pos = p.geometry.attributes.position;
-        for (const side of [-1, 1]) {
-          let mn = Infinity, mx = -Infinity;
-          for (let i = 0; i < pos.count; i++) {
-            const x = pos.getX(i), y = pos.getY(i);
-            if (y < 1.5 && x * side > body + 0.3) { mn = Math.min(mn, x); mx = Math.max(mx, x); }
-          }
-          if (mn < mx) ends.push([(mn + mx) / 2, 0, (mx - mn) / 2 + 0.2, 2.5, 3, false]);
-        }
+        if (p.matName !== 'wood') { body.push(p); continue; }
+        const [keepL, cutL] = splitGeometry(p.geometry, p.matrix, (x, y) => y < 6 && x < -half - 0.15);
+        if (cutL) L.push({ ...p, geometry: cutL, matrix: ID });
+        if (!keepL) continue;
+        const [keep, cutR] = splitGeometry(keepL, ID, (x, y) => y < 6 && x > half + 0.15);
+        if (cutR) R.push({ ...p, geometry: cutR, matrix: ID });
+        if (keep) body.push({ ...p, geometry: keep, matrix: ID });
       }
-      inf.shoring = ends;
+      parts = body;
+      inf.parts = body;
+      inf.shore = { L, R, half };
     }
     this.info.set(name, inf);
     return inf;
@@ -124,6 +134,7 @@ export class Placer {
     return this.G.mats.get(key) || part.material;
   }
 
+  // World position of a named empty of a model placed at (x, z, rot).
   node(model, nodeName, x, z, rot, scale = 1, y = 0) {
     const inf = this.model(model);
     if (!inf || !inf.nodes[nodeName]) return null;
@@ -132,13 +143,35 @@ export class Placer {
     return new THREE.Vector3(p.x, y + n.y * scale, p.z);
   }
 
-  // o: { scale, y, collide (false | spec[]), tag, unique, override, cast, receive, maxDist, sight }
+  // Door of a block placed at (x, z, rot): { door, front, out, yaw } in world space.
+  entrance(model, x, z, rot, step = 1.6) {
+    const e = ENTRANCE[model];
+    if (!e) return null;
+    const d = tf(x, z, rot, e[0], e[1]);
+    const f = tf(x, z, rot, e[0], e[1] + step);
+    const out = new THREE.Vector3(Math.sin(rot), 0, Math.cos(rot));
+    return { door: new THREE.Vector3(d.x, 0, d.z), front: new THREE.Vector3(f.x, 0, f.z), out, lx: e[0], lz: e[1] };
+  }
+
+  // o: { scale, y, collide (false | spec[]), tag, unique, override, cast, receive, maxDist, sight, shoreL, shoreR }
   add(model, x, z, rot = 0, o = {}) {
     const inf = this.model(model);
     if (!inf) return null;
     const p = { model, x, z, rot, scale: o.scale ?? 1, y: o.y ?? 0, o };
     this.list.push(p);
     if (o.collide !== false) this.collide(model, x, z, rot, p.scale, o);
+    if (inf.shore) {
+      for (const side of ['L', 'R']) {
+        const want = o['shore' + side] ?? true;
+        if (!want || !inf.shore[side].length) continue;
+        this.list.push({ model: model + '#' + side, x, z, rot, scale: p.scale, y: p.y, o: { cast: o.cast, receive: o.receive }, parts: inf.shore[side], base: model });
+        if (o.collide !== false) {
+          const sx = side === 'L' ? -1 : 1;
+          const w = tf(x, z, rot, sx * (inf.shore.half + 1.7) * p.scale, 0);
+          this.G.col.add(w.x, w.z, 1.6 * p.scale, 2.45 * p.scale, rot, { y0: -1, y1: 2.4, tag: 'shoring', sight: false });
+        }
+      }
+    }
     return p;
   }
 
@@ -149,17 +182,19 @@ export class Placer {
       const b = inf.box;
       spec = [[(b.min.x + b.max.x) / 2, (b.min.z + b.max.z) / 2, (b.max.x - b.min.x) / 2, (b.max.z - b.min.z) / 2, b.max.y]];
     }
-    if (inf && inf.shoring) spec = spec.concat(inf.shoring);
     const big = (FOOTPRINT[model] && FOOTPRINT[model][0][2] > 4) || o.building;
-    for (const s of spec) {
+    spec.forEach((s, k) => {
       const [lx, lz, hx, hz, h, sight, lrot] = s;
       const w = tf(x, z, rot, lx * scale, lz * scale);
       this.G.col.add(w.x, w.z, hx * scale, hz * scale, rot + (lrot || 0), {
         y0: -1, y1: (h ?? (inf ? inf.box.max.y : 10)) * scale, tag: o.tag || model,
         sight: o.sight ?? (sight ?? true), solid: true,
       });
-      if (big && s === spec[0]) this.footprints.push([w.x, w.z, hx * scale, hz * scale, rot]);
-    }
+      if (big && k === 0) {
+        this.footprints.push([w.x, w.z, hx * scale, hz * scale, rot, model]);
+        if (this.onFootprint) this.onFootprint(w.x, w.z, hx * scale, hz * scale, rot);
+      }
+    });
   }
 
   build() {
@@ -171,7 +206,7 @@ export class Placer {
     for (const [model, ps] of byModel) {
       const inst = ps.filter((p) => !p.o.unique && !p.o.override);
       const single = ps.filter((p) => p.o.unique || p.o.override);
-      if (inst.length === 1) single.push(inst.pop());
+      if (inst.length === 1 && !inst[0].parts) single.push(inst.pop());
       for (const p of single) this.clone(p);
       if (inst.length) this.instanced(model, inst);
     }
@@ -182,61 +217,66 @@ export class Placer {
     const G = this.G;
     let obj;
     try { obj = G.assets.instance(p.model); } catch (e) { console.warn('[city]', e.message); return; }
-    G.mats.apply(obj, { cast: p.o.cast ?? true, receive: p.o.receive ?? true, override: { ...(this.overrides[p.model] || {}), ...(p.o.override || {}) } });
+    const inf = this.info.get(p.model);
+    if (inf && inf.shore) {
+      // rebuild from the cut parts so the shoring stays separate
+      obj = new THREE.Group();
+      for (const part of inf.parts) {
+        const m = new THREE.Mesh(part.geometry, this.material(p.model, part, p.o.override));
+        m.matrix.copy(part.matrix); m.matrixAutoUpdate = false;
+        obj.add(m);
+      }
+      obj.traverse((o) => { if (o.isMesh) { o.castShadow = p.o.cast ?? true; o.receiveShadow = p.o.receive ?? true; } });
+    } else {
+      G.mats.apply(obj, { cast: p.o.cast ?? true, receive: p.o.receive ?? true, override: { ...(this.overrides[p.model] || {}), ...(p.o.override || {}) } });
+    }
     obj.position.set(p.x, p.y, p.z);
     obj.rotation.y = p.rot;
     obj.scale.setScalar(p.scale);
+    obj.updateMatrix();
     obj.updateMatrixWorld(true);
+    obj.matrixAutoUpdate = false;
     obj.traverse((o) => { o.matrixAutoUpdate = false; });
+    obj.name = p.model;
     this.root.add(obj);
     p.object = obj;
+    if (!this.meshes.has(p.model)) this.meshes.set(p.model, []);
+    this.meshes.get(p.model).push(obj);
     const max = p.o.maxDist ?? MAX_DIST[p.model];
-    if (max) this.culled.push({ obj, x: p.x, z: p.z, r: 10, max });
+    if (max) this.culled.push({ obj, x: p.x, z: p.z, max });
   }
 
-  instanced(model, ps) {
-    const inf = this.info.get(model);
-    const chunks = new Map();
-    for (const p of ps) {
-      const k = Math.floor(p.x / CHUNK) + ',' + Math.floor(p.z / CHUNK);
-      if (!chunks.has(k)) chunks.set(k, []);
-      chunks.get(k).push(p);
+  instanced(model, list) {
+    const base = list[0].base || model;
+    const inf = this.info.get(base);
+    const parts = list[0].parts || inf.parts;
+    const out = [];
+    for (const part of parts) {
+      const mat = this.material(base, part);
+      const im = new THREE.InstancedMesh(part.geometry, mat, list.length);
+      list.forEach((p, i) => {
+        tmpQ.setFromAxisAngle(Y, p.rot);
+        tmpS.setScalar(p.scale);
+        tmpP.set(p.x, p.y, p.z);
+        tmpM.compose(tmpP, tmpQ, tmpS).multiply(part.matrix);
+        im.setMatrixAt(i, tmpM);
+      });
+      im.instanceMatrix.needsUpdate = true;
+      im.computeBoundingSphere();
+      im.castShadow = list[0].o.cast ?? true;
+      im.receiveShadow = list[0].o.receive ?? true;
+      im.matrixAutoUpdate = false;
+      im.name = model + ':' + part.matName;
+      this.root.add(im);
+      out.push(im);
     }
-    const max = MAX_DIST[model];
-    for (const list of chunks.values()) {
-      let cx = 0, cz = 0;
-      for (const p of list) { cx += p.x; cz += p.z; }
-      cx /= list.length; cz /= list.length;
-      let r = 0;
-      for (const p of list) r = Math.max(r, Math.hypot(p.x - cx, p.z - cz));
-      const meshes = [];
-      for (const part of inf.parts) {
-        const mat = this.material(model, part);
-        const im = new THREE.InstancedMesh(part.geometry, mat, list.length);
-        list.forEach((p, i) => {
-          tmpQ.setFromAxisAngle(Y, p.rot);
-          tmpS.setScalar(p.scale);
-          tmpP.set(p.x, p.y, p.z);
-          tmpM.compose(tmpP, tmpQ, tmpS).multiply(part.matrix);
-          im.setMatrixAt(i, tmpM);
-        });
-        im.instanceMatrix.needsUpdate = true;
-        im.computeBoundingSphere();
-        im.castShadow = list[0].o.cast ?? true;
-        im.receiveShadow = list[0].o.receive ?? true;
-        im.matrixAutoUpdate = false;
-        im.name = model;
-        this.root.add(im);
-        meshes.push(im);
-      }
-      if (max) for (const m of meshes) this.culled.push({ obj: m, x: cx, z: cz, r, max });
-    }
+    this.meshes.set(model, out);
   }
 
   // Hide distant small things. Cheap enough to run a few times a second.
   cull(cam) {
     for (const c of this.culled) {
-      const d = Math.hypot(cam.x - c.x, cam.z - c.z) - c.r;
+      const d = Math.hypot(cam.x - c.x, cam.z - c.z);
       c.obj.visible = d < c.max;
     }
   }

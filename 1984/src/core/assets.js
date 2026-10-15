@@ -32,7 +32,8 @@ export const MODEL_NAMES = [
 ];
 
 const TEX_SETS = ['concrete_white', 'concrete_grey', 'brick', 'plaster', 'slate', 'asphalt', 'paving', 'cobble',
-  'wood', 'board', 'wallpaper', 'tile_white', 'metal', 'grass', 'dirt', 'rubble', 'bark', 'bark_moss', 'fabric'];
+  'wood', 'board', 'wallpaper', 'tile_white', 'metal', 'grass', 'dirt', 'rubble', 'bark', 'bark_moss', 'fabric',
+  'plaster_peeling', 'brick_dark', 'rust'];
 const TEX_SINGLE = ['leaves', 'leaves_n', 'leaves_elm', 'leaves_elm_n', 'grass_blade'];
 
 export async function loadAll(onProgress) {
@@ -49,6 +50,8 @@ export async function loadAll(onProgress) {
     if (!src) { tick(); return; }
     const t = await texLoader.loadAsync(src);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    // colour maps are sRGB; normal and roughness maps stay linear
+    if (n.endsWith('_c') || n === 'leaves' || n === 'leaves_elm' || n === 'grass_blade') t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 8;
     textures.set(n, t);
     tick();

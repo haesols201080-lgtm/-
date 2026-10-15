@@ -189,7 +189,9 @@ export function buildLibrary() {
   std('cardboard', { ...T('board'), color: 0xd8b783, roughness: 1 });
   std('metal', { ...T('metal', { metal: true }), color: 0xffffff, roughness: 1, metalness: 1 });
   std('metal_dark', { ...T('metal', { metal: true }), color: 0x404244, roughness: 1, metalness: 1 });
-  std('rust', { ...T('metal'), color: 0x8a4a2a, roughness: 0.9, metalness: 0.2 });
+  std('rust', { ...T('rust'), color: 0xffffff, roughness: 1, metalness: 0.3 });
+  std('plaster_peeling', { ...T('plaster_peeling'), color: 0xffffff, roughness: 1 });
+  std('brick_dark', { ...T('brick_dark'), color: 0xffffff, roughness: 1 });
   std('iron_black', { color: 0x0c0c0d, roughness: 0.55, metalness: 0.7 }, { grime: 0 });
   std('brass', { color: 0xa88a48, roughness: 0.35, metalness: 1 }, { grime: 0 });
   std('rubber', { color: 0x0b0b0b, roughness: 0.9 }, { grime: 0 });

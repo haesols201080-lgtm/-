@@ -367,3 +367,118 @@ export class MergeBuilder {
     return out;
   }
 }
+
+// ---------------------------------------------------------------- geometry
+
+// Bake a (possibly quantized, indexed) model part into plain float arrays in
+// model space and split its triangles by a predicate on the centroid. Used to
+// cut the timber shoring off the ends of the prole terraces so it can be put
+// back only where the neighbouring house is missing.
+export function splitGeometry(geometry, matrix, pred) {
+  const pos = geometry.attributes.position, nrm = geometry.attributes.normal, uv = geometry.attributes.uv;
+  const idx = geometry.index;
+  const nm = new THREE.Matrix3().getNormalMatrix(matrix);
+  const v = new THREE.Vector3(), n = new THREE.Vector3();
+  const out = [{ p: [], n: [], uv: [] }, { p: [], n: [], uv: [] }];
+  const tri = [0, 0, 0];
+  const count = idx ? idx.count : pos.count;
+  const P = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  for (let t = 0; t < count; t += 3) {
+    for (let k = 0; k < 3; k++) {
+      tri[k] = idx ? idx.getX(t + k) : t + k;
+      P[k].fromBufferAttribute(pos, tri[k]).applyMatrix4(matrix);
+    }
+    const cx = (P[0].x + P[1].x + P[2].x) / 3, cy = (P[0].y + P[1].y + P[2].y) / 3, cz = (P[0].z + P[1].z + P[2].z) / 3;
+    const o = out[pred(cx, cy, cz) ? 1 : 0];
+    for (let k = 0; k < 3; k++) {
+      v.copy(P[k]);
+      o.p.push(v.x, v.y, v.z);
+      if (nrm) { n.fromBufferAttribute(nrm, tri[k]).applyMatrix3(nm).normalize(); o.n.push(n.x, n.y, n.z); }
+      if (uv) o.uv.push(uv.getX(tri[k]), uv.getY(tri[k]));
+    }
+  }
+  return out.map((o) => {
+    if (!o.p.length) return null;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(o.p, 3));
+    if (o.n.length) g.setAttribute('normal', new THREE.Float32BufferAttribute(o.n, 3));
+    else g.computeVertexNormals();
+    if (o.uv.length) g.setAttribute('uv', new THREE.Float32BufferAttribute(o.uv, 2));
+    g.computeBoundingBox();
+    g.computeBoundingSphere();
+    return g;
+  });
+}
+
+// ---------------------------------------------------------------- occupancy
+
+// Coarse grid of taken ground (buildings, kept-open places) so the filler
+// pass never drops a block on top of something.
+export class Occupancy {
+  constructor(x0, z0, x1, z1, cell = 2) {
+    this.x0 = x0; this.z0 = z0; this.cell = cell;
+    this.nx = Math.ceil((x1 - x0) / cell); this.nz = Math.ceil((z1 - z0) / cell);
+    this.g = new Uint8Array(this.nx * this.nz);
+  }
+
+  // Calls f(i, j) for each cell under an oriented box (centre, half extents, rotY).
+  cells(cx, cz, hx, hz, rot, f) {
+    const c = Math.cos(rot), s = Math.sin(rot);
+    const ex = Math.abs(hx * c) + Math.abs(hz * s), ez = Math.abs(hx * s) + Math.abs(hz * c);
+    const i0 = Math.max(0, Math.floor((cx - ex - this.x0) / this.cell)), i1 = Math.min(this.nx - 1, Math.floor((cx + ex - this.x0) / this.cell));
+    const j0 = Math.max(0, Math.floor((cz - ez - this.z0) / this.cell)), j1 = Math.min(this.nz - 1, Math.floor((cz + ez - this.z0) / this.cell));
+    for (let j = j0; j <= j1; j++) {
+      for (let i = i0; i <= i1; i++) {
+        const x = this.x0 + (i + 0.5) * this.cell - cx, z = this.z0 + (j + 0.5) * this.cell - cz;
+        const lx = x * c - z * s, lz = x * s + z * c;
+        if (Math.abs(lx) <= hx + this.cell * 0.5 && Math.abs(lz) <= hz + this.cell * 0.5) if (f(i, j) === false) return false;
+      }
+    }
+    return true;
+  }
+
+  mark(cx, cz, hx, hz, rot = 0) { this.cells(cx, cz, hx, hz, rot, (i, j) => { this.g[j * this.nx + i] = 1; }); }
+
+  free(cx, cz, hx, hz, rot = 0) { return this.cells(cx, cz, hx, hz, rot, (i, j) => this.g[j * this.nx + i] === 0); }
+
+  outside(x, z) {
+    return x < this.x0 || z < this.z0 || x >= this.x0 + this.nx * this.cell || z >= this.z0 + this.nz * this.cell;
+  }
+}
+
+// ---------------------------------------------------------------- misc
+
+// Point list helper for paths: [[x, z], ...] -> Vector3[] on the ground.
+export function polyline(pts, ground) {
+  return pts.map(([x, z]) => new THREE.Vector3(x, ground ? ground(x, z) : 0, z));
+}
+
+// A unit quad standing on its base, facing +Z (posters, washing, signs).
+export function standingQuad(w = 1, h = 1, z = 0) {
+  const g = new THREE.PlaneGeometry(w, h);
+  g.translate(0, h / 2, z);
+  return g;
+}
+
+// Two crossed quads (a plant clump), base at y = 0, uv.y = 1 at the top so the
+// sway patch bends only the tips. Normals lean upwards so the backs are not black.
+export function crossQuads(w = 1, h = 1) {
+  const p = [], n = [], uv = [], idx = [];
+  for (let k = 0; k < 2; k++) {
+    const a = k * Math.PI / 2 + 0.3;
+    const dx = Math.cos(a) * w / 2, dz = Math.sin(a) * w / 2;
+    const nx = -Math.sin(a) * 0.35, nz = Math.cos(a) * 0.35;
+    const b = p.length / 3;
+    p.push(-dx, 0, -dz, dx, 0, dz, dx, h, dz, -dx, h, -dz);
+    for (let q = 0; q < 4; q++) n.push(nx, 0.94, nz);
+    uv.push(0, 0, 1, 0, 1, 1, 0, 1);
+    idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(n, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeBoundingSphere();
+  return g;
+}

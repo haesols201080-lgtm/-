@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { NodeIO } from '@gltf-transform/core';
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions';
-import { weld, dedup, prune, meshopt } from '@gltf-transform/functions';
+import { weld, dedup, prune, meshopt, resample } from '@gltf-transform/functions';
 import { MeshoptEncoder, MeshoptDecoder } from 'meshoptimizer';
 
 const root = path.dirname(path.dirname(new URL(import.meta.url).pathname));
@@ -17,13 +17,35 @@ await MeshoptDecoder.ready;
 const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({
   'meshopt.encoder': MeshoptEncoder, 'meshopt.decoder': MeshoptDecoder,
 });
+// Skinned people: only bone rotations matter on screen (plus the hips'
+// translation for the walk bob); face bones and scale keys are dropped.
+function pruneAnimation(doc) {
+  const root = doc.getRoot();
+  const face = new Set();
+  const head = root.listNodes().find((n) => n.getName() === 'head');
+  if (head) head.traverse((n) => { if (n !== head) face.add(n); });
+  for (const anim of root.listAnimations()) {
+    for (const ch of anim.listChannels()) {
+      const node = ch.getTargetNode();
+      const p = ch.getTargetPath();
+      const name = node ? node.getName() : '';
+      if (!node || face.has(node) || p === 'scale' || (p === 'translation' && name !== 'hips')) {
+        const s = ch.getSampler();
+        ch.dispose();
+        if (s && s.listParents().length <= 1) s.dispose();
+      }
+    }
+  }
+}
+
 let a = 0, b = 0;
 const only = process.argv.slice(2);
 for (const f of fs.readdirSync(src).sort()) {
   if (!f.endsWith('.glb')) continue;
   if (only.length && !only.includes(f.replace('.glb', ''))) continue;
   const doc = await io.read(path.join(src, f));
-  await doc.transform(dedup(), weld(), prune(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+  if (f.startsWith('char_')) pruneAnimation(doc);
+  await doc.transform(dedup(), weld(), resample({ tolerance: 2e-4 }), prune(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
   const outPath = path.join(dst, f);
   await io.write(outPath, doc);
   const s0 = fs.statSync(path.join(src, f)).size, s1 = fs.statSync(outPath).size;
