@@ -8,6 +8,7 @@ import * as art from './art.js';
 export const globals = {
   uWet: { value: 0 },        // 0 dry .. 1 soaked
   uNight: { value: 0 },      // lit windows
+  uDayLum: { value: 1 },     // daylight reaching into rooms behind glass
   uTime: { value: 0 },
 };
 
@@ -35,8 +36,22 @@ function patch(mat, opts = {}) {
           vWNrm = normalize(mat3(modelMatrix) * wn);
         }`);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nuniform float uWet;\nuniform float uGrime;\nuniform float uWetK;')
+      .replace('#include <common>', `#include <common>
+        varying vec3 vWPos; varying vec3 vWNrm;
+        uniform float uWet; uniform float uGrime; uniform float uWetK;
+        float h3(vec3 p){ return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+        float vn3(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(mix(h3(i), h3(i + vec3(1,0,0)), f.x), mix(h3(i + vec3(0,1,0)), h3(i + vec3(1,1,0)), f.x), f.y),
+                     mix(mix(h3(i + vec3(0,0,1)), h3(i + vec3(1,0,1)), f.x), mix(h3(i + vec3(0,1,1)), h3(i + vec3(1,1,1)), f.x), f.y), f.z); }`)
       .replace('#include <map_fragment>', `#include <map_fragment>
+        // large-scale variation hides texture tiling; streaks of soot and
+        // rain run down vertical walls
+        float macro = vn3(vWPos * 0.045) * 0.6 + vn3(vWPos * 0.17) * 0.4;
+        diffuseColor.rgb *= mix(0.78, 1.12, macro * uGrime + (1.0 - uGrime) * 0.6);
+        float vert = 1.0 - abs(vWNrm.y);
+        float streak = vn3(vec3(vWPos.x * 1.7 + vWPos.z * 1.7, vWPos.y * 0.08, vWPos.z * 0.3 - vWPos.x * 0.3));
+        streak = smoothstep(0.55, 0.95, streak) * vert * uGrime;
+        diffuseColor.rgb *= 1.0 - streak * 0.35;
         float gH = 1.0 - smoothstep(0.0, 2.2, vWPos.y);
         float gN = fract(sin(dot(floor(vWPos.xz * 0.7), vec2(12.9898, 78.233))) * 43758.5453);
         diffuseColor.rgb *= mix(1.0, 0.62 + 0.12 * gN, gH * uGrime);
@@ -44,9 +59,99 @@ function patch(mat, opts = {}) {
         float wetM = uWet * uWetK * mix(0.45, 1.0, up);
         diffuseColor.rgb *= mix(1.0, 0.68, wetM);`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        roughnessFactor = mix(roughnessFactor, roughnessFactor * 0.28, wetM);`);
+        roughnessFactor = mix(roughnessFactor, roughnessFactor * 0.28, wetM);
+        #if defined(PUDDLES) && defined(USE_ROUGHNESSMAP)
+          // puddles stored in the blue channel fill up as the ground gets wet
+          float pud = smoothstep(0.15, 0.6, texture2D(roughnessMap, vRoughnessMapUv).b) * smoothstep(0.2, 0.9, uWet) * up;
+          roughnessFactor = mix(roughnessFactor, 0.02, pud);
+          diffuseColor.rgb *= mix(1.0, 0.35, pud);
+        #endif`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        #if defined(PUDDLES) && defined(USE_ROUGHNESSMAP)
+          normal = normalize(mix(normal, normalize(vNormal), smoothstep(0.15, 0.6, texture2D(roughnessMap, vRoughnessMapUv).b) * smoothstep(0.2, 0.9, uWet)));
+        #endif`);
   };
-  mat.customProgramCacheKey = () => `g${grime}w${wetUp}`;
+  if (opts.puddles) mat.defines = { ...(mat.defines || {}), PUDDLES: '' };
+  mat.customProgramCacheKey = () => `g${grime}w${wetUp}p${opts.puddles ? 1 : 0}`;
+  return mat;
+}
+
+// Interior mapping: every pane of glass looks into a fake room (back wall,
+// side walls, floor, ceiling, sometimes curtains) ray-traced in the
+// fragment shader, so blocks of flats have depth instead of mirror windows.
+// Rooms are cells of a world-aligned grid along the facade; at night a
+// share of them are lit warm. The glass itself reflects the sky by Fresnel.
+function patchGlass(mat, litShare) {
+  mat.onBeforeCompile = (sh) => {
+    sh.uniforms.uNight = globals.uNight;
+    sh.uniforms.uDayLum = globals.uDayLum;
+    sh.uniforms.uLitShare = { value: litShare };
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWNrm;')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+        {
+          vec4 wp = vec4(transformed, 1.0);
+          vec3 wn = objectNormal;
+          #ifdef USE_INSTANCING
+            wp = instanceMatrix * wp; wn = mat3(instanceMatrix) * wn;
+          #endif
+          vWPos = (modelMatrix * wp).xyz;
+          vWNrm = normalize(mat3(modelMatrix) * wn);
+        }`);
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+        varying vec3 vWPos; varying vec3 vWNrm;
+        uniform float uNight, uDayLum, uLitShare;
+        float ih(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+        vec3 interiorColor(vec3 wpos, vec3 nrm, vec3 cam){
+          vec3 n = normalize(vec3(nrm.x, 0.0, nrm.z));
+          vec3 t = normalize(cross(vec3(0.0, 1.0, 0.0), n));
+          vec3 dir = normalize(wpos - cam);
+          float du = dot(dir, t), dv = dir.y, dw = -dot(dir, n);
+          if (dw < 0.02) dw = 0.02;
+          vec2 cell = vec2(3.0, 3.0);
+          float D = 3.6;
+          float u = dot(wpos, t), v = wpos.y + 0.05;
+          float u0 = floor(u / cell.x) * cell.x, v0 = floor(v / cell.y) * cell.y;
+          float tu = du > 0.0 ? (u0 + cell.x - u) / du : (u0 - u) / min(du, -1e-4);
+          float tv = dv > 0.0 ? (v0 + cell.y - v) / dv : (v0 - v) / min(dv, -1e-4);
+          float tw = D / dw;
+          float th = min(tu, min(tv, tw));
+          vec3 id = vec3(u0, v0, dot(wpos, n) * 0.0 + floor(dot(wpos, vec3(0.37, 0.0, 0.61))));
+          float r1 = ih(id), r2 = ih(id + 7.1), r3 = ih(id + 3.3);
+          vec3 wall = mix(vec3(0.42, 0.38, 0.30), vec3(0.30, 0.33, 0.30), r1) * mix(0.6, 1.0, r2);
+          vec3 col;
+          float depth = th * dw;              // how far behind the glass the hit is
+          if (th == tw) {
+            float hu = u + du * th - u0, hv = v + dv * th - v0;
+            col = wall * 0.75;
+            // a door or a cupboard on the back wall
+            if (r3 > 0.5 && abs(hu - cell.x * (0.25 + 0.5 * r1)) < 0.45 && hv < 2.1) col = vec3(0.16, 0.11, 0.07);
+          } else if (th == tv) {
+            col = dv > 0.0 ? vec3(0.55, 0.53, 0.48) : vec3(0.15, 0.10, 0.07);
+          } else {
+            col = wall * 0.9;
+          }
+          // furniture silhouette low in the room
+          float fy = v + dv * min(th, D * 0.7 / dw) - v0;
+          if (r2 > 0.4 && fy < 0.9 && depth > 1.2) col *= 0.45;
+          // light: lit rooms at night glow warm with falloff from a ceiling bulb
+          float lit = step(1.0 - uLitShare, ih(id + 11.0));
+          float fall = 1.0 / (1.0 + depth * 0.35);
+          vec3 night = col * lit * vec3(1.0, 0.72, 0.42) * 1.6 * fall;
+          vec3 day = col * uDayLum * 0.22 * (0.6 + 0.4 * fall);
+          vec3 c = mix(day, night, uNight) + day * 0.3 * uNight;
+          // curtains or blackout paper across part of the pane
+          float hu2 = u - u0;
+          float curtain = step(0.55, r3) * (step(hu2, cell.x * (0.15 + 0.25 * r2)) + step(cell.x * (0.85 - 0.25 * r1), hu2));
+          vec3 cc = mix(vec3(0.30, 0.26, 0.20), vec3(0.20, 0.22, 0.24), r1);
+          c = mix(c, cc * mix(uDayLum * 0.35, 1.2 * lit, uNight), clamp(curtain, 0.0, 1.0) * 0.9);
+          return c;
+        }`)
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        totalEmissiveRadiance += interiorColor(vWPos, vWNrm, cameraPosition);`);
+  };
+  mat.customProgramCacheKey = () => 'glass' + litShare;
   return mat;
 }
 
@@ -91,6 +196,12 @@ export function buildLibrary() {
   std('screen_frame', { color: 0x2e3133, roughness: 0.35, metalness: 0.9 }, { grime: 0 });
   std('tile_white', { ...T('tile_white'), color: 0xffffff, roughness: 1 }, { grime: 0.3 });
   std('rubble', { ...T('rubble'), color: 0xffffff, roughness: 1 }, { grime: 0 });
+  // ground surfaces; meshes using them need world-space UVs (u = x / tile)
+  std('asphalt', { ...T('asphalt'), color: 0xffffff, roughness: 1 }, { grime: 0, puddles: true });
+  std('paving', { ...T('paving'), color: 0xffffff, roughness: 1 }, { grime: 0, puddles: true });
+  std('cobble', { ...T('cobble'), color: 0xffffff, roughness: 1 }, { grime: 0, puddles: true });
+  std('dirt', { ...T('dirt'), color: 0xffffff, roughness: 1 }, { grime: 0, puddles: false });
+  std('grass', { ...T('grass'), color: 0xffffff, roughness: 1 }, { grime: 0, puddles: false });
   std('sandbag', { ...T('fabric'), color: 0x8e7f62, roughness: 1 }, { grime: 0.3 });
   std('canvas', { ...T('fabric'), color: 0x5a5a44, roughness: 1 }, { grime: 0 });
   std('bark', { ...T('bark'), color: 0xffffff, roughness: 1 }, { grime: 0 });
@@ -103,9 +214,13 @@ export function buildLibrary() {
   std('diary_cover', { color: 0x5a1410, roughness: 0.55 }, { grime: 0 });
   std('lamp_bulb', { color: 0xffe2b0, emissive: 0xffc070, emissiveIntensity: 0.0, roughness: 0.3 }, { grime: 0 });
   // glass reflects the sky like a dulled mirror; some windows light up at night
-  std('glass', { color: 0x1a1f24, roughness: 0.06, metalness: 1, envMapIntensity: 1.1 }, { grime: 0, wet: 0 });
-  const lit = std('glass_lit', { color: 0x1a1f24, roughness: 0.08, metalness: 1, emissive: 0xffb05a, emissiveIntensity: 0 }, { grime: 0, wet: 0 });
-  lit.userData.nightEmissive = 1.6;
+  for (const [name, share] of [['glass', 0.12], ['glass_lit', 0.85]]) {
+    // emissive stays black: the shader adds the fake room on top of it
+    const g = new THREE.MeshStandardMaterial({ name, color: 0x000000, roughness: 0.04, metalness: 0.0,
+      emissive: 0x000000, envMapIntensity: 3.2 });
+    patchGlass(g, share);
+    lib.set(name, g);
+  }
   const pw = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.02, transmission: 1, thickness: 0.08, ior: 1.5 });
   pw.name = 'paperweight_glass'; lib.set(pw.name, pw);
   lib.set('lens', new THREE.MeshStandardMaterial({ color: 0x9ab0b0, roughness: 0.05, metalness: 0.5, transparent: true, opacity: 0.35 }));

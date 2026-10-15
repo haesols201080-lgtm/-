@@ -212,16 +212,16 @@ def asphalt(res=1024, seed=40):
     n = fbm(res, 8, 8, seed); agg = fbm(res, 256, 2, seed + 1)
     big = fbm(res, 3, 5, seed + 2)
     d1, d2, _ = worley(res, 5, seed + 3)
-    crack = np.clip(1 - (d2 - d1) * 25, 0, 1) * np.clip((fbm(res, 6, 3, seed + 4) - 0.5) * 6, 0, 1)
-    puddle = np.clip((big - 0.56) * 9, 0, 1)
+    crack = np.clip(1 - (d2 - d1) * 40, 0, 1) * np.clip((fbm(res, 6, 3, seed + 4) - 0.62) * 5, 0, 1) * 0.7
+    puddle = np.clip((big - 0.62) * 7, 0, 1)
     col = tint(n * 0.6 + agg * 0.4, (0.09, 0.09, 0.095), (0.25, 0.245, 0.24))
     col *= 1 - crack[..., None] * 0.6
-    col *= 1 - puddle[..., None] * 0.45
+    col *= 1 - puddle[..., None] * 0.18
     h = agg * 0.4 + n * 0.2 - crack * 0.6
     h = h * (1 - puddle) + puddle * 0.1
-    rough = 0.72 + 0.2 * agg
-    rough = rough * (1 - puddle) + 0.04 * puddle
-    save_set('asphalt', col, h, rough, 1 - crack * 0.5, nstrength=3.0)
+    rough = 0.72 + 0.2 * agg - puddle * 0.12
+    # puddle mask goes in the blue channel; the game floods it when it rains
+    save_set('asphalt', col, h, rough, 1 - crack * 0.5, puddle, nstrength=3.0)
 
 
 def paving(res=1024, seed=50):
@@ -237,10 +237,10 @@ def paving(res=1024, seed=50):
     puddle = np.clip((big - 0.6) * 8, 0, 1)
     col = tint(v * 0.3 + n * 0.7, (0.24, 0.23, 0.22), (0.47, 0.45, 0.42))
     col *= 1 - (joint * 0.6 + crack * 0.4)[..., None]
-    col *= 1 - puddle[..., None] * 0.35
+    col *= 1 - puddle[..., None] * 0.12
     h = 0.6 - joint * 0.6 + n * 0.2 - crack * 0.3 + v * 0.1
-    rough = (0.8 + 0.15 * n) * (1 - puddle) + 0.06 * puddle
-    save_set('paving', col, h, rough, 1 - joint * 0.5)
+    rough = 0.8 + 0.15 * n - puddle * 0.1
+    save_set('paving', col, h, rough, 1 - joint * 0.5, puddle)
 
 
 def cobble(res=512, seed=60):
@@ -250,9 +250,9 @@ def cobble(res=512, seed=60):
     col = tint(idv * 0.5 + n * 0.5, (0.16, 0.15, 0.14), (0.38, 0.36, 0.33))
     col *= (0.35 + 0.65 * edge[..., None])
     h = np.sqrt(edge) * 0.9 + n * 0.1
-    wet = np.clip((big - 0.5) * 4, 0, 1)
-    rough = (0.6 + 0.3 * n) * (1 - wet * 0.7)
-    save_set('cobble', col, h, rough, 0.4 + 0.6 * edge)
+    wet = np.clip((big - 0.5) * 4, 0, 1) * (1 - edge * 0.6)
+    rough = 0.7 + 0.25 * n
+    save_set('cobble', col, h, rough, 0.4 + 0.6 * edge, wet)
 
 
 def planks(name, res, seed, c0, c1, n_planks=6, weathered=False):

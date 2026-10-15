@@ -27,7 +27,7 @@ def obox(m, P, u0, u1, v0, v1, w0, w1, mat, faces='all'):
 
 
 def facade(m, origin, right, out, width, height, wins, wall, depth=0.22,
-           frame='iron_black', sills=True, mullions=True):
+           frame='iron_black', sills=True, mullions=True, frames=True):
     """A flat wall with recessed window openings.
     wins: list of (x0, z0, x1, z1, glass_material[, kind])"""
     P = frame_fn(origin, right, out)
@@ -50,6 +50,13 @@ def facade(m, origin, right, out, width, height, wins, wall, depth=0.22,
         m.quad([P(x1, z0, 0), P(x1, z1, 0), P(x1, z1, d), P(x1, z0, d)], wall)
         m.quad([P(x0, z0, d), P(x1, z0, d), P(x1, z1, d), P(x0, z1, d)], gm)
         if kind == 'window':
+            if frames and gm in ('glass', 'glass_lit'):
+                # sash frame round the glass, set back in the reveal
+                fw = 0.055
+                obox(m, P, x0, x1, z0, z0 + fw, d - 0.08, d - 0.004, frame)
+                obox(m, P, x0, x1, z1 - fw, z1, d - 0.08, d - 0.004, frame)
+                obox(m, P, x0, x0 + fw, z0 + fw, z1 - fw, d - 0.08, d - 0.004, frame)
+                obox(m, P, x1 - fw, x1, z0 + fw, z1 - fw, d - 0.08, d - 0.004, frame)
             if mullions and gm in ('glass', 'glass_lit'):
                 mu = (x0 + x1) / 2
                 obox(m, P, mu - 0.035, mu + 0.035, z0, z1, d - 0.07, d - 0.005, frame)
@@ -140,6 +147,11 @@ def party_block(name, W, D, floors, fh=3.0, seed=1, wall='concrete_grey', entran
                  faces={'+z', '-y', '-z', '-x', '+x'})
         obox(m, P, -0.25, width + 0.25, H - 0.55, H - 0.25, -0.3, 0.0, wall, faces={'+z', '-y', '-z', '-x', '+x'})
         obox(m, P, -0.05, width + 0.05, 0.0, 0.55, -0.08, 0.0, 'concrete_dark', faces={'+z', '-y', '-x', '+x'})
+        if key in ('front', 'back'):
+            for u in (0.35, width - 0.35):
+                m.cyl(P(u, 0.0, -0.14), P(u, H - 0.3, -0.14), 0.055, 0.055, 'iron_black', 8)
+                m.cyl(P(u, H - 0.3, -0.14), P(u, H - 0.2, 0.0), 0.055, 0.055, 'iron_black', 8)
+                m.cyl(P(u - 0.1, 0.02, -0.14), P(u + 0.12, 0.02, -0.3), 0.06, 0.06, 'iron_black', 8)
     # roof with parapet
     m.box((-W / 2, -D / 2, H - 0.01), (W / 2, D / 2, H), 'concrete_dark', faces={'+z'})
     t = 0.25
@@ -227,6 +239,15 @@ def prole_terrace(name='prole_terrace', n=4, seed=3, ruined=0, shop=False, pub=F
                     continue
                 obox(m, P, h * hw + 0.45, h * hw + 1.75, 0.0, 0.18, -0.45, 0.0, 'stone_dirty')
     gable_roof(m, x_start, x_start + Wb, D, H, 2.6)
+    # cast-iron gutters along both eaves, downpipes between houses
+    for y in (-D / 2 - 0.42, D / 2 + 0.42):
+        m.cyl((x_start - 0.3, y, H - 0.2), (x_start + Wb + 0.3, y, H - 0.2), 0.07, 0.07, 'iron_black', 8)
+        for h in range(whole + 1):
+            if r.random() < 0.35:
+                continue
+            x = x_start + h * hw + (0.12 if h == 0 else -0.12 if h == whole else 0)
+            m.cyl((x, y, H - 0.25), (x, (D / 2 + 0.14) * (1 if y > 0 else -1), H - 0.6), 0.045, 0.045, 'iron_black', 6)
+            m.cyl((x, (D / 2 + 0.14) * (1 if y > 0 else -1), H - 0.6), (x, (D / 2 + 0.14) * (1 if y > 0 else -1), 0.05), 0.045, 0.045, 'iron_black', 6)
     # chimney stacks on party walls
     for h in range(whole + 1):
         x = x_start + h * hw
@@ -333,7 +354,7 @@ def pyramid(name, base, tiers, th, step, seed=11, windows=True, slogans=True, to
                                      'glass_lit' if r.random() < 0.25 else 'glass'))
             if key == 'front' and i == 0:
                 wins.append((width / 2 - 6, 0.0, width / 2 + 6, 7.5, 'glass', 'door'))
-            facade(m, o, right, out, width, th, wins, 'concrete_white', depth=0.35, sills=False, mullions=False)
+            facade(m, o, right, out, width, th, wins, 'concrete_white', depth=0.35, sills=False, mullions=False, frames=False)
             P = frame_fn(o, right, out)
             if key == 'front' and slogans and 2 <= i <= 4:
                 k = i - 2

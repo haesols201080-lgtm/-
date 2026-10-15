@@ -3,8 +3,10 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 
 const loader = new GLTFLoader();
+loader.setMeshoptDecoder(MeshoptDecoder);
 const texLoader = new THREE.TextureLoader();
 const models = new Map();
 const textures = new Map();
@@ -58,7 +60,7 @@ export async function loadAll(onProgress) {
     if (packed && packed.m[n]) {
       gltf = await loader.parseAsync(b64ToBuffer(packed.m[n]), '');
     } else {
-      gltf = await loader.loadAsync(`assets/models/${n}.glb`);
+      gltf = await loader.loadAsync(`assets/models_opt/${n}.glb`);
     }
     models.set(n, gltf);
     tick();

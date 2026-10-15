@@ -228,6 +228,8 @@ class Mesh:
     def finish(self, box_uv=True, smooth_angle=None, link=True):
         bm = self.bm
         if box_uv:
+            # weld coincident corners so the exporter can share vertices
+            bmesh.ops.remove_doubles(bm, verts=bm.verts[:], dist=1e-4)
             uv_box(bm, self.uv, self.mats, self.keep_uv)
         me = bpy.data.meshes.new(self.name)
         bm.to_mesh(me)
