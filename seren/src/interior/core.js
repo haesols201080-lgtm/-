@@ -44,7 +44,7 @@ function coreOptions(B, nUp) {
 }
 
 /** 부품 목록 → 정방향(정면 +j) 칸 목록. 반환 { w, d, parts:[{type, i0, j0, w, d}], lobby:[[i,j]] } */
-function layoutComps(list) {
+function layoutComps(list, deep = true) {
   const D = Math.max(...list.map((t) => COMP[t].d));
   const mini = list.every((t) => t === 'spiral' || t === 'spiral2' || t === 'liftS');
   const lobbyD = mini || list.some((t) => COMP[t].d < D) ? 0 : 2; // 곧은 계단만 있으면 앞에 2칸 홀
@@ -56,7 +56,8 @@ function layoutComps(list) {
   for (const t of list) { const c = COMP[t]; parts.push({ type: t, kind: c.kind, i0: x, j0: 0, w: c.w, d: c.d }); x += c.w; }
   // 승강기 문 앞에는 적어도 두 칸(2 m) 홀 — 작은 심(나선 계단 + 작은 승강기)이나 얕은 승강기 앞이 한 칸 띠뿐이면
   //  타고 내리는 사람이 설 곳이 없고 문 앞이 곧 옆 방이 된다 (v24 4단계 승강기: 부르고 기다리고 타는 자리)
-  const liftNeed = Math.max(0, ...list.filter((t) => COMP[t].kind === 'lift' || COMP[t].kind === 'cargo').map((t) => COMP[t].d + 2));
+  //  (deep = false: 그 깊이로는 심이 안 들어가는 작은 층 — 승강기를 잃기보다 예전 깊이로 한 번 더 해 본다)
+  const liftNeed = deep ? Math.max(0, ...list.filter((t) => COMP[t].kind === 'lift' || COMP[t].kind === 'cargo').map((t) => COMP[t].d + 2)) : 0;
   const W = x, Dt = Math.max(D + lobbyD + extra, liftNeed);
   const lobby = [];
   const occ = new Set();
@@ -140,10 +141,10 @@ export function planCore(B) {
         return false;
       };
       const tallGap = gapMax(serve) > SPIRAL2_MAXH + 1e-6;
-      for (const list of coreOptions(B, nUp)) {
+      for (const [list, deep] of coreOptions(B, nUp).flatMap((l) => (hasLift(l) ? [[l, true], [l, false]] : [[l, true]]))) {
         if (strict && !list.some((t) => COMP[t].kind === 'lift')) continue;
         const tooSmall = tallGap && list.includes('spiral2');
-        const L = layoutComps(list);
+        const L = layoutComps(list, deep);
         let best = null, bs = Infinity;
         const cands = [];
         for (let o = 0; o < 4; o++) {

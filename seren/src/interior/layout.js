@@ -368,12 +368,24 @@ export function layoutFloor(B, F, ctx = {}) {
   // ── 5c. 폭 1 m 띠 방(2×2 칸 하나 들어가지 않는 방)은 이웃 방으로 — 가구 하나 놓을 수 없는 「방」이 생기지 않게.
   //   복도·홀에 닿았으면 그쪽(복도가 조금 넓어진다), 아니면 같은 집·가장 길게 맞닿은 방으로.
   //   띠가 된 것이 세대·객실의 첫 방이면 그 집의 다른 방(욕실·부엌…)이 그 이름을 이어받는다 (객실이 욕실만 남지 않게). 5a 뒤에도 한 번 더.
+  const coreFront = new Set(); // 심(계단·승강기) 문 앞 칸
+  if (B.core) for (const p of B.core.parts) { const [ci, cj] = p.door.c, [di, dj] = p.door.dir; if (g.ok(ci + di, cj + dj)) coreFront.add(g.c(ci + di, cj + dj)); }
   const thinMerge = () => {
     const CORE = ['stair', 'lift', 'cargo', 'shaft'];
     for (let pass = 0; pass < 3; pass++) {
       let ch = 0;
       for (const R of rooms) {
-        if (!R.n || CORE.includes(R.type) || R.circ || R.main || R.sealed || R.shop || fat(g, room, R) > 0) continue;
+        // 오가는 공간도 네 칸 아래 조각(심 뒤에 남은 현관 홀 따위 — 문을 낼 자리도 없다)이면 이웃으로. 복도·승강기 홀·로비는 그대로,
+        //  그 층의 하나뿐인 오가는 공간이거나 계단·승강기 문 앞 칸을 가진 조각(작은 집의 현관 — 계단이 그리로 열린다)도 그대로
+        //  다른 오가는 공간과 떨어진 채(심 뒤·방 사이에 갇힌) 열두 칸 아래 홀도 — 문으로 이어 줄 길이 없다
+        let sliver = R.circ && R.n <= 12 && !['corridor', 'lifthall', 'lobby'].includes(R.type) && R.id !== L.lifthall &&
+          rooms.some((S) => S !== R && S.n && S.circ) && ![...coreFront].some((c) => room[c] === R.id + 1);
+        if (sliver && R.n > 4) {
+          let touch = false;
+          for (let c = 0; c < g.n && !touch; c++) if (room[c] === R.id + 1) g.nb(c, (e) => { const S = room[e] ? rooms[room[e] - 1] : null; if (S && S !== R && S.circ) touch = true; });
+          sliver = !touch;
+        }
+        if (!R.n || CORE.includes(R.type) || (R.circ && !sliver) || R.main || R.sealed || R.shop || fat(g, room, R) > 0) continue;
         const kids = rooms.filter((S) => S.n && S.unit === R.id);
         if (kids.length) {
           // 이 집의 가장 큰 다른 방이 이 방을 이어받는다

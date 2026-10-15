@@ -90,9 +90,22 @@ export class Carts {
       if (home !== i) continue;
       this.seeded.add(L.link);
       const [fx, fz] = L.front, sx = fz ? 1 : 0, sz = fx ? 1 : 0;
-      const ag = this.ops.agents;
-      let gx = L.x + fx * 2.0 + sx * (L.W / 2 + 0.9), gz = L.z + fz * 2.0 + sz * (L.W / 2 + 0.9);
-      if (ag) [gx, gz] = ag.freeNear(i, gx, gz);
+      const ag = this.ops.agents, pl = ind.plan(i);
+      // 승강기 문 옆 빈 바닥: 걸을 수 있고, 가구 앞(쓰는 자리)·다른 문 앞·승강기 문 앞을 막지 않는 곳
+      const clear = (x, z) => {
+        if (pl && pl.fix.some((F) => Math.hypot(x - F.ax, z - F.az) < 1.3 || Math.hypot(x - F.x, z - F.z) < Math.max(F.w, F.d) / 2 + 0.7)) return false;
+        if ((out.doors || []).some((d) => Math.hypot(x - d.x, z - d.z) < 1.6)) return false;
+        for (const Q of out.lifts || []) { const rx = x - Q.x, rz = z - Q.z, n = rx * Q.front[0] + rz * Q.front[1], sd = Q.front[1] ? rx : rz; if (n > -0.2 && n < 2.2 && Math.abs(sd) < Q.W / 2 + 0.6) return false; }
+        return true;
+      };
+      let gx = null, gz = null;
+      for (const dn of [1.6, 2.4, 3.2, 1.0]) for (const ds of [1, -1]) for (const dw of [0.9, 1.6, 2.4]) {
+        if (gx != null) break;
+        const tx = L.x + fx * dn + sx * ds * (L.W / 2 + dw), tz = L.z + fz * dn + sz * ds * (L.W / 2 + dw);
+        const [ax, az] = ag ? ag.freeNear(i, tx, tz) : [tx, tz];
+        if (Math.hypot(ax - tx, az - tz) < 0.4 && clear(ax, az)) { gx = ax; gz = az; }
+      }
+      if (gx == null) continue; // 문 옆에 둘 곳이 없으면 이 승강기에는 수레를 두지 않는다 (쓰는 자리를 막느니)
       const [wx, wz] = ind.world(L.x + fx, L.z + fz), [cx, cz] = ind.world(gx, gz);
       const cart = { id: this.list.length, link: L.link, floor: i, gx, gz, yaw: Math.atan2(wx - cx, wz - cz), load: null, mesh: null, col: null };
       cart.home = { floor: i, gx, gz, yaw: cart.yaw };
