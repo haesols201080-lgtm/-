@@ -134,7 +134,7 @@ export class Atmosphere {
 
   update(dt, camPos, minutes) {
     this.minutes = minutes;
-    if (this.indoor) { this.uni.uTime.value += dt; return; }
+    if (this.indoor) { this.uni.uTime.value += dt; this.maybeBakeProbe(camPos); return; }
     const w = this.w, T = this.target || WEATHER[this.weather];
     const k = Math.min(1, dt * 0.15);
     for (const key in T) w[key] += (T[key] - w[key]) * k;
@@ -200,11 +200,46 @@ export class Atmosphere {
     const key = `${Math.round(minutes / 15)}:${this.weather}:${Math.round(cloud * 10)}`;
     if (key !== this.lastEnvKey) {
       this.lastEnvKey = key;
-      if (this.envRT) this.envRT.dispose();
-      this.envRT = this.pmrem.fromScene(this.envScene, 0, 0.1, 500);
-      if (!this.indoor) this.scene.environment = this.envRT.texture;
+      this.probeDirty = true;
     }
+    this.maybeBakeProbe(camPos);
   }
+
+  // Reflection probe: the real surroundings (buildings, lamps, the sky) are
+  // rendered into a cube map at the player's position and prefiltered for
+  // image-based lighting, so windows and wet streets reflect the city. Re-
+  // baked when the player has moved far enough, the light changed, or the
+  // location changed.
+  maybeBakeProbe(pos, force = false) {
+    if (!this.probePos) this.probePos = pos.clone().add(new THREE.Vector3(1e6, 0, 0));
+    const moved = this.probePos.distanceTo(pos);
+    if (!force && !this.probeDirty && moved < (this.indoor ? 6 : 25)) return;
+    const now = performance.now();
+    if (!force && this.lastProbe && now - this.lastProbe < 1500) return;
+    this.lastProbe = now;
+    this.probeDirty = false;
+    this.probePos.copy(pos);
+    const r = this.renderer;
+    const shadowAuto = r.shadowMap.autoUpdate;
+    r.shadowMap.autoUpdate = false;
+    const prevEnv = this.scene.environment;
+    const domePos = this.dome.position.clone();
+    this.dome.position.copy(pos);
+    const old = this.envRT;
+    try {
+      this.scene.environment = prevEnv;
+      this.envRT = this.pmrem.fromScene(this.scene, 0, 0.1, this.indoor ? 60 : 1100, { size: 256, position: pos.clone() });
+    } catch (e) {
+      // older signature without options: bake at the origin of the scene
+      this.envRT = this.pmrem.fromScene(this.envScene, 0, 0.1, 500);
+    }
+    r.shadowMap.autoUpdate = shadowAuto;
+    this.dome.position.copy(domePos);
+    this.scene.environment = this.envRT.texture;
+    if (old) old.dispose();
+  }
+
+  invalidateProbe() { this.probeDirty = true; }
 
   setIndoor(on, fogColor = 0x1a1a1a, density = 0.02) {
     this.indoor = on;
@@ -215,7 +250,7 @@ export class Atmosphere {
       this.hemi.intensity = 0.25;
       this.hemi.color.set(0x9a9890); this.hemi.groundColor.set(0x2a2622);
       this.fog.color.set(fogColor); this.fog.density = density;
-      this.scene.environment = this.envRT ? this.envRT.texture : null;
     }
+    this.probeDirty = true;
   }
 }

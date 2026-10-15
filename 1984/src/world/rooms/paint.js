@@ -829,3 +829,277 @@ export function view(kind, night, art, horizon = 0.39) {
   ctx.filter = 'blur(1.2px)'; ctx.drawImage(c, 0, 0); ctx.filter = 'none';
   return toTex(c, { aniso: 4 });
 }
+
+// ---------------------------------------------------------------- surfaces
+
+// Anisotropic tileable value noise (separate periods per axis).
+function vn2(x, y, px, py) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const fx = x - xi, fy = y - yi;
+  const h = (i, j) => {
+    i = ((i % px) + px) % px; j = ((j % py) + py) % py;
+    let n = i * 374761393 + j * 668265263 + 1013904223;
+    n = (n ^ (n >>> 13)) * 1274126177;
+    return ((n ^ (n >>> 16)) >>> 0) / 4294967296;
+  };
+  const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+  const a = h(xi, yi), b = h(xi + 1, yi), c = h(xi, yi + 1), d = h(xi + 1, yi + 1);
+  return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
+}
+
+// Distemper and gloss paint: a light neutral grey with soft blotches, brush
+// marks and specks, tinted by the material colour. Tileable, 512 px.
+export function paintNeutral(sd = 1) {
+  srand(800 + sd);
+  const S = 512;
+  const [c, ctx] = cv(S, S);
+  const img = ctx.createImageData(S, S); const d = img.data;
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const n = fbm(x / 128, y / 128, 4, 4);
+      const m = fbm(x / 32 + 7, y / 32 + 3, 3, 16);
+      const brush = vn2(x / 4, y / 64, 128, 8) * 0.6 + vn2(x / 8, y / 128, 64, 4) * 0.4;
+      let v = 0.86 + (n - 0.5) * 0.16 + (m - 0.5) * 0.05 + (brush - 0.5) * 0.035;
+      if (rnd() < 0.0015) v -= R(0.08, 0.25);
+      const i = (y * S + x) * 4;
+      d[i] = v * 255; d[i + 1] = v * 252; d[i + 2] = v * 244; d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toTex(c, { repeat: true });
+}
+
+// Normal map from a height function (wraps at the edges, so it tiles).
+function normalFrom(hf, S, strength) {
+  const h = new Float32Array(S * S);
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) h[y * S + x] = hf(x, y);
+  const [c, ctx] = cv(S, S);
+  const img = ctx.createImageData(S, S); const d = img.data;
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const l = h[y * S + ((x - 1 + S) % S)], r = h[y * S + ((x + 1) % S)];
+      const u = h[((y - 1 + S) % S) * S + x], b = h[((y + 1) % S) * S + x];
+      let nx = (l - r) * strength, ny = (b - u) * strength, nz = 1;
+      const k = 1 / Math.hypot(nx, ny, nz);
+      const i = (y * S + x) * 4;
+      d[i] = (nx * k * 0.5 + 0.5) * 255; d[i + 1] = (ny * k * 0.5 + 0.5) * 255; d[i + 2] = (nz * k * 0.5 + 0.5) * 255; d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toTex(c, { srgb: false, repeat: true });
+}
+
+// Plaster / paper bump: fine orange-peel, trowel undulation and pits.
+export function plasterBump() {
+  srand(820);
+  const pits = [];
+  for (let i = 0; i < 220; i++) pits.push([R(0, 512), R(0, 512), R(1, 3.5)]);
+  return normalFrom((x, y) => {
+    let v = fbm(x / 8, y / 8, 3, 64) * 0.5 + fbm(x / 64, y / 64, 3, 8) * 1.6;
+    return v;
+  }, 512, 2.2);
+}
+
+// Woven fabric / carpet pile.
+export function pileBump() {
+  srand(830);
+  return normalFrom((x, y) => vn2(x / 2, y / 2, 128, 128) * 0.6 + fbm(x / 16, y / 16, 3, 32) * 0.5 + ((x + y) % 4 < 2 ? 0.08 : 0), 256, 1.6);
+}
+
+// Winston's wallpaper: a cheap utility paper, grey-green ground with a
+// small trellis and faded four-petal motifs. One tile = one 0.53 m strip.
+export function paperUtility() {
+  srand(840);
+  const S = 512;
+  const [c, ctx] = cv(S, S);
+  ctx.fillStyle = '#a19d84'; ctx.fillRect(0, 0, S, S);
+  // printed trellis, slightly misregistered
+  const n = 8, step = S / n;
+  ctx.lineWidth = 2.2;
+  for (const [ox, col] of [[1.5, 'rgba(120,124,100,0.55)'], [0, 'rgba(96,100,82,0.6)']]) {
+    ctx.strokeStyle = col;
+    for (let k = -n; k <= 2 * n; k++) {
+      ctx.beginPath(); ctx.moveTo(k * step + ox, 0); ctx.lineTo(k * step + S + ox, S); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(k * step + ox, 0); ctx.lineTo(k * step - S + ox, S); ctx.stroke();
+    }
+  }
+  for (let j = 0; j <= n; j++) {
+    for (let i = 0; i <= n; i++) {
+      const x = i * step + (j % 2 ? step / 2 : 0), y = j * step;
+      for (let k = 0; k < 4; k++) {
+        const a = k * Math.PI / 2 + Math.PI / 4;
+        ctx.fillStyle = 'rgba(132,104,84,0.75)';
+        ctx.beginPath(); ctx.ellipse(x + Math.cos(a) * 7, y + Math.sin(a) * 7, 6.5, 3.2, a, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.fillStyle = 'rgba(92,86,70,0.8)'; ctx.beginPath(); ctx.arc(x, y, 2.6, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  // strip seam: a dark line of grime and a lighter overlap
+  ctx.fillStyle = 'rgba(40,36,28,0.35)'; ctx.fillRect(0, 0, 2, S);
+  ctx.fillStyle = 'rgba(220,214,190,0.25)'; ctx.fillRect(2, 0, 3, S);
+  mottle(ctx, S, S, 2, 0.35, [120, 106, 72], 2);
+  mottle(ctx, S, S, 4, 0.18, [70, 64, 50], 4);
+  grain(ctx, S, S, 0.05);
+  return toTex(c, { repeat: true });
+}
+
+// Parsons' wallpaper: a faded regency stripe, cream and dull green.
+export function paperStripe() {
+  srand(850);
+  const S = 512;
+  const [c, ctx] = cv(S, S);
+  ctx.fillStyle = '#b6ad8c'; ctx.fillRect(0, 0, S, S);
+  const bands = [[0, 60, '#7a8064'], [60, 20, '#c4ba98'], [80, 8, '#6a7056'], [88, 80, '#b8ae8e'], [168, 8, '#6a7056'], [176, 20, '#c4ba98'], [196, 60, '#7a8064']];
+  for (let rep = 0; rep < 2; rep++) for (const [x, w, col] of bands) { ctx.fillStyle = col; ctx.fillRect(rep * 256 + x, 0, w, S); }
+  for (let y = 0; y < S; y += 32) { ctx.fillStyle = 'rgba(80,70,50,0.12)'; ctx.fillRect(0, y, S, 2); }
+  ctx.fillStyle = 'rgba(40,36,28,0.4)'; ctx.fillRect(0, 0, 2, S);
+  mottle(ctx, S, S, 2, 0.45, [128, 110, 70], 2);
+  mottle(ctx, S, S, 6, 0.2, [60, 56, 44], 6);
+  grain(ctx, S, S, 0.06);
+  return toTex(c, { repeat: true });
+}
+
+// The junk shop: a dark Victorian paper, olive and umber leaves, nearly gone
+// brown with a century of gas and tobacco.
+export function paperVictorian() {
+  srand(860);
+  const S = 512;
+  const [c, ctx] = cv(S, S);
+  ctx.fillStyle = '#5a4c34'; ctx.fillRect(0, 0, S, S);
+  const leaf = (x, y, s, a, col) => {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(s, s); ctx.fillStyle = col;
+    ctx.beginPath(); ctx.moveTo(0, -30); ctx.bezierCurveTo(18, -16, 18, 16, 0, 34); ctx.bezierCurveTo(-18, 16, -18, -16, 0, -30); ctx.fill();
+    ctx.restore();
+  };
+  for (let j = 0; j < 4; j++) {
+    for (let i = 0; i < 4; i++) {
+      const x = i * 128 + (j % 2) * 64, y = j * 128 + 64;
+      for (let k = 0; k < 6; k++) leaf(x + Math.cos(k) * 30, y + Math.sin(k * 1.3) * 30, 0.9, k * 1.05, k % 2 ? '#6a5c3a' : '#4e4630');
+      ctx.fillStyle = '#7a5a36'; ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(40,32,20,0.5)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(x, y + 60); ctx.quadraticCurveTo(x + 30, y, x, y - 60); ctx.stroke();
+    }
+  }
+  ctx.fillStyle = 'rgba(20,16,10,0.4)'; ctx.fillRect(0, 0, 2, S);
+  mottle(ctx, S, S, 2, 0.4, [50, 38, 22], 2);
+  mottle(ctx, S, S, 5, 0.25, [90, 70, 40], 5);
+  grain(ctx, S, S, 0.06);
+  return toTex(c, { repeat: true });
+}
+
+// Plain marbled linoleum, worn paler where people walk (low frequency).
+export function linoPlain(base = [92, 70, 52]) {
+  srand(870 + base[0]);
+  const S = 512;
+  const [c, ctx] = cv(S, S);
+  const img = ctx.createImageData(S, S); const d = img.data;
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const w = vn2(x / 32 + fbm(x / 64, y / 64, 3, 8) * 3, y / 128, 16, 4);
+      const n = fbm(x / 32, y / 32, 4, 16);
+      const k = 0.82 + (w - 0.5) * 0.3 + (n - 0.5) * 0.2;
+      const i = (y * S + x) * 4;
+      d[i] = base[0] * k; d[i + 1] = base[1] * k; d[i + 2] = base[2] * k; d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  grain(ctx, S, S, 0.03);
+  return toTex(c, { repeat: true });
+}
+
+// Wall-to-wall carpet pile with a faint shading of wear.
+export function carpet(base = [26, 34, 62]) {
+  srand(880 + base[2]);
+  const S = 256;
+  const [c, ctx] = cv(S, S);
+  const img = ctx.createImageData(S, S); const d = img.data;
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const n = fbm(x / 32, y / 32, 4, 8), f = rnd();
+      const k = 0.85 + (n - 0.5) * 0.25 + (f - 0.5) * 0.18;
+      const i = (y * S + x) * 4;
+      d[i] = base[0] * k; d[i + 1] = base[1] * k; d[i + 2] = base[2] * k; d[i + 3] = 255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+  return toTex(c, { repeat: true });
+}
+
+// Book spines for shelves: 16 spines across one texture, cloth and leather.
+export function bookSpines(sd = 0) {
+  srand(890 + sd);
+  const [c, ctx] = cv(512, 256);
+  let x = 0;
+  const cols = ['#4a2a22', '#283a2c', '#2a2c40', '#5a4a30', '#6a5a46', '#3a2a24', '#1c1c1e', '#7a6a50', '#4c3a3a', '#30302a'];
+  while (x < 512) {
+    const w = R(18, 40);
+    ctx.fillStyle = cols[Math.floor(rnd() * cols.length)];
+    ctx.fillRect(x, 0, w, 256);
+    ctx.fillStyle = 'rgba(200,170,90,0.55)';
+    for (const y of [R(20, 34), R(200, 226)]) ctx.fillRect(x + 3, y, w - 6, 3);
+    if (rnd() < 0.7) { ctx.fillStyle = 'rgba(210,180,100,0.5)'; ctx.fillRect(x + w * 0.3, R(60, 90), w * 0.4, R(30, 70)); }
+    ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(x, 0, 2, 256);
+    x += w;
+  }
+  mottle(ctx, 512, 256, 3, 0.3, [30, 24, 18], 3);
+  grain(ctx, 512, 256, 0.08);
+  return toTex(c);
+}
+
+// Aged mirror silvering: dark foxing spots and edge loss. Used as a colour
+// map on a metallic surface, so dark means no reflection.
+export function mirrorAged() {
+  srand(900);
+  const S = 256;
+  const [c, ctx] = cv(S, S);
+  ctx.fillStyle = '#cfcfc8'; ctx.fillRect(0, 0, S, S);
+  for (let i = 0; i < 90; i++) softDot(ctx, R(0, S), R(0, S), R(2, 10), `rgba(40,36,30,${R(0.2, 0.6)})`);
+  const g = ctx.createLinearGradient(0, 0, 0, S);
+  g.addColorStop(0, 'rgba(30,26,20,0.5)'); g.addColorStop(0.12, 'rgba(30,26,20,0)'); g.addColorStop(0.88, 'rgba(30,26,20,0)'); g.addColorStop(1, 'rgba(30,26,20,0.6)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, S, S);
+  mottle(ctx, S, S, 3, 0.3, [60, 56, 48], 3);
+  return toTex(c);
+}
+
+// Etched / frosted pub glass: alpha is the frosting.
+export function frosted(text) {
+  srand(910);
+  const [c, ctx] = cv(512, 256);
+  ctx.fillStyle = 'rgba(214,214,206,0.82)'; ctx.fillRect(0, 0, 512, 256);
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.lineWidth = 3;
+  ctx.strokeRect(16, 16, 480, 224);
+  for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(256, 128, 60 + k * 14, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke(); }
+  if (text) {
+    ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.font = `bold 54px ${SERIF}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, 256, 150);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  for (let i = 0; i < 40; i++) softDot(ctx, R(0, 512), R(0, 256), R(10, 40), 'rgba(120,110,90,0.08)');
+  return toTex(c);
+}
+
+// A soft vertical gradient for light shafts and steam (white, alpha falls off).
+export function shaft() {
+  const [c, ctx] = cv(64, 256);
+  const g = ctx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, 'rgba(255,255,255,0.0)'); g.addColorStop(0.15, 'rgba(255,255,255,0.9)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 256);
+  const h = ctx.createLinearGradient(0, 0, 64, 0);
+  h.addColorStop(0, 'rgba(0,0,0,1)'); h.addColorStop(0.25, 'rgba(0,0,0,0)'); h.addColorStop(0.75, 'rgba(0,0,0,0)'); h.addColorStop(1, 'rgba(0,0,0,1)');
+  ctx.globalCompositeOperation = 'destination-out'; ctx.fillStyle = h; ctx.fillRect(0, 0, 64, 256);
+  return toTex(c, { srgb: false });
+}
+
+// Washing on the line: a sheet, a shirt, nappies. Greyish whites.
+export function laundry(kind) {
+  srand(920 + kind.length);
+  const [c, ctx] = cv(128, 128);
+  const base = { sheet: '#d2cfc4', shirt: '#9a9c9e', nappy: '#dedad0', apron: '#8a7a68', vest: '#c6c0b0' }[kind] || '#ccc';
+  ctx.fillStyle = base; ctx.fillRect(0, 0, 128, 128);
+  for (let i = 0; i < 30; i++) softDot(ctx, R(0, 128), R(0, 128), R(8, 30), 'rgba(90,84,70,0.1)');
+  for (let y = 0; y < 128; y += 3) { ctx.fillStyle = 'rgba(0,0,0,0.04)'; ctx.fillRect(0, y, 128, 1); }
+  if (kind === 'shirt') { ctx.fillStyle = 'rgba(40,40,44,0.5)'; for (let x = 0; x < 128; x += 16) ctx.fillRect(x, 0, 3, 128); }
+  grain(ctx, 128, 128, 0.06);
+  return toTex(c);
+}
