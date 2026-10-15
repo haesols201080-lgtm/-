@@ -6,6 +6,8 @@ import * as THREE from 'three';
 import { MergeBuilder, noiseTexture, srgbClone, makeCanvas, canvasTexture, rng, patchMaterial } from './city_util.js';
 
 export const KERB_H = 0.12;
+// rain intensity for puddle ripples, driven by the city from G.atmos
+export const uRain = { value: 0 };
 
 export const T = { ASPHALT: 0, PAVING: 1, COBBLE: 2, SQUARE: 3, COMPOUND: 4, GRASS: 5, YARD: 6, CONCRETE: 7 };
 const RAISED = [false, true, false, true, false, true, true, true];
@@ -27,7 +29,6 @@ export function groundMaterial(G, name, tile, o = {}) {
   });
   if (o.offset) { mat.polygonOffset = true; mat.polygonOffsetFactor = -o.offset; mat.polygonOffsetUnits = -o.offset * 2; }
   const globals = G.mats.globals;
-  const uRain = G.world && G.world._uRain ? G.world._uRain : (globals.uRain || { value: 0 });
   const uni = {
     uNoise: { value: noiseTexture() }, uTile: { value: tile }, uPud: { value: o.puddles ?? 0.8 },
     uMacro: { value: o.macro ?? 1 }, uRain,
