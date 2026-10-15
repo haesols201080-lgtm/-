@@ -553,7 +553,7 @@ body.busy .touchui *, body.busy .tones * { pointer-events: none !important; }
 .os-bar { flex: 1; min-width: 8px; border: 0; border-radius: 4px 4px 0 0; background: linear-gradient(var(--os), color-mix(in srgb, var(--os) 30%, transparent)); cursor: pointer; padding: 0; }
 .os-bar:hover { filter: brightness(1.4); }
 .ops-hud { position: absolute; left: 18px; bottom: 120px; display: flex; flex-direction: column; gap: 5px; pointer-events: none; z-index: 3; }
-.ops-hud span { background: rgba(10, 14, 28, 0.62); border-left: 3px solid #7ff3e6; padding: 5px 10px; border-radius: 6px; font-size: 13px; color: var(--ink); max-width: 46vw; }
+.ops-hud span { background: rgba(10, 14, 28, 0.62); border-left: 3px solid #7ff3e6; padding: 5px 10px; border-radius: 6px; font-size: 13px; color: var(--ink); max-width: max(200px, min(46vw, calc(50vw - 160px))); } /* 가운데 아래 표적 이름과 겹치지 않게 */
 .ops-hud .b { border-color: #ffc46a; } .ops-hud .c { border-color: #ff9fd0; } .ops-hud .t { border-color: #b9a6ff; } .ops-hud .s { border-color: #8ff0c0; } .ops-hud .g { border-color: #9ff6ff; }
 /* 건물 안 지도 */
 .imap { position: absolute; inset: 0; display: flex; gap: 10px; padding: 10px; padding-bottom: calc(10px + var(--safe-b)); }

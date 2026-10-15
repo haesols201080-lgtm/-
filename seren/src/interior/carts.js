@@ -84,7 +84,7 @@ export class Carts {
     const ind = this.ind, B = this.ops.cur.B;
     for (const L of out.lifts || []) {
       if (!L.cargo || !L.stops || L.link == null || this.seeded.has(L.link)) continue;
-      const lk = B.links[L.link];
+      const lk = B.links.find((k) => k.id === L.link);
       const fl = lk ? lk.floors : L.stops;
       const home = fl.includes(B.ground) ? B.ground : fl.reduce((a, b) => (ind.yOf(a) <= ind.yOf(b) ? a : b), fl[0]);
       if (home !== i) continue;
@@ -124,7 +124,7 @@ export class Carts {
   /** 구역 창고에서 다른 층 창고로 갈 짐을 싣는다 */
   _loadFor(cart) {
     const ops = this.ops, ind = this.ind, B = ops.cur.B, econ = this.game.econ;
-    const lk = B.links[cart.link];
+    const lk = B.links.find((k) => k.id === cart.link);
     let best = null;
     for (const j of (lk ? lk.floors : [])) {
       if (j === cart.floor) continue;

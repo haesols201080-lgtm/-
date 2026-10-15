@@ -137,8 +137,7 @@ const s3 = await page.evaluate(async () => {
 });
 ok(s3.done === true && s3.cur === s3.dest, `화물 승강기로 ${s3.label}층 도착 (칸 안 ${s3.inCarF} 프레임)`);
 ok(s3.pushing && s3.cartObj && s3.vis, '수레째 왔다 (손에서 놓지 않음)');
-await page.evaluate(() => window.__cam(true));
-await page.evaluate(() => window.__run(4));
+await page.evaluate(() => { const g = SEREN.game; window.__cam(false); g.rig.yaw = g.player.yaw + Math.PI; return window.__run(20); }); // 칸 안: 게임 카메라 그대로 (벽 안쪽에 머문다)
 await shot('shots/cargo-2-car.png');
 
 // 4) 창고에 짐 내리기 → 세입자 재고 · 세우기
