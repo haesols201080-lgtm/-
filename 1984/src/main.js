@@ -32,6 +32,8 @@ async function boot() {
   setupStory(G);
   ui.loading(0.96);
   const params = new URLSearchParams(location.search);
+  if (params.has('noprobe')) G.atmos.noProbe = true;
+  if (params.has('slowgpu')) G.debug.maxDt = 2;     // headless tests run at ~1 fps
   G.renderer.setup(G.scene, G.camera, params.get('q') || localStorage.getItem('1984.quality') || 'medium');
   // compile shaders up front so the first seconds do not stutter
   G.enter('city', G.world.points.home_door ? { x: G.world.points.home_door.x, z: G.world.points.home_door.z + 0, yaw: 0 } : { x: 0, z: 0 });

@@ -211,6 +211,16 @@ export class Atmosphere {
   // baked when the player has moved far enough, the light changed, or the
   // location changed.
   maybeBakeProbe(pos, force = false) {
+    if (this.noProbe) {
+      if (this.probeDirty || !this.envRT) {
+        this.probeDirty = false;
+        const old = this.envRT;
+        this.envRT = this.pmrem.fromScene(this.envScene, 0, 0.1, 500);
+        this.scene.environment = this.envRT.texture;
+        if (old) old.dispose();
+      }
+      return;
+    }
     if (!this.probePos) this.probePos = pos.clone().add(new THREE.Vector3(1e6, 0, 0));
     const moved = this.probePos.distanceTo(pos);
     if (!force && !this.probeDirty && moved < (this.indoor ? 6 : 25)) return;
@@ -220,20 +230,18 @@ export class Atmosphere {
     this.probeDirty = false;
     this.probePos.copy(pos);
     const r = this.renderer;
-    const shadowAuto = r.shadowMap.autoUpdate;
-    r.shadowMap.autoUpdate = false;
     const prevEnv = this.scene.environment;
     const domePos = this.dome.position.clone();
     this.dome.position.copy(pos);
     const old = this.envRT;
     try {
-      this.scene.environment = prevEnv;
+      // bake without the previous probe so it cannot feed back into itself
+      this.scene.environment = null;
       this.envRT = this.pmrem.fromScene(this.scene, 0, 0.1, this.indoor ? 60 : 1100, { size: 256, position: pos.clone() });
     } catch (e) {
       // older signature without options: bake at the origin of the scene
       this.envRT = this.pmrem.fromScene(this.envScene, 0, 0.1, 500);
     }
-    r.shadowMap.autoUpdate = shadowAuto;
     this.dome.position.copy(domePos);
     this.scene.environment = this.envRT.texture;
     if (old) old.dispose();

@@ -168,7 +168,7 @@ export function createGame(container) {
 
   let last = performance.now();
   G.frame = (now = performance.now()) => {
-    let dt = Math.min(0.1, (now - last) / 1000);
+    let dt = Math.min(G.debug.maxDt || 0.1, (now - last) / 1000);
     last = now;
     if (G.paused) dt = 0;
     G.time += dt;

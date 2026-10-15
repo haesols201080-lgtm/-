@@ -414,7 +414,7 @@ class Telescreen {
     this.acc = 0;
     const ctx = this.ctx, W = 512, H = 320;
     ctx.save();
-    ctx.fillStyle = '#0d1412'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#26302c'; ctx.fillRect(0, 0, W, H);
     const m = this.mode;
     if (m === 'bb') this.drawBB();
     else if (m === 'figures') this.drawFigures();
@@ -428,7 +428,7 @@ class Telescreen {
     ctx.globalCompositeOperation = 'multiply';
     ctx.fillStyle = m === 'hate' ? '#c8d4c8' : '#a8c4b8'; ctx.fillRect(0, 0, W, H);
     ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.fillStyle = 'rgba(0,0,0,0.14)';
     for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
     const v = ctx.createRadialGradient(W / 2, H / 2, 80, W / 2, H / 2, 320);
     v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.65)');
@@ -441,7 +441,7 @@ class Telescreen {
   drawBB() {
     const ctx = this.ctx;
     const g = ctx.createLinearGradient(0, 0, 0, 320);
-    g.addColorStop(0, '#3a4440'); g.addColorStop(1, '#141a18');
+    g.addColorStop(0, '#6a7670'); g.addColorStop(1, '#2a3230');
     ctx.fillStyle = g; ctx.fillRect(0, 0, 512, 320);
     drawBB(ctx, 256, 150 + Math.sin(this.t * 0.4) * 2, 92 + this.t * 0.4, { coat: '#1e2422' });
     ctx.fillStyle = '#e8e8e0'; ctx.font = `bold 26px ${SANS}`; ctx.textAlign = 'center';
@@ -450,8 +450,8 @@ class Telescreen {
 
   drawFigures() {
     const ctx = this.ctx;
-    ctx.fillStyle = '#1a2420'; ctx.fillRect(0, 0, 512, 320);
-    ctx.fillStyle = '#d8e0d8'; ctx.font = `bold 22px ${SANS}`; ctx.textAlign = 'left';
+    ctx.fillStyle = '#4a5a52'; ctx.fillRect(0, 0, 512, 320);
+    ctx.fillStyle = '#f0f6f0'; ctx.font = `bold 22px ${SANS}`; ctx.textAlign = 'left';
     ctx.fillText('MINISTRY OF PLENTY', 24, 40);
     ctx.font = `18px ${SANS}`;
     const rows = ['PIG-IRON', 'BOOTS (PAIRS)', 'SAUCEPANS', 'TRACTORS', 'CHOCOLATE RATION', 'NINTH THREE-YEAR PLAN'];

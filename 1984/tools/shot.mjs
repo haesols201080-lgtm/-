@@ -39,7 +39,7 @@ const logs = [];
 page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) logs.push(`[${m.type()}] ${m.text()}`); });
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}\n${e.stack || ''}`));
 const q = process.env.Q || 'medium';
-await page.goto('file://' + path.join(root, 'index.html') + `?skip&q=${q}&nostory`);
+await page.goto('file://' + path.join(root, 'index.html') + `?skip&q=${q}&nostory${process.env.EXTRA || ''}`);
 try {
   await page.waitForFunction(() => window.G && window.G.location, null, { timeout: 240000 });
 } catch (e) {
@@ -71,7 +71,7 @@ for (const [name, [loc, spawn, minutes, weather]] of Object.entries(SHOTS)) {
     const r = window.G.renderer.gl.info.render;
     return { calls: r.calls, tris: r.triangles };
   });
-  await page.screenshot({ path: path.join(out, name + '.png') });
+  await page.screenshot({ path: path.join(out, name + '.png'), timeout: 240000 });
   console.log(`${name}: fps ${fps.toFixed(1)} (swiftshader) calls ${info.calls} tris ${info.tris} ${(Date.now() - t0) / 1000}s`);
 }
 console.log('--- console ---');

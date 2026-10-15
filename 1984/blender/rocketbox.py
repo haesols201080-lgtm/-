@@ -26,7 +26,7 @@ ROLES = {
     'syme': ('Professions/Construction_Male_03', 'm', {'tint': 'party'}),
     'parsons': ('Professions/Construction_Male_04', 'm', {'tint': 'party'}),
     'party_woman': ('Professions/Business_Female_01', 'f', {'tint': 'navy'}),
-    'julia': ('Professions/Business_Female_04', 'f', {'tint': 'navy', 'sash': True}),
+    'julia': ('Professions/Business_Female_04', 'f', {'tint': 'navy'}),
     'obrien': ('Professions/Business_Male_03', 'm', {}),
     'thought_police': ('Professions/Police_Male_03', 'm', {'tint': 'police'}),
     'guard': ('Professions/Security_Male_01', 'm', {'tint': 'police'}),
@@ -69,7 +69,7 @@ def find_tex(texdir, prefix, kind):
 
 def load_px(path, size):
     img = bpy.data.images.load(path)
-    if img.size[0] != size:
+    if img.size[0] != size or img.size[1] != size:
         img.scale(size, size)
     a = np.empty(size * size * 4, np.float32)
     img.pixels.foreach_get(a)

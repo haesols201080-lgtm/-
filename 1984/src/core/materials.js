@@ -104,6 +104,8 @@ function patchGlass(mat, litShare) {
         uniform float uNight, uDayLum, uLitShare;
         float ih(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
         vec3 interiorColor(vec3 wpos, vec3 nrm, vec3 cam){
+          // flat (skylight) panes have no room behind them
+          if (abs(nrm.x) + abs(nrm.z) < 0.05) return vec3(0.0);
           vec3 n = normalize(vec3(nrm.x, 0.0, nrm.z));
           vec3 t = normalize(cross(vec3(0.0, 1.0, 0.0), n));
           vec3 dir = normalize(wpos - cam);
@@ -266,7 +268,7 @@ export function buildLibrary() {
   poster('engraving', art.engraving());
   poster('sign', art.sign('MINISTRY'));
   const ts = new THREE.MeshStandardMaterial({ name: 'telescreen_screen', color: 0x000000, emissive: 0xffffff,
-    emissiveMap: art.telescreen.texture, emissiveIntensity: 1.25, roughness: 0.25, metalness: 0.2 });
+    emissiveMap: art.telescreen.texture, emissiveIntensity: 2.6, roughness: 0.25, metalness: 0.2 });
   lib.set('telescreen_screen', ts);
 }
 
