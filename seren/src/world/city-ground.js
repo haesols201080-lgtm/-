@@ -383,7 +383,7 @@ CityS cityBlock(float type, float vari, float stilt, float u, float v, float L, 
       float wall = min(min(gf.x, cell.x - gf.x), min(gf.y, cell.y - gf.y));
       if (edge > 1.5 && edge < 3.0) S.kind = 5.0;
       else if (gi.x >= 0.0 && gi.x < nx && gi.y >= 0.0 && gi.y < 2.0) {
-        float h = fract(sin(dot(gi + vari, vec2(12.9898, 78.233))) * 43758.5453);
+        float h = fract((gi.x * 7.0 + gi.y * 13.0 + vari * 3.0) * 0.137); // park-water.roomHash 와 같은 식 (JS 가 연못 자리를 맞춘다)
         if (wall < 1.3) S.kind = 5.0;
         else if (wall < 2.2 && !(abs(gf.x - cell.x * 0.5) < 1.2 || abs(gf.y - cell.y * 0.5) < 1.2)) S.kind = 14.0; // 울타리 (가운데로 드나드는 틈)
         else {

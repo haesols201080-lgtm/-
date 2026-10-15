@@ -161,6 +161,7 @@ src/
 - **문**: `_fillDoors` 는 `doorFixed` 문만 그린다. 문 자리를 새로 잡으면(`_fixedN` 증가) 0.3 초 안에 다시 그린다.
 - **빛길 관 받침 기둥**: `transit.supportPts` → 충돌체 + 도시 피할 곳(7 m).
 - **분수의 물**: `fountainWaterGeo`/`fountainWaterMaterial`(분수 인스턴스 행렬을 나눠 씀), 연못 테 충돌체는 고리 모양 상자 열둘(`PROPCOL` 상자의 8번째 값 = 추가 회전), `city.fountainAt(x, z)` → game `_wading`(플레이어 `wade`).
+- **공원 연못의 물**: 공원(계획 녹지) 바닥의 다섯 배치(연못 정원·시냇물·정원 방·고리 산책로·들꽃 초원 — `city-ground.js`)에서 물인 자리는 `world/park-water.js` 의 `parkWaterAt(B, u, v)` 가 같은 식으로 안다(GLSL 을 바꾸면 여기도). 블록이 깨어날 때 `cityfabric._pondMesh` 가 그 자리에 물면(`pondWaterMaterial` — 분수 물과 유니폼을 나눠 씀)을 깔고, `city.pondAt` → `_wading`. 소품·주민 자리는 물·물가에 두지 않는다(`_wetUV`).
 - **실내 구조**: `interiors.js` 의 `LAYOUTS`(여섯)·`PALETTES`(빛깔) — `layoutOf(r)` 이 씨앗으로 고른다. 구조마다의 건축은 `_build` 의 「구조마다의 건축」 묶음(벽기둥은 `later` 로 가구 뒤 빈 자리에만). 방마다 기억: `state.rooms['구역:모양:번호']`.
 - **착륙선 선실**: `game/cabin.js` 의 `buildCabin` + `interiors.enterCabin(lander)`(해치 `lander.hatch` → `structures.landerTarget` → game `landerUse('door')`).
 - **장소 빌더가 지은 집을 들어갈 수 있게**: `world.customRecs.push({x, z, gy, r, h, ux, uz(문 바깥 방향), dz(문까지), use, name})` → `cityfabric._customRecs`.

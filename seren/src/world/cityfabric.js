@@ -11,6 +11,7 @@ import { mulberry32 } from '../core/noise.js';
 import { cityArchetypes, SPEC, PROPCOL, doorGeo, propArchetypes, fountainWaterGeo, FOUNTAIN, bridgeBodyAt } from './city-arch.js';
 import { buildPlan, layoutBlock, layoutCore, uvToWorld, locate } from './cityplan.js';
 import { planUniforms, applyPlanUniforms } from './city-ground.js';
+import { parkWaterAt } from './park-water.js';
 import { litMaterial } from './materials.js';
 import { PointLights } from './lights.js';
 import { glyphStripTexture } from './hologram.js';
@@ -182,7 +183,9 @@ export class CityFabric {
     if (facilities) for (const F of facilities.list) E.push([F.x, F.z, F.R + (F.type === 'dock' ? 48 : 24)]);
     for (const p of PLACES) {
       if (SKIP_PLACE.has(p.type)) continue;
-      const r = Math.max(p.flat ? p.flat.r + 20 : 0, p.radius ? Math.min(p.radius, 400) + 20 : 45);
+      // 실제로 지은 자리(평탄화 반지름)만 비운다 — 전에는 이름·음악이 미치는 반지름(최대 420 m)을 통째로 비워
+      //  마을 둘레 블록이 바닥만 깔린 빈 터로 남았다 (사용자 제보 「휑하다」). 장소 구조물과 몸이 겹치는 것은 _room(충돌체)이 따로 막는다
+      const r = p.flat ? p.flat.r + 25 : p.radius ? Math.min(p.radius * 0.5, 200) + 20 : 45;
       E.push([p.pos[0], p.pos[1], r, true]);
     }
     const res = (at, off = [0, 0]) => { if (Array.isArray(at)) return [at[0] + off[0], at[1] + off[1]]; const p = PLACE[at]; return p ? [p.pos[0] + off[0], p.pos[1] + off[1]] : null; };
@@ -396,11 +399,31 @@ export class CityFabric {
   _bldg(zone, B, kind, u, v, hw, hd, h, o, tint, rnd) {
     if (!SPEC[kind] || !this.list[kind]) return null;
     const [x, z, a] = uvToWorld(B, u, v);
-    return this._bldgAt(zone, B, kind, x, z, a, hw, hd, h, o, tint, rnd);
+    const clash = (x1, z1, R1) => (B.recs || []).some((q) => q.moved && Math.hypot(q.x - x1, q.z - z1) < Math.max(q.sx, q.sz) + R1 + 2);
+    if (!clash(x, z, Math.max(hw, hd))) {
+      B.lastWhy = null;
+      const r = this._bldgAt(zone, B, kind, x, z, a, hw, hd, h, o, tint, rnd);
+      if (r || o.deck !== undefined || !['under', 'excluded', 'slope', 'padSlope', 'room'].includes(B.lastWhy)) return r;
+    }
+    // 빛길 관·피할 자리·비탈·다른 구조물에 걸려 못 지은 건물 (사용자 제보 「휑하다」): 블록 안에서 비켜 서거나 조금 작게 — 관이 지나는 줄만 비운다.
+    //  이미 선 건물과 겹치지 않는 자리만, 비켜 선 건물은 표시해 뒤에 오는 건물이 그 자리를 피한다
+    const L = B.L, D = B.D;
+    for (const sc of [1, 0.75, 0.55, 0.42]) {
+      const hw2 = hw * sc, hd2 = hd * sc, R2 = Math.max(hw2, hd2);
+      for (const [du, dv] of [[0.25, 0], [-0.25, 0], [0, 0.2], [0, -0.2], [0.4, 0], [-0.4, 0], [0.25, 0.2], [-0.25, -0.2], [0.25, -0.2], [-0.25, 0.2], [0, 0]]) {
+        const u2 = u + du * L, v2 = v + dv * D;
+        if (u2 < hw2 + 2 || u2 > L - hw2 - 2 || v2 < hd2 + 2 || v2 > D - hd2 - 2) continue;
+        const [x2, z2, a2] = uvToWorld(B, u2, v2);
+        if ((B.recs || []).some((q) => Math.hypot(q.x - x2, q.z - z2) < Math.max(q.sx, q.sz) + R2 + 2)) continue;
+        const r2 = this._bldgAt(zone, B, kind, x2, z2, a2, hw2, hd2, h * (0.7 + sc * 0.3), o, tint, rnd);
+        if (r2) { r2.moved = true; return r2; }
+      }
+    }
+    return null;
   }
 
   /** 건물을 못 지은 까닭을 블록에 센다 (빈 블록 찾기: B.why) */
-  _no(B, why) { if (B) { const w = B.why || (B.why = {}); w[why] = (w[why] || 0) + 1; } return null; }
+  _no(B, why) { if (B) { const w = B.why || (B.why = {}); w[why] = (w[why] || 0) + 1; B.lastWhy = why; } return null; }
 
   /** 세계 좌표에 건물 하나 (a = 문 쪽 기준 각도: door 1 이면 (cos a, sin a) 쪽에 문) */
   _bldgAt(zone, B, kind, x, z, a, hw, hd, h, o, tint, rnd) {
@@ -843,6 +866,7 @@ export class CityFabric {
     }
     this._consoles(B);
     this._blockStreet(B);
+    this._pondMesh(B);
   }
 
   /** 들어갈 수 없는 건물 발치의 바깥 조작대 (game/outdoors.js 가 쓴다) */
@@ -965,6 +989,7 @@ export class CityFabric {
   /** 블록 좌표로 소품 하나. face: 'out'|'in'|'u+'|'u-'|숫자, o.rel 이면 숫자 face 를 블록 평면의 각으로 */
   _propUV(B, kind, u, v, face, o) {
     if (!this.parch[kind]) return null;
+    if (this._wetUV(B, u, v, kind === 'fountain' ? FOUNTAIN.r * (o.s || 1) + 0.8 : Math.max(1.2, o.col ? o.col.r * (o.s || 1) + 0.4 : 0))) return null; // 공원 연못 속·가장자리에는 놓지 않는다 (분수 수반이 연못에 걸치지 않게)
     const [x, z, a] = uvToWorld(B, u, v);
     const h = heightAt(x, z);
     if (h < 0.8 && !B.stilt) return null;
@@ -989,6 +1014,7 @@ export class CityFabric {
 
   /** 주민이 머무는 자리 */
   _spot(B, type, u, v, face, o = {}) {
+    if (this._wetUV(B, u, v, 0.8)) return null; // 공원 연못 속에는 서지 않는다
     const [x, z, a] = uvToWorld(B, u, v);
     const h = heightAt(x, z);
     if (h < 0.8) return null;
@@ -1150,6 +1176,62 @@ export class CityFabric {
     }
   }
 
+  /** 공원 블록인가 (연못이 실제 물인 곳) */
+  _isPark(B) { return !!B && B.type === USE.GRN && !B.natural && !B.core; }
+  /** 공원 연못의 물면 (블록이 깨어날 때 한 번): 바닥 무늬(city-ground 의 계획 녹지)와 같은 자리에 0.5 m 칸으로 */
+  _pondMesh(B) {
+    if (!this._isPark(B) || B.pond) return;
+    B.pond = true;
+    // 꼭짓점 격자마다 물인 정도(둘레 다섯 점의 평균) → 물이 닿는 칸만 네모로, 가장자리는 꼭짓점 알파로 부드럽게
+    const S = 0.5, D = B.D, Lmax = (B.th1 - B.th0) * (B.R0 + D), nu = Math.ceil(Lmax / S) + 1, nv = Math.ceil(D / S) + 1;
+    const wet = new Float32Array(nu * nv);
+    let any = false;
+    for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+      const u = i * S, v = j * S;
+      let w = 0;
+      for (const [du, dv] of [[0, 0], [0.2, 0.2], [-0.2, 0.2], [0.2, -0.2], [-0.2, -0.2]]) if (parkWaterAt(B, u + du, v + dv)) w++;
+      wet[j * nu + i] = w / 5;
+      if (w) any = true;
+    }
+    if (!any) return;
+    const P = [], W = [], idx = [], vid = new Int32Array(nu * nv).fill(-1);
+    const vert = (i, j) => {
+      const k = j * nu + i;
+      if (vid[k] < 0) { const [x, z] = uvToWorld(B, i * S, j * S); vid[k] = P.length / 3; P.push(x, heightAt(x, z) + 0.14, z); W.push(wet[k]); }
+      return vid[k];
+    };
+    for (let j = 0; j < nv - 1; j++) for (let i = 0; i < nu - 1; i++) {
+      if (!(wet[j * nu + i] || wet[j * nu + i + 1] || wet[(j + 1) * nu + i] || wet[(j + 1) * nu + i + 1])) continue;
+      const a = vert(i, j), b = vert(i + 1, j), c = vert(i + 1, j + 1), d = vert(i, j + 1);
+      idx.push(a, c, b, a, d, c);
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+    g.setAttribute('aW', new THREE.Float32BufferAttribute(W, 1));
+    g.setIndex(idx);
+    g.computeBoundingSphere();
+    const m = new THREE.Mesh(g, pondWaterMaterial());
+    m.renderOrder = 2;
+    this.scene.add(m);
+    B.pondMeshObj = m;
+    (this.ponds || (this.ponds = [])).push(m);
+  }
+  /** 플레이어 발밑의 공원 연못: {y(물높이)} 또는 null */
+  pondAt(x, z) {
+    const w = this.where(x, z);
+    if (!w || w.kind !== 'block' || !this._isPark(w.B) || !parkWaterAt(w.B, w.u, w.v)) return null;
+    return { x, z, y: heightAt(x, z) + 0.14, r: 1, s: 1, pond: true };
+  }
+  /** 공원 블록에서 (u, v) 둘레 r 안에 물이 있나 (소품·사람 자리를 물 밖에) */
+  _wetUV(B, u, v, r = 1.2) {
+    if (!this._isPark(B)) return false;
+    if (parkWaterAt(B, u, v)) return true;
+    for (let k = 0; k < 8; k++) {
+      const c = Math.cos(k * Math.PI / 4), sn = Math.sin(k * Math.PI / 4);
+      for (let q = r; q > 0.4; q -= 1.5) if (parkWaterAt(B, u + c * q, v + sn * q)) return true;
+    }
+    return false;
+  }
   /** 플레이어 발밑의 분수 연못: {x, z, y(물높이), r, s} 또는 null (깨어난 둘레 블록에서만) */
   fountainAt(x, z) {
     if (this.fountI < 0) return null;
@@ -1492,6 +1574,7 @@ export class CityFabric {
     let woke = 0;
     while (this._actList.length && performance.now() - t0 < budget) { const B = this._actList.shift(); if (!B.act) { this._activate(B); woke++; } }
     if (woke) this._propsDirty = true;
+    if (this.ponds && (this._pondT = (this._pondT || 0) - dt) < 0) { this._pondT = 0.5; for (const m of this.ponds) { const b = m.geometry.boundingSphere; m.visible = Math.hypot(b.center.x - cam.x, b.center.z - cam.z) < this.propR + 260 + b.radius; } }
     if (this._propsDirty && (this._fillT = (this._fillT || 0) - dt) < 0) { this._fillT = 0.25; this._fillProps(this._last.y > -1e5 ? this._last : cam); }
     const pp = ctx.player ? ctx.player.pos : cam;
     if ((this._colT = (this._colT || 0) - dt) < 0) { this._colT = 0.3; this._propCols(pp.x, pp.z); }
@@ -1560,5 +1643,32 @@ export function fountainWaterMaterial() {
     transparent: true, depthWrite: false,
   });
   fountainWaterMaterial.m = m;
+  return m;
+}
+
+/** 공원 연못의 물: 분수 물과 같은 물결·하늘 비춤·밤빛(유니폼을 나눠 쓴다 — 걷는 사람 둘레 물결 uWade 도), 인스턴스가 아닌 한 덩어리.
+ *  aW = 꼭짓점마다 물인 정도 → 가장자리가 부드럽게 사라진다 */
+export function pondWaterMaterial() {
+  if (pondWaterMaterial.m) return pondWaterMaterial.m;
+  const F = fountainWaterMaterial();
+  const frag = F.fragmentShader
+    .replace('varying vec3 vWorld; varying vec2 vLoc;', 'varying vec3 vWorld; varying vec2 vLoc; varying float vW;')
+    .replace('float a = mix(0.62, 0.94, fres) * smoothstep(5.12, 4.95, r) + 0.06;', 'float a = mix(0.55, 0.92, fres) * smoothstep(0.05, 0.75, vW);');
+  if (frag === F.fragmentShader) throw new Error('pondWaterMaterial: 분수 셰이더 바꿀 곳을 못 찾음');
+  const m = new THREE.ShaderMaterial({
+    uniforms: F.uniforms,
+    vertexShader: `${CURVE_GLSL}
+      attribute float aW;
+      varying vec3 vWorld; varying vec2 vLoc; varying float vW;
+      void main() {
+        vLoc = vec2(40.0); vW = aW;
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorld = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * vec4(curveWorld(wp.xyz), 1.0);
+      }`,
+    fragmentShader: frag,
+    transparent: true, depthWrite: false,
+  });
+  pondWaterMaterial.m = m;
   return m;
 }

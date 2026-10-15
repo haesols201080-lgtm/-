@@ -441,10 +441,10 @@ export class Game {
   }
 
   /** 렌더링 없이 시뮬레이션만 한 걸음 (자동 테스트용) */
-  /** 분수 연못 속을 걷기: 느려지고, 둘레로 물결이 퍼지고, 첨벙 소리 (물은 밟히지 않는다 — 연못 테만 단단하다) */
+  /** 분수·공원 연못 속을 걷기: 느려지고, 둘레로 물결이 퍼지고, 첨벙 소리 (물은 밟히지 않는다 — 연못 테만 단단하다) */
   _wading(dt) {
     const p = this.player;
-    if ((this._wadeT = (this._wadeT || 0) - dt) < 0) { this._wadeT = 0.12; this._fount = this.city && !this.interiors.inPocket ? this.city.fountainAt(p.pos.x, p.pos.z) : null; }
+    if ((this._wadeT = (this._wadeT || 0) - dt) < 0) { this._wadeT = 0.12; this._fount = this.city && !this.interiors.inPocket ? (this.city.fountainAt(p.pos.x, p.pos.z) || this.city.pondAt(p.pos.x, p.pos.z)) : null; }
     const F = this._fount;
     const inW = !!F && p.pos.y < F.y - 0.05 && (p.state === 'ground' || p.state === 'air');
     p.wade = (p.wade || 0) + ((inW ? 1 : 0) - (p.wade || 0)) * Math.min(1, dt * 6);
