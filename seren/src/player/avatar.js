@@ -259,7 +259,7 @@ export class Avatar {
     this.held = h;
     if (!this._heldMeshes) this._heldMeshes = {};
     for (const m of Object.values(this._heldMeshes)) m.visible = false;
-    if (!h) return;
+    if (!h || h.kind === 'cart') return; // 짐수레는 손에 들지 않고 앞에 민다 (interior/carts 가 그린다) — 손잡이를 잡은 자세만
     const k = h.kind === 'basket' ? 'basket' : ['tray', 'crystal', 'vial', 'book'].includes(h.kind) ? h.kind : 'box';
     let m = this._heldMeshes[k];
     if (!m) {
@@ -428,6 +428,7 @@ export class Avatar {
     const hk = this.held && this.held.kind;
     if (hk && (s === 'ground' || s === 'swim' || s === 'lift')) {
       if (hk === 'basket') { P.shR = Math.max(P.shR, -0.15) * 0.4; P.shZR = 0.22; P.elR = -0.12; }
+      else if (hk === 'cart') { P.shL = P.shR = -0.95; P.shZL = P.shZR = 0.12; P.elL = P.elR = -0.25; P.spineX += 0.12; } // 짐수레 손잡이를 잡고 민다
       else { P.shL = -1.0; P.shR = -1.0; P.shZL = 0.06; P.shZR = 0.06; P.elL = -0.6; P.elR = -0.6; P.spineX -= 0.05; }
     }
     // 하는 일의 몸짓 (짧게): 집기·채우기·조작·먹기·앉기·눕기·돌보기

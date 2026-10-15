@@ -104,6 +104,14 @@ export class Indoor {
       d.lock = lk;
       out.locks.push(lk);
     }
+    // 계단 문 막이 (짐수레를 미는 동안만 선다 — 수레는 계단으로 못 간다, interior/carts)
+    out.cartBars = [];
+    for (const d of out.doors) {
+      const A = pl.L.rooms[d.door.a], Bq = d.door.b >= 0 ? pl.L.rooms[d.door.b] : null;
+      if (!((A && A.type === 'stair') || (Bq && Bq.type === 'stair'))) continue;
+      const dv = d.slide[1] === 1;
+      out.cartBars.push({ d, spec: Object.assign(colBox({ r: this.r, V: this.V, y0: ctx.y0 }, d.x, d.z, dv ? 0.09 : d.w / 2 + 0.02, dv ? d.w / 2 + 0.02 : 0.09, 0, -0.2, 3.6, false), { wall: true }), col: null });
+    }
     // 승강기 (v24 4단계): 문 두 짝(문틀 높이 그대로) · 문 막이(닫혀 있는 동안 승강로로 못 들어가게) · 문 위 표시창(승강장 쪽과 칸 안쪽 —
     //  칸이 지금 몇 층에 있고 어느 쪽으로 가는지) · 부르기 단추(▲▼, 누르면 불이 들어온다). 열리고 닫히는 것은 game/lifts 의 칸이 정한다.
     for (const L of out.lifts) {
@@ -161,6 +169,7 @@ export class Indoor {
     const g = this.game, C = g.world.colliders;
     for (const c of out.added) C.remove(c);
     for (const lk of out.locks || []) if (lk.col) { C.remove(lk.col); lk.col = null; }
+    for (const b of out.cartBars || []) if (b.col) { C.remove(b.col); b.col = null; }
     for (const L of out.lifts || []) if (L.col) { C.remove(L.col); L.col = null; }
     g.engine.scene.remove(out.group);
     out.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); if (o.material && o.material.isMeshBasicMaterial && !o.material.userData.keep) o.material.dispose(); });
@@ -408,6 +417,7 @@ export class Indoor {
     const people = [[p.x, p.y, p.z]];
     if (this.agents) for (const a of this.agents.near()) people.push([a.pos.x, a.pos.y, a.pos.z]);
     const ops = g.ops, C = g.world.colliders;
+    const cartIn = !!(ops && ops.carry && ops.carry.kind === 'cart'); // 짐수레를 밀고 있으면 계단 문·승객 승강기 문이 막힌다
     const lockTick = (this._lkT = (this._lkT || 0) - dt) < 0;
     if (lockTick) this._lkT = 0.25;
     for (const out of this.built.values()) {
@@ -420,6 +430,11 @@ export class Indoor {
           if (shut && !lk.col) lk.col = C.add(lk.spec);
           else if (!shut && lk.col) { C.remove(lk.col); lk.col = null; }
         }
+      }
+      for (const b of out.cartBars || []) {
+        const shut = cartIn && out.i === this.cur;
+        if (shut && !b.col) b.col = C.add(b.spec);
+        else if (!shut && b.col) { C.remove(b.col); b.col = null; }
       }
       for (const d of out.doors) {
         const [wx, wz] = this.world(d.x, d.z);
@@ -439,7 +454,7 @@ export class Indoor {
         L.leaves[0].position.set(L.x + fx * 0.05 - sx * off, y, L.z + fz * 0.05 - sz * off);
         L.leaves[1].position.set(L.x + fx * 0.05 + sx * off, y, L.z + fz * 0.05 + sz * off);
         // 문 막이: 거의 다 열렸을 때만 걷힌다 (닫히는 문틈으로 비집고 들어가지 못하게)
-        const shut = L.open < 0.85;
+        const shut = L.open < 0.85 || (cartIn && !L.cargo); // 승객 승강기는 짐수레를 들이지 않는다
         if (shut && !L.col) L.col = C.add(L.spec);
         else if (!shut && L.col) { C.remove(L.col); L.col = null; }
       }

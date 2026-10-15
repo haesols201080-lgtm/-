@@ -11,6 +11,7 @@ import { FUSE, FIX } from './catalog.js';
 import { Agents } from './agents.js';
 import { TYPES, roleOf } from './ops-types.js';
 import { Apps } from './apps.js';
+import { Carts } from './carts.js';
 import { findPath } from './nav.js';
 import { audio } from '../core/audio.js';
 import { won } from '../data/money.js';
@@ -29,7 +30,8 @@ export class Ops {
     this.basket = []; // [{ g, from: slotKey, price, uid }]
     this.tryOn = []; // 옷가게에서 든 옷 [{ item, color, fit, price, key, uid }] (v24)
     this.trying = null; // 탈의 칸에서 입어 보는 중 { fid, floor, on: {부위: 든 옷} }
-    this.carry = null; // { g, n, from, kind: 'box'|'tray'|'crate'|'fuel'… }
+    this.carry = null; // { g, n, from, kind: 'box'|'tray'|'crate'|'fuel'|'cart'… }
+    this.carts = new Carts(this); // 짐수레 (화물 승강기로 다른 층에)
     this.task = null; // 지금 하는 과제 { title, steps, k, pay, role }
     this._hudT = 0;
     this.t = 0;
@@ -85,6 +87,7 @@ export class Ops {
     // 계산하지 않은 바구니는 진열대로 돌려놓는다
     if (this.basket.length) this.returnBasket(true);
     if (this.carry) this.dropCarry(true);
+    this.carts.clear();
     // 사지 않은 옷은 옷걸이로 (입어 보던 옷은 벗는다)
     if (this.trying) { this.trying = null; g.dress(); }
     if (this.tryOn.length) {
@@ -312,6 +315,9 @@ export class Ops {
     for (const X of out.extraTargets || []) { const d = Math.hypot(gx - X.gx, gz - X.gz); if (d < X.r && d < bd) { bd = d; best = { F: { id: -1, x: X.gx, z: X.gz }, h: X.h }; } }
     // 하고 있는 과제의 다음 자리는 늘 먼저
     if (this.task) { const tk = this.taskTarget(gx, gz, out); if (tk) return tk; }
+    // 짐수레: 밀고 있으면 「세우기」(진열대 따위는 쓰지 않는다), 서 있는 수레가 가구보다 가까우면 「밀기」
+    const ct = this.carts.target(i, gx, gz);
+    if (ct && (this.carts.pushing() || !best || ct.d < bd)) return ct;
     if (!best) return null;
     const lab = typeof best.h.label === 'function' ? best.h.label() : best.h.label;
     return { kind: 'op', o: best, label: lab, short: best.h.short || '쓰기' };
@@ -409,7 +415,7 @@ export class Ops {
     return c;
   }
   _basketVis() { const av = this.game.avatar; if (av && av.setHeld) av.setHeld(this.basket.length ? { kind: 'basket', n: this.basket.length } : this.carry ? { kind: this.carry.kind || 'box', color: this.carry.color ?? (GOODS[this.carry.g] || {}).color } : null); }
-  _carryVis() { this._basketVis(); this.game.player.carrySlow = this.carry ? 0.78 : 1; }
+  _carryVis() { this._basketVis(); this.game.player.carrySlow = this.carry ? (this.carry.kind === 'cart' ? 0.7 : 0.78) : 1; }
 
   // ── 과제 (일) ───────────────────────────────────
   /** 과제 시작: steps = [{ at: 가구 찾기 함수(out) → F, label, do(F) → bool(끝났나) }] */
@@ -540,6 +546,7 @@ export class Ops {
     const cur = this.cur;
     if (!cur) { this._hud(dt); return; }
     if (this.agents && this.game.interiors.inPocket) this.agents.update(dt);
+    if (this.game.interiors.inPocket) this.carts.update(dt);
     // 탈의 칸 밖으로 나가면 입어 보던 옷은 벗는다 (매장 아무 데서나 입고 다니지 않게)
     if (this.trying && this.cur) {
       const ind = this.cur.indoor, pl = ind.plan(this.trying.floor), F = pl && pl.fix.find((f) => f.id === this.trying.fid);

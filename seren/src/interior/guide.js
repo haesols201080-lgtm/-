@@ -58,10 +58,11 @@ export class Guide {
     const B = this.cur.B;
     if (a === b) return [];
     const dist = new Map([[a, 0]]), prev = new Map(), Q = [a];
+    const ops = this.game.ops, cart = !!(ops && ops.carry && ops.carry.kind === 'cart'); // 짐수레는 화물 승강기로만
     const edges = (i) => {
       const E = [];
       for (const lk of B.links) {
-        if (!lk.floors.includes(i) || lk.kind === 'roof') continue;
+        if (!lk.floors.includes(i) || lk.kind === 'roof' || (cart && lk.kind !== 'cargo')) continue;
         const fl = lk.floors.slice().sort((x, y) => x - y);
         if (lk.kind === 'lift' || lk.kind === 'cargo') { for (const j of fl) if (j !== i) E.push([j, 25 + 2 * Math.abs(j - i) + (lk.kind === 'cargo' ? 10 : 0), lk]); }
         else { const k = fl.indexOf(i); if (k > 0) E.push([fl[k - 1], 14, lk]); if (k < fl.length - 1) E.push([fl[k + 1], 14, lk]); }

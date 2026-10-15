@@ -81,12 +81,13 @@ export class LiftCars {
   }
   /** 문틀(문짝이 지나가는 곳)에 플레이어가 서 있나 — 그러면 문이 닫히지 않는다 */
   _inDoorway(L) {
-    const ind = this.ind, p = this.game.player.pos;
+    const ind = this.ind, pl = this.game.player, p = pl.pos;
     if (Math.abs(p.y - ind.yOf(ind.cur)) > 1.6) return false;
-    const [gx, gz] = ind.grid(p.x, p.z);
-    const [fx, fz] = L.front, rx = gx - L.x, rz = gz - L.z;
-    const n = rx * fx + rz * fz, s = fz ? rx : rz;
-    return Math.abs(n) < 0.55 && Math.abs(s) < L.W / 2 + 0.1;
+    const [fx, fz] = L.front;
+    const at = (x, z, m) => { const [gx, gz] = ind.grid(x, z), rx = gx - L.x, rz = gz - L.z, n = rx * fx + rz * fz, s = fz ? rx : rz; return Math.abs(n) < m && Math.abs(s) < L.W / 2 + 0.1; };
+    if (at(p.x, p.z, 0.55)) return true;
+    const cp = pl.cartPoint && pl.cartPoint(); // 미는 짐수레가 문틀에 걸쳐 있어도
+    return !!cp && at(cp[0], cp[1], 0.6); // 수레 가운데에서 앞뒤 0.5 m 가 수레
   }
   _label(car) {
     let best = null, bd = 1e9;
@@ -385,6 +386,7 @@ export class LiftCars {
     const g = this.game, ind = this.ind, car = this.car(L.link);
     if (!car) return null;
     // 화물 승강기는 직원 구역 — 부르기 판의 출입증 읽개에 직원 출입증을 대야 부를 수 있다 (관계자 구역과 같은 규칙)
+    if (!L.cargo && g.ops && g.ops.carry && g.ops.carry.kind === 'cart') { audio.blip({ hz: 320, to: 220, dur: 0.16, gain: 0.06, bus: 'ui' }); g.ui.toast('승객 승강기에는 짐수레를 싣지 않아요 — 화물 승강기로', { kind: 'muted' }); return null; }
     if (L.cargo && g.ops) {
       const pl = ind.plan(ind.cur), R = pl && pl.L.rooms[L.room];
       if (R && !g.ops.canEnter(R, ind.cur)) { audio.blip({ hz: 320, to: 220, dur: 0.16, gain: 0.06, bus: 'ui' }); g.ui.toast(`출입증 읽개가 붉게 깜빡인다 · ${g.ops.lockInfo(R)}`, { kind: 'muted' }); return null; }
@@ -447,9 +449,9 @@ export class LiftCars {
         const L = this.liftOn(ind.cur, car.id);
         if (!L) return end(false);
         // 문이 다 열렸다: 칸 가운데로 걸어 들어선 자리 (문을 바라본다)
-        const [x, z] = ind.world(L.bb.cx, L.bb.cz);
+        const [fx, fz] = L.front, V = ind.V, back = g.player.cart ? 0.5 : 0; // 짐수레를 밀면 수레까지 칸 안에 들게 조금 뒤로
+        const [x, z] = ind.world(L.bb.cx - fx * back, L.bb.cz - fz * back);
         g.player.teleport(x, ind.yOf(ind.cur) + 0.05, z, 0.3);
-        const [fx, fz] = L.front, V = ind.V;
         const wx = fx * V.ex[0] + fz * V.ez[0], wz = fx * V.ex[1] + fz * V.ez[1];
         g.player.yaw = Math.atan2(wx, wz); g.rig.yaw = g.player.yaw + Math.PI;
         A.step = 'board';

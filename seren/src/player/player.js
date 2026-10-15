@@ -208,6 +208,7 @@ export class Player {
     this.pos.x += v.x * dt;
     this.pos.z += v.z * dt;
     this.world.colliders.pushOut(this.pos, RADIUS, HEIGHT, STEP);
+    if (this.cart) this._cartPush();
 
     const g = this.world.colliders.ground(this.pos.x, this.pos.z, this.pos.y, STEP, 0.15, this._g);
     if (this.pos.y - g.h > STEP + 0.05 && !(steep)) {
@@ -237,6 +238,17 @@ export class Player {
     if (ctl && ctl.pressed('skimmer') && this.canSkim) this.mountSkimmer();
   }
 
+  /** 미는 짐수레(interior/carts)의 충돌: 몸 앞 cart.d 의 둥근 몸이 벽·가구에 묻히지 않게 몸째 밀려난다 */
+  _cartPush() {
+    const c = this._cartV || (this._cartV = new THREE.Vector3()), f = this.cart;
+    const sx = Math.sin(this.yaw), sz = Math.cos(this.yaw);
+    c.set(this.pos.x + sx * f.d, this.pos.y, this.pos.z + sz * f.d);
+    const x0 = c.x, z0 = c.z;
+    this.world.colliders.pushOut(c, f.r, 1.0, STEP);
+    this.pos.x += c.x - x0; this.pos.z += c.z - z0;
+  }
+  /** 수레 가운데 (미는 동안만) */
+  cartPoint() { return this.cart ? [this.pos.x + Math.sin(this.yaw) * this.cart.d, this.pos.z + Math.cos(this.yaw) * this.cart.d] : null; }
   _groundNormal() {
     if (this.groundC) return this.groundN.set(0, 1, 0);
     const e = 1.2, x = this.pos.x, z = this.pos.z, H = this.world.heightAt;

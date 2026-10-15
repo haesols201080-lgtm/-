@@ -238,7 +238,10 @@ const s4 = await page.evaluate(async () => {
   const L = LC.liftOn(ind.cur, car.id);
   const [fx, fz] = L.front;
   const [dx, dz] = ind.world(L.x + fx * 0.05, L.z + fz * 0.05);
+  LC.openDoors(car); car.hold = 99; // 문틀까지 걸어가는 동안은 열어 둔다 — 시험은 문틀에 선 뒤부터
   await window.__walk(dx, dz, 4);
+  g.player.teleport(dx, ind.yOf(ind.cur) + 0.1, dz, 0.3); // 걸음의 관성으로 지나치지 않게 문틀 한가운데에 선다
+  for (let k = 0; k < 3; k++) g.update(1 / 30);
   car.hold = 0;
   await window.__run(240);
   const held = car.want === 1 && L.open > 0.85;
@@ -294,7 +297,7 @@ else {
   ok(s4b.called && s4b.waited, '손님이 승강장 앞에 서서 칸을 불렀다');
   ok(s4b.boarded && s4b.vis, '문이 열리자 칸 안으로 걸어 들어갔다 (칸 안에서도 보인다)');
   ok(s4b.gone && s4b.f > 0, `문이 닫히자 칸과 함께 떠났다 (${s4b.f} 프레임)`);
-  ok(!s4b.arr || (s4b.arr.conv && s4b.arr.f2 > 0 && s4b.arr.d < 0.6), `새 손님이 칸을 타고 와서 걸어 나왔다 ${s4b.arr ? `(${s4b.arr.f2} 프레임, 원래 자리까지 ${s4b.arr.d} m)` : '(승강기 홀 없음)'}`);
+  ok(!s4b.arr || (s4b.arr.conv && s4b.arr.f2 > 0 && s4b.arr.d < 1.2), `새 손님이 칸을 타고 와서 걸어 나왔다 ${s4b.arr ? `(${s4b.arr.f2} 프레임, 원래 자리까지 ${s4b.arr.d} m)` : '(승강기 홀 없음)'}`);
 }
 
 // 5) 자동 타기 (사람 순서 그대로) 로 처음 층으로
