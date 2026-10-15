@@ -20,6 +20,8 @@ export const SHOTS = {
   square_noon: ['city', { x: 10, z: -20, yaw: 0.15, pitch: 0.12 }, 12 * 60, 'clear_cold'],
   minitrue: ['city', { x: 0, z: -60, yaw: 0, pitch: 0.35 }, 10 * 60, 'overcast'],
   prole_rain: ['city', { x: 150, z: 90, yaw: -1.57, pitch: 0.0 }, 17 * 60, 'rain'],
+  prole_day: ['city', { x: 120, z: 88, yaw: -1.2, pitch: -0.05 }, 15 * 60, 'overcast'],
+  square_crowd: ['city', { x: -6, z: -22, yaw: 0.1, pitch: 0.02 }, 8 * 60 + 10, 'clear_cold'],
   prole_dusk: ['city', { x: 100, z: 150, yaw: 1.2, pitch: 0.0 }, 19 * 60 + 40, 'overcast'],
   night: ['city', { x: 0, z: 60, yaw: 0, pitch: 0.05 }, 23 * 60 + 30, 'overcast'],
   miniluv: ['city', { x: -150, z: -99, yaw: 1.57, pitch: 0.2 }, 15 * 60, 'hot_haze'],

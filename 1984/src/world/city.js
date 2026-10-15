@@ -9,6 +9,7 @@ import { Placer } from './city_build.js';
 import { paintGround, placeParty, placeProle, zoneAt, ZONES, namedPoints, namedPaths, doorDefs, spawnDefs } from './city_layout.js';
 import { posterAtlas, POSTER } from './city_paint.js';
 import { rng, tf, standingQuad } from './city_util.js';
+import { addCityLife } from './city_life.js';
 
 const PI = Math.PI, H = PI / 2;
 
@@ -110,6 +111,10 @@ export function setupCity(G) {
     placer.add(filler[i % filler.length], x, z, Math.round(r() * 4) * H, { collide: false, cast: false, scale: 1 + r() * 0.3 });
   }
 
+  // parked lorries and the black vans of the Ministry of Love
+  for (const [m, x, z, rot] of [['truck', -13, 34, 0], ['truck', -150, 52, H], ['van', 12.5, 140, PI], ['van', -100, -92, H], ['truck', 120, 33, H], ['van', 40, -103, 0.2]]) {
+    placer.add(m, x, z, rot, { unique: true });
+  }
   placer.build();
   buildGround(G, map, root);
   buildOverlays(G, map, overlays, root);
@@ -206,5 +211,6 @@ export function setupCity(G) {
     surface: (x, z) => map.surface(x, z),
     setPosterEnemy: (kind) => atlas.setEnemy(kind),
   };
+  addCityLife(G, ctx, root);
   return G.world;
 }

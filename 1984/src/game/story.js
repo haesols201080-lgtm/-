@@ -120,27 +120,16 @@ export function setupStory(G) {
       await ENDINGS[id](G, kit);
       throw { ending: id };
     },
-    crowd(on) {
-      if (!G.npcs) return;
-      if (!kit._crowd && G.world) {
-        kit._crowd = G.npcs.crowd('city', { paths: ['avenue_w', 'avenue_e', 'square_loop', 'commute', 'mansions_road'], count: 34 });
-        kit._proles = G.npcs.crowd('city', { paths: ['prole_a', 'prole_b'], count: 14, models: ['char_prole_man', 'char_prole_woman', 'char_charrington', 'char_prole_man'] });
-        kit._patrols = [
-          G.npcs.patrol({ id: 'tp1', location: 'city', path: G.world.paths.square_loop }),
-          G.npcs.patrol({ id: 'tp2', location: 'city', path: G.world.paths.avenue_e }),
-          G.npcs.patrol({ id: 'tp3', location: 'city', path: G.world.paths.lovelane, model: 'char_guard' }),
-          G.npcs.patrol({ id: 'tp4', location: 'city', path: G.world.paths.prole_a }),
-        ];
-      }
-      G.npcs.setCrowdDensity('city', on);
-    },
+    crowd(on) { if (G.npcs) G.npcs.setCrowdDensity('city', on); },
   };
   // crowds follow the hour: busy at the commute, thin in the evening, gone at night
   G.events.on('minute', (m) => {
-    if (!kit._crowd) return;
+    if (!G.npcs) return;
     const h = (m % 1440) / 60;
-    const d = h < 7 || h >= 23 ? 0 : (h < 9 || (h >= 17.8 && h < 19.5)) ? 1 : 0.35;
+    const d = h < 6.5 || h >= 23 ? 0.04 : (h < 9 || (h >= 17.8 && h < 19.5)) ? 1 : 0.55;
     G.npcs.setCrowdDensity('city', d);
+    const out = h >= 6.5 && h < 22.5;
+    for (const n of G.npcs.list) if (n.ambient) n.visible = out;
   });
 
   G.events.on('arrest', async (reason) => {
