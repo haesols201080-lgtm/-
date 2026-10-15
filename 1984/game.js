@@ -55700,9 +55700,9 @@ void main() {
         void main(){
           float t = fract(uTime * 0.05 + aSeed);
           vec3 p = position + vec3(t * 6.0 + sin(aSeed * 40.0 + uTime) * 0.6, t * 9.0, t * 2.0);
-          vec4 mv = modelViewMatrix * vec4(p, 1.0);
-          gl_Position = projectionMatrix * mv;
-          gl_PointSize = (2.0 + t * 7.0) * 300.0 / -mv.z;
+          vec4 mvPosition = modelViewMatrix * vec4(p, 1.0);
+          gl_Position = projectionMatrix * mvPosition;
+          gl_PointSize = (2.0 + t * 7.0) * 300.0 / max(0.5, -mvPosition.z);
           vA = (1.0 - t) * smoothstep(0.0, 0.1, t) * 0.35;
           #include <fog_vertex>
         }`,
