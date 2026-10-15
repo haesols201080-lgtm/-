@@ -50,6 +50,9 @@ for (let k = 0; k < list; k++) {
   const res = await page.evaluate(async () => {
     const g = SEREN.game, I = g.interiors, ind = I.cur.indoor, B = I.cur.B, LC = I.lifts, C = g.world.colliders;
     const name = `${I.title(I.cur.r)} (${B.pid})`;
+    // 승강기는 지금 셀에 닿은 것만 짓는다 — 승강기 홀 셀로 (정문 셀이 홀과 다른 건물)
+    const hk = ind.homeKey(ind.cur);
+    if (hk && hk !== ind.cellKey) { ind.setCell(hk); for (let f = 0; f < 4; f++) g.update(1 / 30); }
     const out0 = ind.built.get(ind.cur);
     const rep = [];
     // 짜임에는 1층에 서는 승강기가 있는데 지은 층에 승강기 문이 없으면 문제
