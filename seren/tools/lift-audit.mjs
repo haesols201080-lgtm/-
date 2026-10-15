@@ -52,6 +52,10 @@ for (let k = 0; k < list; k++) {
     const name = `${I.title(I.cur.r)} (${B.pid})`;
     const out0 = ind.built.get(ind.cur);
     const rep = [];
+    // 짜임에는 1층에 서는 승강기가 있는데 지은 층에 승강기 문이 없으면 문제
+    const want = B.links.filter((k) => (k.kind === 'lift' || k.kind === 'cargo') && k.floors.includes(ind.cur));
+    const have = new Set(out0.lifts.filter((q) => q.stops && q.link != null).map((q) => q.link));
+    for (const k of want) if (!have.has(k.id)) rep.push({ cargo: k.kind === 'cargo', err: `짜임의 승강기 ${k.id}(${k.kind}) 가 이 층에 없음 · 지은 승강기 ${out0.lifts.length} · 층 ${ind.cur}/${B.ground} · 셀 ${ind.cellKey}` });
     for (const L0 of out0.lifts.filter((q) => q.stops && q.link != null)) {
       // 승강장 셀이 지어지게 문 앞에 서서
       const [fx, fz] = L0.front;

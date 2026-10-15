@@ -86,12 +86,17 @@ for (const pid of want) {
             let depth = 0.3;
             for (let sd = 0.35; sd <= 1.6; sd += 0.05) { if (ind.roomAt(i, ...ind.world(q.x + q.nx * sd, q.z + q.nz * sd)) !== farR) break; depth = sd; }
             const tgt = Math.max(0.45, Math.min(0.9, depth - 0.4));
-            const [ax, az] = ind.world(q.x - q.nx * 1.2, q.z - q.nz * 1.2), [bx, bz] = ind.world(q.x + q.nx * tgt, q.z + q.nz * tgt);
+            // 문 앞 자리: 문 가운데 줄이 다른 방(문 한쪽 반만 이 방으로 열리는 두 칸 문)이면 문 폭 안에서 옆으로 비킨 줄에서 (이 방에서 문으로 다가가는 길)
+            const tx = -q.nz, tz = q.nx, nearR = (o) => ind.roomAt(i, ...ind.world(q.x - q.nx * 0.3 + tx * o, q.z - q.nz * 0.3 + tz * o));
+            let lat = 0;
+            const at12 = (o) => ind.roomAt(i, ...ind.world(q.x - q.nx * 1.2 + tx * o, q.z - q.nz * 1.2 + tz * o));
+            for (const o of [0, 0.5, -0.5]) { const r0 = nearR(o); if (r0 >= 0 && [o - 0.35, o, o + 0.35].every((u) => at12(u) === r0 && nearR(u) === r0)) { lat = o; break; } } // 몸 폭(0.7 m)이 다 그 방 안인 줄
+            const [ax, az] = ind.world(q.x - q.nx * 1.2 + tx * lat, q.z - q.nz * 1.2 + tz * lat), [bx, bz] = ind.world(q.x + q.nx * tgt + tx * lat, q.z + q.nz * tgt + tz * lat);
             const past = () => { const [gx, gz] = ind.grid(g.player.pos.x, g.player.pos.z); return (gx - q.x) * q.nx + (gz - q.z) * q.nz; }; // 문 줄을 지나 들어간 깊이
             // 출발: 문 앞 (이 셀 안이어야 — 가구에 막혔으면 문 앞 0.6 m)
             ind.cur = i; ind.setCell(key);
             let [sx, sz] = [ax, az];
-            if (!ind.inside(i, sx, sz)) [sx, sz] = ind.world(q.x - q.nx * 0.6, q.z - q.nz * 0.6);
+            if (!ind.inside(i, sx, sz)) [sx, sz] = ind.world(q.x - q.nx * 0.6 + tx * lat, q.z - q.nz * 0.6 + tz * lat);
             g.player.teleport(sx, ind.yOf(i) + 0.3, sz, 0.1);
             window.__settle(6);
             if (ind.cellKey !== key) { fail(`${F.label}층 ${key}: 문 앞에 서니 ${ind.cellKey}`); continue; }
