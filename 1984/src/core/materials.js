@@ -54,7 +54,7 @@ function patch(mat, opts = {}) {
         diffuseColor.rgb *= 1.0 - streak * 0.35;
         float gH = 1.0 - smoothstep(0.0, 2.2, vWPos.y);
         float gN = fract(sin(dot(floor(vWPos.xz * 0.7), vec2(12.9898, 78.233))) * 43758.5453);
-        diffuseColor.rgb *= mix(1.0, 0.62 + 0.12 * gN, gH * uGrime);
+        diffuseColor.rgb *= mix(1.0, 0.78 + 0.1 * gN, gH * uGrime);
         float up = clamp(vWNrm.y, 0.0, 1.0);
         float wetM = uWet * uWetK * mix(0.45, 1.0, up);
         diffuseColor.rgb *= mix(1.0, 0.68, wetM);`)
@@ -141,7 +141,7 @@ function patchGlass(mat, litShare) {
           float lit = step(1.0 - uLitShare, ih(id + 11.0));
           float fall = 1.0 / (1.0 + depth * 0.35);
           vec3 night = col * lit * vec3(1.0, 0.72, 0.42) * 1.6 * fall;
-          vec3 day = col * uDayLum * 0.22 * (0.6 + 0.4 * fall);
+          vec3 day = col * uDayLum * 0.085 * (0.5 + 0.5 * fall);
           vec3 c = mix(day, night, uNight) + day * 0.3 * uNight;
           // curtains or blackout paper across part of the pane
           float hu2 = u - u0;
@@ -170,7 +170,26 @@ function std(name, params, opts) {
   const m = new THREE.MeshStandardMaterial(params);
   m.name = name;
   patch(m, opts);
+  m.userData.patchOpts = opts || {};
   lib.set(name, m);
+  return m;
+}
+
+// The same material reading a per-vertex tint (the generated town multiplies
+// one brick or stucco texture by many colours). Glass keeps its own shader.
+export function vc(name) {
+  const key = name + '#vc';
+  if (lib.has(key)) return lib.get(key);
+  const base = lib.get(name);
+  if (!base) return null;
+  if (/^glass/.test(name)) { lib.set(key, base); return base; }
+  const m = base.clone();
+  m.name = key;
+  m.vertexColors = true;
+  patch(m, base.userData.patchOpts || {});
+  const k0 = m.customProgramCacheKey;
+  m.customProgramCacheKey = () => k0() + 'vc';
+  lib.set(key, m);
   return m;
 }
 
@@ -221,7 +240,7 @@ export function buildLibrary() {
   for (const [name, share] of [['glass', 0.12], ['glass_lit', 0.85]]) {
     // emissive stays black: the shader adds the fake room on top of it
     const g = new THREE.MeshStandardMaterial({ name, color: 0x000000, roughness: 0.04, metalness: 0.0,
-      emissive: 0x000000, envMapIntensity: 3.2 });
+      emissive: 0x000000, envMapIntensity: 1.7 });
     patchGlass(g, share);
     lib.set(name, g);
   }

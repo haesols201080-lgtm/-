@@ -178,14 +178,14 @@ export class Atmosphere {
     this.sun.target.updateMatrixWorld();
     this.hemi.color.copy(mixC(C('#1a2230'), mixC(zen, hor, 0.5), day));
     this.hemi.groundColor.copy(mixC(C('#0a0a0c'), C('#4a4640'), day));
-    this.hemi.intensity = 0.28 + day * (0.12 + cloud * 0.45);
-    this.scene.environmentIntensity = this.indoor ? 0.35 : 0.12 + day * (0.42 + cloud * 0.35);
+    this.hemi.intensity = 0.28 + day * (0.22 + cloud * 0.75);
+    this.scene.environmentIntensity = this.indoor ? 0.35 : 0.12 + day * (0.5 + cloud * 0.55);
 
     // fog
     const fogCol = hor.clone().lerp(C('#8c8a84'), 0.25 * day);
     this.fog.color.copy(fogCol);
     this.fog.density = w.fog * (1 + (1 - day) * 0.6);
-    this.exposure = 0.95 + (1 - day) * 0.9;
+    this.exposure = 0.95 + cloud * day * 0.35 + (1 - day) * 0.9;   // overcast London is grey but not dark
 
     this.searchlights.visible = day < 0.25;
     if (this.searchlights.visible) {

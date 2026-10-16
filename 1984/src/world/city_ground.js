@@ -132,6 +132,28 @@ export class GroundMap {
     for (let j = j0; j < j1; j++) this.t.fill(type, j * this.nx + i0, j * this.nx + i1);
   }
 
+  // Scanline fill of a polygon [[x, z], ...] (even-odd).
+  paintPoly(poly, type) {
+    const c = this.cell;
+    let zmin = Infinity, zmax = -Infinity;
+    for (const [, z] of poly) { zmin = Math.min(zmin, z); zmax = Math.max(zmax, z); }
+    const j0 = Math.max(0, Math.floor((zmin - this.z0) / c)), j1 = Math.min(this.nz - 1, Math.ceil((zmax - this.z0) / c));
+    const xs = [];
+    for (let j = j0; j <= j1; j++) {
+      const z = this.z0 + (j + 0.5) * c;
+      xs.length = 0;
+      for (let i = 0, k = poly.length - 1; i < poly.length; k = i++) {
+        const [xa, za] = poly[k], [xb, zb] = poly[i];
+        if ((za > z) !== (zb > z)) xs.push(xa + ((z - za) * (xb - xa)) / (zb - za));
+      }
+      xs.sort((a, b) => a - b);
+      for (let q = 0; q + 1 < xs.length; q += 2) {
+        const i0 = Math.max(0, Math.round((xs[q] - this.x0) / c)), i1 = Math.min(this.nx, Math.round((xs[q + 1] - this.x0) / c));
+        if (i1 > i0) this.t.fill(type, j * this.nx + i0, j * this.nx + i1);
+      }
+    }
+  }
+
   typeAt(x, z) {
     const i = Math.floor((x - this.x0) / this.cell), j = Math.floor((z - this.z0) / this.cell);
     if (i < 0 || j < 0 || i >= this.nx || j >= this.nz) return T.ASPHALT;
