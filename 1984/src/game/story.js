@@ -3,6 +3,7 @@
 // below; between beats the player is free to roam. Saves after each day.
 import * as THREE from 'three';
 import { DAYS } from './script/index.js';
+import { store } from '../core/store.js';
 
 const DOW = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 
@@ -33,10 +34,10 @@ export function setupStory(G) {
     canEnter(id) { return id === 'station' ? !!S.flags.sunday : true; },
     save() {
       const data = { day: S.day, suspicion: S.suspicion, record: S.record, flags: S.flags, inventory: S.inventory, money: S.money };
-      localStorage.setItem('1984.save', JSON.stringify(data));
+      store.set('1984.save', JSON.stringify(data));
     },
     load() {
-      try { const d = JSON.parse(localStorage.getItem('1984.save')); if (d) Object.assign(S, d); return !!d; } catch (e) { return false; }
+      try { const d = JSON.parse(store.get('1984.save')); if (d) Object.assign(S, d); return !!d; } catch (e) { return false; }
     },
     async start(newGame) {
       if (!newGame) story.load();

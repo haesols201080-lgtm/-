@@ -218,7 +218,8 @@ export function addCityLife(G, ctx, root) {
   }
 
   // ---- banners: long red Ingsoc cloths on the Ministry and the square
-  {
+  // (off: hung at fixed spots they floated wherever no facade stood behind)
+  if (false) {
     const tex = flagTexture(G);
     const mat = new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 0.85 });
     const geo = new THREE.PlaneGeometry(1, 1); geo.translate(0, -0.5, 0);

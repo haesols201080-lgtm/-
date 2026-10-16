@@ -3,6 +3,7 @@
 // the player's hands: the diary, the Records Department slips, the Physical
 // Jerks, the Two Minutes Hate, O'Brien's fingers, Goldstein's book.
 import * as THREE from 'three';
+import { store } from '../core/store.js';
 
 const CSS = `
 #ui{position:fixed;inset:0;pointer-events:none;z-index:10;font-family:"Noto Serif KR","Nanum Myeongjo","Batang",serif;color:#e9e4d8;
@@ -170,7 +171,7 @@ export function setupUI(G) {
       ctx.fillStyle = '#8e1c14'; ctx.fillRect(0, 860, 1600, 40);
       ctx.fillStyle = '#e8e0cc'; ctx.font = 'bold 26px "Arial Narrow",sans-serif'; ctx.textAlign = 'right';
       ctx.fillText('BIG BROTHER IS WATCHING YOU', 1560, 889);
-      const hasSave = !!localStorage.getItem('1984.save');
+      const hasSave = !!store.get('1984.save');
       el.menu.innerHTML = '';
       el.menu.appendChild(c);
       const panel = document.createElement('div');
@@ -532,8 +533,8 @@ export function setupUI(G) {
         <div class="keys">WASD 걷기 · Shift 뛰기(눈에 띈다) · C 웅크리기 · E 살피기/대화 · M 지도 · Esc 일시정지 · F3 텔레스크린 시야</div></div></div>`;
       el.modal.style.display = 'flex';
       const sel = el.modal.querySelector('.q'); sel.value = q;
-      sel.addEventListener('change', () => { localStorage.setItem('1984.quality', sel.value); G.renderer.setup(G.scene, G.camera, sel.value); });
-      el.modal.querySelector('.sens').addEventListener('input', (e) => { G.input.sensitivity = +e.target.value; localStorage.setItem('1984.sens', e.target.value); });
+      sel.addEventListener('change', () => { store.set('1984.quality', sel.value); G.renderer.setup(G.scene, G.camera, sel.value); });
+      el.modal.querySelector('.sens').addEventListener('input', (e) => { G.input.sensitivity = +e.target.value; store.set('1984.sens', e.target.value); });
       el.modal.querySelector('.vol').addEventListener('input', (e) => { if (G.audio && G.audio.master) G.audio.master(+e.target.value); });
       el.modal.querySelector('.save').addEventListener('click', () => { if (G.story && G.story.save) { G.story.save(); ui.toast('저장했다.'); } });
       el.modal.querySelector('.menu').addEventListener('click', () => location.reload());
@@ -578,9 +579,9 @@ export function setupUI(G) {
     const f = G.focus;
     el.prompt.style.opacity = f ? 1 : 0;
     if (f) el.prompt.innerHTML = `<kbd>E</kbd>${f.label}`;
-    el.click.style.display = (!G.input.locked && !G.modal && G.cutscene === 0 && !G.paused) ? 'block' : 'none';
+    el.click.style.display = (!G.input.locked && !G.input.drag && !G.modal && G.cutscene === 0 && !G.paused) ? 'block' : 'none';
   });
-  const sens = parseFloat(localStorage.getItem('1984.sens') || '1');
+  const sens = parseFloat(store.get('1984.sens') || '1');
   G.input.sensitivity = sens;
   G.ui = ui;
   return ui;

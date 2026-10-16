@@ -11,6 +11,8 @@ import { setupNPCs } from './game/npc.js';
 import { setupSurveillance } from './game/surveillance.js';
 import { setupWeather } from './game/weather.js';
 import { setupStory } from './game/story.js';
+import { store } from './core/store.js';
+import { isTouch, setupTouch } from './core/touch.js';
 
 async function boot() {
   const container = document.getElementById('game');
@@ -34,7 +36,9 @@ async function boot() {
   const params = new URLSearchParams(location.search);
   if (params.has('noprobe')) G.atmos.noProbe = true;
   if (params.has('slowgpu')) G.debug.maxDt = 2;     // headless tests run at ~1 fps
-  G.renderer.setup(G.scene, G.camera, params.get('q') || localStorage.getItem('1984.quality') || 'medium');
+  const touch = isTouch();
+  if (touch) setupTouch(G);
+  G.renderer.setup(G.scene, G.camera, params.get('q') || store.get('1984.quality') || (touch ? 'low' : 'medium'));
   // compile shaders up front so the first seconds do not stutter
   G.enter('city', G.world.points.home_door ? { x: G.world.points.home_door.x, z: G.world.points.home_door.z + 0, yaw: 0 } : { x: 0, z: 0 });
   G.renderer.gl.compile(G.scene, G.camera);

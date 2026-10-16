@@ -74,10 +74,12 @@ export class Player {
       if (inp.down('KeyS') || inp.down('ArrowDown')) fz -= 1;
       if (inp.down('KeyA') || inp.down('ArrowLeft')) fx -= 1;
       if (inp.down('KeyD') || inp.down('ArrowRight')) fx += 1;
+      if (inp.axis && (inp.axis.x || inp.axis.z)) { fx += inp.axis.x; fz += inp.axis.z; }
     }
     const wantCrouch = !this.locked && (inp.down('KeyC') || inp.down('ControlLeft'));
     this.crouch += ((wantCrouch ? 1 : 0) - this.crouch) * Math.min(1, dt * 8);
     const len = Math.hypot(fx, fz);
+    const amt = Math.min(1, len);    // a half-pushed stick walks slowly
     const wantRun = !this.locked && (inp.down('ShiftLeft') || inp.down('ShiftRight')) && fz > 0 && this.crouch < 0.3;
     this.running = wantRun && len > 0 && this.stamina > 0.05;
     if (this.running) this.stamina = Math.max(0, this.stamina - dt * 0.12);
@@ -86,7 +88,7 @@ export class Player {
     const fwd = this.forward(new THREE.Vector3());
     const right = new THREE.Vector3(-fwd.z, 0, fwd.x);
     const wish = new THREE.Vector3();
-    if (len > 0) wish.addScaledVector(fwd, fz / len).addScaledVector(right, fx / len).multiplyScalar(maxSpeed);
+    if (len > 0) wish.addScaledVector(fwd, fz / len).addScaledVector(right, fx / len).multiplyScalar(maxSpeed * amt);
     const accel = len > 0 ? 9 : 12;
     this.vel.x += (wish.x - this.vel.x) * Math.min(1, dt * accel);
     this.vel.z += (wish.z - this.vel.z) * Math.min(1, dt * accel);

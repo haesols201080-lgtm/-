@@ -2,11 +2,12 @@
 // window.__ASSETS__.a override them by name). The telescreen's fruity voice
 // drones under everything indoors; the city hums; the Hate roars.
 import * as THREE from 'three';
+import { store } from './store.js';
 
 export function setupAudio(G) {
   const AC = window.AudioContext || window.webkitAudioContext;
   const ctx = AC ? new AC() : null;
-  const A = { ctx, volume: parseFloat(localStorage.getItem('1984.vol') || '0.8'), buffers: {} };
+  const A = { ctx, volume: parseFloat(store.get('1984.vol') || '0.8'), buffers: {} };
   if (!ctx) { G.audio = { play() {}, unlock() {}, master() {}, blip() {}, shout() {}, helicopter() {}, step() {} }; return G.audio; }
   const out = ctx.createGain(); out.gain.value = A.volume; out.connect(ctx.destination);
   const verb = ctx.createConvolver();
@@ -205,7 +206,7 @@ export function setupAudio(G) {
   const audio = {
     get volume() { return A.volume; },
     unlock() { if (ctx.state !== 'running') ctx.resume(); },
-    master(v) { A.volume = v; out.gain.value = v; localStorage.setItem('1984.vol', v); },
+    master(v) { A.volume = v; out.gain.value = v; store.set('1984.vol', v); },
     play(name, o = {}) {
       if (ctx.state !== 'running') return;
       const buf = A.buffers[name];

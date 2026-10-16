@@ -9,6 +9,8 @@ export class Input {
     this.locked = false;
     this.enabled = true;
     this.sensitivity = 1;
+    this.axis = { x: 0, z: 0 };   // analogue walking from the touch stick
+    this.drag = false;             // look by dragging when pointer lock is refused
     addEventListener('keydown', (e) => {
       if (e.repeat) return;
       this.keys.add(e.code);
@@ -18,13 +20,13 @@ export class Input {
     addEventListener('keyup', (e) => this.keys.delete(e.code));
     addEventListener('blur', () => this.keys.clear());
     addEventListener('mousemove', (e) => {
-      if (!this.locked) return;
-      this.mx += e.movementX; this.my += e.movementY;
+      if (this.locked || (this.drag && this.mouseDown)) { this.mx += e.movementX; this.my += e.movementY; }
     });
     el.addEventListener('mousedown', (e) => {
       if (e.button === 0) { this.mouseDown = true; this.pressed.add('Mouse0'); }
     });
     addEventListener('mouseup', (e) => { if (e.button === 0) this.mouseDown = false; });
+    document.addEventListener('pointerlockerror', () => { this.drag = true; });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === el;
       if (this.onLockChange) this.onLockChange(this.locked);
@@ -33,7 +35,9 @@ export class Input {
 
   lock() {
     if (document.pointerLockElement !== this.el && this.el.requestPointerLock) {
-      try { const p = this.el.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* ignored */ }
+      // sandboxed frames may refuse pointer lock: fall back to drag-to-look
+      const refuse = () => { this.drag = true; };
+      try { const p = this.el.requestPointerLock(); if (p && p.catch) p.catch(refuse); } catch (e) { refuse(); }
     }
   }
 
