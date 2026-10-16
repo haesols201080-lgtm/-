@@ -1,9 +1,9 @@
-"""The column in Victory Square (Nelson's Column in Trafalgar Square, with
-Big Brother on top): real proportions, a stepped granite base, a pedestal
-with bronze relief panels, a fluted granite shaft with a bronze capital,
-and four couchant bronze lions on their plinths, modelled as sculpture
-(skin-modifier armatures, subdivided, with a carved mane) rather than
-assembled from spheres."""
+"""The Big Brother Monument in Victory Square. Whatever stood here before
+has been taken over: the fluted column now carries Big Brother gazing
+south 'towards the skies where he had vanquished the Eurasian aeroplanes
+in the Battle of Airstrip One', the pedestal's bronze reliefs show that
+battle, and the four lions at the base were recast in the Party's own
+hard monumental manner. Telescreens are set all round the pediment."""
 import math
 import bpy, bmesh
 from mathutils import Vector, Matrix, noise
@@ -20,93 +20,47 @@ TOP = CAP[1] + 2.0                        # where the statue stands
 
 
 def lion(name, mirror=False):
-    """A couchant lion like Landseer's at Trafalgar Square: forelegs straight
-    out, the chest high under a heavy mane, the head raised, the hind legs
-    folded with the tail curled round. Blocked out of ellipsoids and limb
-    capsules the way a sculptor blocks a maquette, fused with a voxel
-    remesh, smoothed, and the mane carved with flowing noise.
-    Units are metres for the real size (about 6 m nose to rump)."""
-    parts = []
+    """The lions at the base, recast by the Party in its own monumental
+    manner: planar, stepped and hard-edged, the old imperial beasts made
+    into Big Brother's. Bevelled blocks and wedges, about 6 m long."""
+    m = Mesh(name)
+    B = 'bronze'
 
-    def ell(c, r, rot=(0, 0, 0)):
-        bpy.ops.mesh.primitive_uv_sphere_add(segments=32, ring_count=16, location=c, rotation=rot)
-        o = bpy.context.active_object
-        o.scale = r
-        parts.append(o)
+    def blk(c, size, rx=0.0, rz=0.0):
+        M = Matrix.Translation(c) @ Matrix.Rotation(rz, 4, 'Z') @ Matrix.Rotation(rx, 4, 'X')
+        hx, hy, hz = size[0] / 2, size[1] / 2, size[2] / 2
+        m.box((-hx, -hy, -hz), (hx, hy, hz), B, matrix=M)
 
-    def cap(a, b, ra, rb):
-        a, b = Vector(a), Vector(b)
-        n = 6
-        for i in range(n + 1):
-            t = i / n
-            p = a.lerp(b, t)
-            r = ra + (rb - ra) * t
-            ell(tuple(p), (r, r, r))
-
-    # trunk: rump, belly, chest
-    ell((0, -1.95, 0.88), (0.74, 0.82, 0.78))
-    ell((0, -0.75, 0.95), (0.74, 1.3, 0.8))
-    ell((0, 0.45, 1.18), (0.82, 0.85, 0.98))
-    # the mane: over the shoulders, up the neck, falling down the chest
-    ell((0, 0.85, 1.78), (0.98, 0.92, 0.95))
-    ell((0, 1.22, 1.15), (0.74, 0.55, 0.92))
-    ell((0, 0.2, 1.55), (0.8, 0.7, 0.75))
-    # head and muzzle, chin
-    ell((0, 1.58, 2.02), (0.5, 0.58, 0.54))
-    ell((0, 2.04, 1.86), (0.33, 0.38, 0.3))
-    ell((0, 1.98, 1.62), (0.24, 0.3, 0.16))
+    # hindquarters and the long low back, stepping up to the chest
+    blk((0, -2.0, 0.75), (1.45, 1.6, 1.5))
+    blk((0, -0.75, 0.82), (1.4, 1.5, 1.5), rx=0.04)
+    blk((0, 0.35, 1.05), (1.55, 1.2, 1.95), rx=0.06)
+    # the mane: three stepped collars round the neck and chest
+    for i, (y, z, w, h, d) in enumerate([(0.55, 1.55, 2.05, 2.1, 1.0), (0.95, 1.7, 1.85, 1.9, 0.6), (1.25, 1.75, 1.55, 1.65, 0.45)]):
+        blk((0, y, z), (w, d, h), rx=-0.05 * i)
+    # head: brow, face, muzzle, jaw
+    blk((0, 1.55, 2.05), (1.0, 0.75, 0.85))
+    blk((0, 1.98, 1.9), (0.62, 0.55, 0.55))
+    blk((0, 2.22, 1.72), (0.42, 0.35, 0.28))
+    blk((0, 1.95, 1.5), (0.5, 0.45, 0.22))
     for sx in (-1, 1):
-        ell((sx * 0.3, 1.5, 2.46), (0.13, 0.09, 0.15))                 # ears
-        ell((sx * 0.26, 1.92, 2.08), (0.16, 0.18, 0.12))               # brows
-        # forelegs, straight out, big paws
-        cap((sx * 0.44, 0.95, 0.8), (sx * 0.43, 2.25, 0.24), 0.32, 0.22)
-        ell((sx * 0.43, 2.5, 0.18), (0.3, 0.4, 0.19))
-        # hind leg folded: thigh, shank along the ground, paw beside the belly
-        ell((sx * 0.55, -1.75, 0.72), (0.42, 0.78, 0.62))
-        cap((sx * 0.6, -2.2, 0.2), (sx * 0.64, -0.95, 0.16), 0.2, 0.16)
-        ell((sx * 0.64, -0.75, 0.15), (0.24, 0.33, 0.16))
-    # tail curled round the right hind paw
-    cap((0.1, -2.6, 0.7), (0.55, -2.95, 0.14), 0.12, 0.09)
-    cap((0.55, -2.95, 0.14), (1.0, -2.25, 0.11), 0.09, 0.08)
-    cap((1.0, -2.25, 0.11), (0.95, -1.45, 0.11), 0.08, 0.09)
-    ell((0.95, -1.35, 0.12), (0.13, 0.2, 0.12))
-
-    bpy.ops.object.select_all(action='DESELECT')
-    for o in parts:
-        o.select_set(True)
-    bpy.context.view_layer.objects.active = parts[0]
-    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
-    bpy.ops.object.join()
-    ob = bpy.context.active_object
-    ob.name = name
-    rm = ob.modifiers.new('remesh', 'REMESH'); rm.mode = 'VOXEL'; rm.voxel_size = 0.045
-    bpy.ops.object.modifier_apply(modifier='remesh')
-    sm = ob.modifiers.new('smooth', 'LAPLACIANSMOOTH'); sm.iterations = 18; sm.lambda_factor = 0.9
-    bpy.ops.object.modifier_apply(modifier='smooth')
-    # carve the mane in locks that flow down and back; leave the face smooth
-    bm = bmesh.new(); bm.from_mesh(ob.data)
-    bm.normal_update()
-    for v in bm.verts:
-        p = v.co
-        dm = Vector((p.x / 1.05, (p.y - 0.85) / 1.0, (p.z - 1.55) / 0.95)).length
-        mane = max(0.0, min(1.0, 1.25 - dm))
-        face = Vector((p.x / 0.42, (p.y - 1.85) / 0.5, (p.z - 1.95) / 0.5)).length
-        if face < 1.0:
-            mane *= face ** 2
-        # locks: stretched noise, long along the fall of the hair
-        q = Vector((p.x * 9.0, p.y * 2.2 + p.z * 1.4, p.z * 3.0 - p.y * 1.2))
-        locks = noise.turbulence(q, 3, True, noise_basis='PERLIN_ORIGINAL')
-        hide = noise.noise(p * 1.8) * 0.015
-        v.co += v.normal * (mane * (0.02 + locks * 0.075) + hide)
-        if v.co.z < 0.02:
-            v.co.z = 0.02
-    bm.to_mesh(ob.data); bm.free()
-    dec = ob.modifiers.new('dec', 'DECIMATE'); dec.ratio = 0.12
-    bpy.ops.object.modifier_apply(modifier='dec')
-    for p in ob.data.polygons:
-        p.use_smooth = True
-    ob.data.materials.clear()
-    ob.data.materials.append(material('bronze'))
+        blk((sx * 0.36, 1.5, 2.5), (0.2, 0.14, 0.22), rz=sx * 0.3)            # ears
+        # forelegs straight out, broad paws with the toes cut in
+        blk((sx * 0.45, 1.45, 0.42), (0.5, 1.6, 0.7))
+        blk((sx * 0.45, 2.45, 0.2), (0.6, 0.75, 0.38))
+        for t in (-0.2, 0, 0.2):
+            blk((sx * 0.45 + t, 2.86, 0.14), (0.16, 0.12, 0.26))
+        # haunch and the hind paw tucked forward
+        blk((sx * 0.6, -1.85, 0.72), (0.45, 1.45, 1.25))
+        blk((sx * 0.68, -0.95, 0.18), (0.36, 1.0, 0.34))
+    # tail laid along the plinth and round
+    blk((0.35, -2.95, 0.16), (0.3, 0.7, 0.28), rz=0.5)
+    blk((0.85, -2.75, 0.14), (0.26, 0.7, 0.26), rz=-0.9)
+    ob = m.finish(box_uv=True)
+    bpy.context.view_layer.objects.active = ob
+    ob.select_set(True)
+    bv = ob.modifiers.new('bevel', 'BEVEL'); bv.width = 0.05; bv.segments = 2; bv.limit_method = 'ANGLE'
+    bpy.ops.object.modifier_apply(modifier='bevel')
     ob.select_set(False)
     return ob
 
@@ -139,12 +93,22 @@ def monument(statue_fn):
         # recessed frame and the bronze relief panel standing in it
         m.box((-3.0, -4.78, PED[0] + 1.2), (3.0, -4.7, PED[0] + 4.6), 'granite', matrix=R)
         m.box((-2.8, -4.84, PED[0] + 1.35), (2.8, -4.78, PED[0] + 4.45), 'bronze', matrix=R)
-        # figures in relief: a march of the Party, rows of raised forms
-        for i in range(9):
-            x = -2.5 + i * 0.62
-            hgt = 1.6 + 0.4 * math.sin(i * 1.7)
-            m.box((x - 0.16, -4.98, PED[0] + 1.5), (x + 0.16, -4.84, PED[0] + 1.5 + hgt), 'bronze', matrix=R)
-            m.sphere((x, -4.9, PED[0] + 1.62 + hgt), 0.14, 'bronze', 8, 6, matrix=R)
+        # in relief: the Battle of Airstrip One. Big Brother stands in the
+        # middle, enemy aircraft fall about him, searchlight beams cross
+        m.box((-0.35, -5.0, PED[0] + 1.5), (0.35, -4.84, PED[0] + 3.9), 'bronze', matrix=R)
+        m.sphere((0, -4.92, PED[0] + 4.1), 0.24, 'bronze', 10, 8, matrix=R)
+        for i in range(6):
+            x = -2.4 + i * 0.96 if i < 3 else -2.4 + (i - 3) * 0.96 + 3.0
+            if abs(x) < 0.7:
+                continue
+            z = PED[0] + 2.2 + (i % 3) * 0.7
+            ang = 0.6 + (i % 3) * 0.3
+            M2 = R @ Matrix.Translation((x, -4.92, z)) @ Matrix.Rotation(ang * (1 if x < 0 else -1), 4, 'Y')
+            m.box((-0.42, -0.06, -0.06), (0.42, 0.06, 0.06), 'bronze', matrix=M2)    # fuselage
+            m.box((-0.1, -0.06, -0.38), (0.1, 0.06, 0.38), 'bronze', matrix=M2)     # wings
+        for sgn in (-1, 1):
+            M3 = R @ Matrix.Translation((sgn * 1.2, -4.9, PED[0] + 3.0)) @ Matrix.Rotation(sgn * 0.5, 4, 'Y')
+            m.box((-0.05, -0.04, -1.5), (0.05, 0.04, 1.5), 'bronze', matrix=M3)
     moulding(m, PED[1] - 0.2, 4.7, 5.1, 0.6, 'granite')
     moulding(m, PED[1] + 0.4, 5.1, 3.9, 0.5, 'granite')
     m.box((-3.6, -3.6, PED[1] + 0.9), (3.6, 3.6, DIE[1]), 'granite')

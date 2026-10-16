@@ -42,7 +42,9 @@ function ragged(ctx, pts, r, amp = 10, step = 9) {
 // ---------------------------------------------------------------- posters
 
 // Cells of the poster atlas (4 x 2). Every poster quad is 1 x 1.4.
-export const POSTER = { bb: 0, ingsoc: 1, enemy: 2, notice: 3, bb_torn: 4, ingsoc_torn: 5, enemy_torn: 6, bb_faded: 7 };
+export const POSTER = { bb: 0, ingsoc: 1, enemy: 2, notice: 3, bb_torn: 4, ingsoc_torn: 5, enemy_torn: 6, bb_faded: 7,
+  triad: 8, down_enemy: 9, always_war: 10, thanks_bb: 11, plan: 12, choc: 13, triad_torn: 14, down_enemy_torn: 15 };
+const SLOGANS = new Set(['triad', 'down_enemy', 'always_war', 'thanks_bb', 'plan', 'choc']);
 const PW = 512, PH = 717;
 
 function eastasian(ctx, w, h) {
@@ -82,12 +84,71 @@ function notice(ctx, w, h, r) {
   ctx.fillStyle = '#7e1810'; ctx.fillRect(18, h - 34, w - 36, 12);
 }
 
+// Typographic Party posters: the slogans of the novel in heavy grotesque
+// capitals, red, black and cream, the cheap printing showing.
+function slogan(ctx, w, h, kind, srcs, r) {
+  const cream = '#e4dac2', red = '#8e1a12', black = '#16130f';
+  const lines = (arr, y0, size, col, gap = 1.12, font = SANS) => {
+    ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    arr.forEach((t, i) => {
+      let s = size;
+      ctx.font = `900 ${s}px ${font}`;
+      while (ctx.measureText(t).width > w * 0.86 && s > 10) { s -= 2; ctx.font = `900 ${s}px ${font}`; }
+      ctx.fillText(t, w / 2, y0 + i * size * gap);
+    });
+  };
+  const E = srcs.enemyName || 'EURASIA';
+  if (kind === 'triad') {
+    ctx.fillStyle = black; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = red; ctx.fillRect(0, h * 0.06, w, h * 0.05); ctx.fillRect(0, h * 0.89, w, h * 0.05);
+    lines(['WAR', 'IS PEACE'], h * 0.2, 74, cream);
+    ctx.fillStyle = red; ctx.fillRect(w * 0.2, h * 0.37, w * 0.6, 6);
+    lines(['FREEDOM', 'IS SLAVERY'], h * 0.47, 70, cream);
+    ctx.fillStyle = red; ctx.fillRect(w * 0.2, h * 0.64, w * 0.6, 6);
+    lines(['IGNORANCE', 'IS STRENGTH'], h * 0.73, 66, cream);
+  } else if (kind === 'down_enemy') {
+    ctx.fillStyle = cream; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = red; ctx.fillRect(0, 0, w, h * 0.5);
+    // a boot coming down on the enemy's map
+    ctx.fillStyle = black;
+    ctx.beginPath(); ctx.moveTo(w * 0.28, h * 0.08); ctx.lineTo(w * 0.62, h * 0.08); ctx.lineTo(w * 0.66, h * 0.33); ctx.lineTo(w * 0.86, h * 0.36);
+    ctx.lineTo(w * 0.88, h * 0.46); ctx.lineTo(w * 0.24, h * 0.46); ctx.lineTo(w * 0.26, h * 0.3); ctx.closePath(); ctx.fill();
+    lines(['DOWN WITH', E + '!'], h * 0.62, 78, black);
+    lines(['ALL FOR THE FRONT'], h * 0.88, 30, red);
+  } else if (kind === 'always_war') {
+    ctx.fillStyle = cream; ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = black; ctx.lineWidth = 10; ctx.strokeRect(18, 18, w - 36, h - 36);
+    lines(['OCEANIA', 'IS AT WAR', 'WITH', E], h * 0.2, 62, black);
+    ctx.fillStyle = red; ctx.fillRect(w * 0.12, h * 0.6, w * 0.76, 4);
+    lines(['OCEANIA HAS ALWAYS', 'BEEN AT WAR', 'WITH ' + E], h * 0.7, 34, red, 1.3);
+  } else if (kind === 'thanks_bb') {
+    ctx.fillStyle = '#d6c8a6'; ctx.fillRect(0, 0, w, h);
+    if (srcs.drawBB) { ctx.save(); ctx.beginPath(); ctx.rect(40, 40, w - 80, h * 0.56); ctx.clip(); ctx.fillStyle = '#2a2b2a'; ctx.fillRect(40, 40, w - 80, h * 0.56); srcs.drawBB(ctx, w / 2, h * 0.36, 120, { coat: '#1c1d1e' }); ctx.restore(); }
+    lines(['THANK YOU,', 'BIG BROTHER'], h * 0.7, 52, red);
+    lines(['FOR OUR NEW, HAPPY LIFE'], h * 0.88, 30, black);
+  } else if (kind === 'plan') {
+    ctx.fillStyle = '#c9bea0'; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = red;
+    for (let i = 0; i < 6; i++) { const bh = h * (0.12 + i * 0.07); ctx.fillRect(w * 0.12 + i * w * 0.13, h * 0.58 - bh, w * 0.09, bh); }
+    lines(['NINTH', 'THREE-YEAR PLAN'], h * 0.68, 50, black);
+    lines(['TARGETS OVERFULFILLED'], h * 0.87, 34, red);
+  } else if (kind === 'choc') {
+    ctx.fillStyle = cream; ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = '#3a2416'; ctx.fillRect(w * 0.3, h * 0.08, w * 0.4, h * 0.26);
+    ctx.fillStyle = '#5a3a24'; for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) ctx.fillRect(w * 0.32 + i * w * 0.125, h * 0.1 + j * h * 0.12, w * 0.11, h * 0.1);
+    lines(['CHOCOLATE', 'RATION', 'INCREASED'], h * 0.46, 58, black);
+    lines(['TO TWENTY GRAMMES', 'A WEEK'], h * 0.8, 38, red);
+  }
+  grain(ctx, w, h, 0.05, r);
+}
+
 function drawPosterCell(ctx, kind, srcs, r) {
   const w = PW, h = PH;
   ctx.save();
   ctx.clearRect(0, 0, w, h);
   const base = kind.replace(/_(torn|faded)$/, '');
   if (base === 'notice') notice(ctx, w, h, r);
+  else if (SLOGANS.has(base)) slogan(ctx, w, h, base, srcs, r);
   else if (base === 'enemy' && srcs.enemy === 'eastasia') eastasian(ctx, w, h);
   else if (srcs[base]) ctx.drawImage(srcs[base], 0, 0, w, h);
   if (kind.endsWith('_faded')) {
@@ -135,8 +196,8 @@ function drawPosterCell(ctx, kind, srcs, r) {
 export function posterAtlas(G) {
   const art = G.art;
   const src = (f) => { try { const t = f(); return t && t.image; } catch (e) { return null; } };
-  const srcs = { bb: src(art.posterBB), ingsoc: src(art.posterIngsoc), enemy: src(art.posterEurasian), enemyKind: 'eurasia' };
-  const [c, ctx] = makeCanvas(PW * 4, PH * 2);
+  const srcs = { bb: src(art.posterBB), ingsoc: src(art.posterIngsoc), enemy: src(art.posterEurasian), enemyName: 'EURASIA', drawBB: art.drawBB };
+  const [c, ctx] = makeCanvas(PW * 4, PH * 4);
   const cell = makeCanvas(PW, PH);
   const r = rng(1984);
   const paint = (kind) => {
@@ -152,12 +213,13 @@ export function posterAtlas(G) {
   const rect = (kind) => {
     const i = POSTER[kind];
     // a texel inset keeps neighbouring cells from bleeding in at mip levels
-    const u = (i % 4) / 4, v = 1 - (Math.floor(i / 4) + 1) / 2;
-    return [u + 0.002, v + 0.002, 0.25 - 0.004, 0.5 - 0.004];
+    const u = (i % 4) / 4, v = 1 - (Math.floor(i / 4) + 1) / 4;
+    return [u + 0.002, v + 0.001, 0.25 - 0.004, 0.25 - 0.002];
   };
   const setEnemy = (kind) => {
     srcs.enemy = kind === 'eastasia' ? 'eastasia' : src(art.posterEurasian);
-    paint('enemy'); paint('enemy_torn');
+    srcs.enemyName = kind === 'eastasia' ? 'EASTASIA' : 'EURASIA';
+    paint('enemy'); paint('enemy_torn'); paint('down_enemy'); paint('down_enemy_torn'); paint('always_war');
     tex.needsUpdate = true;
   };
   return { tex, rect, setEnemy };

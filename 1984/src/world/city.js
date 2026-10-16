@@ -11,11 +11,12 @@ import { Placer } from './city_build.js';
 import { posterAtlas } from './city_paint.js';
 import { rng, tf, standingQuad, lookYaw } from './city_util.js';
 import { addCityLife } from './city_life.js';
+import { addPropaganda } from './propaganda.js';
 import { londonPlan, WINDOW, VICTORY_SQUARE, SITES, AVENUES, districtAt } from './london.js';
 import { buildTown } from './town/index.js';
 import { Kit, Frame, TINTS } from './town/kit.js';
 import { cornerBuilding } from './town/corner.js';
-import { resolve } from './town/styles.js';
+import { resolve, baysFor } from './town/styles.js';
 import { townMaterials } from './town/mats.js';
 import { pointInPoly, segDist } from './town/streets.js';
 
@@ -92,8 +93,11 @@ export function setupCity(G) {
     const vm = run(WANT.mansions);
     if (vm) {
       const st = res('interwar', rr, { decay: 0.45, storeys: 8 });
-      st.wall = 'brick'; st.wallTint = [0.86, 0.74, 0.62]; st.gf = 'shop'; st.fasciaTop = 3.4;
-      vm.style = st; vm.special = 'mansions'; vm.signName = 'VICTORY MANSIONS';
+      // 'the glass doors of Victory Mansions': a flats entrance, not a shop
+      st.wall = 'brick'; st.wallTint = [0.86, 0.74, 0.62];
+      st.doorW = 2.2; st.doorH = 2.9; st.glazedDoor = true; st.fan = 'rect'; st.porch = 1.2;
+      st.doorBay = Math.floor(baysFor(st, vm.w) / 2);
+      vm.style = st; vm.special = 'mansions';
       vm.d = Math.max(vm.d, 13);
     }
     const cc = run(WANT.community);
@@ -147,34 +151,48 @@ export function setupCity(G) {
   };
 
   // ---- landmarks
-  // the column in Victory Square, Big Brother gazing south down Whitehall
-  placer.add('monument', 0, 0, 0, { unique: true });
-  // St Martin's-in-the-Fields, portico to the west on the square
+  // The Big Brother Monument. Whatever stood here before has been taken over:
+  // the column carries Big Brother gazing south, the pedestal shows his
+  // victory in the Battle of Airstrip One, the lions were recast in the
+  // Party's manner. The broad steps can be climbed.
+  placer.add('monument', 0, 0, 0, {
+    unique: true,
+    collide: [[0, 0, 5.0, 5.0, 60], [6.6, 6.0, 1.85, 3.75, 3.4], [-6.6, 6.0, 1.85, 3.75, 3.4], [6.6, -6.0, 1.85, 3.75, 3.4], [-6.6, -6.0, 1.85, 3.75, 3.4]],
+  });
+  for (let k = 0; k < 4; k++) { const a = 9.6 - k * 0.45; map.addStep(0, 0, 0, -a, -a, a, a, (k + 1) * 0.3); }
+  {
+    const words = ['BIG BROTHER', 'THE BATTLE OF AIRSTRIP ONE', 'BIG BROTHER', 'OUR NEW HAPPY LIFE'];
+    for (let k = 0; k < 4; k++) {
+      const a = k * H;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 0.42), G.mats.signMaterial(words[k], { bg: '#4a4740', fg: '#d8ccaa', serif: true }));
+      m.position.set(Math.sin(a) * 4.72, 6.15, Math.cos(a) * 4.72);
+      m.rotation.y = a;
+      root.add(m);
+    }
+  }
+  // St Martin's-in-the-Fields, 'a museum used for propaganda displays'
   placer.add('church', 92, -122, -H, { unique: true });
   // the Ministry of Truth on the site of Senate House
   const mt = plan.minitrue;
   const mScale = (mt.half * 2 - 26) / 170;
   placer.add('minitrue', mt.x, mt.z, 0, { unique: true, scale: mScale });
-  // the other three ministries over the roofs
-  placer.add('pyramid_far', 160, 1650, 0.3, { unique: true, collide: false, cast: false, scale: 1.3 });     // Peace, beyond Whitehall
-  placer.add('pyramid_far', -1700, -500, -0.2, { unique: true, collide: false, cast: false, scale: 1.2 });  // Love, to the west
-  placer.add('pyramid_far', 1800, -1300, 0.5, { unique: true, collide: false, cast: false, scale: 1.25 }); // Plenty, to the east
+  // the other three ministries over the roofs: Peace and Plenty in the same
+  // white terraces, Love windowless and grey
+  placer.add('pyramid_far', 160, 1650, 0.3, { unique: true, collide: false, cast: false, scale: 1.3 });
+  placer.add('miniluv', -1700, -500, -0.2, { unique: true, collide: false, cast: false, scale: 1.15 });
+  placer.add('pyramid_far', 1800, -1300, 0.5, { unique: true, collide: false, cast: false, scale: 1.25 });
   gallery(G, root, r);
+  squareFittings(G, root);
 
   // ---- distant London: the real footprints beyond the window as massing
   farLondon(G, root, plan.massing, r);
 
-  // ---- street lamps along every street, telescreens on the Party streets
+  // ---- street lamps along every street
   const lamps = [];
   const telescreens = [];
   const lampAt = (x, z, rot) => {
     const p = placer.add('lamp_post', x, z, rot);
     if (p) { const l = placer.node('lamp_post', 'light', x, z, rot) || new THREE.Vector3(x, 4.75, z); lamps.push(l); }
-  };
-  const screenAt = (x, z, rot, range = 26) => {
-    if (!placer.add('telescreen_pole', x, z, rot)) return;
-    const eye = placer.node('telescreen_pole', 'eye', x, z, rot) || new THREE.Vector3(x, 3.7, z);
-    telescreens.push({ location: 'city', pos: eye, dir: new THREE.Vector3(Math.sin(rot), 0, Math.cos(rot)), fov: 150, range });
   };
   const used = [];
   const free = (x, z, d) => used.every(([a, b]) => Math.hypot(a - x, b - z) > d);
@@ -192,27 +210,67 @@ export function setupCity(G) {
         const x = ax + ux * t - uz * off * side, z = az + uz * t + ux * off * side;
         side = -side;
         if (map.typeAt(x, z) !== 1 || !free(x, z, 14)) continue;   // on a pavement, not crowded
-        if (G.col.blocked && false) continue;
         used.push([x, z]);
-        const rot = Math.atan2(uz * side, -ux * side);   // arm over the road
-        const party = AVENUES.has(s.name) || s.district === 'westend';
-        if (party && s.kind === 'main' && r() < 0.18) screenAt(x, z, lookYaw(-(-uz * -side), -(ux * -side)) + PI);
-        else lampAt(x, z, rot);
+        lampAt(x, z, Math.atan2(uz * side, -ux * side));
       }
       acc = (acc - L) % step; if (acc < 0) acc += step;
     }
   }
-  // Victory Square: telescreens round the column's pedestal
-  for (let k = 0; k < 4; k++) { const a = k * H + PI / 4; screenAt(Math.sin(a) * 13.5, Math.cos(a) * 13.5, a, 32); }
+
+  // ---- telescreens: oblong metal plaques set in the walls where the Party
+  // looks: over the doors of its offices and flats, on the blank flank walls
+  // of its streets, round the monument's pediment, flanking the Ministry's
+  // doors. Hardly any in the prole streets.
+  const scr = [];
+  const freeS = (x, z, d) => scr.every(([a, b]) => Math.hypot(a - x, b - z) > d);
+  const wallScreen = (F, lx, y, scale = 0.6, range = 26) => {
+    const p = F.p(lx, 0, 0.02);
+    if (!freeS(p[0], p[2], 18)) return;
+    scr.push([p[0], p[2]]);
+    placer.add('telescreen_wall', p[0], p[2], F.rot, { y: F.oy + y, scale, collide: false, unique: false });
+    const dir = new THREE.Vector3(Math.sin(F.rot), 0, Math.cos(F.rot));
+    telescreens.push({ location: 'city', pos: new THREE.Vector3(p[0], F.oy + y, p[2]).addScaledVector(dir, 0.2), dir, fov: 150, range });
+  };
+  const partyAt = (x, z) => districtAt(x, z) !== 'slum';
+  for (const j of town.jobs) {
+    if (j.kind !== 'house' || !j.doors || !j.doors.length) continue;
+    const st = j.style;
+    const official = st.type === 'office' || st.type === 'interwar' || st.type === 'tenement' || j.special === 'mansions' || j.special === 'community';
+    if (!official || !partyAt(j.F.ox, j.F.oz)) continue;
+    const d = j.doors[0];
+    const [lx] = j.F.local(d.x, d.z);
+    const doorTop = (st.raise || 0) + (st.doorH || 2.6);
+    wallScreen(j.F, lx, doorTop + 0.6, 0.55, 22);
+  }
+  for (const g of spots.gables) {
+    const party = partyAt(g.x, g.z);
+    if (r() > (party ? 0.45 : 0.05)) continue;
+    const F = new Frame(g.x, 0.12, g.z, g.rot);
+    wallScreen(F, 0, 3.6, 0.75, 30);
+  }
+  // round the pediment of the monument (the novel), facing the four ways
+  for (let k = 0; k < 4; k++) {
+    const a = k * H;
+    const F = new Frame(Math.sin(a) * 3.62, 0, Math.cos(a) * 3.62, a);
+    scr.length = 0;
+    wallScreen(F, 0, 8.6, 1.0, 40);
+  }
+  // flanking the Ministry's great doors
+  {
+    const fz = mt.z + 85 * mScale;
+    for (const dx of [-15, 15]) { const F = new Frame(mt.x + dx, 0.12, fz, 0); wallScreen(F, 0, 5.2, 1.4, 45); }
+  }
 
   placer.build();
 
-  // ---- posters on exposed gables and hoardings; the face at the Party corners
+  // ---- posters: pasted flat on the walls between windows, a little askew,
+  // layered and torn; the great face on the blank flank walls; the hoardings
   const atlas = posterAtlas(G);
-  const posterMat = new THREE.MeshStandardMaterial({ map: atlas.tex, roughness: 0.9, alphaTest: 0.4, side: THREE.DoubleSide });
+  const posterMat = new THREE.MeshStandardMaterial({ map: atlas.tex, roughness: 0.9, alphaTest: 0.4, side: THREE.DoubleSide,
+    polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
   const posters = [];
   const posterGeo = standingQuad(1, 1);
-  const addPoster = (x, y, z, rot, w, kind) => {
+  const addPoster = (x, y, z, rot, w, kind, tilt = 0) => {
     const g = posterGeo.clone();
     const [u, v, du, dv] = atlas.rect(kind);
     const uv = g.attributes.uv;
@@ -220,31 +278,51 @@ export function setupCity(G) {
     const m = new THREE.Mesh(g, posterMat);
     m.scale.set(w, w * 1.4, 1);
     m.position.set(x, y, z);
-    m.rotation.y = rot;
+    m.rotation.set(0, rot, tilt, 'YXZ');
     m.receiveShadow = true;
     m.userData.kind = kind;
     root.add(m);
     posters.push(m);
   };
+  const FRESH = ['bb', 'bb', 'ingsoc', 'triad', 'down_enemy', 'always_war', 'thanks_bb', 'plan', 'choc', 'bb', 'enemy'];
+  const OLD = ['bb_torn', 'ingsoc_torn', 'bb_faded', 'enemy_torn', 'triad_torn', 'down_enemy_torn'];
+  // on the piers between the ground-floor openings of house fronts
+  for (const j of town.jobs) {
+    if (j.kind !== 'house') continue;
+    const st = j.style;
+    if (st.gf === 'shop' || st.gf === 'pub' || st.type === 'stucco' && districtAt(j.F.ox, j.F.oz) === 'inner') continue;
+    const party = partyAt(j.F.ox, j.F.oz);
+    if (r() > (party ? 0.3 : 0.14)) continue;
+    const bays = baysFor(st, j.w), bw = j.w / bays;
+    const win = (st.win && st.win[0]) || { w: 1 };
+    const pier = bw - Math.max(win.w || 1, st.doorW || 1);
+    if (pier < 0.8) continue;
+    const k = 1 + Math.floor(r() * Math.max(1, bays - 1));
+    const lx = Math.min(j.w - 0.5, k * bw);
+    const pw = Math.min(0.72, pier - 0.12);
+    const p = j.F.p(lx, 0, 0.022);   // the quad is centred on its x
+    const kinds = party ? (r() < 0.75 ? FRESH : OLD) : OLD;
+    addPoster(p[0], 0.12 + (st.raise || 0) + 1.0 + r() * 0.25, p[2], j.F.rot, pw, kinds[Math.floor(r() * kinds.length)], (r() - 0.5) * 0.05);
+    // a second pasted half over the first, as bill-stickers do
+    if (r() < 0.3) addPoster(p[0] + Math.cos(j.F.rot) * 0.12, 0.12 + (st.raise || 0) + 1.35, p[2] - Math.sin(j.F.rot) * 0.12, j.F.rot, pw * 0.9, OLD[Math.floor(r() * OLD.length)], (r() - 0.5) * 0.08);
+  }
+  // the great face on the flank walls ('every commanding corner')
   for (const g of spots.gables) {
-    if (r() < 0.35) continue;
-    const kinds = ['bb_torn', 'ingsoc_torn', 'bb', 'enemy_torn', 'bb_faded'];
-    const p = tf(g.x, g.z, g.rot, (r() - 0.5) * Math.max(0, g.len - 4), 0.06);
-    if (g.h > 12 && r() < 0.5) addPoster(p.x, 6 + r() * 4, p.z, g.rot, 3.4, r() < 0.8 ? 'bb' : 'bb_faded');
-    else addPoster(p.x, 1.1 + r() * 1.0, p.z, g.rot, 1.0, kinds[Math.floor(r() * kinds.length)]);
+    const party = partyAt(g.x, g.z);
+    const p = tf(g.x, g.z, g.rot, (r() - 0.5) * Math.max(0, g.len - 5), 0.05);
+    if (party && g.h > 9 && r() < 0.6) addPoster(p.x, 4.6 + r() * 2.5, p.z, g.rot, Math.min(3.4, g.len * 0.4), r() < 0.85 ? 'bb' : 'bb_faded', (r() - 0.5) * 0.02);
+    else if (r() < 0.5) addPoster(p.x, 1.1 + r() * 0.6, p.z, g.rot, 0.95, OLD[Math.floor(r() * OLD.length)], (r() - 0.5) * 0.06);
   }
   for (const b of spots.bombsites) {
     if (!b.hoarding) continue;
-    for (let x = b.x0 + 1.2; x < b.x1 - 0.8; x += 1.6 + r() * 1.2) {
+    for (let x = b.x0 + 1.2; x < b.x1 - 0.8; x += 1.0 + r() * 1.0) {
       const p = b.f.w(x, 0.09);
-      addPoster(p.x, 0.95 + r() * 0.3, p.z, b.f.rot, 1.0, ['bb', 'bb_torn', 'ingsoc', 'ingsoc_torn', 'enemy_torn'][Math.floor(r() * 5)]);
+      addPoster(p.x, 0.75 + r() * 0.5, p.z, b.f.rot, 0.9 + r() * 0.3, [...FRESH, ...OLD][Math.floor(r() * (FRESH.length + OLD.length))], (r() - 0.5) * 0.07);
     }
   }
-  for (const e of spots.entrances) {
-    if (e.top < 14 || r() < 0.4) continue;
-    const p = tf(e.x, e.z, e.rot, e.lx, 0.08);
-    addPoster(p.x, Math.min(e.top - 6, 10 + r() * 4), p.z, e.rot, 4.2, 'bb');
-  }
+
+  // ---- flags, banners and streamers, every one fixed to something
+  addPropaganda(G, root, town, plan, { r, partyAt, avenues: AVENUES, map, minitrue: { x: mt.x, z: mt.z, s: mScale } });
 
   // ---- lamp light pool near the camera at night
   const pool = [];
@@ -529,6 +607,23 @@ function gallery(G, root, r) {
   K.build(root, townMaterials(G), { name: 'gallery' });
   G.col.add(-24, -123, 68, 27, 0, { y0: -1, y1: 20, tag: 'building' });
   G.col.add((x0 + x1) / 2, zf + 4.2, (x1 - x0) / 2 + 0.6, 0.6, 0, { y0: -1, y1: 12, tag: 'columns', sight: false });
+}
+
+// Victory Square's two fountains, drained for the duration and never filled
+// again: granite basins with litter and dead leaves in them.
+function squareFittings(G, root) {
+  const K = new Kit();
+  for (const sx of [-1, 1]) {
+    const cx = sx * 22, cz = -38, R = 6.2;
+    K.cyl('granite', cx, cz, 0.12, 0.66, R, 32, true, [0.7, 0.68, 0.64]);   // the basin, drained and silted up
+    K.cyl('granite', cx, cz, 0.12, 0.76, R + 0.2, 32, false);
+    K.cyl('granite', cx, cz, 0.62, 2.6, 0.9, 12, true);
+    K.cyl('bronze', cx, cz, 2.6, 3.0, 1.6, 16, true);
+    K.cyl('granite', cx, cz, 3.0, 4.2, 0.35, 10, true);
+    G.col.add(cx, cz, R, R, 0, { y0: -1, y1: 0.76, tag: 'fountain', sight: false });
+    G.col.add(cx, cz, R * 0.72, R * 0.72, Math.PI / 4, { y0: -1, y1: 0.76, tag: 'fountain', sight: false });
+  }
+  K.build(root, townMaterials(G), { name: 'square' });
 }
 
 // The Underground entrance: a stair down behind railings, a lit sign.

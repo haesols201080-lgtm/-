@@ -80,12 +80,20 @@ class Room {
         t = h.b;
       }
       seg(t, s.len, 0, Ht);
-      // skirting board
-      const sk = new THREE.Mesh(new THREE.BoxGeometry(s.len, 0.14, 0.025), def.skirtMat);
-      const mid = P3(s.len / 2, 0.07);
-      sk.position.set(mid[0] + s.inward[0] * 0.012, 0.07, mid[2] + s.inward[1] * 0.012);
-      sk.rotation.y = Math.atan2(-s.u[1], s.u[0]);
-      g.add(sk);
+      // skirting board, stopping at every door and gap
+      const cuts = hs.filter((h) => (h.sill ?? 0) < 0.15).map((h) => [h.a - 0.04, h.b + 0.04]);
+      let t0 = 0;
+      for (const [ca, cb] of [...cuts, [s.len, s.len]]) {
+        const len = ca - t0;
+        if (len > 0.05) {
+          const sk = new THREE.Mesh(new THREE.BoxGeometry(len, 0.14, 0.025), def.skirtMat);
+          const mid = P3(t0 + len / 2, 0.07);
+          sk.position.set(mid[0] + s.inward[0] * 0.0135, 0.07, mid[2] + s.inward[1] * 0.0135);
+          sk.rotation.y = Math.atan2(-s.u[1], s.u[0]);
+          g.add(sk);
+        }
+        t0 = cb;
+      }
       // collider for the wall (openings for doors are closed: doors teleport)
       const cx = this.ox + s.o[0] + s.u[0] * s.len / 2 - s.inward[0] * WALL_T / 2;
       const cz = s.o[1] + s.u[1] * s.len / 2 - s.inward[1] * WALL_T / 2;
@@ -106,14 +114,14 @@ class Room {
     const rv = (t, y0, y1) => {
       const p = P3(t, 0);
       const m = new THREE.Mesh(new THREE.BoxGeometry(0.06, y1 - y0, WALL_T), frameMat);
-      m.position.set(p[0] - s.inward[0] * WALL_T / 2, (y0 + y1) / 2, p[2] - s.inward[1] * WALL_T / 2);
+      m.position.set(p[0] - s.inward[0] * (WALL_T / 2 - 0.012), (y0 + y1) / 2, p[2] - s.inward[1] * (WALL_T / 2 - 0.012));
       m.rotation.y = rot;
       m.castShadow = true;
       g.add(m);
     };
     rv(h.a, h.sill, h.sill + h.height); rv(h.b, h.sill, h.sill + h.height);
     const lintel = new THREE.Mesh(new THREE.BoxGeometry(h.width + 0.12, 0.08, WALL_T), frameMat);
-    lintel.position.set(cx - s.inward[0] * WALL_T / 2, h.sill + h.height + 0.04, cz - s.inward[1] * WALL_T / 2);
+    lintel.position.set(cx - s.inward[0] * (WALL_T / 2 - 0.014), h.sill + h.height + 0.04, cz - s.inward[1] * (WALL_T / 2 - 0.014));
     lintel.rotation.y = rot;
     g.add(lintel);
     if (h.kind === 'window') {
@@ -290,7 +298,7 @@ export function setupInteriors(G) {
     furnish(r) {
       // the poster too large for indoor display, the lift that never works
       const big = r.prop('poster', 2.98, -1.0, -H, { collide: false, scale: 2.2, y: 0.4, override: { poster_bb: G.mats.get('poster_bb') } });
-      r.prop('poster', -1.5, -4.48, 0, { collide: false, y: 1.1 });
+      r.prop('poster', 0.6, -4.48, 0, { collide: false, y: 1.1, override: { poster_bb: G.mats.get('poster_ingsoc') } });
       const lift = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.2, 0.05), G.mats.get('metal_dark'));
       lift.position.set(-1.6, 1.1, -4.47); r.root.add(lift);
       const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.3), new THREE.MeshStandardMaterial({ map: P.notice(['OUT OF ORDER']) }));
@@ -324,9 +332,8 @@ export function setupInteriors(G) {
       r.prop('chair', ax, D + 0.05, PI, { collide: 'none' });
       r.prop('diary', ax + 0.1, D + 0.25, 0.3, { y: 0.76, collide: false });
       r.prop('bed', 1.9, -0.6, H);
-      r.prop('cupboard', -2.25, -1.4, H);
-      r.prop('shelf', 2.3, 1.6, -H);
-      r.prop('gin', 2.25, 1.5, 0, { y: 0.88, collide: false });
+      r.prop('cupboard', 2.3, 1.55, -H);
+      r.prop('gin', ax - 0.38, D + 0.32, 0, { y: 0.76, collide: false });
       r.prop('sink', -2.3, 0.3, H);
       r.light(0.2, 2.7, 0, { intensity: 30 });
       pt(r, 'alcove_seat', ax, D + 0.15);
@@ -424,7 +431,7 @@ export function setupInteriors(G) {
       { side: 'n', at: 4.6, to: ['room', 'door'], label: '2층 방으로 올라간다', spawn: 'stairs' },
     ],
     furnish(r) {
-      r.prop('shelf', -2.7, -1.5, H); r.prop('shelf', -2.7, 0.3, H); r.prop('shelf', 2.7, -2.0, -H);
+      r.prop('cupboard', -2.7, -1.5, H); r.prop('cupboard', 2.7, -2.0, -H);
       r.prop('table', 0, -0.5, 0);
       r.prop('paperweight', 0.15, -0.45, 0, { y: 0.76, collide: false });
       r.prop('armchair', 2.2, 1.5, -2.4);
@@ -460,7 +467,7 @@ export function setupInteriors(G) {
       const bar = new THREE.Mesh(new THREE.BoxGeometry(5, 1.1, 0.7), M.woodDark);
       bar.position.set(-0.5, 0.55, -2.4); r.root.add(bar);
       G.col.add(r.ox - 0.5, -2.4, 2.5, 0.35, 0, { y0: 0, y1: 1.1, tag: 'bar' });
-      r.prop('shelf', -1.5, -3.3, 0); r.prop('shelf', 0.5, -3.3, 0);
+      r.prop('cupboard', -1.5, -3.3, 0); r.prop('cupboard', 0.5, -3.3, 0);
       for (const [x, z] of [[2.5, 0.8], [-2.5, 1.2]]) { r.prop('table', x, z, 0); r.prop('chair', x + 0.6, z, -H); r.prop('chair', x - 0.6, z, H); }
       r.light(-1, 3, 0, { intensity: 26 }); r.light(2.5, 3, 1, { intensity: 14, shadow: false });
       pt(r, 'bar', -0.5, -1.7); pt(r, 'oldman', -2.5, 1.2);
@@ -474,7 +481,7 @@ export function setupInteriors(G) {
     doors: [{ side: 'w', at: 4.5, to: ['city', 'obrien_door'], label: '오브라이언의 집을 나선다', spawn: 'door' }],
     furnish(r) {
       r.prop('table', 1.5, -1.5, 0); r.prop('armchair', 0.6, -1.2, 1.2); r.prop('chair', 2.3, -1.2, -H);
-      r.prop('shelf', 3.35, 1.0, -H);
+      r.prop('cupboard', 3.35, 1.0, -H);
       r.screen = r.telescreen(-3.4, 1.6, 0, H, { range: 9 });
       r.light(1.5, 3, -1.5, { intensity: 30, color: 0xffe0b8 });
       pt(r, 'desk', 1.5, -1.5); pt(r, 'screen', -3.3, 0, 1.6);

@@ -21,7 +21,7 @@ function b64ToBuffer(b64) {
 export const MODEL_NAMES = [
   'victory_mansions', 'party_block_a', 'party_block_b', 'party_block_c', 'inner_block', 'prole_terrace',
   'prole_terrace_b', 'prole_ruin', 'shop', 'pub', 'minitrue', 'pyramid_far', 'fence_wire', 'guard_tower',
-  'mg_nest', 'monument', 'church', 'station', 'community_centre', 'cafe', 'telescreen_wall', 'telescreen_pole',
+  'mg_nest', 'monument', 'miniluv', 'church', 'station', 'community_centre', 'cafe', 'telescreen_wall', 'telescreen_pole',
   'lamp_post', 'bench', 'bin', 'poster', 'sandbags', 'rubble_pile', 'truck', 'van', 'helicopter', 'train', 'bed',
   'bed_old', 'table', 'gateleg', 'chair', 'armchair', 'cubicle', 'canteen_table', 'diary', 'paperweight',
   'engraving', 'gin', 'oil_stove', 'shelf', 'cage', 'rack', 'cell_bench', 'chess', 'bulb', 'sink', 'cupboard',

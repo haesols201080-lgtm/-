@@ -15,16 +15,22 @@ const only = process.argv.slice(3);
 fs.mkdirSync(out, { recursive: true });
 
 // name: [location, spawn {x,z,yaw,pitch}, minutes, weather]
+// spawn may also be { street: name, t: 0..1, turn: radians, pitch } to stand
+// on the centre line of a real street looking along it
 export const SHOTS = {
-  square: ['city', { x: 2, z: 40, yaw: 0, pitch: 0.12 }, 10 * 60, 'clear_cold'],
-  charing_cross_rd: ['city', { x: -40, z: -260, yaw: 0.2, pitch: 0.04 }, 11 * 60, 'overcast'],
-  seven_dials: ['city', { x: 60, z: -660, yaw: 1.0, pitch: 0.04 }, 15 * 60, 'overcast'],
-  prole_street: ['city', { x: 200, z: -760, yaw: -0.5, pitch: 0.02 }, 16 * 60, 'rain'],
-  minitrue: ['city', { x: -44, z: -1310, yaw: 0, pitch: 0.42 }, 10 * 60, 'clear_cold'],
+  square: ['city', { x: 4, z: 34, yaw: 0.05, pitch: 0.22 }, 10 * 60, 'clear_cold'],
+  monument_base: ['city', { x: -14, z: 18, yaw: -0.6, pitch: 0.1 }, 10 * 60 + 20, 'overcast'],
+  charing_cross_rd: ['city', { street: 'Charing Cross Road', t: 0.35, turn: 0, pitch: 0.05 }, 11 * 60, 'overcast'],
+  shaftesbury: ['city', { street: 'Shaftesbury Avenue', t: 0.5, turn: 0, pitch: 0.05 }, 8 * 60 + 30, 'clear_cold'],
+  seven_dials: ['city', { street: 'Monmouth Street', t: 0.5, turn: 0, pitch: 0.03 }, 15 * 60, 'overcast'],
+  prole_street: ['city', { street: 'Shelton Street', t: 0.5, turn: 0, pitch: 0.02 }, 16 * 60, 'rain'],
+  minitrue: ['city', { street: 'Ministry Approach', t: 0.62, turn: 1.57, pitch: 0.38 }, 10 * 60, 'clear_cold'],
   home: ['city', 'home_door', 8 * 60, 'clear_cold'],
-  night: ['city', { x: -40, z: -420, yaw: 0, pitch: 0.05 }, 23 * 60 + 30, 'overcast'],
+  square_flags: ['city', { x: -30, z: 30, yaw: -0.45, pitch: 0.18 }, 11 * 60, 'clear_cold'],
+  night: ['city', { street: 'Charing Cross Road', t: 0.6, turn: 0, pitch: 0.05 }, 23 * 60 + 30, 'overcast'],
   country: ['country', 'golden', 17 * 60, 'golden'],
   flat: ['flat', 'door', 21 * 60, 'overcast'],
+  hall: ['mansions_hall', 'street', 8 * 60, 'overcast'],
   records: ['records', 'entrance', 9 * 60, 'overcast'],
 };
 
@@ -53,6 +59,15 @@ for (const [name, [loc, spawn, minutes, weather]] of Object.entries(SHOTS)) {
     const G = window.G;
     G.cutscene = 0; G.modal = false;
     if (G.ui && G.ui.closeAll) G.ui.closeAll();
+    if (spawn && spawn.street && G.world && G.world.plan) {
+      const st = G.world.plan.streets.filter((q) => q.name === spawn.street).sort((a, b) => b.line.length - a.line.length)[0];
+      if (st) {
+        const L = st.line, i = Math.min(L.length - 2, Math.floor(spawn.t * (L.length - 1)));
+        const [ax, az] = L[i], [bx, bz] = L[i + 1];
+        const yaw = Math.atan2(-(bx - ax), -(bz - az)) + (spawn.turn || 0);
+        spawn = { x: (ax + bx) / 2, z: (az + bz) / 2, yaw, pitch: spawn.pitch };
+      }
+    }
     G.enter(loc, spawn);
     if (typeof spawn === 'object' && spawn.pitch != null) G.player.pitch = spawn.pitch;
     G.setTime(minutes);

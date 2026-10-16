@@ -111,8 +111,9 @@ export function addCityLife(G, ctx, root) {
     root.add(im);
   }
 
-  // ---- puddles: London never quite dries
-  {
+  // ---- puddles: left to the ground material, which pools water in the
+  // hollows when it rains (the old round decals read as holes)
+  if (false) {
     const geo = new THREE.CircleGeometry(1, 20); geo.rotateX(-H);
     const mat = new THREE.MeshStandardMaterial({ color: 0x0b0c0d, roughness: 0.03, metalness: 0.0, envMapIntensity: 1.8,
       transparent: true, opacity: 0.88, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6, depthWrite: false });

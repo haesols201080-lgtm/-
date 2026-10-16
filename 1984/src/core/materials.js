@@ -199,6 +199,8 @@ export function buildLibrary() {
   std('concrete_grey', { ...T('concrete_grey'), color: 0xffffff, roughness: 1 });
   std('concrete_dark', { ...T('concrete_grey'), color: 0x8e8c88, roughness: 1 });
   std('stone_dirty', { ...T('concrete_grey'), color: 0xd2c6ac, roughness: 1 });
+  std('granite', { ...T('concrete_grey'), color: 0xbdb7ae, roughness: 1, normalScale: new THREE.Vector2(0.7, 0.7) });
+  std('bronze', { ...T('metal', { metal: true }), color: 0x5e4c32, roughness: 0.6, metalness: 0.85 }, { grime: 0.5 });
   std('stone_statue', { ...T('concrete_grey'), color: 0xb9b5ac, roughness: 1 }, { grime: 0 });
   std('brick', { ...T('brick'), color: 0xffffff, roughness: 1 });
   std('plaster', { ...T('plaster'), color: 0xffffff, roughness: 1 });
@@ -212,6 +214,8 @@ export function buildLibrary() {
   std('metal_dark', { ...T('metal', { metal: true }), color: 0x404244, roughness: 1, metalness: 1 });
   std('rust', { ...T('rust'), color: 0xffffff, roughness: 1, metalness: 0.3 });
   std('plaster_peeling', { ...T('plaster_peeling'), color: 0xffffff, roughness: 1 });
+  // faded, stained wallpaper (the rooms used it but the library never had it: the walls rendered blank white)
+  std('wallpaper', { ...T('wallpaper'), color: 0xd8cdb6, roughness: 1 }, { grime: 0.8 });
   std('brick_dark', { ...T('brick_dark'), color: 0xffffff, roughness: 1 });
   std('iron_black', { color: 0x0c0c0d, roughness: 0.55, metalness: 0.7 }, { grime: 0 });
   std('brass', { color: 0xa88a48, roughness: 0.35, metalness: 1 }, { grime: 0 });

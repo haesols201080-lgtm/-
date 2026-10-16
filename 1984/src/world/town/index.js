@@ -8,7 +8,7 @@ import { cornerBuilding } from './corner.js';
 import { resolve } from './styles.js';
 import { cutBlocks } from './plots.js';
 import { townMaterials } from './mats.js';
-import { signAtlas, SHOPS, PUBS } from './signs.js';
+import { signAtlas, SHOPS, PUBS, PARTY } from './signs.js';
 import { buildTownGround } from './ground.js';
 import { fillGap } from './gaps.js';
 import { rng } from '../city_util.js';
@@ -20,12 +20,12 @@ const legacy = (F) => ({ w: (lx, lz) => ({ x: F.x(lx, lz), z: F.z(lx, lz) }), ro
 
 // district rules: which types line which streets
 export const DISTRICTS = {
-  westend: { decay: 0.28, gap: 0.05, alley: 0.04, mix: [['shop', 40], ['office', 22], ['stucco', 14], ['georgian', 12], ['interwar', 4], ['victorian', 8]], corner: [['pub', 35], ['shop', 40], ['office', 25]] },
-  bloomsbury: { decay: 0.38, gap: 0.08, alley: 0.04, mix: [['georgian', 62], ['stucco', 14], ['shop', 10], ['tenement', 6], ['office', 4], ['victorian', 4]], corner: [['shop', 50], ['pub', 35], ['georgian', 15]] },
+  westend: { decay: 0.28, gap: 0.05, alley: 0.04, mix: [['shop', 30], ['office', 26], ['stucco', 14], ['georgian', 14], ['interwar', 8], ['victorian', 8]], corner: [['shop', 45], ['office', 55]] },
+  bloomsbury: { decay: 0.38, gap: 0.08, alley: 0.04, mix: [['georgian', 62], ['stucco', 14], ['shop', 8], ['tenement', 6], ['office', 6], ['victorian', 4]], corner: [['shop', 50], ['office', 30], ['georgian', 20]] },
   slum: { decay: 0.68, gap: 0.17, alley: 0.12, mix: [['cottage', 38], ['victorian', 20], ['shop', 14], ['tenement', 10], ['warehouse', 8], ['georgian', 10]], corner: [['pub', 45], ['shop', 55]] },
   railway: { decay: 0.6, gap: 0.12, alley: 0.08, mix: [['warehouse', 45], ['cottage', 25], ['tenement', 15], ['victorian', 15]], corner: [['pub', 50], ['shop', 50]] },
   inner: { decay: 0.04, gap: 0.0, alley: 0.0, mix: [['stucco', 65], ['georgian', 35]], corner: [['stucco', 100]] },
-  mansions: { decay: 0.45, gap: 0.08, alley: 0.06, mix: [['victorian', 30], ['tenement', 20], ['shop', 18], ['interwar', 12], ['georgian', 20]], corner: [['pub', 40], ['shop', 60]] },
+  mansions: { decay: 0.45, gap: 0.08, alley: 0.06, mix: [['victorian', 30], ['tenement', 20], ['shop', 18], ['interwar', 12], ['georgian', 20]], corner: [['shop', 60], ['office', 40]] },
 };
 
 const RUN = { georgian: [4, 11], stucco: [4, 9], victorian: [4, 10], cottage: [6, 16], shop: [1, 4], pub: [1, 1], office: [1, 1], tenement: [1, 1], interwar: [1, 1], warehouse: [1, 1] };
@@ -48,7 +48,10 @@ export function buildTown(G, root, plan, map, o = {}) {
     houses: [],
   };
   const districtOf = (street, x, z) => DISTRICTS[(street && street.district) || plan.districtAt(x, z) || 'slum'] || DISTRICTS.slum;
-  const shopName = () => SHOPS[Math.floor(r() * SHOPS.length)];
+  // private trade ('the free market') only in the prole streets; elsewhere the
+  // Party's ration points and depots, or a dead shop with whitewashed glass
+  const proleAt = (x, z) => { const d = plan.districtAt(x, z); return d === 'slum' || d === 'railway'; };
+  const shopName = (x, z) => (x === undefined || proleAt(x, z) ? SHOPS[Math.floor(r() * SHOPS.length)] : r() < 0.7 ? PARTY[Math.floor(r() * PARTY.length)] : null);
   const pubName = () => PUBS[Math.floor(r() * PUBS.length)];
 
   const chooser = (street, e, rr, remaining) => {
@@ -89,9 +92,11 @@ export function buildTown(G, root, plan, map, o = {}) {
     const st = j.style;
     if (j.kind === 'house') {
       j.F = new Frame(j.F.ox, gl, j.F.oz, j.F.rot);
-      j.sign = j.signName ? atlas.rect(j.signName) : st.gf === 'shop' ? atlas.rect(shopName()) : st.gf === 'pub' ? atlas.rect(pubName()) : null;
+      const sn = j.signName || (st.gf === 'shop' ? shopName(j.F.ox, j.F.oz) : st.gf === 'pub' ? pubName() : null);
+      j.sign = sn ? atlas.rect(sn) : null;
+      if (st.gf === 'shop' && !sn && !j.signName) j.deadShop = true;
       j.doorPaint = TINTS.paint[Math.floor(r() * TINTS.paint.length)];
-      j.shopState = st.decay > 0.5 && r() < 0.35 ? (r() < 0.5 ? 'boarded' : 'dead') : 'ok';
+      j.shopState = j.deadShop ? (r() < 0.4 ? 'boarded' : 'dead') : st.decay > 0.5 && r() < 0.35 ? (r() < 0.5 ? 'boarded' : 'dead') : 'ok';
       j.blind = r() < 0.25;
       j.bombL = j.left === 'open' && r() < st.decay * 0.6;
       j.bombR = j.right === 'open' && r() < st.decay * 0.6;
@@ -101,7 +106,7 @@ export function buildTown(G, root, plan, map, o = {}) {
       j.signs = {};
       if (j.signName) { const n = atlas.rect(j.signName); j.signs[0] = n; j.signs[1] = n; j.signs[2] = n; }
       else if (st.gf === 'pub') { const n = atlas.rect(pubName()); j.signs[0] = n; j.signs[1] = n; j.signs[2] = n; }
-      else if (st.gf === 'shop') { j.signs[0] = atlas.rect(shopName()); j.signs[1] = atlas.rect(shopName()); j.signs[2] = j.signs[1]; }
+      else if (st.gf === 'shop') { const a = shopName(j.poly[1][0], j.poly[1][1]), b = shopName(j.poly[1][0], j.poly[1][1]); if (a) j.signs[0] = atlas.rect(a); if (b) { j.signs[1] = atlas.rect(b); j.signs[2] = j.signs[1]; } }
       j.shopState = st.decay > 0.55 && r() < 0.3 ? 'boarded' : 'ok';
       j.key = keyOf(j.poly[1][0], j.poly[1][1]);
     }

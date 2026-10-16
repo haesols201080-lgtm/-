@@ -393,24 +393,38 @@ def pyramid(name, base, tiers, th, step, seed=11, windows=True, slogans=True, to
 
 
 def miniluv():
-    """No windows at all."""
+    """The Ministry of Love: the same Party pyramid as the others, but with no
+    windows at all. Fewer, taller terraces of stained grey concrete, ribbed
+    like a fortress, a single steel door, searchlight masts on the top."""
     m = Mesh('miniluv')
-    W, D, H = 130, 110, 64
-    for key, (o, right, out, width) in sides(W, D).items():
-        wins = []
-        if key == 'front':
-            wins.append((width / 2 - 3.5, 0.0, width / 2 + 3.5, 6.0, 'metal_dark', 'door'))
-        facade(m, o, right, out, width, H, wins, 'concrete_dark', depth=0.6, sills=False)
-        P = frame_fn(o, right, out)
-        n = int(width / 7)
-        for k in range(n + 1):
-            u = k * width / n
-            obox(m, P, u - 0.7, u + 0.7, 0, H - 2, -1.1, 0, 'concrete_grey')
-        obox(m, P, -1.2, width + 1.2, H - 3, H, -1.6, 0, 'concrete_grey')
-        obox(m, P, -0.5, width + 0.5, 0, 1.2, -1.4, 0, 'concrete_grey')
-    m.box((-W / 2, -D / 2, H - 0.01), (W / 2, D / 2, H), 'concrete_dark', faces={'+z'})
-    for x in (-40, 0, 40):
-        m.box((x - 4, -10, H), (x + 4, 10, H + 6), 'concrete_dark')
+    base, tiers, th, step = 160, 9, 19, 7.5
+    for i in range(tiers):
+        W = base - i * step * 2
+        z0 = i * th
+        for key, (o, right, out, width) in sides(W, W).items():
+            o = o + Vector((0, 0, z0))
+            wins = []
+            if key == 'front' and i == 0:
+                wins.append((width / 2 - 3.0, 0.0, width / 2 + 3.0, 6.5, 'metal_dark', 'door'))
+            facade(m, o, right, out, width, th, wins, 'concrete_dark', depth=0.6, sills=False, mullions=False, frames=False)
+            P = frame_fn(o, right, out)
+            n = max(4, int(width / 9))
+            for k in range(n + 1):
+                u = k * width / n
+                obox(m, P, u - 0.9, u + 0.9, 0, th - 1.0, -1.4, 0, 'concrete_grey')
+            obox(m, P, -1.0, width + 1.0, th - 1.6, th, -2.0, 0, 'concrete_grey')
+        Wn = W - step * 2 if i < tiers - 1 else 0
+        z1 = z0 + th
+        h, hn = W / 2, Wn / 2
+        if Wn > 0:
+            for (a, b, c, d) in [((-h, -h), (h, -h), (hn, -hn), (-hn, -hn)), ((h, -h), (h, h), (hn, hn), (hn, -hn)),
+                                 ((h, h), (-h, h), (-hn, hn), (hn, hn)), ((-h, h), (-h, -h), (-hn, -hn), (-hn, hn))]:
+                m.quad([(*a, z1), (*b, z1), (*c, z1), (*d, z1)], 'concrete_dark')
+        else:
+            m.box((-h, -h, z1 - 0.01), (h, h, z1), 'concrete_dark', faces={'+z'})
+            for x, y in ((-6, -6), (6, -6), (-6, 6), (6, 6)):
+                m.cyl((x, y, z1), (x, y, z1 + 14), 0.35, 0.25, 'iron_black', 6)
+                m.box((x - 0.8, y - 0.8, z1 + 14), (x + 0.8, y + 0.8, z1 + 15.2), 'iron_black')
     return [m.finish()]
 
 

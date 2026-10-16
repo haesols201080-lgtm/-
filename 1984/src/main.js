@@ -11,6 +11,7 @@ import { setupNPCs } from './game/npc.js';
 import { setupSurveillance } from './game/surveillance.js';
 import { setupWeather } from './game/weather.js';
 import { setupStory } from './game/story.js';
+import { setupTraffic } from './world/traffic.js';
 import { store } from './core/store.js';
 import { isTouch, setupTouch } from './core/touch.js';
 
@@ -35,6 +36,7 @@ async function boot() {
   setupCountryside(G);
   setupWeather(G);
   setupStory(G);
+  if (G.world && G.world.plan) setupTraffic(G);
   ui.loading(0.96);
   const params = new URLSearchParams(location.search);
   if (params.has('noprobe')) G.atmos.noProbe = true;
