@@ -43,6 +43,7 @@ class Room {
     this.spawns = {};
     this.screens = [];
     this.lights = [];
+    this.clear = [];     // kept-free floor in front of doors and openings
   }
 
   w(x, z, y = 0) { return new THREE.Vector3(this.ox + x, y, z); }
@@ -73,6 +74,13 @@ class Room {
         g.add(quad(P3(t0, y0), P3(t1, y0), P3(t1, y1), P3(t0, y1), def.wallTile || 2.0, wallMat));
       };
       for (const h of hs) {
+        if (h.kind !== 'window') {
+          // nothing may stand in front of a door or an opening
+          const p0 = P3(h.a - 0.25, 0), p1 = P3(h.b + 0.25, 0);
+          const q0 = [p0[0] + s.inward[0] * 1.15, p0[2] + s.inward[1] * 1.15], q1 = [p1[0] + s.inward[0] * 1.15, p1[2] + s.inward[1] * 1.15];
+          const xs = [p0[0], p1[0], q0[0], q1[0]], zs = [p0[2], p1[2], q0[1], q1[1]];
+          this.clear.push({ x0: Math.min(...xs), x1: Math.max(...xs), z0: Math.min(...zs), z1: Math.max(...zs), u: s.u, mid: (h.a + h.b) / 2, side: key });
+        }
         seg(t, h.a, 0, Ht);
         seg(h.a, h.b, 0, h.sill);
         seg(h.a, h.b, h.sill + h.height, Ht);
@@ -196,8 +204,31 @@ class Room {
     G.mats.apply(obj, { cast: o.cast ?? true, receive: true, override: o.override });
     obj.position.set(x, o.y ?? 0, z);
     obj.rotation.y = rot;
+    obj.userData.prop = model;
     if (o.scale) obj.scale.setScalar(o.scale);
     this.root.add(obj);
+    // keep the way through doors free: slide a floor-standing prop along the
+    // wall out of a door's clearance, or leave it out
+    if ((o.y ?? 0) < 0.3 && !o.allowDoor) {
+      const hit = () => {
+        obj.updateMatrixWorld(true);
+        const b = new THREE.Box3().setFromObject(obj);
+        const x0 = b.min.x - this.ox, x1 = b.max.x - this.ox;
+        return this.clear.find((c) => x1 > c.x0 && x0 < c.x1 && b.max.z > c.z0 && b.min.z < c.z1);
+      };
+      let c = hit();
+      if (c) {
+        const base = obj.position.clone();
+        let done = false;
+        for (let k = 1; k <= 12 && !done; k++) {
+          for (const sg of [1, -1]) {
+            obj.position.set(base.x + c.u[0] * 0.2 * k * sg, base.y, base.z + c.u[1] * 0.2 * k * sg);
+            if (!hit()) { done = true; break; }
+          }
+        }
+        if (!done) { console.warn('[rooms] left out', model, 'in', this.def.id, ': it would block a door'); this.root.remove(obj); return null; }
+      }
+    }
     if (o.collide !== false) {
       obj.updateMatrixWorld(true);
       const box = new THREE.Box3().setFromObject(obj);
@@ -328,15 +359,17 @@ export function setupInteriors(G) {
       r.root.add(quad([ax - aw / 2, 2.699, D], [ax + aw / 2, 2.699, D], [ax + aw / 2, 2.699, D + ad], [ax - aw / 2, 2.699, D + ad], 2.5, M.plaster));
       // telescreen on the long south wall, facing north into the room
       r.telescreen(0.6, 1.6, D - 0.02, PI, { range: 9, fov: 150 });
-      r.prop('table', ax, D + 0.3, PI, { collide: 'none' });
-      r.prop('chair', ax, D + 0.05, PI, { collide: 'none' });
-      r.prop('diary', ax + 0.1, D + 0.25, 0.3, { y: 0.76, collide: false });
+      // he sits well back in the alcove, the chair against its back wall and
+      // facing the room; the table stands in front of him, half in the recess
+      r.prop('chair', ax, D + ad - 0.27, PI, { collide: 'none' });
+      r.prop('table', ax, D - 0.08, 0, { collide: 'none' });
+      r.prop('diary', ax + 0.08, D + 0.02, PI + 0.12, { y: 0.76, collide: false });
       r.prop('bed', 1.9, -0.6, H);
       r.prop('cupboard', 2.3, 1.55, -H);
-      r.prop('gin', ax - 0.38, D + 0.32, 0, { y: 0.76, collide: false });
+      r.prop('gin', ax - 0.34, D - 0.22, 0, { y: 0.76, collide: false });
       r.prop('sink', -2.3, 0.3, H);
       r.light(0.2, 2.7, 0, { intensity: 30 });
-      pt(r, 'alcove_seat', ax, D + 0.15);
+      pt(r, 'alcove_seat', ax, D + ad - 0.3);
       pt(r, 'bed', 1.9, -0.6);
       pt(r, 'window', 0, -1.6);
       pt(r, 'telescreen', 0.6, D, 1.6);

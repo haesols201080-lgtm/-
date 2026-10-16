@@ -387,4 +387,9 @@ function addPeople(G, ctx, r) {
   G.npcs.patrol({ id: 'tp2', location: 'city', path: w.paths.avenue_e });
   G.npcs.patrol({ id: 'tp3', location: 'city', path: w.paths.lovelane, model: 'char_guard' });
   G.npcs.patrol({ id: 'tp4', location: 'city', path: w.paths.prole_a });
+  // the black uniforms everywhere the Party walks, in twos
+  (w.paths.patrols || []).forEach((p, k) => {
+    G.npcs.patrol({ id: 'tpp' + k, location: 'city', path: p, start: 0 });
+    G.npcs.patrol({ id: 'tpq' + k, location: 'city', path: p, start: 0, dx: 0.9, dz: 0.6 });
+  });
 }

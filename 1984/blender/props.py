@@ -437,12 +437,35 @@ def bulb_lamp():
 
 
 def sink():
+    """A Belfast sink: a deep glazed basin on two brick piers, one brass cold
+    tap on a lead pipe from the wall. The basin is hollow (rim, inner walls,
+    a floor with a drain) so nothing lies flush on anything else."""
     m = Mesh('sink')
-    m.box((-0.35, -0.25, 0.75), (0.35, 0.25, 0.9), 'tile_white')
-    m.box((-0.3, -0.2, 0.8), (0.3, 0.2, 0.9), 'metal_dark', faces={'+z'})
-    m.box((-0.05, -0.05, 0), (0.05, 0.05, 0.75), 'metal')
-    m.cyl((0, 0.2, 0.9), (0, 0.2, 1.05), 0.012, 0.012, 'metal', 6)
-    m.cyl((0, 0.2, 1.05), (0, 0.08, 1.02), 0.012, 0.01, 'metal', 6)
+    x0, x1, y0, y1, zb, zt, t = -0.3, 0.3, -0.21, 0.21, 0.6, 0.86, 0.045
+    # outer body, open at the top
+    m.box((x0, y0, zb), (x1, y1, zt), 'tile_white', faces={'-x', '+x', '-y', '+y', '-z'})
+    # the rim: four bars round the top
+    m.box((x0, y0, zt - 0.02), (x1, y0 + t, zt), 'tile_white', faces={'+z', '+y'})
+    m.box((x0, y1 - t, zt - 0.02), (x1, y1, zt), 'tile_white', faces={'+z', '-y'})
+    m.box((x0, y0 + t, zt - 0.02), (x0 + t, y1 - t, zt), 'tile_white', faces={'+z', '+x'})
+    m.box((x1 - t, y0 + t, zt - 0.02), (x1, y1 - t, zt), 'tile_white', faces={'+z', '-x'})
+    # inner walls facing into the basin, and its floor a hand's depth down
+    zi = zb + 0.08
+    a, b, c, d = x0 + t, x1 - t, y0 + t, y1 - t
+    m.quad([(b, c, zi), (a, c, zi), (a, c, zt - 0.02), (b, c, zt - 0.02)], 'tile_white')   # faces +y
+    m.quad([(a, d, zi), (b, d, zi), (b, d, zt - 0.02), (a, d, zt - 0.02)], 'tile_white')   # faces -y
+    m.quad([(a, c, zi), (a, d, zi), (a, d, zt - 0.02), (a, c, zt - 0.02)], 'tile_white')   # faces +x
+    m.quad([(b, d, zi), (b, c, zi), (b, c, zt - 0.02), (b, d, zt - 0.02)], 'tile_white')   # faces -x
+    m.quad([(a, c, zi), (b, c, zi), (b, d, zi), (a, d, zi)], 'tile_white')                 # floor, up
+    m.cyl((0, 0, zi + 0.002), (0, 0, zi + 0.006), 0.035, 0.035, 'metal_dark', 10)
+    # brick piers
+    for sx in (-0.22, 0.22):
+        m.box((sx - 0.06, -0.18, 0), (sx + 0.06, 0.18, zb), 'brick')
+    # lead pipe up the wall and the brass tap over the basin
+    m.cyl((0, 0.215, 0), (0, 0.215, 1.1), 0.014, 0.014, 'metal_dark', 6)
+    m.cyl((0, 0.215, 1.1), (0, 0.08, 1.08), 0.014, 0.012, 'brass', 6)
+    m.cyl((0, 0.08, 1.08), (0, 0.08, 1.0), 0.012, 0.01, 'brass', 6)
+    m.box((-0.03, 0.06, 1.1), (0.03, 0.1, 1.13), 'brass')
     return [m.finish()]
 
 

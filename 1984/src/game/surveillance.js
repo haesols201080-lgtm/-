@@ -124,13 +124,20 @@ export function setupSurveillance(G) {
     const h = surv.helicopter;
     if (h && S.location === 'city') {
       heliTimer -= dt;
+      // the novel's patrol: it 'skimmed down between the roofs, hovered for an
+      // instant like a bluebottle, and darted away again'. A sortie now and
+      // then, far off the rest of the time.
       if (heliTimer <= 0 || h.pos.distanceTo(h.target) < 4) {
         heliTimer = 12 + Math.random() * 14;
+        h.sortie = (h.sortie || 0) + 1;
+        const away = S.suspicion < 50 && h.sortie % 4 !== 0;
         const near = S.suspicion > 50 ? G.player.pos : null;
         // over the roofs of the playable London (G.world.bounds) or over the suspect
         const b = (G.world && G.world.bounds) || [-250, -150, 250, 270];
         h.target.set((near ? near.x : b[0] + Math.random() * (b[2] - b[0])) + (Math.random() - 0.5) * 40, 38 + Math.random() * 22,
           (near ? near.z : b[1] + Math.random() * (b[3] - b[1])) + (Math.random() - 0.5) * 40);
+        // most of the time it works over other districts, a speck in the haze
+        if (away) { const a = Math.random() * Math.PI * 2; h.target.set(G.player.pos.x + Math.cos(a) * 900, 70 + Math.random() * 30, G.player.pos.z + Math.sin(a) * 900); }
       }
       V.subVectors(h.target, h.pos);
       const d = V.length();

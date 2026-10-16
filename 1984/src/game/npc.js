@@ -121,6 +121,7 @@ class NPC {
     // skip animation work far away
     if (d < 60 || this.hate > 0) this.mixer.update(dt * (this.current === 'walk' ? this.speedMul : 1));
     else this.mixer.update(dt);
+    if (d < 45 && (this.current === 'idle' || this.current === 'talk' || this.current === 'look')) this.idleLayer();
     this.root.updateMatrixWorld(true);
     this.headLook(dt);
     if (this.hate > 0.01) this.hateLayer(dt);
@@ -159,6 +160,23 @@ class NPC {
     const px = p.x - pl.x, pz = p.z - pl.z, pd = Math.hypot(px, pz);
     if (pd < 0.6 && pd > 1e-4) { p.x = pl.x + px / pd * 0.6; p.z = pl.z + pz / pd * 0.6; }
     this.pos.x = p.x; this.pos.z = p.z;
+  }
+
+  idleLayer() {
+    const t = this.G.time + this.idleVar;
+    const talk = this.current === 'talk' ? 1 : 0;
+    const b = this.bones;
+    const add = (bone, x, y, z) => { if (!bone) return; tmpE.set(x, y, z); tmpQ.setFromEuler(tmpE); bone.quaternion.multiply(tmpQ); };
+    add(this.chest, Math.sin(t * 1.7) * 0.02, Math.sin(t * 0.31) * 0.07, Math.sin(t * 0.23) * 0.02);
+    add(b.hips || b.Bip01_Pelvis, 0, Math.sin(t * 0.21) * 0.04, Math.sin(t * 0.19 + 1) * 0.035);
+    const [lu, lf] = this.arms.L, [ru, rf] = this.arms.R;
+    add(lu, Math.sin(t * 0.7) * 0.04, 0, Math.sin(t * 0.5) * 0.03);
+    add(ru, Math.sin(t * 0.6 + 2) * 0.04, 0, Math.sin(t * 0.45 + 1) * 0.03);
+    if (talk) {
+      add(rf, 0, 0, -0.25 - Math.max(0, Math.sin(t * 2.3)) * 0.45);
+      add(ru, -0.15 - Math.max(0, Math.sin(t * 2.3 + 0.4)) * 0.25, 0, 0);
+      add(lf, 0, 0, Math.max(0, Math.sin(t * 1.7 + 1.3)) * 0.3);
+    }
   }
 
   headLook(dt) {
@@ -261,9 +279,10 @@ export function setupNPCs(G) {
       }
     },
     patrol(o) {
-      const n = npcs.spawn({ model: o.model || 'char_thought_police', location: o.location, x: o.path[0].x, z: o.path[0].z, id: o.id, anim: 'walk' });
+      const s0 = Math.min(o.path.length - 1, o.start || 0);
+      const n = npcs.spawn({ model: o.model || 'char_thought_police', location: o.location, x: o.path[s0].x + (o.dx || 0), z: o.path[s0].z + (o.dz || 0), id: o.id, anim: 'walk' });
       if (!n) return null;
-      n.followPath(o.path, { loop: true });
+      n.followPath(o.path, { loop: true, start: s0 });
       n.patrol = true;
       n.viewCone = { fov: 110, range: 22 };
       n.investigate = (pos) => {

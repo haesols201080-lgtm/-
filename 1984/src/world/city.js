@@ -347,7 +347,7 @@ export function setupCity(G) {
 
   // ---- the story's places
   const V = (x, z) => new THREE.Vector3(x, ground(x, z), z);
-  const P = (d) => (d ? V(d.ox, d.oz) : null);
+  const P = (d) => (d ? V(d.x, d.z) : null);
   const vmDoor = doorOf('mansions'), ccDoor = doorOf('community'), cafeDoor = doorOf('cafe');
   const shopDoor = doorOf('shop'), pubDoor = doorOf('pub'), obDoor = doorOf('obrien');
   const station = WANT.station.at;
@@ -366,9 +366,9 @@ export function setupCity(G) {
     rally: V(0, -35),
     square_center: V(0, -30),
     convoy_start: V(-60, 10), convoy_end: V(48, 0),
-    chestnut_tree: P(cafeDoor) ? V(cafeDoor.ox + 2, cafeDoor.oz + 2) : V(70, -255),
+    chestnut_tree: P(cafeDoor) ? V(cafeDoor.x + Math.sin(cafeDoor.rot) * 2.5, cafeDoor.z + Math.cos(cafeDoor.rot) * 2.5) : V(70, -255),
     prole_entry: V(-6, -840),
-    mansions_road: P(vmDoor) ? V(vmDoor.ox + Math.sin(vmDoor.rot) * 3, vmDoor.oz + Math.cos(vmDoor.rot) * 3) : V(-28, -465),
+    mansions_road: P(vmDoor) ? V(vmDoor.x + Math.sin(vmDoor.rot) * 3, vmDoor.z + Math.cos(vmDoor.rot) * 3) : V(-28, -465),
     inner_road: V(-190, -1200),
     church_portico: V(58, -122),
     station_forecourt: V(station[0], station[1] + 3),
@@ -410,16 +410,18 @@ export function setupCity(G) {
   // spawns: standing outside each door, back to it
   const outward = (d) => (d ? lookYaw(Math.sin(d.rot), Math.cos(d.rot)) : 0);
   const S = (p, yaw) => ({ x: p.x, y: p.y, z: p.z, yaw });
+  // stepping out of a door you stand clear of its step and porch
+  const front = (d, p, k = 1.6) => (d ? S(V(d.x + Math.sin(d.rot) * k, d.z + Math.cos(d.rot) * k), outward(d)) : S(p, 0));
   const spawns = {
-    home_door: S(points.home_door, outward(vmDoor)),
+    home_door: front(vmDoor, points.home_door, 2.0),
     minitrue_door: S(points.minitrue_door, lookYaw(0, 1)),
     monument: S(points.monument, lookYaw(0, 1)),
-    shop_door: S(points.shop_door, outward(shopDoor)),
-    pub_door: S(points.pub_door, outward(pubDoor)),
-    obrien_door: S(points.obrien_door, outward(obDoor)),
+    shop_door: front(shopDoor, points.shop_door),
+    pub_door: front(pubDoor, points.pub_door),
+    obrien_door: front(obDoor, points.obrien_door),
     station_door: S(points.station_door, lookYaw(0, 1)),
-    cafe_door: S(points.cafe_door, outward(cafeDoor)),
-    community_door: S(points.community_door, outward(ccDoor)),
+    cafe_door: front(cafeDoor, points.cafe_door),
+    community_door: front(ccDoor, points.community_door),
     rally: S(points.rally, lookYaw(0, 1)),
     rocket_site: S(points.rocket_site, 0),
     prole_entry: S(points.prole_entry, lookYaw(1, 0)),
@@ -561,7 +563,22 @@ function makePaths(plan, pts, ground, map) {
     lovelane: route(P(-60, -40), P(-300, 40)),
     inner: loop([P(-250, -1150), P(-120, -1180), P(-150, -1350)]),
   };
-  for (const k in paths) if (paths[k].length < 2) paths[k] = [new THREE.Vector3(0, 0.12, -30), new THREE.Vector3(20, 0.12, -30)];
+  // Thought Police beats: loops through the Party's streets, two prole rounds
+  const pr = (() => { let s = 31; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; })();
+  const partyNodes = all.filter((n) => n.e.some(([, , s]) => AVENUES.has(s.name)));
+  const proleNodes = all.filter((n) => districtAt(n.x, n.z) === 'slum' && n.e.length > 1);
+  paths.patrols = [];
+  for (let k = 0; k < 12; k++) {
+    const src = k < 10 ? partyNodes : proleNodes;
+    if (src.length < 4) break;
+    const a = src[Math.floor(pr() * src.length)];
+    const near = src.filter((n) => { const d = Math.hypot(n.x - a.x, n.z - a.z); return d > 90 && d < 260; });
+    if (near.length < 2) continue;
+    const b = near[Math.floor(pr() * near.length)], c = near[Math.floor(pr() * near.length)];
+    const p = loop([a, b, c]);
+    if (p.length > 6) paths.patrols.push(p);
+  }
+  for (const k in paths) if (k !== 'patrols' && paths[k].length < 2) paths[k] = [new THREE.Vector3(0, 0.12, -30), new THREE.Vector3(20, 0.12, -30)];
   return paths;
 }
 

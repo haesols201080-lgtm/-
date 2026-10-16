@@ -32,6 +32,11 @@ export const SHOTS = {
   flat: ['flat', 'door', 21 * 60, 'overcast'],
   hall: ['mansions_hall', 'street', 8 * 60, 'overcast'],
   records: ['records', 'entrance', 9 * 60, 'overcast'],
+  flat_b: ['flat', { x: 6098.2 + 0.4, z: -1.6, yaw: -2.3, pitch: -0.1 }, 10 * 60, 'overcast'],
+  parsons: ['parsons_flat', 'door', 19 * 60, 'overcast'],
+  shop: ['shop', 'door', 15 * 60, 'overcast'],
+  pub: ['pub', 'door', 20 * 60, 'overcast'],
+  room: ['room', 'stairs', 19 * 60, 'hot_haze'],
 };
 
 const browser = await pw.chromium.launch({
@@ -43,7 +48,8 @@ const logs = [];
 page.on('console', (m) => { if (['error', 'warning'].includes(m.type())) logs.push(`[${m.type()}] ${m.text()}`); });
 page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}\n${e.stack || ''}`));
 const q = process.env.Q || 'medium';
-await page.goto('file://' + path.join(root, 'index.html') + `?skip&q=${q}&nostory${process.env.EXTRA || ''}`);
+// HTML=<dir>/index.html runs a private build (its own game.js) so parallel work does not collide
+await page.goto('file://' + (process.env.HTML || path.join(root, 'index.html')) + `?skip&q=${q}&nostory${process.env.EXTRA || ''}`);
 try {
   await page.waitForFunction(() => window.G && window.G.location, null, { timeout: 240000 });
 } catch (e) {
@@ -74,7 +80,7 @@ for (const [name, [loc, spawn, minutes, weather]] of Object.entries(SHOTS)) {
     if (G.weather) G.weather.set(weather); else G.atmos.setWeather(weather, true);
     G.atmos.w = { ...G.atmos.target };
   }, [loc, spawn, minutes, weather]);
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(typeof spawn === 'string' || (spawn && spawn.x > 5000) ? 4500 : 2500);
   const fps = await page.evaluate(() => new Promise((res) => {
     let n = 0; const t = performance.now();
     const f = () => { n++; if (performance.now() - t < 2000) requestAnimationFrame(f); else res(n / 2); };
