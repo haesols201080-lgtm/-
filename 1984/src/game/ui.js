@@ -65,6 +65,7 @@ const CSS = `
 #ui .meter{position:absolute;left:50%;bottom:90px;transform:translateX(-50%);width:min(520px,80vw);display:none;text-align:center;font-family:var(--sans)}
 #ui .meter .bar{height:8px;background:rgba(255,255,255,.12);margin-top:8px}
 #ui .meter .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#7a1810,#e0402c)}
+#ui .tpad{position:absolute;left:50%;bottom:max(24px,env(safe-area-inset-bottom,0px));transform:translateX(-50%);display:grid;gap:10px;pointer-events:auto;z-index:6}#ui .tpad button{width:76px;height:76px;border-radius:14px;border:1px solid rgba(220,214,200,.45);background:rgba(12,12,12,.55);color:#efe7d6;font:600 30px/1 system-ui,sans-serif;touch-action:none}#ui .tpad.hold button{width:min(70vw,320px);height:84px;border-radius:42px;font-size:20px}
 #ui .jk{position:absolute;left:50%;bottom:120px;transform:translateX(-50%);display:none;font-family:var(--mono);font-size:58px;color:#f0e8d8;text-shadow:0 0 18px #000}
 #ui .map canvas{display:block;width:100%;height:auto;background:#d8d0b8}
 #ui .menu{position:absolute;inset:0;display:none;pointer-events:auto;background:#060606;align-items:center;justify-content:center}
@@ -317,7 +318,9 @@ export function setupUI(G) {
           for (const step of o.steps) {
             if (step.write) { await write(step.write); written.push(step.write); continue; }
             if (step.repeat) {
-              opts.innerHTML = `<div style="font-family:var(--sans);font-size:14px;color:#4a443a">${step.hint}</div>`;
+              opts.innerHTML = `<div style="font-family:var(--sans);font-size:14px;color:#4a443a">${G.input.touch ? step.hint.replace('아무 키나 누를', '종이를 누를') : step.hint}</div>`;
+              const tap = (e) => { e.preventDefault(); dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyA', key: 'a' })); };
+              el.modal.querySelector('.sheet').addEventListener('pointerdown', tap);
               let n = 0;
               await new Promise((r2) => {
                 const k = async (e) => {
@@ -393,6 +396,28 @@ export function setupUI(G) {
       return results;
     },
 
+    // ---- on-screen keys for phones: buttons that send the keyboard events the
+    // minigames listen for. layout: 'arrows' | 'hold'. Returns a remover.
+    touchKeys(layout, label) {
+      if (!G.input.touch) return () => {};
+      const pad = document.createElement('div');
+      const key = (type, code) => dispatchEvent(new KeyboardEvent(type, { code, key: code, bubbles: true }));
+      if (layout === 'arrows') {
+        pad.className = 'tpad';
+        pad.style.gridTemplateColumns = 'repeat(3,76px)';
+        pad.innerHTML = '<span></span><button data-k="ArrowUp">↑</button><span></span><button data-k="ArrowLeft">←</button><button data-k="ArrowDown">↓</button><button data-k="ArrowRight">→</button>';
+        pad.querySelectorAll('button').forEach((b) => b.addEventListener('pointerdown', (e) => { e.preventDefault(); key('keydown', b.dataset.k); key('keyup', b.dataset.k); }));
+      } else {
+        pad.className = 'tpad hold';
+        pad.innerHTML = `<button>${label || '누르고 있기'}</button>`;
+        const b = pad.querySelector('button');
+        b.addEventListener('pointerdown', (e) => { e.preventDefault(); key('keydown', 'Space'); });
+        for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) b.addEventListener(ev, (e) => { e.preventDefault(); key('keyup', 'Space'); });
+      }
+      root.appendChild(pad);
+      return () => { key('keyup', 'Space'); pad.remove(); };
+    },
+
     // ---- Physical Jerks: follow the instructress's beat
     async jerks(o = {}) {
       const beats = o.beats || 12;
@@ -401,7 +426,8 @@ export function setupUI(G) {
       let misses = 0;
       el.jk.style.display = 'block';
       el.meter.style.display = 'block';
-      el.meter.querySelector('.mt').textContent = '화면의 화살표 방향키를 박자에 맞춰 누른다';
+      el.meter.querySelector('.mt').textContent = G.input.touch ? '화면의 화살표를 박자에 맞춰 누른다' : '화면의 화살표 방향키를 박자에 맞춰 누른다';
+      const offPad = ui.touchKeys('arrows');
       for (let i = 0; i < beats; i++) {
         const k = keys[Math.floor(Math.random() * 4)];
         el.jk.textContent = glyph[k];
@@ -423,6 +449,7 @@ export function setupUI(G) {
         await G.wait(0.3);
         el.jk.style.color = '';
       }
+      offPad();
       el.jk.style.display = 'none';
       el.meter.style.display = 'none';
       return misses;
@@ -432,7 +459,8 @@ export function setupUI(G) {
     async hate(sec = 60) {
       el.meter.style.display = 'block';
       const mt = el.meter.querySelector('.mt');
-      mt.textContent = 'Space를 누르고 있으면 함께 소리친다';
+      mt.textContent = G.input.touch ? '버튼을 누르고 있으면 함께 소리친다' : 'Space를 누르고 있으면 함께 소리친다';
+      const offPad = ui.touchKeys('hold', '함께 소리친다');
       let shout = 0, t0 = G.time, part = 0;
       const down = () => G.input.down('Space') || G.input.down('KeyE') || G.input.mouseDown;
       if (G.surv) G.surv.require('shout', true);
@@ -446,6 +474,7 @@ export function setupUI(G) {
         G.player.fovKick = s ? -4 : 0;
         await G.wait(0.05);
       }
+      offPad();
       if (G.surv) { G.surv.require('shout', false); G.surv.flag('shouting', false); }
       G.player.fovKick = 0;
       el.meter.style.display = 'none';

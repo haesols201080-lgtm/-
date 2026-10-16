@@ -84,12 +84,12 @@ export function setupSurveillance(G) {
     const heli = { obj, pos: new THREE.Vector3(0, 45, 60), target: new THREE.Vector3(0, 40, 0), t: 0, rotor: null, tail: null };
     obj.traverse((o) => { if (o.name === 'rotor') heli.rotor = o; if (o.name === 'tail_rotor') heli.tail = o; });
     const spot = new THREE.SpotLight(0xe8f0ff, 0, 140, 0.18, 0.5, 1.4);
-    spot.position.set(0, -0.6, -2.4);
+    spot.position.set(0, -0.6, 2.4);
     obj.add(spot); obj.add(spot.target);
-    spot.target.position.set(0, -40, -18);
+    spot.target.position.set(0, -40, 18);
     const cone = new THREE.Mesh(new THREE.ConeGeometry(6, 40, 24, 1, true),
       new THREE.MeshBasicMaterial({ color: 0xcfd8e8, transparent: true, opacity: 0.06, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
-    cone.position.set(0, -20.6, -11); cone.rotation.x = -0.42;
+    cone.position.set(0, -20.6, 11); cone.rotation.x = 0.42;
     obj.add(cone);
     heli.spot = spot; heli.cone = cone;
     const city = G.locations.get('city');
@@ -127,8 +127,10 @@ export function setupSurveillance(G) {
       if (heliTimer <= 0 || h.pos.distanceTo(h.target) < 4) {
         heliTimer = 12 + Math.random() * 14;
         const near = S.suspicion > 50 ? G.player.pos : null;
-        h.target.set((near ? near.x : (Math.random() - 0.5) * 500) + (Math.random() - 0.5) * 40, 32 + Math.random() * 25,
-          (near ? near.z : -150 + Math.random() * 420) + (Math.random() - 0.5) * 40);
+        // over the roofs of the playable London (G.world.bounds) or over the suspect
+        const b = (G.world && G.world.bounds) || [-250, -150, 250, 270];
+        h.target.set((near ? near.x : b[0] + Math.random() * (b[2] - b[0])) + (Math.random() - 0.5) * 40, 38 + Math.random() * 22,
+          (near ? near.z : b[1] + Math.random() * (b[3] - b[1])) + (Math.random() - 0.5) * 40);
       }
       V.subVectors(h.target, h.pos);
       const d = V.length();
@@ -136,8 +138,15 @@ export function setupSurveillance(G) {
       h.pos.addScaledVector(V.normalize(), sp);
       h.t += dt;
       h.obj.position.set(h.pos.x, h.pos.y + Math.sin(h.t * 1.3) * 0.6, h.pos.z);
-      h.obj.rotation.y += (Math.atan2(-V.x, -V.z) - h.obj.rotation.y) * Math.min(1, dt * 0.8);
-      h.obj.rotation.z = Math.sin(h.t * 0.7) * 0.06;
+      // nose into the direction of flight (the model's front is +Z), the short
+      // way round; dipped forward while it flies, banked into turns
+      h.obj.rotation.order = 'YXZ';
+      const want = Math.atan2(V.x, V.z);
+      const turn = Math.atan2(Math.sin(want - h.obj.rotation.y), Math.cos(want - h.obj.rotation.y));
+      const fly = Math.min(1, d / 30);
+      h.obj.rotation.y += turn * Math.min(1, dt * 0.9) * fly;
+      h.obj.rotation.x += (0.16 * fly - h.obj.rotation.x) * Math.min(1, dt * 1.5);
+      h.obj.rotation.z += (-turn * 0.35 * fly + Math.sin(h.t * 0.7) * 0.03 - h.obj.rotation.z) * Math.min(1, dt * 1.5);
       if (h.rotor) h.rotor.rotation.y += dt * 42;
       if (h.tail) h.tail.rotation.x += dt * 60;
       const night = (G.atmos.day ?? 1) < 0.3;

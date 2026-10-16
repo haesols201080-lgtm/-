@@ -69,28 +69,41 @@ export function addCityLife(G, ctx, root) {
     ];
     const total = kinds.reduce((s, k) => s + k[2], 0);
     const pickKind = () => { let u = r() * total; for (const k of kinds) { u -= k[2]; if (u <= 0) return k; } return kinds[0]; };
-    // more rubbish where people are and in the prole quarter
-    const areas = [
-      [-16, -8, -8.5, 258, 700], [8.5, -8, 16, 258, 700],          // avenue pavements and gutters
-      [-55, -100, 55, -10, 700],                                   // the square
-      [-200, 47, 60, 73, 400], [-200, 188, 20, 214, 250],          // Mansions and Station roads
-      [-185, -111, -55, -87, 200],                                 // Love Lane
-      [55, -12, 335, 312, 2600],                                   // the prole quarter
-    ];
-    for (const [x0, z0, x1, z1, n] of areas) {
-      for (let i = 0; i < n; i++) {
-        const x = x0 + r() * (x1 - x0), z = z0 + r() * (z1 - z0);
-        const [kind, size] = pickKind();
-        const s = size * (0.7 + r() * 0.7);
-        rects.push(atlas.rect(kind));
-        mats.push(mat4(x, ground(x, z) + 0.012 + r() * 0.004, z, r() * 6.28, s, 1, s));
+    // rubbish along every pavement and gutter, three times as much in the prole streets
+    const plan = ctx.plan;
+    for (const st of plan.streets) {
+      const dens = (st.district === 'slum' ? 0.55 : st.district === 'inner' ? 0.04 : 0.18) * (st.kind === 'main' ? 1.3 : 1);
+      const pave = Array.isArray(st.pave) ? st.pave[0] : st.pave || 0;
+      for (let i = 0; i < st.line.length - 1; i++) {
+        const [ax, az] = st.line[i], [bx, bz] = st.line[i + 1];
+        const L = Math.hypot(bx - ax, bz - az);
+        const n = Math.round(L * dens * (0.6 + r() * 0.8));
+        const ux = (bx - ax) / (L || 1), uz = (bz - az) / (L || 1);
+        for (let k = 0; k < n; k++) {
+          const t = r() * L, side = r() < 0.5 ? -1 : 1;
+          const off = st.w / 2 + (r() < 0.45 ? -0.35 + r() * 0.3 : r() * Math.max(0.4, pave));
+          const x = ax + ux * t - uz * off * side, z = az + uz * t + ux * off * side;
+          const [kind, size] = pickKind();
+          const s2 = size * (0.7 + r() * 0.7);
+          rects.push(atlas.rect(kind));
+          mats.push(mat4(x, ground(x, z) + 0.012 + r() * 0.004, z, r() * 6.28, s2, 1, s2));
+        }
+        // manholes in the carriageway, gratings in the gutters
+        if (L > 14 && st.kind !== 'alley' && r() < 0.6) {
+          const t = r() * L, x = ax + ux * t, z = az + uz * t;
+          rects.push(atlas.rect(DECAL.manhole)); mats.push(mat4(x, 0.012, z, Math.atan2(ux, uz), 0.9, 1, 0.9));
+          const g = st.w / 2 - 0.25, sd = r() < 0.5 ? -1 : 1;
+          rects.push(atlas.rect(DECAL.grate)); mats.push(mat4(x - uz * g * sd, 0.012, z + ux * g * sd, Math.atan2(ux, uz), 0.5, 1, 0.9));
+        }
       }
     }
-    // the manholes and gratings in the carriageways
-    for (let z = -6; z < 258; z += 19) {
-      rects.push(atlas.rect(DECAL.manhole)); mats.push(mat4(r() < 0.5 ? -4 : 4, 0.012, z, 0, 0.9, 1, 0.9));
-      rects.push(atlas.rect(DECAL.grate)); mats.push(mat4(8.2, 0.012, z + 7, 0, 0.5, 1, 0.9));
-      rects.push(atlas.rect(DECAL.grate)); mats.push(mat4(-8.2, 0.012, z + 11, PI, 0.5, 1, 0.9));
+    // the square
+    for (let i = 0; i < 500; i++) {
+      const x = -55 + r() * 105, z = -75 + r() * 90;
+      if (!ctx.inSquare(x, z)) continue;
+      const [kind, size] = pickKind();
+      rects.push(atlas.rect(kind));
+      mats.push(mat4(x, ground(x, z) + 0.012, z, r() * 6.28, size, 1, size));
     }
     const im = atlasInstances(geo, mat, rects, mats);
     im.receiveShadow = true;
@@ -104,11 +117,18 @@ export function addCityLife(G, ctx, root) {
     const mat = new THREE.MeshStandardMaterial({ color: 0x0b0c0d, roughness: 0.03, metalness: 0.0, envMapIntensity: 1.8,
       transparent: true, opacity: 0.88, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -6, depthWrite: false });
     const mats = [];
-    const spots2 = [[-9, -6, 9, 258, 90], [-55, -100, 55, -10, 50], [55, -12, 335, 312, 260], [-200, 47, 60, 73, 40]];
-    for (const [x0, z0, x1, z1, n] of spots2) {
-      for (let i = 0; i < n; i++) {
-        const x = x0 + r() * (x1 - x0), z = z0 + r() * (z1 - z0);
-        mats.push(mat4(x, ground(x, z) + 0.008, z, r() * 6.28, 0.6 + r() * 2.2, 1, 0.4 + r() * 1.2));
+    for (const st of ctx.plan.streets) {
+      const dens = st.district === 'slum' || st.kind === 'lane' || st.kind === 'alley' ? 0.05 : 0.015;
+      for (let i = 0; i < st.line.length - 1; i++) {
+        const [ax, az] = st.line[i], [bx, bz] = st.line[i + 1];
+        const L = Math.hypot(bx - ax, bz - az);
+        const n = Math.round(L * dens + r() * 0.6);
+        for (let k = 0; k < n; k++) {
+          const t = r(), off = (r() - 0.5) * (st.w * 0.9);
+          const ux = (bx - ax) / (L || 1), uz = (bz - az) / (L || 1);
+          const x = ax + (bx - ax) * t - uz * off, z = az + (bz - az) * t + ux * off;
+          mats.push(mat4(x, ground(x, z) + 0.008, z, r() * 6.28, 0.6 + r() * 2.0, 1, 0.4 + r() * 1.0));
+        }
       }
     }
     const im = new THREE.InstancedMesh(geo, mat, mats.length);
@@ -139,11 +159,9 @@ export function addCityLife(G, ctx, root) {
       for (let i = 0; i < 40; i++) addClump(c.x + (r() - 0.5) * rx * 2, c.z + (r() - 0.5) * rz * 2, 1.1);
     }
     for (const y of spots.yards) {
-      for (let i = 0; i < 6; i++) { const p = y.f.w(y.x0 + r() * (y.x1 - y.x0), y.z0 + r() * (y.z1 - y.z0)); addClump(p.x, p.z, 0.8); }
+      if (r() < 0.6) continue;
+      for (let i = 0; i < 3; i++) { const p = y.f.w(y.x0 + r() * (y.x1 - y.x0), y.z0 + r() * (y.z1 - y.z0)); addClump(p.x, p.z, 0.8); }
     }
-    // the bomb site on the avenue and the waste ground opposite
-    for (let i = 0; i < 160; i++) addClump(-24 + (r() - 0.5) * 16, 126 + (r() - 0.5) * 16, 1.2);
-    for (let i = 0; i < 120; i++) addClump(25 + (r() - 0.5) * 16, 125 + (r() - 0.5) * 24, 1.0);
     // grass in the cracks at the foot of walls
     for (const g of spots.gables) for (let i = 0; i < 4; i++) addClump(g.x + (r() - 0.5) * 3, g.z + (r() - 0.5) * 3, 0.5);
     const im = atlasInstances(geo, mat, rects, mats, swayShader(0.08));
@@ -160,7 +178,9 @@ export function addCityLife(G, ctx, root) {
     const rects = [], mats = [];
     const lines = [];
     for (const y of spots.yards) {
-      if (r() < 0.45 || y.ruin) continue;
+      const c0 = y.f.w((y.x0 + y.x1) / 2, (y.z0 + y.z1) / 2);
+      const poor = ctx.plan.districtAt(c0.x, c0.z) === 'slum';
+      if (r() < (poor ? 0.55 : 0.93) || y.ruin) continue;
       const z = (y.z0 + y.z1) / 2;
       const a = y.f.w(y.x0 + 1, z), b = y.f.w(y.x1 - 1, z);
       const hgt = 2.4;
@@ -242,7 +262,7 @@ export function addCityLife(G, ctx, root) {
   {
     const tex = glowTexture('rgba(150,148,142,1)', 64, 1.6);
     const sources = [];
-    for (const y of spots.yards) { if (r() < 0.4) continue; const p = y.f.w(y.x0 + r() * (y.x1 - y.x0), -4); sources.push(new THREE.Vector3(p.x, 11.5, p.z)); }
+    for (const y of spots.yards) { if (r() < 0.86) continue; const p = y.f.w(y.x0 + r() * (y.x1 - y.x0), y.z1 + 4); sources.push(new THREE.Vector3(p.x, (y.top || 11) + 1.5, p.z)); }
     const N = sources.length * 6;
     const geo = new THREE.BufferGeometry();
     const pos = new Float32Array(N * 3), seed = new Float32Array(N);
@@ -288,7 +308,7 @@ export function addCityLife(G, ctx, root) {
     const birds = [];
     for (let i = 0; i < N; i++) {
       const flock = i % 3;
-      const c = [[-12, -30], [14, -70], [0, -100]][flock];
+      const c = [[-14, -20], [16, -40], [-2, -52]][flock];
       birds.push({ home: new THREE.Vector3(c[0] + (r() - 0.5) * 8, 0.1, c[1] + (r() - 0.5) * 8), p: new THREE.Vector3(), fly: 0, t: r() * 10, a: r() * 6.28 });
     }
     birds.forEach((b) => b.p.copy(b.home));
@@ -332,12 +352,12 @@ function addPeople(G, ctx, r) {
   const proles = ['char_prole_man', 'char_prole_woman', 'char_charrington', 'char_prole_woman', 'char_prole_man'];
   // walkers on the pavements: the commute
   const w = G.world;
-  G.ambientCrowd = G.npcs.crowd('city', { paths: ['avenue_w', 'avenue_e', 'square_loop', 'commute', 'mansions_road', 'station_road'], count: 54, models: party });
-  G.ambientProles = G.npcs.crowd('city', { paths: ['prole_a', 'prole_b'], count: 22, models: proles });
+  G.ambientCrowd = G.npcs.crowd('city', { paths: ['avenue_w', 'avenue_e', 'square_loop', 'commute', 'mansions_road', 'station_road'], count: 90, models: party });
+  G.ambientProles = G.npcs.crowd('city', { paths: ['prole_a', 'prole_b'], count: 40, models: proles });
   // proles chatting on their doorsteps, women gossiping in pairs
   let n = 0;
   for (const d of spots.doorsteps) {
-    if (r() < 0.78 || n > 34) continue;
+    if (d.shop || ctx.plan.districtAt(d.x, d.z) !== 'slum' || r() < 0.8 || n > 40) continue;
     n++;
     const out = d.rot;
     const a = tf(d.x, d.z, d.rot, 0, 1.1), b = tf(d.x, d.z, d.rot, 0.9, 1.6);
@@ -345,17 +365,22 @@ function addPeople(G, ctx, r) {
     const p2 = P(b.x, b.z, proles[(n + 1) % proles.length], 'idle', out - 2.2);
     if (p1 && p2) { p1.lookAt(p2.root.position.clone().setY(1.6)); p2.lookAt(p1.root.position.clone().setY(1.6)); }
   }
-  // the queue at the greengrocer's
-  for (let i = 0; i < 9; i++) P(236 - 4 + i * 0.75, 153.2 + (i % 2) * 0.15, proles[i % proles.length], 'idle', -H);
+  const pts = w.points;
+  const slumShops = spots.shopDoors.filter((d) => ctx.plan.districtAt(d.x, d.z) === 'slum');
+  // a queue at a shop in the prole streets
+  const q = slumShops[Math.floor(r() * slumShops.length)];
+  if (q) for (let i = 0; i < 9; i++) { const p = tf(q.x, q.z, q.rot, -0.5 - i * 0.75, 0.9 + (i % 2) * 0.15); P(p.x, p.z, proles[i % proles.length], 'idle', q.rot + H); }
   // outside the pub
-  for (let i = 0; i < 4; i++) P(95 - 3 + i * 1.1, 39 + (i % 2) * 0.7, 'char_prole_man', i % 2 ? 'talk' : 'idle', PI * (i % 2));
-  // children on the waste ground
-  for (let i = 0; i < 5; i++) P(25 + (r() - 0.5) * 8, 125 + (r() - 0.5) * 10, 'char_child', r() < 0.5 ? 'run' : 'idle', r() * 6.28);
-  // Party members at the monument, reading the spiral poster
-  for (let i = 0; i < 10; i++) { const a = i / 10 * 6.28; P(Math.sin(a) * 9.5, -55 + Math.cos(a) * 9.5, party[i % party.length], i % 3 ? 'idle' : 'look', a + PI); }
-  // a cluster at the Ministry doors, guards at the Ministry of Love
-  for (let i = 0; i < 6; i++) P(-6 + i * 2.2, -108 + (i % 2), party[i % party.length], 'idle', PI);
-  for (const [x, z] of [[-182, -95], [-182, -103], [-190, -99]]) P(x, z, 'char_guard', 'idle', H);
+  for (let i = 0; i < 4; i++) P(pts.pub_door.x - 1.5 + i * 1.1, pts.pub_door.z + (i % 2) * 0.7, 'char_prole_man', i % 2 ? 'talk' : 'idle', PI * (i % 2));
+  // children on a bomb site
+  const site = spots.bombsites.find((b) => { const c = b.f.w((b.x0 + b.x1) / 2, -3); return ctx.plan.districtAt(c.x, c.z) === 'slum'; });
+  if (site) for (let i = 0; i < 5; i++) { const c = site.f.w(site.x0 + r() * (site.x1 - site.x0), -1 - r() * 4); P(c.x, c.z, 'char_child', r() < 0.5 ? 'run' : 'idle', r() * 6.28); }
+  // Party members round the column, reading the spiral poster
+  for (let i = 0; i < 10; i++) { const a = i / 10 * 6.28; P(Math.sin(a) * 9.5, -2 + Math.cos(a) * 9.5, party[i % party.length], i % 3 ? 'idle' : 'look', a + PI); }
+  // a cluster at the Ministry doors, guards beside them
+  const md = pts.minitrue_door;
+  for (let i = 0; i < 6; i++) P(md.x - 6 + i * 2.2, md.z + 3 + (i % 2), party[i % party.length], 'idle', PI);
+  for (const dx of [-9, 9]) P(md.x + dx, md.z + 1, 'char_guard', 'idle', 0);
   // the Thought Police on their rounds
   G.npcs.patrol({ id: 'tp1', location: 'city', path: w.paths.square_loop });
   G.npcs.patrol({ id: 'tp2', location: 'city', path: w.paths.avenue_e });

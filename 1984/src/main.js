@@ -26,7 +26,10 @@ async function boot() {
   setupNPCs(G);
   setupSurveillance(G);
   ui.loading(0.84);
-  setupCity(G);
+  const params0 = new URLSearchParams(location.search);
+  // ?nocity skips building London (fast look-dev of rooms and the country)
+  if (params0.has('nocity')) G.world = { points: { home_door: { x: 0, y: 0, z: 0 } }, zones: {}, paths: {}, lamps: [], telescreens: [], posters: [], zoneAt: () => 'outskirts', surface: () => 'paving', setPosterEnemy() {}, placer: { footprints: [] } };
+  else setupCity(G);
   ui.loading(0.9);
   setupInteriors(G);
   setupCountryside(G);
@@ -40,7 +43,8 @@ async function boot() {
   if (touch) setupTouch(G);
   G.renderer.setup(G.scene, G.camera, params.get('q') || store.get('1984.quality') || (touch ? 'low' : 'medium'));
   // compile shaders up front so the first seconds do not stutter
-  G.enter('city', G.world.points.home_door ? { x: G.world.points.home_door.x, z: G.world.points.home_door.z + 0, yaw: 0 } : { x: 0, z: 0 });
+  if (params0.has('nocity')) G.enter('flat', 'door');
+  else G.enter('city', 'home_door');
   G.renderer.gl.compile(G.scene, G.camera);
   ui.loading(1);
   G.start();

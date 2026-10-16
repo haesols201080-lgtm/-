@@ -12,7 +12,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import bpy
 from mathutils import Vector
-import lib, textures, buildings, props, characters, nature
+import lib, textures, buildings, props, characters, nature, monument
 
 ROOT = os.path.dirname(HERE)
 MODELS = os.path.join(ROOT, 'assets', 'models')
@@ -38,7 +38,7 @@ def buildings_table():
         'fence_wire': b.fence_wire,
         'guard_tower': b.guard_tower,
         'mg_nest': b.sandbag_ring,
-        'monument': lambda: b.column_monument(characters.statue),
+        'monument': lambda: monument.monument(characters.statue),
         'church': b.st_martins,
         'station': b.station,
         'community_centre': b.community_centre,

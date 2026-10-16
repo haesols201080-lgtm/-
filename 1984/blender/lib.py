@@ -12,6 +12,8 @@ from mathutils import Vector, Matrix
 
 # name: (base colour, roughness, metallic, emission)
 PALETTE = {
+    'granite':        ((0.46, 0.45, 0.43), 0.75, 0.0, None),
+    'bronze':         ((0.24, 0.19, 0.13), 0.45, 0.9, None),
     'concrete_white': ((0.80, 0.80, 0.77), 0.85, 0.0, None),
     'concrete_grey':  ((0.42, 0.41, 0.39), 0.9, 0.0, None),
     'concrete_dark':  ((0.25, 0.25, 0.24), 0.9, 0.0, None),
@@ -77,6 +79,7 @@ PALETTE = {
 }
 
 TEX_SCALE = {  # metres covered by one texture tile, per material
+    'granite': 3.0, 'bronze': 2.0,
     'concrete_white': 4.0, 'concrete_grey': 4.0, 'concrete_dark': 4.0, 'stone_dirty': 3.0,
     'brick': 2.0, 'plaster': 2.5, 'slate': 2.0, 'corrugated': 2.0, 'wood': 1.5, 'wood_dark': 1.0,
     'board': 1.2, 'tile_white': 1.0, 'rubble': 2.0, 'sandbag': 1.0, 'bark': 1.0, 'bark_moss': 1.0,

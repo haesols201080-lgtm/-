@@ -50,7 +50,7 @@ export function setupCity(G) {
     const near = (want, list) => {
       let best = null, bd = 1e9;
       for (const j of list) {
-        if (j.special) continue;
+        if (j.special || j.kind === 'none') continue;
         const kind = j.street && j.street.kind;
         if (want.kinds && kind && !want.kinds.includes(kind)) continue;
         const c = j.kind === 'house' ? centre(j) : [j.poly[1][0], 0, j.poly[1][1]];
@@ -64,7 +64,7 @@ export function setupCity(G) {
     const run = (want) => {
       let best = null, bd = 1e9;
       const byEdge = new Map();
-      for (const j of houses) { const k = j.block + ':' + j.edge; if (!byEdge.has(k)) byEdge.set(k, []); byEdge.get(k).push(j); }
+      for (const j of houses) { if (j.kind !== 'house' || j.special) continue; const k = j.block + ':' + j.edge; if (!byEdge.has(k)) byEdge.set(k, []); byEdge.get(k).push(j); }
       for (const list of byEdge.values()) {
         list.sort((a, b) => a.pos - b.pos);
         for (let i = 0; i < list.length; i++) {
@@ -372,7 +372,7 @@ export function setupCity(G) {
     setPosterEnemy: (kind) => atlas.setEnemy(kind),
     bounds: WINDOW,
   };
-  const ctx = { G, placer, map, ground, plan, town, spots, r: rng(1949), blocks: [] };
+  const ctx = { G, placer, map, ground, plan, town, spots, r: rng(1949), blocks: [], inSquare: (x, z) => pointInPoly(x, z, VICTORY_SQUARE) };
   addCityLife(G, ctx, root);
   return G.world;
 }
