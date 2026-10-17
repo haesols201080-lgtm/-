@@ -12,6 +12,7 @@ def branch(m, r, p, d, length, rad, depth, cfg, tips):
         tips.append((end, d))
         return
     n = cfg['split'] if depth > 1 else cfg['split'] + 1
+    kids = []
     for k in range(n):
         ang = cfg['spread'] * (0.6 + 0.8 * r.random())
         az = (k / n) * math.tau + r.random() * 1.2
@@ -19,12 +20,63 @@ def branch(m, r, p, d, length, rad, depth, cfg, tips):
         side = Quaternion(d, az) @ side
         nd = (Quaternion(side, ang) @ d)
         nd = (nd + Vector((0, 0, cfg['up']))).normalized()
-        branch(m, r, end, nd, length * cfg['shrink'] * (0.8 + 0.4 * r.random()), rad * cfg['taper'], depth - 1, cfg, tips)
+        kids.append(nd)
+        # a fork starts a little inside the parent's end along its own bearing:
+        # sibling limbs from one centre each had a face in one shared plane there
+        base = end - nd * rad * cfg['taper'] * 0.7
+        branch(m, r, base, nd, length * cfg['shrink'] * (0.8 + 0.4 * r.random()), rad * cfg['taper'], depth - 1, cfg, tips)
     if cfg.get('leader') and depth > 1:
-        branch(m, r, end, (d + Vector((0, 0, 0.3))).normalized(), length * 0.8, rad * cfg['taper'], depth - 1, cfg, tips)
+        # bend the leader away from a sibling it nearly follows: two limbs
+        # leaving one joint at almost the same bearing share faces there
+        ld = (d + Vector((0, 0, 0.3))).normalized()
+        for _ in range(6):
+            near = [k for k in kids if ld.angle(k) < 0.2]
+            if not near:
+                break
+            ld = (ld + (ld - near[0]).normalized() * 0.1).normalized()
+        branch(m, r, end, ld, length * 0.8, rad * cfg['taper'], depth - 1, cfg, tips)
+
+
+def _card_clash(pts, cards):
+    """How badly would this leaf card z-fight with those already placed?
+    0 when it cannot, else the |cos| of the angle to the most parallel card
+    it clashes with. The leaves are double sided, so either facing counts: a
+    clash is a card within 6 deg of parallel, overlapping, whose plane comes
+    within 2 cm of this one."""
+    n = (pts[1] - pts[0]).cross(pts[3] - pts[0]).normalized()
+    c = sum(pts, Vector()) / 4
+    rad = (pts[0] - c).length
+    worst = 0.0
+    for n2, c2, rad2, pts2 in cards:
+        dot = abs(n.dot(n2))
+        if dot < 0.9945 or dot <= worst or (c2 - c).length > rad + rad2:
+            continue
+        da = [n2.dot(p - c2) for p in pts]
+        db = [n.dot(p - c) for p in pts2]
+        if min(da) * max(da) <= 0 or min(map(abs, da)) < 0.02 or min(db) * max(db) <= 0 or min(map(abs, db)) < 0.02:
+            worst = dot
+    return worst
 
 
 def foliage(m, r, tips, size, mat, per_tip=1, droop=0.0):
+    cards = []
+    def place(make, turn):
+        # turn a card that would lie in another's plane by 12 deg steps (half a
+        # turn at most, then the least parallel try); the random draws are
+        # already made, so the rest of the tree stays as it was
+        best = None
+        for k in range(16):
+            cand = make(k * turn)
+            bad = _card_clash(cand, cards)
+            if best is None or bad < best[0]:
+                best = (bad, cand)
+            if not bad:
+                break
+        pts = best[1]
+        n = (pts[1] - pts[0]).cross(pts[3] - pts[0]).normalized()
+        c = sum(pts, Vector()) / 4
+        cards.append((n, c, (pts[0] - c).length, pts))
+        m.quad(pts, mat, uv_rect=(0, 0, 1, 1))
     for (p, d) in tips:
         for _ in range(per_tip):
             c = p + Vector(((r.random() - 0.5) * size * 0.6, (r.random() - 0.5) * size * 0.6, (r.random() - 0.5) * size * 0.4 - droop))
@@ -32,16 +84,18 @@ def foliage(m, r, tips, size, mat, per_tip=1, droop=0.0):
             rot = r.random() * math.pi
             for k in range(3):
                 if k < 2:
-                    a = rot + k * math.pi / 2
-                    ax = Vector((math.cos(a), math.sin(a), 0)) * s / 2
-                    up = Vector((0, 0, s / 2))
-                    pts = [c - ax - up, c + ax - up, c + ax + up, c - ax + up]
+                    def vert(extra, a=rot + k * math.pi / 2):
+                        ax = Vector((math.cos(a + extra), math.sin(a + extra), 0)) * s / 2
+                        up = Vector((0, 0, s / 2))
+                        return [c - ax - up, c + ax - up, c + ax + up, c - ax + up]
+                    place(vert, 0.21)
                 else:
-                    ax = Vector((s / 2, 0, 0)); ay = Vector((0, s / 2, 0))
-                    tilt = Matrix.Rotation(r.random() * 0.6, 3, 'X')
-                    ax, ay = tilt @ ax, tilt @ ay
-                    pts = [c - ax - ay, c + ax - ay, c + ax + ay, c - ax + ay]
-                m.quad(pts, mat, uv_rect=(0, 0, 1, 1))
+                    def flat(extra, t=r.random() * 0.6):
+                        ax = Vector((s / 2, 0, 0)); ay = Vector((0, s / 2, 0))
+                        tilt = Matrix.Rotation(t + extra, 3, 'X')
+                        ax, ay = tilt @ ax, tilt @ ay
+                        return [c - ax - ay, c + ax - ay, c + ax + ay, c - ax + ay]
+                    place(flat, -0.21)
 
 
 def tree(name, seed, cfg, leaf_mat, leaf_size, height, per_tip=1):
@@ -56,8 +110,12 @@ def tree(name, seed, cfg, leaf_mat, leaf_size, height, per_tip=1):
         foliage(m, r, tips, leaf_size, leaf_mat, per_tip, cfg.get('droop', 0.0))
     # roots
     for k in range(5):
-        a = k / 5 * math.tau + r.random()
-        m.cyl(Vector((0, 0, 0.3)), Vector((math.cos(a) * 1.0, math.sin(a) * 1.0, -0.1)), cfg['trunk'] * 0.45, 0.04, cfg['bark'], 6)
+        # at most 0.5 rad off an even fan, each starting a little out along its
+        # own bearing inside the trunk: roots that all began at one point, some
+        # at nearly the same bearing, had faces in one plane there
+        a = k / 5 * math.tau + r.random() * 0.5
+        d = Vector((math.cos(a), math.sin(a), 0))
+        m.cyl(d * cfg['trunk'] * 0.4 + Vector((0, 0, 0.3)), d * 1.0 + Vector((0, 0, -0.1)), cfg['trunk'] * 0.45, 0.04, cfg['bark'], 6)
     return [m.finish()]
 
 

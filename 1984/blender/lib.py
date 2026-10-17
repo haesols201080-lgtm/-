@@ -197,6 +197,33 @@ class Mesh:
                 f = self.bm.faces.new(ring1); f.material_index = mi
         return ring0, ring1
 
+    def tube(self, pts, r, mat, seg=6):
+        """One swept tube along a polyline, open at both ends. Consecutive
+        stretches share a ring, so a bent rod has no overlapping faces at its
+        joints (separate cylinders there lie in one plane and z-fight)."""
+        P = [Vector(p) for p in pts]
+        n = len(P)
+        tans = []
+        for i in range(n):
+            t = P[min(i + 1, n - 1)] - P[max(i - 1, 0)]
+            tans.append(t.normalized())
+        nrm = tans[0].orthogonal().normalized()
+        mi = self.mi(mat)
+        rings = []
+        for i in range(n):
+            t = tans[i]
+            nrm = (nrm - t * nrm.dot(t)).normalized()   # parallel transport
+            bi = t.cross(nrm)
+            rings.append([self.bm.verts.new(P[i] + (nrm * math.cos(a) + bi * math.sin(a)) * r)
+                          for a in (math.tau * k / seg for k in range(seg))])
+        for i in range(n - 1):
+            for k in range(seg):
+                j = (k + 1) % seg
+                f = self.bm.faces.new((rings[i][k], rings[i][j], rings[i + 1][j], rings[i + 1][k]))
+                f.material_index = mi
+                f.smooth = True
+        return rings
+
     def sphere(self, c, r, mat, seg=12, rings=8, scale=(1, 1, 1), smooth=True, matrix=None):
         cx, cy, cz = c
         sx, sy, sz = scale

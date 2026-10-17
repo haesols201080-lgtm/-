@@ -13,13 +13,37 @@ def anchor(name, loc, parent=None):
     return e
 
 
+def inset_panel(m, outer, inner, y, depth, frame_mat, panel_mat):
+    """The front (-y facing) face at y of a box, with an opening whose panel
+    (a screen, a print) is set depth back into it. Nothing lies over anything
+    else, so the panel cannot z-fight with its frame at any distance; a decal
+    a few mm proud of the frame flickers once it is seen from far off.
+    outer, inner: (x0, z0, x1, z1)."""
+    X0, Z0, X1, Z1 = outer
+    x0, z0, x1, z1 = inner
+    yb = y + depth
+    for q in ([(X0, y, Z0), (X1, y, Z0), (x1, y, z0), (x0, y, z0)],
+              [(X1, y, Z0), (X1, y, Z1), (x1, y, z1), (x1, y, z0)],
+              [(X1, y, Z1), (X0, y, Z1), (x0, y, z1), (x1, y, z1)],
+              [(X0, y, Z1), (X0, y, Z0), (x0, y, z0), (x0, y, z1)],
+              [(x0, y, z0), (x1, y, z0), (x1, yb, z0), (x0, yb, z0)],
+              [(x1, y, z0), (x1, y, z1), (x1, yb, z1), (x1, yb, z0)],
+              [(x1, y, z1), (x0, y, z1), (x0, yb, z1), (x1, yb, z1)],
+              [(x0, y, z1), (x0, y, z0), (x0, yb, z0), (x0, yb, z1)]):
+        m.quad(q, frame_mat)
+    m.quad([(x0, yb, z0), (x1, yb, z0), (x1, yb, z1), (x0, yb, z1)], panel_mat, uv_rect=(0, 0, 1, 1))
+
+
 def telescreen_wall():
     m = Mesh('telescreen_wall')
     w, h, d = 1.7, 1.1, 0.09
-    m.box((-w / 2 - 0.08, -d, -h / 2 - 0.08), (w / 2 + 0.08, 0, h / 2 + 0.08), 'screen_frame')
-    m.quad([(-w / 2, -d - 0.004, -h / 2), (w / 2, -d - 0.004, -h / 2), (w / 2, -d - 0.004, h / 2), (-w / 2, -d - 0.004, h / 2)],
-           'telescreen_screen', uv_rect=(0, 0, 1, 1))
-    m.box((-0.5, -d - 0.02, -h / 2 - 0.07), (0.5, -d + 0.01, -h / 2 - 0.02), 'metal_dark')
+    # the screen is set 1.2 cm into the frame (it hung 4 mm in front of it and
+    # flickered on facades seen down a street)
+    m.box((-w / 2 - 0.08, -d, -h / 2 - 0.08), (w / 2 + 0.08, 0, h / 2 + 0.08), 'screen_frame',
+          faces={'+y', '-x', '+x', '-z', '+z'})
+    inset_panel(m, (-w / 2 - 0.08, -h / 2 - 0.08, w / 2 + 0.08, h / 2 + 0.08), (-w / 2, -h / 2, w / 2, h / 2),
+                -d, 0.012, 'screen_frame', 'telescreen_screen')
+    m.box((-0.5, -d - 0.02, -h / 2 - 0.07), (0.5, -d, -h / 2 - 0.02), 'metal_dark', faces={'-y', '-x', '+x', '-z', '+z'})
     o = m.finish()
     anchor('eye', (0, -0.2, 0), o)
     return [o] + list(o.children)
@@ -28,9 +52,8 @@ def telescreen_wall():
 def telescreen_pole():
     m = Mesh('telescreen_pole')
     m.cyl((0, 0, 0), (0, 0, 4.2), 0.12, 0.09, 'iron_black', 10)
-    m.box((-1.0, -0.25, 3.0), (1.0, 0.25, 4.4), 'screen_frame')
-    m.quad([(-0.85, -0.255, 3.12), (0.85, -0.255, 3.12), (0.85, -0.255, 4.28), (-0.85, -0.255, 4.28)],
-           'telescreen_screen', uv_rect=(0, 0, 1, 1))
+    m.box((-1.0, -0.25, 3.0), (1.0, 0.25, 4.4), 'screen_frame', faces={'+y', '-x', '+x', '-z', '+z'})
+    inset_panel(m, (-1.0, 3.0, 1.0, 4.4), (-0.85, 3.12, 0.85, 4.28), -0.25, 0.012, 'screen_frame', 'telescreen_screen')
     m.cyl((0, 0, 4.4), (0, 0, 4.9), 0.06, 0.06, 'iron_black', 6)
     m.cyl((0, 0.1, 4.95), (0, -0.6, 5.1), 0.08, 0.38, 'metal_dark', 12, caps=False)
     m.box((-1.05, -0.3, 2.95), (1.05, 0.3, 3.0), 'iron_black')
@@ -201,8 +224,11 @@ def bed_iron():
             m.cyl((x, y, 0.4), (x, y, hgt), 0.012, 0.012, 'iron_black', 4)
     m.box((-0.45, -1.0, 0.35), (0.45, 1.0, 0.4), 'iron_black')
     m.box((-0.43, -0.98, 0.4), (0.43, 0.98, 0.55), 'mattress')
-    m.box((-0.42, -0.5, 0.55), (0.42, 0.98, 0.6), 'fabric_grey')
-    m.box((-0.3, 0.65, 0.55), (0.3, 0.92, 0.68), 'mattress')
+    # the blanket hangs over the mattress edges (1.5 cm proud of its sides,
+    # 5 mm at the head clear of the rails) and the pillow lies on it, so no
+    # face shares a plane with another
+    m.box((-0.445, -0.5, 0.48), (0.445, 0.985, 0.6), 'fabric_grey')
+    m.box((-0.3, 0.65, 0.6), (0.3, 0.92, 0.72), 'mattress')
     return [m.finish()]
 
 
@@ -212,9 +238,11 @@ def bed_mahogany():
     m.box((-0.82, 1.0, 0), (0.82, 1.1, 1.3), 'wood_dark')
     m.box((-0.82, -1.1, 0), (0.82, -1.0, 0.75), 'wood_dark')
     m.box((-0.78, -1.0, 0.5), (0.78, 1.0, 0.72), 'mattress')
-    m.box((-0.76, -0.4, 0.72), (0.76, 1.0, 0.78), 'fabric_red')
+    # counterpane 1.5 cm proud of the mattress sides; its head end is pressed
+    # against the headboard, so that face is left out
+    m.box((-0.795, -0.4, 0.62), (0.795, 1.0, 0.78), 'fabric_red', faces={'+z', '-z', '-y', '-x', '+x'})
     for sx in (-0.4, 0.4):
-        m.box((sx - 0.3, 0.65, 0.72), (sx + 0.3, 0.95, 0.88), 'paper')
+        m.box((sx - 0.3, 0.65, 0.78), (sx + 0.3, 0.95, 0.92), 'paper')
     return [m.finish()]
 
 
@@ -279,7 +307,7 @@ def cubicle():
     m.box((0.93, -0.55, 0.9), (0.95, -0.05, 1.25), 'iron_black')
     for k in range(6):
         y = -0.52 + k * 0.09
-        m.box((0.92, y, 0.9), (0.935, y + 0.015, 1.25), 'metal')
+        m.box((0.92, y, 0.91), (0.935, y + 0.015, 1.24), 'metal')
     m.box((-0.2, -0.6, 0.0), (0.2, -0.2, 0.45), 'metal_dark')
     o = m.finish()
     anchor('memory_hole', (0.9, -0.3, 1.07), o)
@@ -303,10 +331,13 @@ def canteen_table():
 
 def diary():
     m = Mesh('diary')
-    m.box((-0.11, -0.15, 0), (0.11, 0.15, 0.025), 'paper')
+    # only the page edges of the paper block show; its top, bottom and back
+    # lie against the boards and the spine
+    m.box((-0.11, -0.15, 0), (0.11, 0.15, 0.025), 'paper', faces={'+x', '-y', '+y'})
     m.box((-0.115, -0.155, -0.003), (0.115, 0.155, 0.0), 'diary_cover')
     m.box((-0.115, -0.155, 0.025), (0.115, 0.155, 0.028), 'diary_cover')
-    m.box((-0.118, -0.155, -0.003), (-0.11, 0.155, 0.028), 'fabric_red')
+    # cloth spine against the boards' back edges, a little taller and longer
+    m.box((-0.12, -0.157, -0.005), (-0.115, 0.157, 0.030), 'fabric_red')
     return [m.finish()]
 
 
@@ -319,18 +350,22 @@ def paperweight():
 
 def engraving():
     m = Mesh('engraving')
-    m.box((-0.32, -0.02, -0.24), (0.32, 0.0, 0.24), 'wood_dark')
-    m.quad([(-0.27, -0.022, -0.19), (0.27, -0.022, -0.19), (0.27, -0.022, 0.19), (-0.27, -0.022, 0.19)],
-           'engraving', uv_rect=(0, 0, 1, 1))
+    # the print sits 4 mm deep in an opening of the frame board (it hung 2 mm
+    # in front of the board)
+    m.box((-0.32, -0.02, -0.24), (0.32, 0.0, 0.24), 'wood_dark', faces={'+y', '-x', '+x', '-z', '+z'})
+    inset_panel(m, (-0.32, -0.24, 0.32, 0.24), (-0.27, -0.19, 0.27, 0.19), -0.02, 0.004, 'wood_dark', 'engraving')
     return [m.finish()]
 
 
 def gin_bottle():
     m = Mesh('gin')
-    m.cyl((0, 0, 0), (0, 0, 0.2), 0.04, 0.04, 'glass', 12)
+    # the label is a band of the bottle's own wall (a sleeve 0.5 mm over the
+    # glass z-fought with it)
+    m.cyl((0, 0, 0), (0, 0, 0.06), 0.04, 0.04, 'glass', 12)
+    m.cyl((0, 0, 0.06), (0, 0, 0.14), 0.04, 0.04, 'paper', 12, caps=False)
+    m.cyl((0, 0, 0.14), (0, 0, 0.2), 0.04, 0.04, 'glass', 12, caps=False)
     m.cyl((0, 0, 0.2), (0, 0, 0.26), 0.04, 0.015, 'glass', 12)
     m.cyl((0, 0, 0.26), (0, 0, 0.29), 0.015, 0.015, 'glass', 12)
-    m.cyl((0, 0, 0.06), (0, 0, 0.14), 0.0405, 0.0405, 'paper', 12, caps=False)
     return [m.finish()]
 
 
@@ -374,7 +409,7 @@ def cage():
             m.cyl((-L / 2, y, z), (L / 2, y, z), 0.004, 0.004, 'iron_black', 3, caps=False)
         for x in (-L / 2, L / 2):
             m.cyl((x, -W / 2, z), (x, W / 2, z), 0.004, 0.004, 'iron_black', 3, caps=False)
-    m.box((-L / 2, -W / 2, -0.01), (L / 2, W / 2, 0.0), 'metal')
+    m.box((-L / 2 - 0.01, -W / 2 - 0.01, -0.01), (L / 2 + 0.01, W / 2 + 0.01, 0.0), 'metal')
     m.box((L / 2 - 0.01, -0.03, 0.15), (L / 2 + 0.05, 0.03, 0.2), 'iron_black')
     m.cyl((-L / 2 - 0.15, 0, 0.17), (-L / 2, 0, 0.17), 0.18, 0.13, 'iron_black', 14, caps=False)
     m.box((-0.05, -0.02, H), (0.05, 0.02, H + 0.08), 'iron_black')
@@ -400,8 +435,8 @@ def interrogation_bed():
         m.box((-0.47, y, 0.62), (0.47, y + 0.08, 0.74), 'rubber')
     # dial machine
     m.box((0.7, -0.3, 0), (1.1, 0.3, 1.1), 'metal_dark')
-    m.cyl((0.69, 0, 0.85), (0.66, 0, 0.85), 0.14, 0.14, 'paper', 20)
-    m.box((0.66, -0.01, 0.84), (0.665, 0.11, 0.86), 'iron_black')
+    m.cyl((0.71, 0, 0.85), (0.66, 0, 0.85), 0.14, 0.14, 'paper', 20)
+    m.box((0.651, -0.01, 0.84), (0.656, 0.11, 0.86), 'iron_black')
     return [m.finish()]
 
 

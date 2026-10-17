@@ -114,9 +114,11 @@ def roof_clutter(m, W, D, H, r, n=4):
             for k in range(2):
                 m.cyl((x - 0.2 + k * 0.4, y, H + 1.8), (x - 0.2 + k * 0.4, y, H + 2.2), 0.12, 0.1, 'brick', 8)
         elif kind < 0.7:
-            m.box((x - 1.4, y - 1.0, H), (x + 1.4, y + 1.0, H + 2.4), 'metal')
+            # water tank up on two iron trestles (it used to start on the roof
+            # with the trestles inside it, their feet sharing its floor)
+            m.box((x - 1.4, y - 1.0, H + 0.3), (x + 1.4, y + 1.0, H + 2.4), 'metal')
             for sx in (-1.2, 1.2):
-                m.box((x + sx - 0.08, y - 0.9, H - 0.0), (x + sx + 0.08, y + 0.9, H + 0.3), 'iron_black')
+                m.box((x + sx - 0.08, y - 0.9, H), (x + sx + 0.08, y + 0.9, H + 0.3), 'iron_black')
         else:
             m.box((x - 0.8, y - 0.8, H), (x + 0.8, y + 0.8, H + 1.0), 'concrete_dark')
 
@@ -180,8 +182,9 @@ def gable_roof(m, x0, x1, D, H, rise, mat='slate', overhang=0.3, gable_mat='bric
     m.quad([(x0 - overhang, y0, H - 0.12), (x0 - overhang, 0, zr - 0.15), (x1 + overhang, 0, zr - 0.15), (x1 + overhang, y0, H - 0.12)], 'wood_dark')
     m.quad([(x1 + overhang, y1, H - 0.12), (x1 + overhang, 0, zr - 0.15), (x0 - overhang, 0, zr - 0.15), (x0 - overhang, y1, H - 0.12)], 'wood_dark')
     # gable triangles
-    m.quad([(x0, D / 2, H), (x0, -D / 2, H), (x0, 0, zr)], gable_mat)
-    m.quad([(x1, -D / 2, H), (x1, D / 2, H), (x1, 0, zr)], gable_mat)
+    if gable_mat:
+        m.quad([(x0, D / 2, H), (x0, -D / 2, H), (x0, 0, zr)], gable_mat)
+        m.quad([(x1, -D / 2, H), (x1, D / 2, H), (x1, 0, zr)], gable_mat)
 
 
 def prole_terrace(name='prole_terrace', n=4, seed=3, ruined=0, shop=False, pub=False):
@@ -223,7 +226,10 @@ def prole_terrace(name='prole_terrace', n=4, seed=3, ruined=0, shop=False, pub=F
         # shop fascia and sign board
         if key == 'front' and (shop or pub):
             obox(m, P, 0.2, 4.95, 2.8, 3.3, -0.25, 0.0, 'wood_dark')
-            m.quad([P(0.3, 2.85, -0.26), P(4.85, 2.85, -0.26), P(4.85, 3.25, -0.26), P(0.3, 3.25, -0.26)],
+            # the signboard is fixed 4 cm proud of the fascia: a sheet 1 cm off
+            # it flickered when the street was seen from far off
+            obox(m, P, 0.3, 4.85, 2.85, 3.25, -0.29, -0.25, 'wood_dark', faces={'+z', '-z', '-x', '+x'})
+            m.quad([P(0.3, 2.85, -0.29), P(4.85, 2.85, -0.29), P(4.85, 3.25, -0.29), P(0.3, 3.25, -0.29)],
                    'sign', uv_rect=(0, 0, 1, 1))
             if shop:
                 for k in range(1, 6):
@@ -286,7 +292,7 @@ def prole_terrace(name='prole_terrace', n=4, seed=3, ruined=0, shop=False, pub=F
         mesh_poly_wall(m, jag, 0.3, 'brick')
         for k in range(4):
             y = -D / 2 + 1 + k * 1.8
-            m.box((rx0, y, fh - 0.1), (rx0 + 2.5 + r.random() * 1.5, y + 0.18, fh + 0.12), 'wood')
+            m.box((rx0, y, fh - 0.12), (rx0 + 2.5 + r.random() * 1.5, y + 0.18, fh + 0.1), 'wood')
         rubble_heap(m, (rx0 + (rx1 - rx0) / 2, 0.6, 0), 3.6, 1.6, r)
     return [m.finish()]
 
@@ -445,8 +451,7 @@ def fence_wire():
         t = i / (turns * 10)
         a = t * turns * math.tau
         pts.append(Vector((-L / 2 + t * L, math.sin(a) * 0.35 + 0.25, 3.5 + math.cos(a) * 0.35)))
-    for a, b in zip(pts, pts[1:]):
-        m.cyl(a, b, 0.012, 0.012, 'iron_black', 3, caps=False)
+    m.tube(pts, 0.012, 'iron_black', 3)
     return [m.finish()]
 
 
@@ -551,7 +556,8 @@ def st_martins():
         if key == 'front':
             wins.append((width / 2 - 1.5, 0, width / 2 + 1.5, 5, 'wood_dark', 'door'))
         facade(m, o, right, out, width, H, wins, 'stone_dirty', depth=0.5)
-    gable_roof(m, -W / 2, W / 2, D, H, 0.01, 'slate', 0.4, 'stone_dirty')
+    # eaves only: the 1 cm gables would lie on the sides of the roof slab
+    gable_roof(m, -W / 2, W / 2, D, H, 0.01, 'slate', 0.4, None)
     m.box((-W / 2, -D / 2, H), (W / 2, D / 2, H + 0.6), 'slate')
     # portico
     for k in range(6):
@@ -582,15 +588,12 @@ def station():
     ribs = 11
     for i in range(ribs):
         y = -L / 2 + i * L / (ribs - 1)
-        prev = None
-        for k in range(17):
-            a = math.pi * k / 16
-            p = Vector((math.cos(a) * W / 2, y, 6 + math.sin(a) * 7))
-            if prev is not None:
-                m.cyl(prev, p, 0.12, 0.12, 'iron_black', 5)
-            prev = p
+        # each rib is one bent tube (16 straight pieces overlapped at the joints)
+        m.tube([(math.cos(math.pi * k / 16) * W / 2, y, 6 + math.sin(math.pi * k / 16) * 7) for k in range(17)],
+               0.12, 'iron_black', 5)
         for sx in (-W / 2, W / 2):
-            m.cyl((sx, y, 0), (sx, y, 6), 0.22, 0.22, 'iron_black', 8)
+            # feet 5 cm into the ground, off the platform's underside
+            m.cyl((sx, y, -0.05), (sx, y, 6), 0.22, 0.22, 'iron_black', 8)
     for k in range(16):
         a0, a1 = math.pi * k / 16, math.pi * (k + 1) / 16
         p0 = (math.cos(a0) * W / 2, math.sin(a0) * 7 + 6)
@@ -609,7 +612,9 @@ def station():
     # facade with clock
     m.box((-W / 2 - 2, -L / 2 - 6, 0), (W / 2 + 2, -L / 2 - 4, 14), 'brick')
     m.cyl((0, -L / 2 - 6.05, 10.5), (0, -L / 2 - 6.25, 10.5), 1.4, 1.4, 'paper', 24)
-    m.box((-2.5, -L / 2 - 6.1, 0), (2.5, -L / 2 - 4, 4), 'wood_dark')
+    # doors 10 cm proud of the brickwork (the box ran through the wall and its
+    # back showed through the brick inside the shed)
+    m.box((-2.5, -L / 2 - 6.1, 0), (2.5, -L / 2 - 5.9, 4), 'wood_dark', faces={'-y', '-x', '+x', '+z'})
     m.quad([(-5, -L / 2 - 6.3, 6.5), (5, -L / 2 - 6.3, 6.5), (5, -L / 2 - 6.3, 7.6), (-5, -L / 2 - 6.3, 7.6)],
            'sign', uv_rect=(0, 0, 1, 1))
     return [m.finish()]

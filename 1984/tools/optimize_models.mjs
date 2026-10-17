@@ -38,6 +38,19 @@ function pruneAnimation(doc) {
   }
 }
 
+// The game's textures keep three's default flipY = true (v up, as in Blender);
+// the Blender exporter writes glTF's v down, so turn it back.
+function flipV(doc) {
+  const seen = new Set();
+  for (const mesh of doc.getRoot().listMeshes()) for (const p of mesh.listPrimitives()) {
+    const uv = p.getAttribute('TEXCOORD_0');
+    if (!uv || seen.has(uv)) continue;
+    seen.add(uv);
+    const e = [];
+    for (let i = 0; i < uv.getCount(); i++) { uv.getElement(i, e); uv.setElement(i, [e[0], 1 - e[1]]); }
+  }
+}
+
 let a = 0, b = 0;
 const only = process.argv.slice(2);
 for (const f of fs.readdirSync(src).sort()) {
@@ -45,7 +58,11 @@ for (const f of fs.readdirSync(src).sort()) {
   if (only.length && !only.includes(f.replace('.glb', ''))) continue;
   const doc = await io.read(path.join(src, f));
   if (f.startsWith('char_')) pruneAnimation(doc);
-  await doc.transform(dedup(), weld(), resample({ tolerance: 2e-4 }), prune(), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
+  else flipV(doc);
+  // keepAttributes: the Blender materials carry no images (the game supplies
+  // its textures by material name), so a plain prune() would drop TEXCOORD_0
+  // and every model would show one texel of its texture
+  await doc.transform(dedup(), weld(), resample({ tolerance: 2e-4 }), prune({ keepAttributes: true }), meshopt({ encoder: MeshoptEncoder, level: 'medium' }));
   const outPath = path.join(dst, f);
   await io.write(outPath, doc);
   const s0 = fs.statSync(path.join(src, f)).size, s1 = fs.statSync(outPath).size;
