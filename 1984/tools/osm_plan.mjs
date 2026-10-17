@@ -1,0 +1,102 @@
+// Turns the OpenStreetMap extract of central London (research/city2/osm,
+// data (c) OpenStreetMap contributors, ODbL) into the game's street plan for
+// the playable window: Trafalgar Square north through Seven Dials and
+// St Giles to Bloomsbury and Senate House. Writes src/world/town/london_data.js.
+//   node tools/osm_plan.mjs <osmDir>
+import fs from 'node:fs';
+import path from 'node:path';
+const root = path.dirname(path.dirname(new URL(import.meta.url).pathname));
+const dir = process.argv[2];
+const W = [-340, -1600, 440, 120];          // x0, z0, x1, z1 (x east, z south, origin Nelson's Column)
+const M = 30;                                // keep streets a little beyond the window so blocks close
+const streets = JSON.parse(fs.readFileSync(path.join(dir, 'streets.json'))).streets;
+const paths = JSON.parse(fs.readFileSync(path.join(dir, 'paths.json'))).paths;
+const areas = JSON.parse(fs.readFileSync(path.join(dir, 'areas.json')));
+const inside = ([x, z], m = 0) => x >= W[0] - m && x <= W[2] + m && z >= W[1] - m && z <= W[3] + m;
+
+// clip a polyline to the (margin-grown) window, splitting where it leaves
+function clip(pts) {
+  const out = [];
+  let cur = [];
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    if (inside(p, M)) { cur.push(p); continue; }
+    if (cur.length) { cur.push(p); out.push(cur); cur = []; }
+    else if (i + 1 < pts.length && inside(pts[i + 1], M)) cur.push(p);
+  }
+  if (cur.length > 1) out.push(cur);
+  return out.filter((c) => c.length > 1);
+}
+const r1 = (v) => Math.round(v * 10) / 10;
+const len = (pts) => pts.reduce((s, p, i) => (i ? s + Math.hypot(p[0] - pts[i - 1][0], p[1] - pts[i - 1][1]) : 0), 0);
+
+const LANE = /\b(Mews|Yard|Court|Passage|Alley|Row|Walk|Buildings|Gardens)\b/;
+const out = [];
+const streetNames = new Set();
+for (const s of streets) {
+  if (s.name) streetNames.add(s.name);
+  let w, pave, kind;
+  if (s.cls === 'trunk' || s.cls === 'primary') { w = 11; pave = 3.4; kind = 'main'; }
+  else if (s.cls === 'secondary') { w = 9; pave = 3.0; kind = 'main'; }
+  else if (s.cls === 'residential') {
+    if (s.name && LANE.test(s.name)) { w = 4.6; pave = 1.0; kind = 'lane'; }
+    else { w = 6.8; pave = 2.2; kind = 'street'; }
+  } else if (s.cls === 'service') {
+    if (!s.name) continue;
+    w = 4.2; pave = 0.6; kind = 'lane';
+  } else continue;
+  for (const c of clip(s.xz)) {
+    if (len(c) < 4) continue;
+    out.push({ n: s.name || '', c: s.cls, k: kind, w, p: pave, pts: c.map(([x, z]) => [r1(x), r1(z)]) });
+  }
+}
+// named courts and alleys that are footways today (most were alleys then too)
+for (const p of paths) {
+  if (!p.name || streetNames.has(p.name)) continue;
+  if (!/\b(Court|Alley|Passage|Place|Yard|Row|Buildings|Walk|Arcade)\b/.test(p.name)) continue;
+  for (const c of clip(p.xz)) {
+    if (len(c) < 6) continue;
+    out.push({ n: p.name, c: 'path', k: 'alley', w: 2.6, p: 0, pts: c.map(([x, z]) => [r1(x), r1(z)]) });
+  }
+}
+// distant massing: real footprints outside the window as oriented boxes
+// [x, z, hx, hz, rot, h], heights held to a Victorian skyline
+const blds = JSON.parse(fs.readFileSync(path.join(dir, 'buildings.json'))).buildings;
+const FAR = 900;
+const massing = [];
+for (const b of blds) {
+  const pts = b.outer;
+  let cx = 0, cz = 0;
+  for (const [x, z] of pts) { cx += x; cz += z; }
+  cx /= pts.length; cz /= pts.length;
+  if (inside([cx, cz], -8)) continue;
+  if (cx < W[0] - FAR || cx > W[2] + FAR || cz < W[1] - FAR || cz > W[3] + FAR) continue;
+  // principal axis from the longest edge
+  let best = 0, rot = 0;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const dx = pts[i + 1][0] - pts[i][0], dz = pts[i + 1][1] - pts[i][1];
+    const l = Math.hypot(dx, dz);
+    if (l > best) { best = l; rot = Math.atan2(-dz, dx); }
+  }
+  const c = Math.cos(rot), s = Math.sin(rot);
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+  for (const [x, z] of pts) {
+    const dx = x - cx, dz = z - cz;
+    const lx = dx * c - dz * s, lz = dx * s + dz * c;
+    x0 = Math.min(x0, lx); x1 = Math.max(x1, lx); z0 = Math.min(z0, lz); z1 = Math.max(z1, lz);
+  }
+  const hx = (x1 - x0) / 2, hz = (z1 - z0) / 2;
+  if (hx * hz < 12) continue;
+  const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+  const wx = cx + mx * c + mz * s, wz = cz - mx * s + mz * c;
+  const h = Math.max(8, Math.min(26, b.h || 12));
+  massing.push([r1(wx), r1(wz), r1(hx), r1(hz), Math.round(rot * 1000) / 1000, r1(h)]);
+}
+out.push({ n: 'Trafalgar Square', c: 'primary', k: 'main', w: 10, p: 3.4, pts: [[-78, -62], [-40, -70], [0, -78], [44, -88]] });
+const parks = (areas.park || []).filter((a) => a.outer.some((q) => inside(q))).map((a) => ({ n: a.name || '', poly: a.outer.map(([x, z]) => [r1(x), r1(z)]) }));
+const data = { window: W, streets: out, parks, massing, licence: 'Street geometry (c) OpenStreetMap contributors, ODbL 1.0' };
+const file = path.join(root, 'src/world/town/london_data.js');
+fs.writeFileSync(file, '// Generated by tools/osm_plan.mjs. ' + data.licence + '\nexport default ' + JSON.stringify(data) + ';\n');
+const counts = {};
+for (const s of out) counts[s.k] = (counts[s.k] || 0) + 1;
+console.log('streets', out.length, counts, 'parks', parks.length, 'massing', massing.length, (fs.statSync(file).size / 1024).toFixed(0) + ' KB');

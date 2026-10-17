@@ -1,0 +1,7 @@
+node_modules/
+assets/models_opt/
+assets.js
+tools/sandbox/out.js
+tools/townlab/out.js
+tools/townlab/out2.js
+__pycache__/
