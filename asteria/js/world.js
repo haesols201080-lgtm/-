@@ -265,7 +265,7 @@ function shrine(m, x, z, i) {
 function pillarBeam(m, x, z, color, flagFixed, flagOff, flicker) {
   const y = wy(m, x, z);
   const mt = beamMat(color);
-  const b = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 4, 520, 12, 1, true), mt);
+  const b = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 2.6, 520, 12, 1, true), mt);
   b.position.set(x, y + 260, z);
   b.renderOrder = 8;
   m.group.add(b);

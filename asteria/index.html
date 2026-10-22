@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>아스테리아 1부</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Nanum+Pen+Script&display=swap">
@@ -28,7 +27,8 @@
 }
 html, body { height: 100%; margin: 0; background: var(--night); color: var(--ink); font-family: var(--font-ui); overflow: hidden; overscroll-behavior: none; }
 body { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
-#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: var(--night); }
+#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: var(--night); }
+#hud { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; }
 button { font-family: var(--font-ui); cursor: pointer; }
 button:focus-visible { outline: 2px solid var(--ley); outline-offset: 2px; }
 [hidden] { display: none !important; }
@@ -42,7 +42,7 @@ button:focus-visible { outline: 2px solid var(--ley); outline-offset: 2px; }
 #banner { position: fixed; left: 50%; top: 28%; transform: translateX(-50%); font-family: var(--font-story); font-weight: 700; font-size: clamp(22px, 5vw, 40px); letter-spacing: 0.08em; color: var(--ink); text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6); opacity: 0; pointer-events: none; white-space: nowrap; }
 #banner.on { animation: banner 3.4s ease forwards; }
 @keyframes banner { 0% { opacity: 0; letter-spacing: 0.3em; } 15% { opacity: 1; letter-spacing: 0.08em; } 75% { opacity: 1; } 100% { opacity: 0; } }
-#caption { position: fixed; left: 50%; bottom: 22%; transform: translateX(-50%); width: min(88vw, 640px); text-align: center; font-family: var(--font-story); font-size: clamp(16px, 2.6vw, 21px); line-height: 1.6; color: var(--ink); text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8); opacity: 0; transition: opacity .5s; pointer-events: none; text-wrap: balance; }
+#caption { position: fixed; left: 50%; bottom: 22%; transform: translateX(-50%); width: min(88vw, 640px); box-sizing: border-box; padding: 10px 18px; border-radius: 12px; background: rgba(16, 14, 34, 0.62); text-align: center; font-family: var(--font-story); font-size: clamp(16px, 2.6vw, 21px); line-height: 1.6; color: var(--ink); text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8); opacity: 0; transition: opacity .5s; pointer-events: none; text-wrap: balance; }
 #caption.on { opacity: 1; }
 #prompt { position: fixed; left: 0; top: 0; background: rgba(23, 21, 46, 0.86); color: var(--ink); font-size: 12px; padding: 4px 10px; border-radius: 999px; pointer-events: none; white-space: nowrap; border: 1px solid rgba(255, 255, 255, 0.15); }
 #prompt b { color: var(--brass); margin-right: 4px; }
@@ -133,7 +133,7 @@ button:focus-visible { outline: 2px solid var(--ley); outline-offset: 2px; }
 .tb.sm { width: 48px; height: 48px; font-size: 11px; }
 
 /* 타이틀 */
-#title { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px; overflow: auto; }
+#title { background: radial-gradient(ellipse at 50% 45%, rgba(12,10,30,0.62) 0%, rgba(12,10,30,0.25) 55%, rgba(12,10,30,0) 80%); position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px; overflow: auto; }
 #title .eyebrow { font-size: 13px; letter-spacing: 0.3em; color: var(--ley); }
 #title h1 { font-family: var(--font-story); font-weight: 700; font-size: clamp(44px, 11vw, 96px); margin: 0; letter-spacing: 0.06em; line-height: 1.05; text-shadow: 0 4px 40px rgba(127, 240, 255, 0.35); text-wrap: balance; }
 #title .sub { font-family: var(--font-story); font-size: clamp(16px, 3.4vw, 22px); color: var(--ink); margin: 0 0 18px; }
@@ -143,6 +143,17 @@ button:focus-visible { outline: 2px solid var(--ley); outline-offset: 2px; }
 #help, #confirmNew { width: min(100%, 460px); background: var(--panel); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px; padding: 14px 18px; text-align: left; }
 #confirmNew p { margin: 0 0 12px; font-size: 14px; line-height: 1.6; }
 #confirmNew .acts { justify-content: flex-end; }
+
+/* 로딩 */
+#loading { position: fixed; inset: 0; z-index: 50; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(ellipse at 50% 60%, #2a2454 0%, #120f26 60%, #08070f 100%); transition: opacity .6s; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); text-align: center; }
+#loading.out { opacity: 0; pointer-events: none; }
+#loading .lring { width: 120px; height: 120px; border-radius: 50%; border: 2px solid rgba(127, 240, 255, 0.5); position: relative; animation: spin 6s linear infinite; box-shadow: 0 0 40px rgba(127, 240, 255, 0.25), inset 0 0 30px rgba(127, 240, 255, 0.2); }
+#loading .lring::before, #loading .lring::after { content: ''; position: absolute; inset: 14px; border-radius: 50%; border: 1px dashed rgba(127, 240, 255, 0.6); }
+#loading .lring::after { inset: 34px; border: 2px solid rgba(200, 160, 255, 0.6); animation: spin 3s linear infinite reverse; }
+@keyframes spin { to { transform: rotate(360deg); } }
+#loading .lname { font-family: var(--font-story); font-weight: 700; font-size: clamp(26px, 6vw, 44px); letter-spacing: 0.08em; }
+#loading .lsub { font-size: 13px; letter-spacing: 0.2em; color: var(--ley); min-height: 1em; }
+#loading .ltip { max-width: 30em; font-size: 13px; color: var(--ink-dim); line-height: 1.6; margin-top: 18px; }
 
 /* 엔딩 */
 #ending { position: fixed; inset: 0; background: var(--night); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px; overflow: auto; text-align: center; }
@@ -165,8 +176,10 @@ button:focus-visible { outline: 2px solid var(--ley); outline-offset: 2px; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="아스테리아 1부 게임 화면"></canvas>
+<canvas id="gl" aria-label="아스테리아 1부 게임 화면"></canvas>
+<canvas id="hud"></canvas>
 
+<div id="loading"><div class="lring"></div><div class="lname">아스테리아</div><div class="lsub">대륙을 그리는 중</div><div class="ltip"></div></div>
 <div id="obj" hidden></div>
 <div id="toasts" aria-live="polite"></div>
 <div id="banner"></div>
@@ -207,11 +220,12 @@ button:focus-visible { outline: 2px solid var(--ley); outline-offset: 2px; }
   <div id="joy"><div id="joyKnob"></div></div>
   <div class="tbtns">
     <button class="tb big" data-btn="attack" style="right:0;bottom:36px" type="button">공격</button>
-    <button class="tb" data-btn="act" style="right:84px;bottom:0" type="button">행동</button>
-    <button class="tb" data-btn="rune" style="right:84px;bottom:72px" type="button">룬</button>
-    <button class="tb sm" data-btn="glide" style="right:14px;bottom:118px" type="button">활공</button>
-    <button class="tb sm" data-btn="run" style="right:154px;bottom:44px" type="button">달리기</button>
-    <button class="tb sm" data-btn="runeNext" style="right:150px;bottom:108px" type="button">룬 바꿈</button>
+    <button class="tb" data-btn="cast" style="right:80px;bottom:96px" type="button">마법</button>
+    <button class="tb" data-btn="jump" style="right:84px;bottom:0" type="button">점프</button>
+    <button class="tb sm" data-btn="act" style="right:6px;bottom:120px" type="button">행동</button>
+    <button class="tb sm" data-btn="rune" style="right:154px;bottom:52px" type="button">룬</button>
+    <button class="tb sm" data-btn="runeNext" style="right:156px;bottom:112px" type="button">룬 바꿈</button>
+    <button class="tb sm" data-btn="run" style="right:150px;bottom:-6px" type="button">달리기</button>
   </div>
 </div>
 
@@ -231,25 +245,30 @@ button:focus-visible { outline: 2px solid var(--ley); outline-offset: 2px; }
 </div>
 
 <div id="helpText" hidden>
-  <h4>키보드</h4>
+  <h4>키보드와 마우스</h4>
   <div class="keys">
-    <kbd>WASD · 방향키</kbd><span>이동</span>
+    <kbd>WASD</kbd><span>이동</span>
+    <kbd>마우스 · 방향키</kbd><span>카메라 (화면을 클릭하면 마우스가 고정된다. Esc로 풀린다)</span>
     <kbd>Shift</kbd><span>달리기 (스태미나)</span>
-    <kbd>Space · J</kbd><span>공격</span>
-    <kbd>E · Enter</kbd><span>말 걸기, 줍기, 오르기, 대화 넘기기</span>
-    <kbd>Q</kbd><span>룬 쓰기</span>
+    <kbd>Space</kbd><span>점프 · 공중에서 한 번 더 누르면 활공</span>
+    <kbd>왼쪽 클릭 · J</kbd><span>근접 공격 (무기)</span>
+    <kbd>오른쪽 클릭 · K</kbd><span>공명봉 마법탄 · 길게 눌렀다 떼면 공명파</span>
+    <kbd>Q</kbd><span>룬 쓰기 (카메라로 겨눈다)</span>
     <kbd>1 2 3 4 · R</kbd><span>룬 고르기 (인력 · 정체 · 결빙 · 파열)</span>
-    <kbd>F</kbd><span>활공 (높은 곳에서)</span>
+    <kbd>E</kbd><span>말 걸기, 줍기, 대화 넘기기</span>
+    <kbd>벽으로 계속 걷기</kbd><span>벽 오르기 · 오르는 중 Space로 뛰어오르기 · F로 뛰어내리기</span>
+    <kbd>휠</kbd><span>카메라 거리 · 인력 룬으로 붙든 물건 거리</span>
     <kbd>H</kbd><span>가장 좋은 음식 바로 먹기</span>
     <kbd>Tab · I</kbd><span>가방 · 무기 · 일지 · 편지</span>
     <kbd>M</kbd><span>지도</span>
   </div>
+  <h4>마법</h4>
+  <p>마법과 룬은 마력(하트 아래 푸른 막대)을 쓴다. 빛나는 지맥 위에 서 있으면 마력이 빠르게 찬다. 마력꽃을 먹거나 요리에 넣어도 찬다.</p>
+  <p>룬을 새긴 무기는 불꽃 · 서리 · 번개 · 바람의 힘을 띤다. 무기의 마력이 다하면 부서진다.</p>
   <h4>알아두면 좋은 것</h4>
-  <p>절벽, 서가, 담쟁이는 오를 수 있다. 오르고 달리고 헤엄치고 활공하면 스태미나가 닳는다.</p>
-  <p>추우면 오른쪽 위 온도계가 파래지고 하트가 깎인다. 모닥불 곁, 매콤한 요리, 털 외투로 버틴다.</p>
-  <p>모닥불과 화로에서 재료를 세 개까지 넣어 요리한다. 불꽃고추는 몸을 데우고, 기운버섯은 숨을 고르게 한다.</p>
-  <p>공명석은 가장 가까운 기관 쪽을 가리킨다. 가까울수록 화면 테두리가 빨리 뛴다.</p>
-  <p>관측탑에 오르면 그 주변 지도가 밝혀진다. 봉인 실험실의 공명 결정 네 개로 하트나 스태미나를 늘린다.</p>
+  <p>절벽과 건물 벽은 어디든 오를 수 있다. 던전의 매끈한 벽은 오를 수 없다. 높은 데서 떨어지면 다치니 활공하자.</p>
+  <p>추우면 온도계가 파래지고 하트가 깎인다. 모닥불 곁, 매콤한 요리, 털 외투로 버틴다. 모닥불 위로 활공하면 더운 바람을 탄다.</p>
+  <p>공명석은 가장 가까운 기관 쪽을 가리킨다. 가까울수록 화면 테두리가 빨리 뛴다. 관측탑 꼭대기에 오르면 주변 지도가 그려진다.</p>
   <p>진행은 이 브라우저에 자동으로 저장된다.</p>
   <p><button type="button" class="sndBtn" style="background:transparent;color:var(--ink);border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:6px 10px">소리 끄기</button></p>
 </div>
@@ -268,9 +287,16 @@ button:focus-visible { outline: 2px solid var(--ley); outline-offset: 2px; }
 <script>
   document.getElementById('help').innerHTML = document.getElementById('helpText').innerHTML;
 </script>
+<script src="vendor/three.min.js"></script>
+<script src="vendor/three-post.js"></script>
 <script src="js/core.js"></script>
-<script src="js/entities.js"></script>
-<script src="js/maps.js"></script>
+<script src="js/gfx.js"></script>
+<script src="js/field.js"></script>
+<script src="js/world.js"></script>
+<script src="js/actors.js"></script>
+<script src="js/magic.js"></script>
+<script src="js/areas.js"></script>
+<script src="js/scene.js"></script>
 <script src="js/story.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/main.js"></script>

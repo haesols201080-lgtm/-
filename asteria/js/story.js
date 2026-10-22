@@ -14,13 +14,15 @@ const RUNES = {
 };
 const WEAPONS = {
   stick: { name: '나뭇가지', dmg: 2, dur: 10, c: '#a87a4a' },
+  emberBlade: { name: '불씨 단검', dmg: 3, dur: 18, c: '#ff8a3a', elem: 'fire' },
+  frostSpear: { name: '서리 창', dmg: 4, dur: 22, c: '#bfe8ff', elem: 'frost', reach: 2.8 },
   wood: { name: '연습용 목검', dmg: 2, dur: 20, c: '#d8b080' },
   brass: { name: '놋쇠 단검', dmg: 3, dur: 22, c: '#d8b040' },
-  runeSword: { name: '룬 장검', dmg: 5, dur: 26, c: '#7ff0ff' },
+  runeSword: { name: '룬 장검', dmg: 5, dur: 26, c: '#7ff0ff', elem: 'shock' },
   pick: { name: '광부 곡괭이', dmg: 4, dur: 24, c: '#9a9aa8' },
-  saltSpear: { name: '소금 창', dmg: 4, dur: 28, c: '#eef6ff' },
-  leafblade: { name: '낙엽 검', dmg: 4, dur: 30, c: '#ffb35a' },
-  ancient: { name: '고대 룬검', dmg: 7, dur: 40, c: '#c0b0ff' },
+  saltSpear: { name: '소금 창', dmg: 4, dur: 28, c: '#eef6ff', elem: 'frost', reach: 2.8 },
+  leafblade: { name: '낙엽 검', dmg: 4, dur: 30, c: '#ffb35a', elem: 'wind' },
+  ancient: { name: '고대 룬검', dmg: 7, dur: 40, c: '#c0b0ff', elem: 'fire' },
 };
 const ITEMS = {
   carrot: { name: '당근', heal: 2, ing: true },
@@ -36,6 +38,7 @@ const ITEMS = {
   dust: { name: '잔향 가루', heal: 0, ing: true, desc: '잔향이 흩어진 자리에 남는 반짝이는 가루' },
   bread: { name: '빵', heal: 6, ing: true },
   candy: { name: '온기 사탕', heal: 1, warm: 100, ing: true, desc: '미라의 특제. 맛은 묻지 말 것' },
+  manabloom: { name: '마력꽃', heal: 1, mana: 40, ing: true, desc: '지맥 근처에 피는 꽃. 먹으면 마력이 찬다' },
   crystal: { name: '공명 결정', desc: '응축된 지맥 마력' },
   torch: { name: '횃불' },
 };
@@ -147,13 +150,13 @@ async function letterPair(n) {
 function learnRune(k, ped) {
   runScript(async () => {
     G.runes[k] = true; G.rune = k;
-    sfx('chime'); burst(ped.x, ped.y - 0.4, 24, RUNES[k].c, 3, 0.8);
+    sfx('chime'); FX.burst(ped.x, ped.y + 1.7, ped.z, 50, COL(RUNES[k].c).getHex(), 6, 1, 0.25); G.flash = { c: COL(RUNES[k].c).getHex(), k: 4, t: 0.4, x: ped.x, y: ped.y + 2, z: ped.z };
     await UI.paperShow(`${RUNES[k].name} 룬`, RUNES[k].desc + `\n\n선택: 숫자 ${Object.keys(RUNES).indexOf(k) + 1} 또는 R · 사용: Q`);
     if (G.map.id === 'under') {
       if (k === 'magnes') await say('렌', '문이 닫혔다! 저 철 상자를 누름판에 올려야 열리나 보다.');
       if (k === 'stasis') await say('렌', '칼날이 돌기 시작했어. 정체 룬으로 잠깐 멈추면 지나갈 수 있겠다.');
-      if (k === 'cryo') { for (let y = 6; y <= 8; y++) for (let x = 29; x <= 38; x++) S(G.map, x, y, T.DEEP); G.shake = 0.4; sfx('rumble'); await say('렌', '바닥에서 물이 솟았다! 얼음 발판을 만들어 건너자.'); }
-      if (k === 'burst') { for (let x = 42; x <= 51; x++) S(G.map, x, 8, T.CRACK); G.shake = 0.5; sfx('break'); await say('렌', '천장이 무너졌어! 금 간 돌은 파열 룬으로 부술 수 있다.'); }
+      if (k === 'cryo') { for (let y = 6; y <= 8; y++) for (let x = 29; x <= 38; x++) setCell(G.map, x, y, T.DEEP); G.shake = 0.4; sfx('rumble'); await say('렌', '바닥에서 물이 솟았다! 얼음 발판을 만들어 건너자.'); }
+      if (k === 'burst') { for (let x = 42; x <= 51; x++) setCell(G.map, x, 8, T.CRACK); G.shake = 0.5; sfx('break'); await say('렌', '천장이 무너졌어! 금 간 돌은 파열 룬으로 부술 수 있다.'); }
       const n = Object.keys(G.runes).length;
       if (n === 4) { toast('룬 네 개를 모두 얻었다 · 기관실 앞방의 봉인이 열린다'); setObj('메아리 식당 아래의 기관실 앞방으로'); }
       else setObj(`봉인 실험실에서 룬 얻기 (${n} / 4)`);
@@ -164,7 +167,7 @@ function learnRune(k, ped) {
 // ---------- 파이프 (4장) ----------
 function updatePipes() {
   const m = G.map; const at = {};
-  for (const e of m.ents) if (e.type === 'pipe') { e.flow = false; at[Math.floor(e.x) + ',' + Math.floor(e.y)] = e; }
+  for (const e of m.ents) if (e.type === 'pipe') { e.flow = false; at[e.gx + ',' + e.gy] = e; }
   const start = at['47,6'];
   if (!start) return;
   const has = (e, dx, dy) => pipeDirs(e).some(([a, b]) => a === dx && b === dy);
@@ -173,7 +176,7 @@ function updatePipes() {
   while (q.length) {
     const e = q.shift();
     for (const [dx, dy] of pipeDirs(e)) {
-      const n = at[(Math.floor(e.x) + dx) + ',' + (Math.floor(e.y) + dy)];
+      const n = at[(e.gx + dx) + ',' + (e.gy + dy)];
       if (n && !n.flow && has(n, -dx, -dy)) { n.flow = true; q.push(n); }
     }
   }
@@ -194,7 +197,7 @@ function floodgateOpen(e) {
   e.opened = true; e.solid = false; markDone(e.id);
   G.f.rescued = (G.f.rescued || 0) + 8;
   sfx('open'); G.shake = 0.3;
-  for (let i = 0; i < 30; i++) Parts.push({ x: e.x + rand(-0.5, 0.5), y: e.y + 0.5, vx: rand(-1, 1), vy: rand(2, 5), life: 0.8, max: 0.8, c: '#6fb6dd', size: 3, g: 4 });
+  FX.burst(e.x, e.y + 1, e.z + 0.6, 50, 0x6fb6dd, 5, 1, 0.3, { add: false, grav: 9 });
   toast(`수문이 열렸다 · 아래 갱도의 물이 빠진다 (${G.f.rescued}명)`);
   if (G.map.ents.filter(o => o.type === 'floodgate' && o.opened).length >= 5) TALK.manualEnd();
   return true;
@@ -203,7 +206,7 @@ function floodgateOpen(e) {
 // ---------- 사슬 (5장) ----------
 function chainCut(e) {
   sfx('chain'); G.shake = 0.3;
-  burst(e.x, e.y, 20, '#7ff0ff', 4, 0.8);
+  FX.burst(e.x, e.y + 1.3, e.z, 40, 0x7ff0ff, 6, 0.9, 0.25);
   G.f.chainsLeft--;
   G.map.dim = (6 - G.f.chainsLeft) * 0.1;
   toast(`고원의 불빛이 하나 꺼졌다 (${G.f.chainsLeft} / 6)`);
@@ -213,7 +216,7 @@ function readStele(e) {
   runScript(async () => {
     const s = STELES[e.idx];
     const first = !e.read;
-    if (first) { e.read = true; G.f.steles = (G.f.steles || 0) + 1; G.f.transl = true; sfx('rune'); burst(e.x, e.y - 0.4, 14, '#7ff0ff', 2, 0.6); }
+    if (first) { e.read = true; G.f.steles = (G.f.steles || 0) + 1; G.f.transl = true; sfx('rune'); FX.burst(e.x, e.y + 2, e.z, 30, 0xc0b0ff, 4, 0.8, 0.2); }
     await UI.paperShow('프리마의 비문', s.an, 'stone');
     for (const l of s.ren) await say('렌', l);
     if (first && G.f.steles >= 4) {
@@ -235,22 +238,26 @@ const TALK = {
   // ---------------- 1장 ----------------
   async opening() {
     G.f.hideHud = true; G.noSave = true;
-    G.camT = { x: 32, y: 24 };
-    G.cam.x = 32 * TS; G.cam.y = 18 * TS;
     G.fade = 1; G.fadeTo = 0;
-    await caption('아스테리아. 마력의 지맥이 땅 밑을 혈관처럼 흐르는 대륙.', 3.4);
-    await caption('맑은 봄날 아침, 학원 도시 칼리도르.', 2.8);
-    G.camT = { x: 14, y: 8 };
-    await caption('책들이 새떼처럼 서고 사이를 날아다니고,', 2.8);
-    G.camT = { x: 32, y: 26 };
-    await caption('견습생이 실수로 띄운 물방울 고래가 광장 위를 헤엄친다.', 3.4);
-    G.camT = { x: 8, y: 34 };
-    await wait(1.4);
+    cineShot(64 + 30, 22, 52 + 40, 64, 6, 52);
+    await caption('아스테리아. 마력의 지맥이 땅 밑을 혈관처럼 흐르는 대륙.', 3.6);
+    cineShot(64 - 26, 9, 46, 64, 10, 52);
+    await caption('맑은 봄날 아침, 학원 도시 칼리도르.', 3);
+    cineShot(16, 12, 44, 28, 9, 30);
+    await caption('책들이 새떼처럼 서고 사이를 날아다니고,', 3);
+    cineShot(70, 12, 66, 64, 11, 52);
+    await caption('견습생이 실수로 띄운 물방울 고래가 광장 위를 헤엄친다.', 3.6);
+    G.fadeTo = 1; await wait(0.6);
+    cineOff();
+    await showLoading('기숙사', '');
+    enterMap('dorm', 4, 5); CAM.yaw = Math.PI * 0.85;
+    hideLoading(); G.fadeTo = 0;
+    await wait(0.8);
     await say('렌', '…으음. 몇 시지?');
     await say('렌', '큰일이다! 늦잠이야! 필사본을 오늘 아침까지 기록보관소에 내야 하는데!');
-    G.camT = null; G.f.hideHud = false; G.noSave = false;
-    setObj('필사본을 기록보관소의 베르타에게 전하기');
-    toast(UI.touch ? '왼쪽 원으로 움직이고, 오른쪽 버튼으로 행동한다' : '이동: WASD · 달리기: Shift · 말 걸기: E · 메뉴: Tab');
+    G.f.hideHud = false; G.noSave = false;
+    setObj('필사본을 기록보관소의 베르타에게 전하기 · 기숙사를 나가 북쪽으로');
+    toast(UI.touch ? '왼쪽 원으로 움직이고, 오른쪽을 끌어 카메라를 돌린다' : '이동 WASD · 카메라 마우스 · 점프 Space · 말 걸기 E · 메뉴 Tab');
     saveGame();
   },
   berta(e) {
@@ -396,6 +403,7 @@ const TALK = {
       await say('의장 알드릭', '연구원 렌 아르덴이군. 오스윈이 자네 얘기를 자주 하지. 번역이 깔끔하다고.');
     });
   },
+  councilor(e) { runScript(async () => { await say('평의원 소냐', G.f.council ? '원정대 명단은 저기 책상 위에 있다. 다들 젊지. 현장이란 그런 곳이니까.' : '떨림 이후로 서류가 세 배가 됐어. 기관 정비 기록은 마기스터 이상만 볼 수 있다네.'); }); },
   tailor(e) {
     runScript(async () => {
       await say('재봉사 넬', '원정 가는 연구원이지? 북쪽은 털 외투 없이는 못 버텨. 둘러봐.');
@@ -411,7 +419,7 @@ const TALK = {
   sleep() {
     runScript(async () => {
       const i = await choose('침대에 누울까?', ['잔다', '아직']);
-      if (i) { P.y -= 1.2; return; }
+      if (i) { P.z += 2.5; return; }
       G.fadeTo = 1; await wait(0.8);
       G.time = 7 * 60; G.f.slept = true; G.f.ch1ready = true;
       await caption('원정 첫날 아침.', 2);
@@ -431,14 +439,14 @@ const TALK = {
     sfx('rumble'); G.shake = 1.4;
     await wait(1.4);
     G.f.tremor = true;
-    burst(P.x, P.y, 20, '#fff', 3, 1);
+    FX.burst(P.x, P.y + 1, P.z, 30, 0xffffff, 4, 1, 0.2);
     await say('렌', '…방금 등불이 숨을 쉰 것 같았는데.');
     await say('렌', '발밑 깊은 곳에서 울렸어. 기관 쪽이다.');
-    G.camT = { x: 32, y: 24 }; await wait(1.4);
+    if (G.map.id === 'kalidor') { cineShot(76, 9, 66, 64, 3, 52); await wait(1.2); }
     await caption('광장 분수가 솟은 모양 그대로 얼어붙었다.', 2.6);
-    G.camT = { x: 50, y: 9 }; await wait(1.2);
+    if (G.map.id === 'kalidor') { cineShot(102, 30, 62, 102, 12, 20); await wait(1.0); }
     await caption('대강당 돔 안으로 눈이 내린다.', 2.4);
-    G.camT = null;
+    cineOff();
     await say('견습생 도린', '눈이다! 대강당 안에 눈이 와!');
     await say('견습생 율', '분수 좀 봐. 저거 만져도 돼?');
     await say('렌', '다들 무서워하기보다 어리둥절한 얼굴이네. …핍은 어디 있지?');
@@ -446,31 +454,31 @@ const TALK = {
     toast('기온이 떨어졌다 · 오른쪽 위 온도계를 보자');
   },
   async oswinOrder() {
-    const os = spawn('npc', P.x + 3, P.y + 1, { exact: true, name: '오스윈', talk: 'oswin', look: OSWIN_LOOK, id: 'oswinTmp' });
+    const os = spawn('npc', P.x + 3, P.z + 1.5, { name: '오스윈', talk: 'oswin', look: OSWIN_LOOK, id: 'oswinTmp' });
     await say('오스윈', '렌! 다친 데는 없니? 핍도 괜찮고? …좋아, 다행이다.');
     await say('오스윈', '기관이 떨렸다. 학원 지하의 작은 기관 말이다. 이 도시를 데우는 녀석이지.');
     await say('오스윈', '나는 평의회에 먼저 다녀와야 한다. 그동안 지하 회랑에 내려가서 상태를 살펴 주겠니?');
     await say('오스윈', '봉인 실험실 네 곳에 룬이 있다. 네 공명봉에 반응할 거다. 중계탑 세 개를 다시 켜면 기관실 문이 열린다.');
     await say('오스윈', '기관실에는 혼자 들어가지 마라. 문이 열리면 나를 기다리렴.');
     await say('렌', '네! 연구실 계단으로 내려갈게요.');
-    os.dead = true; burst(os.x, os.y, 8, '#c8b8ff', 2, 0.4);
+    os.dead = true; FX.burst(os.x, os.y + 1, os.z, 20, 0xc8b8ff, 3, 0.6, 0.2);
     G.f.toUnder = true; G.f.oswinInLab = false;
     setObj('오스윈 연구실의 계단으로 지하 회랑에 내려가기');
   },
   async engineRoom() {
     G.f.engineScene = true;
-    const os = spawn('npc', 28, 38, { exact: true, name: '오스윈', talk: 'oswin', look: OSWIN_LOOK, id: 'oswinUG' });
+    const os = spawn('npc', 56, 76, { name: '오스윈', talk: 'oswin', look: OSWIN_LOOK, id: 'oswinUG' });
     await say('오스윈', '렌! 중계탑을 전부 켰구나. 혼자서 해낸 거냐? …대단하다.');
     await say('오스윈', '여기서부터는 내가 들어가마. 기관실 안은 마력이 진해서 연구원은 오래 못 버틴다.');
     await say('오스윈', '기다리렴. 금방 나올 테니.');
-    for (let i = 0; i < 40; i++) { os.y += 0.15; os.x = lerp(os.x, 28, 0.1); await wait(0.03); }
+    for (let i = 0; i < 40; i++) { os.z += 0.3; os.x = lerp(os.x, 56, 0.1); os.yaw = 0; os.vx = 0; os.vz = 1; os.wander = 1; await wait(0.03); }
     os.dead = true; sfx('open');
     G.fadeTo = 0.6; await wait(1.2);
     await caption('렌은 문 앞에서 기다린다.', 2.2);
     await say('문 너머의 오스윈', '조금만 더 버텨주게. 곧 보낼 테니.', { cls: 'far' });
     await caption('기계에게 하는 말투가 아니다.', 2.2);
     G.fadeTo = 0; await wait(0.6);
-    const os2 = spawn('npc', 28, 44, { exact: true, name: '오스윈', talk: 'oswin', look: OSWIN_LOOK, id: 'oswinUG2' });
+    const os2 = spawn('npc', 56, 88, { name: '오스윈', talk: 'oswin', look: OSWIN_LOOK, id: 'oswinUG2' });
     const i = await choose('', ['누구랑 이야기하셨어요?', '(아무것도 묻지 않는다)']);
     if (i === 0) await say('오스윈', '(웃으며) 기관하고. 늙으면 대답 없는 것들에게 말이 많아져.');
     else await say('오스윈', '기다려 줘서 고맙다. 이제 괜찮을 거다.');
@@ -479,17 +487,17 @@ const TALK = {
     G.f.ch1engine = true; G.f.oswinInLab = false;
     enterMap('kalidor', 33, 31);
     G.rainbow = 1.6;
-    G.camT = { x: 32, y: 25 };
+    cineShot(64 + 18, 8, 52 + 22, 64, 7, 44);
     G.fadeTo = 0; await wait(1.0); G.fadeWhite = false;
     sfx('chime');
     await caption('온기가 돌아온다. 얼었던 분수가 다시 솟구치고, 광장에 무지개가 걸린다.', 3.6);
-    G.camT = null;
+    cineOff();
     await say('핍', '렌 형! 무지개야! 고래보다 커!');
     setObj('대강당의 평의회로');
   },
   async council() {
     G.f.council = true;
-    G.camT = { x: 50, y: 8 };
+    if (G.map.id === 'hall') cineShot(20, 6, 24, 19, 2, 8);
     await say('의장 알드릭', '떨림은 칼리도르만의 일이 아니었네. 대륙 곳곳의 기관이 꺼지거나 비틀렸다는 전갈이 왔어.');
     await say('의장 알드릭', '마르셀라, 엘름바텐, 그라벤호프. 비틀린 기관 셋을 고치지 못하면 이번 겨울을 넘기지 못하는 도시가 생긴다.');
     await say('의장 알드릭', '평의회는 정비 원정을 결정한다.');
@@ -497,7 +505,7 @@ const TALK = {
     await say('의장 알드릭', '2년 차를? …좋네. 현장은 젊은 몸이 버티지.');
     await say('렌', '제가… 원정대예요?');
     await say('오스윈', '쓸모 있는 사람이 되고 싶다고 했잖니. 이번이 그 기회다.');
-    G.camT = null;
+    cineOff();
     setObj('친구들에게 인사하고, 밤에 오스윈 연구실로');
     toast('친구들이 배웅 선물을 챙겨 두었다');
     G.f.oswinInLab = true;
@@ -519,18 +527,18 @@ const TALK = {
   },
   async towerTop(e) {
     e.lit = true; markDone(e.id);
-    revealFog(e.x, e.y, e.rad);
+    revealFog(e.x, e.z, e.rad);
     sfx('chime');
     if (!G.f.map) G.f.map = true;
     if (e.id === 'tw0' && !G.f.ch1done) {
       await say('렌', '높다…! 대륙이 전부 보여.');
-      G.camT = { x: 22, y: 77 }; await wait(1.6);
-      await caption('서쪽 해안, 마르셀라.', 1.8);
-      G.camT = { x: 178, y: 62 }; await wait(1.8);
-      await caption('동쪽 숲, 엘름바텐.', 1.8);
-      G.camT = { x: 106, y: 10 }; await wait(1.8);
-      await caption('북쪽 산, 그라벤호프.', 1.8);
-      G.camT = null; await wait(0.8);
+      const top = P.y + 3;
+      for (const [pl, cap] of [[PLACES.cathedral, '서쪽 해안, 마르셀라.'], [PLACES.clock, '동쪽 숲, 엘름바텐.'], [PLACES.mine, '북쪽 산, 그라벤호프.']]) {
+        const dx = pl[0] - P.x, dz = pl[1] - P.z, l = Math.hypot(dx, dz);
+        cineShot(P.x - dx / l * 6, top + 2, P.z - dz / l * 6, P.x + dx / l * 60, top + 18, P.z + dz / l * 60);
+        await wait(0.4); await caption(cap, 2.2);
+      }
+      cineOff(); await wait(0.6);
       await say('렌', '지평선 너머 기관들이 빛기둥처럼 솟아 있다. 몇 개는… 흐릿하게 깜빡이고 있어.');
       toast('지도가 밝혀졌다 · M');
       // 마지막 10초
@@ -567,12 +575,10 @@ const TALK = {
   },
   tick(dt) {
     if (G.mode !== 'play') return;
-    const ct = tileAt(Math.floor(P.x), Math.floor(P.y));
-    if (TD[ct].climb && !G.f.climbTip) { G.f.climbTip = true; toast('오르는 중 · 스태미나 바퀴가 다 닳으면 미끄러진다'); }
     // 2번째 기관: 기관실 출구의 회색 가면
     if (G.f.maskBeat && G.map.id === G.f.maskBeat && !G.lock) {
       const ex = G.map.ents.find(e => e.type === 'warp' && e.to === 'world');
-      if (ex && dist(ex.x, ex.y, P.x, P.y) < 7) { G.f.maskBeat = null; runScript(TALK.maskBeat); }
+      if (ex && dist(ex.x, ex.z, P.x, P.z) < 14) { G.f.maskBeat = null; runScript(TALK.maskBeat); }
     }
     // 수동 배수 제한 시간
     if (G.f.manualStart && !G.f.manualDone && G.t > G.f.manualEnd) TALK.manualEnd();
@@ -584,15 +590,15 @@ const TALK = {
   },
   async maskBeat() {
     const ex = G.map.ents.find(e => e.type === 'warp' && e.to === 'world');
-    const mk = spawn('npc', ex.x, ex.y - 2.5, { exact: true, name: '회색 가면', look: { cloak: '#5a5a62', body: '#7a7a82', skin: '#cfc8c0', hair: '#3a3a40', mask: '#9a9aa2' }, id: 'maskTmp' });
-    burst(mk.x, mk.y, 16, '#c0b0ff', 3, 0.6); sfx('rune');
+    const mk = spawn('npc', ex.x, ex.z - 5, { name: '회색 가면', look: { cloak: '#5a5a62', body: '#7a7a82', skin: '#cfc8c0', hair: '#3a3a40', mask: '#9a9aa2' }, id: 'maskTmp' });
+    FX.burst(mk.x, mk.y + 1, mk.z, 40, 0xc0b0ff, 4, 0.8, 0.25); sfx('rune');
     await say('회색 가면', '…또 하나를 재웠구나.');
     await say('렌', '누구세요? 학원에서 말하던… 떨림의 원인?');
     await say('회색 가면', '학원이 나를 그렇게 부르더냐.');
     await say('회색 가면', '그 돌. 목에 건 것. 그게 누구 맥박에 맞춰 뛰는지 생각해 본 적 있느냐.');
     await say('렌', '제 맥박이요. 선생님이 맞춰 주셨어요.');
     await say('회색 가면', '…그렇다면 조금 느리게 뛰겠지. 아직은.');
-    mk.dead = true; burst(mk.x, mk.y, 24, '#c0b0ff', 4, 0.8); sfx('boom');
+    mk.dead = true; FX.burst(mk.x, mk.y + 1, mk.z, 60, 0xc0b0ff, 6, 1, 0.3); sfx('boom');
     await say('렌', '…사라졌다.');
   },
   enter: {
@@ -607,7 +613,7 @@ const TALK = {
         const k = G.f.q.shift();
         if (TALK.queue[k]) await TALK.queue[k]();
       }
-      if (G.f.kassJoined && !G.f.maskDown && !G.map.ents.find(e => e.type === 'ally')) spawn('ally', P.x - 1, P.y, { exact: true, id: 'kassAlly' });
+      if (G.f.kassJoined && !G.f.maskDown && !G.map.ents.find(e => e.type === 'ally')) spawn('ally', P.x - 1.5, P.z, { id: 'kassAlly' });
     },
     async under() {
       if (!G.f.underTip) { G.f.underTip = true; await say('렌', '지하 회랑은 처음이다. 공기가 차가워.'); toast(UI.touch ? '공격 버튼으로 휘두른다' : '공격: Space · 상자를 열어 무기부터 챙기자'); setObj('봉인 실험실에서 룬 얻기 (0 / 4)'); }
@@ -623,7 +629,7 @@ const TALK = {
     },
     async prima() {
       if (G.f.kassJoined && !G.f.maskDown) {
-        const al = spawn('ally', P.x + 1, P.y, { exact: true, id: 'kassAlly2' });
+        const al = spawn('ally', P.x + 1.5, P.z, { id: 'kassAlly2' });
         const mk = G.map.ents.find(e => e.type === 'boss_mask');
         await say('회색 가면', '돌아가라.');
         await say('카시안', '학원이 말하던 떨림의 원인이야! 렌, 조심해!');
@@ -646,7 +652,7 @@ const TALK = {
       if (G.f.elm === 'full') {
         G.time = 17 * 60;
         await caption('숲에 석 달 치 비가 한 번에 쏟아지고, 낙엽이 일제히 떨어진다.', 3.4);
-        for (let i = 0; i < 120; i++) Parts.push({ x: P.x + rand(-12, 12), y: P.y + rand(-10, 4), vx: 0, vy: 14, life: 0.9, max: 0.9, c: '#bfe6ff', size: 2, g: 0 });
+        G.rain = 6;
         await wait(1.2);
         G.f.heddaGone = true;
         await caption('그날 밤, 헤다는 잠든 채 숨을 거두었다.', 3);
@@ -673,7 +679,7 @@ const TALK = {
     async letter2() { await letterPair(2); },
     async letter3() { await letterPair(3); },
     async kassian() {
-      const k = spawn('npc', P.x + 2.5, P.y + 0.5, { exact: true, name: '카시안', look: KASSIAN_LOOK, id: 'kassMeet' });
+      const k = spawn('npc', P.x + 3, P.z + 1.5, { name: '카시안', look: KASSIAN_LOOK, id: 'kassMeet' });
       await say('카시안', '렌! 렌 아르덴! 대륙 한복판에서 다 보네.');
       await say('카시안', '내 원정대는 저 아래 갈림길에서 쉬는 중이야. 너도 기관 하나 고쳤다며? 역시.');
       await say('카시안', '나? 우리 집안 이름을 다시 세우려면 이 정도는 해야지. 벨 가문의 셋째 아들이 대륙을 데웠다. 멋지잖아?');
@@ -681,7 +687,7 @@ const TALK = {
       await say('렌', '내 것도 그래. 내 맥보다 조금 느리게.');
       await say('카시안', '그치? 둘이 똑같으니 고장은 아니겠지. 자, 불꽃고추. 북쪽 가면 필요할 거야. 얼어 죽지 마!');
       give('pepper', 2);
-      for (let i = 0; i < 30; i++) { k.x += 0.25; await wait(0.03); }
+      for (let i = 0; i < 40; i++) { k.x += 0.35; k.yaw = Math.PI / 2; k.vx = 1; k.wander = 1; await wait(0.03); }
       k.dead = true;
     },
     async summons() {
@@ -709,7 +715,7 @@ const TALK = {
       await say('카시안', '같이 가자. 고원은 혼자 오르기엔 너무 추워.');
       await say('렌', '응. 같이 가자.');
       G.f.kassJoined = true;
-      spawn('ally', e.x, e.y, { exact: true, id: 'kassAlly' });
+      spawn('ally', e.x, e.z, { id: 'kassAlly' });
       toast('카시안이 함께 간다');
       setObj('카시안과 함께 고원에 올라 프리마로 · 끊어진 다리는 활공으로');
       if (!G.f.furcoat && G.warmT <= 0) await say('카시안', '털 외투 없어? 그럼 매콤한 거라도 먹고 올라가. 고원은 정말 추워.');
@@ -916,7 +922,7 @@ const TALK = {
   // ---------------- 5장 ----------------
   async chamber() {
     G.f.chamber = true;
-    G.camT = { x: 20, y: 5 };
+    cineShot(40, 5.2, 24, 40, 2.4, 8);
     await caption('가장 깊은 방은 예배당처럼 생겼다. 가운데에 놋쇠와 룬으로 된 의자가 있다.', 3.4);
     await caption('의자에는 아주 늙은 사람이 기관과 하나로 엮여 앉아 있다. 프리마의 첫 마법사다.', 3.6);
     await say('첫 마법사', '…드디어 교대가 왔구나.');
@@ -930,7 +936,7 @@ const TALK = {
     await say('공명석 너머의 오스윈', '미안하다, 렌. 네가 아니면 서쪽 세 도시가 이번 겨울을 넘기지 못한다.', { cls: 'far' });
     await say('렌', '선생님…?');
     await caption('대답은 없다.', 1.8);
-    G.camT = null;
+    cineOff();
     const i = await choose('', ['앉는다', '앉지 않는다']);
     if (i === 0) await TALK.sit();
     else {
@@ -969,7 +975,7 @@ const TALK = {
             await say('카시안', '렌! 렌, 정신 차려!', { cls: 'far' });
             G.fadeTo = 0; await wait(0.8); G.fadeWhite = false;
             await caption('끝나기 직전, 카시안이 렌을 의자에서 끌어냈다.', 2.8);
-            const k = spawn('npc', P.x + 1.2, P.y, { exact: true, name: '카시안', look: KASSIAN_LOOK, id: 'kassIn' });
+            const k = spawn('npc', P.x + 1.4, P.z, { name: '카시안', look: KASSIAN_LOOK, id: 'kassIn' });
             await say('카시안', '…들었어. 전부. 공명석 소리도, 교수님 목소리도.');
             await say('카시안', '내 공명석도 같은 소리를 내. 이게 무슨 뜻인지… 나중에 이야기하자. 지금은 아니야.');
             G.f.sat = true;
@@ -987,22 +993,30 @@ const TALK = {
     await say('첫 마법사', '고맙다.');
     await say('첫 마법사', '…따뜻했다. 아주 오랫동안.');
     G.f.mageGone = true;
-    burst(20, 4.5, 40, '#7ff0ff', 3, 1.4);
+    FX.burst(40, 3, 9, 120, 0x7ff0ff, 6, 2, 0.3, { lift: 2 });
     await wait(1);
     G.f.primaStop = true;
     await caption('프리마가 멈춘다.', 2.6);
     G.fadeTo = 1; await wait(1);
-    enterMap('world', 46, 42);
+    await showLoading('알테라 고원', '');
+    const [rx, rz] = M_(38, 40.5);
+    enterMap('world', rx, rz, true);
+    hideLoading();
     G.f.stoneSilent = true;
     G.time = 18 * 60 + 30;
-    G.camT = { x: 30, y: 52 };
+    const ry = G.map.ground(rx, rz);
+    cineShot(rx + 4, ry + 10, rz - 6, PLACES.brig[0], ry - 10, PLACES.brig[1]);
     G.fadeTo = 0; await wait(1.2);
     await caption('렌이 고원 밖으로 나오자, 서쪽 하늘 아래 세 도시의 불빛이 보인다.', 3.2);
-    for (const k of ['seilen', 'brig', 'orta']) { G.camT = { x: PLACES[k][0], y: PLACES[k][1] }; await wait(1.2); G.f['dark_' + k] = true; sfx('beat2'); await wait(0.8); }
+    for (const k of ['seilen', 'brig', 'orta']) { cineShot(rx + 4, ry + 10, rz - 6, PLACES[k][0], ry - 14, PLACES[k][1]); await wait(1.4); G.f['dark_' + k] = true; sfx('beat2'); await wait(0.9); }
     G.f.westDark = true;
     await caption('불빛이 차례로 꺼졌다. 서부의 온도가 영구히 떨어진다.', 3.2);
-    G.camT = null;
-    enterMap('world', PLACES.riven[0] - 2, PLACES.riven[1] - 4);
+    cineOff();
+    G.fadeTo = 1; await wait(0.5);
+    await showLoading('리벤', '고원 아래 첫 마을');
+    enterMap('world', PLACES.riven[0] - 4, PLACES.riven[1] - 12, true);
+    retintWorld(G.map);
+    hideLoading(); G.fadeTo = 0;
     setObj('고원 아래 첫 마을, 리벤으로');
     saveGame();
   },
@@ -1016,7 +1030,7 @@ const TALK = {
       const who = G.f.rescued >= 8 ? { name: '광부 요나스', look: { cloak: '#6a5a4a', hair: '#3a2a1a', hat: '#d8b030' } }
         : G.f.elm === 'stable' ? { name: '촌장 브람', look: { cloak: '#7a5a3a', hair: '#8a7a6a' } }
           : { name: '순례자 안나', look: { cloak: '#d8d0c0', hair: '#5a4a3a', hat: '#c8b898' } };
-      if (h) { h.name = who.name; h.look = who.look; h.x = P.x + 2; h.y = P.y + 1; }
+      if (h) { h.name = who.name; h.look = who.look; h.x = P.x + 2.5; h.z = P.z + 1.5; h.obj && GFX.dyn.remove(h.obj); h.obj = null; }
       await caption('그런데 그 전단을 떼어 구겨버리는 사람이 있다.', 2.6);
       e.dead = true; sfx('break');
       await say(who.name, '당신 덕에 우리 동네는 따뜻했어요.');
@@ -1047,9 +1061,10 @@ const TALK = {
   async crystalUpgrade() {
     sfx('chime');
     await say('렌', '공명 결정 네 개가 하나로 녹아든다…');
-    const i = await choose('무엇을 단단하게 할까?', ['하트 하나 늘리기', '스태미나 늘리기']);
+    const i = await choose('무엇을 단단하게 할까?', ['하트 하나 늘리기', '스태미나 늘리기', '마력 늘리기']);
     if (i === 0) { P.maxhp += 4; P.hp = P.maxhp; toast('하트가 늘었다'); }
-    else { P.maxst += 20; P.st = P.maxst; toast('스태미나가 늘었다'); }
+    else if (i === 1) { P.maxst += 20; P.st = P.maxst; toast('스태미나가 늘었다'); }
+    else { G.maxMana += 25; G.mana = G.maxMana; toast('마력이 늘었다'); }
   },
   onCook(r) { if (G.f.tremor && !G.f.soup) toast('핍에게 가져다주자'); },
 };
@@ -1077,3 +1092,7 @@ function showEnding() {
   $('btnEndCont').onclick = () => { el.hidden = true; G.fadeTo = 0; setObj('2부에서 계속 · 원하는 만큼 대륙을 둘러보자'); };
   $('btnEndTitle').onclick = () => { location.reload(); };
 };
+
+// 시네마틱 카메라
+function cineShot(x, y, z, lx, ly, lz) { G.cineKeep = { x, y, z, lx, ly, lz }; }
+function cineOff() { G.cineKeep = null; G.cine = null; CAM.init = false; }

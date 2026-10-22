@@ -2,16 +2,19 @@
 'use strict';
 
 const GFX = { pool: [], labels: [], t: 0 };
+// 색은 sRGB로 적고, 계산은 선형 공간에서 한다
+THREE.ColorManagement.legacyMode = false;
 const V3 = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
 const COL = c => new THREE.Color(c);
 
 function initGfx() {
   const isTouch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
   GFX.mobile = isTouch;
+  GFX.low = /low/.test(location.search);
   const canvas = document.getElementById('gl');
   const r = new THREE.WebGLRenderer({ canvas, antialias: !isTouch, powerPreference: 'high-performance' });
-  r.setPixelRatio(Math.min(window.devicePixelRatio || 1, isTouch ? 1.25 : 1.6));
-  r.shadowMap.enabled = true;
+  r.setPixelRatio(GFX.low ? 0.5 : Math.min(window.devicePixelRatio || 1, isTouch ? 1.25 : 1.6));
+  r.shadowMap.enabled = !GFX.low;
   r.shadowMap.type = isTouch ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
   r.outputEncoding = THREE.sRGBEncoding;
   GFX.renderer = r;
@@ -58,13 +61,13 @@ function initGfx() {
   GFX.rodLight = new THREE.PointLight(0x9ff4ff, 0, 9, 2); scene.add(GFX.rodLight);
 
   // 후처리 (데스크톱): HDR → 번짐 → 톤 매핑
-  if (!isTouch && GFX.webgl2 && THREE.EffectComposer) {
+  if (!isTouch && !GFX.low && GFX.webgl2 && THREE.EffectComposer) {
     const rt = new THREE.WebGLRenderTarget(16, 16, { type: THREE.HalfFloatType });
     const comp = new THREE.EffectComposer(r, rt);
     comp.addPass(new THREE.RenderPass(scene, GFX.camera));
-    GFX.bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.85, 0.55, 0.82);
+    GFX.bloom = new THREE.UnrealBloomPass(new THREE.Vector2(256, 256), 0.5, 0.45, 0.92);
     comp.addPass(GFX.bloom);
-    GFX.finalU = { tDiffuse: { value: null }, exposure: { value: 1.0 }, vig: { value: 0.55 }, sat: { value: 1.08 }, tint: { value: COL(0xffffff) } };
+    GFX.finalU = { tDiffuse: { value: null }, exposure: { value: 0.82 }, vig: { value: 0.55 }, sat: { value: 1.08 }, tint: { value: COL(0xffffff) } };
     const fin = new THREE.ShaderPass(new THREE.ShaderMaterial({
       uniforms: GFX.finalU,
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
@@ -113,6 +116,7 @@ function canvasTex(size, draw, repeat) {
   const t = new THREE.CanvasTexture(c);
   if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; }
   t.anisotropy = 4;
+  t.encoding = THREE.sRGBEncoding;
   return t;
 }
 function makeNoiseTex() {
@@ -137,6 +141,7 @@ function makeWaterNormal() {
     }
     g.putImageData(img, 0, 0);
   }, true);
+  t.encoding = THREE.LinearEncoding;
   return t;
 }
 function makeGlowTex() {
@@ -224,7 +229,7 @@ function beamMat(color) {
     uniforms: { c: { value: COL(color) }, a: { value: 0.5 }, t: { value: 0 } },
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false, side: THREE.DoubleSide,
     vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.); }',
-    fragmentShader: 'uniform vec3 c; uniform float a, t; varying vec2 vUv; void main(){ float e = 1.0 - abs(vUv.x - 0.5) * 2.0; float f = pow(1.0 - vUv.y, 1.6); float s = 0.75 + 0.25 * sin(vUv.y * 40.0 - t * 3.0); gl_FragColor = vec4(c * 2.2, e * e * f * a * s); }',
+    fragmentShader: 'uniform vec3 c; uniform float a, t; varying vec2 vUv; void main(){ float e = 1.0 - abs(vUv.x - 0.5) * 2.0; float f = pow(1.0 - vUv.y, 2.2); float s = 0.75 + 0.25 * sin(vUv.y * 40.0 - t * 3.0); gl_FragColor = vec4(c * 1.6, e * e * e * f * a * s * 0.6); }',
   });
 }
 
@@ -373,7 +378,7 @@ function label(x, y, z, text, col, o) { GFX.labels.push({ x, y, z, text, col: co
 
 // ---------- 하늘과 시간 ----------
 const SKY = {
-  day: { top: 0x3a7bd5, hor: 0xbfe3f5, sun: 0xfff0d8 },
+  day: { top: 0x2f6cc8, hor: 0xa8d0ea, sun: 0xfff0d8 },
   dusk: { top: 0x3a4a8a, hor: 0xf3a66c, sun: 0xffb070 },
   night: { top: 0x070a1c, hor: 0x1c2446, sun: 0x8090c0 },
 };
@@ -404,12 +409,12 @@ function updateSky(o) {
   U.horizon.value.copy(_c1);
   U.bottom.value.copy(_c1).multiplyScalar(0.6);
   GFX.scene.fog.color.copy(_c1);
-  GFX.scene.fog.density = o.fog ?? 0.0045;
+  GFX.scene.fog.density = o.fog ?? 0.0028;
   U.sunCol.value.set(sunUp ? (dusk > 0.4 ? SKY.dusk.sun : SKY.day.sun) : SKY.night.sun);
   U.stars.value = n; U.aurora.value = (o.aurora || 0) * n;
   GFX.sun.color.copy(U.sunCol.value);
-  GFX.sun.intensity = sunUp ? lerp(2.4, 1.2, dusk) * (o.sunK ?? 1) : 0.35;
+  GFX.sun.intensity = sunUp ? lerp(1.55, 0.9, dusk) * (o.sunK ?? 1) : 0.28;
   GFX.hemi.color.set(n > 0.5 ? 0x5a6aa8 : 0xcfe8ff); GFX.hemi.groundColor.set(n > 0.5 ? 0x202838 : 0x5a6a3a);
-  GFX.hemi.intensity = lerp(0.8, 0.35, n);
+  GFX.hemi.intensity = lerp(0.55, 0.28, n);
   GFX.amb.intensity = n * 0.12;
 }

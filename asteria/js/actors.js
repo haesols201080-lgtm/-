@@ -355,6 +355,22 @@ ET.deco = {
     else if (k === 'grave') { mesh(geo('box', 0.8, 1.1, 0.25), mat('#b8b4ac'), 0, 0.55, 0, g); mesh(geo('cyl', 0.5, 0.6, 0.12, 10), mat('#7a5a3a'), 0, 0.06, 0.6, g); }
     else if (k === 'source') { mesh(geo('box', 1.8, 1.4, 1.8), mat('#5a4a4a'), 0, 0.7, 0, g); g.bulb = mesh(geo('sph', 0.4), GLOW('#ff9a3a', 2.6), 0, 1.0, 0.8, g); }
     else if (k === 'runefloor') { const d = runeDisc('#7ff0ff', 8, 0.9); d.position.y = 0.03; g.add(d); g.disc = d; }
+    else if (k === 'skydome') {
+      // 대강당 천장: 매일 바뀌는 별자리
+      const dm = mesh(geo('sph', 13, 32, 16), new THREE.MeshBasicMaterial({ color: 0x141a3a, side: THREE.BackSide }), 0, 5.5, 0, g); dm.scale.y = 0.4;
+      const pts = new THREE.BufferGeometry(), P_ = [];
+      for (let i = 0; i < 260; i++) { const a = rand(6.28), r = rand(2, 12.5); P_.push(Math.cos(a) * r, 5.5 + Math.sqrt(Math.max(0, 1 - (r / 13) ** 2)) * 13 * 0.4 - 0.2, Math.sin(a) * r); }
+      pts.setAttribute('position', new THREE.Float32BufferAttribute(P_, 3));
+      g.stars = new THREE.Points(pts, new THREE.PointsMaterial({ color: 0xcfe8ff, size: 0.14, transparent: true, opacity: 0.9 })); g.add(g.stars);
+      for (let i = 0; i < 3; i++) { const r = mesh(geo('tor', 4 + i * 2.5, 0.03, 4, 48), GLOW('#c8a0ff', 1.4), 0, 8.2 - i * 0.4, 0, g); r.rotation.x = Math.PI / 2; }
+    }
+    else if (k === 'orrery') {
+      mesh(geo('cyl', 0.35, 0.45, 0.3, 10), mat('#b88a3a', { metal: 0.7, rough: 0.3 }), 0, 0.95, 0, g);
+      g.orr = new THREE.Group(); g.orr.position.y = 1.6; g.add(g.orr);
+      mesh(geo('sph', 0.16), GLOW('#ffd27a', 2.6), 0, 0, 0, g.orr);
+      for (let i = 0; i < 4; i++) { const ring = new THREE.Group(); ring.rotation.set(rand(-0.4, 0.4), 0, rand(-0.4, 0.4)); g.orr.add(ring); mesh(geo('tor', 0.3 + i * 0.16, 0.008, 4, 32), mat('#d8b25a', { metal: 0.8 }), 0, 0, 0, ring).rotation.x = Math.PI / 2; const pl = mesh(geo('sph', 0.04 + i * 0.01), GLOW(['#7ff0ff', '#ff9a5a', '#c8a0ff', '#a0ff8a'][i], 2), 0.3 + i * 0.16, 0, 0, ring); ring.userData.sp = 1.6 / (i + 1); }
+      mesh(geo('box', 1.2, 0.8, 0.8), mat('#7a5a3a'), 0, 0.4, 0, g);
+    }
     shadowAll(g); return g;
   },
   sync(e, o, dt) {
@@ -362,6 +378,8 @@ ET.deco = {
     if (o.bulb && e.kind === 'cityLight') o.bulb.visible = !G.f[e.flagOff];
     if (o.lights) o.lights.forEach((l, i) => l.position.y = 4 + Math.sin(GFX.t * 2 + i) * 0.3);
     if (o.disc) o.disc.rotation.z += dt * 0.15;
+    if (o.stars) o.stars.rotation.y += dt * 0.02;
+    if (o.orr) o.orr.children.forEach((r, i) => { if (r.userData.sp) r.rotation.y += dt * r.userData.sp; });
   },
 };
 // 하늘해파리 (마력 생물)
