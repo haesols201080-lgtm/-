@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>아스테리아 1부</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Nanum+Pen+Script&display=swap">
+<style>
+/* 화면 전체를 쓰는 게임. 캔버스 위에 대화·메뉴·조작 버튼을 겹친다 */
+:root {
+  --night: #17152e;
+  --night-2: #24203f;
+  --ink: #f2eee4;
+  --ink-dim: #b9b4c8;
+  --parch: #f4ecd6;
+  --parch-ink: #3a2e22;
+  --ley: #7ff0ff;
+  --brass: #d4a94e;
+  --rose: #ff6a86;
+  --panel: rgba(23, 21, 46, 0.94);
+  --font-story: "Gowun Batang", "Noto Serif KR", "AppleMyungjo", serif;
+  --font-ui: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-hand: "Nanum Pen Script", "Gowun Batang", cursive;
+  color-scheme: dark;
+}
+html, body { height: 100%; margin: 0; background: var(--night); color: var(--ink); font-family: var(--font-ui); overflow: hidden; overscroll-behavior: none; }
+body { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: var(--night); }
+button { font-family: var(--font-ui); cursor: pointer; }
+button:focus-visible { outline: 2px solid var(--ley); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+/* 상단 정보 */
+#obj { position: fixed; left: max(14px, env(safe-area-inset-left, 0px)); top: calc(env(safe-area-inset-top, 0px) + 58px); max-width: min(44vw, 360px); font-size: 13px; line-height: 1.45; color: var(--ink); background: rgba(23, 21, 46, 0.6); padding: 6px 10px; border-radius: 8px; text-wrap: pretty; pointer-events: none; }
+#toasts { position: fixed; left: 50%; top: calc(env(safe-area-inset-top, 0px) + 100px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; width: min(90vw, 520px); }
+.toast { background: rgba(23, 21, 46, 0.86); border: 1px solid rgba(127, 240, 255, 0.35); color: var(--ink); padding: 7px 14px; border-radius: 999px; font-size: 13px; text-align: center; transition: opacity .5s, transform .5s; }
+.toast.quiet { border-color: transparent; font-size: 12px; color: var(--ink-dim); padding: 4px 12px; }
+.toast.out { opacity: 0; transform: translateY(-6px); }
+#banner { position: fixed; left: 50%; top: 28%; transform: translateX(-50%); font-family: var(--font-story); font-weight: 700; font-size: clamp(22px, 5vw, 40px); letter-spacing: 0.08em; color: var(--ink); text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6); opacity: 0; pointer-events: none; white-space: nowrap; }
+#banner.on { animation: banner 3.4s ease forwards; }
+@keyframes banner { 0% { opacity: 0; letter-spacing: 0.3em; } 15% { opacity: 1; letter-spacing: 0.08em; } 75% { opacity: 1; } 100% { opacity: 0; } }
+#caption { position: fixed; left: 50%; bottom: 22%; transform: translateX(-50%); width: min(88vw, 640px); text-align: center; font-family: var(--font-story); font-size: clamp(16px, 2.6vw, 21px); line-height: 1.6; color: var(--ink); text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8); opacity: 0; transition: opacity .5s; pointer-events: none; text-wrap: balance; }
+#caption.on { opacity: 1; }
+#prompt { position: fixed; left: 0; top: 0; background: rgba(23, 21, 46, 0.86); color: var(--ink); font-size: 12px; padding: 4px 10px; border-radius: 999px; pointer-events: none; white-space: nowrap; border: 1px solid rgba(255, 255, 255, 0.15); }
+#prompt b { color: var(--brass); margin-right: 4px; }
+
+/* 대화 */
+.dlg { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); transform: translateX(-50%); width: min(92vw, 720px); box-sizing: border-box; background: var(--panel); border: 1px solid rgba(212, 169, 78, 0.5); border-radius: 14px; padding: 16px 20px 18px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45); }
+.dlg .who { display: inline-block; font-weight: 700; font-size: 13px; color: var(--night); background: var(--brass); padding: 2px 10px; border-radius: 6px; margin-bottom: 8px; }
+.dlg.ren .who { background: var(--ley); }
+.dlg.far { border-style: dashed; }
+.dlg.far .txt { font-style: italic; color: #d8e8ff; }
+.dlg .txt { font-family: var(--font-story); font-size: clamp(15px, 2.2vw, 18px); line-height: 1.65; min-height: 3.3em; text-wrap: pretty; white-space: pre-line; }
+.dlg .more { position: absolute; right: 16px; bottom: 10px; color: var(--brass); font-size: 12px; animation: bob 1s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(3px); } }
+#choice { position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 180px); transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; width: min(86vw, 420px); }
+.cq { font-family: var(--font-story); text-align: center; font-size: 16px; padding: 6px; text-shadow: 0 2px 10px #000; }
+.copt { background: var(--panel); color: var(--ink); border: 1px solid rgba(255, 255, 255, 0.2); padding: 12px 16px; border-radius: 10px; font-size: 15px; text-align: left; }
+.copt.hi, .copt:hover { border-color: var(--brass); background: #2e2950; }
+.copt.hi::before { content: '▸ '; color: var(--brass); }
+
+/* 종이 (편지, 수집물) */
+.paper { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(90vw, 520px); max-height: 78vh; overflow: auto; box-sizing: border-box; background: var(--parch); color: var(--parch-ink); border-radius: 6px; padding: 26px 28px 20px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6), inset 0 0 60px rgba(160, 120, 60, 0.25); }
+.paper .ptitle { font-family: var(--font-story); font-weight: 700; font-size: 18px; border-bottom: 1px solid rgba(58, 46, 34, 0.3); padding-bottom: 10px; margin-bottom: 14px; }
+.paper .pbody { font-family: var(--font-story); font-size: 15px; line-height: 1.8; text-wrap: pretty; }
+.paper.hand .pbody { font-family: var(--font-hand); font-size: 23px; line-height: 1.5; }
+.paper.stone { background: #c8c2b2; }
+.paper.stone .pbody { font-family: var(--font-story); letter-spacing: 0.12em; text-align: center; font-size: 17px; }
+.paper .phint { margin-top: 16px; font-size: 12px; color: rgba(58, 46, 34, 0.6); text-align: right; font-family: var(--font-ui); }
+
+/* 메뉴 패널 */
+#panel { position: fixed; inset: 0; background: rgba(10, 9, 22, 0.6); display: flex; align-items: center; justify-content: center; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px; }
+.pwin { width: min(100%, 640px); max-height: 86vh; display: flex; flex-direction: column; background: var(--panel); border: 1px solid rgba(212, 169, 78, 0.45); border-radius: 16px; overflow: hidden; }
+.ptabs { display: flex; gap: 4px; padding: 10px 10px 0; flex-wrap: wrap; border-bottom: 1px solid rgba(255, 255, 255, 0.08); }
+.ptabs button { background: transparent; color: var(--ink-dim); border: 0; padding: 10px 12px; font-size: 14px; border-bottom: 2px solid transparent; }
+.ptabs button.on { color: var(--ink); border-bottom-color: var(--brass); }
+.ptabs .x { margin-left: auto; font-size: 13px; }
+#panelBody { padding: 14px 18px 20px; overflow: auto; min-height: 0; }
+#panelBody h4 { font-family: var(--font-story); font-size: 15px; margin: 14px 0 8px; color: var(--brass); }
+#panelBody p { margin: 4px 0; font-size: 14px; line-height: 1.6; }
+#panelBody .empty, #panelBody .note { color: var(--ink-dim); font-size: 13px; }
+#panelBody .stat { font-size: 13px; color: var(--ink-dim); }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.row b { font-weight: 600; font-size: 14px; grid-column: 1; }
+.row b em { font-style: normal; color: var(--ink-dim); font-weight: 500; }
+.row span { grid-column: 1; font-size: 12px; color: var(--ink-dim); min-width: 0; }
+.row em { font-style: normal; color: var(--brass); font-size: 12px; }
+.row button, .acts button { background: var(--brass); color: var(--night); border: 0; padding: 7px 12px; border-radius: 8px; font-weight: 600; font-size: 13px; grid-row: 1 / span 2; }
+.row button.ghost, .acts button.ghost { background: transparent; color: var(--ink-dim); border: 1px solid rgba(255, 255, 255, 0.2); }
+.row button:disabled, .acts button:disabled { opacity: 0.4; cursor: default; }
+.row.cur b { color: var(--ley); }
+.ings { display: flex; flex-wrap: wrap; gap: 6px; }
+.ing { background: #2e2950; color: var(--ink); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.ing em { font-style: normal; color: var(--ink-dim); }
+.ing i { font-style: normal; color: var(--brass); font-weight: 700; }
+.ing.on { border-color: var(--brass); }
+.ing:disabled { opacity: 0.35; }
+.pot { margin: 14px 0 6px; font-family: var(--font-story); font-size: 15px; padding: 10px 12px; background: rgba(255, 255, 255, 0.05); border-radius: 8px; }
+.preview { font-size: 14px; color: var(--ink); margin-bottom: 10px; }
+.preview b { color: var(--brass); }
+.acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.made { background: rgba(127, 240, 255, 0.12); color: var(--ley); padding: 8px 12px; border-radius: 8px; margin-bottom: 8px; font-size: 14px; }
+.keys { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; font-size: 13px; }
+.keys kbd { font-family: var(--font-ui); background: #2e2950; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 5px; padding: 1px 7px; font-size: 12px; white-space: nowrap; }
+
+/* 지도 */
+#mapScreen { position: fixed; inset: 0; background: rgba(10, 9, 22, 0.75); display: flex; align-items: center; justify-content: center; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px; }
+.mwin { width: min(100%, 980px); height: min(86vh, 760px); display: flex; flex-direction: column; background: #e8dcc0; color: var(--parch-ink); border-radius: 12px; padding: 12px; box-sizing: border-box; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6); }
+.mhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.mhead h3 { font-family: var(--font-story); margin: 0; font-size: 18px; }
+#mapLegend { font-size: 12px; display: flex; gap: 4px 10px; flex-wrap: wrap; align-items: center; min-width: 0; }
+.lg { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 3px; vertical-align: middle; }
+.lg.a { background: #3aa8b8; } .lg.b { background: #d8783a; } .lg.c { background: #ff5a6a; } .lg.d { background: #7ff0ff; border: 1px solid #3a8a9a; } .lg.e { background: #d8b040; }
+#mapClose { margin-left: auto; background: var(--parch-ink); color: var(--parch); border: 0; border-radius: 8px; padding: 7px 12px; }
+.mbox { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+#mapcv { image-rendering: pixelated; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(58, 46, 34, 0.3); }
+
+/* 화면 버튼 (메뉴, 지도) */
+#hudBtns { position: fixed; right: max(14px, env(safe-area-inset-right, 0px)); top: calc(env(safe-area-inset-top, 0px) + 112px); display: flex; flex-direction: column; gap: 6px; }
+#hudBtns button { background: rgba(23, 21, 46, 0.7); color: var(--ink); border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 10px; padding: 7px 11px; font-size: 12px; }
+
+/* 터치 조작 */
+#touch { position: fixed; left: 0; right: 0; bottom: 0; height: 170px; pointer-events: none; padding-bottom: env(safe-area-inset-bottom, 0px); }
+#joy { position: absolute; left: max(22px, env(safe-area-inset-left, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 22px); width: 124px; height: 124px; border-radius: 50%; background: rgba(255, 255, 255, 0.08); border: 2px solid rgba(255, 255, 255, 0.2); pointer-events: auto; touch-action: none; }
+#joyKnob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; border-radius: 50%; background: rgba(255, 255, 255, 0.35); }
+.tbtns { position: absolute; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(env(safe-area-inset-bottom, 0px) + 16px); width: 210px; height: 150px; pointer-events: none; }
+.tb { position: absolute; width: 60px; height: 60px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.3); background: rgba(23, 21, 46, 0.55); color: var(--ink); font-size: 12px; font-weight: 600; pointer-events: auto; touch-action: none; display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.15; padding: 0; }
+.tb.on { background: rgba(212, 169, 78, 0.6); }
+.tb.big { width: 72px; height: 72px; font-size: 13px; }
+.tb.sm { width: 48px; height: 48px; font-size: 11px; }
+
+/* 타이틀 */
+#title { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px; overflow: auto; }
+#title .eyebrow { font-size: 13px; letter-spacing: 0.3em; color: var(--ley); }
+#title h1 { font-family: var(--font-story); font-weight: 700; font-size: clamp(44px, 11vw, 96px); margin: 0; letter-spacing: 0.06em; line-height: 1.05; text-shadow: 0 4px 40px rgba(127, 240, 255, 0.35); text-wrap: balance; }
+#title .sub { font-family: var(--font-story); font-size: clamp(16px, 3.4vw, 22px); color: var(--ink); margin: 0 0 18px; }
+#title .tag { max-width: 34em; font-size: 14px; line-height: 1.7; color: var(--ink-dim); margin: 0 0 18px; text-wrap: pretty; }
+.tbtn { min-width: 220px; padding: 13px 20px; border-radius: 12px; border: 1px solid var(--brass); background: var(--brass); color: var(--night); font-size: 16px; font-weight: 700; }
+.tbtn.ghost { background: transparent; color: var(--ink); border-color: rgba(255, 255, 255, 0.3); font-weight: 500; }
+#help, #confirmNew { width: min(100%, 460px); background: var(--panel); border: 1px solid rgba(255, 255, 255, 0.15); border-radius: 12px; padding: 14px 18px; text-align: left; }
+#confirmNew p { margin: 0 0 12px; font-size: 14px; line-height: 1.6; }
+#confirmNew .acts { justify-content: flex-end; }
+
+/* 엔딩 */
+#ending { position: fixed; inset: 0; background: var(--night); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 24px; overflow: auto; text-align: center; }
+#ending h2 { font-family: var(--font-story); font-size: clamp(28px, 6vw, 48px); margin: 0; }
+#ending .sub { font-family: var(--font-story); color: var(--ink-dim); margin: 0 0 10px; }
+#endBody { width: min(100%, 540px); text-align: left; }
+.erow { display: grid; grid-template-columns: 7em minmax(0, 1fr); gap: 10px; padding: 9px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.08); font-size: 14px; }
+.erow b { color: var(--brass); font-weight: 600; }
+.erow span { line-height: 1.5; }
+#ending .next { font-family: var(--font-story); color: var(--ley); margin: 14px 0 4px; }
+
+@media (max-width: 560px) {
+  #obj { max-width: 60vw; font-size: 12px; }
+  .dlg { padding: 12px 14px 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #banner.on { animation-duration: 0.01s; animation: none; opacity: 0; }
+  .dlg .more { animation: none; }
+}
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="아스테리아 1부 게임 화면"></canvas>
+
+<div id="obj" hidden></div>
+<div id="toasts" aria-live="polite"></div>
+<div id="banner"></div>
+<div id="caption"></div>
+<div id="prompt" hidden></div>
+
+<div id="dlg" class="dlg" hidden><div class="who"></div><div class="txt"></div><div class="more">▼</div></div>
+<div id="choice" hidden></div>
+<div id="paper" class="paper" hidden><div class="ptitle"></div><div class="pbody"></div><div class="phint">E · 탭해서 닫기</div></div>
+
+<div id="hudBtns" hidden>
+  <button id="btnTouchMenu" type="button">가방 · 일지</button>
+  <button id="btnTouchMap" type="button">지도</button>
+</div>
+
+<div id="panel" hidden>
+  <div class="pwin" role="dialog" aria-label="메뉴">
+    <div class="ptabs">
+      <button type="button" data-tab="bag">가방</button>
+      <button type="button" data-tab="weapon">무기</button>
+      <button type="button" data-tab="journal">일지</button>
+      <button type="button" data-tab="letters">편지</button>
+      <button type="button" data-tab="help">조작</button>
+      <button type="button" class="x" id="panelClose">닫기 · Tab</button>
+    </div>
+    <div id="panelBody"></div>
+  </div>
+</div>
+
+<div id="mapScreen" hidden>
+  <div class="mwin" role="dialog" aria-label="지도">
+    <div class="mhead"><h3 id="mapTitle">대륙 아스테리아</h3><div id="mapLegend"></div><button id="mapClose" type="button">닫기 · M</button></div>
+    <div class="mbox"><canvas id="mapcv"></canvas></div>
+  </div>
+</div>
+
+<div id="touch" hidden>
+  <div id="joy"><div id="joyKnob"></div></div>
+  <div class="tbtns">
+    <button class="tb big" data-btn="attack" style="right:0;bottom:36px" type="button">공격</button>
+    <button class="tb" data-btn="act" style="right:84px;bottom:0" type="button">행동</button>
+    <button class="tb" data-btn="rune" style="right:84px;bottom:72px" type="button">룬</button>
+    <button class="tb sm" data-btn="glide" style="right:14px;bottom:118px" type="button">활공</button>
+    <button class="tb sm" data-btn="run" style="right:154px;bottom:44px" type="button">달리기</button>
+    <button class="tb sm" data-btn="runeNext" style="right:150px;bottom:108px" type="button">룬 바꿈</button>
+  </div>
+</div>
+
+<div id="title">
+  <div class="eyebrow">ASTERIA · PART ONE</div>
+  <h1>아스테리아</h1>
+  <p class="sub">1부 · 식어가는 대륙</p>
+  <p class="tag">학원 2년 차 고대어 번역 연구원 렌 아르덴. 멈추고 비틀린 마력 기관을 고치러 대륙으로 떠난다. 고치는 일은 누구를 위한 일일까.</p>
+  <button class="tbtn" id="btnCont" type="button">이어하기</button>
+  <button class="tbtn" id="btnNew" type="button">새로 시작</button>
+  <div id="confirmNew" hidden>
+    <p>저장된 여행이 있다. 새로 시작하면 지금까지의 기록이 지워진다.</p>
+    <div class="acts"><button class="ghost" id="btnCancelNew" type="button">그만두기</button><button id="btnConfirmNew" type="button">새로 시작</button></div>
+  </div>
+  <button class="tbtn ghost" id="btnHelp" type="button">조작법</button>
+  <div id="help" hidden></div>
+</div>
+
+<div id="helpText" hidden>
+  <h4>키보드</h4>
+  <div class="keys">
+    <kbd>WASD · 방향키</kbd><span>이동</span>
+    <kbd>Shift</kbd><span>달리기 (스태미나)</span>
+    <kbd>Space · J</kbd><span>공격</span>
+    <kbd>E · Enter</kbd><span>말 걸기, 줍기, 오르기, 대화 넘기기</span>
+    <kbd>Q</kbd><span>룬 쓰기</span>
+    <kbd>1 2 3 4 · R</kbd><span>룬 고르기 (인력 · 정체 · 결빙 · 파열)</span>
+    <kbd>F</kbd><span>활공 (높은 곳에서)</span>
+    <kbd>H</kbd><span>가장 좋은 음식 바로 먹기</span>
+    <kbd>Tab · I</kbd><span>가방 · 무기 · 일지 · 편지</span>
+    <kbd>M</kbd><span>지도</span>
+  </div>
+  <h4>알아두면 좋은 것</h4>
+  <p>절벽, 서가, 담쟁이는 오를 수 있다. 오르고 달리고 헤엄치고 활공하면 스태미나가 닳는다.</p>
+  <p>추우면 오른쪽 위 온도계가 파래지고 하트가 깎인다. 모닥불 곁, 매콤한 요리, 털 외투로 버틴다.</p>
+  <p>모닥불과 화로에서 재료를 세 개까지 넣어 요리한다. 불꽃고추는 몸을 데우고, 기운버섯은 숨을 고르게 한다.</p>
+  <p>공명석은 가장 가까운 기관 쪽을 가리킨다. 가까울수록 화면 테두리가 빨리 뛴다.</p>
+  <p>관측탑에 오르면 그 주변 지도가 밝혀진다. 봉인 실험실의 공명 결정 네 개로 하트나 스태미나를 늘린다.</p>
+  <p>진행은 이 브라우저에 자동으로 저장된다.</p>
+  <p><button type="button" class="sndBtn" style="background:transparent;color:var(--ink);border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:6px 10px">소리 끄기</button></p>
+</div>
+
+<div id="ending" hidden>
+  <h2>1부 · 식어가는 대륙</h2>
+  <p class="sub">쫓기는 신세로 끝나지만, 렌은 혼자가 아니다.</p>
+  <div id="endBody"></div>
+  <p class="next">2부 · 도망과 수배로 이어진다</p>
+  <div class="acts" style="justify-content:center">
+    <button class="tbtn ghost" id="btnEndCont" type="button">대륙 더 둘러보기</button>
+    <button class="tbtn" id="btnEndTitle" type="button">타이틀로</button>
+  </div>
+</div>
+
+<script>
+  document.getElementById('help').innerHTML = document.getElementById('helpText').innerHTML;
+</script>
+<script src="js/core.js"></script>
+<script src="js/entities.js"></script>
+<script src="js/maps.js"></script>
+<script src="js/story.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
