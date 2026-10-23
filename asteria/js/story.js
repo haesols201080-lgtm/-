@@ -239,13 +239,13 @@ const TALK = {
   async opening() {
     G.f.hideHud = true; G.noSave = true;
     G.fade = 1; G.fadeTo = 0;
-    cineShot(64 + 30, 22, 52 + 40, 64, 6, 52);
+    cineSpot('open1');
     await caption('아스테리아. 마력의 지맥이 땅 밑을 혈관처럼 흐르는 대륙.', 3.6);
-    cineShot(64 - 26, 9, 46, 64, 10, 52);
+    cineSpot('open2');
     await caption('맑은 봄날 아침, 학원 도시 칼리도르.', 3);
-    cineShot(16, 12, 44, 28, 9, 30);
+    cineSpot('open3');
     await caption('책들이 새떼처럼 서고 사이를 날아다니고,', 3);
-    cineShot(70, 12, 66, 64, 11, 52);
+    cineSpot('open4');
     await caption('견습생이 실수로 띄운 물방울 고래가 광장 위를 헤엄친다.', 3.6);
     G.fadeTo = 1; await wait(0.6);
     cineOff();
@@ -442,10 +442,10 @@ const TALK = {
     FX.burst(P.x, P.y + 1, P.z, 30, 0xffffff, 4, 1, 0.2);
     await say('렌', '…방금 등불이 숨을 쉰 것 같았는데.');
     await say('렌', '발밑 깊은 곳에서 울렸어. 기관 쪽이다.');
-    if (G.map.id === 'kalidor') { cineShot(76, 9, 66, 64, 3, 52); await wait(1.2); }
+    if (G.map.id === 'kalidor') { cineSpot('frozen'); await wait(1.2); }
     await caption('광장 분수가 솟은 모양 그대로 얼어붙었다.', 2.6);
-    if (G.map.id === 'kalidor') { cineShot(102, 30, 62, 102, 12, 20); await wait(1.0); }
-    await caption('대강당 돔 안으로 눈이 내린다.', 2.4);
+    if (G.map.id === 'kalidor') { cineSpot('hallRoof'); await wait(1.0); }
+    await caption('대강당 지붕 위로, 봄인데 눈이 내린다.', 2.4);
     cineOff();
     await say('견습생 도린', '눈이다! 대강당 안에 눈이 와!');
     await say('견습생 율', '분수 좀 봐. 저거 만져도 돼?');
@@ -485,9 +485,9 @@ const TALK = {
     os2.dead = true;
     G.fadeWhite = true; G.fadeTo = 1; await wait(0.8);
     G.f.ch1engine = true; G.f.oswinInLab = false;
-    enterMap('kalidor', 33, 31);
+    enterMap('kalidor', 'court');
     G.rainbow = 1.6;
-    cineShot(64 + 18, 8, 52 + 22, 64, 7, 44);
+    cineSpot('rainbow');
     G.fadeTo = 0; await wait(1.0); G.fadeWhite = false;
     sfx('chime');
     await caption('온기가 돌아온다. 얼었던 분수가 다시 솟구치고, 광장에 무지개가 걸린다.', 3.6);

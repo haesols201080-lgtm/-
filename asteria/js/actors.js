@@ -139,7 +139,7 @@ ET.npc = {
       if (Math.hypot(nx - e.hx, nz - e.hz) < e.wander * (G.map.cs || WS) && canWalk(nx, nz, e.y)) { e.x = nx; e.z = nz; if (e.vx || e.vz) faceTo(e, e.x + e.vx, e.z + e.vz, 0.1); }
       else { e.vx = -e.vx; e.vz = -e.vz; }
     }
-    if (pdist(e) < 4.5) faceTo(e, P.x, P.z, 0.12);
+    if (e.talk && pdist(e) < 4.5) faceTo(e, P.x, P.z, 0.12);
   },
   model: e => makeRig(e.look, {}),
   sync(e, o, dt) {
@@ -676,7 +676,7 @@ ET.fountain = {
 };
 ET.whale = {
   init(e) { e.ph = 0; e.cx = e.x; e.cz = e.z; e.fly = true; },
-  update(e, dt) { e.ph += dt * 0.15; e.x = e.cx + Math.cos(e.ph) * 14; e.z = e.cz + Math.sin(e.ph) * 9; e.y = 11 + Math.sin(e.ph * 2) * 1.2; e.yaw = Math.atan2(-Math.sin(e.ph) * 14, Math.cos(e.ph) * 9); },
+  update(e, dt) { const R = e.cr || 14, Rz = R * 0.65; e.ph += dt * 0.15 * Math.min(1, 14 / R) * 1.6; e.x = e.cx + Math.cos(e.ph) * R; e.z = e.cz + Math.sin(e.ph) * Rz; e.y = (e.hy ?? 11) + Math.sin(e.ph * 2) * 1.2; e.yaw = Math.atan2(-Math.sin(e.ph) * R, Math.cos(e.ph) * Rz); },
   model() {
     const g = new THREE.Group();
     const wm = new THREE.MeshStandardMaterial({ color: 0x8fd4ff, emissive: 0x3a90c8, emissiveIntensity: 0.6, transparent: true, opacity: 0.5, roughness: 0.1, depthWrite: false });

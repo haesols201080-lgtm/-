@@ -384,9 +384,9 @@ const UI = {
   closeMap() { this.modal = null; $('mapScreen').hidden = true; Input.endFrame(); },
   drawMap() {
     const c = $('mapcv'), mc = c.getContext('2d');
-    const world = G.map.kind === 'terrain';
-    const m = world ? G.map : G.map;
-    const W = world ? 256 : m.cw, H = world ? 192 : m.cd;
+    const world = G.map.kind === 'terrain', site = G.map.kind === 'site';
+    const m = G.map;
+    const W = world ? 256 : site ? m.nx : m.cw, H = world ? 192 : site ? m.nz : m.cd;
     const box = c.parentElement.getBoundingClientRect();
     const sc = Math.max(1, Math.min((box.width - 8) / W, (box.height - 10) / H));
     c.width = Math.floor(W * sc * HUD.dpr); c.height = Math.floor(H * sc * HUD.dpr);
@@ -402,6 +402,13 @@ const UI = {
         if (h < 0.1 && !(m.fl[vi] & FL.VOID)) { r = 0.35; g = 0.6; b = 0.8; }
         const shade = 0.75 + clamp((m.ground(wx + 4, wz - 4) - h) * -0.06 + 0.25, 0, 0.5);
         img.data[i] = Math.min(255, r * 255 * shade); img.data[i + 1] = Math.min(255, g * 255 * shade); img.data[i + 2] = Math.min(255, b * 255 * shade); img.data[i + 3] = 255;
+      } else if (site) {
+        const vi = m.vi(x, y), h = m.h[vi];
+        let r = m.col[vi * 3], g = m.col[vi * 3 + 1], b = m.col[vi * 3 + 2];
+        if (m.wl[vi] > h) { r = 0.32; g = 0.5; b = 0.58; }
+        if (m.fl[vi] & SF.COURT) { r = 0.78; g = 0.7; b = 0.58; }
+        const shade = 0.8 + clamp((m.h[m.vi(Math.min(m.nx, x + 1), Math.max(0, y - 1))] - h) * 0.08, -0.3, 0.3);
+        img.data[i] = Math.min(255, r * 255 * shade); img.data[i + 1] = Math.min(255, g * 255 * shade); img.data[i + 2] = Math.min(255, b * 255 * shade); img.data[i + 3] = 255;
       } else {
         const k = y * W + x; blockColor(m, m.ct[k], x, y, m.ch[k], cc);
         const sh = m.ch[k] > 2 ? 0.65 : 1;
@@ -409,10 +416,10 @@ const UI = {
       }
     }
     const off = document.createElement('canvas'); off.width = W; off.height = H; off.getContext('2d').putImageData(img, 0, 0);
-    mc.imageSmoothingEnabled = !world ? false : true;
+    mc.imageSmoothingEnabled = world || site;
     mc.setTransform(1, 0, 0, 1, 0, 0);
     mc.drawImage(off, 0, 0, c.width, c.height);
-    const k = world ? 4 : m.cs;
+    const k = world ? 4 : site ? m.res : m.cs;
     mc.setTransform(sc * HUD.dpr / k, 0, 0, sc * HUD.dpr / k, 0, 0);
     const dot = (x, y, r, col) => { mc.fillStyle = col; mc.beginPath(); mc.arc(x, y, r * k / sc + 1, 0, 7); mc.fill(); mc.strokeStyle = 'rgba(0,0,0,0.4)'; mc.lineWidth = k / sc; mc.stroke(); };
     if (world) {

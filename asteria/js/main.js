@@ -9,7 +9,8 @@ const G = {
   mana: 100, maxMana: 100, dynCols: [], flash: null,
 };
 let P = null;
-const CAM = { yaw: 0, pitch: 0.32, dist: 6.5, x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, init: false };
+// 어깨 너머 카메라: 붐 4 m, 오른쪽 어깨 0.55 m, 피벗 1.55 m, 기본으로 8° 내려다본다
+const CAM = { yaw: 0, pitch: 0.14, dist: 4.0, x: 0, y: 0, z: 0, tx: 0, ty: 0, tz: 0, init: false, side: 0.55, fov: 48 };
 const Timers = [];
 function setTimeoutG(fn, s) { Timers.push({ t: s, fn }); }
 function wait(s) { return new Promise(r => setTimeoutG(r, s)); }
@@ -66,13 +67,18 @@ function goMap(id, tx, ty) {
     if (TALK.enter && TALK.enter[id]) await TALK.enter[id]();
   });
 }
-const getMapKindGuess = id => id === 'world' ? 'terrain' : 'blocks';
+const getMapKindGuess = id => id === 'world' ? 'terrain' : id === 'kalidor' ? 'site' : 'blocks';
 function resolveSpot(m, tx, ty) {
   if (m.kind === 'terrain') {
     if (typeof tx === 'string' || tx === undefined) return worldExit(tx);
     return [tx, ty];
   }
+  if (m.kind === 'site') {
+    if (typeof tx === 'string' || tx === undefined) return (m.spots[tx] || m.spots.court).slice();
+    return [tx, ty];
+  }
   const cs = m.cs;
+  if (typeof tx === 'string') { const sp = m.spots && m.spots[tx]; if (sp) [tx, ty] = sp; else { tx = m.cw / 2; ty = m.cd / 2; } }
   return [Number.isInteger(tx) ? (tx + 0.5) * cs : tx * cs, Number.isInteger(ty) ? (ty + 0.5) * cs : ty * cs];
 }
 function enterMap(id, tx, ty, meters) {
@@ -81,8 +87,8 @@ function enterMap(id, tx, ty, meters) {
   const m = getMap(id);
   if (prev && prev !== m) prev.ents = prev.ents.filter(e => !['bomb', 'proj', 'warn', 'ring', 'bolt', 'wavefx', 'boomfx', 'stasisfx', 'icepillar'].includes(e.type));
   G.map = m;
-  if (!m.group) m.group = buildBlockScene(m);
-  if (m.dirty) { m.dirty = false; m.group = buildBlockScene(m); }
+  if (!m.group) m.group = m.kind === 'site' ? buildSiteScene(m) : buildBlockScene(m);
+  if (m.dirty && m.kind === 'blocks') { m.dirty = false; m.group = buildBlockScene(m); }
   GFX.static.clear(); GFX.static.add(m.group);
   GFX.dyn.clear();
   for (const e of m.ents) { e.obj = null; if (!e.fly) e.y = groundY(e); }
@@ -146,7 +152,7 @@ function startClimb(nx, nz, col) {
   if (col) {
     if (!col.climb) return false;
     if (col.r !== undefined) { const dx = p.x - col.x, dz = p.z - col.z, l = Math.hypot(dx, dz) || 1; n = { x: dx / l, z: dz / l }; }
-    else { const b = colBox(col); const cx = clamp(p.x, b.x0, b.x1), cz = clamp(p.z, b.z0, b.z1); let dx = p.x - cx, dz = p.z - cz; const l = Math.hypot(dx, dz); if (l < 0.01) { dx = p.x - (b.x0 + b.x1) / 2; dz = p.z - (b.z0 + b.z1) / 2; } const L2 = Math.hypot(dx, dz) || 1; n = Math.abs(dx) > Math.abs(dz) ? { x: Math.sign(dx), z: 0 } : { x: 0, z: Math.sign(dz) }; }
+    else { const b = colBox(col), lp = colLocal(col, p.x, p.z), px = lp.x, pz = lp.z; const cx = clamp(px, b.x0, b.x1), cz = clamp(pz, b.z0, b.z1); let dx = px - cx, dz = pz - cz; const l = Math.hypot(dx, dz); if (l < 0.01) { dx = px - (b.x0 + b.x1) / 2; dz = pz - (b.z0 + b.z1) / 2; } n = Math.abs(dx) > Math.abs(dz) ? { x: Math.sign(dx), z: 0 } : { x: 0, z: Math.sign(dz) }; if (col.rot) { const co = Math.cos(col.rot), si = Math.sin(col.rot); n = { x: n.x * co + n.z * si, z: -n.x * si + n.z * co }; } }
   } else {
     if (!G.map.climbable(nx, nz)) { if (!p.noClimbT || G.t > p.noClimbT) { toast('매끈해서 오를 수 없다'); p.noClimbT = G.t + 3; } return false; }
     const m = G.map, e = 0.6;
@@ -558,7 +564,7 @@ function step(dt) {
   for (const e of G.map.ents) { if (!shown(e)) continue; const d = ET[e.type]; if (d && d.col) { const c = d.col(e); if (c) { c.ent = e; G.dynCols.push(c); } } }
   updatePlayer(dt);
   updateHold(dt);
-  const m = G.map, far = m.kind === 'terrain' ? 110 : 1e9;
+  const m = G.map, far = m.kind === 'terrain' ? 110 : m.kind === 'site' ? 170 : 1e9;
   for (const e of m.ents) {
     if (!shown(e)) continue;
     const d = ET[e.type];
@@ -586,29 +592,43 @@ function updateCamera(dt) {
     CAM.pitch = clamp(CAM.pitch + Input.look.y * 0.0034, -0.35, 1.25);
     if (Input.key('camL')) CAM.yaw += 2.2 * dt;
     if (Input.key('camR')) CAM.yaw -= 2.2 * dt;
-    if (Input.wheel && !P.holding) CAM.dist = clamp(CAM.dist + Input.wheel * 0.7, 3.2, 14);
+    if (Input.wheel && !P.holding) CAM.dist = clamp(CAM.dist + Input.wheel * 0.5, 2.4, 14);
     // 활공 중에는 뒤로 천천히 따라간다
     if (P.mode === 'glide') CAM.yaw += angDiff(CAM.yaw, P.yaw + Math.PI) * dt * 1.2;
   }
 }
 function placeCamera(dt) {
   const cam = GFX.camera;
-  let tx = P.x, ty = P.vis + 1.55, tz = P.z, dist_ = CAM.dist, pitch = CAM.pitch, yaw = CAM.yaw;
+  const inside = !G.map.outdoor;
+  let tx = P.x, ty = P.vis + 1.55, tz = P.z, dist_ = inside ? Math.min(CAM.dist, 3.0) : CAM.dist, pitch = CAM.pitch, yaw = CAM.yaw;
   if (P.mode === 'swim') ty = P.y + 1.1;
+  // 오르기·활공·싸움에서는 붐을 늘린다
+  if (P.mode === 'climb' || P.mode === 'glide') dist_ += 1.2;
+  if (G.boss) dist_ += 1.0;
   if (G.camT) { tx = G.camT.x; tz = G.camT.z; ty = (G.camT.y ?? G.map.ground(tx, tz)) + 1.5; dist_ = G.camT.dist || 14; pitch = G.camT.pitch ?? 0.45; if (G.camT.yaw !== undefined) yaw = G.camT.yaw; }
   const k = CAM.init ? Math.min(1, dt * (G.camT ? 2 : 10)) : 1;
   CAM.tx = lerp(CAM.tx, tx, k); CAM.tz = lerp(CAM.tz, tz, k); CAM.ty = lerp(CAM.ty, ty, CAM.init ? Math.min(1, dt * (G.camT ? 2 : 6)) : 1);
   CAM.cy = CAM.init ? CAM.cy + angDiff(CAM.cy, yaw) * k : yaw; CAM.cp = CAM.init ? lerp(CAM.cp, pitch, k) : pitch; CAM.cd = CAM.init ? lerp(CAM.cd, dist_, k) : dist_;
   CAM.init = true;
-  let cx = CAM.tx + Math.sin(CAM.cy) * Math.cos(CAM.cp) * CAM.cd, cz = CAM.tz + Math.cos(CAM.cy) * Math.cos(CAM.cp) * CAM.cd, cy = CAM.ty + Math.sin(CAM.cp) * CAM.cd;
-  const clip = camClip(CAM.tx, CAM.ty, CAM.tz, cx, cy, cz);
-  cx = lerp(CAM.tx, cx, clip); cy = lerp(CAM.ty, cy, clip); cz = lerp(CAM.tz, cz, clip);
+  // 어깨 너머: 피벗과 카메라를 함께 오른쪽으로 민다 (연출 카메라일 때는 빼고)
+  const side = G.camT ? 0 : CAM.side * clamp(CAM.cd / 4, 0.5, 1.2);
+  CAM.sideK = lerp(CAM.sideK ?? side, side, Math.min(1, dt * 4));
+  const rx = Math.cos(CAM.cy) * CAM.sideK, rz = -Math.sin(CAM.cy) * CAM.sideK;
+  let px = CAM.tx + rx, pz = CAM.tz + rz;
+  // 어깨 쪽이 벽에 막히면 가운데로
+  if (camClip(CAM.tx, CAM.ty, CAM.tz, px, CAM.ty, pz) < 1) { px = CAM.tx; pz = CAM.tz; }
+  let cx = px + Math.sin(CAM.cy) * Math.cos(CAM.cp) * CAM.cd, cz = pz + Math.cos(CAM.cy) * Math.cos(CAM.cp) * CAM.cd, cy = CAM.ty + Math.sin(CAM.cp) * CAM.cd;
+  const clip = camClip(px, CAM.ty, pz, cx, cy, cz);
+  cx = lerp(px, cx, clip); cy = lerp(CAM.ty, cy, clip); cz = lerp(pz, cz, clip);
+  // 화각: 바깥 48°, 안 50°, 달리면 +4°
+  const fov = (inside ? 50 : CAM.fov) + (Math.hypot(P.vx, P.vz) > 7 ? 4 : 0) + (G.camT ? 4 : 0);
+  if (Math.abs(cam.fov - fov) > 0.05) { cam.fov = lerp(cam.fov, fov, Math.min(1, dt * 3)); cam.updateProjectionMatrix(); }
   if (G.map.ceil) cy = Math.min(cy, G.map.ceil - 0.4);
   cy = Math.max(cy, G.map.ground(cx, cz) + 0.3);
   if (G.shake > 0) { cx += rand(-1, 1) * G.shake * 0.25; cy += rand(-1, 1) * G.shake * 0.25; }
   if (G.cine) { cx = G.cine.x; cy = G.cine.y; cz = G.cine.z; }
   cam.position.set(cx, cy, cz);
-  if (G.cine) cam.lookAt(G.cine.lx, G.cine.ly, G.cine.lz); else cam.lookAt(CAM.tx, CAM.ty, CAM.tz);
+  if (G.cine) cam.lookAt(G.cine.lx, G.cine.ly, G.cine.lz); else cam.lookAt(px, CAM.ty, pz);
 }
 
 // ======================================================================
@@ -631,7 +651,7 @@ function render(dt) {
   if (P.obj.rod) { P.obj.rod.tip.scale.setScalar(1 + (P.casting > 0 ? Math.min(1, P.casting) * 1.5 : 0) + Math.sin(G.t * 5) * 0.1); }
   // 엔티티 모습
   GFX.labels.length = 0;
-  const far = m.kind === 'terrain' ? 130 : 1e9;
+  const far = m.kind === 'terrain' ? 130 : m.kind === 'site' ? 190 : 1e9;
   _lightCand.length = 0;
   for (const e of m.ents) {
     const vis = shown(e) && Math.abs(e.x - CAM.tx) < far && Math.abs(e.z - CAM.tz) < far;
@@ -675,7 +695,7 @@ function render(dt) {
   if (m.outdoor) {
     const haze = { 2: [0xf4f0e8, 0.35], 3: [0xe8b880, 0.3], 4: [0xdfe8f0, 0.4], 5: [0xe8eef8, 0.6], 6: [G.f.westDark ? 0x9aa8b8 : 0xc8e0e8, 0.3] }[r];
     const glare = r === 2 && !G.f.eng_marcella && G.time / 60 > 11 && G.time / 60 < 15;
-    updateSky({ hour: G.time / 60, night: G.night, haze: haze && haze[0], hazeK: haze && haze[1], fog: m.kind === 'terrain' ? (r === 5 ? 0.0065 : r === 4 ? 0.0048 : 0.0024) + (G.storm > 0 ? 0.012 : 0) : 0.0028, aurora: r === 5 || r === 4 ? 1 : 0.3, sunK: glare ? 1.5 : 1 });
+    updateSky({ hour: G.time / 60, night: G.night, haze: haze && haze[0], hazeK: haze && haze[1], fog: m.kind === 'terrain' ? (r === 5 ? 0.0065 : r === 4 ? 0.0048 : 0.0024) + (G.storm > 0 ? 0.012 : 0) : m.kind === 'site' ? 0.0011 : 0.0028, aurora: r === 5 || r === 4 ? 1 : 0.3, sunK: glare ? 1.5 : 1 });
     if (GFX.finalU) GFX.finalU.exposure.value = lerp(GFX.finalU.exposure.value, glare ? 1.35 : 0.82, dt);
   } else {
     updateSky({ indoor: true, bg: m.bg || 0x07060c, fog: m.dark ? 0.06 : m.indoor ? 0.012 : 0.022, sun: m.dark ? 0.0 : 0.25, hemi: m.dark ? 0.06 : (m.indoor ? 0.55 : 0.35), amb: m.dark ? 0.02 : 0.15, hemiC: m.indoor ? 0xffe0c0 : 0x8090c0 });
@@ -728,7 +748,7 @@ async function newGame() {
   P = newPlayer(0, 0, 0);
   G.mode = 'play';
   await showLoading('칼리도르 학원', '1장 · 식어가는 도시');
-  enterMap('kalidor', 32, 30);
+  enterMap('kalidor', 'court');
   hideLoading();
   runScript(TALK.opening);
 }

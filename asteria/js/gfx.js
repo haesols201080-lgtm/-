@@ -11,8 +11,10 @@ function initGfx() {
   const isTouch = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
   GFX.mobile = isTouch;
   GFX.low = /low/.test(location.search);
+  const atmos = !!window.ATMOS;
   const canvas = document.getElementById('gl');
-  const r = new THREE.WebGLRenderer({ canvas, antialias: !isTouch, powerPreference: 'high-performance' });
+  // 대기 모듈이 있으면 렌더 타깃에 그리고 SMAA로 다듬으므로 기본 버퍼 안티에일리어싱은 꺼 둔다
+  const r = new THREE.WebGLRenderer({ canvas, antialias: atmos ? GFX.low : !isTouch, powerPreference: 'high-performance', stencil: false });
   r.setPixelRatio(GFX.low ? 0.5 : Math.min(window.devicePixelRatio || 1, isTouch ? 1.25 : 1.6));
   r.shadowMap.enabled = !GFX.low;
   r.shadowMap.type = isTouch ? THREE.PCFShadowMap : THREE.PCFSoftShadowMap;
@@ -23,28 +25,6 @@ function initGfx() {
   GFX.scene = scene;
   GFX.camera = new THREE.PerspectiveCamera(58, 1, 0.1, 1400);
   scene.fog = new THREE.FogExp2(0xbfe3f5, 0.006);
-
-  // 하늘
-  GFX.skyU = {
-    top: { value: COL(0x3a7bd5) }, horizon: { value: COL(0xbfe3f5) }, bottom: { value: COL(0x6a7a8a) },
-    sunDir: { value: V3(0.3, 0.8, 0.2).normalize() }, sunCol: { value: COL(0xfff2d0) }, stars: { value: 0 }, aurora: { value: 0 }, t: { value: 0 },
-  };
-  const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), new THREE.ShaderMaterial({
-    uniforms: GFX.skyU, side: THREE.BackSide, depthWrite: false, fog: false,
-    vertexShader: 'varying vec3 vDir; void main(){ vDir = position; vec4 p = projectionMatrix * modelViewMatrix * vec4(position,1.); gl_Position = p.xyww; }',
-    fragmentShader: `uniform vec3 top, horizon, bottom, sunDir, sunCol; uniform float stars, aurora, t; varying vec3 vDir;
-      float h3(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,37.719)))*43758.5453); }
-      void main(){ vec3 d = normalize(vDir); float h = d.y;
-        vec3 c = mix(horizon, top, smoothstep(0.0, 0.55, h)); c = mix(c, bottom, smoothstep(0.0, -0.25, h));
-        float s = max(dot(d, sunDir), 0.); c += sunCol * (pow(s, 900.) * 12. + pow(s, 10.) * 0.35);
-        vec3 p = floor(d * 380.); float n = h3(p);
-        c += vec3(step(0.9982, n)) * stars * smoothstep(0.02, 0.25, h) * (0.6 + 0.4 * sin(t * 2.5 + n * 60.));
-        if (aurora > 0.0) { float w = sin(d.x * 5. + t * 0.25 + sin(d.z * 3. + t * 0.2) * 2.) * 0.5 + 0.5; float band = smoothstep(0.12, 0.3, h) * smoothstep(0.75, 0.35, h);
-          c += mix(vec3(0.1, 1.0, 0.6), vec3(0.6, 0.3, 1.0), w) * w * band * aurora * (0.6 + 0.4 * sin(d.z * 14. + t)); }
-        gl_FragColor = vec4(c, 1.); }`,
-  }));
-  sky.renderOrder = -10; sky.frustumCulled = false;
-  GFX.sky = sky; scene.add(sky);
 
   // 빛
   GFX.hemi = new THREE.HemisphereLight(0xcfe8ff, 0x5a6a3a, 0.75); scene.add(GFX.hemi);
@@ -60,7 +40,41 @@ function initGfx() {
   for (let i = 0; i < 8; i++) { const p = new THREE.PointLight(0xffc880, 0, 14, 2); scene.add(p); GFX.pool.push(p); }
   GFX.rodLight = new THREE.PointLight(0x9ff4ff, 0, 9, 2); scene.add(GFX.rodLight);
 
-  // 후처리 (데스크톱): HDR → 번짐 → 톤 매핑
+  // 공용 텍스처
+  GFX.noiseTex = makeNoiseTex();
+  GFX.waterN = makeWaterNormal();
+  GFX.glowTex = makeGlowTex();
+  GFX.runeTex = makeRuneTex();
+  GFX.fx = new FXSystem(scene);
+  GFX.static = new THREE.Group(); scene.add(GFX.static);
+  GFX.dyn = new THREE.Group(); scene.add(GFX.dyn);
+  initGrass();
+
+  // 하늘, 구름, 환경광, 그림자 단계, 후처리: 대기 모듈(js/atmos.js)이 맡는다. 없으면 예전 방식.
+  if (atmos) ATMOS.init(); else legacySkyAndPost(r, scene, isTouch);
+  window.addEventListener('resize', resizeGfx);
+  resizeGfx();
+}
+// 대기 모듈이 없을 때의 예전 하늘과 후처리
+function legacySkyAndPost(r, scene, isTouch) {
+  GFX.skyU = {
+    top: { value: COL(0x3a7bd5) }, horizon: { value: COL(0xbfe3f5) }, bottom: { value: COL(0x6a7a8a) },
+    sunDir: { value: V3(0.3, 0.8, 0.2).normalize() }, sunCol: { value: COL(0xfff2d0) }, stars: { value: 0 }, aurora: { value: 0 }, t: { value: 0 },
+  };
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 16), new THREE.ShaderMaterial({
+    uniforms: GFX.skyU, side: THREE.BackSide, depthWrite: false, fog: false,
+    vertexShader: 'varying vec3 vDir; void main(){ vDir = position; vec4 p = projectionMatrix * modelViewMatrix * vec4(position,1.); gl_Position = p.xyww; }',
+    fragmentShader: `uniform vec3 top, horizon, bottom, sunDir, sunCol; uniform float stars, aurora, t; varying vec3 vDir;
+      float h3(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,37.719)))*43758.5453); }
+      void main(){ vec3 d = normalize(vDir); float h = d.y;
+        vec3 c = mix(horizon, top, smoothstep(0.0, 0.55, h)); c = mix(c, bottom, smoothstep(0.0, -0.25, h));
+        float s = max(dot(d, sunDir), 0.); c += sunCol * (pow(s, 900.) * 12. + pow(s, 10.) * 0.35);
+        vec3 p = floor(d * 380.); float n = h3(p);
+        c += vec3(step(0.9982, n)) * stars * smoothstep(0.02, 0.25, h) * (0.6 + 0.4 * sin(t * 2.5 + n * 60.));
+        gl_FragColor = vec4(c, 1.); }`,
+  }));
+  sky.renderOrder = -10; sky.frustumCulled = false;
+  GFX.sky = sky; scene.add(sky);
   if (!isTouch && !GFX.low && GFX.webgl2 && THREE.EffectComposer) {
     const rt = new THREE.WebGLRenderTarget(16, 16, { type: THREE.HalfFloatType });
     const comp = new THREE.EffectComposer(r, rt);
@@ -85,18 +99,6 @@ function initGfx() {
   } else {
     r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.0;
   }
-
-  // 공용 텍스처
-  GFX.noiseTex = makeNoiseTex();
-  GFX.waterN = makeWaterNormal();
-  GFX.glowTex = makeGlowTex();
-  GFX.runeTex = makeRuneTex();
-  GFX.fx = new FXSystem(scene);
-  GFX.static = new THREE.Group(); scene.add(GFX.static);
-  GFX.dyn = new THREE.Group(); scene.add(GFX.dyn);
-  initGrass();
-  window.addEventListener('resize', resizeGfx);
-  resizeGfx();
 }
 function resizeGfx() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -104,8 +106,9 @@ function resizeGfx() {
   GFX.camera.aspect = w / h; GFX.camera.updateProjectionMatrix();
   if (GFX.composer) { GFX.composer.setSize(w, h); GFX.composer.setPixelRatio(GFX.renderer.getPixelRatio()); }
   const hud = document.getElementById('hud');
+  if (typeof HUD === 'undefined') return;
   HUD.dpr = Math.min(window.devicePixelRatio || 1, 2);
-  hud.width = Math.round(w * HUD.dpr); hud.height = Math.round(h * HUD.dpr);
+  if (hud) { hud.width = Math.round(w * HUD.dpr); hud.height = Math.round(h * HUD.dpr); }
   HUD.w = w; HUD.h = h;
 }
 
@@ -361,7 +364,7 @@ class FXSystem {
       s.p.length = j;
       s.g.setDrawRange(0, j);
       for (const a of ['position', 'color', 'size', 'alpha']) s.g.attributes[a].needsUpdate = true;
-      s.m.uniforms.scale.value = HUD.h * 0.9;
+      s.m.uniforms.scale.value = (typeof HUD !== 'undefined' ? HUD.h : GFX.renderer.domElement.clientHeight) * 0.9;
     }
   }
   clear() { for (const s of this.sys) s.p.length = 0; }
@@ -384,6 +387,8 @@ const SKY = {
 };
 const _c1 = new THREE.Color(), _c2 = new THREE.Color();
 function updateSky(o) {
+  // 대기 모듈이 있으면 시간·실내 정보를 프리셋 보간으로 옮긴다
+  if (window.ATMOS && ATMOS.ready) return ATMOS.legacy(o);
   const U = GFX.skyU;
   if (o.indoor) {
     U.top.value.set(o.bg); U.horizon.value.set(o.bg); U.bottom.value.set(o.bg); U.stars.value = 0; U.aurora.value = 0;
@@ -418,3 +423,19 @@ function updateSky(o) {
   GFX.hemi.intensity = lerp(0.55, 0.28, n);
   GFX.amb.intensity = n * 0.12;
 }
+
+// ---------- 대기 모듈 불러오기 ----------
+// index.html을 고치지 않아도 되도록, 문서를 읽는 중이면 gfx.js 바로 뒤에 대기 모듈과 그 의존 파일을 끼워 넣는다.
+// (window.ATMOS_MANUAL = true 이면 페이지가 직접 넣는다고 보고 건너뛴다)
+(function autoloadAtmos() {
+  if (window.ATMOS || window.ATMOS_MANUAL) return;
+  const me = document.currentScript;
+  if (!me || !me.src || document.readyState !== 'loading') return;
+  const base = new URL('..', me.src).href;
+  const files = [];
+  if (!THREE.EXRLoader) files.push('vendor/atmos-fflate.js', 'vendor/atmos-exrloader.js');
+  if (!THREE.RoomEnvironment) files.push('vendor/atmos-roomenv.js');
+  if (!THREE.SMAAPass) files.push('vendor/atmos-smaa-shader.js', 'vendor/atmos-smaa-pass.js');
+  files.push('js/atmos.js');
+  for (const f of files) document.write('<script src="' + base + f + '"><\/script>');
+})();

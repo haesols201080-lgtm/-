@@ -488,7 +488,7 @@ function populateWorld(m) {
     addStatic(m, { x0: x0 + 1.6, x1: x1 - 1.6, z0: z0 + 1.6, z1: z1 - 1.6, top: y + 60 });
     shadowAll(g);
   }
-  A('warp', 100, 116.6, { look: 'gate', to: 'kalidor', tx: 32, ty: 3, label: '칼리도르 성문', rad: 4 });
+  A('warp', 100, 116.6, { look: 'gate', to: 'kalidor', tx: 'gate', label: '칼리도르 성문', rad: 4 });
   A('sign', 103, 112, { title: '이정표', text: '서쪽: 마르셀라 해안 · 동쪽: 엘름바텐 숲 · 북쪽: 그라벤호프 산지\n북서쪽 구름 위: 알테라 고원 (출입 금지)' });
   A('npc', 97, 113, { name: '성문지기', talk: 'gatekeeper', look: { cloak: '#6a6a7a', hair: '#3a2a1a', hat: '#4a4a5a' } });
 

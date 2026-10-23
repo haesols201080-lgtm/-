@@ -83,7 +83,10 @@ class BlockField {
 function addStatic(m, c) {
   m.statics.push(c);
   const S = 8;
-  const x0 = c.r ? c.x - c.r : c.x0, x1 = c.r ? c.x + c.r : c.x1, z0 = c.r ? c.z - c.r : c.z0, z1 = c.r ? c.z + c.r : c.z1;
+  let x0, x1, z0, z1;
+  if (c.r) { x0 = c.x - c.r; x1 = c.x + c.r; z0 = c.z - c.r; z1 = c.z + c.r; }
+  else if (c.hw !== undefined) { const ex = c.rot ? Math.abs(Math.cos(c.rot)) * c.hw + Math.abs(Math.sin(c.rot)) * c.hd : c.hw, ez = c.rot ? Math.abs(Math.sin(c.rot)) * c.hw + Math.abs(Math.cos(c.rot)) * c.hd : c.hd; x0 = c.x - ex; x1 = c.x + ex; z0 = c.z - ez; z1 = c.z + ez; }
+  else { x0 = c.x0; x1 = c.x1; z0 = c.z0; z1 = c.z1; }
   for (let gx = Math.floor(x0 / S); gx <= Math.floor(x1 / S); gx++) for (let gz = Math.floor(z0 / S); gz <= Math.floor(z1 / S); gz++) {
     const k = gx * 10007 + gz; let a = m.hash.get(k); if (!a) m.hash.set(k, a = []); a.push(c);
   }
@@ -94,19 +97,32 @@ function collidersNear(x, z, r) {
   for (let gx = Math.floor((x - r) / S); gx <= Math.floor((x + r) / S); gx++) for (let gz = Math.floor((z - r) / S); gz <= Math.floor((z + r) / S); gz++) {
     const a = m.hash.get(gx * 10007 + gz); if (a) for (const c of a) if (!c.off && !out.includes(c)) out.push(c);
   }
-  for (const c of G.dynCols) if (Math.abs(c.x - x) < r + (c.r || c.hw || 2) + 1 && Math.abs(c.z - z) < r + (c.r || c.hd || 2) + 1) out.push(c);
+  for (const c of G.dynCols) if (Math.abs(c.x - x) < r + (c.r || Math.max(c.hw || 2, c.rot ? c.hd || 2 : 0)) + 1 && Math.abs(c.z - z) < r + (c.r || Math.max(c.hd || 2, c.rot ? c.hw || 2 : 0)) + 1) out.push(c);
   return out;
 }
-// 충돌체를 상자 꼴로 통일해서 다룬다
+// 충돌체를 상자 꼴로 통일해서 다룬다. 돌린 상자(rot)는 자기 좌표계의 상자를 돌려준다 (중심 0,0)
 function colBox(c) {
   if (c.r !== undefined) return null;
+  if (c.rot) return { x0: -c.hw, x1: c.hw, z0: -c.hd, z1: c.hd };
   if (c.hw !== undefined) return { x0: c.x - c.hw, x1: c.x + c.hw, z0: c.z - c.hd, z1: c.z + c.hd };
   return c;
 }
+// 월드 좌표 → 충돌체 좌표 (돌린 상자만 바뀐다)
+const _cl = { x: 0, z: 0 };
+function colLocal(c, x, z) {
+  if (!c.rot) { _cl.x = x; _cl.z = z; return _cl; }
+  const dx = x - c.x, dz = z - c.z, co = Math.cos(c.rot), si = Math.sin(c.rot);
+  _cl.x = dx * co - dz * si; _cl.z = dx * si + dz * co; return _cl;
+}
+function colWorld(c, lx, lz, out) {
+  if (!c.rot) { out.x = lx; out.z = lz; return out; }
+  const co = Math.cos(c.rot), si = Math.sin(c.rot);
+  out.x = c.x + lx * co + lz * si; out.z = c.z - lx * si + lz * co; return out;
+}
 function insideCol(c, x, z, pad = 0) {
   if (c.r !== undefined) return Math.hypot(x - c.x, z - c.z) < c.r + pad;
-  const b = colBox(c);
-  return x > b.x0 - pad && x < b.x1 + pad && z > b.z0 - pad && z < b.z1 + pad;
+  const b = colBox(c), l = colLocal(c, x, z);
+  return l.x > b.x0 - pad && l.x < b.x1 + pad && l.z > b.z0 - pad && l.z < b.z1 + pad;
 }
 // 서 있을 수 있는 가장 높은 면 (땅, 상자 위, 얼음 기둥 위, 낙엽 위)
 function standHeight(x, z, y, step = 0.6) {
@@ -127,15 +143,17 @@ function pushOut(o, r, h) {
       const dx = o.x - c.x, dz = o.z - c.z, d = Math.hypot(dx, dz), m = c.r + r;
       if (d < m && d > 0.0001) { o.x = c.x + dx / d * m; o.z = c.z + dz / d * m; o.hitCol = c; }
     } else {
-      const b = colBox(c);
-      const cx = clamp(o.x, b.x0, b.x1), cz = clamp(o.z, b.z0, b.z1);
-      const dx = o.x - cx, dz = o.z - cz, d = Math.hypot(dx, dz);
+      const b = colBox(c), lp = colLocal(c, o.x, o.z);
+      let px = lp.x, pz = lp.z;
+      const cx = clamp(px, b.x0, b.x1), cz = clamp(pz, b.z0, b.z1);
+      const dx = px - cx, dz = pz - cz, d = Math.hypot(dx, dz);
       if (d < r) {
-        if (d > 0.0001) { o.x = cx + dx / d * r; o.z = cz + dz / d * r; }
+        if (d > 0.0001) { px = cx + dx / d * r; pz = cz + dz / d * r; }
         else { // 안에 들어가 버렸으면 가장 가까운 면으로
-          const l = o.x - b.x0, rr = b.x1 - o.x, t = o.z - b.z0, bb = b.z1 - o.z, mn = Math.min(l, rr, t, bb);
-          if (mn === l) o.x = b.x0 - r; else if (mn === rr) o.x = b.x1 + r; else if (mn === t) o.z = b.z0 - r; else o.z = b.z1 + r;
+          const l = px - b.x0, rr = b.x1 - px, t = pz - b.z0, bb = b.z1 - pz, mn = Math.min(l, rr, t, bb);
+          if (mn === l) px = b.x0 - r; else if (mn === rr) px = b.x1 + r; else if (mn === t) pz = b.z0 - r; else pz = b.z1 + r;
         }
+        colWorld(c, px, pz, o);
         o.hitCol = c;
       }
     }
@@ -145,9 +163,13 @@ function pushOut(o, r, h) {
 // ---------- 카메라 가림 ----------
 function camClip(tx, ty, tz, cx, cy, cz) {
   const m = G.map; let k = 1;
+  const cols = m.kind !== 'terrain';
   for (let i = 1; i <= 24; i++) {
     const f = i / 24, x = lerp(tx, cx, f), y = lerp(ty, cy, f), z = lerp(tz, cz, f);
-    if (m.ground(x, z) + 0.35 > y) { k = Math.max(0.12, (i - 1.5) / 24); break; }
+    let hit = m.ground(x, z) + 0.35 > y;
+    // 벽과 탑 같은 큰 충돌체도 카메라를 막는다
+    if (!hit && cols && f > 0.12) for (const c of collidersNear(x, z, 0.3)) if (!c.mob && !c.noCam && y < c.top + 0.3 && y > (c.bot ?? -99) - 0.3 && insideCol(c, x, z, 0.25) && (c.top - (c.bot ?? m.ground(x, z))) > 2.2) { hit = true; break; }
+    if (hit) { k = Math.max(0.12, (i - 1.5) / 24); break; }
   }
   return k;
 }
