@@ -493,6 +493,9 @@ function buildSiteScene(m) {
   for (const c of tb.colliders) addStatic(m, c);
   for (const l of tb.lights) m.ents.push(makeEnt('deco', l.x, l.z, { kind: 'lightonly', id: `kalidor:tl:${l.x.toFixed(1)},${l.z.toFixed(1)}`, light: { c: l.c, k: l.k, d: l.d, h: l.y - m.ground(l.x, l.z) } }));
   for (const a of tb.anims) m.anims.push(a);
+  // 돌담, 선돌, 울타리
+  const db = siteDressing(m); g.add(db.build());
+  for (const c of db.colliders) addStatic(m, c);
   siteTrees(m, g);
   // 고가교 바닥과 난간 (충돌)
   const V = ACAD.viaduct, n = 20;
@@ -745,4 +748,89 @@ function placeTown(m, b) {
     townHouse(b, m, x, z, Math.atan2(tq.x - x, tq.z - z), { w: 6 + hash2(k, 2, 83) * 2, d: 7, floors: 2, seed: k * 17, tint: tints[k % tints.length], shutter: shut[k % shut.length], lit: true, sign: k % 2 ? 0x6a2a22 : null });
   }
   return taken;
+}
+
+// ======================================================================
+// 들판 꾸미기: 마른 돌담, 룬 띠를 두른 선돌, 나무 울타리
+// ======================================================================
+// 마른 돌담: 꺾은선을 따라 크고 작은 돌을 두세 줄로 쌓고 위에 세운 갓돌
+function dryWall(b, m, pts, o = {}) {
+  const H = o.h ?? 1.1, T = o.t ?? 0.7;
+  let k = o.seed ?? 1;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, az] = pts[i], [bx, bz] = pts[i + 1], L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L, rot = Math.atan2(-uz, ux);
+    for (let row = 0, y = 0; row < 3 && y < H - 0.2; row++) {
+      let s = (row % 2) * 0.25;
+      const rh0 = 0.26 + hash2(k, row, 101) * 0.1;
+      while (s < L) {
+        k++;
+        const rh = rh0 * (0.75 + hash2(k, 11, 101) * 0.5), len = 0.25 + Math.pow(hash2(k, 1, 101), 1.6) * 0.7, x = ax + ux * (s + len / 2), z = az + uz * (s + len / 2), gy = m.ground(x, z);
+        const g = new THREE.BoxGeometry(len * 0.96, rh, T * (0.85 + hash2(k, 2, 101) * 0.2), 1, 1, 1);
+        // 모서리를 조금씩 흔들어 다듬지 않은 돌처럼
+        const p = g.attributes.position;
+        for (let v = 0; v < p.count; v++) { p.setX(v, p.getX(v) * (0.9 + hash2(k, v, 103) * 0.15)); p.setY(v, p.getY(v) * (0.85 + hash2(k, v, 105) * 0.25)); p.setZ(v, p.getZ(v) * (0.9 + hash2(k, v, 107) * 0.15)); }
+        g.computeVertexNormals();
+        const tone = 0.78 + hash2(k, 3, 101) * 0.3;
+        b.add(o.key || 'rock', g, M4e(x, gy + y + rh / 2 - 0.08, z, (hash2(k, 4, 101) - 0.5) * 0.08, rot + (hash2(k, 5, 101) - 0.5) * 0.12, (hash2(k, 6, 101) - 0.5) * 0.1), { worldUV: true, color: [tone, tone * 0.98, tone * 0.93] });
+        s += len;
+      }
+      y += rh0 * 0.92;
+    }
+    // 갓돌: 세워 박은 납작한 돌
+    for (let s = 0.1; s < L; s += 0.13 + hash2(k, 7, 101) * 0.08) {
+      k++;
+      const x = ax + ux * s, z = az + uz * s, gy = m.ground(x, z), hh = 0.16 + hash2(k, 9, 101) * 0.1;
+      b.add(o.key || 'rock', new THREE.BoxGeometry(0.09, hh, T * (0.75 + hash2(k, 10, 101) * 0.25)), M4e(x, gy + H - 0.12 + hh / 2, z, 0, rot, (hash2(k, 8, 101) - 0.5) * 0.7), { worldUV: true, color: [0.8, 0.79, 0.74] });
+    }
+    // 충돌 (낮아서 넘어갈 수 있다: 올라설 수 있음)
+    const cx = (ax + bx) / 2, cz = (az + bz) / 2;
+    b.col({ x: cx, z: cz, hw: L / 2, hd: T / 2, rot, top: m.ground(cx, cz) + H, stand: true, climb: true });
+  }
+}
+// 선돌: 고대층 돌, 가운데에 룬 띠가 희미하게 빛난다 (레이 선을 따라 줄지어 선다)
+function standingStone(b, m, x, z, o = {}) {
+  const k = o.seed || 1, h = 2.6 + hash2(k, 1, 111) * 1.8, w = 0.9 + hash2(k, 2, 111) * 0.4, gy = m.ground(x, z);
+  const g = new THREE.CylinderGeometry(w * 0.42, w * 0.55, h, 7, 6);
+  const p = g.attributes.position;
+  for (let v = 0; v < p.count; v++) { const yy = p.getY(v) / h + 0.5, n = noise2(p.getX(v) * 3 + k, p.getZ(v) * 3 + yy * 4, 113); p.setX(v, p.getX(v) * (0.85 + n * 0.3) * (1 - yy * 0.25)); p.setZ(v, p.getZ(v) * (0.6 + n * 0.2)); }
+  g.computeVertexNormals();
+  const rot = o.rot ?? hash2(k, 3, 111) * 6.28, lean = (hash2(k, 4, 111) - 0.5) * 0.12;
+  b.add('stoneOld', g, M4e(x, gy + h / 2 - 0.3, z, lean, rot, 0), { worldUV: true });
+  b.add('brass', new THREE.CylinderGeometry(w * 0.44, w * 0.46, 0.12, 9, 1, true), M4e(x, gy + h * 0.55, z, lean, rot, 0), { worldUV: true });
+  b.add('mana', new THREE.TorusGeometry(w * 0.45, 0.018, 4, 18).rotateX(Math.PI / 2), M4e(x, gy + h * 0.55 + 0.08, z, lean, rot, 0), { color: [0.45, 0.6, 0.62] });
+  b.col({ x, z, r: w * 0.45, top: gy + h, climb: true });
+}
+// 나무 울타리 (기둥 + 가로대 둘)
+function fence(b, m, pts, o = {}) {
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, az] = pts[i], [bx, bz] = pts[i + 1], L = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.round(L / 2.2));
+    for (let j = 0; j <= n; j++) {
+      const x = lerp(ax, bx, j / n), z = lerp(az, bz, j / n), gy = m.ground(x, z);
+      b.add('timber', new THREE.BoxGeometry(0.14, 1.25, 0.14), M4e(x, gy + 0.55, z, (hash2(i, j, 115) - 0.5) * 0.08, 0, (hash2(j, i, 115) - 0.5) * 0.08), { worldUV: true });
+      if (j < n) {
+        const x2 = lerp(ax, bx, (j + 1) / n), z2 = lerp(az, bz, (j + 1) / n), g2 = m.ground(x2, z2), l = Math.hypot(x2 - x, z2 - z), rot = Math.atan2(-(z2 - z), x2 - x);
+        for (const hh of [0.45, 0.95]) b.add('timber', new THREE.BoxGeometry(l + 0.1, 0.1, 0.07), M4e((x + x2) / 2, (gy + g2) / 2 + hh, (z + z2) / 2, 0, rot, Math.atan2(g2 - gy, l)), { worldUV: true });
+      }
+    }
+  }
+}
+function siteDressing(m) {
+  const b = new Batch();
+  // 동쪽 들판을 나누는 돌담
+  dryWall(b, m, [[452, 238], [470, 236], [494, 228], [510, 222]], { seed: 3 });
+  dryWall(b, m, [[452, 264], [474, 266], [490, 276], [508, 282]], { seed: 5 });
+  dryWall(b, m, [[468, 236], [472, 200], [468, 170], [456, 140]], { seed: 7 });
+  dryWall(b, m, [[476, 266], [482, 300], [478, 340], [470, 380]], { seed: 9 });
+  dryWall(b, m, [[380, 140], [410, 150], [440, 150], [460, 140]], { seed: 11 });
+  // 남쪽 숲길 가
+  dryWall(b, m, [[346, 362], [360, 384], [384, 412], [408, 440]], { seed: 13 });
+  // 마을 서쪽 밭 둘레
+  dryWall(b, m, [[60, 140], [100, 136], [130, 150]], { seed: 15 });
+  dryWall(b, m, [[30, 220], [70, 214], [110, 226]], { seed: 17 });
+  dryWall(b, m, [[50, 320], [90, 300], [120, 290]], { seed: 19 });
+  fence(b, m, [[100, 160], [100, 200], [130, 204], [134, 170]]);
+  fence(b, m, [[40, 250], [60, 280], [92, 268]]);
+  // 학원에서 대륙 쪽으로 뻗는 레이 선을 따라 선 선돌들
+  [[470, 250], [486, 218], [492, 186], [430, 160], [412, 128], [120, 60], [96, 40]].forEach(([x, z], i) => standingStone(b, m, x, z, { seed: i + 3 }));
+  return b;
 }
