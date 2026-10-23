@@ -335,7 +335,7 @@ function TEX_GEN() {
     const anc = era === 'ancient', early = era === 'early';
     const E = anc ? { row: 0.74, rowJ: 0.12, lmin: 1.2, lmax: 2.0, stag: 0.35, jw: 0.0016, jwv: 0.0006, rc: 0.003, er: [0.0004, 0.002], ce: 0.006, chip: 0.25, spall: 0.05, pil: 0.0025, ring: 0, lam: 0.25 }
       : early ? { row: 0.27, rowJ: 0.3, lmin: 0.28, lmax: 0.75, stag: 0.08, jw: 0.011, jwv: 0.006, rc: 0.014, er: [0.008, 0.026], ce: 0.045, chip: 0.85, spall: 0.4, pil: 0.007, ring: 0.1, lam: 0.3 }
-        : { row: 0.4, rowJ: 0.13, lmin: 0.6, lmax: 1.4, stag: 0.22, jw: 0.0075, jwv: 0.004, rc: 0.009, er: [0.003, 0.013], ce: 0.022, chip: 0.6, spall: 0.2, pil: 0.005, ring: 0.18, lam: 0.45 };
+        : { row: 0.4, rowJ: 0.2, lmin: 0.65, lmax: 1.55, stag: 0.24, jw: 0.0075, jwv: 0.004, rc: 0.009, er: [0.003, 0.013], ce: 0.022, chip: 0.6, spall: 0.2, pil: 0.005, ring: 0.18, lam: 0.45 };
     const pal = anc ? [['#e8e1d1', 4], ['#ded6c4', 3], ['#ece6d8', 2], ['#d9d0bc', 2], ['#e3d9c4', 2], ['#d4cab4', 1], ['#e6dccb', 1.5]]
       : early ? [['#a88f6b', 3], ['#9b8465', 3], ['#b19a77', 2], ['#8e795d', 2], ['#a39480', 1.5], ['#937f68', 1.5], ['#b8a17b', 1], ['#857463', 1]]
         : dark ? [['#8e7d64', 3], ['#7d6e5a', 3], ['#877766', 2], ['#6f6455', 2], ['#998970', 1], ['#675c4f', 1.2]]
@@ -349,7 +349,7 @@ function TEX_GEN() {
         chips.push({ x, y, r: 0.025 + R() * (early ? 0.09 : 0.06), d: 0.01 + R() * 0.03 });
       }
       return {
-        col: jit(hex(pickW(R, pal)), R, anc ? 0.025 : 0.045, anc ? 0.015 : 0.035), tx: R() * 2 - 1, ty: R() * 2 - 1, pil: 0.4 + R() * 0.6,
+        col: jit(hex(pickW(R, pal)), R, anc ? 0.025 : 0.06, anc ? 0.015 : 0.04), tx: R() * 2 - 1, ty: R() * 2 - 1, pil: 0.4 + R() * 0.6,
         er: E.er[0] + R() * (E.er[1] - E.er[0]) * (dark ? 1.4 : 1), ce: R() * E.ce, chips,
         spall: R() < E.spall * (dark ? 1.6 : 1) ? 0.5 + R() * 0.5 : 0, so: [R() * c.W | 0, R() * c.H | 0],
         lam: R() < E.lam ? 0.3 + R() * 0.7 : 0, lf: 5 + R() * 9, lt: (R() - 0.5) * 0.15, lp: R() * 6.28,
@@ -407,7 +407,7 @@ function TEX_GEN() {
         // 색
         let col = b.col;
         const pt = b.pat * sm(-0.35, 0.55, nL[q] + a * 0.6);
-        col = lerp3(col, grey, pt * (anc ? 0.25 : 0.35));
+        col = lerp3(col, grey, pt * (anc ? 0.25 : 0.5));
         if (b.ring) {
           const rr = Math.hypot(lx - b.rcx, (ly - b.rcy) * 1.5) + a * 0.12 + bb * 0.03;
           const ra = sm(0.55, 0.95, Math.sin(rr * 6.2832 * b.rf)) * 0.12 * sm(0.6, 0.1, rr);
@@ -454,7 +454,7 @@ function TEX_GEN() {
       }
     }
     if (dark || early) {
-      const moss = hex('#5f7a3a'), moss2 = hex('#46602c'), mk = dark ? 0 : 0.25;
+      const moss = hex('#5f7a3a'), moss2 = hex('#46602c'), mk = dark ? 0 : 0.4;
       for (let q = 0; q < N; q++) {
         const m = sm(0.15 + mk, 0.45 + mk, nL[q] * 0.8 + nB[q] * 0.5 + (stone[q] ? -0.35 : 0.2));
         if (m > 0) { c.mixC(q, lerp3(moss2, moss, sat(0.5 + nF[q])), m * 0.85); c.h[q] += m * 0.002 * (0.5 + 0.5 * nF[q]); c.rgh[q] = mix(c.rgh[q], 0.97, m); }
@@ -1582,7 +1582,7 @@ function TEX_GEN() {
   // size: 텍스처 한 장이 덮는 미터 [u, v], hero: 데스크톱 1024 단계, avg/r/m: 자리표시(1×1) 색·거칠기·금속,
   // em: 발광 지도, mac: 큰 얼룩 세기, wx: 날씨(때·젖음·눈) 받는 정도, moss: 이끼, por: 젖으면 어두워지는 정도, vk: 조각마다 색 흔들기
   const KIND = TEX.KIND = {
-    ashlar: { size: [4, 3], hero: 1, avg: 0xbb9e7a, r: 0.86, mac: 1, wx: 1, moss: 1, por: 1, vk: 0.07 },
+    ashlar: { size: [4, 3], hero: 1, avg: 0xbb9e7a, r: 0.86, mac: 1, wx: 1, moss: 1, por: 1, vk: 0.09 },
     rubble: { size: [3, 3], avg: 0x867d6b, r: 0.89, mac: 1, wx: 1, moss: 1, por: 1, vk: 0.08 },
     trim: { size: [2, 2], avg: 0xd3b68d, r: 0.8, mac: 1, wx: 1, moss: 0.7, por: 1 },
     cobble: { size: [2, 2], avg: 0x716a5f, r: 0.74, mac: 1, wx: 1, moss: 0.8, por: 1, vk: 0.08 },
@@ -1760,7 +1760,7 @@ function TEX_GEN() {
   const U = TEX.U = {
     texNoise: { value: null }, texGround: { value: null },
     texGP: { value: V4(0, 0, 0, 0) }, texGR: { value: V4(0, 0, 0, 0) }, texGQ: { value: V4(0, 0, 0, 1) },
-    texW: { value: V4(0.7, 0.35, 0, 0) }, texLey: { value: V4(0.3, 1.2, 1.4, 1.6) }, texMac: { value: V4(0.75, 0.5, 0.22, 0) },
+    texW: { value: V4(0.7, 0.35, 0, 0) }, texLey: { value: V4(0.3, 1.2, 1.4, 1.6) }, texMac: { value: V4(0.75, 0.5, 0.3, 0) },
     texTime: { value: 0 },
   };
   // 세계 노이즈 (256², 반복, 네 채널: r ~8 m, g ~3 m, b ~1 m, a ~0.5 m 크기의 얼룩 — 세계 좌표 × 0.043 으로 읽는다)
@@ -1877,6 +1877,7 @@ uniform float texTime;
 varying vec3 vTexW;
 varying vec3 vTexN;
 #ifdef TEX_TER
+precision mediump sampler2DArray;
 uniform sampler2DArray texArrA;
 uniform sampler2DArray texArrN;
 uniform sampler2DArray texArrO;
@@ -2016,9 +2017,9 @@ float texGroundY( vec3 p ) {
 		// 땅 근처 때 (0~1.5 m): 어둡고 채도 낮게, 노이즈 가장자리. 맨 아래는 축축한 녹갈색
 		float gH = vTexW.y - texGroundY( vTexW );
 		float ge = ( n1.b - 0.5 ) * 1.1 + ( n1.g - 0.5 ) * 0.8;
-		float grime = ( 1.0 - smoothstep( 0.15, 1.7, gH + ge ) ) * ( 1.0 - smoothstep( 0.55, 0.85, nG.y ) ) * texW.x * texQ.z;
+		float grime = pow( 1.0 - smoothstep( 0.0, 2.0, gH + ge ), 0.7 ) * ( 1.0 - smoothstep( 0.55, 0.85, nG.y ) ) * texW.x * texQ.z;
 		float damp = ( 1.0 - smoothstep( 0.0, 0.4, gH + ge * 0.4 ) ) * grime;
-		tAlb = mix( tAlb, mix( vec3( texLum( tAlb ) ), tAlb, 0.55 ) * vec3( 0.7, 0.68, 0.62 ), grime * 0.85 );
+		tAlb = mix( tAlb, mix( vec3( texLum( tAlb ) ), tAlb, 0.5 ) * vec3( 0.62, 0.6, 0.55 ), grime * 0.9 );
 		tAlb *= mix( vec3( 1.0 ), vec3( 0.78, 0.82, 0.66 ), damp * 0.6 );
 		tRough = min( 1.0, tRough + grime * 0.05 );
 		#ifndef TEX_LOW
@@ -2026,7 +2027,7 @@ float texGroundY( vec3 p ) {
 			// 빗물 자국: 세로면에 세로로 긴 노이즈 줄
 			vec2 th = normalize( vec2( - nG.z, nG.x ) + vec2( 1e-4, 0.0 ) );
 			float st = texture2D( texNoise, vec2( dot( vTexW.xz, th ) * 0.11, vTexW.y * 0.012 ) ).b;
-			tAlb *= 1.0 - smoothstep( 0.5, 0.72, st ) * ( 1.0 - abs( nG.y ) ) * texW.x * texQ.z * 0.22;
+			tAlb *= 1.0 - smoothstep( 0.48, 0.7, st ) * ( 1.0 - abs( nG.y ) ) * texW.x * texQ.z * 0.3;
 		}
 		#endif
 		// 이끼: 위를 향한 면, 오목한 곳, 땅 가까운 곳

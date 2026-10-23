@@ -311,3 +311,284 @@ const KIT = (function () {
     lineG(F, x0, x1, z0, z1, f = Math.min) { const pts = [], n = Math.max(2, Math.ceil((x1 - x0) / 2.5)); for (let i = 0; i <= n; i++) for (const z of [z0, z1]) pts.push([lp(x0, x1, i / n), z]); return f === Math.min ? this.gmin(F, pts) : this.gmax(F, pts); }
     stoneKey(era) { return ERA[era] || 'stone'; }
   }
+  const BP = Builder.prototype;
+
+  // =====================================================================
+  // 창
+  // =====================================================================
+  const WIN = {
+    lancet: { w: 1.3, h: 4.8, k: 1.5, m: 0.24, orders: 1 },
+    pointed: { w: 2.0, h: 5.4, k: 1.0, m: 0.26, orders: 2, n: 2, kl: 1.0, foil: 'quatre' },
+    paired: { w: 2.4, h: 6.4, k: 1.0, m: 0.3, orders: 2, n: 2, kl: 1.4, foil: 'ring' },
+    triple: { w: 3.4, h: 7.8, k: 1.0, m: 0.32, orders: 2, n: 3, kl: 1.2, foil: 'ring' },
+    round: { w: 1.0, h: 2.5, k: 0, m: 0.36, orders: 2 },
+    roundPair: { w: 1.9, h: 3.1, k: 0, m: 0.32, orders: 2, n: 2, kl: 0, foil: 'ring' },
+    square: { w: 1.7, h: 2.1, k: -1, m: 0.18, orders: 1 },
+    slit: { w: 0.16, h: 1.4, k: 1.2, m: 0.2, orders: 1 },
+    oculus: { w: 1.4, h: 1.4, k: -2, m: 0.22, orders: 1 },
+  };
+  // 불빛 세기 (해 질 녘 30~50%만, 세기 ±30%, 색은 #FFB866..#FF9A4A)
+  BP._lit = function (sp) {
+    const lit = sp.lit !== undefined ? sp.lit : (this.R() < (sp.litFrac ?? this.litFrac) ? 0.62 + this.R() * 0.66 : 0);
+    const t = this.R();
+    return { lit, col: [lit * 1.0, lit * (0.9 - 0.12 * t), lit * (0.78 - 0.3 * t)] };
+  };
+  // 유리 한 장 (앞면만)
+  BP._glass = function (F, poly, zg, L, key) {
+    const g = prism(new GB(), poly, null, zg - 0.02, zg, { ch: 0, sides: false, back: false });
+    if (L.lit > 0) this.put(key || 'glassLit', g, F, { col: L.col, jit: 0.16 });
+    else this.put(key || 'glassDark', g, F, { jit: 0.12 });
+  };
+  // 철 띠 (가로 막대)
+  BP._bars = function (F, x0, x1, y0, y1, z, step = 0.62) {
+    if (!this.hi) return;
+    for (let y = y0 + step * 0.8; y < y1 - 0.15; y += step) this.box('iron', F, (x0 + x1) / 2, y, z, x1 - x0, 0.03, 0.03, { ch: 0, jit: false });
+  };
+  // 플레이트 트레이서리: 감싸는 아치 아래 n칸, 위에 원창. 원창의 자리는 수치로 찾는다
+  BP._tracery = function (F, x, ys, spY, w, k, n, kl, zg, foil) {
+    const div = this.div, mw = 0.15, e = 0.05, wl = (w - 2 * e - (n - 1) * mw) / n, z0 = zg - 0.06, z1 = zg + 0.14;
+    const P = [[x + w / 2, spY], ...archCurve(w, spY, k, 0, div, x)], heads = [];
+    for (let i = 0; i < n; i++) { const lc = x - w / 2 + e + wl / 2 + i * (wl + mw), c = archCurve(wl, spY, kl, 0, div, lc); heads.push(c); P.push(...c.slice().reverse()); }
+    // 원창: 판 안에서 가장 큰 원
+    const segs = []; const addS = pts => { for (let i = 0; i < pts.length - 1; i++) segs.push([pts[i], pts[i + 1]]); };
+    addS(archCurve(w, spY, k, 0, div * 2, x)); heads.forEach((h, i) => addS(archCurve(wl, spY, kl, 0, div * 2, x - w / 2 + e + wl / 2 + i * (wl + mw))));
+    const sd = (px, py) => { let m = 1e9; for (const [a, b] of segs) { const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy, t = l2 ? cl(((px - a[0]) * dx + (py - a[1]) * dy) / l2, 0, 1) : 0; m = Math.min(m, Math.hypot(px - a[0] - dx * t, py - a[1] - dy * t)); } return m; };
+    const top = spY + archRise(w, k); let best = 0, by = 0;
+    for (let i = 1; i < 24; i++) { const py = lp(spY, top, i / 24); if (py < spY + archRise(wl, kl) * (n % 2 ? 1 : 0.2)) continue; const r = sd(x, py); if (r > best) { best = r; by = py; } }
+    const holes = [];
+    const ro = Math.min(best - 0.07, w * 0.22);
+    if (ro > 0.12) holes.push(foil === 'quatre' ? quatrefoil(x, by, ro, this.hi ? 28 : 16) : circle(x, by, ro, this.hi ? 24 : 14));
+    this.slab('stoneTrim', F, P, holes, z0, z1, { ch: 0.03, back: false, rk: 0.85 });
+    // 원창 안의 동심원 고리와 살 (공명)
+    if (ro > 0.2 && foil === 'ring') {
+      this.slab('stoneTrim', F, circle(x, by, ro * 0.56, 18), [circle(x, by, ro * 0.42, 18)], z0 + 0.03, z1 - 0.02, { ch: 0.02, back: false });
+      for (let i = 0; i < 6; i++) { const a = i / 6 * TAU + PI / 2, c = Math.cos(a), s = Math.sin(a), t = 0.035; const r0 = ro * 0.5, r1 = ro + 0.03; this.slab('stoneTrim', F, [[x + c * r0 - s * t, by + s * r0 + c * t], [x + c * r0 + s * t, by + s * r0 - c * t], [x + c * r1 + s * t, by + s * r1 - c * t], [x + c * r1 - s * t, by + s * r1 + c * t]], null, z0 + 0.03, z1 - 0.03, { ch: 0.01, back: false }); }
+    }
+    // 중간 기둥 (멀리언)
+    for (let i = 1; i < n; i++) {
+      const mx = x - w / 2 + e + i * (wl + mw) - mw / 2;
+      if (!kl && this.hi) { this.turn('stoneTrim', sub(F, mx, zg + 0.04), [[0.11, ys], [0.08, ys + 0.14], [0.075, spY - 0.2], [0.12, spY - 0.06], [0.12, spY + 0.02]], 8); }
+      else this.box('stoneTrim', F, mx, ys, zg + 0.04, mw, spY - ys + 0.02, 0.2, { ch: 0.03 });
+    }
+    for (let i = 0; i < n; i++) { const lc = x - w / 2 + e + wl / 2 + i * (wl + mw); this._bars(F, lc - wl / 2, lc + wl / 2, ys, spY, zg + 0.015); }
+  };
+  // 창 하나: 벽 틀 F(로컬 x는 벽을 따라, y는 세계 높이, 바깥면 z = T/2). 벽에 뚫을 구멍을 돌려준다
+  BP._win = function (F, x, ys, T, sp = {}) {
+    const type = WIN[sp.type] ? sp.type : 'lancet', D = WIN[type];
+    const w = sp.w ?? D.w, h = sp.h ?? D.h, k = sp.k ?? D.k, m = sp.m ?? D.m, div = this.div, zf = T / 2;
+    const q = cl((T - 0.1) / 1.1, 0.35, 1), L = this._lit(sp);
+    const orders = sp.orders ?? D.orders, r0 = 0.18 * q, step = 0.16 * q, gb = 0.24 * q;
+    let hole, top, zg, area;
+    if (type === 'oculus' || type === 'rose') {
+      const R = w / 2, cy = ys + R;
+      hole = circle(x, cy, R + m, this.hi ? 32 : 20);
+      for (let i = 0; i < orders; i++) { const d1 = m * (orders - i) / orders, d0 = m * (orders - i - 1) / orders, z1 = zf - r0 - i * step; this.slab('stoneTrim', F, circle(x, cy, R + d1, this.hi ? 32 : 20), [circle(x, cy, R + d0, this.hi ? 32 : 20)], z1 - 0.3 * q, z1, { ch: 0.03, back: false, rk: 0.8 }); }
+      zg = zf - r0 - (orders - 1) * step - gb;
+      this._glass(F, circle(x, cy, R + 0.01, this.hi ? 28 : 16), zg, L);
+      if (R > 0.4) {
+        this.slab('stoneTrim', F, circle(x, cy, R * 0.5, 18), [circle(x, cy, R * 0.38, 18)], zg - 0.05, zg + 0.1, { ch: 0.02, back: false });
+        for (let i = 0; i < 8; i++) { const a = i / 8 * TAU, c = Math.cos(a), s = Math.sin(a), t = 0.035; this.slab('stoneTrim', F, [[x + c * R * 0.45 - s * t, cy + s * R * 0.45 + c * t], [x + c * R * 0.45 + s * t, cy + s * R * 0.45 - c * t], [x + c * (R + 0.02) + s * t, cy + s * (R + 0.02) - c * t], [x + c * (R + 0.02) - s * t, cy + s * (R + 0.02) + c * t]], null, zg - 0.04, zg + 0.08, { ch: 0.01, back: false }); }
+      }
+      this.slab('stoneTrim', F, circle(x, cy, R + m + 0.22, this.hi ? 32 : 20), [circle(x, cy, R + m + 0.07, this.hi ? 32 : 20)], zf - 0.05, zf + 0.12, { ch: 0.035, back: false });
+      top = cy + R + m + 0.22; area = [w, w]; ys = cy - R;
+    } else if (type === 'square') {
+      const W = w + 2 * m, yt = ys + h;
+      hole = [[x - W / 2, ys], [x + W / 2, ys], [x + W / 2, yt + m], [x - W / 2, yt + m]];
+      const z1 = zf - r0;
+      this.slab('stoneTrim', F, [[x + W / 2, ys], [x + W / 2, yt + m], [x - W / 2, yt + m], [x - W / 2, ys], [x - w / 2, ys], [x - w / 2, yt], [x + w / 2, yt], [x + w / 2, ys]], null, z1 - 0.3 * q, z1, { ch: 0.03, back: false, rk: 0.8 });
+      zg = z1 - gb;
+      this._glass(F, [[x - w / 2, ys], [x + w / 2, ys], [x + w / 2, yt], [x - w / 2, yt]], zg, L);
+      if (w > 1.1) this.box('stoneTrim', F, x, ys, zg + 0.04, 0.13, h, 0.18, { ch: 0.03 });
+      this.box('stoneTrim', F, x, ys + h * 0.64, zg + 0.04, w, 0.12, 0.18, { ch: 0.03 });
+      this._bars(F, x - w / 2, x + w / 2, ys, ys + h * 0.62, zg + 0.015, 0.45);
+      // 네모 물끊기 (꺾여 내려오는 label)
+      this.box('stoneTrim', F, x, yt + m + 0.05, zf + 0.04, W + 0.5, 0.17, 0.2, { ch: 0.035 });
+      for (const s of [-1, 1]) this.box('stoneTrim', F, x + s * (W / 2 + 0.17), yt + m - 0.36, zf + 0.04, 0.16, 0.42, 0.2, { ch: 0.03 });
+      top = yt + m + 0.22; area = [w, h];
+    } else {
+      const rise = archRise(w, k), spY = ys + h - rise;
+      hole = archOpening(w, ys, spY, k, m, div, x);
+      for (let i = 0; i < orders; i++) {
+        const d1 = m * (orders - i) / orders, d0 = m * (orders - i - 1) / orders, z1 = zf - r0 - i * step;
+        this.slab(i % 2 ? 'stoneTrim' : (sp.era === 'early' ? 'stoneEarly' : 'stoneTrim'), F, archBand(w, ys, spY, k, d0, d1, div, x), null, z1 - 0.3 * q, z1, { ch: 0.035, back: false, rk: 0.78 });
+      }
+      zg = zf - r0 - (orders - 1) * step - gb;
+      const n = sp.n ?? D.n ?? 1;
+      if (n > 1 && w > 0.9) {
+        this._glass(F, archOpening(w, ys, spY, k, 0.01, div, x), zg, L);
+        this._tracery(F, x, ys, spY, w, k, n, sp.kl ?? D.kl ?? 1, zg, sp.foil ?? D.foil);
+      } else {
+        this._glass(F, archOpening(w, ys, spY, k, 0.01, div, x), zg, L);
+        if (type !== 'slit') this._bars(F, x - w / 2, x + w / 2, ys, spY, zg + 0.015);
+      }
+      // 물끊기 (아치를 따라 도는 띠 + 끝돌)
+      if (type !== 'slit') {
+        const hb = Math.min(0.3, rise * 0.3), a = m + 0.07, b = m + (sp.era === 'early' ? 0.17 : 0.22);
+        this.slab('stoneTrim', F, archBand(w, spY - hb, spY, k, a, b, div, x), null, zf - 0.05, zf + 0.12, { ch: 0.035, back: false });
+        if (this.hi) for (const s of [-1, 1]) this.box('stoneTrim', F, x + s * (w / 2 + (a + b) / 2 + 0.09), spY - hb - 0.15, zf + 0.03, 0.36, 0.17, 0.2, { ch: 0.03 });
+        top = spY + archRise(w, k, b);
+      } else top = spY + archRise(w, k, m);
+      area = [w, h];
+    }
+    // 창턱 (바깥으로 기운 윗면)
+    if (type !== 'oculus' && type !== 'rose') {
+      const W = w + 2 * m, zb = zg - 0.03;
+      this.profX('stoneTrim', F, [[zb, ys - 0.2], [zf + 0.13, ys - 0.2], [zf + 0.13, ys - 0.09], [zb, ys + 0.03]], x - W / 2 - 0.13, x + W / 2 + 0.13, { ch: 0.03, back: true });
+    }
+    const [wx, wy, wz] = wp(F, x, ys + area[1] / 2, zg);
+    this.mark({ kind: 'window', x: wx, y: wy, z: wz, nx: F.s, nz: F.c, w: area[0], h: area[1], lit: L.lit });
+    return { hole, top, zg };
+  };
+  // 공개: 벽 구멍 없이 창 조립만 (x,z = 바깥면 위 창 가운데, rot = 벽 방향, y = 창턱 높이)
+  BP.window = function (x, y, z, rot, sp = {}, o = {}) {
+    const T = o.thick ?? 1.2, F = sub(frame(x, z, rot), 0, -T / 2);
+    return this._win(F, 0, y, T, sp);
+  };
+
+  // ---------- 장미창 (동심원 고리, 열두 살, 열두 작은 원) ----------
+  BP.rose = function (F, cx, cy, R, o = {}) {
+    const T = o.T ?? 1.2, zf = T / 2, n = this.hi ? 48 : 28, L = this._lit(o), div = n;
+    const hole = circle(cx, cy, R + 0.42, n);
+    this.slab('stoneTrim', F, circle(cx, cy, R + 0.42, n), [circle(cx, cy, R + 0.2, n)], zf - 0.42, zf - 0.12, { ch: 0.04, back: false, rk: 0.8 });
+    this.slab('stoneTrim', F, circle(cx, cy, R + 0.2, n), [circle(cx, cy, R, n)], zf - 0.62, zf - 0.3, { ch: 0.04, back: false, rk: 0.78 });
+    this.slab('stoneTrim', F, circle(cx, cy, R + 0.72, n), [circle(cx, cy, R + 0.52, n)], zf - 0.05, zf + 0.14, { ch: 0.04, back: false });
+    const zg = zf - 0.72, z0 = zg - 0.06, z1 = zg + 0.14;
+    // 유리: 가운데 호박색, 가운데 띠 쪽빛/붉은빛, 바깥 띠 번갈아
+    const pal = [[1.5, 1.05, 0.45], [0.55, 0.75, 1.6], [1.5, 0.55, 0.5], [0.75, 1.3, 0.85], [1.3, 1.1, 0.6]];
+    const sector = (r0, r1, a0, a1) => { const P = [], m = 4; for (let i = 0; i <= m; i++) P.push([cx + Math.cos(lp(a0, a1, i / m)) * r1, cy + Math.sin(lp(a0, a1, i / m)) * r1]); for (let i = m; i >= 0; i--) P.push([cx + Math.cos(lp(a0, a1, i / m)) * r0, cy + Math.sin(lp(a0, a1, i / m)) * r0]); return P; };
+    const gput = (poly, c) => { const g = prism(new GB(), poly, null, zg - 0.02, zg, { ch: 0, sides: false, back: false }); if (L.lit > 0) this.put('glassLit', g, F, { col: [c[0] * L.lit * 0.8, c[1] * L.lit * 0.8, c[2] * L.lit * 0.8], jit: 0.1 }); else this.put('glassStained', g, F, { col: c, jit: 0.1 }); };
+    gput(circle(cx, cy, R * 0.3, 20), pal[0]);
+    for (let i = 0; i < 12; i++) { const a0 = i / 12 * TAU, a1 = (i + 1) / 12 * TAU; gput(sector(R * 0.29, R * 0.63, a0, a1), pal[1 + (i % 2)]); gput(sector(R * 0.62, R + 0.02, a0, a1), pal[i % 2 ? 3 : 4]); }
+    // 돌 창살
+    const ring = (r0, r1, zz0 = z0, zz1 = z1) => this.slab('stoneTrim', F, circle(cx, cy, r1, n), [circle(cx, cy, r0, n)], zz0, zz1, { ch: 0.025, back: false });
+    ring(R * 0.94, R + 0.05); ring(R * 0.58, R * 0.66); ring(R * 0.21, R * 0.3);
+    const spoke = (a, r0, r1, t) => { const c = Math.cos(a), s = Math.sin(a); this.slab('stoneTrim', F, [[cx + c * r0 - s * t, cy + s * r0 + c * t], [cx + c * r0 + s * t, cy + s * r0 - c * t], [cx + c * r1 + s * t, cy + s * r1 - c * t], [cx + c * r1 - s * t, cy + s * r1 + c * t]], null, z0, z1 - 0.02, { ch: 0.015, back: false }); };
+    for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; spoke(a, R * 0.28, R * 0.6, 0.05); spoke(a + PI / 12, R * 0.64, R * 0.96, 0.045); }
+    // 바깥 띠의 작은 원 열둘 (열두 기관)
+    for (let i = 0; i < 12; i++) { const a = i / 12 * TAU, px = cx + Math.cos(a) * R * 0.8, py = cy + Math.sin(a) * R * 0.8, rr = R * 0.105; this.slab('stoneTrim', F, circle(px, py, rr + 0.045, 14), [circle(px, py, rr, 14)], z0 + 0.02, z1, { ch: 0.012, back: false }); }
+    // 가운데 황동 고리
+    this.slab('brass', F, circle(cx, cy, R * 0.2, 20), [circle(cx, cy, R * 0.13, 20)], zg, z1 + 0.03, { ch: 0.01, back: false });
+    this.slab('brass', F, circle(cx, cy, R * 0.06, 12), null, zg, z1 + 0.05, { ch: 0.01, back: false });
+    const [wx, wy, wz] = wp(F, cx, cy, zg);
+    this.mark({ kind: 'window', x: wx, y: wy, z: wz, nx: F.s, nz: F.c, w: 2 * R, h: 2 * R, lit: L.lit, rose: true });
+    return { hole, top: cy + R + 0.72 };
+  };
+
+  // =====================================================================
+  // 문 (벽 틀 F 안, at = 로컬 x, y = 문턱 높이). 여러 겹 물러나는 아치 + 작은 기둥 + 고리 쐐기돌 + 참나무 문짝
+  // =====================================================================
+  BP._door = function (F, at, y, T, d = {}) {
+    const w = d.w ?? 2.6, h = d.h ?? 4.6, k = d.k ?? (d.era === 'early' ? 0 : 1), orders = d.orders ?? 3, div = this.div + 1, zf = T / 2;
+    const rise = archRise(w, k), spY = y + h - rise, step = Math.min(0.28, (T - 0.35) / orders), ow = 0.3;
+    const M = orders * ow;
+    const notch = { x0: at - w / 2 - M, x1: at + w / 2 + M, path: [[at - w / 2 - M, spY], ...archCurve(w, spY, k, M, div, at).reverse(), [at + w / 2 + M, spY]], y };
+    for (let i = 0; i < orders; i++) {
+      const d1 = ow * (orders - i), d0 = ow * (orders - i - 1), z1 = zf - 0.03 - i * step;
+      this.slab(i % 2 ? 'stone' : 'stoneTrim', F, archBand(w, y, spY, k, d0, d1, div, at), null, -T / 2, z1, { ch: 0.05, back: false, rk: 0.8 });
+      // 구석의 작은 기둥 (밑동, 몸, 머리)
+      if (i > 0 && this.hi) for (const s of [-1, 1]) {
+        const cx = at + s * (w / 2 + d1 + 0.02), cz = zf - 0.03 - i * step + 0.11;
+        this.turn('stoneTrim', sub(F, cx, cz), [[0.15, y], [0.15, y + 0.25], [0.1, y + 0.36], [0.085, y + 0.42], [0.085, spY - 0.45], [0.1, spY - 0.38], [0.16, spY - 0.16], [0.16, spY]], 8);
+      }
+    }
+    // 고리 쐐기돌 (열두 눈금 룬 고리)
+    const ap = spY + archRise(w, k, M);
+    this.box('stoneTrim', F, at, ap - 0.55, zf - 0.02, 0.62, 0.8, 0.3, { ch: 0.05 });
+    this.slab('brass', F, circle(at, ap - 0.17, 0.2, 18), [circle(at, ap - 0.17, 0.14, 18)], zf + 0.27, zf + 0.31, { ch: 0.008, back: false });
+    if (this.hi) for (let i = 0; i < 12; i++) { const a = i / 12 * TAU, c = Math.cos(a), s = Math.sin(a), px = at + c * 0.24, py = ap - 0.17 + s * 0.24, t = 0.012; this.slab('brass', F, [[px - s * t, py + c * t], [px + s * t, py - c * t], [px + c * 0.05 + s * t, py + s * 0.05 - c * t], [px + c * 0.05 - s * t, py + s * 0.05 + c * t]], null, zf + 0.27, zf + 0.3, { ch: 0, back: false }); }
+    // 문턱과 계단
+    const zd = zf - 0.03 - (orders - 1) * step - 0.25;
+    this.box('stoneTrim', F, at, y - 0.3, (zd + zf + 0.7) / 2, w + 2 * M + 0.4, 0.32, zf + 0.7 - zd, { ch: 0.04 });
+    const [gx, , gz] = wp(F, at, 0, zf + 1.2), gy = this.ground(gx, gz);
+    for (let i = 1; y - i * 0.17 > gy - 0.05 && i < 12; i++) this.box('stoneTrim', F, at, gy - 0.4, zf + 0.7 + i * 0.32 - 0.16, w + 2 * M + 0.4 + i * 0.2, y - i * 0.17 - gy + 0.4, 0.34, { ch: 0.035 });
+    // 문짝
+    const lv = d.leaves ?? 'closed';
+    if (lv !== 'none') this._leaves(F, at, y, spY, w, k, zd, lv);
+    if (d.lantern !== false) for (const s of [-1, 1]) { const [lx, ly, lz] = wp(F, at + s * (w / 2 + M + 0.75), y + Math.min(3.4, h * 0.72), zf); this.lantern(lx, ly, lz, F.rot, {}); }
+    const [mx, my, mz] = wp(F, at, y, zf);
+    this.mark({ kind: 'door', x: mx, y: my, z: mz, rot: F.rot, w, h });
+    return notch;
+  };
+  // 참나무 문짝 두 짝 (closed: 닫힘, open: 안으로 열림), 철 띠와 징, 고리 손잡이
+  BP._leaves = function (F, at, y, spY, w, k, zd, mode) {
+    const div = this.div + 1, cur = archCurve(w - 0.02, spY, k, 0, div, 0);
+    for (const s of [-1, 1]) {
+      // 경첩 틀 G: 로컬 x = 0(경첩) → -s*w/2 쪽이 가운데. 위 줄은 가운데(꼭대기)에서 경첩 쪽으로
+      const xs = -s, top = cur.filter(p => p[0] * s >= -1e-4).map(p => [w / 2 - p[0] * s, p[1]]).sort((a, b) => b[0] - a[0]);
+      const P = dedupe([[0, y], [w / 2 - 0.01, y], ...top, [0, spY]]).map(p => [p[0] * xs, p[1]]);
+      const G = sub(F, at + s * (w / 2), zd, mode === 'open' ? -s * (HP - 0.3) : 0);
+      this.slab('oak', G, P, null, -0.07, 0.07, { ch: 0.02, chB: 0.02 });
+      if (!this.hi) continue;
+      for (let i = 0; i < 5; i++) { const px = (w / 2) * (i + 0.5) / 5, ph = archY(w, spY, k, w / 2 - px) - y; this.box('oak', G, px * xs, y + 0.05, 0.075, w / 10 - 0.025, ph - 0.12, 0.03, { ch: 0.01 }); }
+      for (const t of [0.12, 0.5, 0.84]) {
+        const yy = y + (spY - y) * t;
+        this.box('iron', G, (w / 4 - 0.02) * xs, yy, 0.1, w / 2 - 0.12, 0.09, 0.025, { ch: 0.005 });
+        for (let j = 0; j < 4; j++) this.box('iron', G, (0.15 + j * (w / 2 - 0.3) / 3) * xs, yy + 0.025, 0.115, 0.04, 0.04, 0.02, { ch: 0 });
+      }
+      this.box('iron', G, (w / 2 - 0.25) * xs, y + 1.0, 0.12, 0.05, 0.16, 0.06, { ch: 0 });
+      this.box('iron', G, (w / 2 - 0.25) * xs, y + 0.9, 0.14, 0.16, 0.03, 0.03, { ch: 0 });
+    }
+  };
+
+  // =====================================================================
+  // 작은 것들: 등불, 첨탑, 굴뚝
+  // =====================================================================
+  BP.lantern = function (x, y, z, rot = 0, o = {}) {
+    const F = frame(x, z, rot, 0), arm = o.post ? 0 : (o.arm ?? 0.62);
+    if (o.post) {
+      const gy = this.ground(x, z), base = o.base ?? gy;
+      this.box('stoneTrim', F, 0, base - 0.3, 0, 0.5, 0.75, 0.5, { ch: 0.05 });
+      this.turn('iron', F, [[0.08, base + 0.4], [0.06, base + 0.6], [0.045, y - 0.35], [0.07, y - 0.3]], 8);
+    } else {
+      this.box('iron', F, 0, y + 0.24, arm / 2, 0.05, 0.05, arm, { ch: 0 });
+      this.box('iron', F, 0, y - 0.25, 0.05, 0.12, 0.3, 0.1, { ch: 0.01 });
+      if (this.hi) for (let i = 1; i < 4; i++) this.box('iron', F, 0, y + 0.24 - i * 0.12, i * 0.12, 0.03, 0.03, 0.03, { ch: 0 });
+    }
+    const L = sub(F, 0, arm), hb = o.post ? -0.3 : -0.18;
+    this.box('iron', L, 0, y + hb, 0, 0.26, 0.05, 0.26, { ch: 0.01 });
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) this.box('iron', L, sx * 0.12, y + hb, sz * 0.12, 0.025, 0.4, 0.025, { ch: 0 });
+    this.turn('iron', L, [[0.2, y + hb + 0.4], [0.03, y + hb + 0.62], [0.035, y + hb + 0.7], [0, y + hb + 0.72]], 4, { a0: PI / 4 });
+    this.box('glow', L, 0, y + hb + 0.06, 0, 0.21, 0.32, 0.21, { ch: 0, col: 1.6, jit: 0.1 });
+    const [lx, ly, lz] = wp(L, 0, y + hb + 0.22, 0);
+    this.light({ x: lx, y: ly, z: lz, c: 0xffb060, k: o.k ?? 1.3, d: o.d ?? 11, flicker: true });
+  };
+  // 첨탑 (돌): 네모 몸 + 박공 넷 + 네모뿔 + 작은 꽃봉오리. tuning이면 소리굽쇠 쌍첨탑
+  BP._pinnacle = function (F, lx, y0, lz, o = {}) {
+    const s = o.s ?? 0.7, h = o.h ?? 4.2, key = o.key ?? 'stoneTrim', P = sub(F, lx, lz, o.rot ?? 0);
+    if (o.tuning) {
+      this.box(key, P, 0, y0, 0, s, 0.5, s, { ch: 0.04 });
+      this.box(key, P, 0, y0 + 0.5, 0, s * 0.42, h * 0.22, s * 0.42, { ch: 0.03 });
+      const yu = y0 + 0.5 + h * 0.22, gap = s * 0.55, t = s * 0.3;
+      const U = archBand(gap, 0, 0, 0, 0, t, this.div + 1).map(p => [p[0], yu + gap / 2 + t - p[1] + 0.0]);
+      this.slab(key, P, U, null, -t / 2, t / 2, { ch: 0.02, chB: 0.02 });
+      for (const sx of [-1, 1]) {
+        const tx = sx * (gap / 2 + t / 2);
+        this.box(key, P, tx, yu + gap / 2 + t - 0.02, 0, t, h * 0.5, t, { ch: 0.025 });
+        this.turn(key, sub(P, tx, 0), [[t * 0.72, yu + gap / 2 + t + h * 0.5 - 0.02], [0, yu + gap / 2 + t + h * 0.5 + 0.5]], 4, { a0: PI / 4 });
+        this.turn('brass', sub(P, tx, 0), [[0, yu + gap / 2 + t + h * 0.5 + 0.44], [0.07, yu + gap / 2 + t + h * 0.5 + 0.52], [0, yu + gap / 2 + t + h * 0.5 + 0.62]], 6);
+      }
+      return y0 + h + 0.6;
+    }
+    const hs = h * 0.36, yt = y0 + hs;
+    this.box(key, P, 0, y0, 0, s, hs, s, { ch: 0.04 });
+    this.box(key, P, 0, yt - 0.02, 0, s + 0.08, 0.1, s + 0.08, { ch: 0.03 });
+    for (const r of [0, HP]) this.slab(key, sub(P, 0, 0, r), [[-s / 2, yt], [s / 2, yt], [0, yt + s * 0.75]], null, -s / 2 - 0.04, s / 2 + 0.04, { ch: 0.02, chB: 0.02 });
+    const hp = h - hs - 0.5, r0 = s * 0.4 * Math.SQRT2;
+    this.turn(key, P, [[r0, yt + 0.06], [r0 * 0.12, yt + hp], [0, yt + hp + 0.02]], 4, { a0: PI / 4 });
+    if (this.hi) for (let i = 1; i <= 3; i++) { const t = i / 4, rr = lp(r0, r0 * 0.12, t) / Math.SQRT2; for (const sx of SG) for (const sz of SG) this.box(key, P, sx * rr, yt + hp * t - 0.06, sz * rr, 0.11, 0.12, 0.11, { ch: 0.03 }); }
+    const yf = yt + hp;
+    this.box(key, P, 0, yf - 0.1, 0, 0.32, 0.08, 0.08, { ch: 0.02 }); this.box(key, P, 0, yf - 0.1, 0, 0.08, 0.08, 0.32, { ch: 0.02 });
+    this.turn(o.tip ?? key, P, [[0, yf - 0.05], [0.09, yf + 0.06], [0.05, yf + 0.2], [0, yf + 0.36]], 6);
+    return yf + 0.36;
+  };
+  BP.pinnacle = function (x, y, z, o = {}) { return this._pinnacle(frame(x, z, o.rot ?? 0), 0, y, 0, o); };
+  BP._chimney = function (F, lx, y0, lz, o = {}) {
+    const w = o.w ?? 1.25, d = o.d ?? 0.8, h = o.h ?? 4, key = o.key ?? 'stoneEarly', C = sub(F, lx, lz, o.rot ?? 0), yt = y0 + h;
+    this.box(key, C, 0, y0, 0, w, h, d, { ch: 0.04 });
+    this.box('stoneTrim', C, 0, yt - 0.62, 0, w + 0.16, 0.14, d + 0.16, { ch: 0.03 });
+    this.box('stoneTrim', C, 0, yt, 0, w + 0.22, 0.18, d + 0.22, { ch: 0.04 });
+    this.box(key, C, 0, yt + 0.18, 0, w - 0.1, 0.12, d - 0.1, { ch: 0.03, col: 0.6 });
+    const np = w > 1 ? 2 : 1;
+    for (let i = 0; i < np; i++) this.turn('stoneDark', sub(C, np > 1 ? (i - 0.5) * w * 0.5 : 0, 0), [[0.17, yt + 0.25], [0.15, yt + 0.55], [0.12, yt + 0.78], [0.15, yt + 0.86], [0.15, yt + 0.92], [0.1, yt + 0.92]], 8);
+  };
+  BP.chimney = function (x, y, z, o = {}) { return this._chimney(frame(x, z, o.rot ?? 0), 0, y, 0, o); };

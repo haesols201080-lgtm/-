@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Flora Look-dev</title>
+<style>
+  :root { --bg: #0d0c18; --ink: #f2eee4; --dim: #b9b4c8; --brass: #d4a94e; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden; font: 13px/1.4 "IBM Plex Sans KR", system-ui, sans-serif; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #bar { position: fixed; left: 12px; top: 12px; display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100% - 24px); }
+  #bar a { color: var(--ink); background: rgba(13, 12, 24, 0.7); border: 1px solid rgba(255, 255, 255, 0.15); padding: 4px 9px; border-radius: 999px; text-decoration: none; }
+  #bar a.on { border-color: var(--brass); color: var(--brass); }
+  #info { position: fixed; right: 12px; bottom: 10px; color: var(--dim); background: rgba(13, 12, 24, 0.6); padding: 3px 8px; border-radius: 6px; white-space: pre; font-family: ui-monospace, monospace; font-size: 11px; }
+  body.shot #bar, body.shot #info { display: none; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="bar"></div>
+<div id="info"></div>
+<script>window.ATMOS_MANUAL = true; var HUD = { w: 800, h: 600, dpr: 1 };</script>
+<script src="../vendor/three.min.js"></script>
+<script src="../vendor/three-post.js"></script>
+<script src="../vendor/atmos-fflate.js"></script>
+<script src="../vendor/atmos-exrloader.js"></script>
+<script src="../vendor/atmos-roomenv.js"></script>
+<script src="../vendor/atmos-smaa-shader.js"></script>
+<script src="../vendor/atmos-smaa-pass.js"></script>
+<script src="../js/core.js"></script>
+<script src="../js/gfx.js"></script>
+<script src="../js/atmos.js"></script>
+<script src="../js/tex.js"></script>
+<script src="../js/batch.js"></script>
+<script src="../js/flora.js"></script>
+<script>
+'use strict';
+// ------------------------------------------------------------------
+// 식물 보기 페이지: #lineup 나무 일곱 종 / #grove 숲 가장자리 / #meadow 역광 들판 / #wall 담쟁이 벽 + 산울타리 + 꽃밭 / #far 먼 숲 (LOD)
+// ------------------------------------------------------------------
+if (/shot/.test(location.search)) document.body.classList.add('shot');
+initGfx();
+const S = GFX.scene;
+const name = (location.hash || '#grove').slice(1);
+
+// ---------- 땅 ----------
+const MEADOW = new THREE.Color(0x7a8b4a), DRY = new THREE.Color(0xa89758), DIRT = new THREE.Color(0x5e4c36), PATH = new THREE.Color(0x8a7354);
+let forestMask = () => 0, pathMask = () => 0, hills = () => 0;
+function ground(x, z) {
+  const d = Math.hypot(x, z);
+  return (fbm(x / 70, z / 70, 3) - 0.5) * 3.2 + (noise2(x / 9, z / 9, 5) - 0.5) * 0.35 + hills(x, z, d);
+}
+// 땅 색 (선형): 들풀 ↔ 마른 풀 얼룩, 숲 바닥은 흙, 길
+function groundCol(x, z, out) {
+  out.copy(MEADOW).lerp(DRY, smooth(0.5, 0.78, fbm(x * 0.03, z * 0.03, 7)) * 0.65);
+  out.multiplyScalar(0.9 + noise2(x * 0.5, z * 0.5, 9) * 0.2);
+  out.lerp(DIRT, forestMask(x, z) * 0.85);
+  out.lerp(PATH, pathMask(x, z));
+  return out;
+}
+// 풀 시스템이 읽는 지도 (게임의 m.grassAt 약속과 같은 꼴)
+const _gcol = new THREE.Color();
+var G = { map: { grassAt(x, z) {
+  const f = forestMask(x, z), p = pathMask(x, z);
+  if (p > 0.5 || f > 0.8) return null;
+  groundCol(x, z, _gcol);
+  return { y: ground(x, z), r: _gcol.r, g: _gcol.g, b: _gcol.b, d: 0.95 * (1 - f) * (1 - p), flower: 0.035 * (1 - f) };
+} } };
+function soilTex() {
+  const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+  g.fillStyle = '#d8d8cc'; g.fillRect(0, 0, 512, 512);
+  let s = 3; const R = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+  for (let i = 0; i < 260; i++) { g.fillStyle = ['rgba(140,150,110,0.25)', 'rgba(120,110,80,0.22)', 'rgba(250,245,220,0.18)', 'rgba(90,90,70,0.2)'][i % 4]; g.beginPath(); g.ellipse(R() * 512, R() * 512, 10 + R() * 50, 6 + R() * 30, R() * 3, 0, 7); g.fill(); }
+  for (let i = 0; i < 30000; i++) { g.fillStyle = R() > 0.5 ? 'rgba(60,60,40,0.35)' : 'rgba(255,250,230,0.3)'; const r = 1 + R() * 2.5; g.fillRect(R() * 512, R() * 512, r, r); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; t.repeat.set(240, 240); return t;
+}
+function buildGround(size, seg, cx = 0, cz = 0) {
+  const g = new THREE.PlaneGeometry(size, size, seg, seg); g.rotateX(-Math.PI / 2); g.translate(cx, 0, cz);
+  const p = g.attributes.position, col = new Float32Array(p.count * 3), c = new THREE.Color();
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); p.setY(i, ground(x, z)); groundCol(x, z, c); col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.computeVertexNormals();
+  const me = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: soilTex(), vertexColors: true, roughness: 0.96 })); me.receiveShadow = true; S.add(me);
+}
+
+// ---------- 도우미 ----------
+const RNG = FLORA._rng(42);
+function scatter(n, fn, R = RNG) { const out = []; for (let k = 0; k < n * 40 && out.length < n; k++) { const p = fn(R); if (p) out.push(p); } return out; }
+const ON = x => x;
+// 돌 벽 (Batch): 기단, 몸, 갓돌, 버팀벽. 재질은 TEX가 있으면 그것, 없으면 캔버스 마름돌
+function ashlarMat() {
+  const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+  let s = 11; const R = () => { s = (s * 16807) % 2147483647; return (s - 1) / 2147483646; };
+  g.fillStyle = '#6f6556'; g.fillRect(0, 0, 512, 512);
+  for (let y = 0; y < 8; y++) { let x = -R() * 60; while (x < 512) { const w = 50 + R() * 70; g.fillStyle = ['#b9a98c', '#a39373', '#b3a283', '#ac9c7e', '#c1b293'][(R() * 5) | 0]; g.fillRect(x + 2, y * 64 + 2, w - 4, 60); x += w; } }
+  for (let i = 0; i < 9000; i++) { g.fillStyle = R() > 0.5 ? 'rgba(58,50,40,0.3)' : 'rgba(232,220,192,0.25)'; g.fillRect(R() * 512, R() * 512, 2, 2); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; t.repeat.set(1 / 4, 1 / 4);
+  return new THREE.MeshStandardMaterial({ map: t, vertexColors: true, roughness: 0.92 });
+}
+const wallMats = {};
+const wallMat = key => { const t = window.TEX && TEX.lib && TEX.lib(key); if (t) return t; if (key === 'bark') return FLORA.materials.bark('dead'); return wallMats[key] || (wallMats[key] = ashlarMat()); };
+
+// ---------- 장면 ----------
+const SC = {};
+SC.lineup = () => {
+  ATMOS.preset('goldenHour', 0, { sun: [17, 320] });
+  buildGround(1400, 220);
+  const kinds = ['oak', 'beech', 'pine', 'birch', 'yew', 'willow', 'dead'];
+  const pts = kinds.map((k, i) => ({ x: (i - 3) * 16, z: -12 + (i % 2) * 3, kind: k, s: 1, rot: i * 1.7 }));
+  // 뒤쪽 숲 띠 (중경)
+  const back = scatter(260, R => { const x = R.r(-160, 160), z = R.r(-150, -70); return { x, z, kind: R.p(['oak', 'pine', 'beech', 'pine', 'birch']) }; });
+  FLORA.forest(S, pts.concat(back), { seed: 5, ground });
+  FLORA.forest(S, scatter(40, R => ({ x: R.r(-60, 60), z: R.r(-20, 4), kind: R() < 0.6 ? 'bush' : 'fern' })), { seed: 2, ground });
+  return { cam: [0, 1.7, 46], look: [0, 6.5, -12], fov: 50 };
+};
+SC.grove = () => {
+  ATMOS.preset('goldenHour', 0, { sun: [13, 248] });
+  forestMask = (x, z) => smooth(-6, -16, z + 2 * Math.sin(x * 0.12)) * 0.9;
+  buildGround(1400, 260);
+  // 숲: 가장자리 z≈-8부터 안쪽으로 빽빽하게
+  const trees = scatter(420, R => { const x = R.r(-90, 90), z = R.r(-130, -9); if (R() > smooth(-4, -30, z) + 0.15) return null; return { x, z, kind: z > -24 ? R.p(['oak', 'birch', 'beech', 'oak', 'birch']) : R.p(['oak', 'beech', 'pine', 'pine', 'yew', 'birch']) }; });
+  trees.push({ x: -5, z: -11, kind: 'oak', s: 1.15 }, { x: 9, z: -13, kind: 'birch', s: 1.1 }, { x: 18, z: -10, kind: 'beech', s: 1 }, { x: -18, z: -14, kind: 'pine', s: 1 });
+  FLORA.forest(S, trees, { seed: 9, ground });
+  // 가장자리 덤불·고사리·바위·꽃 무리 (scatterGround를 밀도 함수로)
+  FLORA.scatterGround(S, { ground, grassAt: G.map.grassAt, W: 200, D: 200 }, {
+    area: { x0: -70, z0: -60, x1: 70, z1: 24 }, seed: 4, cell: 1.5,
+    per: { bush: 3.2, fern: 9, rock: 0.6, flowers: 1.4 },
+    density: (x, z, k) => { const edge = smooth(4, -6, z) * smooth(-40, -10, z); return k === 'bush' ? edge : k === 'fern' ? smooth(2, -9, z) : k === 'flowers' ? smooth(-8, 2, z) * smooth(22, 8, z) : k === 'rock' ? 0.7 : 0; },
+  });
+  FLORA.rocks(S, [{ x: -6.5, z: 3.5, s: 1.3 }, { x: -4.6, z: 4.4, s: 0.6 }, { x: 7, z: -3, s: 1.8 }], { seed: 3, ground });
+  return { cam: [2, 1.65, 15], look: [-1, 3.6, -12], fov: 55 };
+};
+SC.meadow = () => {
+  ATMOS.preset('goldenHour', 0, { sun: [9, 196] });
+  forestMask = (x, z) => smooth(-70, -85, z) * 0.85;
+  buildGround(1600, 280);
+  const trees = scatter(900, R => { const x = R.r(-260, 260), z = R.r(-320, -72); return { x, z, kind: R.p(['oak', 'oak', 'beech', 'birch', 'pine', 'willow']) }; });
+  trees.push({ x: -26, z: -30, kind: 'oak', s: 1.2 }, { x: 34, z: -46, kind: 'birch' });
+  FLORA.forest(S, trees, { seed: 12, ground });
+  FLORA.scatterGround(S, { ground, grassAt: G.map.grassAt, W: 300, D: 300 }, { area: { x0: -60, z0: -90, x1: 60, z1: 40 }, seed: 8, per: { bush: 0.25, fern: 0.2, rock: 0.15, flowers: 1.6 } });
+  return { cam: [0, 1.45, 30], look: [-3, 2.6, -40], fov: 52 };
+};
+SC.wall = () => {
+  ATMOS.preset('goldenHour', 0, { sun: [24, 66] });
+  pathMask = (x, z) => smooth(1.3, 0.9, Math.abs(z - 4.8)) + smooth(1.2, 0.6, z);
+  hills = () => 0;
+  buildGround(800, 200);
+  const b = new Batch();
+  const L = 22, H = 5.2, T = 0.9;
+  b.add('stone', new THREE.BoxGeometry(L, H, T), M4(0, H / 2, 0), { worldUV: true });
+  b.add('stoneTrim', new THREE.BoxGeometry(L + 0.2, 0.7, T + 0.35), M4(0, 0.35, 0), { worldUV: true });
+  b.add('stoneTrim', new THREE.BoxGeometry(L + 0.1, 0.28, T + 0.25), M4(0, H + 0.14, 0), { worldUV: true });
+  for (const x of [-9, -1, 7]) { b.add('stone', new THREE.BoxGeometry(1.1, H * 0.85, 1.2), M4(x, H * 0.425, T / 2 + 0.6), { worldUV: true }); b.add('stoneTrim', new THREE.BoxGeometry(1.25, 0.35, 1.35), M4(x, H * 0.85 + 0.1, T / 2 + 0.6), { worldUV: true }); }
+  FLORA.ivy(b, { ax: -11, az: 0, bx: -1.8, bz: 0, y: 0.05, h: H, thick: T, side: 1 }, { seed: 3, cover: 0.95, density: 1.4 });
+  FLORA.ivy(b, { ax: 0.4, az: 0, bx: 6.3, bz: 0, y: 0.05, h: H * 0.75, thick: T, side: 1 }, { seed: 8, cover: 0.7, density: 1.1 });
+  const wall = b.build(wallMat); S.add(wall);
+  FLORA.hedge(-8.5, 2.6, 8.5, 2.6, { h: 1.15, w: 0.85, seed: 2, ground, parent: S });
+  // 꽃밭: 산울타리 앞 띠 (무리마다 한 색)
+  const bed = []; for (let x = -7.6; x <= 7.6; x += 1.05) bed.push({ x: x + RNG.s() * 0.25, z: 3.75 + RNG.s() * 0.18 });
+  FLORA.flowers(bed.map(p => ({ x: p.x, y: ground(p.x, p.z), z: p.z })), { seed: 6, r: 0.5, n: 7, ground, parent: S });
+  FLORA.forest(S, [{ x: -16, z: -9, kind: 'yew' }, { x: 15, z: -10, kind: 'oak', s: 1.1 }, { x: 25, z: -18, kind: 'beech' }, { x: -24, z: -16, kind: 'pine' }], { seed: 4, ground });
+  FLORA.rocks(S, [{ x: 9.5, z: 4.2, s: 0.5 }, { x: 10.3, z: 3.6, s: 0.3 }], { ground });
+  return { cam: [4.2, 1.7, 10.5], look: [-1.2, 2.1, 0.5], fov: 52 };
+};
+SC.far = () => {
+  ATMOS.preset('goldenHour', 0, { sun: [16, 236] });
+  hills = (x, z, d) => smooth(120, 420, -z) * (ridged(x / 220, z / 220, 6) * 45 + 10) - smooth(60, 200, -z) * smooth(400, 150, -z) * 6;
+  buildGround(2400, 300, 0, -400);
+  const trees = scatter(2200, R => { const x = R.r(-420, 420), z = R.r(-480, -130); const f = fbm(x * 0.008, z * 0.008, 21); if (f < 0.42) return null; return { x, z, kind: ground(x, z) > 25 ? R.p(['pine', 'pine', 'pine', 'yew', 'birch']) : R.p(['oak', 'beech', 'pine', 'birch', 'oak']) }; });
+  FLORA.forest(S, trees, { seed: 31, ground });
+  return { cam: [0, 26, 70], look: [0, 14, -260], fov: 45 };
+};
+const shot = (SC[name] || SC.grove)();
+const bar = document.getElementById('bar');
+for (const k in SC) { const a = document.createElement('a'); a.href = '#' + k; a.textContent = k; if (k === name) a.className = 'on'; a.onclick = () => setTimeout(() => location.reload(), 10); bar.appendChild(a); }
+const cam = GFX.camera;
+cam.fov = shot.fov; cam.updateProjectionMatrix();
+cam.position.set(...shot.cam); cam.lookAt(...shot.look); cam.updateMatrixWorld();
+const focus = new THREE.Vector3(shot.cam[0], ground(shot.cam[0], shot.cam[2]), shot.cam[2]);
+updateGrass(cam.position.x, cam.position.z, true);
+FLORA.update(cam);
+const info = document.getElementById('info');
+let last = performance.now();
+window.__frames = 0;
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  GFX.timeU.value += dt;
+  ATMOS.update(dt, focus);
+  ATMOS.render();
+  window.__frames++;
+  if (window.__frames % 10 === 1) {
+    const st = FLORA.stats(), ri = GFX.renderer.info.render;
+    info.textContent = `${name} · ${ATMOS.tier}\nflora inst LOD0/1/imp ${st.inst.join(' / ')}\nflora tris ${st.tris.map(t => (t / 1000).toFixed(0) + 'k').join(' / ')}  draws ${st.draws}\ngrass ${GFX.grass.im.count} tufts + ${GFX.grass.fl.count} flowers\nframe calls ${ri.calls} tris ${(ri.triangles / 1e6).toFixed(2)}M`;
+    window.__stats = info.textContent;
+  }
+}
+ATMOS.whenLoaded().then(() => { window.__envReady = true; });
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
