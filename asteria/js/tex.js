@@ -1707,8 +1707,16 @@ function TEX_GEN() {
         POOL.ws.push(slot);
       }
       POOL.mode = 'worker';
-      // 워커가 끝내 대답하지 않으면 (파일 주소·샌드박스 iframe 등) 메인 스레드로
-      setTimeout(() => { if (POOL.mode === 'worker' && !POOL.ws.some(s => s.alive)) toMain('응답 없음'); }, 8000);
+      // 워커가 끝내 대답하지 않으면 (파일 주소·샌드박스 iframe 등) 메인 스레드로. 메인 스레드가 (셰이더 번역 등으로) 막혀
+      // 타이머가 늦게 불렸으면 대답이 아직 줄에 있을 수 있으니 조금 더 기다린다 — 제때 불렸는데도 대답이 없을 때만 포기한다.
+      const check = due => {
+        if (POOL.mode !== 'worker' || POOL.ws.some(s => s.alive)) return;
+        const now = performance.now();
+        if (now - due > 400) { setTimeout(() => check(performance.now() + 3000), 3000); return; }
+        toMain('응답 없음');
+      };
+      const due = performance.now() + 6000;
+      setTimeout(() => check(due), 6000);
     } catch (e) { toMain(e && e.message); }
   }
   function toMain(why) {
@@ -1752,7 +1760,7 @@ function TEX_GEN() {
   const U = TEX.U = {
     texNoise: { value: null }, texGround: { value: null },
     texGP: { value: V4(0, 0, 0, 0) }, texGR: { value: V4(0, 0, 0, 0) }, texGQ: { value: V4(0, 0, 0, 1) },
-    texW: { value: V4(0.7, 0.35, 0, 0) }, texLey: { value: V4(0.3, 1.2, 1.4, 1.6) }, texMac: { value: V4(0.55, 0.45, 0, 0) },
+    texW: { value: V4(0.7, 0.35, 0, 0) }, texLey: { value: V4(0.3, 1.2, 1.4, 1.6) }, texMac: { value: V4(0.75, 0.5, 0.22, 0) },
     texTime: { value: 0 },
   };
   // 세계 노이즈 (256², 반복, 네 채널: r ~8 m, g ~3 m, b ~1 m, a ~0.5 m 크기의 얼룩 — 세계 좌표 × 0.043 으로 읽는다)
@@ -2002,11 +2010,13 @@ float texGroundY( vec3 p ) {
 		float mv = ( n1.r - 0.5 ) * 1.2 + ( n2 - 0.5 ) * 0.9 + ( n1.g - 0.5 ) * 0.5;
 		float mh = ( n2 - 0.5 ) * 1.3 - ( n1.g - 0.5 ) * 0.7;
 		tAlb *= ( 1.0 + mv * texMac.x * texP.x ) * ( 1.0 + vec3( 1.0, 0.2, - 0.9 ) * mh * texMac.y * texP.x );
+		// 넓게 어두워진 자리 (비·그을음, 3~10 m)
+		tAlb *= 1.0 - smoothstep( 0.52, 0.74, n1.r * 0.6 + n2 * 0.6 - 0.1 ) * texMac.z * texP.x;
 		float cav = clamp( ( 1.0 - tAO ) * 1.6 + ( 0.5 - tHgt ) * 0.3, 0.0, 1.0 );
 		// 땅 근처 때 (0~1.5 m): 어둡고 채도 낮게, 노이즈 가장자리. 맨 아래는 축축한 녹갈색
 		float gH = vTexW.y - texGroundY( vTexW );
 		float ge = ( n1.b - 0.5 ) * 1.1 + ( n1.g - 0.5 ) * 0.8;
-		float grime = ( 1.0 - smoothstep( 0.0, 1.5, gH + ge ) ) * ( 1.0 - smoothstep( 0.55, 0.85, nG.y ) ) * texW.x * texQ.z;
+		float grime = ( 1.0 - smoothstep( 0.15, 1.7, gH + ge ) ) * ( 1.0 - smoothstep( 0.55, 0.85, nG.y ) ) * texW.x * texQ.z;
 		float damp = ( 1.0 - smoothstep( 0.0, 0.4, gH + ge * 0.4 ) ) * grime;
 		tAlb = mix( tAlb, mix( vec3( texLum( tAlb ) ), tAlb, 0.55 ) * vec3( 0.7, 0.68, 0.62 ), grime * 0.85 );
 		tAlb *= mix( vec3( 1.0 ), vec3( 0.78, 0.82, 0.66 ), damp * 0.6 );
@@ -2016,16 +2026,17 @@ float texGroundY( vec3 p ) {
 			// 빗물 자국: 세로면에 세로로 긴 노이즈 줄
 			vec2 th = normalize( vec2( - nG.z, nG.x ) + vec2( 1e-4, 0.0 ) );
 			float st = texture2D( texNoise, vec2( dot( vTexW.xz, th ) * 0.11, vTexW.y * 0.012 ) ).b;
-			tAlb *= 1.0 - smoothstep( 0.55, 0.75, st ) * ( 1.0 - abs( nG.y ) ) * texW.x * texQ.z * 0.16;
+			tAlb *= 1.0 - smoothstep( 0.5, 0.72, st ) * ( 1.0 - abs( nG.y ) ) * texW.x * texQ.z * 0.22;
 		}
 		#endif
 		// 이끼: 위를 향한 면, 오목한 곳, 땅 가까운 곳
 		float up = smoothstep( 0.35, 0.85, nG.y );
 		float mA = texW.y * texQ.x;
 		if ( mA > 0.001 ) {
-			float mm = n1.g * 0.6 + n1.b * 0.35 + n1.a * 0.25 + cav * 0.5 + up * 0.25 + grime * 0.2;
-			float moss = smoothstep( 1.05 - mA * 0.6, 1.2 - mA * 0.6, mm ) * clamp( up + cav * 0.8 + grime * 0.6, 0.0, 1.0 );
-			vec3 mc = mix( vec3( 0.07, 0.095, 0.03 ), vec3( 0.2, 0.26, 0.05 ), clamp( n1.a * 1.6 - 0.3 + tHgt * 0.4, 0.0, 1.0 ) );
+			float mm = n1.g * 0.9 + n1.b * 0.55 + n1.a * 0.3 + cav * 0.55 + up * 0.15 + grime * 0.25;
+			float th = 1.32 - mA * 0.75;
+			float moss = smoothstep( th, th + 0.12, mm ) * clamp( up + cav * 0.8 + grime * 0.6, 0.0, 1.0 );
+			vec3 mc = mix( vec3( 0.055, 0.075, 0.022 ), vec3( 0.17, 0.22, 0.045 ), clamp( n1.a * 1.8 - 0.4 + tHgt * 0.4, 0.0, 1.0 ) );
 			tAlb = mix( tAlb, mc, moss ); tRough = mix( tRough, 0.95, moss ); tMetal *= 1.0 - moss; tFlat = max( tFlat, moss * 0.5 ); tLey *= 1.0 - moss;
 		}
 		// 젖음: 어둡고 매끈하게, 위 면 오목한 곳엔 물웅덩이
@@ -2104,18 +2115,21 @@ float texGroundY( vec3 p ) {
     sh.fragmentShader = f;
   }
   function cacheKey() { const u = this.userData; return 'TEX4|' + u.texVar + '|' + (u.texEm ? 1 : 0) + (u.texVK > 0 && u.texVar === 'uv' ? 1 : 0) + (lowTier() ? 'L' : ''); }
-  // 그리기 직전: 시간 갱신, 정점색/스플랫 속성이 없는 형상엔 흰색/(1,0,0,0) 을 채운다 (vertexColors 인데 color 가 없으면 검게 나온다)
+  // 그리기 직전: 시간 갱신. 정점색/스플랫 속성이 없는 형상엔 흰색/(1,0,0,0) 을 채운다 (vertexColors 인데 color 가 없으면 검게 나온다).
+  // 이 때는 three 가 이미 버퍼를 올린 뒤라 이번 한 장은 놓치고, 장이 끝나면 형상을 한 번 버려 다음 장에 새 속성까지 다시 올리게 한다.
+  // 미리 TEX.prep(geometry) 를 부르면 이 한 장의 흠도 없다.
   function onRender(r, s, c, geo) {
     U.texTime.value = (performance.now() - T0) / 1000;
     if (!geo || !geo.attributes || !geo.attributes.position || geo.userData.texPrepped) return;
-    TEX.prep(geo, this.userData.texVar === 'ter');
+    if (TEX.prep(geo, this.userData.texVar === 'ter')) queueMicrotask(() => geo.dispose());
   }
+  // 형상에 TEX 재질이 바라는 속성을 채운다 (color = 1, 지형이면 splat = (1,0,0,0)). 무엇을 더했으면 true.
   TEX.prep = function (geo, splat) {
-    const n = geo.attributes.position.count;
-    if (!geo.attributes.color) geo.setAttribute('color', new T.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
-    if (splat && !geo.attributes.splat) { const a = new Float32Array(n * 4); for (let i = 0; i < n; i++) a[i * 4] = 1; geo.setAttribute('splat', new T.BufferAttribute(a, 4)); }
+    const n = geo.attributes.position.count; let added = false;
+    if (!geo.attributes.color) { geo.setAttribute('color', new T.BufferAttribute(new Float32Array(n * 3).fill(1), 3)); added = true; }
+    if (splat && !geo.attributes.splat) { const a = new Float32Array(n * 4); for (let i = 0; i < n; i++) a[i * 4] = 1; geo.setAttribute('splat', new T.BufferAttribute(a, 4)); added = true; }
     geo.userData.texPrepped = true;
-    return geo;
+    return added;
   };
   function setup(m, variant, K, o, size) {
     const wk = o.weather ?? 1;

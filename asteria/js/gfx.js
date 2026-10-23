@@ -249,66 +249,173 @@ function waterMat(o = {}) {
 GFX.timeU = { value: 0 };
 
 // ---------- 풀 (플레이어 주변에만 자란다) ----------
-function initGrass() {
-  const N = GFX.mobile ? 4500 : 16000;
+// 포기(tuft) 하나 = 휜 잎 5~7장. 뿌리는 어둡고 끝은 밝고 마른 색이 섞인다. 바람 물결이 들판을 굴러가고(눕는 곳이 밝아진다),
+// 해를 마주 보면 잎끝이 비친다. 꽃은 무리 지어 핀다. 카메라 가까이는 촘촘하게(땅을 가린다), 멀리는 성기고 넓게, 끝에서 작아져 사라진다.
+// 재질은 MeshStandardMaterial을 고쳐 쓴다 (대기 모듈의 그림자·환경광·안개를 그대로 받는다).
+function grassTuftGeo(blades, segs, flower) {
+  const P = [], N = [], B = [], C = [], I = [];
+  let seed = flower ? 77 : 13;
+  const r = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+  const n = flower ? 3 : blades;
+  for (let k = 0; k < n; k++) {
+    const th = r() * Math.PI * 2, bd = Math.sqrt(r()) * (flower ? 0.06 : 0.13), bx = Math.cos(th) * bd, bz = Math.sin(th) * bd;
+    const face = r() * Math.PI * 2, fx = Math.cos(face), fz = Math.sin(face);           // 잎 넓은 면의 가로 방향
+    const la = face + Math.PI / 2 + (r() - 0.5) * 1.2, lx = Math.cos(la), lz = Math.sin(la); // 눕는 쪽
+    const h = flower ? 0.75 + r() * 0.35 : 0.45 + r() * 0.55, lean = flower ? 0.05 + r() * 0.1 : 0.1 + r() * 0.32, w0 = flower ? 0.004 : 0.005 + r() * 0.004, rb = r();
+    const i0 = P.length / 3;
+    for (let i = 0; i <= segs; i++) {
+      const t = i / segs, cx = bx + lx * lean * h * t * t, cy = h * t * (1 - 0.12 * lean * t), cz = bz + lz * lean * h * t * t;
+      const w = w0 * Math.pow(1 - t, 0.85) * (1 + 0.6 * Math.sin(t * 3.0) * (1 - t));
+      // 법선: 위쪽 + 눕는 쪽 + 넓은 면 조금 (들판이 지형처럼 고르게 밝도록)
+      let nx = -fz * 0.35 + lx * 0.25, ny = 0.75, nz = fx * 0.35 + lz * 0.25; const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+      if (i < segs) { for (const sg of [-1, 1]) { P.push(cx + fx * w * sg, cy, cz + fz * w * sg); N.push(nx, ny, nz); B.push(t, rb, 0); C.push(1, 1, 1); } }
+      else { P.push(cx, cy, cz); N.push(nx, ny, nz); B.push(1, rb, 0); C.push(1, 1, 1); }
+    }
+    for (let i = 0; i < segs - 1; i++) { const a = i0 + i * 2; I.push(a, a + 1, a + 3, a, a + 3, a + 2); }
+    const a = i0 + (segs - 1) * 2; I.push(a, a + 1, a + 2);
+    if (flower) { // 꽃 머리: 꽃잎 부채 (gb.z = 1)
+      const tx = bx + lx * lean * h, ty = h * (1 - 0.12 * lean), tz = bz + lz * lean * h, c0 = P.length / 3, pr = 0.035 + r() * 0.02;
+      P.push(tx, ty + 0.01, tz); N.push(0, 1, 0); B.push(1, rb, 1); C.push(0.55, 0.45, 0.25);
+      for (let j = 0; j <= 10; j++) { const an = j / 10 * Math.PI * 2, rr = pr * (j % 2 ? 0.55 : 1); P.push(tx + Math.cos(an) * rr, ty - rr * 0.15, tz + Math.sin(an) * rr); N.push(0, 1, 0); B.push(1, rb, 1); C.push(1, 1, 1); }
+      for (let j = 0; j < 10; j++) I.push(c0, c0 + 1 + j, c0 + 2 + j);
+    }
+  }
   const g = new THREE.BufferGeometry();
-  const P = [-0.05, 0, 0, 0.05, 0, 0, -0.03, 0.28, 0, 0.03, 0.28, 0, 0, 0.55, 0];
-  const C = [0.45, 0.45, 0.45, 0.45, 0.45, 0.45, 0.8, 0.8, 0.8, 0.8, 0.8, 0.8, 1.15, 1.15, 1.15];
   g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
   g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
-  g.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4]);
-  // 램버트 재질은 대기 모듈의 빛 계산과 맞지 않아 하얗게 뜬다 → 표준 재질
-  const m = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.85, metalness: 0 });
+  g.setAttribute('gb', new THREE.Float32BufferAttribute(B, 3));
+  g.setIndex(I);
+  return g;
+}
+function grassMat(flower) {
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.82, metalness: 0, envMapIntensity: 0.9 });
+  m.customProgramCacheKey = () => 'grass' + (flower ? 'F' : '');
   m.onBeforeCompile = sh => {
     sh.uniforms.uT = GFX.timeU;
-    sh.vertexShader = 'uniform float uT;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
-      vec4 ip = instanceMatrix * vec4(0.,0.,0.,1.);
-      float k = position.y * position.y * 3.0;
-      transformed.x += (sin(uT * 1.8 + ip.x * 0.4 + ip.z * 0.25) * 0.5 + sin(uT * 3.1 + ip.z * 0.9) * 0.18) * k * 0.6;
-      transformed.z += cos(uT * 1.5 + ip.x * 0.3) * k * 0.25;`);
+    const NOISE = `float gHash( vec2 p ) { vec3 q = fract( vec3( p.xyx ) * 0.1031 ); q += dot( q, q.yzx + 33.33 ); return fract( ( q.x + q.y ) * q.z ); }
+float gNoise( vec2 p ) { vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f ); return mix( mix( gHash( i ), gHash( i + vec2( 1.0, 0.0 ) ), f.x ), mix( gHash( i + vec2( 0.0, 1.0 ) ), gHash( i + vec2( 1.0, 1.0 ) ), f.x ), f.y ); }
+`;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
+uniform float uT;
+attribute vec3 gb;
+varying vec3 vGb;
+varying vec2 vGw;
+` + NOISE).replace('#include <begin_vertex>', `#include <begin_vertex>
+{
+	vec3 gIp = ( modelMatrix * vec4( instanceMatrix[ 3 ].xyz, 1.0 ) ).xyz;
+	mat3 gM = mat3( instanceMatrix );
+	float gH = length( gM[ 1 ] ), t = gb.x;
+	vec2 wd = vec2( 0.8, 0.6 );
+	float ph = dot( gIp.xz, wd );
+	// 큰 물결 (바람 쪽으로 굴러간다) + 돌풍 얼룩 + 잎 떨림
+	float wave = 0.5 + 0.5 * sin( ph * 0.23 - uT * 1.8 + 2.0 * sin( dot( gIp.xz, vec2( -0.6, 0.8 ) ) * 0.045 ) );
+	float gust = gNoise( gIp.xz * 0.05 - wd * uT * 0.9 );
+	float w = clamp( wave * 0.55 + gust * 0.65 - 0.1, 0.0, 1.0 );
+	float fl = sin( uT * 4.3 + gb.y * 37.0 + gIp.x * 1.7 + gIp.z * 1.3 ) * 0.07;
+	float bend = ( 0.1 + 0.5 * w + fl ) * t * t;
+	vec3 wo = vec3( wd.x, 0.0, wd.y ) * bend * gH * 0.85;
+	wo.y = - bend * bend * gH * 0.5;
+	transformed += vec3( dot( gM[ 0 ], wo ) / dot( gM[ 0 ], gM[ 0 ] ), dot( gM[ 1 ], wo ) / dot( gM[ 1 ], gM[ 1 ] ), dot( gM[ 2 ], wo ) / dot( gM[ 2 ], gM[ 2 ] ) );
+	vGb = vec3( t, gb.y, gb.z ); vGw = vec2( w, gNoise( gIp.xz * 0.07 + 3.1 ) * 0.7 + gNoise( gIp.xz * 0.6 ) * 0.3 );
+}`);
+    // 잎 색: 뿌리 어둡게 → 몸통(땅 색) → 끝은 밝고 마른 색. 꽃은 머리만 물든다
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vGb;\nvarying vec2 vGw;\n')
+      .replace('#include <color_fragment>', flower ? `#include <color_fragment>
+	diffuseColor.rgb = vGb.z > 0.5 ? diffuseColor.rgb * ( 0.85 + 0.3 * vGb.y ) : vec3( 0.075, 0.11, 0.035 ) * ( 0.5 + 0.7 * vGb.x );` : `#include <color_fragment>
+	{
+		vec3 gBase = diffuseColor.rgb, gDry = vec3( 0.39, 0.31, 0.1 );
+		float dk = smoothstep( 0.45, 0.85, vGw.y ) * 0.6 + vGb.y * 0.2;
+		vec3 gTip = mix( gBase * vec3( 1.4, 1.38, 1.15 ), gDry, dk * 0.75 );
+		vec3 gc = mix( gBase * 0.3, gBase * ( 0.9 + 0.25 * vGb.y ), smoothstep( 0.0, 0.5, vGb.x ) );
+		gc = mix( gc, gTip, smoothstep( 0.45, 1.0, vGb.x ) );
+		gc *= 1.0 + vGw.x * 0.22 * vGb.x;
+		diffuseColor.rgb = gc;
+	}`)
+      .replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace('normal = normal * faceDirection;', ''));
+    // 해(방향광 0)의 그림자 먹은 빛을 잡아 잎끝 투과에 쓴다
+    let L = THREE.ShaderChunk.lights_fragment_begin;
+    const ka = L.indexOf('NUM_DIR_LIGHTS > 0 ) && defined( RE_Direct )'), key = 'RE_Direct( directLight, geometry, material, reflectedLight );', kb = ka < 0 ? -1 : L.indexOf(key, ka);
+    if (kb >= 0) L = L.slice(0, kb + key.length) + '\n\t\t#if ( UNROLLED_LOOP_INDEX == 0 )\n\t\tgSunC = directLight.color; gSunL = directLight.direction;\n\t\t#endif\n' + L.slice(kb + key.length);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_begin>', 'vec3 gSunC = vec3( 0.0 ); vec3 gSunL = vec3( 0.0, 1.0, 0.0 );\n' + L + `
+	{ float fb = saturate( - dot( geometry.viewDir, gSunL ) );
+	  reflectedLight.directDiffuse += gSunC * BRDF_Lambert( material.diffuseColor ) * ( pow( fb, 5.0 ) * 1.8 + fb * fb * 0.3 ) * smoothstep( 0.3, 1.0, vGb.x ) * vec3( 1.0, 0.95, 0.55 ); }`);
   };
-  const im = new THREE.InstancedMesh(g, m, N);
-  im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-  im.frustumCulled = false;
-  im.receiveShadow = true;
-  GFX.grass = { im, N, cx: 1e9, cz: 1e9, on: false };
-  const c = new THREE.Color(1, 1, 1);
-  for (let i = 0; i < N; i++) im.setColorAt(i, c);
-  GFX.scene.add(im);
+  return m;
+}
+function initGrass() {
+  const mob = GFX.mobile, low = GFX.low;
+  const N = mob ? 4200 : low ? 6000 : 13000, NF = mob ? 500 : low ? 900 : 2600;
+  const mk = (geo, mat, n) => {
+    const im = new THREE.InstancedMesh(geo, mat, n);
+    im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3).fill(1), 3).setUsage(THREE.DynamicDrawUsage);
+    im.frustumCulled = false; im.receiveShadow = true; im.count = 0;
+    GFX.scene.add(im);
+    return im;
+  };
+  const im = mk(grassTuftGeo(mob ? 7 : 11, mob ? 2 : 3, false), grassMat(false), N);
+  const fl = mk(grassTuftGeo(3, mob ? 3 : 4, true), grassMat(true), NF);
+  GFX.grass = { im, N, fl, NF, cx: 1e9, cz: 1e9, on: false };
 }
 const _gm = new THREE.Matrix4(), _gq = new THREE.Quaternion(), _gs = new THREE.Vector3(), _gp = new THREE.Vector3(), _gc = new THREE.Color(), _gy = new THREE.Vector3(0, 1, 0);
+// 차분한 들꽃 색 (sRGB): 흰 데이지, 버터컵, 라일락, 분홍, 수레국화, 크림, 끈끈이대나물
+const GRASS_FLOWERS = [0xe8e2d0, 0xd9c25a, 0xa48cb8, 0xc98e9c, 0x7088b8, 0xe6d6a2, 0xb8687a].map(h => new THREE.Color(h));
 function updateGrass(px, pz, force) {
   const gr = GFX.grass, m = G.map;
-  if (!m || !m.grassAt) { if (gr.on) { gr.im.count = 0; gr.on = false; } return; }
-  if (!force && Math.hypot(px - gr.cx, pz - gr.cz) < 3.5) return;
+  if (!m || !m.grassAt) { if (gr.on) { gr.im.count = 0; gr.fl.count = 0; gr.on = false; } return; }
+  if (!force && Math.hypot(px - gr.cx, pz - gr.cz) < 3) return;
   gr.cx = px; gr.cz = pz; gr.on = true;
-  const R = GFX.mobile ? 18 : 30, step = GFX.mobile ? 0.5 : 0.44;
-  const n0x = Math.floor((px - R) / step), n0z = Math.floor((pz - R) / step), n = Math.ceil(2 * R / step);
-  let i = 0;
-  for (let a = 0; a < n && i < gr.N; a++) for (let b = 0; b < n && i < gr.N; b++) {
-    const cx = n0x + a, cz = n0z + b;
-    const x = (cx + hash2(cx, cz, 1)) * step, z = (cz + hash2(cx, cz, 2)) * step;
-    const dx = x - px, dz = z - pz;
-    if (dx * dx + dz * dz > R * R) continue;
-    const s = m.grassAt(x, z);
-    if (!s) continue;
-    const h = hash2(cx, cz, 3);
-    if (h > s.d) continue;
-    _gp.set(x, s.y, z);
-    _gq.setFromAxisAngle(_gy, hash2(cx, cz, 4) * 6.28);
-    const sc = (0.6 + hash2(cx, cz, 5) * 0.9) * (s.k || 1);
-    _gs.set(sc, sc * (0.8 + h * 0.6), sc);
-    _gm.compose(_gp, _gq, _gs);
-    gr.im.setMatrixAt(i, _gm);
-    _gc.setRGB(s.r, s.g, s.b);
-    if (s.flower && hash2(cx, cz, 6) < s.flower) _gc.setHex(pick([0xff8ab8, 0xffe070, 0xffffff, 0xb090ff]));
-    gr.im.setColorAt(i, _gc);
-    i++;
+  // 가까운 고리는 촘촘한 격자, 바깥 고리는 성긴 격자 (포기를 넓혀 덮는다)
+  const mob = GFX.mobile, low = GFX.low;
+  const rings = mob ? [[0, 7, 0.32, 1], [7, 15, 0.6, 1.5]] : low ? [[0, 8, 0.3, 1], [8, 18, 0.56, 1.5]] : [[0, 10, 0.25, 1], [10, 24, 0.46, 1.5]];
+  const Rmax = rings[1][1];
+  let i = 0, f = 0;
+  const A = gr.im.instanceMatrix.array, AC = gr.im.instanceColor.array, B = gr.fl.instanceMatrix.array, BC = gr.fl.instanceColor.array;
+  for (let ri = 0; ri < 2; ri++) {
+    const [r0, r1, step, wk] = rings[ri], salt = ri * 7;
+    const n0x = Math.floor((px - r1) / step), n0z = Math.floor((pz - r1) / step), n = Math.ceil(2 * r1 / step) + 1;
+    for (let a = 0; a < n && i < gr.N; a++) for (let b = 0; b < n && i < gr.N; b++) {
+      const cx = n0x + a, cz = n0z + b;
+      const x = (cx + hash2(cx, cz, 1 + salt)) * step, z = (cz + hash2(cx, cz, 2 + salt)) * step;
+      const dx = x - px, dz = z - pz, d2 = dx * dx + dz * dz;
+      if (d2 >= r1 * r1 || d2 < r0 * r0) continue;
+      const s = m.grassAt(x, z);
+      if (!s) continue;
+      const h = hash2(cx, cz, 3 + salt);
+      if (h > s.d) continue;
+      const d = Math.sqrt(d2);
+      // 키: 대개 0.1~0.35 m, 들판의 몇 무리만 ~0.5 m. 풀 밀도가 낮은 곳(길·마당 가장자리)은 잔디처럼 짧다. 끝 고리에서 작아져 사라진다
+      const hn = noise2(x * 0.13, z * 0.13, 41) * 0.75 + noise2(x * 0.6, z * 0.6, 43) * 0.25, wild = smooth(0.66, 0.86, noise2(x * 0.05, z * 0.05, 45));
+      const ht = (0.1 + 0.25 * hn * hn * (3 - 2 * hn) + wild * 0.16) * (0.82 + hash2(cx, cz, 5 + salt) * 0.36) * (s.k || 1) * (0.5 + 0.5 * smooth(0.45, 0.85, s.d)) * smooth(Rmax, Rmax * 0.72, d);
+      if (ht < 0.03) continue;
+      const wd = (0.95 + hash2(cx, cz, 6 + salt) * 0.5) * wk;
+      _gq.setFromAxisAngle(_gy, hash2(cx, cz, 4 + salt) * 6.283);
+      _gm.compose(_gp.set(x, s.y - 0.02, z), _gq, _gs.set(wd, ht, wd));
+      _gm.toArray(A, i * 16);
+      // 색: 땅 색 그대로 (선형), 포기마다 밝기 ±10%, 넓은 얼룩으로 올리브↔노란 기운
+      const v = 0.9 + hash2(cx, cz, 8 + salt) * 0.2, yl = noise2(x * 0.045, z * 0.045, 47) - 0.5;
+      AC[i * 3] = s.r * v * (1 + yl * 0.25); AC[i * 3 + 1] = s.g * v; AC[i * 3 + 2] = s.b * v * (1 - yl * 0.3);
+      i++;
+      // 꽃: 무리 지어서 (낮은 주파수 노이즈가 높은 곳만), 무리마다 한 색
+      if (s.flower && f < gr.NF && d < Rmax * 0.8) {
+        const fk = smooth(0.6, 0.82, noise2(x * 0.085 + 17, z * 0.085, 49));
+        if (fk > 0 && hash2(cx, cz, 9 + salt) < s.flower * 16 * fk * (ri ? 1.6 : 1)) {
+          const fh = Math.max(ht * 1.15, 0.2) * (0.95 + hash2(cx, cz, 10 + salt) * 0.35);
+          _gm.compose(_gp.set(x + (hash2(cx, cz, 11) - 0.5) * step, s.y - 0.02, z + (hash2(cx, cz, 12) - 0.5) * step), _gq, _gs.set(wk * 1.1, fh, wk * 1.1));
+          _gm.toArray(B, f * 16);
+          const c = GRASS_FLOWERS[Math.floor(noise2(x * 0.03, z * 0.03, 53) * 9 + hash2(cx, cz, 13) * 0.6) % GRASS_FLOWERS.length];
+          BC[f * 3] = c.r; BC[f * 3 + 1] = c.g; BC[f * 3 + 2] = c.b;
+          f++;
+        }
+      }
+    }
   }
-  gr.im.count = i;
-  gr.im.instanceMatrix.needsUpdate = true;
-  if (gr.im.instanceColor) gr.im.instanceColor.needsUpdate = true;
+  for (const [im, n] of [[gr.im, i], [gr.fl, f]]) {
+    im.count = n;
+    im.instanceMatrix.needsUpdate = true; im.instanceMatrix.updateRange.count = n * 16;
+    im.instanceColor.needsUpdate = true; im.instanceColor.updateRange.count = n * 3;
+  }
 }
 
 // ---------- 입자 (빛나는 것과 보통 것) ----------

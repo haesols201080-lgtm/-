@@ -256,9 +256,12 @@ function paintSite(m) {
 // ======================================================================
 // 장면: 지형 메쉬, 물, 건물, 식물, 소품
 // ======================================================================
+// 재질 모듈의 땅 재질이 검증되기 전까지는 정점색 땅을 쓴다
+const SITE_TEX_TERRAIN = false;
 function siteTerrainMeshes(m, group) {
   const CH = 32, w = m.nx + 1, r = m.res;
-  const matl = (window.TEX && TEX.terrain) ? TEX.terrain({}) : new THREE.MeshStandardMaterial({ vertexColors: true, map: GFX.noiseTex, roughness: 0.95 });
+  const texT = SITE_TEX_TERRAIN && window.TEX && TEX.terrain;
+  const matl = texT ? TEX.terrain({}) : new THREE.MeshStandardMaterial({ vertexColors: true, map: GFX.noiseTex, roughness: 0.95 });
   for (let cz = 0; cz < m.nz; cz += CH) for (let cx = 0; cx < m.nx; cx += CH) {
     const nx = Math.min(CH, m.nx - cx), nz = Math.min(CH, m.nz - cz), NV = (nx + 1) * (nz + 1);
     const pos = new Float32Array(NV * 3), nor = new Float32Array(NV * 3), col = new Float32Array(NV * 3), uv = new Float32Array(NV * 2), spl = new Float32Array(NV * 4);
@@ -270,7 +273,7 @@ function siteTerrainMeshes(m, group) {
       const hd = m.h[Math.max(0, iz - 1) * w + ix], hu = m.h[Math.min(m.nz, iz + 1) * w + ix];
       const n = V3(hl - hr, 2 * r, hd - hu).normalize();
       nor[k * 3] = n.x; nor[k * 3 + 1] = n.y; nor[k * 3 + 2] = n.z;
-      if (window.TEX && TEX.terrain) { col[k * 3] = col[k * 3 + 1] = col[k * 3 + 2] = 1; }
+      if (texT) { col[k * 3] = col[k * 3 + 1] = col[k * 3 + 2] = 1; }
       else { col[k * 3] = m.col[vi * 3]; col[k * 3 + 1] = m.col[vi * 3 + 1]; col[k * 3 + 2] = m.col[vi * 3 + 2]; }
       for (let q = 0; q < 4; q++) spl[k * 4 + q] = m.splat[vi * 4 + q];
       uv[k * 2] = ix * r; uv[k * 2 + 1] = iz * r;
