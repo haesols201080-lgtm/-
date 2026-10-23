@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TEX Look-dev</title>
+<style>
+  :root { --bg: #0d0c18; --ink: #f2eee4; --dim: #b9b4c8; --brass: #d4a94e; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden; font: 13px/1.4 "IBM Plex Sans KR", system-ui, sans-serif; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #bar { position: fixed; left: 12px; top: 12px; display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100% - 24px); }
+  #bar a { color: var(--ink); background: rgba(13, 12, 24, 0.7); border: 1px solid rgba(255, 255, 255, 0.15); padding: 4px 9px; border-radius: 999px; text-decoration: none; }
+  #bar a.on { border-color: var(--brass); color: var(--brass); }
+  #info { position: fixed; right: 12px; bottom: 10px; color: var(--dim); background: rgba(13, 12, 24, 0.6); padding: 3px 8px; border-radius: 6px; white-space: pre; }
+  #labels { position: fixed; inset: 0; pointer-events: none; }
+  #labels div { position: absolute; transform: translate(-50%, 0); font-size: 11px; color: #f6efe0; background: rgba(13, 12, 24, 0.55); padding: 0 5px; border-radius: 4px; white-space: nowrap; }
+  body.shot #bar, body.shot #info { display: none; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="labels"></div>
+<div id="bar"></div>
+<div id="info"></div>
+<script>window.ATMOS_MANUAL = true; var HUD = { w: 800, h: 600, dpr: 1 };</script>
+<script src="../vendor/three.min.js"></script>
+<script src="../vendor/three-post.js"></script>
+<script src="../vendor/atmos-fflate.js"></script>
+<script src="../vendor/atmos-exrloader.js"></script>
+<script src="../vendor/atmos-roomenv.js"></script>
+<script src="../vendor/atmos-smaa-shader.js"></script>
+<script src="../vendor/atmos-smaa-pass.js"></script>
+<script src="../js/core.js"></script>
+<script src="../js/gfx.js"></script>
+<script src="../js/atmos.js"></script>
+<script src="../js/tex.js"></script>
+<script src="../js/batch.js"></script>
+<script>
+'use strict';
+// ------------------------------------------------------------------
+// TEX 보기 페이지: #swatches 이름표 전부, #wall 석회암 벽 한 칸, #terrain 섞기 지형, #interior 참나무·카펫·벨벳·황동·양피지
+// ?shot 메뉴 숨김, ?noworker 워커 없이(메인 스레드 대체 경로), ?low 낮은 단계
+// ------------------------------------------------------------------
+if (/shot/.test(location.search)) document.body.classList.add('shot');
+initGfx();
+const S = GFX.scene, cam = GFX.camera;
+const SCENES = ['swatches', 'wall', 'terrain', 'interior'];
+const name = SCENES.includes((location.hash || '').slice(1)) ? location.hash.slice(1) : 'wall';
+const bar = document.getElementById('bar');
+for (const k of SCENES) { const a = document.createElement('a'); a.href = '#' + k; a.textContent = k; if (k === name) a.className = 'on'; a.onclick = () => setTimeout(() => location.reload(), 10); bar.appendChild(a); }
+const L = n => TEX.lib(n);
+const focus = new THREE.Vector3();
+let anim = null;
+
+// ---------- 형상 도우미 ----------
+// 둥근 상자 (모서리 반지름 r, 정점 노멀은 매끈하게), uv 는 미터 상자 투영
+function rbox(w, h, d, r, k = 4) {
+  const n = 2 * k + 2, g = new THREE.BoxGeometry(2, 2, 2, n, n, n), p = g.attributes.position, nr = g.attributes.normal;
+  const hs = [w / 2, h / 2, d / 2];
+  const f = (s, hh) => { const t = (s + 1) / 2 * n; return t <= k ? -hh + r * t / k : t >= n - k ? hh - r * (n - t) / k : -hh + r + (2 * hh - 2 * r) * (t - k) / (n - 2 * k); };
+  const v = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.set(f(p.getX(i), hs[0]), f(p.getY(i), hs[1]), f(p.getZ(i), hs[2]));
+    c.set(clamp(v.x, -hs[0] + r, hs[0] - r), clamp(v.y, -hs[1] + r, hs[1] - r), clamp(v.z, -hs[2] + r, hs[2] - r));
+    const dn = v.clone().sub(c); if (dn.lengthSq() < 1e-12) dn.set(nr.getX(i), nr.getY(i), nr.getZ(i));
+    dn.normalize(); v.copy(c).addScaledVector(dn, r);
+    p.setXYZ(i, v.x, v.y, v.z); nr.setXYZ(i, dn.x, dn.y, dn.z);
+  }
+  return boxUV(g);
+}
+// 구: uv 를 미터로
+function msphere(r, ws = 64, hs = 32) {
+  const g = new THREE.SphereGeometry(r, ws, hs), uv = g.attributes.uv;
+  for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * Math.PI * 2 * r, uv.getY(i) * Math.PI * r);
+  return g;
+}
+function addMesh(g, m, x = 0, y = 0, z = 0, ry = 0, parent = S) {
+  const me = new THREE.Mesh(g, m); me.position.set(x, y, z); me.rotation.y = ry;
+  me.castShadow = me.receiveShadow = true; parent.add(me); return me;
+}
+// 뾰족 아치 (폭 w, 문지방 0 에서 아치 시작 hs 까지 곧게, 정삼각 아치)
+function archPath(s, w, y0, hs, x0 = 0, hole) {
+  const R = w;
+  const pts = [[x0 - w / 2, y0], [x0 + w / 2, y0], [x0 + w / 2, y0 + hs]];
+  // 오른쪽 호: 중심 (x0 - w/2, y0+hs), 반지름 w, 각 0 → 60°
+  for (let i = 1; i <= 12; i++) { const t = i / 12 * (Math.PI / 3); pts.push([x0 - w / 2 + R * Math.cos(t), y0 + hs + R * Math.sin(t)]); }
+  // 왼쪽 호: 중심 (x0 + w/2, y0+hs), 120° → 180°
+  for (let i = 1; i <= 12; i++) { const t = Math.PI * 2 / 3 + i / 12 * (Math.PI / 3); pts.push([x0 + w / 2 + R * Math.cos(t), y0 + hs + R * Math.sin(t)]); }
+  if (hole) pts.reverse();
+  s.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
+  return s;
+}
+// 단면(u=z, v=y)을 x 방향으로 밀어낸 막대
+function prism(profile, x0, x1, bevel = 0) {
+  const s = new THREE.Shape(); s.moveTo(profile[0][0], profile[0][1]); for (let i = 1; i < profile.length; i++) s.lineTo(profile[i][0], profile[i][1]);
+  const g = new THREE.ExtrudeGeometry(s, { depth: x1 - x0, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 1 });
+  g.rotateY(-Math.PI / 2); g.translate(x1, 0, 0);
+  return g;
+}
+
+// ====================================================================================
+// #swatches — 이름표의 모든 재질 (해 질 녘)
+// ====================================================================================
+function sceneSwatches() {
+  ATMOS.preset('goldenHour');
+  TEX.weather({ moss: 0.25, grime: 0.5 });
+  const sph = new Set(['brass', 'gold', 'iron', 'copper', 'lead', 'glassDark', 'glassLit', 'glassStained', 'velvet', 'leather', 'water', 'leaf', 'leafAutumn', 'rope', 'moss']);
+  const names = TEX.names, cols = 8, sp = 1.55;
+  const box = rbox(1.0, 1.0, 1.0, 0.07), ball = msphere(0.52);
+  const labels = [];
+  names.forEach((n, i) => {
+    const c = i % cols, r = Math.floor(i / cols), x = -(c - (cols - 1) / 2) * sp, y = 7.2 - r * 1.62;
+    const me = addMesh(sph.has(n) ? ball : box, L(n), x, y, 0, sph.has(n) ? 0 : 0.5);
+    labels.push([n, new THREE.Vector3(x, y - 0.66, 0)]);
+  });
+  // 바닥 (판석) 과 뒤 벽 (석회암)
+  const fl = new Batch(); fl.add('flagstone', new THREE.BoxGeometry(30, 0.3, 14), M4(0, -0.15, 3), { worldUV: true }); S.add(fl.build());
+  cam.fov = 48; cam.updateProjectionMatrix();
+  cam.position.set(0, 4.1, -11.6); cam.lookAt(0, 3.9, 0); focus.set(0, 2, 0);
+  const box2 = document.getElementById('labels');
+  const place = () => {
+    cam.updateMatrixWorld(); box2.innerHTML = '';
+    for (const [n, p] of labels) {
+      const v = p.clone().project(cam), d = document.createElement('div');
+      d.textContent = n; d.style.left = ((v.x * 0.5 + 0.5) * innerWidth) + 'px'; d.style.top = ((-v.y * 0.5 + 0.5) * innerHeight) + 'px';
+      box2.appendChild(d);
+    }
+  };
+  place(); addEventListener('resize', () => setTimeout(place, 50));
+}
+
+// ====================================================================================
+// #wall — 눈높이에서 본 12 m 석회암 벽 한 칸: 깊은 창, 기단, 띠돌림, 버팀벽, 판석 바닥, 때와 이끼
+// ====================================================================================
+function sceneWall() {
+  ATMOS.preset('goldenHour');
+  TEX.weather({ moss: 0.55, grime: 0.85 });
+  TEX.setGround({ flat: 0 });
+  const b = new Batch();
+  const T = 1.2, H = 9, WW = 1.6, sill = 2.3, spring = 5.3;
+  // 벽 (창 구멍이 뚫린 판을 두께만큼 밀어낸다: 구멍 옆면이 깊은 창 안쪽 면이 된다)
+  const sh = new THREE.Shape(); sh.moveTo(-6, 0); sh.lineTo(6, 0); sh.lineTo(6, H); sh.lineTo(-6, H); sh.lineTo(-6, 0);
+  sh.holes.push(archPath(new THREE.Path(), WW, sill, spring - sill, 0, true));
+  const wg = new THREE.ExtrudeGeometry(sh, { depth: T, bevelEnabled: true, bevelThickness: 0.03, bevelSize: 0.03, bevelSegments: 1, curveSegments: 12 });
+  b.add('stone', wg, null, { worldUV: true });
+  // 기단: 비스듬한 물끊기 윗면, 앞으로 0.2 m
+  b.add('stoneEarly', prism([[-0.2, 0], [0.1, 0], [0.1, 0.92], [0.02, 0.98], [-0.2, 0.8]], -6.6, 6.6, 0.02), null, { worldUV: true });
+  // 띠돌림 (창에서 끊김) 과 갓돌
+  for (const [x0, x1] of [[-6.6, -1.15], [1.15, 6.6]]) b.add('stoneTrim', prism([[-0.14, 0], [0.05, 0], [0.05, 0.26], [-0.04, 0.3], [-0.14, 0.2]], x0, x1, 0.015), M4(0, 4.75, 0), { worldUV: true });
+  b.add('stoneTrim', prism([[-0.16, 0], [T + 0.16, 0], [T + 0.16, 0.18], [T / 2, 0.42], [-0.16, 0.18]], -6.8, 6.8, 0.015), M4(0, H, 0), { worldUV: true });
+  // 창: 창턱 (물끊기), 가운데 돌 멀리언, 어두운 유리 (깊이 0.75 m)
+  b.add('stoneTrim', prism([[-0.16, 0], [0.8, 0], [0.8, 0.12], [0.0, 0.2], [-0.16, 0.14]], -WW / 2 - 0.2, WW / 2 + 0.2, 0.01), M4(0, sill - 0.12, 0), { worldUV: true });
+  b.add('stoneTrim', new THREE.BoxGeometry(0.13, spring - sill + 0.5, 0.18), M4(0, (sill + spring + 0.5) / 2, 0.72), { worldUV: true });
+  const gl = new THREE.ShapeGeometry(archPath(new THREE.Shape(), WW, sill, spring - sill), 12); gl.rotateY(Math.PI);
+  b.add('glassDark', gl, M4(0, 0, 0.8), { worldUV: true });
+  // 버팀벽 둘 (비스듬한 윗면)
+  for (const x of [-6.25, 6.25]) {
+    b.add('stone', prism([[-1.5, 0], [0.05, 0], [0.05, 7.6], [-0.5, 7.6], [-1.5, 6.2]], x - 0.55, x + 0.55, 0.03), null, { worldUV: true });
+    b.add('stoneTrim', prism([[-1.62, 0], [-1.5, 0], [-0.5, 1.4], [0.05, 1.4], [0.05, 1.55], [-0.56, 1.55], [-1.62, 0.14]], x - 0.6, x + 0.6, 0.01), M4(0, 6.12, 0), { worldUV: true });
+  }
+  // 바닥: 판석 마당, 가장자리 자갈, 그 너머 풀
+  b.add('flagstone', new THREE.BoxGeometry(22, 0.2, 7), M4(0, -0.1, -3.4), { worldUV: true });
+  b.add('gravel', new THREE.BoxGeometry(22, 0.2, 0.7), M4(0, -0.11, -7.25), { worldUV: true });
+  b.add('grass', new THREE.BoxGeometry(80, 0.2, 60), M4(0, -0.13, -37.5), { worldUV: true });
+  b.add('flagstone', new THREE.BoxGeometry(22, 0.2, 20), M4(0, -0.1, 11), { worldUV: true });
+  S.add(b.build());
+  // 사람 크기 단서 (1.72 m)
+  const fig = new THREE.Group();
+  const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.34, 1.45, 16), TEX.mat('velvet', { sheen: 1, sheenColor: 0x9a7a7a, tint: 0xb04a4a })); robe.position.y = 0.72; fig.add(robe);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 12), new THREE.MeshStandardMaterial({ color: 0xc89a7a, roughness: 0.6 })); head.position.y = 1.6; fig.add(head);
+  fig.traverse(o => { o.castShadow = o.receiveShadow = true; }); fig.position.set(-2.6, 0, -1.8); S.add(fig);
+  cam.fov = 48; cam.updateProjectionMatrix();
+  cam.position.set(-3.8, 1.65, -10.5); cam.lookAt(0.6, 4.0, 0.6); focus.set(0, 2, -2);
+}
+
+// ====================================================================================
+// #terrain — 언덕, 흙길, 자갈돌 포장, 가파른 둑의 바위, 몇 개의 바위덩이
+// ====================================================================================
+function sceneTerrain() {
+  ATMOS.preset('goldenHour');
+  TEX.weather({ moss: 0.5, grime: 0.6 });
+  const W = 160, NS = 200, r = W / NS;
+  const path = z => 6 * Math.sin(z * 0.05) + 2 * Math.sin(z * 0.13);
+  const hf = (x, z) => {
+    let h = (fbm(x * 0.012, z * 0.012, 3) - 0.5) * 16 + (fbm(x * 0.05, z * 0.05, 5) - 0.5) * 2.5;
+    // 가파른 둑 (x ≈ 18 에서 솟는다)
+    const bank = smooth(14, 22, x + (fbm(z * 0.04, 3, 7) - 0.5) * 8);
+    h += bank * (9 + ridged(x * 0.08, z * 0.08, 9) * 4);
+    // 길과 마당은 고르게
+    const dp = Math.abs(x - path(z));
+    h = lerp(h, h * 0.4, smooth(5, 1.5, dp));
+    return h;
+  };
+  const g = new THREE.PlaneGeometry(W, W, NS, NS); g.rotateX(-Math.PI / 2);
+  const p = g.attributes.position, n = p.count, spl = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) p.setY(i, hf(p.getX(i), p.getZ(i)));
+  g.computeVertexNormals();
+  const nr = g.attributes.normal;
+  for (let i = 0; i < n; i++) {
+    const x = p.getX(i), z = p.getZ(i), dp = Math.abs(x - path(z));
+    let gr = 1, di = smooth(0.62, 0.74, fbm(x * 0.06, z * 0.06, 21)) * 0.7, co = 0, gv = 0;
+    const onPath = smooth(2.2, 1.0, dp + (fbm(x * 0.4, z * 0.4, 5) - 0.5) * 1.2);
+    di = Math.max(di, onPath);
+    co = smooth(6.5, 4.5, Math.hypot(x - path(z) - 0.5, z + 13) + (fbm(x * 0.5, z * 0.5, 6) - 0.5) * 2);
+    gv = smooth(3.4, 2.4, dp) * smooth(2.0, 2.6, dp + (fbm(x * 0.3, z * 0.3, 8) - 0.5)) * 0.9;
+    gr = Math.max(0, 1 - di - co - gv);
+    const s = gr + di + co + gv || 1;
+    spl[i * 4] = gr / s; spl[i * 4 + 1] = di / s; spl[i * 4 + 2] = co / s; spl[i * 4 + 3] = gv / s;
+  }
+  g.setAttribute('splat', new THREE.BufferAttribute(spl, 4));
+  const col = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) { const v = 0.92 + (fbm(p.getX(i) * 0.1, p.getZ(i) * 0.1, 31) - 0.5) * 0.25; col[i * 3] = v * 1.02; col[i * 3 + 1] = v; col[i * 3 + 2] = v * 0.96; }
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const me = new THREE.Mesh(g, TEX.terrain({})); me.receiveShadow = me.castShadow = true; S.add(me);
+  TEX.setGround({ fn: hf, x0: -W / 2, z0: -W / 2, w: W, d: W, res: 256 });
+  // 바위덩이 (노이즈로 부푼 이십면체, 삼면 투영 바위 재질)
+  const rocks = [[9, -2, 1.6], [12.5, 6, 2.4], [-7, 4, 1.1], [3.5, 12, 0.9]];
+  for (const [x, z, s] of rocks) {
+    const rg = new THREE.IcosahedronGeometry(s, 4), rp = rg.attributes.position;
+    for (let i = 0; i < rp.count; i++) {
+      const v = new THREE.Vector3(rp.getX(i), rp.getY(i), rp.getZ(i)), k = 1 + (noise2(v.x * 0.9 + x, v.z * 0.9 + v.y * 0.7, 3) - 0.5) * 0.5 + (noise2(v.x * 3, v.y * 3 + z, 4) - 0.5) * 0.12;
+      v.multiplyScalar(k); v.y *= 0.7; rp.setXYZ(i, v.x, v.y, v.z);
+    }
+    rg.computeVertexNormals();
+    addMesh(rg, L('rock'), x, hf(x, z) + s * 0.25, z, x);
+  }
+  cam.fov = 50; cam.updateProjectionMatrix();
+  const cz = -22, cx = path(cz) - 1.0;
+  cam.position.set(cx, hf(cx, cz) + 1.8, cz); cam.lookAt(path(2) + 5, hf(path(2), 2) + 1.5, 6); focus.set(cx + 3, 0, cz + 14);
+}
+
+// ====================================================================================
+// #interior — 참나무 마루, 판넬 징두리, 카펫, 벨벳 휘장, 황동, 양피지, 책 (촛불과 실내 빛)
+// ====================================================================================
+const CANDLES = [];
+function sceneInterior() {
+  ATMOS.preset('interiorWarm', 0, { sun: [13, 78] });
+  TEX.weather({ moss: 0, grime: 0.35 });
+  TEX.setGround({ flat: 0 });
+  const b = new Batch(), RW = 8, RD = 11, RH = 5.2;
+  b.add('oakFloor', new THREE.BoxGeometry(RW, 0.2, RD), M4(0, -0.1, 0), { worldUV: true });
+  b.add('plaster', new THREE.BoxGeometry(RW, 0.2, RD), M4(0, RH + 0.1, 0), { worldUV: true });
+  for (let k = -2; k <= 2; k++) b.add('timber', new THREE.BoxGeometry(RW, 0.42, 0.36), M4(0, RH - 0.21, k * 2.2), { worldUV: true });
+  // 벽: 아래 1.4 m 판넬, 위는 석회암. 창은 +x 벽에
+  const walls = [[0, RD / 2 + 0.3, RW + 1.2, 0.6], [0, -RD / 2 - 0.3, RW + 1.2, 0.6], [-RW / 2 - 0.3, 0, 0.6, RD]];
+  for (const [x, z, w, d] of walls) b.add('stone', new THREE.BoxGeometry(w, RH, d), M4(x, RH / 2, z), { worldUV: true });
+  // +x 벽은 창 하나 (스테인드글라스) 를 남기고 쌓는다
+  const wx = RW / 2 + 0.3;
+  b.add('stone', new THREE.BoxGeometry(0.6, RH, RD / 2 - 1), M4(wx, RH / 2, -RD / 4 - 0.5), { worldUV: true });
+  b.add('stone', new THREE.BoxGeometry(0.6, RH, RD / 2 - 1), M4(wx, RH / 2, RD / 4 + 0.5), { worldUV: true });
+  b.add('stone', new THREE.BoxGeometry(0.6, 1.6, 2), M4(wx, 0.8, 0), { worldUV: true });
+  b.add('stone', new THREE.BoxGeometry(0.6, 0.9, 2), M4(wx, RH - 0.45, 0), { worldUV: true });
+  b.add('glassStained', new THREE.PlaneGeometry(2, 2.7).rotateY(-Math.PI / 2), M4(wx + 0.1, 2.95, 0), {});
+  // 징두리 판넬 (벽 앞 4 cm)
+  b.add('oakPanel', new THREE.BoxGeometry(RW - 0.1, 1.4, 0.05), M4(0, 0.7, RD / 2 - 0.03), { worldUV: true });
+  b.add('oakPanel', new THREE.BoxGeometry(0.05, 1.4, RD - 0.1), M4(-RW / 2 + 0.03, 0.7, 0), { worldUV: true });
+  b.add('oak', new THREE.BoxGeometry(RW, 0.08, 0.1), M4(0, 1.44, RD / 2 - 0.06), { worldUV: true });
+  b.add('oak', new THREE.BoxGeometry(0.1, 0.08, RD), M4(-RW / 2 + 0.06, 1.44, 0), { worldUV: true });
+  // 책장 (-x 벽): 칸마다 책등 판
+  for (let s = 0; s < 4; s++) {
+    const y0 = 1.65 + s * 0.38;
+    const sp = new THREE.PlaneGeometry(2.6, 0.35).rotateY(Math.PI / 2), uv = sp.attributes.uv;
+    for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 2.6, uv.getY(i) * 0.35);
+    b.add('bookSpines', sp, M4(-RW / 2 + 0.4, y0 + 0.175, 2.6), {});
+    b.add('oak', new THREE.BoxGeometry(0.42, 0.04, 2.7), M4(-RW / 2 + 0.24, y0 - 0.02, 2.6), { worldUV: true });
+  }
+  b.add('oak', new THREE.BoxGeometry(0.42, 1.6, 0.06), M4(-RW / 2 + 0.24, 2.4, 1.22), { worldUV: true });
+  b.add('oak', new THREE.BoxGeometry(0.42, 1.6, 0.06), M4(-RW / 2 + 0.24, 2.4, 3.98), { worldUV: true });
+  // 탁자 (윤 나는 참나무), 다리
+  b.add('oakPolished', new THREE.BoxGeometry(1.4, 0.08, 3.2), M4(0.6, 0.86, -0.5), { worldUV: true });
+  for (const sx of [-0.55, 0.55]) for (const sz of [-1.4, 1.4]) b.add('oak', new THREE.CylinderGeometry(0.05, 0.06, 0.82, 12), M4(0.6 + sx, 0.41, -0.5 + sz), { worldUV: true });
+  // 양피지 몇 장, 가죽 책
+  const parch = [[0.35, -1.3, 0.3], [0.8, -0.9, -0.5], [0.5, 0.4, 0.15]];
+  for (const [x, z, a] of parch) b.add('parchment', new THREE.BoxGeometry(0.34, 0.004, 0.46), M4(x, 0.903, z, a), { worldUV: true });
+  b.add('leather', new THREE.BoxGeometry(0.26, 0.06, 0.36), M4(0.95, 0.93, 0.6, 0.4), { worldUV: true });
+  // 카펫 길 (u 가 폭 전체: 0..2 m)
+  const cg = new THREE.PlaneGeometry(2, 7).rotateX(-Math.PI / 2), cu = cg.attributes.uv, cpos = cg.attributes.position;
+  for (let i = 0; i < cu.count; i++) cu.setXY(i, cpos.getX(i) + 1, cpos.getZ(i));
+  b.add('carpet', cg, M4(-1.8, 0.012, 0.5), {});
+  const g = b.build(k => k === 'oakFloor' ? TEX.mat('oak', { p: { joints: 1 } }) : k === 'oakPolished' ? TEX.mat('oak', { clearcoat: 0.35 }) : batchMat(k));
+  S.add(g);
+  // 벨벳 휘장 (주름진 판, 양면)
+  const vg = new THREE.PlaneGeometry(1.4, 3.6, 48, 8), vp = vg.attributes.position, vu = vg.attributes.uv;
+  for (let i = 0; i < vp.count; i++) { const x = vp.getX(i), y = vp.getY(i); vp.setZ(i, Math.sin(x * 11) * 0.07 * (0.6 + 0.4 * (y + 1.8) / 3.6)); vu.setXY(i, (x + 0.7) * 1.15, y + 1.8); }
+  vg.computeVertexNormals(); vg.rotateY(-Math.PI / 2);
+  addMesh(vg, TEX.mat('velvet', { sheen: 1, sheenColor: 0x7a84c8, sheenRough: 0.45, side: THREE.DoubleSide }), RW / 2 - 0.15, 1.85, -1.8);
+  addMesh(vg, TEX.mat('velvet', { sheen: 1, sheenColor: 0xc87a7a, sheenRough: 0.45, side: THREE.DoubleSide, tint: 0xd8605a }), RW / 2 - 0.15, 1.85, 1.8);
+  // 황동: 촛대 셋, 혼천의, 둥근 쟁반
+  const brass = L('brass');
+  for (const z of [-1.6, -0.5, 0.6]) {
+    addMesh(new THREE.CylinderGeometry(0.07, 0.1, 0.04, 24), brass, 0.6, 0.92, z);
+    addMesh(new THREE.CylinderGeometry(0.018, 0.024, 0.32, 16), brass, 0.6, 1.08, z);
+    addMesh(new THREE.CylinderGeometry(0.045, 0.03, 0.04, 20), brass, 0.6, 1.25, z);
+    addMesh(new THREE.CylinderGeometry(0.022, 0.022, 0.16, 12), TEX.mat('parchment', { tint: 0xfff6e0, rough: 0.8 }), 0.6, 1.35, z);
+    const fl = new THREE.Mesh(new THREE.SphereGeometry(0.025, 10, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffb060).multiplyScalar(8) }));
+    fl.scale.y = 1.8; fl.position.set(0.6, 1.47, z); S.add(fl);
+    CANDLES.push([0.6, 1.5, z]);
+  }
+  const arm = new THREE.Group(); arm.position.set(0.45, 1.25, 0.95);
+  for (let k = 0; k < 3; k++) { const ring = new THREE.Mesh(new THREE.TorusGeometry(0.22 - k * 0.025, 0.012, 10, 64), brass); ring.rotation.set(k * 1.0 + 0.4, k * 0.7, 0); ring.castShadow = true; arm.add(ring); }
+  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.05, 0.35, 16), brass); stem.position.y = -0.3; arm.add(stem);
+  S.add(arm); anim = dt => { arm.children[0].rotation.y += dt * 0.3; };
+  addMesh(new THREE.CylinderGeometry(0.22, 0.2, 0.025, 48), brass, 0.85, 0.915, -1.1);
+  addMesh(new THREE.SphereGeometry(0.11, 32, 24), L('gold'), 0.85, 1.0, -1.1);
+  // 빛: 촛불 셋 + 벽난로 대신 구석 등불
+  const P = GFX.pool;
+  CANDLES.forEach((c, i) => { P[i].position.set(c[0], c[1] + 0.05, c[2]); P[i].color.setHex(0xffa24a); P[i].intensity = 1.6; P[i].distance = 9; });
+  P[3].position.set(-3.2, 2.6, -4.6); P[3].color.setHex(0xffb060); P[3].intensity = 3.5; P[3].distance = 12;
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 10), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xffb060).multiplyScalar(6) })); lamp.position.set(-3.2, 2.6, -4.6); S.add(lamp);
+  cam.fov = 52; cam.updateProjectionMatrix();
+  cam.position.set(-2.2, 1.6, -4.7); cam.lookAt(1.0, 1.0, 0.4); focus.set(0, 1, 0);
+}
+
+({ swatches: sceneSwatches, wall: sceneWall, terrain: sceneTerrain, interior: sceneInterior })[name]();
+
+// ---------- 그리기 ----------
+const info = document.getElementById('info');
+let last = performance.now();
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (anim) anim(dt);
+  ATMOS.update(dt, focus);
+  ATMOS.render();
+}
+requestAnimationFrame(loop);
+Promise.all([TEX.ready(), ATMOS.whenLoaded()]).then(() => {
+  ATMOS.refreshEnv();
+  let n = 0;
+  const wait = () => { if (++n < 4) return requestAnimationFrame(wait); window.__ready = true; document.title = 'ready'; const s = TEX.stats(); info.textContent = name + ' · ' + s.generated + ' tex · ' + s.ms + ' ms (' + s.mode + ')'; };
+  requestAnimationFrame(wait);
+});
+</script>
+</body>
+</html>

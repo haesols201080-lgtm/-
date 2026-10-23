@@ -115,7 +115,7 @@ class SiteField {
     const s = Math.abs(this.ground(x + 1, z) - this.ground(x - 1, z)) + Math.abs(this.ground(x, z + 1) - this.ground(x, z - 1));
     if (s > 2.2) return null;
     const c = this.col;
-    return { y: this.ground(x, z), r: c[i * 3] * 1.08, g: c[i * 3 + 1] * 1.1, b: c[i * 3 + 2], d: 0.9 * g, flower: 0.03 };
+    return { y: this.ground(x, z), r: c[i * 3] * 0.92, g: c[i * 3 + 1] * 1.12, b: c[i * 3 + 2] * 0.85, d: 0.95 * g, flower: 0.03 };
   }
 }
 
@@ -548,7 +548,8 @@ function siteTrees(m, g) {
     const im = new THREE.InstancedMesh(geos[k] || geos.oak, vc, list.length);
     list.forEach((p, i) => {
       q.setFromAxisAngle(V3(0, 1, 0), p.rot); mx.compose(V3(p.x, p.y, p.z), q, V3(p.s, p.s, p.s)); im.setMatrixAt(i, mx);
-      im.setColorAt(i, c.setHSL(0.24 + hash2(i, 9) * 0.04, 0.3, 0.3 + hash2(i, 8) * 0.08));
+      const v = 0.8 + hash2(i, 8) * 0.4, wy = hash2(i, 9);
+      im.setColorAt(i, c.setRGB((0.045 + wy * 0.03) * v, (0.075 + wy * 0.015) * v, 0.022 * v));
       addStatic(m, { x: p.x, z: p.z, r: 0.45 * p.s, top: p.y + 7 });
     });
     im.castShadow = true; im.receiveShadow = true; g.add(im);

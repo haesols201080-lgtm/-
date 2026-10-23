@@ -258,7 +258,8 @@ function initGrass() {
   g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
   g.setIndex([0, 1, 2, 1, 3, 2, 2, 3, 4]);
-  const m = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  // 램버트 재질은 대기 모듈의 빛 계산과 맞지 않아 하얗게 뜬다 → 표준 재질
+  const m = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.85, metalness: 0 });
   m.onBeforeCompile = sh => {
     sh.uniforms.uT = GFX.timeU;
     sh.vertexShader = 'uniform float uT;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>

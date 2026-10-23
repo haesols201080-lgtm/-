@@ -315,6 +315,8 @@
     for (const k of [0, 1, 2, 0, 2, 3]) vtx(B, p[k], n, u[k], c);
     return geoOf(B);
   }
+  // 원판 (평면 uv 0..1, +z를 본다)
+  function disc(r, seg) { const g = new T.CircleGeometry(r, seg || 24).toNonIndexed(); g.setAttribute('color', new T.BufferAttribute(new Float32Array(g.attributes.position.count * 3).fill(1), 3)); return g; }
   function tintGeo(g, t) {
     const c = tcol(t); if (!c) return g;
     const a = g.attributes.color.array;
@@ -1595,6 +1597,371 @@
     for (let yy = 0.32; yy < h; yy += 0.36) if (Math.abs(yy - h * 0.62) > 0.1) k.box('iron', 0, yy, gz + 0.012, w, 0.014, 0.01, { c: 0 });
     k.box('stoneTrim', 0, -0.035, -th / 2 + 0.04, w + 0.14, 0.07, th + 0.08, { c: 0.015 });
     if (o.curtain) for (const s of [-1, 1]) k.add('pVelvet', sheet(8, 8, (u, v) => [s * (w / 2 + 0.05 + u * 0.32), -0.05 + v * (h + ah * 0.5), 0.06 + Math.sin(u * 4 * TAU / 2) * 0.03], { both: true }), null, o.curtain === true ? C.oxblood : o.curtain);
+  };
+
+  // =====================================================================
+  // 8. 불과 빛 (모든 빛에는 보이는 근원)
+  // =====================================================================
+  // 벽난로: 돌 기둥·상인방(룬 고리 쐐기돌)·참나무 선반, 그을린 화실, 받침돌, 장작 받침쇠, 장작·숯·불꽃·불씨, 깜빡이는 빛.
+  // 지역 z=0이 벽면, 앞은 +z. o.breast 굴뚝 가슴 높이(천장까지), o.over 'memory'|'painting'|'none', o.clutter 선반 위 물건
+  P.fireplace = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const R = RNG(x, y, z, o), k = new K(b, x, y, z, rot), ow = opt(o, 'w', 1.3), oh = opt(o, 'h', 1.05), dep = opt(o, 'd', 0.55), jw = 0.32, W = ow + jw * 2, lh = 0.36, H = oh + lh, F = dep + 0.05;
+    for (const s of [-1, 1]) {
+      const jx = s * (ow / 2 + jw / 2);
+      k.box('stone', jx, oh / 2, (F - 0.26) / 2, jw, oh, F - 0.26, { c: 0.01 });
+      k.box('stoneTrim', jx, 0.09, F - 0.13, jw + 0.05, 0.18, 0.28, { c: 0.02 });
+      k.box('stoneTrim', jx, 0.18 + (oh - 0.3) / 2, F - 0.13, jw, oh - 0.3, 0.26, { c: 0.025 });
+      k.box('stoneTrim', jx, oh - 0.06, F - 0.12, jw + 0.06, 0.12, 0.3, { c: 0.02 });
+      k.box('stoneDark', s * (ow / 2 - 0.04), oh / 2, dep / 2, 0.08, oh, dep, { c: 0.01, ry: s * 0.22, t: 0.5 });
+    }
+    k.box('stone', 0, oh + lh / 2, (F - 0.28) / 2, ow, lh, F - 0.28, { c: 0.01 });
+    k.box('stoneTrim', 0, oh + lh / 2, F - 0.14, W, lh, 0.3, { c: 0.025 });
+    for (let i = -2; i <= 2; i++) if (i) k.box('stoneTrim', i * ow / 5, oh + lh / 2, F + 0.012, 0.012, lh - 0.04, 0.01, { c: 0, t: 0.75 });
+    k.box('stoneTrim', 0, oh + lh * 0.47, F + 0.02, 0.24, lh * 0.94, 0.06, { c: 0.015, taper: 1.15 });
+    k.ring('stoneTrim', 0.07, 0.012, 0, oh + lh * 0.5, F + 0.055, { rx: PI / 2, ts: 20, rs: 5 });
+    for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; k.box('stoneTrim', Math.sin(a) * 0.092, oh + lh * 0.5 + Math.cos(a) * 0.092, F + 0.052, 0.008, 0.022, 0.012, { c: 0, rz: -a }); }
+    k.add('pSoot', quad(ow * 1.05, 0.55), L(0, oh + 0.2, F + 0.002), 0.9);
+    k.box('stoneTrim', 0, H - 0.025, F - 0.12, W + 0.1, 0.05, 0.34, { c: 0.015 });
+    k.box('oak', 0, H + 0.035, F - 0.1, W + 0.24, 0.07, 0.4, { c: 0.016, t: [0.9, 0.85, 0.8] });
+    // 화실
+    k.box('stoneDark', 0, oh / 2, 0.03, ow + 0.1, oh, 0.06, { c: 0, t: 0.35 });
+    k.box('stoneDark', 0, oh - 0.02, dep / 2, ow, 0.04, dep, { c: 0, t: 0.25 });
+    k.box('stoneDark', 0, 0.02, dep / 2, ow, 0.04, dep, { c: 0, t: 0.45 });
+    k.add('pSoot', quad(ow * 0.9, oh * 0.9), L(0, oh * 0.55, 0.062), 1);
+    k.box('stoneTrim', 0, 0.03, F + 0.3, W + 0.3, 0.06, 0.64, { c: 0.015, t: 0.9 });
+    // 받침쇠와 장작
+    for (const s of [-1, 1]) {
+      const ax = s * ow * 0.28;
+      k.cyl('iron', 0.016, 0.3, ax, 0.04, F - 0.06, { seg: 8 });
+      k.sph('brass', 0.034, ax, 0.38, F - 0.06, { n: 6, seg: 10 });
+      k.box('iron', ax, 0.05, F - 0.04, 0.2, 0.025, 0.03, { c: 0.004 });
+      k.box('iron', ax, 0.12, F * 0.5, 0.025, 0.03, dep * 0.95, { c: 0.004 });
+    }
+    const logs = [[0, 0.16, 0.24, 0.07, 0.1, 'pCoal'], [0.05, 0.16, 0.42, 0.065, -0.12, 'pCoal'], [-0.04, 0.27, 0.32, 0.06, 0.25, 'timber']];
+    for (const [lx, ly, lz, lr, ry, mt] of logs) k.lathe(mt, [[0, 0], [lr, 0], [lr, 0], [lr * 1.05, ow * 0.4], [lr, ow * 0.78], [lr, ow * 0.78], [0, ow * 0.78]], lx - ow * 0.39, ly, lz, { rz: -PI / 2, ry, seg: 9, t: mt === 'timber' ? [0.35, 0.28, 0.22] : 1, wob: (i, a) => Math.sin(a * 3 + i) * 0.08 });
+    for (let i = 0; i < 16; i++) k.sph('pCoal', R.r(0.02, 0.045), R.r(-ow * 0.38, ow * 0.38), 0.05, R.r(0.1, dep - 0.05), { n: 3, seg: 5, s: 1, t: R.r(0.6, 1.1) });
+    if (o.lit !== false) {
+      for (let i = 0; i < 7; i++) { const p = k.w(R.r(-ow * 0.3, ow * 0.3), 0.17, R.r(0.22, 0.4)); sprite(b, p[0], p[1], p[2], FK.fire, R.r(0.32, 0.62), R(), [1, 1, 1]); }
+      for (let i = 0; i < 30; i++) { const p = k.w(R.r(-ow * 0.35, ow * 0.35), 0.2, R.r(0.2, 0.45)); sprite(b, p[0], p[1], p[2], FK.ember, R.r(0.006, 0.012), R(), [1, 1, 1]); }
+      const hp = k.w(0, 0.45, F + 0.05); sprite(b, hp[0], hp[1], hp[2], FK.halo, 1.1, 0.3, [1.4, 0.7, 0.35]);
+      k.add('pGlowAdd', quad(ow * 1.3, 0.9), L(0, 0.005, F + 0.32, -PI / 2, 0, 0), [0.5, 0.2, 0.06]);
+      k.light(0, 0.6, F + 0.35, 0xFF7A30, opt(o, 'light', 3.0), 14, { fire: true, type: 'fire' });
+    }
+    if (o.breast) k.box('stone', 0, H + 0.07 + (o.breast - H - 0.07) / 2, (F - 0.32) / 2, W - 0.06, o.breast - H - 0.07, F - 0.32, { c: 0.015 });
+    const over = o.over === undefined ? 'memory' : o.over;
+    if (over === 'memory') k.sub(P.memoryGlass, 0, H + 0.2, F - 0.32, 0, { w: 0.8, h: 1.1 });
+    else if (over === 'painting') k.sub(P.painting, 0, H + 0.25, F - 0.32, 0, { w: 1.1, h: 0.8 });
+    if (o.clutter !== false) {
+      const my = H + 0.07, mz = F - 0.12;
+      for (const s of [-1, 1]) k.sub(P.candle, s * (W / 2 - 0.08), my, mz, 0, { holder: 'stick', sh: 0.22, h: R.r(0.18, 0.26), light: false, halo: 0.25 });
+      k.sub(P.clock, -0.25, my, mz - 0.02, R.r(-0.1, 0.1), { small: true });
+      k.sub(P.bookStack, W / 2 - 0.42, my, mz, R.r(-0.4, 0.4), { n: 3 });
+      k.sub(P.bottle, 0.2, my, mz + 0.05, 0, { shape: 1, s: 1.1 });
+      k.sub(P.bell, -W / 2 + 0.38, my, mz, 0, { r: 0.05, frame: false });
+      k.sub(P.hourglass, 0.38, my, mz - 0.05, 0, {});
+    }
+    k.col(0, F / 2 + 0.1, W / 2, F / 2 + 0.3, H + 0.1);
+    return { mantel: y + H + 0.07, front: F };
+  };
+  // 촛대 (팔 3 또는 5): 황동 받침과 마디 기둥, 휜 팔, 받침 접시, 초. 빛 하나
+  P.candelabrum = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const R = RNG(x, y, z, o), k = new K(b, x, y, z, rot), arms = opt(o, 'arms', 5), H = opt(o, 'h', 0.42), ra = arms > 3 ? 0.17 : 0.15, ay = H * 0.82;
+    k.lathe('brass', [[0, 0], [0.085, 0], [0.09, 0.01], [0.072, 0.02], [0.045, 0.034], [0.024, 0.06], [0.016, 0.1], [0.026, 0.13], [0.014, 0.16], [0.012, H * 0.55], [0.028, H * 0.6], [0.013, H * 0.66], [0.011, H - 0.03], [0.03, H - 0.01], [0.036, H], [0.02, H], [0.016, H + 0.012], [0, H + 0.012]], 0, 0, 0, { seg: 14 });
+    const lit = o.lit !== false;
+    k.sub(P.candle, 0, H + 0.004, 0, 0, { holder: 'none', h: R.r(0.18, 0.24), r: 0.012, lit, halo: 0.36 });
+    const n = arms - 1;
+    for (let i = 0; i < n; i++) {
+      const a = (n === 2 ? i * PI : i / n * TAU) + (n === 2 ? 0 : PI / 4), ca = Math.sin(a), sa = Math.cos(a), P3 = (r, yy) => [ca * r, yy, sa * r];
+      k.tube('brass', [P3(0.01, H * 0.6), P3(ra * 0.45, H * 0.55), P3(ra * 0.85, H * 0.6), P3(ra, ay - 0.04), P3(ra, ay)], 0.0065, { rs: 6 });
+      const [px, , pz] = P3(ra, 0);
+      k.lathe('brass', [[0, 0], [0.012, 0], [0.04, 0.008], [0.042, 0.012], [0.02, 0.012], [0.016, 0.03], [0, 0.03]], px, ay, pz, { seg: 12 });
+      k.sub(P.candle, px, ay + 0.012, pz, 0, { holder: 'none', h: R.r(0.12, 0.22), r: 0.011, lit: lit && R() > 0.06, halo: 0.22 });
+    }
+    if (o.light !== false && lit) k.light(0, H + 0.3, 0, 0xFFA24A, o.light === true || o.light === undefined ? 1.0 : o.light, 6);
+    return { top: y + H + 0.3 };
+  };
+  // 벽등: 방패 받침판, 휜 팔, 접시와 초. 위 벽에 그을음, 둘레에 따뜻한 빛 무늬. 지역 z=0 벽면, y=판 가운데
+  P.wallSconce = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const R = RNG(x, y, z, o), k = new K(b, x, y, z, rot), n = opt(o, 'n', 1);
+    const sh = new T.Shape(); sh.moveTo(-0.06, -0.14); sh.quadraticCurveTo(0, -0.2, 0.06, -0.14); sh.lineTo(0.065, 0.08); sh.quadraticCurveTo(0.06, 0.13, 0, 0.17); sh.quadraticCurveTo(-0.06, 0.13, -0.065, 0.08); sh.closePath();
+    k.add('brass', ext(sh, 0.014, { bevel: 0.004 }), L(0, 0, 0.007));
+    k.ring('brass', 0.035, 0.006, 0, 0.02, 0.017, { rx: PI / 2, ts: 16, rs: 4 });
+    for (let i = 0; i < n; i++) {
+      const ax = n === 1 ? 0 : (i ? 0.15 : -0.15);
+      k.tube('brass', [[0, -0.05, 0.014], [ax * 0.3, -0.11, 0.07], [ax * 0.8, -0.08, 0.15], [ax, -0.01, 0.18], [ax, 0.0, 0.18]], 0.0075, { rs: 6 });
+      k.lathe('brass', [[0, 0], [0.01, 0], [0.05, 0.01], [0.052, 0.015], [0.018, 0.012], [0.016, 0.03], [0, 0.03]], ax, 0, 0.18, { seg: 12 });
+      k.sub(P.candle, ...[ax, 0.012, 0.18], 0, { holder: 'none', h: R.r(0.14, 0.2), r: 0.012, halo: 0.34, lit: o.lit });
+    }
+    if (o.soot !== false) k.add('pSoot', quad(0.34 + n * 0.12, 0.6), L(0, 0.48, 0.003), 0.85);
+    if (o.lit !== false) { k.add('pGlowAdd', quad(1.2 + n * 0.3, 1.2), L(0, 0.22, 0.005), [0.32, 0.17, 0.07]); k.light(0, 0.28, 0.32, 0xFFA24A, opt(o, 'light', 1.1), 7); }
+  };
+  // 혼천의 샹들리에: 천장 장미, 쇠사슬, 고정된 축과 고리들이 천천히 돈다 (초 고리, 자오환, 황도환), 가운데 마나 수정
+  P.chandelier = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const R = RNG(x, y, z, o), k = new K(b, x, y, z, rot), R0 = opt(o, 'r', 0.85), drop = opt(o, 'drop', 1.6), n = opt(o, 'n', 12), cy = -drop;
+    k.lathe('brass', [[0, -0.08], [0.03, -0.08], [0.1, -0.035], [0.14, -0.01], [0.14, 0], [0, 0]], 0, 0, 0, { seg: 18 });
+    const top = cy + R0 * 0.82;
+    for (let yy = -0.1, i = 0; yy > top + 0.05; yy -= 0.07, i++) k.ring('iron', 0.026, 0.006, 0, yy - 0.035, 0, { rx: PI / 2, ry: i % 2 ? PI / 2 : 0, ts: 10, rs: 4 });
+    k.lathe('brass', [[0, 0], [0.07, 0.02], [0.09, 0.06], [0.05, 0.1], [0.02, 0.14], [0.03, 0.17], [0, 0.18]], 0, top - 0.1, 0, { seg: 14 });
+    k.cyl('brass', 0.014, top - 0.1 - (cy - R0 * 0.7), 0, cy - R0 * 0.7, 0, { seg: 8 });
+    k.lathe('brass', [[0, 0], [0.02, 0.03], [0.05, 0.08], [0.04, 0.12], [0.015, 0.14], [0, 0.14]], 0, cy - R0 * 0.78, 0, { seg: 12 });
+    k.lathe('pCrystal', [[0, -0.11], [0.06, 0], [0, 0.11]], 0, cy, 0, { seg: 6, flat: true });
+    k.ring('brass', 0.08, 0.006, 0, cy, 0, { rx: PI / 2, ts: 16, rs: 4 }); k.ring('brass', 0.08, 0.006, 0, cy, 0, { ts: 16, rs: 4 });
+    { const p = k.w(0, cy, 0); sprite(b, p[0], p[1], p[2], FK.glow, 0.45, 0.4, [0.25, 0.85, 0.95]); }
+    // 도는 고리들 (따로 묶어 extra로)
+    const W0 = k.w(0, cy, 0), groups = [];
+    const mk = (fn, setup) => { const sb = new Batch(); fn(new K(sb, 0, 0, 0, 0)); const g = sb.build(); const pivot = new T.Group(); pivot.position.set(W0[0], W0[1], W0[2]); pivot.rotation.y = rot; if (setup) setup(pivot, g); else pivot.add(g); b.extra.push(pivot); groups.push(g); return g; };
+    const g1 = mk(kk => {
+      kk.ring('brass', R0, 0.024, 0, 0, 0, { ts: 48, rs: 6 }); kk.ring('brass', R0 - 0.06, 0.009, 0, 0, 0, { ts: 48, rs: 4 });
+      for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; kk.box('brass', Math.sin(a) * (R0 - 0.03), 0.0, Math.cos(a) * (R0 - 0.03), 0.012, 0.03, i % 3 ? 0.05 : 0.08, { c: 0.002, ry: a }); }
+      for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + PI / 4; kk.tube('brass', [[Math.sin(a) * 0.02, 0, Math.cos(a) * 0.02], [Math.sin(a) * R0 * 0.5, 0.06, Math.cos(a) * R0 * 0.5], [Math.sin(a) * (R0 - 0.02), 0, Math.cos(a) * (R0 - 0.02)]], 0.008, { rs: 5 }); }
+      for (let i = 0; i < n; i++) {
+        const a = (i + 0.5) / n * TAU, px = Math.sin(a) * R0, pz = Math.cos(a) * R0;
+        kk.lathe('brass', [[0, -0.02], [0.012, -0.02], [0.045, 0.012], [0.047, 0.016], [0.018, 0.014], [0.016, 0.034], [0, 0.034]], px, 0.02, pz, { seg: 10 });
+        P.candle(kk.b, px, 0.054, pz, 0, { holder: 'none', h: R.r(0.14, 0.2), r: 0.012, halo: 0.3, seed: i * 31 + 7 });
+      }
+    });
+    const g2 = mk(kk => { kk.ring('brass', R0 * 0.8, 0.017, 0, 0, 0, { rx: PI / 2, ts: 40, rs: 5 }); for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; kk.box('brass', Math.sin(a) * R0 * 0.8, Math.cos(a) * R0 * 0.8, 0, 0.03, 0.012, 0.03, { c: 0.002, rz: -a }); } });
+    const g3 = mk(kk => { kk.ring('gold', R0 * 0.66, 0.02, 0, 0, 0, { ts: 40, rs: 5 }); kk.ring('brass', R0 * 0.66, 0.006, 0, 0.03, 0, { ts: 40, rs: 3 }); kk.ring('brass', R0 * 0.66, 0.006, 0, -0.03, 0, { ts: 40, rs: 3 }); }, (pv, g) => { const tilt = new T.Group(); tilt.rotation.z = 0.41; tilt.add(g); pv.add(tilt); });
+    const g4 = mk(kk => { kk.ring('brass', R0 * 0.42, 0.012, 0, 0, 0, { rz: PI / 2, ts: 32, rs: 4 }); });
+    const sp = opt(o, 'speed', 1);
+    b.anims.push(t => { g1.rotation.y = t * 0.035 * sp; g2.rotation.y = -t * 0.08 * sp; g3.rotation.y = t * 0.12 * sp; g4.rotation.x = t * 0.18 * sp; g4.rotation.y = t * 0.05; });
+    k.light(0, cy + 0.1, 0, 0xFFB060, opt(o, 'light', 2.2), 15);
+    if (o.manaLight !== false) k.light(0, cy, 0, 0x7FF0FF, 0.35, 4, { flicker: false });
+  };
+  // 등불 (서거나 o.hang이면 y에서 매달림): 쇠틀, 유리, 지붕, 고리, 안의 초
+  P.lantern = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const R = RNG(x, y, z, o), k = new K(b, x, y, z, rot), s = opt(o, 's', 1), w = 0.15 * s, h = 0.26 * s, by = o.hang ? -h - 0.16 * s : 0, mt = o.brass ? 'brass' : 'iron';
+    k.box(mt, 0, by + 0.012 * s, 0, w + 0.03 * s, 0.024 * s, w + 0.03 * s, { c: 0.004 });
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.box(mt, sx * w / 2, by + h / 2, sz * w / 2, 0.012 * s, h, 0.012 * s, { c: 0.002 });
+    k.box(mt, 0, by + h, 0, w + 0.024 * s, 0.018 * s, w + 0.024 * s, { c: 0.003 });
+    k.lathe(mt, [[0, 0], [w * 0.8, 0], [w * 0.8, 0.012 * s], [0.014 * s, h * 0.36], [0.02 * s, h * 0.4], [0.02 * s, h * 0.45], [0, h * 0.45]], 0, by + h + 0.009 * s, 0, { seg: 4, ry: PI / 4, flat: true });
+    k.ring(mt, 0.03 * s, 0.005 * s, 0, by + h + h * 0.45 + 0.035 * s, 0, { rx: PI / 2, ts: 12, rs: 4 });
+    for (const [gx, gz, r2] of [[0, w / 2, 0], [0, -w / 2, 0], [w / 2, 0, PI / 2], [-w / 2, 0, PI / 2]]) k.box('pGlass', gx, by + h / 2, gz, w - 0.012 * s, h - 0.02 * s, 0.003, { c: 0, ry: r2, t: 0xF2E6D0 });
+    for (const sx of [-1, 1]) k.box(mt, sx * w * 0.2, by + h / 2, w / 2 + 0.004, 0.005 * s, h - 0.02, 0.004, { c: 0 });
+    P.candle(b, ...k.w(0, by + 0.024 * s, 0), rot, { holder: 'none', h: 0.1 * s, r: 0.014 * s, halo: 0.42 * s, melt: 0.6, seed: R.i(1e6) });
+    if (o.hang) k.cyl('iron', 0.004, 0.12 * s, 0, by + h + h * 0.45 + 0.06 * s, 0, { seg: 4 });
+    if (o.light) k.light(0, by + h * 0.6, 0, 0xFFB060, o.light === true ? 1.2 : o.light, 8);
+  };
+  // 기름 등잔: 황동 받침과 기름통, 젖빛 유리 갓(발광), 유리 굴뚝, 작은 불꽃
+  P.oilLamp = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const k = new K(b, x, y, z, rot), s = opt(o, 's', 1);
+    k.lathe('brass', [[0, 0], [0.07, 0], [0.072, 0.012], [0.05, 0.025], [0.022, 0.05], [0.016, 0.12], [0.028, 0.14], [0.058, 0.17], [0.064, 0.2], [0.044, 0.235], [0.03, 0.25], [0.034, 0.27], [0, 0.27]].map(p => [p[0] * s, p[1] * s]), 0, 0, 0, { seg: 16 });
+    k.lathe('pFrost', [[0.03, 0], [0.06, 0.02], [0.095, 0.07], [0.1, 0.11], [0.08, 0.16], [0.042, 0.19], [0.04, 0.195], [0.03, 0.2]].map(p => [p[0] * s, p[1] * s]), 0, 0.26 * s, 0, { seg: 18, t: o.col || 1 });
+    k.lathe('pGlass', [[0.022, 0], [0.026, 0.05], [0.019, 0.1], [0.019, 0.24], [0.016, 0.24]].map(p => [p[0] * s, p[1] * s]), 0, 0.3 * s, 0, { seg: 12, t: 0xF0F0F0 });
+    k.fl(0, 0.31 * s, 0, 0.04 * s, { halo: 0.55 * s, hk: 0.8 });
+    if (o.light !== false) k.light(0, 0.42 * s, 0, 0xFFB869, o.light === true || o.light === undefined ? 1.0 : o.light, 6);
+    return { top: y + 0.55 * s };
+  };
+  // 새장 등: 황동 철사 둥근 지붕, 안에 초 또는 마나 수정
+  P.birdcage = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const k = new K(b, x, y, z, rot), r = 0.15, h = 0.34, by = o.hang ? -h - 0.12 : 0;
+    k.lathe('brass', [[0, 0], [r + 0.02, 0], [r + 0.02, 0.025], [r, 0.03], [0, 0.03]], 0, by, 0, { seg: 20 });
+    const nw = 16;
+    for (let i = 0; i < nw; i++) { const a = i / nw * TAU, pts = []; for (let j = 0; j <= 8; j++) { const t = j / 8, yy = t < 0.6 ? t / 0.6 * h * 0.62 : h * 0.62 + Math.sin((t - 0.6) / 0.4 * PI / 2) * h * 0.38, rr = t < 0.6 ? r : r * Math.cos((t - 0.6) / 0.4 * PI / 2); pts.push([Math.sin(a) * rr, by + 0.03 + yy, Math.cos(a) * rr]); } k.tube('brass', pts, 0.0028, { rs: 3 }); }
+    for (const yy of [0.03, h * 0.35, h * 0.65]) k.ring('brass', r, 0.005, 0, by + yy, 0, { ts: 24, rs: 4 });
+    k.lathe('brass', [[0, 0], [0.025, 0], [0.03, 0.02], [0.012, 0.05], [0, 0.06]], 0, by + h + 0.02, 0, { seg: 10 });
+    k.ring('brass', 0.03, 0.005, 0, by + h + 0.11, 0, { rx: PI / 2, ts: 12, rs: 4 });
+    if (o.hang) k.cyl('iron', 0.004, 0.06, 0, by + h + 0.14, 0, { seg: 4 });
+    if (o.crystal) { k.lathe('pCrystal', [[0, -0.05], [0.03, 0], [0, 0.06]], 0, by + 0.12, 0, { seg: 5, flat: true }); const p = k.w(0, by + 0.12, 0); sprite(b, p[0], p[1], p[2], FK.glow, 0.35, 0.7, [0.25, 0.8, 0.9]); if (o.light) k.light(0, by + 0.15, 0, 0x7FF0FF, 0.6, 5, { flicker: false }); }
+    else { P.candle(b, ...k.w(0, by + 0.03, 0), rot, { holder: 'none', h: 0.12, r: 0.014, halo: 0.4 }); if (o.light) k.light(0, by + 0.2, 0, 0xFFA24A, o.light === true ? 0.9 : o.light, 6); }
+  };
+
+  // =====================================================================
+  // 9. 기구
+  // =====================================================================
+  // 바닥 지구의: 휜 다리 셋, 지평환(참나무), 황동 자오환, 23° 기운 구
+  P.globe = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const k = new K(b, x, y, z, rot), r = opt(o, 'r', 0.3), cy = opt(o, 'h', r + 0.55);
+    for (let i = 0; i < 3; i++) { const a = i / 3 * TAU + 0.3, A = (rr, yy) => [Math.sin(a) * rr, yy, Math.cos(a) * rr]; k.tube('oak', [A(r + 0.06, cy - 0.02), A(r + 0.1, cy - 0.25), A(r + 0.08, cy * 0.45), A(0.36, 0.12), A(0.4, 0.02)], s => 0.024 - s * 0.008, { rs: 6 }); k.sph('brass', 0.022, ...A(0.4, 0.02), { n: 4, seg: 6 }); }
+    k.lathe('oak', [[0, 0], [0.05, 0.04], [0.03, 0.1], [0.04, 0.14], [0, 0.18]], 0, 0.12, 0, { seg: 10 });
+    for (let i = 0; i < 3; i++) { const a = i / 3 * TAU + 0.3; k.tube('oak', [[0, 0.17, 0], [Math.sin(a) * 0.37, 0.12, Math.cos(a) * 0.37]], 0.012, { rs: 5 }); }
+    k.lathe('oak', [[r + 0.012, 0], [r + 0.075, 0], [r + 0.075, 0.022], [r + 0.012, 0.022], [r + 0.012, 0.0]], 0, cy - 0.011, 0, { seg: 36 });
+    k.ring('brass', r + 0.075, 0.004, 0, cy + 0.022, 0, { ts: 36, rs: 3 });
+    const gl = k.child(L(0, cy, 0, 0, 0, 0.41));
+    const pr = []; for (let i = 0; i <= 12; i++) { const a = -PI / 2 + PI * i / 12; pr.push([Math.cos(a) * r, Math.sin(a) * r]); } pr[0][0] = 0; pr[12][0] = 0;
+    gl.add('pMap', lathe(pr, 28, { uvRect: [0.5, 0, 1, 1] }), L(0, 0, 0, 0, o.spinA || 0, 0));
+    gl.ring('brass', r + 0.025, 0.009, 0, 0, 0, { rx: PI / 2, ts: 40, rs: 5 });
+    gl.cyl('brass', 0.006, 2 * r + 0.1, 0, -r - 0.05, 0, { seg: 6 });
+    k.col(0, 0, r + 0.1, r + 0.1, cy + r);
+  };
+  // 혼천의: 지평환·자오환·적도·황도(눈금)·분지환·회귀선, 가운데 땅공. o.stand 'table'|'floor', o.spin 안쪽이 돈다
+  P.armillarySphere = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const k = new K(b, x, y, z, rot), r = opt(o, 'r', 0.22), floor = o.stand === 'floor', cy = floor ? 1.05 : r * 1.25 + 0.1;
+    if (floor) { k.lathe('oak', [[0, 0], [0.22, 0], [0.22, 0.05], [0.12, 0.08], [0.05, 0.14], [0.06, 0.3], [0.035, 0.45], [0.03, cy - r * 1.2], [0.05, cy - r * 1.15], [0, cy - r * 1.15]], 0, 0, 0, { seg: 14 }); }
+    else { k.lathe('brass', [[0, 0], [0.11, 0], [0.115, 0.012], [0.09, 0.025], [0.03, 0.04], [0.016, 0.07], [0.022, cy - r * 1.15], [0, cy - r * 1.1]], 0, 0, 0, { seg: 14 }); }
+    k.lathe('brass', [[r * 1.08, -0.008], [r * 1.18, -0.008], [r * 1.18, 0.008], [r * 1.08, 0.008], [r * 1.08, -0.008]], 0, cy, 0, { seg: 40 });
+    for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + PI / 4; k.tube('brass', [[0, cy - r * 1.12, 0], [Math.sin(a) * r * 0.9, cy - r * 0.95, Math.cos(a) * r * 0.9], [Math.sin(a) * r * 1.12, cy - 0.01, Math.cos(a) * r * 1.12]], 0.005, { rs: 4 }); }
+    k.ring('brass', r * 1.05, 0.008, 0, cy, 0, { rx: PI / 2, ts: 40, rs: 5 });
+    const inner = kk => {
+      kk.ring('brass', r, 0.007, 0, 0, 0, { ts: 36, rs: 4 });
+      kk.lathe('gold', [[r * 0.97, -0.014], [r * 1.0, -0.014], [r * 1.0, 0.014], [r * 0.97, 0.014], [r * 0.97, -0.014]], 0, 0, 0, { seg: 40, rz: 0.41 });
+      for (let i = 0; i < 12; i++) { const a = i / 12 * TAU, l = kk.child(L(0, 0, 0, 0, 0, 0.41)); l.box('brass', Math.sin(a) * r, 0, Math.cos(a) * r, 0.004, 0.034, 0.004, { c: 0 }); }
+      kk.ring('brass', r * 0.99, 0.005, 0, 0, 0, { rx: PI / 2, ts: 36, rs: 4 }); kk.ring('brass', r * 0.99, 0.005, 0, 0, 0, { rx: PI / 2, ry: PI / 2, ts: 36, rs: 4 });
+      for (const s of [-1, 1]) kk.ring('brass', r * Math.cos(0.41), 0.004, 0, s * r * Math.sin(0.41), 0, { ts: 30, rs: 3 });
+      kk.sph('pCeramic', r * 0.18, 0, 0, 0, { n: 8, seg: 14, t: 0x4a6a8a });
+      kk.cyl('brass', 0.004, r * 2.3, 0, -r * 1.15, 0, { seg: 5 });
+    };
+    if (o.spin) {
+      const sb = new Batch(); inner(new K(sb, 0, 0, 0, 0)); const g = sb.build(), pv = new T.Group(), p = k.w(0, cy, 0);
+      pv.position.set(p[0], p[1], p[2]); pv.rotation.set(0, rot, 0.38); pv.add(g); b.extra.push(pv);
+      b.anims.push(t => { g.rotation.y = t * 0.15; });
+    } else inner(k.child(L(0, cy, 0, 0, 0, 0.38)));
+    return { top: y + cy + r * 1.2 };
+  };
+  // 태양계의(오러리): 황동 북, 금빛 해, 길이가 다른 팔 끝의 행성들이 저마다 돈다
+  P.orrery = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const R = RNG(x, y, z, o), k = new K(b, x, y, z, rot), s = opt(o, 'r', 0.36) / 0.36;
+    for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; k.sph('brass', 0.022 * s, Math.sin(a) * 0.17 * s, 0.02 * s, Math.cos(a) * 0.17 * s, { n: 4, seg: 8 }); }
+    k.lathe('brass', [[0, 0], [0.2, 0], [0.21, 0.01], [0.21, 0.07], [0.19, 0.08], [0.06, 0.09], [0.03, 0.1], [0, 0.1]].map(p => [p[0] * s, p[1] * s]), 0, 0.03 * s, 0, { seg: 28 });
+    k.lathe('oak', [[0.19, 0], [0.205, 0], [0.205, 0.04], [0.19, 0.04]].map(p => [p[0] * s, p[1] * s]), 0, 0.05 * s, 0, { seg: 28 });
+    for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; k.box('gold', Math.sin(a) * 0.206 * s, 0.07 * s, Math.cos(a) * 0.206 * s, 0.01 * s, 0.03 * s, 0.004, { ry: a, c: 0 }); }
+    k.cyl('brass', 0.012 * s, 0.2 * s, 0, 0.13 * s, 0, { seg: 8 });
+    k.sph('gold', 0.05 * s, 0, 0.36 * s, 0, { n: 10, seg: 16 });
+    const pl = [[0.1, 0.012, 'iron', null], [0.15, 0.016, 'pCeramic', 0xC0A080], [0.2, 0.02, 'pCeramic', 0x4a7aa8], [0.25, 0.015, 'pClay', 0xA84A2A], [0.31, 0.03, 'brass', null], [0.36, 0.024, 'pCeramic', 0xC8B48A]];
+    pl.forEach(([ri, pr, mt, tc], i) => {
+      const sb = new Batch(), kk = new K(sb, 0, 0, 0, 0), hy = (0.2 + i * 0.022) * s, py = 0.3 * s + (i % 2 ? 0.02 : -0.03) * s;
+      kk.cyl('brass', 0.014 * s, 0.01 * s, 0, hy - 0.005 * s, 0, { seg: 8 });
+      kk.tube('brass', [[0, hy, 0], [ri * s * 0.6, hy, 0], [ri * s, hy, 0], [ri * s, py - pr * s, 0]], 0.0035 * s, { rs: 4 });
+      kk.sph(mt, pr * s, ri * s, py, 0, { n: 8, seg: 12, t: tc });
+      if (i === 4) kk.ring('gold', pr * s * 1.7, 0.003 * s, ri * s, py, 0, { rx: 0.4, ts: 20, rs: 3 });
+      if (i === 2) { kk.tube('brass', [[ri * s, py + pr * s, 0], [ri * s, py + pr * s + 0.02 * s, 0], [ri * s + 0.04 * s, py + pr * s + 0.02 * s, 0]], 0.002 * s, { rs: 3 }); kk.sph('pCeramic', 0.007 * s, ri * s + 0.04 * s, py + pr * s + 0.012 * s, 0, { n: 4, seg: 6, t: 0xD8D0C0 }); }
+      const g = sb.build(), pv = new T.Group(), p = k.w(0, 0, 0); pv.position.set(p[0], p[1], p[2]); pv.rotation.y = rot; pv.add(g); b.extra.push(pv);
+      const sp = 0.5 * Math.pow(0.1 / ri, 1.5), ph = R() * TAU; b.anims.push(t => { g.rotation.y = ph + t * sp; });
+    });
+    return { top: y + 0.45 * s };
+  };
+  // 망원경: 참나무 세발, 황동 머리, 마디진 경통(가죽 감음), 파인더. o.pitch 올려본 각
+  P.telescope = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const k = new K(b, x, y, z, rot), hy = 1.12, pitch = opt(o, 'pitch', 0.5);
+    for (let i = 0; i < 3; i++) { const a = i / 3 * TAU + PI / 6, fx = Math.sin(a) * 0.48, fz = Math.cos(a) * 0.48, len = Math.hypot(fx, hy, fz), tl = Math.atan2(Math.hypot(fx, fz), hy);
+      k.box('oak', fx / 2, hy / 2, fz / 2, 0.04, len, 0.03, { c: 0.008, ry: a, rx: -tl, ax: 1 }); k.cyl('brass', 0.022, 0.05, fx, 0, fz, { seg: 8 }); }
+    k.lathe('brass', [[0, -0.06], [0.05, -0.06], [0.06, -0.02], [0.04, 0.02], [0.02, 0.06], [0, 0.06]], 0, hy, 0, { seg: 12 });
+    const tb = k.child(L(0, hy + 0.1, 0, 0, 0, pitch));
+    tb.box('brass', 0, -0.05, 0, 0.05, 0.08, 0.14, { c: 0.01 });
+    const sec = [[-0.62, -0.42, 0.022], [-0.42, -0.2, 0.034], [-0.2, 0.62, 0.052], [0.62, 0.76, 0.064]];
+    for (const [a0, a1, rr] of sec) tb.lathe('brass', [[0, 0], [rr, 0], [rr, 0], [rr, a1 - a0], [rr, a1 - a0], [0, a1 - a0]], a0, 0, 0, { rz: -PI / 2, seg: 16 });
+    tb.lathe('leather', [[0.054, 0], [0.054, 0.36]], -0.05, 0, 0, { rz: -PI / 2, seg: 16 });
+    for (const xx of [-0.42, -0.2, 0.62, 0.3]) tb.ring('brass', xx === 0.62 ? 0.066 : xx === 0.3 ? 0.055 : xx === -0.2 ? 0.054 : 0.036, 0.006, xx, 0, 0, { rz: PI / 2, ts: 18, rs: 4 });
+    tb.lathe('pGlass', [[0, 0], [0.058, 0], [0, 0.002]], 0.75, 0, 0, { rz: -PI / 2, seg: 14, t: 0x8090a0 });
+    tb.cyl('brass', 0.012, 0.22, 0.1, 0.08, 0, { rz: -PI / 2, seg: 8 }); tb.box('brass', 0.2, 0.06, 0, 0.02, 0.03, 0.015, { c: 0.002 });
+    k.col(0, 0, 0.3, 0.3, 1.6);
+  };
+  // 소리굽쇠 걸이: 크기 순서대로 선 굽쇠들, 공명 상자, 작은 망치
+  P.tuningForkRack = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const R = RNG(x, y, z, o), k = new K(b, x, y, z, rot), n = opt(o, 'n', 9), W = 0.7;
+    k.box('oak', 0, 0.025, 0, W, 0.05, 0.18, { c: 0.01 });
+    k.box('oak', 0, 0.12, -0.075, W, 0.19, 0.025, { c: 0.008 });
+    k.box('oak', 0, 0.075, 0.03, W - 0.02, 0.04, 0.05, { c: 0.008, t: 0.9 });
+    for (let i = 0; i < n; i++) {
+      const L0 = 0.36 - i * (0.24 / (n - 1)), fx = -W / 2 + 0.05 + i * (W - 0.1) / (n - 1), g = L0 * 0.06 + 0.006, mt = i % 3 === 1 ? 'brass' : 'pPewter', tc = mt === 'pPewter' ? 0xD0D4D8 : null;
+      k.cyl(mt, 0.0055, L0 * 0.32, fx, 0.06, 0.03, { seg: 6, t: tc });
+      const pts = [[fx - g, 0.06 + L0, 0.03], [fx - g, 0.06 + L0 * 0.4, 0.03]];
+      for (let j = 1; j < 6; j++) { const a = PI + j / 6 * PI; pts.push([fx + Math.cos(a) * g, 0.06 + L0 * 0.4 + Math.sin(a) * g, 0.03]); }
+      pts.push([fx + g, 0.06 + L0 * 0.4, 0.03], [fx + g, 0.06 + L0, 0.03]);
+      k.tube(mt, pts, 0.0045, { rs: 5, t: tc });
+      k.sph(mt, 0.008, fx, 0.06 + L0 * 0.32, 0.03, { n: 3, seg: 6, t: tc });
+    }
+    if (o.box !== false) { k.box('oak', W / 2 + 0.2, 0.06, 0.02, 0.28, 0.12, 0.14, { c: 0.008, t: [1.25, 1.05, 0.85] }); k.cyl('oak', 0.03, 0.002, W / 2 + 0.2, 0.06, 0.091, { rx: PI / 2, seg: 12, t: 0.15 }); }
+    k.cyl('oak', 0.006, 0.2, -0.1, 0.008, 0.14, { rz: -PI / 2, ry: 0.3, seg: 6 }); k.sph('pLinen', 0.018, -0.1 + 0.19, 0.012, 0.14 - 0.06, { n: 5, seg: 8, t: 0x8a3a3a });
+  };
+  // 공명 종 (청동): 속이 빈 종, 추, 참나무 틀. o.frame false면 종만 (y = 종 아래 테)
+  P.bell = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const k = new K(b, x, y, z, rot), r = opt(o, 'r', 0.22), h = r * 1.15, frame = o.frame !== false && !o.hang, by = frame ? 0.95 - h : o.hang ? -h - 0.08 : 0;
+    k.lathe('brass', [[0, h * 0.9], [r * 0.45, h * 0.86], [r * 0.6, h * 0.6], [r * 0.7, h * 0.3], [r * 0.86, h * 0.06], [r * 0.9, 0], [r, 0], [r * 1.0, h * 0.04], [r * 0.93, h * 0.1], [r * 0.77, h * 0.35], [r * 0.66, h * 0.65], [r * 0.6, h * 0.86], [r * 0.48, h * 0.97], [0, h]], 0, by, 0, { seg: 24, t: [0.78, 0.62, 0.48] });
+    k.ring('brass', r * 0.92, r * 0.025, 0, by + h * 0.12, 0, { ts: 24, rs: 4, t: [0.9, 0.7, 0.5] });
+    k.ring('brass', r * 0.62, r * 0.018, 0, by + h * 0.8, 0, { ts: 24, rs: 4, t: [0.9, 0.7, 0.5] });
+    k.ring('brass', r * 0.18, r * 0.04, 0, by + h + r * 0.15, 0, { rx: PI / 2, ts: 12, rs: 5, t: [0.78, 0.62, 0.48] });
+    k.cyl('iron', r * 0.03, h * 0.75, 0, by + h * 0.12, 0, { seg: 5 }); k.sph('iron', r * 0.13, 0, by + h * 0.12, 0, { n: 5, seg: 8 });
+    if (frame) {
+      const fw = r * 2 + 0.3;
+      for (const s of [-1, 1]) { k.box('oak', s * fw / 2, 0.6, 0, 0.09, 1.2, 0.09, { c: 0.012 }); k.box('oak', s * fw / 2, 0.04, 0, 0.12, 0.08, 0.5, { c: 0.012 }); k.box('oak', s * fw / 2, 0.25, s * 0, 0.05, 0.05, 0.4, { c: 0.008, rx: 0 }); }
+      k.box('oak', 0, 1.18, 0, fw + 0.2, 0.12, 0.12, { c: 0.016 });
+      k.box('iron', 0, by + h + r * 0.15 + 0.1, 0, 0.03, 1.12 - (by + h + r * 0.15), 0.03, { c: 0.004 });
+      k.col(0, 0, fw / 2 + 0.1, 0.25, 1.25);
+    } else if (o.hang) k.cyl('iron', 0.012, 0.08, 0, by + h + r * 0.2, 0, { seg: 6 });
+  };
+  // 칠판: 참나무 틀, 분필 글리프(번역판), 분필 받침과 지우개. 벽걸이(z=0 벽면) 또는 o.stand
+  P.chalkboard = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const k = new K(b, x, y, z, rot), w = opt(o, 'w', 1.8), h = opt(o, 'h', 1.0), stand = !!o.stand, cy = stand ? 1.25 : opt(o, 'cy', 1.4);
+    const f = stand ? k.child(L(0, 0, 0.05, -0.08, 0, 0)) : k;
+    f.box('oak', 0, cy, 0.012, w + 0.04, h + 0.04, 0.024, { c: 0.004, t: 0.5 });
+    f.add('pChalk', quad(w, h, [0, 0, 1, 1]), L(0, cy, 0.026));
+    for (const s of [-1, 1]) { f.box('oak', 0, cy + s * (h / 2 + 0.03), 0.035, w + 0.12, 0.06, 0.04, { c: 0.01 }); f.box('oak', s * (w / 2 + 0.03), cy, 0.035, 0.06, h + 0.12, 0.04, { c: 0.01 }); }
+    f.box('oak', 0, cy - h / 2 - 0.05, 0.07, w * 0.9, 0.025, 0.08, { c: 0.006 });
+    for (let i = 0; i < 4; i++) f.cyl('pCeramic', 0.006, 0.06 - i * 0.008, -w * 0.3 + i * 0.1, cy - h / 2 - 0.03, 0.08, { rz: -PI / 2, ry: i * 0.4, seg: 6, t: 0xF4F0E4 });
+    f.box('oak', w * 0.25, cy - h / 2 - 0.02, 0.075, 0.12, 0.04, 0.05, { c: 0.006, t: [1.3, 1.1, 0.9] }); f.box('pLinen', w * 0.25, cy - h / 2 - 0.042, 0.075, 0.12, 0.012, 0.05, { c: 0.003, t: 0x6a6a68 });
+    if (stand) {
+      for (const s of [-1, 1]) { k.box('oak', s * (w / 2 - 0.1), cy / 2 + 0.2, 0.0, 0.05, cy + 0.6, 0.05, { c: 0.008, rx: -0.08, ax: 1 }); k.box('oak', s * (w / 2 - 0.1), (cy + 0.2) / 2, -0.25, 0.04, cy + 0.2, 0.04, { c: 0.006, rx: 0.2, ax: 1 }); }
+      k.col(0, 0, w / 2, 0.3, cy + h / 2);
+    }
+  };
+  // 지도 이젤: 세 다리 이젤 위 양피지 지도, 말린 귀퉁이, 지시봉
+  P.mapEasel = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const k = new K(b, x, y, z, rot), w = opt(o, 'w', 0.9), h = opt(o, 'h', 0.9), tl = 0.2;
+    for (const s of [-1, 1]) k.box('oak', s * 0.3, 0.88, 0.02, 0.04, 1.8, 0.035, { c: 0.006, rx: -tl, rz: s * 0.08, ax: 1 });
+    k.box('oak', 0, 0.75, -0.35, 0.035, 1.55, 0.035, { c: 0.006, rx: 0.32, ax: 1 });
+    const f = k.child(L(0, 0, 0, -tl, 0, 0));
+    f.box('oak', 0, 0.62, 0.06, 0.8, 0.04, 0.08, { c: 0.008 });
+    f.box('oak', 0, 0.64 + h / 2, 0.045, w + 0.04, h + 0.02, 0.012, { c: 0.003, t: 0.7 });
+    f.add('pMap', sheet(6, 6, (u, v) => [(u - 0.5) * w, 0.64 + v * h, 0.054 + (u > 0.85 && v > 0.85 ? (u - 0.85) * (v - 0.85) * 3 : 0) + (u < 0.1 && v < 0.12 ? (0.1 - u) * (0.12 - v) * 4 : 0)], { uvRect: [0, 0, 0.5, 1] }));
+    for (const [px, py] of [[-w / 2 + 0.03, h - 0.03], [w / 2 - 0.03, 0.03]]) f.sph('brass', 0.008, px, 0.64 + py, 0.058, { n: 3, seg: 6 });
+    k.cyl('oak', 0.006, 1.1, 0.48, 0, 0.12, { rz: 0.2, seg: 6 });
+    k.col(0, 0, 0.45, 0.35, 1.7);
+  };
+  // 시계: 키다리 시계(진자·바늘이 움직임) 또는 o.small 벽난로 시계. 12눈금 룬 문자판
+  P.clock = (b, x, y, z, rot, o) => {
+    o = o || {};
+    const k = new K(b, x, y, z, rot), small = !!o.small, s = small ? 0.5 : 1;
+    let dy, dz, dr;
+    if (small) {
+      const sh = archShape(0.26, 0.2, 0.12);
+      k.add('oak', ext(sh, 0.12, { bevel: 0.006 }), L(0, 0.02, 0), [0.8, 0.7, 0.6]);
+      k.box('oak', 0, 0.012, 0, 0.32, 0.024, 0.15, { c: 0.006 });
+      for (const sx of [-1, 1]) k.sph('brass', 0.012, sx * 0.13, 0.33, 0, { n: 3, seg: 6 });
+      k.sph('brass', 0.016, 0, 0.36, 0, { n: 4, seg: 8 });
+      dy = 0.17; dz = 0.062; dr = 0.085;
+    } else {
+      k.box('oak', 0, 0.15, 0, 0.52, 0.3, 0.32, { c: 0.012 });
+      k.box('oak', 0, 0.85, 0, 0.42, 1.1, 0.26, { c: 0.01 });
+      k.box('pGlass', 0, 0.9, 0.132, 0.2, 0.7, 0.004, { c: 0, t: 0xE0E8EC });
+      k.box('oak', 0, 0.9, 0.126, 0.26, 0.76, 0.01, { c: 0.002, t: 0.35 });
+      k.box('oak', 0, 1.42, 0.01, 0.5, 0.06, 0.32, { c: 0.01 });
+      k.box('oak', 0, 1.7, 0, 0.48, 0.5, 0.3, { c: 0.012 });
+      k.add('oak', ext(archShape(0.48, 0.0, 0.18), 0.3, { bevel: 0.006 }), L(0, 1.95, 0));
+      for (const sx of [-1, 0, 1]) k.lathe('brass', [[0, 0], [0.025, 0], [0.03, 0.03], [0.012, 0.07], [0, 0.09]], sx * 0.2, sx ? 1.97 : 2.13, 0, { seg: 8 });
+      dy = 1.7; dz = 0.152; dr = 0.2;
+    }
+    k.lathe('brass', [[0, 0], [dr + 0.012 * s, 0], [dr + 0.012 * s, 0.006], [0, 0.006]], 0, dy, dz - 0.006, { rx: PI / 2, seg: 24 });
+    k.add('pClock', disc(dr, 32), L(0, dy, dz + 0.001));
+    // 바늘·진자 (extra)
+    const sb = new Batch(), kk = new K(sb, 0, 0, 0, 0);
+    kk.box('iron', 0, dr * 0.3, 0.012, 0.008 * s + 0.004, dr * 0.6, 0.003, { c: 0 });
+    const hh = new Batch(), hk = new K(hh, 0, 0, 0, 0); hk.box('iron', 0, dr * 0.22, 0.015, 0.012 * s + 0.004, dr * 0.44, 0.003, { c: 0 });
+    const gm = sb.build(), gh = hh.build(), base = k.w(0, dy, dz), pv = new T.Group();
+    pv.position.set(base[0], base[1], base[2]); pv.rotation.y = rot; pv.add(gm, gh); b.extra.push(pv);
+    let pend = null;
+    if (!small) {
+      const pb = new Batch(), pk = new K(pb, 0, 0, 0, 0);
+      pk.box('brass', 0, -0.32, 0, 0.012, 0.64, 0.006, { c: 0 }); pk.cyl('brass', 0.07, 0.012, 0, -0.66, -0.006, { rx: PI / 2, seg: 18 });
+      pend = pb.build(); const pp = new T.Group(), q = k.w(0, 1.38, 0.08); pp.position.set(q[0], q[1], q[2]); pp.rotation.y = rot; pp.add(pend); b.extra.push(pp);
+    }
+    b.anims.push(t => { const now = new Date(), m = now.getMinutes() + now.getSeconds() / 60, h2 = (now.getHours() % 12) + m / 60; gm.rotation.z = -m / 60 * TAU; gh.rotation.z = -h2 / 12 * TAU; if (pend) pend.rotation.z = Math.sin(t * PI) * 0.09; });
+    if (!small) k.col(0, 0, 0.26, 0.16, 2.1);
   };
   // @@END (이 줄 위에 이어 쓴다)
 })();

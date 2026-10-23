@@ -414,7 +414,7 @@ function scatterWorld(m) {
     crystal: make('crystal', geos.crystal, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, emissive: COL(0x3ac8d8), emissiveIntensity: 1.4, roughness: 0.3 }), lists.crystal),
     rock: make('rock', geo('dod', 1), mat(0x9a9488), lists.rock, (cc, r) => cc.set(r === 4 || r === 5 ? 0xa8b0bc : r === 2 ? 0xf0f4f6 : 0x9a9488)),
     salt: make('salt', geo('cone', 0.7, 2.6, 5), mat(0xf6fafc, { rough: 0.3 }), lists.salt),
-    leaf: make('leaf', geo('plane', 0.45, 0.3), new THREE.MeshLambertMaterial({ color: 0xe0802a, side: THREE.DoubleSide }), lists.leaf, (cc, r, k) => cc.set([0xffffff, 0xfff0a0, 0xffc080][k % 3])),
+    leaf: make('leaf', geo('plane', 0.45, 0.3), new THREE.MeshStandardMaterial({ color: 0xe0802a, side: THREE.DoubleSide, roughness: 0.8 }), lists.leaf, (cc, r, k) => cc.set([0xffffff, 0xfff0a0, 0xffc080][k % 3])),
     drop: make('drop', geo('box', 0.04, 0.3, 0.04), GLOW(0xbfe6ff, 1.2), lists.drop),
   };
   m.treeLists = lists;

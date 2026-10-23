@@ -1564,3 +1564,680 @@ function TEX_GEN() {
   }
   return { build, kinds: Object.keys(B), pn, fbm };
 }
+
+// =====================================================================================
+//  실행부 — 생성 일정(워커 둘, 안 되면 메인 스레드에서 나눠서), 텍스처, 공유 셰이더 층, 재질, 이름표, 지형
+// =====================================================================================
+(function () {
+  if (window.TEX) return;
+  const T = THREE, QS = location.search;
+  const TEX = window.TEX = {};
+  const T0 = performance.now();
+  let G = null;
+  const gen = () => G || (G = TEX_GEN());
+  const V4 = (x, y, z, w) => new T.Vector4(x, y, z, w);
+  const lowTier = () => /low/.test(QS) || !!(window.GFX && GFX.mobile);
+
+  // ---------- 종류별 기본값 ----------
+  // size: 텍스처 한 장이 덮는 미터 [u, v], hero: 데스크톱 1024 단계, avg/r/m: 자리표시(1×1) 색·거칠기·금속,
+  // em: 발광 지도, mac: 큰 얼룩 세기, wx: 날씨(때·젖음·눈) 받는 정도, moss: 이끼, por: 젖으면 어두워지는 정도, vk: 조각마다 색 흔들기
+  const KIND = TEX.KIND = {
+    ashlar: { size: [4, 3], hero: 1, avg: 0xbb9e7a, r: 0.86, mac: 1, wx: 1, moss: 1, por: 1, vk: 0.07 },
+    rubble: { size: [3, 3], avg: 0x867d6b, r: 0.89, mac: 1, wx: 1, moss: 1, por: 1, vk: 0.08 },
+    trim: { size: [2, 2], avg: 0xd3b68d, r: 0.8, mac: 1, wx: 1, moss: 0.7, por: 1 },
+    cobble: { size: [2, 2], avg: 0x716a5f, r: 0.74, mac: 1, wx: 1, moss: 0.8, por: 1, vk: 0.08 },
+    gravel: { size: [1, 1], avg: 0x71695e, r: 0.84, mac: 1, wx: 1, moss: 0.5, por: 1 },
+    flagstone: { size: [4, 4], hero: 1, avg: 0x958c7b, r: 0.62, mac: 1, wx: 1, moss: 0.6, por: 1, vk: 0.06 },
+    slate: { size: [2, 2], hero: 1, avg: 0x444d5a, r: 0.63, mac: 1, wx: 1, moss: 1, por: 0.6, vk: 0.09 },
+    rock: { size: [4, 4], avg: 0x7d766b, r: 0.87, mac: 1, wx: 1, moss: 1, por: 1 },
+    oak: { size: [2, 2], hero: 1, avg: 0x4e3320, r: 0.63, mac: 0.6, wx: 0.6, moss: 0.3, por: 0.8, vk: 0.07 },
+    wood: { size: [2, 2], avg: 0x936f4b, r: 0.59, mac: 0.6, wx: 0.6, moss: 0.3, por: 0.8, vk: 0.07 },
+    oakPanel: { size: [1, 1.4], avg: 0x50331e, r: 0.39, mac: 0.4, wx: 0.3, moss: 0, por: 0.5 },
+    timber: { size: [2, 2], avg: 0x5e4d3b, r: 0.85, mac: 0.8, wx: 0.8, moss: 0.6, por: 1 },
+    plaster: { size: [3, 3], avg: 0xd9c9a8, r: 0.88, mac: 1, wx: 1, moss: 0.5, por: 1 },
+    marble: { size: [2, 2], avg: 0xeae0ce, r: 0.1, mac: 0.5, wx: 0.5, moss: 0.1, por: 0.3 },
+    checker: { size: [2.4, 2.4], avg: 0x847f79, r: 0.09, mac: 0.4, wx: 0.4, moss: 0, por: 0.3 },
+    brass: { size: [1, 1], avg: 0xc59d49, r: 0.32, m: 1, mac: 0.3, wx: 0.4, moss: 0, por: 0.1 },
+    gold: { size: [1, 1], avg: 0xe1bb62, r: 0.22, m: 1, mac: 0.2, wx: 0.3, moss: 0, por: 0.1 },
+    iron: { size: [1, 1], avg: 0x2f2e32, r: 0.64, m: 0.8, mac: 0.4, wx: 0.6, moss: 0.2, por: 0.3 },
+    copper: { size: [2, 2], avg: 0x5e9788, r: 0.62, m: 0.15, mac: 0.7, wx: 0.8, moss: 0.3, por: 0.4, vk: 0.05 },
+    lead: { size: [2, 2], avg: 0x61656c, r: 0.53, m: 0.35, mac: 0.6, wx: 0.8, moss: 0.3, por: 0.3 },
+    glassWarm: { size: [1, 1], avg: 0x3f2d1a, r: 0.14, em: 1, mac: 0, wx: 0.3, moss: 0, por: 0 },
+    glassDark: { size: [1, 1], avg: 0x212630, r: 0.19, mac: 0.15, wx: 0.5, moss: 0, por: 0 },
+    glassStained: { size: [1, 1], avg: 0x19171c, r: 0.18, em: 1, mac: 0, wx: 0.2, moss: 0, por: 0 },
+    carpet: { size: [2, 2], avg: 0x732b22, r: 0.93, mac: 0.3, wx: 0, moss: 0, por: 1 },
+    velvet: { size: [1, 1], avg: 0x182046, r: 0.77, mac: 0.3, wx: 0, moss: 0, por: 1 },
+    parchment: { size: [0.6, 0.6], avg: 0xe4d4aa, r: 0.82, mac: 0.2, wx: 0, moss: 0, por: 1 },
+    leather: { size: [0.5, 0.5], avg: 0x664226, r: 0.59, mac: 0.3, wx: 0.2, moss: 0, por: 0.6 },
+    bookSpines: { size: [1, 0.35], avg: 0x392b20, r: 0.67, mac: 0.2, wx: 0, moss: 0, por: 0.5 },
+    rope: { size: [0.3, 0.3], avg: 0x978157, r: 0.88, mac: 0.3, wx: 0.6, moss: 0.2, por: 1 },
+    grass: { size: [2, 2], avg: 0x4c5a29, r: 0.9, mac: 1, wx: 1, moss: 0, por: 0.8 },
+    dirt: { size: [2, 2], avg: 0x67553f, r: 0.9, mac: 1, wx: 1, moss: 0.3, por: 1 },
+    moss: { size: [1, 1], avg: 0x475b2c, r: 0.95, mac: 1, wx: 1, moss: 0, por: 0.8 },
+    snow: { size: [3, 3], avg: 0xf2f5f9, r: 0.68, mac: 0.3, wx: 0.3, moss: 0, por: 0.2 },
+    bark: { size: [1, 1.5], avg: 0x554839, r: 0.9, mac: 0.8, wx: 0.8, moss: 1, por: 1 },
+    leaf: { size: [1, 1], avg: 0x354621, r: 0.67, mac: 1, wx: 0.6, moss: 0, por: 0.5 },
+    water: { size: [4, 4], avg: 0x23414d, r: 0.04, mac: 0, wx: 0, moss: 0, por: 0 },
+  };
+  // 이름표: 이름 → [종류, TEX.mat 인자]
+  const LIB = TEX.LIB = {
+    stone: ['ashlar', { p: { era: 'high' } }],
+    stoneOld: ['ashlar', { p: { era: 'ancient' }, size: [6, 4.5], ley: 1, macro: 0.5 }],
+    stoneEarly: ['ashlar', { p: { era: 'early' }, size: [3, 3] }],
+    stoneTrim: ['trim', {}],
+    stoneDark: ['ashlar', { p: { era: 'high', dark: 1 } }],
+    slate: ['slate', {}], copper: ['copper', {}], lead: ['lead', {}],
+    brass: ['brass', {}], gold: ['gold', {}], iron: ['iron', {}],
+    oak: ['oak', {}], oakPanel: ['oakPanel', {}], timber: ['timber', {}], plaster: ['plaster', {}],
+    glassDark: ['glassDark', {}],
+    glassLit: ['glassWarm', { lit: 3.2 }],
+    glassStained: ['glassStained', { lit: 1.3, litColor: 0xffffff }],
+    cobble: ['cobble', { ley: 1 }], flagstone: ['flagstone', {}], gravel: ['gravel', {}], dirt: ['dirt', {}], grass: ['grass', {}], moss: ['moss', {}],
+    rock: ['rock', { tri: true }], snow: ['snow', {}],
+    carpet: ['carpet', {}], velvet: ['velvet', { sheen: 1, sheenColor: 0x7a84c8, sheenRough: 0.45 }], parchment: ['parchment', {}], leather: ['leather', {}],
+    bookSpines: ['bookSpines', {}], rope: ['rope', {}], bark: ['bark', {}], leaf: ['leaf', {}], leafAutumn: ['leaf', { p: { autumn: 1 } }],
+    water: ['water', { water: true, transparent: true, opacity: 0.86 }],
+  };
+
+  // ---------- 텍스처 ----------
+  let ANISO = 4;
+  function aniso() { const r = window.GFX && GFX.renderer; if (r) ANISO = Math.min(8, r.capabilities.getMaxAnisotropy() || 1); return ANISO; }
+  function dataTex(data, w, h, srgb) {
+    const t = new T.DataTexture(data, w, h, T.RGBAFormat, T.UnsignedByteType);
+    t.wrapS = t.wrapT = T.RepeatWrapping;
+    t.magFilter = T.LinearFilter; t.minFilter = T.LinearMipmapLinearFilter; t.generateMipmaps = true;
+    t.anisotropy = aniso();
+    if (srgb) t.encoding = T.sRGBEncoding;
+    t.needsUpdate = true;
+    return t;
+  }
+  // 1×1 자리표시를 진짜 그림으로 바꾼다. 크기가 바뀌므로 GPU 쪽을 버리고 새로 올린다 (WebGL2 texStorage는 크기를 못 바꾼다)
+  function fillTex(t, data, w, h) { t.dispose(); t.image = { data, width: w, height: h }; t.anisotropy = aniso(); t.needsUpdate = true; }
+  const rgb8 = h => [(h >> 16) & 255, (h >> 8) & 255, h & 255];
+
+  // ---------- 생성 일정 ----------
+  const PACKS = new Map(), Q = [], POOL = { mode: '', ws: [], mainT: 0 };
+  let pending = 0, waiters = [], genCount = 0, genMs = 0, noiseMs = 0;
+  const genList = [];
+  function getPack(kind, p, size, res, seed) {
+    const key = kind + '|' + JSON.stringify(p) + '|' + size[0] + 'x' + size[1] + '|' + res + '|' + seed;
+    let P = PACKS.get(key);
+    if (P) return P;
+    const K = KIND[kind], a = rgb8(K.avg);
+    P = { key, kind, p, size, res, seed, ready: false, cbs: [], data: null };
+    P.albedo = dataTex(new Uint8Array([a[0], a[1], a[2], 128]), 1, 1, true);
+    P.normal = dataTex(new Uint8Array([128, 128, 255, 128]), 1, 1, false);
+    P.orm = dataTex(new Uint8Array([255, Math.round(K.r * 255), Math.round((K.m || 0) * 255), 255]), 1, 1, false);
+    P.emissive = K.em ? dataTex(new Uint8Array([200, 190, 170, 255]), 1, 1, true) : null;
+    PACKS.set(key, P);
+    pending++;
+    Q.push({ P, job: { kind, W: res, H: res, mw: size[0], mh: size[1], seed, p } });
+    if (!POOL.mode) startPool();
+    pump();
+    return P;
+  }
+  function finish(P, r, ms, where) {
+    fillTex(P.albedo, r.albedo, r.W, r.H); fillTex(P.normal, r.normal, r.W, r.H); fillTex(P.orm, r.orm, r.W, r.H);
+    if (P.emissive && r.emissive) fillTex(P.emissive, r.emissive, r.W, r.H);
+    P.ready = true; P.data = r; P.ms = ms;
+    genCount++; genMs += ms; genList.push({ key: P.key, ms: Math.round(ms), res: r.W, where });
+    done(P);
+  }
+  function fail(j, msg) { console.error('TEX: ' + j.job.kind + ' 생성 실패 — ' + msg); done(j.P); }
+  function done(P) {
+    const cb = P.cbs; P.cbs = [];
+    for (const f of cb) { try { f(P); } catch (e) { console.error(e); } }
+    if (--pending <= 0) { pending = 0; const w = waiters; waiters = []; setTimeout(() => { for (const f of w) f(); }, 0); }
+  }
+  function startPool() {
+    POOL.mode = 'main';
+    if (/noworker/.test(QS) || typeof Worker === 'undefined' || !window.Blob || !window.URL) { if (/noworker/.test(QS)) console.info('TEX: ?noworker — 메인 스레드에서 만든다'); return; }
+    try {
+      const src = "'use strict';\nconst G = (" + TEX_GEN.toString() + ")();\n" +
+        "onmessage = function (e) {\n  const d = e.data;\n  if (d.ping) { postMessage({ pong: 1 }); return; }\n" +
+        "  try { const t0 = performance.now(), r = G.build(d.job), tr = [r.albedo.buffer, r.normal.buffer, r.orm.buffer];\n" +
+        "    if (r.emissive) tr.push(r.emissive.buffer);\n    postMessage({ r: r, ms: performance.now() - t0 }, tr);\n" +
+        "  } catch (err) { postMessage({ err: String(err && err.message || err) }); }\n};\n";
+      const url = URL.createObjectURL(new Blob([src], { type: 'text/javascript' }));
+      for (let i = 0; i < 2; i++) {
+        const w = new Worker(url), slot = { w, job: null, alive: false };
+        w.onmessage = e => onMsg(slot, e.data);
+        w.onerror = e => { if (e && e.preventDefault) e.preventDefault(); onFail(slot, (e && e.message) || 'worker error'); };
+        w.postMessage({ ping: 1 });
+        POOL.ws.push(slot);
+      }
+      POOL.mode = 'worker';
+      // 워커가 끝내 대답하지 않으면 (파일 주소·샌드박스 iframe 등) 메인 스레드로
+      setTimeout(() => { if (POOL.mode === 'worker' && !POOL.ws.some(s => s.alive)) toMain('응답 없음'); }, 8000);
+    } catch (e) { toMain(e && e.message); }
+  }
+  function toMain(why) {
+    if (POOL.mode === 'main') return;
+    console.warn('TEX: 워커를 못 써서 메인 스레드에서 하나씩 나눠 만든다 (' + why + ')');
+    for (const s of POOL.ws) { if (s.job) Q.unshift(s.job); try { s.w.terminate(); } catch (e) { /* 무시 */ } }
+    POOL.ws = []; POOL.mode = 'main';
+    pump();
+  }
+  function onFail(slot, msg) {
+    const i = POOL.ws.indexOf(slot); if (i < 0) return;
+    POOL.ws.splice(i, 1);
+    if (slot.job) Q.unshift(slot.job);
+    try { slot.w.terminate(); } catch (e) { /* 무시 */ }
+    if (!POOL.ws.length) toMain(msg); else pump();
+  }
+  function onMsg(slot, d) {
+    if (d.pong) { slot.alive = true; pump(); return; }
+    const j = slot.job; slot.job = null;
+    if (j) { if (d.err) fail(j, d.err); else finish(j.P, d.r, d.ms, 'worker'); }
+    pump();
+  }
+  function pump() {
+    if (POOL.mode === 'worker') {
+      for (const s of POOL.ws) if (s.alive && !s.job && Q.length) { s.job = Q.shift(); s.w.postMessage({ job: s.job.job }); }
+    } else if (POOL.mode === 'main' && Q.length && !POOL.mainT) POOL.mainT = setTimeout(mainStep, 0);
+  }
+  // 메인 스레드: 한 틱에 한 장, 한 단계 낮은 해상도로 (최소 256) — 화면이 멈추지 않게 틱 사이에 숨을 쉰다
+  function mainStep() {
+    POOL.mainT = 0;
+    const j = Q.shift(); if (!j) return;
+    const job = Object.assign({}, j.job), lo = Math.min(job.W, Math.max(256, job.W >> 1));
+    job.W = job.H = lo;
+    try { const t0 = performance.now(), r = gen().build(job); finish(j.P, r, performance.now() - t0, 'main'); }
+    catch (e) { fail(j, e && e.message); }
+    if (Q.length) POOL.mainT = setTimeout(mainStep, 24);
+  }
+  function tierRes(kind) { return lowTier() ? 256 : KIND[kind].hero ? 1024 : 512; }
+
+  // ---------- 공유 값 (모든 TEX 재질이 같은 객체를 본다) ----------
+  const U = TEX.U = {
+    texNoise: { value: null }, texGround: { value: null },
+    texGP: { value: V4(0, 0, 0, 0) }, texGR: { value: V4(0, 0, 0, 0) }, texGQ: { value: V4(0, 0, 0, 1) },
+    texW: { value: V4(0.7, 0.35, 0, 0) }, texLey: { value: V4(0.3, 1.2, 1.4, 1.6) }, texMac: { value: V4(0.55, 0.45, 0, 0) },
+    texTime: { value: 0 },
+  };
+  // 세계 노이즈 (256², 반복, 네 채널: r ~8 m, g ~3 m, b ~1 m, a ~0.5 m 크기의 얼룩 — 세계 좌표 × 0.043 으로 읽는다)
+  function makeNoise() {
+    const t0 = performance.now(), S = 256, g = gen(), d = new Uint8Array(S * S * 4);
+    const enc = v => Math.round(255 * Math.min(1, Math.max(0, 0.5 + v * 0.8)));
+    for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) {
+      const u = (i + 0.5) / S, v = (j + 0.5) / S, o = (j * S + i) * 4;
+      d[o] = enc(g.fbm(u * 3, v * 3, 3, 3, 4, 401, 0.5));
+      d[o + 1] = enc(g.fbm(u * 8, v * 8, 8, 8, 4, 402, 0.5));
+      d[o + 2] = enc(g.fbm(u * 24, v * 24, 24, 24, 3, 403, 0.5));
+      d[o + 3] = enc(g.fbm(u * 48, v * 48, 48, 48, 2, 404, 0.55));
+    }
+    noiseMs = performance.now() - t0;
+    return dataTex(d, S, S, false);
+  }
+  let inited = false;
+  function init() {
+    if (inited) return; inited = true;
+    U.texNoise.value = makeNoise();
+    const g = new T.DataTexture(new Uint8Array(4), 1, 1); g.needsUpdate = true;
+    U.texGround.value = g;
+    TEX.weather();
+  }
+
+  // 날씨: {grime 0..1 땅 근처 때, moss 0..1 위 면 이끼, wet 0..1 젖음, snow 0..1 눈, ley 레이 빛 세기(기본 1)}
+  const WX = { grime: 0.7, moss: 0.35, wet: 0, snow: 0, ley: 1 };
+  const LEYC = new T.Color(0x7ff0ff);
+  TEX.weather = function (o) {
+    if (o) Object.assign(WX, o);
+    U.texW.value.set(WX.grime, WX.moss, WX.wet, WX.snow);
+    const k = 1.25 * WX.ley; U.texLey.value.set(LEYC.r * k, LEYC.g * k, LEYC.b * k, 1.6);
+    return Object.assign({}, WX);
+  };
+
+  // 땅 높이 (지면 근처 때·물 얼룩). 형식:
+  //  {flat: y}                         — 어디서나 높이 y
+  //  {tex, x0, z0, w, d, min?, max?}   — 높이 격자 텍스처. 텍셀 (i, j) = 점 (x0 + i·w/(W−1), z0 + j·d/(D−1)) 의 땅 높이 (정점 격자와 같다, j 가 +z)
+  //     R 채널을 읽는다. Float/HalfFloat 이면 미터 그대로 (min 은 더할 값, 기본 0), UnsignedByte 면 y = min + R/255·(max − min).
+  //     Float32 가 선형 거르기를 못 하는 기기에서는 HalfFloat 로 바꿔 올린다.
+  //  {fn(x, z) → y, x0, z0, w, d, res = 256} — 함수를 구워서 위 형식으로
+  TEX.setGround = function (o) {
+    if (!o) return;
+    init();
+    if (o.flat !== undefined) { U.texGQ.value.set(0, o.flat, 0, 1); return; }
+    let t = o.tex, base = o.min || 0, scale = 1;
+    if (!t && o.fn) { const b = bakeGround(o); t = b.tex; base += b.min; }
+    if (!t || !t.image) return;
+    if (t.type === T.FloatType && !floatLinear()) { const h = toHalf(t); t = h.tex; base += h.min; }
+    if (t.type === T.UnsignedByteType) scale = (o.max ?? 1) - (o.min || 0);
+    t.wrapS = t.wrapT = T.ClampToEdgeWrapping; t.magFilter = T.LinearFilter; t.minFilter = T.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true;
+    const W = t.image.width, D = t.image.height;
+    U.texGround.value = t;
+    U.texGP.value.set(o.x0 || 0, o.z0 || 0, (W - 1) / (o.w * W), (D - 1) / (o.d * D));
+    U.texGR.value.set(0.5 / W, 0.5 / D, 0, 0);
+    U.texGQ.value.set(1, 0, base, scale);
+  };
+  function floatLinear() { const r = window.GFX && GFX.renderer; return !r || r.extensions.has('OES_texture_float_linear'); }
+  function halfTex(f, W, D) {
+    let mn = Infinity; for (let i = 0; i < f.length; i++) if (f[i] < mn) mn = f[i];
+    const h = new Uint16Array(W * D * 4);
+    for (let i = 0; i < W * D; i++) { const v = T.DataUtils.toHalfFloat(f[i] - mn); h[i * 4] = h[i * 4 + 1] = h[i * 4 + 2] = v; h[i * 4 + 3] = 15360; }
+    const t = new T.DataTexture(h, W, D, T.RGBAFormat, T.HalfFloatType);
+    return { tex: t, min: mn };
+  }
+  function toHalf(t) {
+    const d = t.image.data, W = t.image.width, D = t.image.height, n = W * D, step = d.length / n, f = new Float32Array(n);
+    for (let i = 0; i < n; i++) f[i] = d[i * step];
+    return halfTex(f, W, D);
+  }
+  function bakeGround(o) {
+    const N = o.res || 256, f = new Float32Array(N * N);
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) f[j * N + i] = o.fn(o.x0 + i * o.w / (N - 1), o.z0 + j * o.d / (N - 1));
+    return halfTex(f, N, N);
+  }
+
+  // =====================================================================
+  //  셰이더 층: 표준 재질의 조각을 바꿔 끼운다 (atmos.js 의 안개·그림자·환경광 조각은 그대로 쓴다)
+  //  면 정보(알베도, AO, 거칠기, 금속, 레이, 높이, 노멀)를 먼저 모으고 → 세계 좌표 큰 얼룩·때·빗물·이끼·젖음·눈·레이 빛을 얹는다
+  // =====================================================================
+  const VERT_PARS = `
+varying vec3 vTexW;
+varying vec3 vTexN;
+uniform vec4 texUvS;
+#ifdef TEX_TER
+attribute vec4 splat;
+varying vec4 vTexSplat;
+#endif
+`;
+  const VERT_UV = `
+#ifdef USE_UV
+	vUv = uv * texUvS.xy + texUvS.zw;
+#endif`;
+  const VERT_MAIN = `
+	{
+		vec4 tw_ = vec4( transformed, 1.0 );
+		vec3 tn_ = objectNormal;
+		#ifdef USE_INSTANCING
+		tw_ = instanceMatrix * tw_; tn_ = mat3( instanceMatrix ) * tn_;
+		#endif
+		tw_ = modelMatrix * tw_;
+		vTexW = tw_.xyz;
+		vTexN = normalize( mat3( modelMatrix ) * tn_ );
+		#ifdef TEX_TER
+		vTexSplat = splat;
+		#endif
+	}
+`;
+  const FRAG_PARS = `
+uniform sampler2D texNoise;
+uniform sampler2D texGround;
+uniform vec4 texGP, texGR, texGQ, texW, texLey, texMac, texUvS, texP, texQ;
+uniform float texTime;
+varying vec3 vTexW;
+varying vec3 vTexN;
+#ifdef TEX_TER
+uniform sampler2DArray texArrA;
+uniform sampler2DArray texArrN;
+uniform sampler2DArray texArrO;
+uniform vec4 texTerS, texTerR;
+varying vec4 vTexSplat;
+#define TEXG( s, u, a, b ) textureGrad( s, u, a, b )
+#endif
+float texLum( vec3 c ) { return dot( c, vec3( 0.2126, 0.7152, 0.0722 ) ); }
+float texHash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
+float texGroundY( vec3 p ) {
+	if ( texGQ.x < 0.5 ) return texGQ.y;
+	return texGQ.z + texture2D( texGround, ( p.xz - texGP.xy ) * texGP.zw + texGR.xy ).r * texGQ.w;
+}
+`;
+  // 지형 층 하나 (WebGL2: 기울기를 가지 밖에서 구해 textureGrad 로 읽는다 — 무게가 0 인 층은 건너뛴다)
+  function terLayer(i, s) {
+    return `
+		LA[ ${i} ] = vec3( 0.5 ); LP[ ${i} ] = vec3( 0.0 ); LO[ ${i} ] = vec2( 1.0, 0.9 ); LH[ ${i} ] = 0.0;
+		if ( LW[ ${i} ] > 0.003 ) {
+			vec3 u3 = vec3( pw * ${s}, ${i}.0 ); vec2 g1 = gx * ${s}, g2 = gy * ${s};
+			vec4 a = TEXG( texArrA, u3, g1, g2 ), n = TEXG( texArrN, u3, g1, g2 ), o = TEXG( texArrO, u3, g1, g2 );
+			if ( far > 0.001 ) {
+				mat2 rt = mat2( 0.8, - 0.6, 0.6, 0.8 ) * 0.27;
+				vec4 a2 = TEXG( texArrA, vec3( rt * u3.xy + 0.37, u3.z ), rt * g1, rt * g2 );
+				a.rgb = mix( a.rgb, ( a.rgb + a2.rgb ) * 0.5, far );
+			}
+			n.xyz = n.xyz * 2.0 - 1.0;
+			LA[ ${i} ] = a.rgb; LP[ ${i} ] = vec3( n.x, 0.0, n.y ); LO[ ${i} ] = o.rg; LH[ ${i} ] = n.a;
+		}`;
+  }
+  const FRAG_TER = `
+	#ifdef TEX_TER
+	{
+		vec4 sw = max( vTexSplat, 0.0 );
+		sw.x += max( 0.0, 1.0 - dot( sw, vec4( 1.0 ) ) );
+		sw /= max( dot( sw, vec4( 1.0 ) ), 1e-4 );
+		vec4 nz = texture2D( texNoise, vTexW.xz * 0.043 );
+		float rk = 1.0 - smoothstep( texTerR.z, texTerR.y, nG.y + ( nz.g - 0.5 ) * 0.16 );
+		float far = smoothstep( 9.0, 40.0, length( vTexW - cameraPosition ) );
+		vec2 pw = vTexW.xz, gx = dFdx( pw ), gy = dFdy( pw );
+		vec3 rp = vTexW * texTerR.x, rdx = dFdx( rp ), rdy = dFdy( rp );
+		vec3 LA[ 5 ]; vec3 LP[ 5 ]; vec2 LO[ 5 ]; float LH[ 5 ]; float LW[ 5 ];
+		LW[ 0 ] = sw.x * ( 1.0 - rk ); LW[ 1 ] = sw.y * ( 1.0 - rk ); LW[ 2 ] = sw.z * ( 1.0 - rk ); LW[ 3 ] = sw.w * ( 1.0 - rk ); LW[ 4 ] = rk;
+		${terLayer(0, 'texTerS.x')}
+		${terLayer(1, 'texTerS.y')}
+		${terLayer(2, 'texTerS.z')}
+		${terLayer(3, 'texTerS.w')}
+		// 가파른 비탈의 바위: 삼면 투영
+		LA[ 4 ] = vec3( 0.5 ); LP[ 4 ] = vec3( 0.0 ); LO[ 4 ] = vec2( 1.0, 0.9 ); LH[ 4 ] = 0.0;
+		if ( LW[ 4 ] > 0.003 ) {
+			vec3 bw = pow( abs( nG ), vec3( 6.0 ) ); bw /= dot( bw, vec3( 1.0 ) );
+			vec3 sg = step( 0.0, nG ) * 2.0 - 1.0;
+			vec3 uX = vec3( - sg.x * rp.z, rp.y, 4.0 ), uY = vec3( - sg.y * rp.x, rp.z, 4.0 ), uZ = vec3( sg.z * rp.x, rp.y, 4.0 );
+			vec2 xA = vec2( - sg.x * rdx.z, rdx.y ), xB = vec2( - sg.x * rdy.z, rdy.y ), yA = vec2( - sg.y * rdx.x, rdx.z ), yB = vec2( - sg.y * rdy.x, rdy.z ), zA = vec2( sg.z * rdx.x, rdx.y ), zB = vec2( sg.z * rdy.x, rdy.y );
+			vec4 a = TEXG( texArrA, uX, xA, xB ) * bw.x + TEXG( texArrA, uY, yA, yB ) * bw.y + TEXG( texArrA, uZ, zA, zB ) * bw.z;
+			vec4 o = TEXG( texArrO, uX, xA, xB ) * bw.x + TEXG( texArrO, uY, yA, yB ) * bw.y + TEXG( texArrO, uZ, zA, zB ) * bw.z;
+			vec4 nX = TEXG( texArrN, uX, xA, xB ) * 2.0 - 1.0, nY = TEXG( texArrN, uY, yA, yB ) * 2.0 - 1.0, nZ = TEXG( texArrN, uZ, zA, zB ) * 2.0 - 1.0;
+			LA[ 4 ] = a.rgb; LO[ 4 ] = o.rg; LH[ 4 ] = ( nX.a * bw.x + nY.a * bw.y + nZ.a * bw.z ) * 0.5 + 0.5;
+			LP[ 4 ] = bw.x * vec3( 0.0, nX.y, - sg.x * nX.x ) + bw.y * vec3( - sg.y * nY.x, 0.0, nY.y ) + bw.z * vec3( sg.z * nZ.x, nZ.y, 0.0 );
+		}
+		// 높이로 섞기: 높은 돌·풀포기가 먼저 드러난다 (선형 섞기가 아니다)
+		float hw0 = LW[ 0 ] * ( 1.0 + 1.5 * LH[ 0 ] ), hw1 = LW[ 1 ] * ( 1.0 + 1.5 * LH[ 1 ] ), hw2 = LW[ 2 ] * ( 1.0 + 1.5 * LH[ 2 ] ), hw3 = LW[ 3 ] * ( 1.0 + 1.5 * LH[ 3 ] ), hw4 = LW[ 4 ] * ( 1.0 + 1.5 * LH[ 4 ] );
+		float hm = max( max( max( hw0, hw1 ), max( hw2, hw3 ) ), hw4 ) - texTerR.w;
+		float b0 = max( hw0 - hm, 0.0 ), b1 = max( hw1 - hm, 0.0 ), b2 = max( hw2 - hm, 0.0 ), b3 = max( hw3 - hm, 0.0 ), b4 = max( hw4 - hm, 0.0 );
+		float bs = 1.0 / max( b0 + b1 + b2 + b3 + b4, 1e-4 );
+		b0 *= bs; b1 *= bs; b2 *= bs; b3 *= bs; b4 *= bs;
+		tAlb = LA[ 0 ] * b0 + LA[ 1 ] * b1 + LA[ 2 ] * b2 + LA[ 3 ] * b3 + LA[ 4 ] * b4;
+		vec2 lo = LO[ 0 ] * b0 + LO[ 1 ] * b1 + LO[ 2 ] * b2 + LO[ 3 ] * b3 + LO[ 4 ] * b4;
+		tAO = lo.x; tRough = lo.y; tMetal = 0.0;
+		tHgt = LH[ 0 ] * b0 + LH[ 1 ] * b1 + LH[ 2 ] * b2 + LH[ 3 ] * b3 + LH[ 4 ] * b4;
+		vec3 pert = LP[ 0 ] * b0 + LP[ 1 ] * b1 + LP[ 2 ] * b2 + LP[ 3 ] * b3 + LP[ 4 ] * b4;
+		tNW = normalize( nG + pert * texQ.w );
+	}
+	#endif`;
+  const FRAG_SURF = `
+	vec3 nG = normalize( vTexN );
+	#ifdef DOUBLE_SIDED
+	nG *= gl_FrontFacing ? 1.0 : - 1.0;
+	#endif
+	vec3 tAlb = vec3( 1.0 ), tN = vec3( 0.0, 0.0, 1.0 ), tNW = nG, tEm = vec3( 0.0 );
+	float tAO = 1.0, tRough = 1.0, tMetal = 0.0, tLey = 0.0, tHgt = 0.5, tFlat = 0.0;
+	vec3 tBW = pow( abs( nG ), vec3( 4.0 ) ); tBW /= dot( tBW, vec3( 1.0 ) );
+	#if defined( TEX_UV ) || defined( TEX_WATER )
+	{
+		#ifdef TEX_WATER
+		vec2 wu1 = vUv + vec2( 0.031, 0.017 ) * texTime, wu2 = vUv * 0.61 + vec2( - 0.019, 0.026 ) * texTime + 0.37;
+		vec4 ta = texture2D( map, wu1 ), to = texture2D( roughnessMap, wu1 ), tn1 = texture2D( normalMap, wu1 ), tn2 = texture2D( normalMap, wu2 );
+		vec3 a1 = tn1.xyz * 2.0 - 1.0, a2 = tn2.xyz * 2.0 - 1.0;
+		tN = normalize( vec3( a1.xy + a2.xy, a1.z * a2.z ) ); tHgt = ( tn1.a + tn2.a ) * 0.5;
+		#else
+		vec4 ta = texture2D( map, vUv ), to = texture2D( roughnessMap, vUv ), tn1 = texture2D( normalMap, vUv );
+		tN = tn1.xyz * 2.0 - 1.0; tHgt = tn1.a;
+		#endif
+		tAlb = ta.rgb; tAO = to.r; tRough = to.g; tMetal = to.b; tLey = 1.0 - to.a;
+		#ifdef TEX_VAR
+		{
+			// 조각(돌·널빤지)마다 타일마다 다른 밝기·색: 같은 무늬가 몇 미터마다 되풀이되는 것을 숨긴다 (멀어지면 끈다)
+			vec2 tile = floor( vUv );
+			float r1 = fract( ta.a * 7.13 + texHash( tile ) * 3.71 ), r2 = fract( ta.a * 4.37 + texHash( tile + 17.31 ) * 2.93 );
+			vec2 fw = fwidth( vUv ) / texUvS.xy;
+			float fade = texP.w * ( 1.0 - smoothstep( 0.02, 0.09, max( fw.x, fw.y ) ) );
+			tAlb *= ( 1.0 + ( r1 - 0.5 ) * 2.0 * fade ) * ( 1.0 + vec3( 0.8, 0.15, - 0.8 ) * ( r2 - 0.5 ) * fade );
+		}
+		#endif
+	}
+	#endif
+	#ifdef TEX_TRI
+	{
+		vec3 p = vTexW * texUvS.x;
+		vec3 bw = pow( abs( nG ), vec3( 6.0 ) ); bw /= dot( bw, vec3( 1.0 ) );
+		vec3 sg = step( 0.0, nG ) * 2.0 - 1.0;
+		vec2 uX = vec2( - sg.x * p.z, p.y ), uY = vec2( - sg.y * p.x, p.z ), uZ = vec2( sg.z * p.x, p.y );
+		vec4 a = texture2D( map, uX ) * bw.x + texture2D( map, uY ) * bw.y + texture2D( map, uZ ) * bw.z;
+		vec4 o = texture2D( roughnessMap, uX ) * bw.x + texture2D( roughnessMap, uY ) * bw.y + texture2D( roughnessMap, uZ ) * bw.z;
+		vec4 nX = texture2D( normalMap, uX ) * 2.0 - 1.0, nY = texture2D( normalMap, uY ) * 2.0 - 1.0, nZ = texture2D( normalMap, uZ ) * 2.0 - 1.0;
+		tAlb = a.rgb; tAO = o.r; tRough = o.g; tMetal = o.b; tLey = 1.0 - o.a;
+		tHgt = ( nX.a * bw.x + nY.a * bw.y + nZ.a * bw.z ) * 0.5 + 0.5;
+		vec3 pert = bw.x * vec3( 0.0, nX.y, - sg.x * nX.x ) + bw.y * vec3( - sg.y * nY.x, 0.0, nY.y ) + bw.z * vec3( sg.z * nZ.x, nZ.y, 0.0 );
+		tNW = normalize( nG + pert * texQ.w );
+	}
+	#endif
+	${FRAG_TER}
+	{
+		vec4 n1 = texture2D( texNoise, vTexW.zy * 0.043 ) * tBW.x + texture2D( texNoise, vTexW.xz * 0.043 ) * tBW.y + texture2D( texNoise, vTexW.xy * 0.043 ) * tBW.z;
+		#ifdef TEX_LOW
+		float n2 = 0.5;
+		#else
+		float n2 = texture2D( texNoise, vTexW.xz * 0.0137 + vTexW.y * 0.0041 + 0.5 ).r;
+		#endif
+		// 큰 얼룩 (2~10 m): 밝기와 따뜻함
+		float mv = ( n1.r - 0.5 ) * 1.2 + ( n2 - 0.5 ) * 0.9 + ( n1.g - 0.5 ) * 0.5;
+		float mh = ( n2 - 0.5 ) * 1.3 - ( n1.g - 0.5 ) * 0.7;
+		tAlb *= ( 1.0 + mv * texMac.x * texP.x ) * ( 1.0 + vec3( 1.0, 0.2, - 0.9 ) * mh * texMac.y * texP.x );
+		float cav = clamp( ( 1.0 - tAO ) * 1.6 + ( 0.5 - tHgt ) * 0.3, 0.0, 1.0 );
+		// 땅 근처 때 (0~1.5 m): 어둡고 채도 낮게, 노이즈 가장자리. 맨 아래는 축축한 녹갈색
+		float gH = vTexW.y - texGroundY( vTexW );
+		float ge = ( n1.b - 0.5 ) * 1.1 + ( n1.g - 0.5 ) * 0.8;
+		float grime = ( 1.0 - smoothstep( 0.0, 1.5, gH + ge ) ) * ( 1.0 - smoothstep( 0.55, 0.85, nG.y ) ) * texW.x * texQ.z;
+		float damp = ( 1.0 - smoothstep( 0.0, 0.4, gH + ge * 0.4 ) ) * grime;
+		tAlb = mix( tAlb, mix( vec3( texLum( tAlb ) ), tAlb, 0.55 ) * vec3( 0.7, 0.68, 0.62 ), grime * 0.85 );
+		tAlb *= mix( vec3( 1.0 ), vec3( 0.78, 0.82, 0.66 ), damp * 0.6 );
+		tRough = min( 1.0, tRough + grime * 0.05 );
+		#ifndef TEX_LOW
+		{
+			// 빗물 자국: 세로면에 세로로 긴 노이즈 줄
+			vec2 th = normalize( vec2( - nG.z, nG.x ) + vec2( 1e-4, 0.0 ) );
+			float st = texture2D( texNoise, vec2( dot( vTexW.xz, th ) * 0.11, vTexW.y * 0.012 ) ).b;
+			tAlb *= 1.0 - smoothstep( 0.55, 0.75, st ) * ( 1.0 - abs( nG.y ) ) * texW.x * texQ.z * 0.16;
+		}
+		#endif
+		// 이끼: 위를 향한 면, 오목한 곳, 땅 가까운 곳
+		float up = smoothstep( 0.35, 0.85, nG.y );
+		float mA = texW.y * texQ.x;
+		if ( mA > 0.001 ) {
+			float mm = n1.g * 0.6 + n1.b * 0.35 + n1.a * 0.25 + cav * 0.5 + up * 0.25 + grime * 0.2;
+			float moss = smoothstep( 1.05 - mA * 0.6, 1.2 - mA * 0.6, mm ) * clamp( up + cav * 0.8 + grime * 0.6, 0.0, 1.0 );
+			vec3 mc = mix( vec3( 0.07, 0.095, 0.03 ), vec3( 0.2, 0.26, 0.05 ), clamp( n1.a * 1.6 - 0.3 + tHgt * 0.4, 0.0, 1.0 ) );
+			tAlb = mix( tAlb, mc, moss ); tRough = mix( tRough, 0.95, moss ); tMetal *= 1.0 - moss; tFlat = max( tFlat, moss * 0.5 ); tLey *= 1.0 - moss;
+		}
+		// 젖음: 어둡고 매끈하게, 위 면 오목한 곳엔 물웅덩이
+		float wet = texW.z * texP.y;
+		if ( wet > 0.001 ) {
+			float pud = smoothstep( 0.7, 0.95, nG.y ) * smoothstep( 0.55, 0.8, cav * 0.7 + n1.g * 0.6 + ( 0.5 - tHgt ) * 0.4 ) * wet;
+			float wk = wet * ( 0.7 + 0.3 * n1.b );
+			tAlb *= 1.0 - wk * texQ.y * 0.45;
+			tRough = mix( tRough, 0.1, wk * 0.7 ); tRough = mix( tRough, 0.03, pud );
+			tFlat = max( tFlat, pud );
+		}
+		// 눈: 위 면부터
+		float sn = texW.w * texP.y;
+		if ( sn > 0.001 ) {
+			float s = smoothstep( 0.9 - sn * 0.75, 1.0 - sn * 0.6, nG.y + ( n1.b - 0.5 ) * 0.35 + ( n1.g - 0.5 ) * 0.3 + cav * 0.12 );
+			tAlb = mix( tAlb, vec3( 0.85, 0.89, 0.95 ) * ( 0.92 + 0.08 * n1.a ), s );
+			tRough = mix( tRough, 0.7, s ); tMetal *= 1.0 - s; tFlat = max( tFlat, s * 0.85 ); tLey *= 1.0 - s;
+		}
+		// 레이 빛: ORM.a 가 표시한 틈에서 옅게 숨쉬는 시안
+		tEm += texLey.rgb * tLey * texP.z * ( 0.55 + 0.45 * sin( texTime * texLey.w - dot( vTexW, vec3( 0.37, 0.53, 0.29 ) ) * 1.7 + n1.g * 5.0 ) );
+	}
+	diffuseColor.rgb *= tAlb;
+`;
+  const FRAG_ROUGH = 'float roughnessFactor = roughness * tRough;';
+  const FRAG_METAL = 'float metalnessFactor = metalness * tMetal;';
+  const FRAG_NORMAL = `
+#if defined( TEX_TRI ) || defined( TEX_TER )
+	normal = normalize( ( viewMatrix * vec4( normalize( mix( tNW, nG, tFlat ) ), 0.0 ) ).xyz );
+#else
+	{
+		vec3 mapN = normalize( mix( tN, vec3( 0.0, 0.0, 1.0 ), tFlat ) );
+		mapN.xy *= normalScale * texQ.w;
+		normal = perturbNormal2Arb( - vViewPosition, normal, mapN, faceDirection );
+	}
+#endif`;
+  const FRAG_EMIS = `
+#if defined( USE_EMISSIVEMAP ) && ! defined( TEX_TRI )
+	totalEmissiveRadiance *= texture2D( emissiveMap, vUv ).rgb;
+#endif
+#if defined( TEX_EMVC ) && defined( USE_COLOR )
+	totalEmissiveRadiance *= vColor;
+#endif
+	totalEmissiveRadiance += tEm;`;
+  const FRAG_AO = `
+	{
+		float ambientOcclusion = tAO;
+		reflectedLight.indirectDiffuse *= ambientOcclusion;
+		#if defined( USE_ENVMAP ) && defined( STANDARD )
+		float dotNV = saturate( dot( geometry.normal, geometry.viewDir ) );
+		reflectedLight.indirectSpecular *= computeSpecularOcclusion( dotNV, ambientOcclusion, material.roughness );
+		#endif
+	}`;
+  function swap(src, inc, code) {
+    const k = '#include <' + inc + '>';
+    if (src.indexOf(k) < 0) { console.warn('TEX: 셰이더 조각 없음 ' + inc); return src; }
+    return src.replace(k, code);
+  }
+  function onCompile(sh) {
+    const ud = this.userData;
+    Object.assign(sh.uniforms, U, ud.texU);
+    let defs = '#define TEX_' + ud.texVar.toUpperCase() + '\n';
+    if (ud.texEm) defs += '#define TEX_EMVC\n';
+    if (ud.texVar === 'uv' && ud.texVK > 0) defs += '#define TEX_VAR\n';
+    if (lowTier()) defs += '#define TEX_LOW\n';
+    let v = defs + VERT_PARS + sh.vertexShader;
+    v = swap(v, 'uv_vertex', VERT_UV);
+    v = swap(v, 'fog_vertex', VERT_MAIN + '\n#include <fog_vertex>');
+    sh.vertexShader = v;
+    let f = defs + sh.fragmentShader.replace('void main() {', FRAG_PARS + '\nvoid main() {');
+    f = swap(f, 'map_fragment', FRAG_SURF);
+    f = swap(f, 'roughnessmap_fragment', FRAG_ROUGH);
+    f = swap(f, 'metalnessmap_fragment', FRAG_METAL);
+    f = swap(f, 'normal_fragment_maps', FRAG_NORMAL);
+    f = swap(f, 'emissivemap_fragment', FRAG_EMIS);
+    f = swap(f, 'aomap_fragment', FRAG_AO);
+    sh.fragmentShader = f;
+  }
+  function cacheKey() { const u = this.userData; return 'TEX4|' + u.texVar + '|' + (u.texEm ? 1 : 0) + (u.texVK > 0 && u.texVar === 'uv' ? 1 : 0) + (lowTier() ? 'L' : ''); }
+  // 그리기 직전: 시간 갱신, 정점색/스플랫 속성이 없는 형상엔 흰색/(1,0,0,0) 을 채운다 (vertexColors 인데 color 가 없으면 검게 나온다)
+  function onRender(r, s, c, geo) {
+    U.texTime.value = (performance.now() - T0) / 1000;
+    if (!geo || !geo.attributes || !geo.attributes.position || geo.userData.texPrepped) return;
+    TEX.prep(geo, this.userData.texVar === 'ter');
+  }
+  TEX.prep = function (geo, splat) {
+    const n = geo.attributes.position.count;
+    if (!geo.attributes.color) geo.setAttribute('color', new T.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
+    if (splat && !geo.attributes.splat) { const a = new Float32Array(n * 4); for (let i = 0; i < n; i++) a[i * 4] = 1; geo.setAttribute('splat', new T.BufferAttribute(a, 4)); }
+    geo.userData.texPrepped = true;
+    return geo;
+  };
+  function setup(m, variant, K, o, size) {
+    const wk = o.weather ?? 1;
+    const u = {
+      texUvS: { value: V4(1 / size[0], 1 / size[1], 0, 0) },
+      // x 큰 얼룩, y 젖음·눈, z 레이 빛, w 조각 흔들기 (텍스처가 준비되면 켠다)
+      texP: { value: V4(o.macro ?? K.mac ?? 1, (K.wx ?? 1) * wk, o.ley ?? 1, 0) },
+      // x 이끼, y 젖으면 어두워짐, z 땅 근처 때, w 노멀 세기
+      texQ: { value: V4((o.moss ?? K.moss ?? 0) * wk, K.por ?? 1, (o.grime ?? K.wx ?? 1) * wk, o.normal ?? 1) },
+    };
+    m.userData.texU = u; m.userData.texVar = variant; m.userData.texEm = !!o.lit; m.userData.texVK = o.vary ?? K.vk ?? 0;
+    m.onBeforeCompile = onCompile;
+    m.customProgramCacheKey = cacheKey;
+    m.onBeforeRender = onRender;
+    m.extensions = m.extensions || {}; m.extensions.derivatives = true;
+    return u;
+  }
+  const sizeOf = (s, d) => s === undefined ? d.slice() : typeof s === 'number' ? [s, s] : [s[0], s[1] ?? s[0]];
+
+  // ---------- 재질 ----------
+  // TEX.mat(kind, o): o.size 미터(수 또는 [u,v]), o.p 생성기 인자, o.tint 색 곱, o.rough 거칠기 곱, o.metal 금속 곱, o.tri 세계 삼면 투영,
+  //   o.lit 발광 세기(정점색을 곱한다; o.litColor 기본 #FFB866), o.emissive, o.sheen/o.clearcoat(→ Physical), o.side, o.transparent, o.opacity,
+  //   o.weather 날씨 받는 배율, o.moss/o.grime/o.macro/o.ley/o.vary/o.normal 개별 배율, o.res 해상도, o.seed
+  const MATS = new Map();
+  TEX.mat = function (kind, o = {}) {
+    const K = KIND[kind];
+    if (!K) { console.warn('TEX: 모르는 종류 ' + kind); return new T.MeshStandardMaterial({ color: 0xff00ff, vertexColors: true }); }
+    const ck = kind + JSON.stringify(o);
+    let m = MATS.get(ck); if (m) return m;
+    init();
+    const size = sizeOf(o.size, K.size), res = o.res || tierRes(kind);
+    const P = getPack(kind, o.p || {}, size, res, o.seed ?? 7);
+    const prm = {
+      color: new T.Color(o.tint ?? 0xffffff), roughness: o.rough ?? 1, metalness: o.metal ?? 1, vertexColors: true,
+      map: P.albedo, normalMap: P.normal, roughnessMap: P.orm,
+      side: o.side ?? T.FrontSide, transparent: !!o.transparent, opacity: o.opacity ?? 1,
+    };
+    if (o.depthWrite !== undefined) prm.depthWrite = o.depthWrite;
+    if (P.emissive && !o.tri) prm.emissiveMap = P.emissive;
+    if (o.emissive !== undefined) prm.emissive = new T.Color(o.emissive);
+    if (o.lit) { prm.emissive = new T.Color(o.litColor ?? 0xffb866); prm.emissiveIntensity = o.lit; }
+    const phys = !!(o.sheen || o.clearcoat);
+    if (o.sheen) { prm.sheen = o.sheen; prm.sheenColor = new T.Color(o.sheenColor ?? 0xffffff); prm.sheenRoughness = o.sheenRough ?? 0.5; }
+    if (o.clearcoat) { prm.clearcoat = o.clearcoat; prm.clearcoatRoughness = o.clearcoatRough ?? 0.2; }
+    m = phys ? new T.MeshPhysicalMaterial(prm) : new T.MeshStandardMaterial(prm);
+    const u = setup(m, o.tri ? 'tri' : o.water ? 'water' : 'uv', K, o.water ? Object.assign({ macro: 0, weather: 0 }, o) : o, size);
+    const on = () => { u.texP.value.w = m.userData.texVK; };
+    if (P.ready) on(); else P.cbs.push(on);
+    m.name = 'TEX:' + kind;
+    m.userData.texPack = P;
+    MATS.set(ck, m);
+    return m;
+  };
+  // 이름 붙은 기본 재질 (캐시). 모르는 이름이면 null.
+  const LIBM = new Map();
+  TEX.lib = function (name) {
+    const d = LIB[name]; if (!d) return null;
+    let m = LIBM.get(name);
+    if (!m) { m = TEX.mat(d[0], d[1]); m.name = 'TEX.lib:' + name; LIBM.set(name, m); }
+    return m;
+  };
+  TEX.names = Object.keys(LIB);
+
+  // ---------- 지형 ----------
+  // TEX.terrain(o) — 높이장 땅 메쉬용 섞기 재질 (WebGL2: 텍스처 배열 셋으로 다섯 층).
+  //  정점 속성:
+  //   splat (vec4): x 풀, y 흙·길, z 포장(자갈돌), w 덤 층(기본 굵은 자갈) 의 무게. 셰이더가 합을 1로 맞추고, 합이 1보다 작으면 나머지는 풀이다.
+  //                 없으면 (1,0,0,0) 을 채워 넣는다.
+  //   color (vec3): 색 곱 (1 = 그대로). 없으면 흰색.
+  //   normal: 매끈한 정점 노멀 — 경사 판정에 쓴다. uv 는 쓰지 않는다 (월드 xz 로 깐다).
+  //  경사가 o.slope = [30, 42]° 사이를 넘어가면 삼면 투영 바위(o.rock, 한 장 o.rockSize m)가 높이 섞기로 드러난다.
+  //  o.layers 네 종류 (기본 ['grass','dirt','cobble','gravel']), o.sizes 각 층 한 장의 미터, o.tint, o.res, o.blend (높이 섞기 깊이, 기본 0.18)
+  //  WebGL1 이면 첫 층 하나의 평범한 TEX.mat 으로 물러난다 (uv 가 미터여야 한다).
+  TEX.terrain = function (o = {}) {
+    init();
+    const layers = (o.layers || ['grass', 'dirt', 'cobble', 'gravel']).slice(0, 4);
+    while (layers.length < 4) layers.push(layers[layers.length - 1]);
+    const r = window.GFX && GFX.renderer, gl2 = r ? r.capabilities.isWebGL2 : true;
+    if (!gl2 || !T.DataArrayTexture) return TEX.mat(layers[0], { tint: o.tint });
+    const kinds = layers.concat([o.rock || 'rock']);
+    const sizes = (o.sizes || layers.map(k => KIND[k].size[0])).concat([o.rockSize || 6]);
+    const res = o.res || (lowTier() ? 256 : 512), N = res * res * 4;
+    const packs = kinds.map((k, i) => getPack(k, (o.p && o.p[i]) || {}, [sizes[i], sizes[i]], res, 7));
+    const mk = (srgb, fill) => {
+      const d = new Uint8Array(N * 5);
+      for (let l = 0; l < 5; l++) { const c = fill(KIND[kinds[l]]); for (let p = 0; p < res * res; p++) d.set(c, l * N + p * 4); }
+      const t = new T.DataArrayTexture(d, res, res, 5);
+      t.format = T.RGBAFormat; t.type = T.UnsignedByteType;
+      t.wrapS = t.wrapT = T.RepeatWrapping; t.magFilter = T.LinearFilter; t.minFilter = T.LinearMipmapLinearFilter; t.generateMipmaps = true;
+      t.anisotropy = aniso();
+      if (srgb) t.encoding = T.sRGBEncoding;
+      t.needsUpdate = true;
+      return t;
+    };
+    const A = mk(true, K => rgb8(K.avg).concat([128])), Nn = mk(false, () => [128, 128, 255, 128]), O = mk(false, K => [255, Math.round(K.r * 255), 0, 255]);
+    const copy = (t, src, l, w) => {
+      const dst = t.image.data, o0 = l * N;
+      if (w === res) dst.set(src, o0);
+      else for (let j = 0; j < res; j++) for (let i = 0; i < res; i++) { const s = ((j * w / res | 0) * w + (i * w / res | 0)) * 4, d = o0 + (j * res + i) * 4; dst[d] = src[s]; dst[d + 1] = src[s + 1]; dst[d + 2] = src[s + 2]; dst[d + 3] = src[s + 3]; }
+      t.needsUpdate = true;
+    };
+    packs.forEach((P, l) => {
+      const put = () => { if (!P.data) return; copy(A, P.data.albedo, l, P.data.W); copy(Nn, P.data.normal, l, P.data.W); copy(O, P.data.orm, l, P.data.W); };
+      if (P.ready) put(); else P.cbs.push(put);
+    });
+    const m = new T.MeshStandardMaterial({ color: new T.Color(o.tint ?? 0xffffff), roughness: 1, metalness: 0, vertexColors: true });
+    const u = setup(m, 'ter', { mac: 1, wx: 1, moss: 0, por: 0.9 }, { grime: 0, moss: 0 }, [1, 1]);
+    const sl = o.slope || [30, 42], D2R = Math.PI / 180;
+    Object.assign(u, {
+      texArrA: { value: A }, texArrN: { value: Nn }, texArrO: { value: O },
+      texTerS: { value: V4(1 / sizes[0], 1 / sizes[1], 1 / sizes[2], 1 / sizes[3]) },
+      texTerR: { value: V4(1 / sizes[4], Math.cos(sl[0] * D2R), Math.cos(sl[1] * D2R), o.blend ?? 0.18) },
+    });
+    m.name = 'TEX.terrain';
+    return m;
+  };
+
+  // ---------- 상태 ----------
+  // TEX.ready() → 지금까지 요청한 텍스처가 모두 만들어지면 풀리는 Promise
+  TEX.ready = () => new Promise(res => { if (!pending) res(); else waiters.push(res); });
+  TEX.stats = () => ({
+    generated: genCount, pending, ms: Math.round(genMs), noiseMs: Math.round(noiseMs), mode: POOL.mode || 'idle', workers: POOL.ws.filter(s => s.alive).length,
+    list: genList.slice(),
+  });
+})();
