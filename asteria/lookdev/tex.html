@@ -75,6 +75,7 @@ function msphere(r, ws = 64, hs = 32) {
   return g;
 }
 function addMesh(g, m, x = 0, y = 0, z = 0, ry = 0, parent = S) {
+  TEX.prep(g);
   const me = new THREE.Mesh(g, m); me.position.set(x, y, z); me.rotation.y = ry;
   me.castShadow = me.receiveShadow = true; parent.add(me); return me;
 }
@@ -106,7 +107,6 @@ function sceneSwatches() {
   TEX.weather({ moss: 0.25, grime: 0.5 });
   const sph = new Set(['brass', 'gold', 'iron', 'copper', 'lead', 'glassDark', 'glassLit', 'glassStained', 'velvet', 'leather', 'water', 'leaf', 'leafAutumn', 'rope', 'moss']);
   const names = TEX.names, cols = 8, sp = 1.55;
-  const box = TEX.prep(rbox(1.0, 1.0, 1.0, 0.07)) && 0 || null, ball = null;
   const BOX = rbox(1.0, 1.0, 1.0, 0.07), BALL = msphere(0.52); TEX.prep(BOX); TEX.prep(BALL);
   const labels = [];
   names.forEach((n, i) => {
@@ -169,7 +169,7 @@ function sceneWall() {
   const fig = new THREE.Group();
   const robe = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.34, 1.45, 16), TEX.mat('velvet', { sheen: 1, sheenColor: 0x9a7a7a, tint: 0xb04a4a })); robe.position.y = 0.72; fig.add(robe);
   const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 12), new THREE.MeshStandardMaterial({ color: 0xc89a7a, roughness: 0.6 })); head.position.y = 1.6; fig.add(head);
-  fig.traverse(o => { o.castShadow = o.receiveShadow = true; }); fig.position.set(-2.6, 0, -1.8); S.add(fig);
+  fig.traverse(o => { o.castShadow = o.receiveShadow = true; if (o.geometry) TEX.prep(o.geometry); }); fig.position.set(-2.6, 0, -1.8); S.add(fig);
   cam.fov = 48; cam.updateProjectionMatrix();
   cam.position.set(-3.8, 1.65, -10.5); cam.lookAt(0.6, 4.0, 0.6); focus.set(0, 2, -2);
 }
