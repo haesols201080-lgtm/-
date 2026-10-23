@@ -257,7 +257,7 @@ function paintSite(m) {
 // 장면: 지형 메쉬, 물, 건물, 식물, 소품
 // ======================================================================
 // 재질 모듈의 땅 재질이 검증되기 전까지는 정점색 땅을 쓴다
-const SITE_TEX_TERRAIN = false;
+const SITE_TEX_TERRAIN = true;
 function siteTerrainMeshes(m, group) {
   const CH = 32, w = m.nx + 1, r = m.res;
   const texT = SITE_TEX_TERRAIN && window.TEX && TEX.terrain;

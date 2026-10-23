@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hero Look-dev</title>
+<style>
+  :root { --bg: #0d0c18; --ink: #f2eee4; --dim: #b9b4c8; --brass: #d4a94e; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden; font: 13px/1.4 "IBM Plex Sans KR", system-ui, sans-serif; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #bar { position: fixed; left: 12px; top: 12px; display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100% - 24px); }
+  #bar a { color: var(--ink); background: rgba(13, 12, 24, 0.7); border: 1px solid rgba(255, 255, 255, 0.15); padding: 4px 9px; border-radius: 999px; text-decoration: none; }
+  #bar a.on { border-color: var(--brass); color: var(--brass); }
+  #info { position: fixed; right: 12px; bottom: 10px; color: var(--dim); background: rgba(13, 12, 24, 0.6); padding: 3px 8px; border-radius: 6px; white-space: pre; }
+  body.shot #bar, body.shot #info { display: none; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="bar"></div>
+<div id="info"></div>
+<script>window.ATMOS_MANUAL = true; var HUD = { w: 800, h: 600, dpr: 1 };</script>
+<script src="../vendor/three.min.js"></script>
+<script src="../vendor/three-post.js"></script>
+<script src="../vendor/atmos-fflate.js"></script>
+<script src="../vendor/atmos-exrloader.js"></script>
+<script src="../vendor/atmos-roomenv.js"></script>
+<script src="../vendor/atmos-smaa-shader.js"></script>
+<script src="../vendor/atmos-smaa-pass.js"></script>
+<script src="../js/core.js"></script>
+<script src="../js/gfx.js"></script>
+<script src="../js/atmos.js"></script>
+<script src="../js/actors.js"></script>
+<script src="../js/hero.js"></script>
+<script>
+'use strict';
+// ------------------------------------------------------------------
+// 캐릭터 보기 페이지: #turn #face #walk #run #crowd #glide (?shot 이면 메뉴를 숨기고 시간을 정해진 만큼 돌린 뒤 멈춘다)
+// ------------------------------------------------------------------
+const SHOT = /shot/.test(location.search);
+if (SHOT) document.body.classList.add('shot');
+initGfx();
+const S = GFX.scene, cam = GFX.camera;
+const qT = (location.search.match(/[?&]t=([\d.]+)/) || [])[1];
+
+// ---------- 바닥과 마당 ----------
+let seed = 11;
+const R = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
+function tex(size, draw, rep) {
+  const c = document.createElement('canvas'); c.width = c.height = size; draw(c.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 8; t.encoding = THREE.sRGBEncoding; if (rep) t.repeat.set(rep, rep); return t;
+}
+const hexA = (h, k) => { const c = new THREE.Color(h); c.offsetHSL(0, 0, k); return '#' + c.getHexString(); };
+const speck = (g, S_, n, a, col) => { for (let i = 0; i < n; i++) { g.fillStyle = col(R()); g.globalAlpha = a * R(); const r = 1 + R() * 3; g.fillRect(R() * S_, R() * S_, r, r); } g.globalAlpha = 1; };
+const paving = tex(512, (g, S_) => {
+  g.fillStyle = '#4e463c'; g.fillRect(0, 0, S_, S_);
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) { const ox = x * 128 + (y % 2) * 64; g.fillStyle = hexA(['#9a8b74', '#a39580', '#8e8270', '#a89a84'][Math.floor(R() * 4)], (R() - 0.5) * 0.05); g.fillRect((ox + 3) % S_, y * 128 + 3, 122, 122); if (ox + 125 > S_) g.fillRect(0, y * 128 + 3, (ox + 125) % S_, 122); }
+  speck(g, S_, 12000, 0.25, v => v > 0.5 ? '#2e2a24' : '#cfc2a8');
+}, 16);
+const ashlar = tex(512, (g, S_) => {
+  g.fillStyle = '#6f6556'; g.fillRect(0, 0, S_, S_);
+  for (let y = 0; y < 8; y++) { let x = -R() * 60; while (x < S_) { const w = 50 + R() * 70; g.fillStyle = hexA(['#c9a97e', '#bc9d74', '#c4a47a', '#b89a70', '#cdb084'][Math.floor(R() * 5)], (R() - 0.5) * 0.06); g.fillRect(x + 2, y * 64 + 2, w - 4, 60); x += w; } }
+  speck(g, S_, 9000, 0.22, v => v > 0.5 ? '#3a3228' : '#e8dcc0');
+});
+const MS = {
+  pave: new THREE.MeshStandardMaterial({ map: paving, roughness: 0.9 }),
+  stone: new THREE.MeshStandardMaterial({ map: ashlar, roughness: 0.92 }),
+  oak: new THREE.MeshStandardMaterial({ color: 0x5a3a24, roughness: 0.7 }),
+  iron: new THREE.MeshStandardMaterial({ color: 0x2e2e33, roughness: 0.45, metalness: 0.8 }),
+  brass: new THREE.MeshStandardMaterial({ color: 0xc8a04a, roughness: 0.32, metalness: 1 }),
+  water: new THREE.MeshStandardMaterial({ color: 0x1e3038, roughness: 0.08, metalness: 0.2 }),
+  white: new THREE.MeshStandardMaterial({ color: 0xe8e2d6, roughness: 0.8 }), dark: new THREE.MeshStandardMaterial({ color: 0x2a2626, roughness: 0.8 }),
+};
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120).rotateX(-Math.PI / 2), MS.pave); ground.receiveShadow = true; S.add(ground);
+const box = (w, h, d, m, x, y, z, ry = 0) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.rotation.y = ry; o.castShadow = o.receiveShadow = true; S.add(o); return o; };
+const uvBox = (o, sc = 3) => { const g = o.geometry, p = g.attributes.position, n = g.attributes.normal, uv = g.attributes.uv; o.updateMatrixWorld(); const v = new THREE.Vector3(); for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i).applyMatrix4(o.matrixWorld); const ax = Math.abs(n.getX(i)), az = Math.abs(n.getZ(i)); uv.setXY(i, (ax > az ? v.z : v.x) / sc, v.y / sc); } return o; };
+// 마당 벽 (뒤와 옆), 아치 구멍 대신 어두운 판
+uvBox(box(30, 9, 1.2, MS.stone, 0, 4.5, -9));
+uvBox(box(1.2, 9, 22, MS.stone, -12, 4.5, 2)); uvBox(box(1.2, 9, 22, MS.stone, 12, 4.5, 2));
+for (let i = -3; i <= 3; i++) { box(1.6, 3.4, 0.2, MS.dark, i * 3.6, 1.7, -8.35); uvBox(box(0.5, 9.4, 0.9, MS.stone, i * 3.6 + 1.8, 4.7, -8.2)); }
+// 분수, 벤치, 등불
+{ const f = new THREE.Mesh(new THREE.CylinderGeometry(1.6, 1.7, 0.55, 28), MS.stone); f.position.set(5.5, 0.27, -3.5); f.castShadow = f.receiveShadow = true; S.add(f); uvBox(f, 2);
+  const w = new THREE.Mesh(new THREE.CylinderGeometry(1.45, 1.45, 0.05, 28), MS.water); w.position.set(5.5, 0.5, -3.5); S.add(w);
+  const c = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.25, 1.6, 10), MS.stone); c.position.set(5.5, 1.1, -3.5); c.castShadow = true; S.add(c); }
+const bench = (x, z, ry) => { box(1.8, 0.08, 0.45, MS.oak, x, 0.45, z, ry); box(0.1, 0.42, 0.4, MS.iron, x - 0.75 * Math.cos(ry), 0.21, z + 0.75 * Math.sin(ry), ry); box(0.1, 0.42, 0.4, MS.iron, x + 0.75 * Math.cos(ry), 0.21, z - 0.75 * Math.sin(ry), ry); };
+bench(-5.5, -4.6, 0); bench(1.5, -6.8, 0);
+for (const [x, z] of [[-8, -6], [9, 4]]) { box(0.12, 3, 0.12, MS.iron, x, 1.5, z); box(0.3, 0.4, 0.3, MS.brass, x, 3.1, z); }
+// 키 재는 막대: 렌의 머리 하나(0.245 m)마다 색이 바뀐다
+function ruler(x, z, H = 1.72, n = 7) { for (let i = 0; i < n; i++) { const o = box(0.05, H / n - 0.004, 0.05, i % 2 ? MS.white : MS.dark, x, (i + 0.5) * H / n, z); o.castShadow = false; } }
+
+// ---------- 생김새 ----------
+const REN = { cloak: '#2f7f7a', hair: '#3a2a20', body: '#f0e8d8', scarf: null };
+const REN_GLOW = { cloak: '#2f7f7a', hair: '#3a2a20', body: '#f0e8d8', scarf: '#7ff0ff' };
+const OSWIN = { cloak: '#5a4a7a', body: '#e8e0cf', hair: '#d8d0c8', skin: '#f0d0b0' };
+const MIRA = { cloak: '#8a5ac8', hair: '#e86a3a', body: '#f0e8d8' };
+const KASS = { cloak: '#a83a4a', hair: '#e8c060', body: '#f0e8d8', scarf: '#d8b040' };
+const PIP = { cloak: '#5aa86a', hair: '#e8c070', scale: 0.75 };
+const TOWN = k => ({ cloak: ['#7a6a55', '#5a6a5a', '#8a5a4a', '#c9b89a', '#6a5a6a'][k % 5], hair: ['#2a1f18', '#5a3a22', '#a8742e', '#1a1a1e'][k % 4], skin: ['#e8c098', '#b8845a', '#f3d3b5', '#8a5a3a'][k % 4], body: '#d8ccb0', legs: '#4a3e30', seed: k * 11, scale: 0.95 + (k % 3) * 0.04 });
+
+// ---------- 장면 ----------
+const RIGS = [];   // {r, mode, speed, path, chat, ...}
+function put(look, o, x, z, yaw, st) { const r = makeRig(look, o || {}); r.position.set(x, 0, z); r.rotation.y = yaw || 0; S.add(r); const e = Object.assign({ r, mode: 'idle', speed: 0, x0: x, z0: z, yaw0: yaw || 0 }, st || {}); RIGS.push(e); return e; }
+const name = (location.hash || '#turn').slice(1);
+let camFn = null, focus = new THREE.Vector3(0, 1, 0), simT = 3, sunAz = 330, sunEl = 15, rim = null;
+const scenes = {
+  turn() {
+    [0, Math.PI / 4, Math.PI / 2, Math.PI].forEach((y, i) => put(REN, { rod: true, glider: true }, -1.65 + i * 1.1, 0, y));
+    ruler(-2.55, 0); ruler(2.55, 0);
+    camFn = () => { cam.fov = 24; cam.position.set(0, 0.95, 8.6); cam.lookAt(0, 0.88, 0); };
+    focus.set(0, 1, 0);
+  },
+  face() {
+    put(REN_GLOW, { rod: true, glider: true }, 0, 0, 0.12);
+    put(HERO.student(3), {}, -0.62, -0.25, 0.32, { expr: 5 });
+    put(Object.assign(HERO.student(8), { scale: 1 }), {}, 0.64, -0.2, -0.3);
+    camFn = () => { cam.fov = 32; cam.position.set(0.05, 1.6, 1.75); cam.lookAt(0.02, 1.5, 0); };
+    rim = new THREE.DirectionalLight(0xcfe0ff, 3.0); rim.position.set(3, 2.4, -2.2); S.add(rim);
+    focus.set(0, 1.5, 0); simT = 2.4; sunAz = 292; sunEl = 17;
+  },
+  walk() {
+    put(REN, { rod: true, glider: true }, -1.4, 0.2, Math.PI / 2, { mode: 'walk', speed: 1.4 });
+    put(REN, { rod: true, glider: true }, -1.3, -2.2, Math.PI / 2, { mode: 'walk', speed: 1.4 });
+    put(HERO.student(5), {}, -1.9, 1.6, Math.PI / 2, { mode: 'walk', speed: 1.3 });
+    camFn = () => { const p = RIGS[0].r.position; cam.fov = 30; cam.position.set(p.x + 3.6, 1.35, p.z + 5.6); cam.lookAt(p.x + 0.3, 0.9, p.z - 1.0); };
+    simT = qT ? +qT : 2.62; sunAz = 300;
+  },
+  run() {
+    put(REN, { rod: true, glider: true }, -4, 0.2, Math.PI / 2, { mode: 'walk', speed: 4.6 });
+    put(REN, { rod: true, glider: true }, -6.5, -2.3, Math.PI / 2, { mode: 'run', speed: 7.8 });
+    camFn = () => { const p = RIGS[0].r.position; cam.fov = 30; cam.position.set(p.x + 4.6, 1.4, p.z + 6.2); cam.lookAt(p.x + 0.4, 0.9, p.z - 1.0); };
+    simT = qT ? +qT : 1.83; sunAz = 300;
+  },
+  crowd() {
+    const st = [[-3.2, -1.5], [-2.3, -1.2], [-2.8, -0.5]];
+    st.forEach(([x, z], i) => { const e = put(HERO.student(11 + i), {}, x, z, 0, { chat: true }); e.r.rotation.y = Math.atan2(-2.75 - x, -1.05 - z); });
+    put(HERO.student(21), {}, -0.6, -2.4, 0.4, { chat: true }); put(TOWN(2), {}, 0.2, -2.0, -2.2, { chat: true });
+    put(HERO.student(31), {}, 1.5, -6.65, 0, { mode: 'sit' });
+    put(HERO.student(41), {}, 2.5, 1.0, 0, { mode: 'walk', speed: 1.3, circle: [1.2, 0.6, 3.0] });
+    put(TOWN(7), {}, -1.0, 2.0, 0, { mode: 'walk', speed: 1.2, circle: [-1.5, 0.6, 2.4] });
+    put(MIRA, {}, -4.6, 0.8, 0.9); put(KASS, {}, 3.3, -1.0, -0.6); put(PIP, {}, -3.8, 1.6, 0.4);
+    put(OSWIN, {}, 0.8, 0.4, 0.2);
+    // 잔향 (반투명, 가면에 금)
+    const gm = ghostMat('#a898ff'); const ge = put({ mask: '#9a9aa2', crack: true }, { ghost: gm }, 4.2, 1.2, -0.5);
+    mesh(geo('sph', 0.04), GLOW('#ffffff', 2.5), -0.075, 0, 0.2, ge.r.head); mesh(geo('sph', 0.04), GLOW('#ffffff', 2.5), 0.075, 0, 0.2, ge.r.head);
+    put(REN, { rod: true, glider: true }, 1.6, 2.8, Math.PI + 0.3, { cast: 1 });
+    camFn = () => { cam.fov = 40; cam.position.set(0.2, 1.75, 8.6); cam.lookAt(-0.2, 0.95, -1.2); };
+    focus.set(0, 1, -1); simT = 3.2; sunAz = 300;
+  },
+  glide() {
+    put(REN_GLOW, { rod: true, glider: true }, -6, 0, Math.PI / 2, { mode: 'glide', speed: 9.5, y: 4.2 });
+    camFn = () => { const p = RIGS[0].r.position; cam.fov = 34; cam.position.set(p.x + 3.4, p.y + 0.5, p.z + 4.4); cam.lookAt(p.x - 0.1, p.y + 1.1, p.z); };
+    simT = 2.0; sunAz = 300; sunEl = 20;
+  },
+};
+(scenes[name] || scenes.turn)();
+const bar = document.getElementById('bar');
+for (const k in scenes) { const a = document.createElement('a'); a.href = '#' + k; a.textContent = k; if (k === name) a.className = 'on'; a.onclick = () => setTimeout(() => location.reload(), 10); bar.appendChild(a); }
+ATMOS.preset('goldenHour', 0, { sun: [sunEl, sunAz] });
+for (const e of RIGS) if (e.y) e.r.position.y = e.y;
+
+// ---------- 시간 ----------
+function tick(dt) {
+  for (const e of RIGS) {
+    const r = e.r;
+    if (e.speed && e.mode !== 'sit') {
+      if (e.circle) { e.a = (e.a ?? 0) + dt * e.speed / e.circle[2]; r.position.set(e.circle[0] + Math.cos(e.a) * e.circle[2], 0, e.circle[1] + Math.sin(e.a) * e.circle[2]); r.rotation.y = Math.atan2(-Math.sin(e.a), Math.cos(e.a)); }
+      else { r.position.x += Math.sin(r.rotation.y) * e.speed * dt; r.position.z += Math.cos(r.rotation.y) * e.speed * dt; }
+    }
+    animRig(r, { mode: e.mode, speed: e.speed, chat: e.chat, cast: e.cast || 0 }, dt);
+    if (e.expr !== undefined) HERO.expr(r, e.expr);
+  }
+}
+for (const e of RIGS) animRig(e.r, { mode: e.mode, speed: e.speed, chat: e.chat }, 0);
+camFn(); cam.updateProjectionMatrix();
+const steps = Math.round(simT * 60);
+for (let i = 0; i < steps; i++) { tick(1 / 60); if (i % 20 === 0) camFn(); }
+camFn(); cam.updateProjectionMatrix();
+const info = document.getElementById('info');
+const tris = RIGS.map(e => HERO.tris(e.r));
+info.textContent = name + ' · rigs ' + RIGS.length + ' · tris/rig ' + Math.min(...tris) + '–' + Math.max(...tris) + ' · built ' + HERO.count;
+window.__heroInfo = { tris, rigs: RIGS.length, bd: RIGS.slice(0, 3).map(e => HERO.breakdown(e.r)) };
+let last = performance.now();
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!SHOT) { tick(dt); camFn(); }
+  ATMOS.update(dt, focus);
+  ATMOS.render();
+  window.__frames = (window.__frames || 0) + 1;
+}
+ATMOS.whenLoaded().then(() => { window.__envReady = true; });
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

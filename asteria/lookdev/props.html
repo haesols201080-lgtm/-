@@ -1,0 +1,368 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Props Look-dev</title>
+<style>
+  :root { --bg: #0d0c18; --ink: #f2eee4; --dim: #b9b4c8; --brass: #d4a94e; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden; font: 13px/1.4 "IBM Plex Sans KR", system-ui, sans-serif; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #bar { position: fixed; left: 12px; top: 12px; display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100% - 24px); }
+  #bar a { color: var(--ink); background: rgba(13, 12, 24, 0.7); border: 1px solid rgba(255, 255, 255, 0.15); padding: 4px 9px; border-radius: 999px; text-decoration: none; }
+  #bar a.on { border-color: var(--brass); color: var(--brass); }
+  #info { position: fixed; right: 12px; bottom: 10px; color: var(--dim); background: rgba(13, 12, 24, 0.6); padding: 3px 8px; border-radius: 6px; white-space: pre; font-size: 11px; }
+  #labels { position: fixed; inset: 0; pointer-events: none; }
+  #labels div { position: absolute; transform: translate(-50%, -100%); font: 600 11px/1.2 system-ui, sans-serif; color: #fff4dc; background: rgba(20, 14, 10, 0.72); padding: 1px 5px; border-radius: 3px; white-space: nowrap; border: 1px solid rgba(212, 169, 78, 0.5); }
+  body.shot #bar, body.shot #info { display: none; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="labels"></div>
+<div id="bar"></div>
+<div id="info"></div>
+<script>window.ATMOS_MANUAL = true; var HUD = { w: 800, h: 600, dpr: 1 };</script>
+<script src="../vendor/three.min.js"></script>
+<script src="../vendor/three-post.js"></script>
+<script src="../vendor/atmos-fflate.js"></script>
+<script src="../vendor/atmos-exrloader.js"></script>
+<script src="../vendor/atmos-roomenv.js"></script>
+<script src="../vendor/atmos-smaa-shader.js"></script>
+<script src="../vendor/atmos-smaa-pass.js"></script>
+<script src="../js/core.js"></script>
+<script src="../js/gfx.js"></script>
+<script src="../js/atmos.js"></script>
+<script src="../js/tex.js"></script>
+<script src="../js/batch.js"></script>
+<script src="../js/props.js"></script>
+<script>
+'use strict';
+// ------------------------------------------------------------------
+// 소품 보기 페이지: #lineup(줄 세운 전체, #lineup1..8 줄마다), #study, #refectory, #dorm, #court, #town
+// ------------------------------------------------------------------
+const SHOT = /shot/.test(location.search);
+if (SHOT) document.body.classList.add('shot');
+initGfx();
+const S = GFX.scene, P = PROPS, T = THREE, PI = Math.PI, TAU = PI * 2;
+if (GFX.grass) { GFX.grass.im.visible = false; if (GFX.grass.fl) GFX.grass.fl.visible = false; }
+
+// ---------- TEX가 아직 없을 때 쓸 임시 재질 (TEX.lib가 있으면 그쪽이 먼저) ----------
+const X = P.tx;
+function fbTex(size, rep, f, lin) { const c = X.canvas(size, size, (g, w, h) => X.pixels(g, w, h, f)); return X.ctex(c, { repeat: rep, lin }); }
+const FB = {
+  oak: () => woodMat(0x4a2e1b, 0.6), oakPanel: () => woodMat(0x553620, 0.55, 1), timber: () => woodMat(0x6a5236, 0.75),
+  stone: () => stoneMat(0xc9a97e, 2.0, 'ashlar'), stoneDark: () => stoneMat(0x6e6252, 2.0, 'ashlar'), stoneEarly: () => stoneMat(0xa89274, 2.0, 'ashlar'),
+  stoneTrim: () => stoneMat(0xd2b88f, 1.0, 'smooth'), stoneOld: () => stoneMat(0xe3dccb, 1.0, 'smooth'), flagstone: () => stoneMat(0x9a8e7c, 2.4, 'flag'),
+  plaster: () => plainMat(0xe0d6c0, 0.95, 26, 2), brass: () => metalMat(0xC9A45C, 0.32), gold: () => metalMat(0xD8B25A, 0.28), iron: () => metalMat(0x34353a, 0.55, 0.75),
+  lead: () => metalMat(0x5a5f66, 0.5, 0.6), copper: () => plainMat(0x5e9c8c, 0.6, 40, 1),
+  leather: () => plainMat(0x5a3a28, 0.6, 50, 3), parchment: () => plainMat(0xe6d4ae, 0.9, 40, 2), rope: () => plainMat(0x9a8058, 0.95, 60, 6),
+  velvet: () => plainMat(0x2a2f5e, 0.85, 40, 2), carpet: () => plainMat(0x6b2a22, 0.95, 50, 2), slate: () => plainMat(0x3e4656, 0.6, 40, 3), bark: () => plainMat(0x4a3a2c, 0.95, 70, 3),
+};
+function woodMat(col, rough, panel) {
+  const c = new T.Color(col), R = P.rng(col & 0xffff);
+  const map = fbTex(512, 1, (x, y) => {
+    const w = X.pfbm(x / 128, y / 512, 4, 3, 4), ring = 0.5 + 0.5 * Math.sin((x + w * 60) * 0.11 + X.pnoise(x / 40, y / 300, 12.8, 1.7, 5) * 4);
+    const pore = X.pnoise(x / 1.5, y / 24, 341, 21, 9), plank = panel ? 1 - 0.5 * Math.exp(-Math.pow(((x % 128) - 2) / 2, 2)) : 1;
+    const k = (0.78 + 0.22 * ring - 0.12 * pore + (w - 0.5) * 0.35) * plank;
+    return [c.r * 255 * 1.9 * k, c.g * 255 * 1.9 * k, c.b * 255 * 1.9 * k];
+  });
+  return new T.MeshStandardMaterial({ map, vertexColors: true, roughness: rough, metalness: 0 });
+}
+function stoneMat(col, size, kind) {
+  const c = new T.Color(col).convertLinearToSRGB(), R = P.rng(7);
+  const cv = X.canvas(512, 512, (g, W) => {
+    g.fillStyle = '#' + c.getHexString(); g.fillRect(0, 0, W, W);
+    const px = W / size;
+    if (kind === 'ashlar') {
+      g.fillStyle = 'rgba(40,30,20,0.55)'; const rh = 0.3 * px;
+      for (let r = 0; r * rh < W; r++) { g.fillRect(0, r * rh, W, 3); let x = -R() * 0.5 * px; while (x < W) { const bw = (0.4 + R() * 0.55) * px; g.fillStyle = `rgba(${R() < 0.5 ? '255,240,220' : '60,45,30'},${R() * 0.1})`; g.fillRect(x + 2, r * rh + 3, bw - 3, rh - 3); g.fillStyle = 'rgba(40,30,20,0.55)'; g.fillRect(x, r * rh, 3, rh); x += bw; } }
+    } else if (kind === 'flag') {
+      let y = 0; while (y < W) { const rh = (0.5 + R() * 0.4) * px; let x = 0; while (x < W) { const bw = (0.5 + R() * 0.6) * px; g.fillStyle = `rgba(${R() < 0.5 ? '255,245,230' : '40,35,30'},${R() * 0.14})`; g.fillRect(x + 3, y + 3, bw - 5, rh - 5); g.strokeStyle = 'rgba(30,25,20,0.7)'; g.lineWidth = 4; g.strokeRect(x, y, bw, rh); x += bw; } y += rh; }
+    }
+    X.pixels(g, W, W, (x, y, r, gg, b) => { const n = X.pfbm(x / 64, y / 64, 8, 31, 4), f = X.pnoise(x / 3, y / 3, 170.6, 170.6, 4); const k = 0.82 + n * 0.3 + (f - 0.5) * 0.12; return [r * k, gg * k, b * k]; });
+  });
+  const map = X.ctex(cv, { repeat: 1 / size });
+  return new T.MeshStandardMaterial({ map, vertexColors: true, roughness: kind === 'flag' ? 0.62 : 0.9, metalness: 0 });
+}
+function plainMat(col, rough, amp, sc) {
+  const c = new T.Color(col), map = fbTex(256, sc, (x, y) => { const n = X.pfbm(x / 32, y / 32, 8, 5, 4), f = X.pnoise(x / 2, y / 2, 128, 128, 6); const k = 1 + (n - 0.5) * amp / 100 * 2 + (f - 0.5) * 0.1; return [c.r * 255 * 1.6 * k, c.g * 255 * 1.6 * k, c.b * 255 * 1.6 * k]; });
+  return new T.MeshStandardMaterial({ map, vertexColors: true, roughness: rough, metalness: 0 });
+}
+function metalMat(col, rough, met) {
+  const rm = fbTex(256, 3, (x, y) => { const n = X.pfbm(x / 32, y / 32, 8, 9, 4); const v = 255 * Math.min(1, Math.max(0, rough + (n - 0.5) * 0.35)); return [v, v, v]; }, true);
+  const c = new T.Color(col), map = fbTex(256, 2, (x, y) => { const n = X.pfbm(x / 48, y / 48, 5.33, 13, 3); const k = 0.85 + n * 0.3; return [c.r * 255 * 1.4 * k, c.g * 255 * 1.4 * k, c.b * 255 * 1.4 * k]; });
+  return new T.MeshStandardMaterial({ map, roughnessMap: rm, vertexColors: true, roughness: 1, metalness: met === undefined ? 1 : met });
+}
+for (const k in FB) BATCH_MATS[k] = key => (window.TEX && TEX.lib && TEX.lib(key)) || FB[key]();
+
+// ---------- 방 껍데기 ----------
+// o: {x0,x1,z0,z1,h, floor, wall, t, panel(높이), beams:{step}, windows:[{wall:'n'|'s'|'w'|'e', at, w, h, ah, sill, glass}], skip:'s'}
+function room(b, o) {
+  const G = P.geo, t = o.t || 0.6, W = o.x1 - o.x0, D = o.z1 - o.z0, cx = (o.x0 + o.x1) / 2, cz = (o.z0 + o.z1) / 2;
+  b.add(o.floor || 'flagstone', G.cbox(W + 2 * t, 0.2, D + 2 * t, 0, { ax: 0 }), M4(cx, -0.1, cz));
+  b.add('plaster', G.cbox(W + 2 * t, 0.2, D + 2 * t, 0), M4(cx, o.h + 0.1, cz), {});
+  const walls = { n: [o.x0 - t, o.x1 + t, cx, o.z0 - t / 2, 0], s: [o.x0 - t, o.x1 + t, cx, o.z1 + t / 2, 0], w: [-o.z1, -o.z0, o.x0 - t / 2, cz, PI / 2], e: [-o.z1, -o.z0, o.x1 + t / 2, cz, PI / 2] };
+  for (const side of ['n', 's', 'w', 'e']) {
+    if ((o.skip || '').includes(side)) continue;
+    const [u0, u1, px, pz, ry] = walls[side], sh = new T.Shape();
+    sh.moveTo(u0, 0); sh.lineTo(u1, 0); sh.lineTo(u1, o.h); sh.lineTo(u0, o.h); sh.closePath();
+    for (const win of (o.windows || []).filter(q => q.wall === side)) {
+      const uc = side === 'w' || side === 'e' ? -win.at : win.at, pts = P.archShape(win.w, win.h, win.ah).getPoints(10);
+      sh.holes.push(new T.Path(pts.map(p => new T.Vector2(p.x + uc, p.y + win.sill))));
+    }
+    const g = G.ext(sh, t);
+    if (side === 'w' || side === 'e') b.add(o.wall || 'stone', g, M4(px, 0, 0, ry)); else b.add(o.wall || 'stone', g, M4(0, 0, pz, 0));
+  }
+  for (const win of (o.windows || [])) {
+    const rot = { n: 0, s: PI, w: PI / 2, e: -PI / 2 }[win.wall], wx = win.wall === 'w' ? o.x0 : win.wall === 'e' ? o.x1 : win.at, wz = win.wall === 'n' ? o.z0 : win.wall === 's' ? o.z1 : win.at;
+    P.window(b, wx, win.sill, wz, rot, { w: win.w, h: win.h, ah: win.ah, thick: t, glass: win.glass, curtain: win.curtain });
+  }
+  // 판벽, 걸레받이, 처마돌림
+  const ph = o.panel || 0;
+  const sides = [['n', o.x0, o.z0, o.x1, o.z0], ['s', o.x1, o.z1, o.x0, o.z1], ['w', o.x0, o.z1, o.x0, o.z0], ['e', o.x1, o.z0, o.x1, o.z1]];
+  for (const [side, ax, az, bx, bz] of sides) {
+    if ((o.skip || '').includes(side)) continue;
+    const len = Math.hypot(bx - ax, bz - az), ang = Math.atan2(bz - az, bx - ax), mx = (ax + bx) / 2, mz = (az + bz) / 2, nx = Math.sin(ang), nz = -Math.cos(ang);
+    const k = new P.K(b, mx, 0, mz, -ang);
+    if (ph && !(o.noPanel || '').includes(side)) {
+      k.box('oakPanel', 0, ph / 2, 0.02, len, ph, 0.04, { c: 0, t: [0.85, 0.8, 0.75] });
+      for (let x = -len / 2 + 0.6; x < len / 2; x += 0.6) k.box('oak', x, ph / 2, 0.045, 0.06, ph - 0.1, 0.02, { c: 0.005, t: 0.8 });
+      k.box('oak', 0, ph + 0.03, 0.05, len, 0.06, 0.06, { c: 0.012 });
+    }
+    k.box('oak', 0, 0.08, 0.035 + (ph ? 0.04 : 0), len, 0.16, 0.03, { c: 0.008, t: 0.7 });
+    k.box('stoneTrim', 0, o.h - 0.12, 0.08, len, 0.24, 0.16, { c: 0.03 });
+  }
+  if (o.beams) for (let x = o.x0 + o.beams.step / 2; x < o.x1; x += o.beams.step) b.add('oak', G.cbox(0.24, 0.3, D, 0.025), M4(x, o.h - 0.15, cz), {});
+  if (o.beams && o.beams.purlin) b.add('oak', G.cbox(W, 0.22, 0.26, 0.02), M4(cx, o.h - 0.4, cz));
+}
+
+// ---------- 장면 ----------
+const ROOT = new T.Group(); S.add(ROOT);
+const LIGHTS = [], ANIMS = [], LABELS = [];
+let COUNT = 0;
+function put(fn, b, ...a) { COUNT++; return fn(b, ...a); }
+function finish(b) { const g = b.build(); ROOT.add(g); LIGHTS.push(...b.lights); ANIMS.push(...b.anims); return g; }
+let SHAFTS = [];
+function shaft(from, dir, len, w, h, col, k) { const s = ATMOS.shaft(new T.Vector3(...from), new T.Vector3(...dir).normalize(), len, Math.max(w, h) / 2, col, { width: w, height: h, spread: 0.08, intensity: k }); ROOT.add(s); SHAFTS.push(s); return s; }
+function motes(min, max, n, col) { ROOT.add(ATMOS.motes(new T.Box3(new T.Vector3(...min), new T.Vector3(...max)), n, { shafts: SHAFTS, color: col, base: 0.03 })); }
+
+const SCN = {};
+// 줄 세우기
+SCN.lineup = (row) => {
+  const b = new Batch(), list = P.list, per = 10, rows = [];
+  for (let i = 0; i < list.length; i += per) rows.push(list.slice(i, i + per));
+  let z = 0, maxW = 0, zs = [];
+  rows.forEach((r, ri) => {
+    const depth = Math.max(...r.map(q => q[2])) + 1.2;
+    if (row && ri + 1 !== row) { return; }
+    let x = 0;
+    r.forEach(([name, fn, sz, opt]) => {
+      const px = x + sz / 2, y = name === 'wallSconce' || name === 'wallLantern' ? 1.6 : name === 'herbBundle' ? 1.9 : name === 'banner' ? 3.0 : name === 'chandelier' ? 2.8 : name === 'tapestry' ? 2.2 : name === 'painting' || name === 'memoryGlass' ? 0.6 : 0;
+      fn(b, px, y, z, 0, Object.assign({ seed: 11 }, opt || {}));
+      LABELS.push({ text: name, x: px, y: 0.05, z: z + Math.min(sz, 2) * 0.45 + 0.25 });
+      x += sz + 0.6;
+    });
+    zs.push([z, x]); maxW = Math.max(maxW, x);
+    z += depth;
+  });
+  b.add('flagstone', P.geo.cbox(maxW + 6, 0.2, z + 6, 0), M4(maxW / 2, -0.1, z / 2 - 1));
+  finish(b);
+  const cx = maxW / 2, cz = z / 2 - 1;
+  if (row) return { pre: 'lineup', cam: [cx, 3.2, cz + 7.5], look: [cx, 0.9, cz - 0.6], fov: 52, km: 0.6 };
+  return { pre: 'lineup', cam: [cx, 26, cz + 30], look: [cx, 0, cz - 1], fov: 50, km: 0.4 };
+};
+// 서재 모퉁이 6×8 m
+SCN.study = () => {
+  const b = new Batch();
+  room(b, { x0: -3, x1: 3, z0: -4, z1: 4, h: 3.6, floor: 'oak', panel: 1.0, noPanel: 'n', beams: { step: 1.2 }, windows: [{ wall: 'w', at: -2.45, w: 1.0, h: 1.65, ah: 0.6, sill: 1.0, glass: [0.75, 0.9, 1.6] }] });
+  for (const bx of [-1.95, 0, 1.95]) put(P.bookshelf, b, bx, 0, -3.81, 0, { bays: 2, h: 2.75, rail: true, ladder: bx === 0 ? 0.45 : false, seed: bx * 10 + 3 });
+  put(P.fireplace, b, -3, 0, 0.85, PI / 2, { breast: 3.48, over: 'memory', w: 1.2, h: 1.0 });
+  put(P.wallSconce, b, -3, 1.8, -0.75, PI / 2, {}); put(P.wallSconce, b, -3, 1.8, 2.45, PI / 2, { light: 0.9 });
+  put(P.desk, b, -2.1, 0, -2.25, PI / 2, { seed: 5 });
+  put(P.chair, b, -1.3, 0, -2.2, -PI / 2 + 0.18, { seat: 'leather' });
+  put(P.rug, b, -0.55, 0, 0.45, PI / 2 + 0.04, { w: 2.4, l: 3.4, design: 0, layer: true, seed: 4 });
+  put(P.armchair, b, -1.35, 0, 2.55, Math.atan2(-1.6, -1.6), { col: 0x5E1E22 });
+  put(P.armchair, b, -1.45, 0, -0.65, Math.atan2(-1.5, 1.4), { col: 0x2F4A36 });
+  put(P.roundTable, b, -1.15, 0, 1.0, 0.3, { r: 0.42, h: 0.56, dress: { center: 'stackCandle', second: 'teaSet', kinds: ['cup', 'book', 'paper', 'keyring', 'candle'], density: 4 } });
+  put(P.cushion, b, -2.0, 0, 2.0, 0.5, { col: 0xA8843E }); put(P.bookStack, b, -0.55, 0, 2.35, 0.3, { n: 5 });
+  put(P.globe, b, 0.95, 0, -2.75, 0.5, {});
+  put(P.armillarySphere, b, 2.25, 0, -2.95, 0.3, { stand: 'floor', spin: true, r: 0.25 });
+  put(P.cardCatalog, b, 2.62, 0, -1.1, -PI / 2, { light: 0.6 });
+  put(P.lectern, b, 2.05, 0, 0.1, -PI / 2 + 0.3, { candle: true, light: 0.8 });
+  put(P.trunk, b, 2.5, 0, 1.9, -PI / 2, { open: true });
+  put(P.tapestry, b, 3, 3.1, 2.3, -PI / 2, { w: 2.0 });
+  put(P.pottedPlant, b, -2.55, 0, -3.3, 0, { kind: 'fern' });
+  put(P.telescope, b, -2.2, 0, 3.25, 2.3, { pitch: 0.4 });
+  put(P.tuningForkRack, b, -2.75, 1.0, -2.45, PI / 2, { box: false, n: 7 });
+  put(P.birdcage, b, -0.3, 3.6, -1.2, 0.2, { hang: true, crystal: true, light: true });
+  put(P.rug, b, 0.95, 0, -1.0, 0.25, { w: 1.5, l: 2.1, design: 1, seed: 8 });
+  put(P.roundTable, b, 0.95, 0, -1.0, 0.2, { r: 0.45, h: 0.74, dress: { center: 'oilLamp', second: 'openBook', kinds: ['book', 'paper', 'paper', 'inkAndQuill', 'cup', 'magnifier', 'scrolls'], density: 6, light: 0.9 } });
+  put(P.chair, b, 0.55, 0, -0.35, 2.6, { seat: 'velvet', col: 0x2A2F5E });
+  put(P.candleCluster, b, -2.2, 0.06, 1.62, 0, { n: 4, light: 0.8 });
+  put(P.candleCluster, b, 1.0, 0, -3.3, 0, { n: 3 });
+  COUNT += P.clutter(b, { x: 0, y: 0, z: -3.3, w: 5.6, d: 0.55, rot: 0 }, { floor: true, kinds: ['floorStack', 'floorStack', 'scrolls', 'basket', 'candle'], density: 2.5, seed: 9 }).length;
+  COUNT += P.clutter(b, { x: 1.6, y: 0, z: 2.6, w: 1.6, d: 1.0, rot: 0 }, { floor: true, kinds: ['floorStack', 'crate', 'sack', 'scrolls'], density: 1.5, seed: 4 }).length;
+  COUNT += 30; // 책상·벽난로·책장 안의 작은 물건 (desk/mantel/shelf gap items, 대략)
+  finish(b);
+  shaft([-3.15, 2.05, -2.45], [0.866, -0.5, 0.05], 5.2, 0.85, 1.9, 0x9fb8ff, 0.6);
+  motes([-3, 0.2, -4], [3, 3.4, 4], 900, 0xd8e4ff);
+  return { pre: 'interiorWarm', over: { sun: [30, 272], sunCol: 0x9DB4FF, sunI: 1.8, moonlight: 1, envI: 0.16, envTint: 0xb0b8e0, hemiI: 0.03, hemiSky: 0x8090c0, expo: 1.35 }, cam: [2.4, 1.62, 3.5], look: [-1.55, 1.15, -1.6], fov: 52, km: 1.4, focus: [0, 1, 0] };
+};
+// 식당(대강당) 한 구간
+SCN.refectory = () => {
+  const b = new Batch(), wins = [];
+  for (const zc of [-6, -2, 2, 6]) for (const side of ['w', 'e']) if (!(side === 'w' && Math.abs(zc) < 3)) wins.push({ wall: side, at: zc, w: 1.6, h: 3.4, ah: 1.0, sill: 4.4, glass: side === 'w' ? [0.55, 0.6, 0.95] : [0.3, 0.36, 0.6] });
+  room(b, { x0: -7, x1: 7, z0: -9, z1: 9, h: 10, panel: 3.0, beams: { step: 2.0, purlin: true }, windows: wins });
+  for (const tx of [-2.6, 2.6]) {
+    put(P.longTable, b, tx, 0, 0, PI / 2, { len: 12, w: 1.0, seed: tx > 0 ? 3 : 8, runnerCol: tx > 0 ? 0x2A2F5E : 0x5E1E22 });
+    for (const s of [-1, 1]) for (const bz of [-4.4, -1.4, 1.6, 4.6]) put(P.bench, b, tx + s * 0.78, 0, bz + (s > 0 ? 0.15 : -0.1), PI / 2, { len: 2.8 });
+  }
+  put(P.longTable, b, 0, 0, -7.6, 0, { len: 6, w: 1.0, seed: 21, runnerCol: 0x2A2F5E });
+  for (const cz of [-3.5, 3.5]) for (const cx of [-2.6, 2.6]) if ((cz < 0) === (cx < 0)) put(P.chandelier, b, cx, 10, cz, 0.3, { r: 1.15, drop: 5.2, n: 16, seed: cz });
+  put(P.chandelier, b, 0, 10, -1, 0, { r: 1.0, drop: 4.8, n: 12, light: 1.6 });
+  put(P.fireplace, b, -7, 0, 0, PI / 2, { w: 2.0, h: 1.5, d: 0.75, breast: 4.0, over: 'none', light: 3.5 });
+  for (const bz of [-8, -4, 0, 4, 8]) { put(P.banner, b, 7, 7.9, bz, -PI / 2, { w: 1.1, h: 3.2 }); if (Math.abs(bz) > 1) put(P.banner, b, -7, 7.9, bz, PI / 2, { w: 1.1, h: 3.2 }); }
+  for (const bz of [-6, -2, 2, 6]) { put(P.wallSconce, b, 7, 2.5, bz, -PI / 2, { n: 2 }); if (Math.abs(bz) > 3) put(P.wallSconce, b, -7, 2.5, bz, PI / 2, { n: 2 }); }
+  put(P.lectern, b, 3.6, 0, -8.0, 0.4, { candle: true });
+  put(P.bell, b, 0, 10, -5.5, 0, { hang: true, r: 0.45 }); put(P.bell, b, -5, 10, 6.5, 0, { hang: true, r: 0.35 });
+  for (const bz of [-1, 1]) for (const s of [-1, 1]) put(P.potionShelf, b, s * 5.6, 0, bz * 8.83, bz < 0 ? 0 : PI, { w: 1.2, h: 1.9 });
+  put(P.statue, b, -5.6, 0, -8.1, 0.3, {}); put(P.armorStand, b, 5.9, 0, 7.6, -2.6, {});
+  for (const s of [-1, 1]) { put(P.barrel, b, s * 6.3, 0, 3.2, 0, {}); put(P.crate, b, s * 6.3, 0, 4.0, 0.2, { s: 0.55 }); }
+  put(P.rug, b, 0, 0, -7.6, 0, { w: 6.5, l: 2.6, design: 1 });
+  COUNT += 120;
+  finish(b);
+  for (const zc of [-6, 6]) shaft([-7.2, 6.4, zc], [0.82, -0.52, 0.22], 13, 1.4, 3.6, 0x8aa0d8, 0.26);
+  motes([-7, 0.3, -9], [7, 9, 9], 1400, 0xd8e4ff);
+  return { pre: 'interiorWarm', over: { sun: [24, 278], sunCol: 0x7F96CC, sunI: 1.6, envI: 0.2, envTint: 0xb8b8d8, hemiI: 0.04, hemiSky: 0x8090c0, expo: 1.3 }, cam: [0.3, 1.75, 8.3], look: [-0.9, 2.3, -6], fov: 55, km: 1.4, focus: [0, 2, 0] };
+};
+// 기숙사 방
+SCN.dorm = () => {
+  const b = new Batch();
+  room(b, { x0: -3, x1: 3, z0: -4, z1: 4, h: 3.4, floor: 'oak', panel: 0.9, beams: { step: 1.2 }, windows: [{ wall: 'w', at: 0.6, w: 1.2, h: 1.5, ah: 0.6, sill: 0.95, curtain: 0x2A2F5E, glass: [0.75, 0.9, 1.6] }] });
+  put(P.bed, b, -0.95, 0, -2.85, 0, { curtain: 0x5E1E22 });
+  put(P.nightstand, b, 0.48, 0, -3.55, 0, {});
+  put(P.trunk, b, -0.95, 0, -1.4, 0, {});
+  put(P.wardrobe, b, 2.68, 0, -2.3, -PI / 2, { open: true });
+  put(P.windowSeat, b, -2.72, 0, 0.6, PI / 2, { w: 1.3 });
+  put(P.rug, b, -0.2, 0, 0.3, 0.06, { w: 2.0, l: 2.8, design: 1, layer: true });
+  put(P.fireplace, b, 3, 0, 1.4, -PI / 2, { w: 1.0, h: 0.85, d: 0.45, breast: 3.28, over: 'painting', light: 2.4 });
+  put(P.desk, b, -2.5, 0, 2.6, PI / 2, { hutch: true, w: 1.3, seed: 2 });
+  put(P.chair, b, -1.75, 0, 2.6, -PI / 2 - 0.3, { seat: 'velvet', cloth: 0x2A2F5E });
+  put(P.bookshelf, b, 2.62, 0, -0.45, -PI / 2, { bays: 1, h: 2.2, d: 0.32 });
+  put(P.armchair, b, 1.6, 0, 1.8, -PI / 2 + 0.5, { col: 0x3E4A2A });
+  put(P.cushion, b, 0.8, 0, 1.4, 0.4, { col: 0xA8843E, w: 0.5, d: 0.5 }); put(P.cushion, b, 0.75, 0.12, 1.45, 1.1, { col: 0x5E1E22, w: 0.36, d: 0.36 });
+  put(P.pottedPlant, b, -2.6, 0, -0.55, 0, {});
+  put(P.bookStack, b, -2.6, 0.54, 0.25, 0.3, { n: 3, candle: true, light: 0.5 });
+  put(P.herbBundle, b, 1.5, 3.25, -3.7, 0, { n: 3 });
+  put(P.wallSconce, b, -3, 1.75, 2.2, PI / 2, { light: 0.8 });
+  COUNT += P.clutter(b, { x: 0.3, y: 0, z: -1.0, w: 1.2, d: 0.8, rot: 0.1 }, { floor: true, kinds: ['floorStack', 'basket', 'scrolls', 'candle'], density: 3, seed: 3 }).length;
+  COUNT += 25;
+  finish(b);
+  shaft([-3.15, 1.75, 0.6], [0.83, -0.55, -0.1], 4.6, 1.05, 1.7, 0x9fb8ff, 0.6);
+  motes([-3, 0.2, -4], [3, 3.2, 4], 700, 0xd8e4ff);
+  return { pre: 'interiorWarm', over: { sun: [33, 268], sunCol: 0x9DB4FF, sunI: 1.8, moonlight: 1, envI: 0.16, envTint: 0xb0b8e0, hemiI: 0.03, hemiSky: 0x8090c0, expo: 1.35 }, cam: [2.35, 1.6, 3.55], look: [-1.25, 1.05, -1.8], fov: 54, km: 1.4, focus: [0, 1, 0] };
+};
+// 대정원 (해 질 녘): 엔진 혼천의 분수, 기둥 등, 의자, 항아리, 낮은 담, 깃대
+SCN.court = () => {
+  const b = new Batch();
+  b.add('flagstone', P.geo.cbox(70, 0.2, 70, 0), M4(0, -0.1, 0));
+  put(P.engineFountain, b, 0, 0, 0, 0.2, { lit: 5 });
+  for (let i = 0; i < 8; i++) { const a = i / 8 * TAU + PI / 8; put(P.lanternPost, b, Math.sin(a) * 7.5, 0, Math.cos(a) * 7.5, a, { arms: i % 2 ? 2 : 1 }); }
+  for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; put(P.gardenBench, b, Math.sin(a) * 5.6, 0, Math.cos(a) * 5.6, a + PI, { kind: i % 2 ? 'iron' : 'stone' }); }
+  for (let i = 0; i < 4; i++) { const a = i / 4 * TAU + PI / 4; put(P.urn, b, Math.sin(a) * 4.4, 0, Math.cos(a) * 4.4, 0, { seed: i }); }
+  for (const s of [-1, 1]) { put(P.lowWall, b, s * 12, 0, 0, PI / 2, { len: 14 }); put(P.lowWall, b, 0, 0, s * 12, 0, { len: 10 }); put(P.planter, b, s * 5, 0, -11.2, 0, { len: 2.4 }); }
+  for (const [x, z] of [[-10, -10], [10, -10], [-10, 10], [10, 10]]) put(P.flagPole, b, x, 0, z, 0.3, {});
+  put(P.noticeBoard, b, 7.5, 0, 9.5, -0.6, {}); put(P.railing, b, -6, 0, 11.2, 0, { len: 4 });
+  for (const [x, z, r] of [[-15, -9, 0], [15, -6, 0], [-14, 14, 0]]) { b.add('stone', P.geo.cbox(8, 9, 6, 0.05), M4(x, 4.5, z - 3, r)); }
+  put(P.cart, b, -8, 0, 6, 0.8, { load: 'sacks' }); put(P.barrel, b, -9.5, 0, 4.6, 0, {}); put(P.crate, b, -9.4, 0, 3.8, 0.3, {});
+  COUNT += 10;
+  finish(b);
+  return { pre: 'goldenHour', over: { sun: [14, 250] }, cam: [9.5, 2.1, 12.5], look: [0, 2.6, -0.5], fov: 50, km: 0.7, focus: [0, 2, 0], out: 1 };
+};
+// 마을 장터 (저녁)
+SCN.town = () => {
+  const b = new Batch();
+  b.add('flagstone', P.geo.cbox(60, 0.2, 60, 0), M4(0, -0.1, 0));
+  for (const [x, z, r, w, h] of [[-9, -8, 0, 10, 7], [6, -9, 0, 9, 8], [-13, 4, PI / 2, 12, 6.5], [13, 2, -PI / 2, 12, 7]]) {
+    const k = new P.K(b, x, 0, z, r);
+    k.box('plaster', 0, h / 2, 0, w, h, 0.6, { c: 0.02 }); k.box('stone', 0, 0.6, 0.02, w + 0.1, 1.2, 0.66, { c: 0.02 });
+    for (let i = 0; i < 3; i++) { const wx = -w / 2 + (i + 0.5) * w / 3; P.window(b, ...k.w(wx, 3.4, 0.3), r, { w: 0.9, h: 1.4, ah: 0.4, glass: i % 2 ? [1.8, 1.1, 0.5] : [0.35, 0.4, 0.6], thick: 0.15 }); P.wallLantern(b, ...k.w(wx + w / 6, 2.6, 0.3), r, { light: i === 1 ? 1.2 : 0.8 }); }
+    k.box('oak', 0, 1.2, 0.33, 1.1, 2.3, 0.06, { c: 0.01 });
+  }
+  put(P.marketStall, b, -6, 0, -4.2, 0, { goods: 'produce', light: 0.8 }); put(P.marketStall, b, -2.9, 0, -4.4, 0.05, { goods: 'fabric' }); put(P.marketStall, b, 0.4, 0, -4.2, -0.04, { goods: 'curios', light: 0.8 });
+  put(P.marketStall, b, 4.2, 0, -4.6, 0.1, { goods: 'bakery' }); put(P.marketStall, b, -9.5, 0, 0.2, PI / 2, { goods: 'herbs', light: 0.8 });
+  put(P.well, b, 0.5, 0, 2.2, 0.3, {});
+  put(P.cart, b, 5.5, 0, 1.0, -0.7, { load: 'barrels' });
+  for (let i = 0; i < 4; i++) put(P.barrel, b, 8.5 + (i % 2) * 0.65, 0, -2 + Math.floor(i / 2) * 0.65, i, {});
+  for (let i = 0; i < 3; i++) put(P.crate, b, 7.4, i * 0.43, -3.6, i * 0.3, { s: 0.6 });
+  for (let i = 0; i < 4; i++) put(P.sack, b, -4 + i * 0.5, 0, -2.4, i, {});
+  put(P.flagPole, b, -3.5, 0, 5.5, 0.4, {}); put(P.noticeBoard, b, 3.5, 0, 6, -0.4, {});
+  put(P.lanternPost, b, -1.2, 0, -0.6, 0, { arms: 2 }); put(P.lanternPost, b, 3.2, 0, 3.5, 0, {});
+  put(P.gardenBench, b, -5.5, 0, 3.5, 0.6, { kind: 'stone' }); put(P.urn, b, -7, 0, 5.2, 0, { pedestal: false });
+  for (let i = 0; i < 5; i++) put(P.basket, b, -6.6 + i * 0.4, 0, -2.9, i, { fill: ['fruit', 'bread', 'herbs', 'cloth', 'fruit'][i] });
+  COUNT += 60;
+  finish(b);
+  return { pre: 'dusk', over: { sun: [-1, 240] }, cam: [3.5, 1.75, 9.5], look: [-2.5, 1.6, -3], fov: 52, km: 1.3, focus: [0, 1, 0], out: 1 };
+};
+
+// ---------- 시작 ----------
+const hash = (location.hash || '#study').slice(1), mrow = hash.match(/^lineup(\d+)$/), name = mrow ? 'lineup' : hash;
+const bar = document.getElementById('bar');
+for (const k of ['lineup', 'lineup1', 'lineup2', 'lineup3', 'lineup4', 'lineup5', 'lineup6', 'lineup7', 'lineup8', 'study', 'refectory', 'dorm', 'court', 'town']) { const a = document.createElement('a'); a.href = '#' + k; a.textContent = k; if (k === hash) a.className = 'on'; a.onclick = () => setTimeout(() => location.reload(), 10); bar.appendChild(a); }
+const t0 = performance.now();
+const shot = (SCN[name] || SCN.study)(mrow ? +mrow[1] : 0);
+const buildMs = Math.round(performance.now() - t0);
+if (shot.pre === 'lineup') ATMOS.preset('day', 0, { sun: [42, 210], fogDen: 0.0002, fogH: 0, expo: 0.95, vig: 0.15, split: 0.05 });
+else ATMOS.preset(shot.pre, 0, shot.over || {});
+const cam = GFX.camera;
+cam.fov = shot.fov; cam.updateProjectionMatrix();
+cam.position.set(...shot.cam); cam.lookAt(...shot.look);
+const focus = new T.Vector3(...(shot.focus || shot.look));
+// 빛 풀: 화면 안 + 가까운 + 불 우선으로 8개
+const _fr = new T.Frustum(), _pm = new T.Matrix4(), _v = new T.Vector3();
+function assignLights(t) {
+  cam.updateMatrixWorld(); _pm.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse); _fr.setFromProjectionMatrix(_pm);
+  const sc = LIGHTS.map(l => { _v.set(l.x, l.y, l.z); const d = _v.distanceTo(cam.position), vis = _fr.containsPoint(_v) || d < (l.d || 6) * 0.7; return [l, (l.fire ? 3 : 1) * (l.k || 1) * (vis ? 1 : 0.3) / (1 + d * d * 0.03)]; }).sort((a, b) => b[1] - a[1]);
+  for (let i = 0; i < GFX.pool.length; i++) {
+    const p = GFX.pool[i], e = sc[i];
+    if (!e) { p.intensity = 0; continue; }
+    const l = e[0], ph = (l.x * 7.1 + l.z * 3.3) % 10, f = l.flicker === false ? 1 : 1 + (l.fire ? 0.15 : 0.08) * (Math.sin(t * 7.3 + ph) * 0.6 + Math.sin(t * 13.7 + ph * 2) * 0.4);
+    p.position.set(l.x + (l.fire ? Math.sin(t * 5 + ph) * 0.04 : 0), l.y, l.z); p.color.setHex(l.c); p.intensity = (l.k || 1) * f * (shot.km || 1); p.distance = l.d || 8; p.decay = 2;
+  }
+}
+// 라벨
+const LBL = document.getElementById('labels');
+const lblEls = LABELS.map(l => { const d = document.createElement('div'); d.textContent = l.text; LBL.appendChild(d); return d; });
+function placeLabels() { const w = innerWidth, h = innerHeight; LABELS.forEach((l, i) => { _v.set(l.x, l.y, l.z).project(cam); const e = lblEls[i]; if (_v.z > 1) { e.style.display = 'none'; return; } e.style.display = ''; e.style.left = ((_v.x * 0.5 + 0.5) * w) + 'px'; e.style.top = ((-_v.y * 0.5 + 0.5) * h) + 'px'; }); }
+// 통계
+function stats() { let tris = 0, meshes = 0; ROOT.traverseVisible(o => { if (o.isMesh || o.isPoints) { meshes++; const g = o.geometry; tris += (g.index ? g.index.count : g.attributes.position.count) / (o.isPoints ? 1 : 3); } }); return { tris: Math.round(tris), meshes }; }
+const ST = stats();
+const info = document.getElementById('info');
+GFX.renderer.info.autoReset = false;
+window.__frames = 0;
+let last = performance.now(), envOK = false;
+Promise.all([ATMOS.whenLoaded(), window.TEX && TEX.ready ? TEX.ready() : 0]).then(() => { envOK = true; window.__texMs = Math.round(performance.now()); });
+setTimeout(() => { envOK = true; }, 200000);
+let stopped = false;
+function loop(now) {
+  if (stopped) return;
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const t = now / 1000;
+  for (const a of ANIMS) a(t);
+  assignLights(t);
+  ATMOS.update(dt, focus);
+  GFX.renderer.info.reset();
+  ATMOS.render();
+  if (LABELS.length) placeLabels();
+  window.__frames++;
+  const ri = GFX.renderer.info.render;
+  window.__stats = { scene: hash, props: COUNT, tris: ST.tris, meshes: ST.meshes, calls: ri.calls, frameTris: ri.triangles, lights: LIGHTS.length, buildMs, texMs: window.__texMs, tex: window.TEX && TEX.stats ? TEX.stats().generated : -1 };
+  if (envOK && window.__frames > 3) { window.__shotReady = true; if (SHOT) stopped = true; }
+  info.textContent = `${hash} · 소품 ${COUNT} · 삼각형 ${ST.tris} · 메쉬 ${ST.meshes} · 호출/프레임 ${ri.calls} · 빛 표시 ${LIGHTS.length} · 만들기 ${buildMs} ms`;
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

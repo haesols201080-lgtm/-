@@ -41,6 +41,8 @@
 if (/shot/.test(location.search)) document.body.classList.add('shot');
 initGfx();
 const S = GFX.scene;
+// 이 페이지에는 등불이 없다: 쓰지 않는 점광원 풀을 떼어 셰이더를 작게 한다 (소프트웨어 GL 컴파일 시간)
+for (const p of GFX.pool) S.remove(p); S.remove(GFX.rodLight);
 const name = (location.hash || '#grove').slice(1);
 
 // ---------- 땅 ----------

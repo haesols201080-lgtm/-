@@ -7,7 +7,7 @@
 'use strict';
 (function () {
   const T = THREE;
-  const legacyAnim = typeof animRig === 'function' ? animRig : null;
+  const legacyAnim = typeof window.animRig === 'function' ? window.animRig : null;   // actors.js의 원래 함수
   const HERO = window.HERO = { count: 0 };
 
   // ===================================================================
@@ -76,7 +76,7 @@
   function skinMat(hex) {
     return memo('skin' + hex, () => { const c = C(hex); return new T.MeshStandardMaterial({ color: c, roughness: 0.56, emissive: c.clone().multiply(C('#ff9a80')), emissiveIntensity: 0.045 }); });
   }
-  function hairMat() { return MAT.hair || (MAT.hair = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.46, metalness: 0.0 })); }
+  function hairMat() { return MAT.hair || (MAT.hair = new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.0 })); }
   function maskMat(hex) { return memo('mask' + hex, () => new T.MeshStandardMaterial({ color: C(hex), roughness: 0.32, metalness: 0.05 })); }
   // 영대: 정점색(바탕) × 무늬, 룬은 자체광 지도 (빛나는 판이면 시안)
   function stoleTex() {
@@ -281,13 +281,13 @@
     const sp = { key, seed, R, ren, ghost, child, elder, fem, town, uniform, mira, oswin, kass };
     sp.H = ren ? 1 : (fem ? 0.955 : 1) * (0.975 + R() * 0.05);
     sp.legK = child ? 0.93 : 1 + (R() - 0.5) * 0.03; sp.torK = 1; sp.neckK = child ? 0.9 : fem ? 1.04 : 1;
-    sp.shK = (fem ? 0.9 : 1) * (1 + (R() - 0.5) * 0.05); sp.hipK = fem ? 1.06 : 1; sp.wK = (elder ? 1.05 : 1) * (1 + (R() - 0.5) * 0.07); sp.headK = child ? 1.04 : 1;
+    sp.shK = (fem ? 0.9 : 1) * (1 + (R() - 0.5) * 0.05); sp.hipK = fem ? 1.06 : 1; sp.wK = (elder ? 1.05 : 1) * (1 + (R() - 0.5) * 0.07); sp.headK = child ? 1.08 : 1.04;
     if (ren) { sp.shK = 1; sp.wK = 1; sp.legK = 1; }
     sp.D = dims(sp);
     // 색
     const trim = look.trim || (uniform ? (ren ? '#4A6A8A' : pick(R, TRIMS)) : null);
     let robe, lining, piping;
-    if (ren && cloak === '#2f7f7a') { robe = '#1F3A4A'; lining = '#7a6440'; piping = '#E7DFCF'; }
+    if (ren && cloak === '#2f7f7a') { robe = '#1F3A4A'; lining = '#5e4a30'; piping = '#E7DFCF'; }
     else if (uniform) { robe = '#262A3F'; lining = trim; piping = hsl(trim, 0.9, 1.35); }
     else { robe = hsl(cloak, town ? 0.6 : 0.72, town ? 0.92 : 0.86); lining = trim || hsl(cloak, 0.55, 0.6, 0.03); piping = trim ? hsl(trim, 0.9, 1.3) : (town ? hsl(cloak, 0.5, 0.7) : '#cfc2a4'); }
     const shirt = hsl(look.body || '#e8e0cf', 0.7, ren ? 0.95 : 0.93);
@@ -301,7 +301,7 @@
     else if (ren) { stole = '#CFC2A4'; stole2 = '#1F3A4A'; }
     else if (!town && !ghost && R() < (elder ? 0.45 : 0.2)) { stole = hsl(trim || pick(R, TRIMS), 0.9, 1.05); stole2 = '#d8cbb0'; }
     sp.stole = ghost ? null : stole; sp.stoleGlow = stoleGlow;
-    sp.skin = look.skin || (ren ? '#ecc8a8' : oswin ? '#f0d0b0' : SKINS[Math.floor(R() * SKINS.length)]);
+    sp.skin = look.skin || (ren ? '#e3bb98' : oswin ? '#f0d0b0' : SKINS[Math.floor(R() * SKINS.length)]);
     sp.hairC = hsl(hairHex, 0.9, 1);
     sp.mask = look.mask ? hsl(look.mask, 0.8, 1.05) : null; sp.crack = !!look.crack;
     sp.hood = ghost || look.mask ? 'up' : ren ? 'down' : town ? (R() < 0.45 ? 'down' : null) : R() < (elder ? 0.3 : 0.42) ? 'down' : null;
@@ -328,17 +328,17 @@
     sp.beard = oswin || (elder && !fem && R() < 0.6) ? 'full' : (!fem && !child && !ren && R() < 0.12) ? 'short' : null;
     // 머리(두개골) 생김새
     const jit = (a, b) => lp(a, b, R());
-    sp.headP = ren ? { w: 1, jaw: 1.02, chinW: 1, chin: 1.05, nose: 1.0, noseW: 1, brow: 1, cheek: 1, lip: 0.95, sq: 2.55 }
+    sp.headP = ren ? { w: 1, jaw: 0.95, chinW: 0.86, chin: 1.1, nose: 1.0, noseW: 1, brow: 1, cheek: 1, lip: 0.95, sq: 2.55 }
       : child ? { w: 1.03, jaw: 0.9, chinW: 0.95, chin: 0.8, nose: 0.72, noseW: 0.9, brow: 0.6, cheek: 1.2, lip: 1, sq: 2.3 }
-        : { w: +jit(0.96, 1.03).toFixed(2), jaw: +(fem ? jit(0.88, 0.96) : jit(0.98, 1.07)).toFixed(2), chinW: +jit(0.9, 1.08).toFixed(2), chin: +jit(0.85, 1.15).toFixed(2), nose: +((fem ? 0.86 : 1) * jit(0.88, 1.15) * (elder ? 1.12 : 1)).toFixed(2), noseW: +jit(0.9, 1.15).toFixed(2), brow: +(fem ? 0.75 : jit(0.9, 1.25)).toFixed(2), cheek: +jit(0.8, 1.2).toFixed(2), lip: +((fem ? 1.12 : 0.95) * (elder ? 0.75 : 1)).toFixed(2), sq: +jit(2.35, 2.65).toFixed(2) };
+        : { w: +jit(0.96, 1.03).toFixed(2), jaw: +(fem ? jit(0.86, 0.93) : jit(0.92, 1.0)).toFixed(2), chinW: +jit(0.82, 0.98).toFixed(2), chin: +jit(0.85, 1.15).toFixed(2), nose: +((fem ? 0.86 : 1) * jit(0.88, 1.15) * (elder ? 1.12 : 1)).toFixed(2), noseW: +jit(0.9, 1.15).toFixed(2), brow: +(fem ? 0.75 : jit(0.9, 1.25)).toFixed(2), cheek: +jit(0.8, 1.2).toFixed(2), lip: +((fem ? 1.12 : 0.95) * (elder ? 0.75 : 1)).toFixed(2), sq: +jit(2.35, 2.65).toFixed(2) };
     // 그린 얼굴
     const sk = srgb(sp.skin), hc = srgb(sp.hairC);
-    const browC = HSL(sp.hairC).l > 0.55 ? hc.map(v => v * 0.75) : hc.map(v => v * 0.82);
+    const browC = HSL(sp.hairC).l > 0.55 ? hc.map(v => v * 0.72) : hc.map(v => v * 0.62);
     const lipC = [lp(sk[0], 190, 0.35), lp(sk[1], 92, 0.35), lp(sk[2], 88, 0.35)];
-    sp.face = ren ? { ex: 0.0315, ew: 0.0165, eh: 0.0068, el: 0.0043, tilt: 0.0009, ir: 0.0066, iris: srgb('#5c4330'), by: 0.0195, ba: 0.0026, bt: 0.0036, browC: srgb('#2a1c14'), my: -0.066, mw: 0.0215, lu: 0.0032, ll: 0.0046, lipC, blush: 0.13, lash: 0.0017, lashC: [26, 16, 12], fem: 0, age: 0, freck: 6, stub: 0, sclera: [236, 230, 222], skin: sk, seed: 11 }
+    sp.face = ren ? { ex: 0.032, ew: 0.0172, eh: 0.0084, el: 0.0049, tilt: 0.001, ir: 0.0071, iris: srgb('#6a4a2c'), by: 0.0205, ba: 0.0024, bt: 0.0046, browC: srgb('#24170f'), my: -0.066, mw: 0.022, lu: 0.0034, ll: 0.005, lipC: [lp(sk[0], 170, 0.4), lp(sk[1], 85, 0.4), lp(sk[2], 75, 0.4)], blush: 0.13, lash: 0.0017, lashC: [26, 16, 12], fem: 0, age: 0, freck: 6, stub: 0, sclera: [236, 230, 222], skin: sk, seed: 11 }
       : {
-        ex: 0.0315 * (child ? 1.02 : 1), ew: +(jit(0.0148, 0.0168) * (child ? 1.12 : 1)).toFixed(4), eh: +(jit(0.006, 0.0074) + fem * 0.0006).toFixed(4), el: +jit(0.0038, 0.0047).toFixed(4), tilt: +jit(-0.0004, 0.0016).toFixed(4),
-        ir: +(jit(0.006, 0.0067) * (child ? 1.1 : 1)).toFixed(4), iris: srgb(pick(R, IRIS)), by: +jit(0.018, 0.022).toFixed(4), ba: +jit(0.0012, 0.0036).toFixed(4), bt: +((fem ? jit(0.0022, 0.003) : jit(0.003, 0.0044)) * (child ? 0.8 : 1)).toFixed(4),
+        ex: 0.0318 * (child ? 1.02 : 1), ew: +(jit(0.0158, 0.0175) * (child ? 1.1 : 1)).toFixed(4), eh: +(jit(0.0074, 0.0088) + fem * 0.0007).toFixed(4), el: +jit(0.0044, 0.0052).toFixed(4), tilt: +jit(-0.0004, 0.0016).toFixed(4),
+        ir: +(jit(0.0066, 0.0072) * (child ? 1.08 : 1)).toFixed(4), iris: srgb(pick(R, IRIS)), by: +jit(0.018, 0.022).toFixed(4), ba: +jit(0.0012, 0.0036).toFixed(4), bt: +((fem ? jit(0.0028, 0.0036) : jit(0.0038, 0.005)) * (child ? 0.85 : 1)).toFixed(4),
         browC, my: -0.066, mw: +jit(0.019, 0.0235).toFixed(4), lu: +((fem ? 0.0036 : 0.0029) * (elder ? 0.7 : 1)).toFixed(4), ll: +((fem ? 0.0054 : 0.0045) * (elder ? 0.75 : 1)).toFixed(4), lipC: fem ? [lp(sk[0], 185, 0.45), lp(sk[1], 80, 0.45), lp(sk[2], 85, 0.45)] : lipC,
         blush: +((child ? 0.2 : fem ? 0.16 : 0.1) * jit(0.7, 1.2)).toFixed(3), lash: fem ? 0.0021 : 0.0016, lashC: [24, 15, 12], fem, age: elder ? 1 : 0,
         freck: R() < 0.25 ? 10 + (R() * 30 | 0) : 0, stub: !fem && !child && !elder && R() < 0.3 ? 0.12 : 0, sclera: [234, 228, 220], skin: sk, seed: seed % 997,
@@ -363,8 +363,8 @@
   }
   function capeRings(D, sp) {
     const h = D.s, k = sp.shK, f = sp.fem * 0.012;
-    return [[D.neckY + 0.05 * h, 0.071, 0.063, 0.068, 0], [D.neckY + 0.032 * h, 0.13, 0.093, 0.104, 0], [D.shY + 0.042 * h, 0.215 * k, 0.128 + f, 0.132, 0],
-      [D.shY - 0.03 * h, 0.248 * k, 0.154 + f, 0.158, 0.22], [D.shY - 0.112 * h, 0.258 * k, 0.166 + f, 0.172, 0.36], [D.shY - 0.124 * h, 0.259 * k, 0.167 + f, 0.174, 0.38], [D.shY - 0.14 * h, 0.26 * k, 0.168 + f, 0.176, 0.4]]
+    return [[D.neckY + 0.05 * h, 0.071, 0.063, 0.068, 0], [D.neckY + 0.032 * h, 0.13, 0.093, 0.104, 0], [D.shY + 0.042 * h, 0.205 * k, 0.126 + f, 0.13, 0],
+      [D.shY - 0.03 * h, 0.232 * k, 0.15 + f, 0.155, 0.22], [D.shY - 0.112 * h, 0.24 * k, 0.162 + f, 0.168, 0.36], [D.shY - 0.124 * h, 0.241 * k, 0.163 + f, 0.17, 0.38], [D.shY - 0.14 * h, 0.242 * k, 0.164 + f, 0.172, 0.4]]
       .map(([y, w, ff, b, a0]) => ({ c: [0, y, 0], w: w * h * sp.wK, f: ff * h * sp.wK, b: b * h * sp.wK, a0 }));
   }
   // 겉면(망토·몸판)의 단면: 영대·가방끈이 그 위에 얹힌다
@@ -376,6 +376,8 @@
     const c = ringAt(cr.slice().reverse(), y);
     return { w: Math.max(a.w, c.w), f: Math.max(a.f, c.f), b: Math.max(a.b, c.b) };
   }
+  // 가방 자리 (몸 기준): 왼 엉덩이 옆 조금 뒤, 치마 바깥
+  function satPos(D, sp) { const r = Math.max(outerAt(D, sp, D.hipY).w, sp.hemW * 0.62 * D.s) + 0.06 * D.s; return [-r * 0.93, D.hipY - 0.02 * D.s, -0.075 * D.s]; }
   function torsoW(D) {
     const h = D.s;
     return p => {
@@ -412,9 +414,9 @@
       const tr = torsoRings(D, sp);
       // 몸통: 셔츠·조끼·허리띠·바지 윗부분
       const vneck = y => ss(D.chestY + 0.02 * h, D.neckY + 0.02 * h, y) * 0.06 * h;
-      gb.add(loft(tr, { seg: 24, warp: frontWarp }), { w: tw, pid: p => p.y < D.waistY - 0.034 * h ? PI_.TROU : p.y < D.waistY - 0.004 * h ? PI_.BELT : sp.vest && !(p.z > 0 && Math.abs(p.x) < vneck(p.y)) ? PI_.VEST : PI_.SHIRT });
+      gb.add(loft(tr, { seg: 20, warp: frontWarp }), { w: tw, pid: p => p.y < D.waistY - 0.034 * h ? PI_.TROU : p.y < D.waistY - 0.004 * h ? PI_.BELT : sp.vest && !(p.z > 0 && Math.abs(p.x) < vneck(p.y)) ? PI_.VEST : PI_.SHIRT });
       const front = y => ringAt(tr, y).f;
-      if (sp.vest) for (let i = 0; i < 4; i++) { const y = D.waistY + (0.035 + i * 0.042) * h; gb.add(sphereG(0.0062 * h, 6, 4), { m: M4(0, y, front(y) + 0.002 * h), w: tw, pid: PI_.BRASS }); }
+      if (sp.vest) for (let i = 0; i < 4; i++) { const y = D.waistY + (0.035 + i * 0.042) * h; gb.add(sphereG(0.0062 * h, 5, 3), { m: M4(0, y, front(y) + 0.002 * h), w: tw, pid: PI_.BRASS }); }
       gb.add(new T.BoxGeometry(0.036 * h, 0.026 * h, 0.008 * h), { m: M4(0, D.waistY - 0.019 * h, front(D.waistY - 0.019 * h) + 0.003 * h), w: tw, pid: PI_.BRASS });
       // 셔츠 깃
       const col = loft([{ c: [0, D.neckY - 0.008 * h, 0.002], w: 0.066 * h, f: 0.062 * h, b: 0.06 * h, a0: 0.42 }, { c: [0, D.neckY + 0.034 * h, 0.004], w: 0.06 * h, f: 0.058 * h, b: 0.057 * h, a0: 0.5 }], { seg: 14 });
@@ -423,23 +425,24 @@
       const by = [D.waistY - 0.05 * h, D.waistY + 0.02 * h, D.waistY + 0.10 * h, D.chestY + 0.05 * h, D.chestY + 0.12 * h, D.shY - 0.035 * h, D.shY + 0.014 * h, D.neckY + 0.03 * h];
       const gap = y => lp(0.085, 0.048, ss(D.waistY, D.neckY, y)) * h * (sp.town ? 0.6 : 1);
       const br = by.map((y, i) => { const r = ringAt(tr, y), o = (0.014 + (i < 2 ? 0.006 : 0)) * h, w = r.w + o; return { c: [0, y, 0], w, f: r.f + o, b: r.b + o, a0: Math.asin(Math.min(0.92, gap(y) / w)) }; });
-      const cols = edgeCols(20, 0.014), isEdge = (a, b) => b < 0.0141 || b > 0.9859;
+      const cols = edgeCols(16, 0.014), isEdge = (a, b) => b < 0.0141 || b > 0.9859;
       const bod = loft(br, { cols });
-      gb.add(bod, { w: tw, pid: (p, a, b) => isEdge(a, b) ? PI_.TRIM : PI_.ROBE }); gb.add(innerOf(bod, 0.004 * h), { w: tw, pid: (p, a, b) => isEdge(a, b) ? PI_.TRIM : PI_.LINE });
+      gb.add(bod, { w: tw, pid: (p, a, b) => isEdge(a, b) ? PI_.TRIM : PI_.ROBE });
+      for (const [c0, c1] of [[0, 0.2], [0.8, 1]]) gb.add(innerOf(loft(br, { cols: cols.filter(c => c >= c0 - 1e-6 && c <= c1 + 1e-6) }), 0.004 * h), { w: tw, pid: (p, a, b) => isEdge(a, b) ? PI_.TRIM : PI_.LINE });   // 안감은 앞섶 근처만 보인다
       // 위팔 소매(로브), 아래팔 셔츠
       for (const sg of [-1, 1]) {
         const L = sg < 0, x = sg * D.shX;
-        const us = [[-0.047, 0.004], [-0.03, 0.045], [-0.004, 0.066], [0.06, 0.074], [0.15, 0.072], [D.upper / h - 0.02, 0.07], [D.upper / h + 0.035, 0.072]];
-        gb.add(loft(us.map(([s, r]) => ({ c: [x, D.shY - s * h, D.shZ], w: r * h * sp.wK, f: r * h * sp.wK, b: r * h * sp.wK })), { seg: 12 }), { w: armW(D, L), pid: PI_.ROBE });
-        const fs = [[D.upper / h - 0.03, 0.046], [D.upper / h + 0.01, 0.043], [D.upper / h + 0.12, 0.037], [D.upper / h + D.fore / h - 0.02, 0.031], [D.upper / h + D.fore / h - 0.005, 0.035], [D.upper / h + D.fore / h + 0.012, 0.034], [D.upper / h + D.fore / h + 0.014, 0.022]];
-        gb.add(loft(fs.map(([s, r]) => ({ c: [x, D.shY - s * h, D.shZ], w: r * h, f: r * h, b: r * h })), { seg: 10 }), { w: armW(D, L), pid: PI_.SHIRT });
+        const us = [[-0.047, 0.004], [-0.03, 0.043], [-0.004, 0.06], [0.06, 0.064], [0.15, 0.062], [D.upper / h - 0.02, 0.062], [D.upper / h + 0.035, 0.066]];
+        gb.add(loft(us.map(([s, r]) => ({ c: [x, D.shY - s * h, D.shZ], w: r * h * sp.wK, f: r * h * sp.wK, b: r * h * sp.wK })), { seg: 10 }), { w: armW(D, L), pid: PI_.ROBE });
+        const fs = [[D.upper / h - 0.03, 0.046], [D.upper / h + 0.06, 0.04], [D.upper / h + D.fore / h - 0.02, 0.031], [D.upper / h + D.fore / h - 0.005, 0.035], [D.upper / h + D.fore / h + 0.012, 0.034], [D.upper / h + D.fore / h + 0.014, 0.022]];
+        gb.add(loft(fs.map(([s, r]) => ({ c: [x, D.shY - s * h, D.shZ], w: r * h, f: r * h, b: r * h })), { seg: 8 }), { w: armW(D, L), pid: PI_.SHIRT });
       }
       // 어깨 망토
       if (sp.cape) {
         const cr = capeRings(D, sp), n = cr.length;
-        const cp = loft(cr, { cols: edgeCols(22, 0.012) });
+        const cp = loft(cr, { cols: edgeCols(18, 0.012) });
         const pid = (lin) => (p, a, b) => a > (n - 2.5) / (n - 1) || (cr[Math.round(a * (n - 1))].a0 > 0 && (b < 0.0121 || b > 0.9879)) ? PI_.TRIM : lin ? PI_.LINE : PI_.CAPE;
-        gb.add(cp, { w: tw, pid: pid(0) }); gb.add(innerOf(cp, 0.004 * h), { w: tw, pid: pid(1) });
+        gb.add(cp, { w: tw, pid: pid(0) }); gb.add(innerOf(loft(cr.slice(2), { cols: edgeCols(18, 0.012) }), 0.004 * h), { w: tw, pid: (p, a, b) => a > (cr.length - 3.5) / (cr.length - 3) || b < 0.0121 || b > 0.9879 ? PI_.TRIM : PI_.LINE });
         // 망토 앞 걸쇠 (황동)
         gb.add(new T.CylinderGeometry(0.013 * h, 0.013 * h, 0.006 * h, 10).rotateX(PI / 2), { m: M4(0, D.shY + 0.0 * h, ringAt(cr.slice().reverse(), D.shY).f + 0.004 * h), w: tw, pid: PI_.BRASS });
       }
@@ -451,8 +454,8 @@
         gb.add(loft(rr, { seg: 8 }), { w: tw, pid: PI_.CAPE });
         const back = y => outerAt(D, sp, y).b + 0.012 * h, bag = [];
         const ys = [D.neckY + 0.05 * h, D.neckY + 0.0, D.shY - 0.06 * h, D.shY - 0.16 * h, D.shY - 0.22 * h, D.shY - 0.235 * h];
-        const ws = [0.1, 0.115, 0.1, 0.06, 0.02, 0.004];
-        ys.forEach((y, i) => bag.push({ c: [0, y, -back(y) - 0.012 * h], w: ws[i] * h, f: 0.012 * h, b: (i ? 0.03 : 0.02) * h * (1 - i / 7) }));
+        const ws = [0.095, 0.105, 0.09, 0.055, 0.02, 0.004];
+        ys.forEach((y, i) => bag.push({ c: [0, y, -back(y) - 0.006 * h], w: ws[i] * h, f: 0.008 * h, b: (i ? 0.018 : 0.016) * h * (1 - i / 7) }));
         const hb = loft(bag, { seg: 12 });
         gb.add(hb, { w: tw, pid: PI_.CAPE });
         gb.add(loft([{ c: [0, ys[0] - 0.004 * h, -back(ys[0]) - 0.005 * h], w: 0.1 * h, f: 0.02 * h, b: 0.02 * h, a0: 2.1, a1: TAU - 2.1 }, { c: [0, ys[1], -back(ys[1]) - 0.006 * h], w: 0.112 * h, f: 0.02 * h, b: 0.025 * h, a0: 2.1, a1: TAU - 2.1 }], { seg: 6, inward: true }), { w: tw, pid: PI_.LINE });
@@ -474,7 +477,7 @@
       }
       // 가방끈 (오른 어깨 → 왼 엉덩이) 과 가방
       if (sp.satchel) {
-        const A = new T.Vector3(0.12 * h, D.shY + 0.03 * h, 0), Bp = new T.Vector3(-0.19 * h, D.hipY + 0.02 * h, 0), ctr = A.clone().add(Bp).multiplyScalar(0.5);
+        const A = new T.Vector3(0.12 * h, D.shY + 0.03 * h, 0), Bp = new T.Vector3(-0.17 * h, D.waistY + 0.0 * h, 0), ctr = A.clone().add(Bp).multiplyScalar(0.5);
         const u = Bp.clone().sub(A).multiplyScalar(0.5), pts = [], nrm = [];
         for (let k = 0; k <= 28; k++) {
           const t = k / 28 * TAU, p = ctr.clone().addScaledVector(u, Math.cos(t)), z = Math.sin(t);
@@ -496,7 +499,7 @@
         const bx = new T.BoxGeometry(0.065 * h, 0.17 * h, 0.21 * h, 2, 4, 5), bp = bx.attributes.position, half = [0.0325 * h, 0.085 * h, 0.105 * h], rr = 0.018 * h;
         for (let i = 0; i < bp.count; i++) { const v = [bp.getX(i), bp.getY(i), bp.getZ(i)], q = v.map((x, k) => cl(x, -half[k] + rr, half[k] - rr)), d = v.map((x, k) => x - q[k]), l = Math.hypot(...d) || 1; bp.setXYZ(i, q[0] + d[0] / l * rr, q[1] + d[1] / l * rr, q[2] + d[2] / l * rr); }
         bx.computeVertexNormals(); bx.userData.ij = null;
-        const hipR = outerAt(D, sp, D.hipY).w + 0.05 * h, sm = M4(-hipR, D.hipY - 0.03 * h, 0.03 * h, 1, 1, 1, 0, 0.18, 0.06);
+        const sP = satPos(D, sp), sm = M4(sP[0], sP[1], sP[2], 1, 1, 1, 0, -0.42, 0.1);
         gb.add(bx, { m: sm, w: [[B.hips, 1]], pid: PI_.STRAP });
         const fl = new T.BoxGeometry(0.012 * h, 0.1 * h, 0.2 * h); fl.userData.ij = null;
         gb.add(fl, { m: sm.clone().multiply(M4(-0.034 * h, 0.04 * h, 0)), w: [[B.hips, 1]], pid: PI_.STRAP });
@@ -508,16 +511,15 @@
         const L = sg < 0, x = sg * D.hipX, lw = legW(D, L);
         const tro = [[D.hipY + 0.05 * h, 0.09, 0.085, 0.095], [D.hipY - 0.06 * h, 0.085, 0.082, 0.088], [D.hipY - 0.2 * h, 0.075, 0.072, 0.075], [D.kneeY + 0.05 * h, 0.06, 0.06, 0.06], [D.kneeY, 0.058, 0.06, 0.058],
           [D.kneeY - 0.1 * h, 0.06, 0.058, 0.066], [D.ankleY + 0.12 * h, 0.048, 0.048, 0.05], [D.ankleY + 0.03 * h, 0.046, 0.05, 0.048]];
-        gb.add(loft(tro.map(([y, w, f, b]) => ({ c: [x, y, 0], w: w * h * sp.wK, f: f * h * sp.wK, b: b * h * sp.wK })), { seg: 10 }), { w: lw, pid: PI_.TROU });
+        gb.add(loft(tro.map(([y, w, f, b]) => ({ c: [x, y, 0], w: w * h * sp.wK, f: f * h * sp.wK, b: b * h * sp.wK })), { seg: 8 }), { w: lw, pid: PI_.TROU });
         const top = sp.boots === 'knee' ? D.kneeY - 0.025 * h : D.ankleY + 0.075 * h;
         const bt = [[top - 0.002 * h, 0.07, 0.072, 0.074], [top - 0.03 * h, 0.066, 0.066, 0.07], [Math.max(D.ankleY + 0.1 * h, top - 0.16 * h), 0.056, 0.056, 0.064], [D.ankleY + 0.04 * h, 0.05, 0.054, 0.052], [D.ankleY - 0.01 * h, 0.05, 0.06, 0.052]];
         if (top - 0.16 * h <= D.ankleY + 0.1 * h) bt.splice(2, 1);
         const boot = loft(bt.map(([y, w, f, b]) => ({ c: [x, y, 0.004 * h], w: w * h, f: f * h, b: b * h })), { seg: 10 });
         gb.add(boot, { w: lw, pid: PI_.BOOT });
-        gb.add(innerOf(boot, 0.004 * h), { w: lw, pid: PI_.BOOT });
         // 발 (z로 늘인 관: 뒤꿈치 → 발끝)
-        const fr = [[-0.07, 0.004, -0.045], [-0.062, 0.03, -0.03], [-0.045, 0.038, 0.0], [-0.015, 0.044, 0.04], [0.03, 0.047, 0.02], [0.08, 0.049, -0.01], [0.13, 0.05, -0.03], [0.17, 0.044, -0.042], [0.195, 0.032, -0.05], [0.212, 0.014, -0.058], [0.218, 0.003, -0.062]];
-        const ft = loft(fr.map(([z, w, t]) => { const bot = -D.ankleY / h, cy = (t + bot) / 2, hh = (t - bot) / 2; return { c: [x, D.ankleY + cy * h, z * h], ax: X1, ay: [0, 1, 0], w: w * h, f: hh * h, b: hh * h, q: 0.8 }; }), { seg: 10 });
+        const fr = [[-0.07, 0.004, -0.045], [-0.062, 0.03, -0.03], [-0.04, 0.04, 0.01], [0.0, 0.045, 0.035], [0.06, 0.049, -0.005], [0.13, 0.05, -0.03], [0.18, 0.04, -0.045], [0.208, 0.02, -0.056], [0.218, 0.003, -0.062]];
+        const ft = loft(fr.map(([z, w, t]) => { const bot = -D.ankleY / h, cy = (t + bot) / 2, hh = (t - bot) / 2; return { c: [x, D.ankleY + cy * h, z * h], ax: X1, ay: [0, 1, 0], w: w * h, f: hh * h, b: hh * h, q: 0.8 }; }), { seg: 8 });
         gb.add(ft, { w: [[L ? B.footL : B.footR, 1]], pid: p => p.y < 0.012 * h ? PI_.SOLE : PI_.BOOT });
       }
       const g = gb.build();
@@ -536,9 +538,9 @@
         const tip = k === 7, w = (tip ? 0.012 : lp(0.04, 0.034, s)) * h, th = (tip ? 0.004 : 0.0095) * h;
         R.push({ c: [cx, cy, 0], ax: [0, 0, 1], ay: [Math.cos(a), -Math.sin(a), 0], w, f: th, b: th * 1.05 });
       }
-      gb.add(loft(R, { seg: 10 }));
+      gb.add(loft(R, { seg: 8 }));
       const th = fist ? [[-0.004, -0.03, 0.026], [-0.016, -0.055, 0.036], [-0.03, -0.078, 0.03], [-0.04, -0.092, 0.012], [-0.042, -0.096, 0.004]] : [[-0.004, -0.03, 0.026], [-0.012, -0.055, 0.036], [-0.02, -0.08, 0.042], [-0.027, -0.1, 0.04], [-0.029, -0.106, 0.038]];
-      gb.add(tube(th.map(p => p.map(v => v * h)), t => (t > 0.95 ? 0.003 : lp(0.012, 0.0085, t)) * h, 8));
+      gb.add(tube(th.map(p => p.map(v => v * h)), t => (t > 0.95 ? 0.003 : lp(0.012, 0.0085, t)) * h, 6));
       return gb;
     });
   }
@@ -595,7 +597,7 @@
   }
   function headGeo(H, lo) {
     return memo('head' + JSON.stringify(H) + lo, () => {
-      const NU = lo ? 16 : 34, NV = lo ? 12 : 30;
+      const NU = lo ? 16 : 28, NV = lo ? 12 : 24;
       const TH = warpTable(NV, t => 1 + 2.3 * ss(68 * D2R, 82 * D2R, t) * (1 - ss(166 * D2R, 178 * D2R, t)), 0, PI);
       const PHs = warpTable(NU, p => 1 + 2.6 * gs(p, 0.85), -PI, PI);
       const P = [], UV = [], I = [];
@@ -615,7 +617,7 @@
       const gb = new GB(false); g.userData.ij = null; gb.add(g);
       // 귀
       for (const s of [-1, 1]) {
-        const e = new T.SphereGeometry(1, 10, 8), ep = e.attributes.position;
+        const e = new T.SphereGeometry(1, 8, 6), ep = e.attributes.position;
         for (let i = 0; i < ep.count; i++) { let x = ep.getX(i), y = ep.getY(i), z = ep.getZ(i); const cup = x > 0 ? 1 - 0.55 * gs(y, 0.45) * gs(z, 0.5) : 1; ep.setXYZ(i, x * 0.0075 * cup, y * 0.027, z * 0.017 * (1 - 0.25 * (y > 0 ? 0 : -y))); }
         e.computeVertexNormals(); e.userData.ij = null;
         const uv = e.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, s < 0 ? 0.004 : 0.996, 0.45);
@@ -635,11 +637,13 @@
     const bz = (p, t) => { const u = 1 - t; return [u * u * u * p[0] + 3 * u * u * t * p[2] + 3 * u * t * t * p[4] + t * t * t * p[6], u * u * u * p[1] + 3 * u * u * t * p[3] + 3 * u * t * t * p[5] + t * t * t * p[7]]; };
     const R = rng(F.seed * 13 + 3);
     // 형태감: 가장자리, 이마, 턱 밑, 눈두덩, 볼, 코
-    { const gr = g.createRadialGradient(X(0), Y(-0.018), 0.05 * kx, X(0), Y(-0.018), 0.1 * kx); gr.addColorStop(0, A(dark, 0)); gr.addColorStop(1, A(dark, 0.16)); g.fillStyle = gr; g.fillRect(0, oy, S, S); }
+    { const gr = g.createRadialGradient(X(0), Y(-0.018), 0.045 * kx, X(0), Y(-0.018), 0.095 * kx); gr.addColorStop(0, A(dark, 0)); gr.addColorStop(1, A(dark, 0.24)); g.fillStyle = gr; g.fillRect(0, oy, S, S); }
     blob(0, 0.046, 0.046, 0.022, white, 0.07);
     blob(0, -0.122, 0.07, 0.02, dark, 0.3);
     for (const s of [-1, 1]) {
-      blob(s * 0.03, 0.003, 0.027, 0.016, warm, 0.2 + F.age * 0.1);
+      blob(s * 0.03, 0.003, 0.027, 0.017, warm, 0.3 + F.age * 0.1);
+      blob(s * 0.022, 0.009, 0.012, 0.006, mul(warm, 0.8), 0.22);
+      blob(s * 0.056, -0.05, 0.012, 0.022, dark, 0.13, s * 0.3);
       blob(s * 0.05, -0.034, 0.024, 0.017, rose, F.blush);
       blob(s * 0.0115, -0.016, 0.0045, 0.021, dark, 0.07);
       blob(s * 0.058, 0.012, 0.012, 0.02, dark, 0.06);
@@ -647,7 +651,7 @@
     blob(0, -0.0465, 0.0135, 0.0045, dark, 0.24);
     blob(0, -0.031, 0.0045, 0.004, white, 0.12);
     blob(0, -0.005, 0.003, 0.012, white, 0.05);
-    blob(0, -0.081, 0.013, 0.0035, dark, 0.16);
+    blob(0, -0.081, 0.013, 0.0038, dark, 0.24);
     blob(0, -0.097, 0.011, 0.007, white, 0.07);
     // 주근깨·수염 자국·주름
     for (let k = 0; k < F.freck; k++) { const x = (R() - 0.5) * 0.11, y = -0.01 - R() * 0.034; if (Math.abs(x) < 0.007 && y > -0.03) continue; blob(x, y, 0.0009, 0.0009, mul(sk, 0.68), 0.55); }
@@ -674,12 +678,12 @@
     // 입
     {
       const smile = st === 5 ? 1 : 0, op = st === 6 ? 0.0034 : 0, my = F.my, mw = F.mw * (smile ? 1.07 : 1), cu = smile ? 0.0024 : 0, lu = F.lu, ll = F.ll, lc = F.lipC;
-      g.fillStyle = A(mul(lc, 0.88), 0.85); g.beginPath();
+      g.fillStyle = A(mul(lc, 0.8), 0.95); g.beginPath();
       g.moveTo(X(-mw), Y(my + cu)); g.bezierCurveTo(X(-mw * 0.6), Y(my + lu * 0.6), X(-0.009), Y(my + lu * 1.05), X(-0.0035), Y(my + lu));
       g.quadraticCurveTo(X(0), Y(my + lu * 0.72), X(0.0035), Y(my + lu));
       g.bezierCurveTo(X(0.009), Y(my + lu * 1.05), X(mw * 0.6), Y(my + lu * 0.6), X(mw), Y(my + cu));
       g.bezierCurveTo(X(mw * 0.5), Y(my - 0.0004 + cu * 0.3), X(-mw * 0.5), Y(my - 0.0004 + cu * 0.3), X(-mw), Y(my + cu)); g.fill();
-      g.fillStyle = A(lc, 0.8); g.beginPath();
+      g.fillStyle = A(lc, 0.92); g.beginPath();
       g.moveTo(X(-mw * 0.92), Y(my + cu - 0.0005)); g.bezierCurveTo(X(-mw * 0.5), Y(my - op - 0.0006), X(mw * 0.5), Y(my - op - 0.0006), X(mw * 0.92), Y(my + cu - 0.0005));
       g.bezierCurveTo(X(mw * 0.55), Y(my - op - ll * 1.2), X(-mw * 0.55), Y(my - op - ll * 1.2), X(-mw * 0.92), Y(my + cu - 0.0005)); g.fill();
       blob(0, my - op - ll * 0.5, mw * 0.45, ll * 0.32, white, 0.18);
@@ -714,7 +718,7 @@
         g.lineWidth = Math.max(0.6, 0.0004 * kx);
         for (let k = 0; k < 20; k++) { const a = k / 20 * TAU; g.strokeStyle = A(k % 2 ? mx(F.iris, white, 0.45) : mul(F.iris, 0.45), 0.28); g.beginPath(); g.moveTo(X(ix + Math.cos(a) * rr * 0.45), Y(iy + Math.sin(a) * rr * 0.45)); g.lineTo(X(ix + Math.cos(a) * rr * 0.9), Y(iy + Math.sin(a) * rr * 0.9)); g.stroke(); }
         g.fillStyle = A([16, 11, 9], 1); g.beginPath(); g.arc(X(ix), Y(iy), rr * 0.42 * kx, 0, TAU); g.fill();
-        const lg = g.createLinearGradient(0, Y(uh * 1.25 + 0.0008), 0, Y(-0.0015)); lg.addColorStop(0, A([45, 22, 16], 0.62)); lg.addColorStop(0.6, A([45, 22, 16], 0)); g.fillStyle = lg; g.fillRect(X(cx - 0.03), Y(0.02), 0.06 * kx, 0.04 * ky);
+        const lg = g.createLinearGradient(0, Y(uh * 1.25 + 0.0008), 0, Y(-0.0015)); lg.addColorStop(0, A([45, 22, 16], 0.5)); lg.addColorStop(0.45, A([45, 22, 16], 0)); g.fillStyle = lg; g.fillRect(X(cx - 0.03), Y(0.02), 0.06 * kx, 0.04 * ky);
         g.fillStyle = A(white, 0.96); g.beginPath(); g.arc(X(ix - rr * 0.34), Y(iy + rr * 0.36), rr * 0.27 * kx, 0, TAU); g.fill();
         g.fillStyle = A(white, 0.45); g.beginPath(); g.arc(X(ix + rr * 0.38), Y(iy - rr * 0.34), rr * 0.11 * kx, 0, TAU); g.fill();
         g.restore();
@@ -772,14 +776,14 @@
   class HB {   // 머리카락 정점 모음
     constructor() { this.P = []; this.Cc = []; this.I = []; }
     clump(P0, P1, P2, w0, th, col, flat = 0.42) {
-      const NS = 7, NR = 5, base = this.P.length / 3, t0 = new T.Vector3(), rd = new T.Vector3(), bi = new T.Vector3(), nn = new T.Vector3();
+      const NS = 5, NR = 4, base = this.P.length / 3, t0 = new T.Vector3(), rd = new T.Vector3(), bi = new T.Vector3(), nn = new T.Vector3();
       for (let i = 0; i <= NS; i++) {
         const t = i / NS, a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t;
         const p = [a * P0[0] + b * P1[0] + c * P2[0], a * P0[1] + b * P1[1] + c * P2[1], a * P0[2] + b * P1[2] + c * P2[2]];
         t0.set(2 * (1 - t) * (P1[0] - P0[0]) + 2 * t * (P2[0] - P1[0]), 2 * (1 - t) * (P1[1] - P0[1]) + 2 * t * (P2[1] - P1[1]), 2 * (1 - t) * (P1[2] - P0[2]) + 2 * t * (P2[2] - P1[2])).normalize();
         rd.set(p[0] - HC[0], p[1] - HC[1], p[2] - HC[2]).normalize();
         bi.crossVectors(t0, rd); if (bi.lengthSq() < 1e-6) bi.set(1, 0, 0); bi.normalize(); nn.crossVectors(bi, t0).normalize();
-        const w = i === NS ? 0.0004 : w0 * Math.pow(1 - t, 0.7) * (0.75 + 0.25 * Math.sin(PI * Math.min(1, t * 1.5 + 0.2))) + 0.0006, tt = w * (th || flat);
+        const w = i === NS ? 0.0004 : w0 * Math.pow(1 - t, 0.5) * (0.78 + 0.22 * Math.sin(PI * Math.min(1, t * 1.5 + 0.2))) + 0.0006, tt = w * (th || flat);
         const k = lp(0.68, 1.12, t) * col[3];
         for (let j = 0; j < NR; j++) {
           const an = j / NR * TAU;
@@ -795,14 +799,14 @@
       for (let i = 0; i < p.count; i += 3) this.I.push(base + i, base + i + 1, base + i + 2);
       void H;
     }
-    cap(H, line, thick, col, NU = 22, NV = 8) {
+    cap(H, line, thick, col, NU = 20, NV = 6) {
       const base = this.P.length / 3, R = rng(9);
       for (let i = 0; i <= NV; i++) for (let j = 0; j < NU; j++) {
         const ph = -180 + j / NU * 360, lim = line(Math.abs(ph)), th = lim * Math.pow(i / NV, 0.9), e = i / NV;
         const q = scalp(Math.max(0.5, th), ph, thick * lp(1, 0.12, Math.pow(e, 3)) + (R() - 0.5) * 0.0012 * (1 - e), H);
         this.P.push(...q); const k = lp(0.78, 0.66, e) * col[3]; this.Cc.push(col[0] * k, col[1] * k, col[2] * k);
       }
-      for (let i = 0; i < NV; i++) for (let j = 0; j < NU; j++) { const a = base + i * NU + j, b = base + i * NU + (j + 1) % NU, c = b + NU, d = a + NU; this.I.push(a, b, c, a, c, d); }
+      for (let i = 0; i < NV; i++) for (let j = 0; j < NU; j++) { const a = base + i * NU + j, b = base + i * NU + (j + 1) % NU, c = b + NU, d = a + NU; this.I.push(a, d, c, a, c, b); }
     }
     build() {
       const g = new T.BufferGeometry();
@@ -827,8 +831,8 @@
       const top = !hat;
       if (style === 'crop' || style === 'short') {
         const k = style === 'short' ? 0.6 : 1;
-        for (const [p0, dp] of [[-42, 24], [-24, 22], [-6, 20], [12, 17], [30, 12]]) add(1, [24, p0], [52, p0 + dp * 0.5, 0.022 * k], [76 + R() * 5, p0 + dp, 0.012 * k], 0.026 * k + R() * 0.005, 0.42);
-        if (top) for (const p0 of [-80, -40, 0, 40, 80, 130, 180, 230]) add(1, [6, p0], [34, p0 + 14, 0.026 * k], [62 + R() * 8, p0 + 26, 0.016 * k], 0.03 * k, 0.45);
+        for (const [p0, dp] of [[-50, 22], [-34, 22], [-18, 20], [-2, 19], [14, 17], [30, 14], [44, 10]]) add(1, [22, p0 * 0.8], [50, p0 + dp * 0.5, 0.017 * k], [73 + R() * 7, p0 + dp, 0.01 * k], 0.033 * k + R() * 0.005, 0.36);
+        if (top) for (const p0 of [-90, -55, -20, 15, 50, 85, 125, 165, 205, 245]) add(1, [5, p0], [32, p0 + 12, 0.02 * k], [60 + R() * 8, p0 + 24, 0.013 * k], 0.038 * k, 0.4);
         for (const s of [-1, 1]) { add(0, [46, s * 62], [66, s * 74, 0.018 * k], [90, s * 82, 0.008], 0.026 * k); add(0, [52, s * 98], [74, s * 104, 0.016 * k], [96, s * 110, 0.007], 0.028 * k); }
         for (const p0 of [125, 150, 175, 200, 225]) add(0, [36, p0], [78, p0, 0.022 * k], [116 + R() * 4, p0 + R() * 10 - 5, 0.01], 0.034 * k);
         piv = scalp(20, 0, 0.0, H); amp = 0.3;
@@ -839,7 +843,7 @@
         for (const p0 of [130, 160, 190, 220]) add(0, [40, p0], [80, p0, 0.02], [114, p0, 0.01], 0.032);
         piv = scalp(20, -30, 0, H); amp = 0.3;
       } else if (style === 'curly') {
-        for (let k = 0; k < 38; k++) { const th = 8 + R() * (k < 30 ? 80 : 110), ph = -180 + R() * 360; if (th > lineStd(Math.abs(ph)) + 6) continue; S.blob(scalp(th, ph, thick * 0.9, H), [0.02 + R() * 0.008, 0.018 + R() * 0.006, 0.02 + R() * 0.008], col(), H); }
+        for (let k = 0; k < 26; k++) { const th = 6 + (k < 20 ? k / 20 * 85 : 60 + R() * 50), ph = k < 20 ? -180 + ((k * 137.5) % 360) : -180 + R() * 360; if (th > lineStd(Math.abs(ph)) + 6) continue; S.blob(scalp(th, ph, thick * 0.9, H), [0.026 + R() * 0.008, 0.022 + R() * 0.006, 0.026 + R() * 0.008], col(), H); }
         for (const p0 of [-30, 0, 30]) add(1, [30, p0], [55, p0 + 5, 0.03], [74, p0 + 10, 0.02], 0.024, 0.6);
         piv = scalp(30, 0, 0, H); amp = 0.25;
       } else if (style === 'bob' || style === 'long') {
@@ -949,19 +953,19 @@
   function rodGeo() {
     return memo('rod', () => {
       const gb = new GB(false), rr = [];
-      const zs = [[-0.3, 0.003], [-0.297, 0.0115], [-0.26, 0.0125], [-0.255, 0.0118], [-0.07, 0.0115], [-0.065, 0.0135], [0.065, 0.0135], [0.07, 0.0112], [0.49, 0.0102], [0.495, 0.0128], [0.53, 0.0135], [0.545, 0.0158], [0.556, 0.012], [0.56, 0.004]];
+      const zs = [[-0.3, 0.003], [-0.297, 0.0115], [-0.26, 0.0125], [-0.255, 0.0118], [-0.07, 0.0115], [-0.065, 0.0135], [0.065, 0.0135], [0.07, 0.0112], [0.49, 0.0102], [0.495, 0.0128], [0.53, 0.0135], [0.545, 0.0158], [0.556, 0.012], [0.56, 0.004]].map(([z, r]) => [z, r * 1.3]);
       zs.forEach(([z, r]) => rr.push({ c: [0, 0, z], ax: X1, ay: [0, 1, 0], w: r, f: r, b: r }));
-      gb.add(loft(rr, { seg: 10 }), { pid: p => p.z < -0.252 || p.z > 0.492 ? PI_.BRASS : Math.abs(p.z) < 0.067 ? PI_.STRAP : PI_.WOOD });
+      gb.add(loft(rr, { seg: 8 }), { pid: p => p.z < -0.252 || p.z > 0.492 ? PI_.BRASS : Math.abs(p.z) < 0.067 ? PI_.STRAP : PI_.WOOD });
       for (const s of [-1, 1]) {
-        const pts = []; for (let k = 0; k <= 8; k++) { const t = k / 8; pts.push([s * (0.011 + Math.sin(PI * t) * 0.024), Math.sin(PI * t) * 0.006 * s, 0.548 + t * 0.12]); }
-        gb.add(tube(pts, t => lp(0.0042, 0.0024, t), 6), { pid: PI_.BRASS });
+        const pts = []; for (let k = 0; k <= 5; k++) { const t = k / 5; pts.push([s * (0.011 + Math.sin(PI * t) * 0.024), Math.sin(PI * t) * 0.006 * s, 0.548 + t * 0.12]); }
+        gb.add(tube(pts, t => lp(0.0042, 0.0024, t), 5), { pid: PI_.BRASS });
       }
-      gb.add(new T.TorusGeometry(0.03, 0.0028, 6, 18), { m: M4(0, 0, 0.612), pid: PI_.BRASS });
+      gb.add(new T.TorusGeometry(0.03, 0.0028, 4, 14), { m: M4(0, 0, 0.612), pid: PI_.BRASS });
       return gb.build();
     });
   }
   function crystalGeo() {
-    return memo('crystal', () => { const g = new T.OctahedronGeometry(1, 0); g.scale(0.02, 0.02, 0.048); return g; });
+    return memo('crystal', () => { const g = new T.OctahedronGeometry(1, 0); g.scale(0.026, 0.026, 0.062); return g; });
   }
 
   // ===================================================================
@@ -995,7 +999,7 @@
       const ue = 0.12, ve = 0.13, us = [0, ue, ue + 0.02], vs = [];
       for (let k = 1; k < (Cn - 1) * 2; k++) { const u = k / 2; if (u > ue + 0.05 && u < Cn - 1 - ue - 0.05) us.push(u); }
       us.push(Cn - 1 - ue - 0.02, Cn - 1 - ue, Cn - 1);
-      for (let k = 0; k <= (Rn - 1) * 2; k++) { const v = k / 2; if (v < Rn - 1 - ve - 0.05) vs.push(v); }
+      for (let k = 0; k <= Rn - 1; k++) { const v = k; if (v < Rn - 1 - ve - 0.05) vs.push(v); }
       vs.push(Rn - 1 - ve - 0.02, Rn - 1 - ve, Rn - 1);
       const NU = this.NU = us.length, NV = this.NV = vs.length, nv = NU * NV, layers = ghost ? 1 : 2;
       this.tapI = new Int16Array(nv * 16); this.tapW = new Float32Array(nv * 16);
@@ -1121,8 +1125,8 @@
   // 종 소매: 아래팔에 붙은 관. 중력 쪽으로 늘어지고, 팔을 들면 팔꿈치 쪽으로 미끄러진다
   class Sleeve {
     constructor(sp, D, ghost) {
-      const h = D.s, L = D.fore + 0.045 * h, bell = sp.bell * h, N = 14, layers = ghost ? 1 : 2;
-      const sl = [-0.04 * h, 0.02 * h, 0.08 * h, 0.15 * h, D.fore - 0.01 * h, L - 0.017 * h, L - 0.0165 * h, L];
+      const h = D.s, L = D.fore + 0.045 * h, bell = sp.bell * h, N = 12, layers = ghost ? 1 : 2;
+      const sl = [-0.04 * h, 0.03 * h, 0.12 * h, D.fore - 0.01 * h, L - 0.017 * h, L - 0.0165 * h, L];
       const nr = sl.length, nv = nr * (N + 1);
       const rest = this.rest = new Float32Array(nv * layers * 3), aux = this.aux = new Float32Array(nv * layers * 3);
       const col = new Float32Array(nv * layers * 3), uv = new Float32Array(nv * layers * 2), rm = new Float32Array(nv * layers * 2), I = [], pc = sp.pal.c;
@@ -1178,7 +1182,7 @@
       // 겉면 단면표 (가슴 기준 y → 몸 기준 단면)
       this.prof = []; for (let k = 0; k <= 24; k++) { const y = lp(D.hipY - 0.1 * h, D.neckY + 0.02 * h, k / 24), o = outerAt(D, sp, y); this.prof.push([y - D.chestY, o.w + 0.012 * h, o.f + 0.012 * h, o.b + 0.012 * h]); }
       // 리본 격자: 줄(사슬 2배) × 열(가장자리 띠)
-      const us = [0, 0.1, 0.11, 0.5, 0.89, 0.9, 1], NR = (N - 1) * 2 + 1, NU = us.length; this.us = us; this.NR = NR;
+      const us = [0, 0.1, 0.11, 0.89, 0.9, 1], NR = (N - 1) * 2 + 1, NU = us.length; this.us = us; this.NR = NR;
       const nv = NR * NU * 2, pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), col = new Float32Array(nv * 3), uv = new Float32Array(nv * 2), I = [];
       const c1 = sp.pal.c[PI_.STOLE], c2 = sp.pal.c[PI_.STOLE2], cb = sp.pal.c[PI_.BRASS];
       for (let s = 0; s < 2; s++) for (let j = 0; j < NR; j++) for (let i = 0; i < NU; i++) {
@@ -1574,7 +1578,7 @@
     if (r.rod) r.rod.rotation.x = -p[K.rod];
   }
   const _wp = new T.Vector3(), _cam = new T.Vector3();
-  const CAP = new Float32Array(7 * 5), ELL = { e: null, ie: new Float32Array(16), w: 0, h: 0, f: 0, b: 0, cy: 0 };
+  const CAP = new Float32Array(7 * 6), ELL = { e: null, ie: new Float32Array(16), w: 0, h: 0, f: 0, b: 0, cy: 0 };
   function clothStep(r, H, dt, lod, snap) {
     const sk = H.skirt, D = H.D, sc = H.sc, h = D.s, bn = H.bn;
     sk.targets(r);
@@ -1584,6 +1588,7 @@
     let nc = 0;
     const capP = (a, b, rad) => { a.getWorldPosition(_v1); b.getWorldPosition(_v2); CAP[nc++] = _v1.x; CAP[nc++] = _v1.y; CAP[nc++] = _v1.z; CAP[nc++] = _v2.x; CAP[nc++] = _v2.y; CAP[nc++] = _v2.z; CAP[nc++] = rad * sc; };
     capP(bn.legL, bn.shinL, 0.1 * h); capP(bn.shinL, bn.footL, 0.078 * h); capP(bn.legR, bn.shinR, 0.1 * h); capP(bn.shinR, bn.footR, 0.078 * h);
+    if (H.sp.satchel) { const q = satPos(D, H.sp); _v1.set(q[0], q[1] - D.hipY, q[2]).applyMatrix4(bn.hips.matrixWorld); for (let k = 0; k < 2; k++) { CAP[nc++] = _v1.x; CAP[nc++] = _v1.y; CAP[nc++] = _v1.z; } CAP[nc++] = 0.11 * h * sc; }
     const cap = CAP.subarray(0, nc);
     const hr = ringAt(torsoRings(D, H.sp), D.hipY - 0.02 * h);
     ELL.e = bn.hips.matrixWorld.elements; ELL.ie.set(_m2.copy(bn.hips.matrixWorld).invert().elements);
@@ -1711,10 +1716,10 @@
   // 13. 바꿔 끼우기 + 보기 페이지용 도우미
   // ===================================================================
   window.makeRig = makeRig; window.animRig = animRig;
-  try { makeRig = window.makeRig; animRig = window.animRig; } catch (e) { /* 전역 함수 바인딩 */ }
   HERO.makeRig = makeRig; HERO.animRig = animRig; HERO.spec = spec;
   // 무리 속 학생 생김새 (seed로 정해진다)
   HERO.student = seed => { const R = rng(seed * 31 + 7); return { cloak: '#262a3f', trim: pick(R, TRIMS), hair: pick(R, HAIRS), skin: pick(R, SKINS), body: '#e8e0cf', seed, scale: 0.95 + R() * 0.08 }; };
   HERO.expr = (r, st) => { if (r._h) r._h.expr = st; };
+  HERO.breakdown = r => { const o = {}; r.traverse(m => { if (m.isMesh && m.geometry) { let n = m.name || (m.isSkinnedMesh ? 'skinned' : m.parent === r ? 'root' : 'mesh'); if (m === r._h.skirt.mesh) n = 'skirt'; else if (r._h.stole && m === r._h.stole.mesh) n = 'stole'; else if (m === r._h.headHi) n = 'head'; else if (m === r._h.headLo) return; else if (r._h.sleeves.some(x => x.mesh === m)) n = 'sleeve'; else if (r._h.glider && r._h.glider.group.children.includes(m)) n = 'glider'; else if (r.rod && (m.parent === r.rod)) n = 'rod'; else if (m.material && m.material === MAT.hair) n = 'hair'; const g = m.geometry; o[n] = (o[n] || 0) + (g.index ? g.index.count : g.attributes.position.count) / 3; } }); return o; };
   HERO.tris = r => { let t = 0; r.traverse(m => { if (m.isMesh && m.visible && m.geometry) { const g = m.geometry; t += (g.index ? g.index.count : g.attributes.position.count) / 3; } }); return t; };
 })();

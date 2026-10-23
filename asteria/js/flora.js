@@ -260,8 +260,9 @@
     if (ATL) return ATL;
     const N = isMob() ? 1024 : 2048, S = N / 4;
     const cv = document.createElement('canvas'); cv.width = cv.height = N;
-    const g = cv.getContext('2d');
-    for (let t = 0; t < 16; t++) { g.save(); g.translate((t % 4) * S, ((t / 4) | 0) * S); g.beginPath(); g.rect(0, 0, S, S); g.clip(); DRAW[t](g, S, rng(1000 + t * 77)); g.restore(); }
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    F._atlasMs = [];
+    for (let t = 0; t < 16; t++) { const t0 = performance.now(); g.save(); g.translate((t % 4) * S, ((t / 4) | 0) * S); g.beginPath(); g.rect(0, 0, S, S); g.clip(); DRAW[t](g, S, rng(1000 + t * 77)); g.restore(); F._atlasMs.push(Math.round(performance.now() - t0)); }
     const d = g.getImageData(0, 0, N, N).data;
     bleed(d, N, S);
     const out = new Uint8Array(N * N * 4);
@@ -987,7 +988,7 @@ ${f.fade ? '#ifdef USE_INSTANCING\n\tvFloraD = length( ( modelMatrix * vec4( ins
   // =====================================================================
   // 9. 임포스터: 나무마다 두 방향(변형 0과 1)을 아틀라스에 굽는다 (색 = sqrt(선형), 법선 + 잎 표시)
   // =====================================================================
-  const IMP = { ready: false, N: isMob() ? 1024 : 2048, nU: { value: null }, ext: [], aTex: null };
+  const IMP = { ready: false, N: isMob() ? 512 : 1024, nU: { value: null }, ext: [], aTex: null };
   const IMP_KINDS = ['oak', 'beech', 'birch', 'willow', 'pine', 'yew', 'dead'];
   const CANON = [101, 202];   // 숲의 기본 변형 seed (임포스터와 같은 나무)
   const CAP_V = 'uniform vec2 uvS; varying vec2 vUv; varying vec3 vC; varying vec3 vN; void main() { vUv = uv * uvS; vC = color; vN = normalize( mat3( modelMatrix ) * normal ); gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }';
@@ -997,11 +998,11 @@ ${f.fade ? '#ifdef USE_INSTANCING\n\tvFloraD = length( ( modelMatrix * vec4( ins
     if (IMP.ready) return IMP;
     const r = window.GFX && GFX.renderer; if (!r) return null;
     const N = IMP.N, TS = N / 4;
-    const mk = () => new T.WebGLRenderTarget(N, N, { minFilter: T.LinearMipmapLinearFilter, magFilter: T.LinearFilter, generateMipmaps: true, depthBuffer: true, stencilBuffer: false });
+    const mk = () => new T.WebGLRenderTarget(N, N, { minFilter: T.LinearMipmapLinearFilter, magFilter: T.LinearFilter, generateMipmaps: false, depthBuffer: true, stencilBuffer: false });
     const A = mk(), Nr = mk();
     const scene = new T.Scene(), cam = new T.OrthographicCamera(-1, 1, 1, -1, 1, 400);
     cam.position.set(0, 0, 200); cam.updateMatrixWorld();
-    const capM = (map, leaf, nrm, uvS) => new T.ShaderMaterial({ uniforms: { map: { value: map }, uvS: { value: uvS || new T.Vector2(1, 1) } }, vertexColors: true, side: T.DoubleSide, vertexShader: CAP_V, fragmentShader: nrm ? CAP_FN : CAP_FA, defines: leaf ? { LEAF: 1 } : {} });
+    const capC = new Map(), capM = (map, leaf, nrm, uvS) => { const k = map.uuid + leaf + nrm; let m = capC.get(k); if (!m) capC.set(k, m = new T.ShaderMaterial({ uniforms: { map: { value: map }, uvS: { value: uvS || new T.Vector2(1, 1) } }, vertexColors: true, side: T.DoubleSide, vertexShader: CAP_V, fragmentShader: nrm ? CAP_FN : CAP_FA, defines: leaf ? { LEAF: 1 } : {} })); return m; };
     const prevRT = r.getRenderTarget(), prevAC = r.autoClear, cc = r.getClearColor(new T.Color()), ca = r.getClearAlpha(), prevSh = r.shadowMap.enabled;
     r.shadowMap.enabled = false;
     for (const [rt, c] of [[A, new T.Color(0.17, 0.21, 0.13)], [Nr, new T.Color(0.5, 0.5, 1.0)]]) {
@@ -1024,11 +1025,14 @@ ${f.fade ? '#ifdef USE_INSTANCING\n\tvFloraD = length( ( modelMatrix * vec4( ins
           const vx = (t % 4) * TS, vy = ((t / 4) | 0) * TS;
           rt.viewport.set(vx, vy, TS, TS); rt.scissor.set(vx, vy, TS, TS); rt.scissorTest = true;
           r.setRenderTarget(rt); r.clearDepth(); r.render(scene, cam);
-          for (const me of scene.children) me.material.dispose();
         }
       }
     });
+    // 밉맵은 마지막에 한 번만 (칸마다 만들면 소프트웨어 GL에서 매우 느리다): 빈 장면을 1픽셀만 그려 만들게 한다
+    scene.clear();
+    for (const rt of [A, Nr]) { rt.texture.generateMipmaps = true; rt.viewport.set(0, 0, 1, 1); rt.scissor.set(0, 0, 1, 1); rt.scissorTest = true; r.setRenderTarget(rt); r.render(scene, cam); }
     A.scissorTest = Nr.scissorTest = false; A.viewport.set(0, 0, N, N); Nr.viewport.set(0, 0, N, N);
+    for (const m of capC.values()) m.dispose();
     r.setRenderTarget(prevRT); r.autoClear = prevAC; r.setClearColor(cc, ca); r.shadowMap.enabled = prevSh;
     IMP.aTex = A.texture; IMP.nU.value = Nr.texture; IMP.rts = [A, Nr]; IMP.ready = true;
     return IMP;

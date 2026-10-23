@@ -699,16 +699,16 @@ function TEX_GEN() {
       const ly = (y / c.mh * nL + a * 0.6 + b * 0.15 + nL * 4) % nL, li = Math.floor(ly) % nL, lf = ly - Math.floor(ly);
       const La = layers[li];
       const step = sm(0.0, 0.08, lf) * sm(1.0, 0.9, lf);
-      const crack = sm(0.06, 0.005, V.bd[q] + b * 0.03);
+      const crack = sm(0.022, 0.002, V.bd[q] + b * 0.025 + f * 0.004) * sm(-0.15, 0.35, nB[(q + 7919) % N] + a * 0.4);
       let h = La.off + nR[q] * 0.08 + a * 0.05 + b * 0.02 + f * 0.004;
       h += (step - 1) * 0.03 * (0.5 + La.hard);
-      h -= crack * 0.07;
+      h -= crack * 0.035;
       c.h[q] = h;
       let col = La.col;
-      col = lerp3(col, pal[(V.id[q] * 7) % pal.length], 0.25);
+      col = lerp3(col, pal[(V.id[q] * 7) % pal.length], 0.1);
       let lum = 1 + a * 0.08 + b * 0.06 + f * 0.05 + (nR[q] - 0.5) * 0.12;
       const streak = sm(0.2, 0.7, nS[q]) * 0.25;
-      lum *= 1 - streak - crack * 0.4;
+      lum *= 1 - streak - crack * 0.3;
       c.setC(q, col, lum);
       c.rgh[q] = 0.86 + b * 0.05 + crack * 0.08;
       // 지의류 반점

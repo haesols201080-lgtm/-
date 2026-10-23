@@ -35,8 +35,13 @@
 //         chalkboard{w,h,stand} mapEasel{w,h} clock{tall} magnifier{} keyring{}
 //   병·음식: potionShelf{w,h,shelves} cauldron{r,fire} teaSet{} inkAndQuill{} scrolls{n,open} herbBundle{n} pottedPlant{kind}
 //         goblet plate bowl pitcher bread fruitBowl bottle cup book openBook paper hourglass
-//   창고: crate{s,lid} barrel{lying} sack{h}
-//   천·벽: banner{w,h,wall} tapestry{w,h} rug{w,l,design,layer} painting{w,h} memoryGlass{w,h} statue{s} armorStand{}
+//   창고: crate{s,lid,fill} barrel{h,r,lying} sack{h,spill} basket{r,fill:'fruit'|'bread'|'herbs'|'cloth',handle} bucket{water}
+//   천·벽: banner{w,h,free} tapestry{w,h} rug{w,l,design:0|1,layer} painting{w,h} memoryGlass{w,h} statue{s,mat,plinth} armorStand{}
+//   바깥(정원·마을): lanternPost{h,arms:1|2,light} wallLantern{s,light}(z=0 벽면) gardenBench{kind:'stone'|'iron',len}
+//         urn{mat,pedestal,cols} planter{len,wood} flowers{r,n,cols} marketStall{w,goods:'produce'|'fabric'|'bakery'|'curios'|'herbs',cols,light}
+//         well{} cart{load:'sacks'|'barrels'|'crates'|'hay'} flagPole{h,w,fh} noticeBoard{w,n} lowWall{len,h,t,piers,balls} railing{len,h}
+//         engineFountain{r=3,lit=0..12,cy,light} — 지름 ~6 m 수반 + 12개 황동 고리(천천히 돎, 켜진 고리는 금빛+마나) + 물막·물줄기
+//   방: window{w,h,ah,thick,glass,curtain} (벽 구멍은 부르는 쪽이 낸다; PROPS.archShape(w,h,ah) 로 같은 모양의 구멍)
 //   흩기: PROPS.clutter(batch, area, o)  area={x,y,z,w,d,rot} (y=윗면). o.kinds, o.density, o.floor, o.avoid
 //         PROPS.dress(batch, top, o)     탁자 윗면 꾸미기 (큰+중간+작은 셋 묶음, 15~25% 비틀기, 펼친 책, 녹은 초)
 //   PROPS.list — 보기 페이지용 [이름, 함수, 대략 크기] 목록. PROPS.U.time — 소품 셰이더 시간(스스로 돈다).
@@ -299,7 +304,7 @@
     const bv = o.bevel || 0;
     let g = new T.ExtrudeGeometry(shape, { depth: Math.max(0.0005, depth - bv * 2), bevelEnabled: bv > 0, bevelThickness: bv, bevelSize: bv * 0.9, bevelSegments: 1, curveSegments: o.curve || 8 });
     g.translate(0, 0, -depth / 2 + bv);
-    g = g.toNonIndexed(); g.computeVertexNormals();
+    if (g.index) g = g.toNonIndexed(); g.computeVertexNormals();
     const n = g.attributes.position.count, col = new Float32Array(n * 3).fill(1);
     g.setAttribute('color', new T.BufferAttribute(col, 3));
     if (o.uvRect) { // 앞뒤 면을 아틀라스 칸에 맞춘다
@@ -317,6 +322,7 @@
   }
   // 원판 (평면 uv 0..1, +z를 본다)
   function disc(r, seg) { const g = new T.CircleGeometry(r, seg || 24).toNonIndexed(); g.setAttribute('color', new T.BufferAttribute(new Float32Array(g.attributes.position.count * 3).fill(1), 3)); return g; }
+  const U01 = [0, 0, 1, 1];
   function tintGeo(g, t) {
     const c = tcol(t); if (!c) return g;
     const a = g.attributes.color.array;
@@ -638,22 +644,38 @@
   // ---- 기억 유리 (스테인드글라스 학자상: 납선 + 보석빛) ----
   function memoryTex() {
     return canvas(256, 512, (g, w, h) => {
-      const R = rng(83), pane = ['#2A4FA8', '#9E1F2A', '#D39A2A', '#2F7A4A', '#5A3A8A', '#c8b890', '#3a6a9a'];
-      g.fillStyle = '#141414'; g.fillRect(0, 0, w, h);
-      for (let y = 0; y < h; y += 32) for (let x = 0; x < w; x += 32) { g.fillStyle = hexs(pane[(x / 32 + y / 32) % 2 ? 0 : 5], (R() - 0.5) * 0.1); g.fillRect(x + 2, y + 2, 28, 28); }
-      g.fillStyle = '#141414'; g.beginPath(); g.moveTo(40, h - 30); g.lineTo(40, 170); g.quadraticCurveTo(128, 30, 216, 170); g.lineTo(216, h - 30); g.fill();
-      const sky = g.createLinearGradient(0, 80, 0, h); sky.addColorStop(0, '#3a6ab8'); sky.addColorStop(1, '#5a3a8a');
-      g.fillStyle = sky; g.beginPath(); g.moveTo(48, h - 38); g.lineTo(48, 172); g.quadraticCurveTo(128, 46, 208, 172); g.lineTo(208, h - 38); g.fill();
-      g.fillStyle = '#9E1F2A'; g.beginPath(); g.moveTo(128, 150); g.quadraticCurveTo(80, 200, 78, h - 50); g.lineTo(178, h - 50); g.quadraticCurveTo(176, 200, 128, 150); g.fill();
-      g.fillStyle = '#e8d0a8'; g.beginPath(); g.arc(128, 140, 22, 0, TAU); g.fill();
-      g.fillStyle = '#D39A2A'; g.beginPath(); g.arc(128, 140, 36, PI * 1.05, PI * 1.95); g.lineTo(150, 140); g.arc(128, 140, 24, PI * 1.95, PI * 1.05, true); g.fill();
-      g.fillStyle = '#efe0b8'; g.fillRect(100, 260, 56, 36);
-      g.fillStyle = '#2F7A4A'; g.fillRect(48, h - 90, 160, 52);
-      g.strokeStyle = '#141414'; g.lineWidth = 4;
-      for (let i = 0; i < 26; i++) { g.beginPath(); const x = 48 + R() * 160, y = 60 + R() * (h - 120); g.moveTo(x, y); g.lineTo(x + (R() - 0.5) * 70, y + (R() - 0.5) * 70); g.stroke(); }
-      g.lineWidth = 6; g.beginPath(); g.moveTo(40, h - 30); g.lineTo(40, 170); g.quadraticCurveTo(128, 30, 216, 170); g.lineTo(216, h - 30); g.closePath(); g.stroke();
-      g.beginPath(); g.moveTo(128, 150); g.quadraticCurveTo(80, 200, 78, h - 50); g.lineTo(178, h - 50); g.quadraticCurveTo(176, 200, 128, 150); g.stroke(); g.beginPath(); g.arc(128, 140, 22, 0, TAU); g.stroke(); g.strokeRect(100, 260, 56, 36);
-      pixels(g, w, h, (x, y, r, gg, b) => { const n = 0.8 + pnoise(x / 5, y / 5, 52, 103, 6) * 0.35; return [r * n, gg * n, b * n]; });
+      const R = rng(83), lead = '#141210';
+      const glass = (c, k) => hexs(c, (R() - 0.5) * (k || 0.08));
+      g.fillStyle = lead; g.fillRect(0, 0, w, h);
+      // 바탕: 들쭉날쭉한 남색·보라 조각
+      const gx = 6, gy = 12, P0 = [];
+      for (let j = 0; j <= gy; j++) { const row = []; for (let i = 0; i <= gx; i++) row.push([i / gx * w + (i % gx ? (R() - 0.5) * 22 : 0), j / gy * h + (j % gy ? (R() - 0.5) * 22 : 0)]); P0.push(row); }
+      for (let j = 0; j < gy; j++) for (let i = 0; i < gx; i++) { const q = [P0[j][i], P0[j][i + 1], P0[j + 1][i + 1], P0[j + 1][i]]; g.fillStyle = glass(R.p(['#22356e', '#2a3f80', '#33276a', '#1f2e5e', '#3a4a8a']), 0.1); g.beginPath(); q.forEach((p, k) => k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.fill(); g.strokeStyle = lead; g.lineWidth = 3; g.stroke(); }
+      for (let i = 0; i < 26; i++) { g.fillStyle = 'rgba(255,236,190,0.75)'; g.beginPath(); g.arc(20 + R() * (w - 40), 16 + R() * 200, 1.2 + R() * 1.4, 0, TAU); g.fill(); }
+      // 테두리 띠: 호박·홍옥·녹옥 작은 조각
+      for (let y = 0; y < h; y += 22) for (const x of [0, w - 16]) { g.fillStyle = glass(R.p(['#b8862a', '#8e2430', '#2f6a44', '#b8862a']), 0.06); g.fillRect(x + 2, y + 2, 12, 18); }
+      for (let x = 16; x < w - 16; x += 22) for (const y of [h - 18]) { g.fillStyle = glass(R.p(['#b8862a', '#8e2430', '#2f6a44']), 0.06); g.fillRect(x + 2, y + 2, 18, 13); }
+      // 장미: 룬 고리 (호박)
+      g.fillStyle = glass('#c99a3a', 0.04); g.beginPath(); g.arc(w / 2, 64, 40, 0, TAU); g.fill();
+      g.fillStyle = glass('#2a3f80', 0.04); g.beginPath(); g.arc(w / 2, 64, 26, 0, TAU); g.fill();
+      runeRing(g, w / 2, 64, 32, lead, 3.5);
+      // 학자: 겉옷(홍옥), 망토(보라), 얼굴, 두건(호박), 책(상아), 바닥(녹옥)
+      g.fillStyle = glass('#2f6a44', 0.05); g.fillRect(18, h - 120, w - 36, 102);
+      for (let x = 18; x < w - 18; x += 30) { g.strokeStyle = lead; g.lineWidth = 3; g.beginPath(); g.moveTo(x, h - 120); g.lineTo(x + 12, h - 18); g.stroke(); }
+      const robe = [[128, 170], [92, 230], [74, h - 70], [182, h - 70], [164, 230]];
+      g.fillStyle = glass('#8e2430', 0.05); g.beginPath(); robe.forEach((p, k) => k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.fill();
+      g.fillStyle = glass('#5a3a8a', 0.05); g.beginPath(); g.moveTo(128, 168); g.lineTo(86, 224); g.lineTo(70, 330); g.lineTo(100, 300); g.lineTo(112, 230); g.closePath(); g.fill(); g.beginPath(); g.moveTo(128, 168); g.lineTo(170, 224); g.lineTo(186, 330); g.lineTo(156, 300); g.lineTo(144, 230); g.closePath(); g.fill();
+      g.fillStyle = glass('#c99a3a', 0.04); g.beginPath(); g.arc(128, 150, 30, PI * 0.95, PI * 2.05); g.lineTo(150, 172); g.lineTo(106, 172); g.closePath(); g.fill();
+      g.fillStyle = '#e8d4b0'; g.beginPath(); g.ellipse(128, 156, 15, 19, 0, 0, TAU); g.fill();
+      g.fillStyle = '#efe4c8'; g.beginPath(); g.moveTo(98, 262); g.lineTo(128, 254); g.lineTo(158, 262); g.lineTo(158, 290); g.lineTo(128, 282); g.lineTo(98, 290); g.closePath(); g.fill();
+      g.strokeStyle = 'rgba(60,40,30,0.7)'; g.lineWidth = 1; for (let r = 0; r < 4; r++) { g.beginPath(); g.moveTo(104, 266 + r * 5); g.lineTo(124, 261 + r * 5); g.moveTo(132, 261 + r * 5); g.lineTo(152, 266 + r * 5); g.stroke(); }
+      g.strokeStyle = lead; g.lineWidth = 4;
+      g.beginPath(); robe.forEach((p, k) => k ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.stroke();
+      for (const xx of [104, 118, 138, 152]) { g.beginPath(); g.moveTo(xx + (xx - 128) * 0.1, 300); g.lineTo(xx + (xx - 128) * 0.6, h - 72); g.stroke(); }
+      g.beginPath(); g.ellipse(128, 156, 15, 19, 0, 0, TAU); g.stroke(); g.beginPath(); g.arc(128, 150, 30, PI * 0.95, PI * 2.05); g.stroke();
+      g.beginPath(); g.moveTo(98, 262); g.lineTo(128, 254); g.lineTo(158, 262); g.lineTo(158, 290); g.lineTo(128, 282); g.lineTo(98, 290); g.closePath(); g.moveTo(128, 254); g.lineTo(128, 282); g.stroke();
+      // 유리 두께 결 (조각 가운데가 밝다)
+      pixels(g, w, h, (x, y, r, gg, b) => { const n = 0.78 + pnoise(x / 6, y / 6, 42.7, 85.3, 6) * 0.3 + pnoise(x / 23, y / 23, 11.1, 22.3, 7) * 0.18; return [r * n, gg * n, b * n]; });
     });
   }
   function clockTex() {
@@ -711,7 +733,7 @@
     leaf: lazy(() => ctex(leafTex(), { rep: false })), radial: lazy(() => ctex(radialTex(), { rep: false })), coal: lazy(() => ctex(coalTex(), { repeat: 2 })),
     n1: lazy(() => ctex(noiseTex(3, 200, 90, 24), { repeat: 4 })), n2: lazy(() => ctex(noiseTex(8, 210, 60, 12), { repeat: 6 })), leaded: lazy(() => ctex(leadedTex(), { repeat: 1.6 })),
   };
-  P.TX = TX;
+  P.TX = TX; P.tx = { canvas, ctex, pnoise, pfbm, pixels, speck, glyphs, runeRing };
   const std = o => new T.MeshStandardMaterial(Object.assign({ vertexColors: true, roughness: 0.8, metalness: 0 }, o));
   // 발광 × 정점색, 시간 흔들기 등 셰이더 덧대기
   function patch(m, o) {
@@ -753,7 +775,7 @@
   RG('pCoal', () => patch(std({ map: TX.coal(), emissiveMap: TX.coal(), emissive: 0xff7a30, emissiveIntensity: 2.2, roughness: 0.9 }),
     { key: 'coal', frag: 'totalEmissiveRadiance *= (0.55 + 0.45 * sin(uT * 2.3 + vViewPosition.x * 9.0 + vViewPosition.y * 7.0)) * (0.8 + 0.3 * sin(uT * 7.1 + vViewPosition.z * 13.0)) * vColor;' }));
   RG('pCrystal', () => { const m = std({ color: 0xbffaff, emissive: 0x52e4f2, emissiveIntensity: 2.4, roughness: 0.08, metalness: 0.2, flatShading: true }); m.userData.noShadow = 1; return m; });
-  RG('pFrost', () => { const m = patch(std({ color: 0xfff2dc, emissive: 0xffb860, emissiveIntensity: 2.6, roughness: 0.55, transparent: true, opacity: 0.94 }), { key: 'frost', frag: 'totalEmissiveRadiance *= vColor * (0.94 + 0.06 * sin(uT * 8.0 + vViewPosition.x * 20.0));' }); m.userData.noShadow = 1; return m; });
+  RG('pFrost', () => { const m = patch(std({ color: 0xfff2dc, emissive: 0xffc070, emissiveIntensity: 4.0, roughness: 0.55, transparent: true, opacity: 0.94 }), { key: 'frost', frag: 'totalEmissiveRadiance *= vColor * (0.94 + 0.06 * sin(uT * 8.0 + vViewPosition.x * 20.0));' }); m.userData.noShadow = 1; return m; });
   // 물: 동심 물결(uv가 극좌표라 원형 물결이 된다), 떨어지는 물줄기
   RG('pWater', () => { const m = patch(std({ color: 0x2c4c54, map: TX.n2(), roughness: 0.05, metalness: 0.25, transparent: true, opacity: 0.9, envMapIntensity: 1.5 }),
     { key: 'wat', nfrag: 'normal = normalize( normal + 0.09 * vec3( sin( vUv.y * 9.0 - uT * 1.4 ) * 0.7 + sin( vUv.x * 5.0 + uT * 0.8 ) * 0.3, 0.0, cos( vUv.y * 7.0 - uT * 1.1 + vUv.x * 2.0 ) * 0.6 ) );' }); m.userData.noShadow = 1; return m; });
@@ -807,12 +829,12 @@
         float d = abs( vQ.x ) / max( w, 0.001 );
         a = smoothstep( 1.0, 0.55, d ) * smoothstep( -0.12, 0.0, y );
         float core = smoothstep( 0.8, 0.0, d ) * smoothstep( 0.9, 0.2, y );
-        col = mix( vec3( 1.0, 0.36, 0.07 ), vec3( 1.0, 0.88, 0.6 ), core );
+        col = mix( vec3( 1.0, 0.36, 0.07 ) * 0.8, vec3( 1.0, 0.93, 0.78 ) * 1.6, core );
         col = mix( col, vec3( 0.2, 0.3, 1.0 ), smoothstep( 0.16, -0.06, y ) * 0.7 );
-        col *= 6.0 * vA * vC;
+        col *= 6.5 * vA * vC;
       } else if ( vK < 1.5 ) {
         float r2 = dot( vQ, vQ );
-        a = ( exp( -r2 * 5.0 ) * 0.14 + exp( -r2 * 30.0 ) * 0.3 ) * vA * smoothstep( 1.0, 0.75, r2 );
+        a = ( exp( -r2 * 5.0 ) * 0.15 + exp( -r2 * 30.0 ) * 0.4 ) * vA * smoothstep( 1.0, 0.75, r2 );
         col = vec3( 1.0, 0.56, 0.24 ) * vC;
       } else if ( vK < 2.5 ) {
         float y = vQ.y;
@@ -821,7 +843,7 @@
         float d = abs( vQ.x + ( n - 0.5 ) * 0.6 * y ) / max( w, 0.001 );
         a = smoothstep( 1.0, 0.25, d + y * 0.45 * n ) * smoothstep( -0.14, 0.04, y );
         float hot = smoothstep( 0.7, 0.0, d ) * smoothstep( 0.85, 0.0, y );
-        col = mix( vec3( 0.95, 0.22, 0.04 ), vec3( 1.0, 0.72, 0.32 ), hot ) * 3.4 * ( 0.65 + 0.7 * n ) * vC;
+        col = mix( vec3( 0.95, 0.22, 0.04 ) * 0.8, vec3( 1.0, 0.86, 0.6 ) * 2.2, hot * hot ) * 3.6 * ( 0.65 + 0.7 * n ) * vC;
       } else if ( vK < 3.5 ) {
         float r2 = dot( vQ, vQ ); a = exp( -r2 * 5.0 ) * max( vA, 0.0 ); col = vec3( 1.0, 0.45, 0.12 ) * 5.0;
       } else {
@@ -884,8 +906,15 @@
     k.cyl('iron', 0.0012, 0.009, 0, base + h - 0.006, 0, { seg: 4, rz: R.r(-0.2, 0.2) });
     const top = base + h;
     if (lit) k.fl(0, top + 0.004, 0, o.fs || R.r(0.034, 0.046), { halo: o.halo === undefined ? 0.3 : o.halo });
-    if (o.light) k.light(0, top + 0.06, 0, 0xFFA24A, o.light === true ? 0.9 : o.light, 5.5);
+    if (o.light) k.light(0, top + 0.06, 0, 0xFFA24A, o.light === true ? 1.0 : o.light, 4.2);
     return { top: y + top };
+  };
+  // 기둥 초 무리 (굵은 초 n개, 녹아 붙은 촛농 웅덩이): 벽난로 앞·창턱·선반용. o.light 하나만 진짜 빛
+  P.candleCluster = (b, x, y, z, rot, o) => {
+    o = o || {}; const R = RNG(x, y, z, o), k = new K(b, x, y, z, rot), n = opt(o, 'n', 3 + R.i(3));
+    k.lathe('pWax', [[0, 0], [0.11, 0], [0.09, 0.008], [0.03, 0.012], [0, 0.012]], 0, 0, 0, { seg: 12, t: C.waxOld, wob: (i, a) => Math.sin(a * 3 + i) * 0.2 });
+    for (let i = 0; i < n; i++) { const a = i / n * TAU + R() * 0.5, rr = i ? R.r(0.04, 0.08) : 0; P.candle(b, ...k.w(Math.sin(a) * rr, 0.006, Math.cos(a) * rr), rot, { holder: 'none', r: R.r(0.022, 0.034), h: R.r(0.05, 0.22), melt: 1, halo: 0.25, lit: R() > 0.1, seed: R.i(1e9) }); }
+    if (o.light) k.light(0, 0.3, 0, 0xFFA24A, o.light === true ? 0.9 : o.light, 4);
   };
   P.goblet = (b, x, y, z, rot, o) => {
     o = o || {}; const k = new K(b, x, y, z, rot), mt = o.mat || 'pPewter';
@@ -1597,7 +1626,7 @@
   P.window = (b, x, y, z, rot, o) => {
     o = o || {};
     const k = new K(b, x, y, z, rot), w = opt(o, 'w', 1.2), h = opt(o, 'h', 2.2), ah = opt(o, 'ah', w * 0.6), th = opt(o, 'thick', 0.6), gz = -th * 0.62;
-    const gc = tcol(o.glass !== undefined ? o.glass : [0.38, 0.48, 0.85]);
+    const gc = tcol(o.glass !== undefined ? o.glass : [1.1, 1.35, 2.4]);
     k.add('pNightGlass', ext(archShape(w, h, ah), 0.01), L(0, 0, gz), gc);
     k.box('stoneTrim', 0, (h + ah * 0.55) / 2, gz, 0.08, h + ah * 0.55, 0.16, { c: 0.012 });
     k.box('stoneTrim', 0, h * 0.62, gz, w, 0.07, 0.14, { c: 0.01 });
@@ -1629,14 +1658,14 @@
     k.box('stoneTrim', 0, oh + lh * 0.47, F + 0.02, 0.24, lh * 0.94, 0.06, { c: 0.015, taper: 1.15 });
     k.ring('stoneTrim', 0.07, 0.012, 0, oh + lh * 0.5, F + 0.055, { rx: PI / 2, ts: 20, rs: 5 });
     for (let i = 0; i < 12; i++) { const a = i / 12 * TAU; k.box('stoneTrim', Math.sin(a) * 0.092, oh + lh * 0.5 + Math.cos(a) * 0.092, F + 0.052, 0.008, 0.022, 0.012, { c: 0, rz: -a }); }
-    k.add('pSoot', quad(ow * 1.05, 0.55), L(0, oh + 0.2, F + 0.002), 0.9);
+    k.add('pSoot', quad(ow * 1.05, 0.55, U01), L(0, oh + 0.2, F + 0.002), 0.9);
     k.box('stoneTrim', 0, H - 0.025, F - 0.12, W + 0.1, 0.05, 0.34, { c: 0.015 });
     k.box('oak', 0, H + 0.035, F - 0.1, W + 0.24, 0.07, 0.4, { c: 0.016, t: [0.9, 0.85, 0.8] });
     // 화실
     k.box('stoneDark', 0, oh / 2, 0.03, ow + 0.1, oh, 0.06, { c: 0, t: 0.35 });
     k.box('stoneDark', 0, oh - 0.02, dep / 2, ow, 0.04, dep, { c: 0, t: 0.25 });
     k.box('stoneDark', 0, 0.02, dep / 2, ow, 0.04, dep, { c: 0, t: 0.45 });
-    k.add('pSoot', quad(ow * 0.9, oh * 0.9), L(0, oh * 0.55, 0.062), 1);
+    k.add('pSoot', quad(ow * 0.9, oh * 0.9, U01), L(0, oh * 0.55, 0.062), 1);
     k.box('stoneTrim', 0, 0.03, F + 0.3, W + 0.3, 0.06, 0.64, { c: 0.015, t: 0.9 });
     // 받침쇠와 장작
     for (const s of [-1, 1]) {
@@ -1653,8 +1682,8 @@
       for (let i = 0; i < 7; i++) { const p = k.w(R.r(-ow * 0.3, ow * 0.3), 0.17, R.r(0.22, 0.4)); sprite(b, p[0], p[1], p[2], FK.fire, R.r(0.32, 0.62), R(), [1, 1, 1]); }
       for (let i = 0; i < 30; i++) { const p = k.w(R.r(-ow * 0.35, ow * 0.35), 0.2, R.r(0.2, 0.45)); sprite(b, p[0], p[1], p[2], FK.ember, R.r(0.006, 0.012), R(), [1, 1, 1]); }
       const hp = k.w(0, 0.45, F + 0.05); sprite(b, hp[0], hp[1], hp[2], FK.halo, 1.1, 0.3, [1.4, 0.7, 0.35]);
-      k.add('pGlowAdd', quad(ow * 1.3, 0.9), L(0, 0.005, F + 0.32, -PI / 2, 0, 0), [0.5, 0.2, 0.06]);
-      k.light(0, 0.6, F + 0.35, 0xFF7A30, opt(o, 'light', 3.0), 14, { fire: true, type: 'fire' });
+      k.add('pGlowAdd', quad(ow * 1.6, 1.1, U01), L(0, 0.065, F + 0.32, -PI / 2, 0, 0), [0.6, 0.24, 0.07]);
+      k.light(0, 0.6, F + 0.35, 0xFF7A30, opt(o, 'light', 3.2), opt(o, 'reach', 9), { fire: true, type: 'fire' });
     }
     if (o.breast) k.box('stone', 0, H + 0.07 + (o.breast - H - 0.07) / 2, (F - 0.32) / 2, W - 0.06, o.breast - H - 0.07, F - 0.32, { c: 0.015 });
     const over = o.over === undefined ? 'memory' : o.over;
@@ -1687,7 +1716,7 @@
       k.lathe('brass', [[0, 0], [0.012, 0], [0.04, 0.008], [0.042, 0.012], [0.02, 0.012], [0.016, 0.03], [0, 0.03]], px, ay, pz, { seg: 12 });
       k.sub(P.candle, px, ay + 0.012, pz, 0, { holder: 'none', h: R.r(0.12, 0.22), r: 0.011, lit: lit && R() > 0.06, halo: 0.22 });
     }
-    if (o.light !== false && lit) k.light(0, H + 0.3, 0, 0xFFA24A, o.light === true || o.light === undefined ? 1.0 : o.light, 6);
+    if (o.light !== false && lit) k.light(0, H + 0.3, 0, 0xFFA24A, o.light === true || o.light === undefined ? 1.2 : o.light, 4.8);
     return { top: y + H + 0.3 };
   };
   // 벽등: 방패 받침판, 휜 팔, 접시와 초. 위 벽에 그을음, 둘레에 따뜻한 빛 무늬. 지역 z=0 벽면, y=판 가운데
@@ -1703,8 +1732,8 @@
       k.lathe('brass', [[0, 0], [0.01, 0], [0.05, 0.01], [0.052, 0.015], [0.018, 0.012], [0.016, 0.03], [0, 0.03]], ax, 0, 0.18, { seg: 12 });
       k.sub(P.candle, ...[ax, 0.012, 0.18], 0, { holder: 'none', h: R.r(0.14, 0.2), r: 0.012, halo: 0.34, lit: o.lit });
     }
-    if (o.soot !== false) k.add('pSoot', quad(0.34 + n * 0.12, 0.6), L(0, 0.48, 0.003), 0.85);
-    if (o.lit !== false) { k.add('pGlowAdd', quad(1.2 + n * 0.3, 1.2), L(0, 0.22, 0.005), [0.32, 0.17, 0.07]); k.light(0, 0.28, 0.32, 0xFFA24A, opt(o, 'light', 1.1), 7); }
+    if (o.soot !== false) k.add('pSoot', quad(0.34 + n * 0.12, 0.6, U01), L(0, 0.48, 0.003), 0.85);
+    if (o.lit !== false) { k.add('pGlowAdd', quad(1.2 + n * 0.3, 1.2, U01), L(0, 0.22, 0.005), [0.42, 0.2, 0.07]); k.light(0, 0.28, 0.32, 0xFFA24A, opt(o, 'light', 1.2), 5); }
   };
   // 혼천의 샹들리에: 천장 장미, 쇠사슬, 고정된 축과 고리들이 천천히 돈다 (초 고리, 자오환, 황도환), 가운데 마나 수정
   P.chandelier = (b, x, y, z, rot, o) => {
@@ -1737,7 +1766,7 @@
     const g4 = mk(kk => { kk.ring('brass', R0 * 0.42, 0.012, 0, 0, 0, { rz: PI / 2, ts: 32, rs: 4 }); });
     const sp = opt(o, 'speed', 1);
     b.anims.push(t => { g1.rotation.y = t * 0.035 * sp; g2.rotation.y = -t * 0.08 * sp; g3.rotation.y = t * 0.12 * sp; g4.rotation.x = t * 0.18 * sp; g4.rotation.y = t * 0.05; });
-    k.light(0, cy + 0.1, 0, 0xFFB060, opt(o, 'light', 2.2), 15);
+    k.light(0, cy + 0.1, 0, 0xFFB060, opt(o, 'light', 2.2), opt(o, 'reach', 11));
     if (o.manaLight !== false) k.light(0, cy, 0, 0x7FF0FF, 0.35, 4, { flicker: false });
   };
   // 등불 (서거나 o.hang이면 y에서 매달림): 쇠틀, 유리, 지붕, 고리, 안의 초
@@ -1753,7 +1782,7 @@
     for (const sx of [-1, 1]) k.box(mt, sx * w * 0.2, by + h / 2, w / 2 + 0.004, 0.005 * s, h - 0.02, 0.004, { c: 0 });
     P.candle(b, ...k.w(0, by + 0.024 * s, 0), rot, { holder: 'none', h: 0.1 * s, r: 0.014 * s, halo: 0.42 * s, melt: 0.6, seed: R.i(1e6) });
     if (o.hang) k.cyl('iron', 0.004, 0.12 * s, 0, by + h + h * 0.45 + 0.06 * s, 0, { seg: 4 });
-    if (o.light) k.light(0, by + h * 0.6, 0, 0xFFB060, o.light === true ? 1.2 : o.light, 8);
+    if (o.light) k.light(0, by + h * 0.6, 0, 0xFFB060, o.light === true ? 1.2 : o.light, 6);
   };
   // 기름 등잔: 황동 받침과 기름통, 젖빛 유리 갓(발광), 유리 굴뚝, 작은 불꽃
   P.oilLamp = (b, x, y, z, rot, o) => {
@@ -1763,7 +1792,7 @@
     k.lathe('pFrost', [[0.03, 0], [0.06, 0.02], [0.095, 0.07], [0.1, 0.11], [0.08, 0.16], [0.042, 0.19], [0.04, 0.195], [0.03, 0.2]].map(p => [p[0] * s, p[1] * s]), 0, 0.26 * s, 0, { seg: 18, t: o.col || 1 });
     k.lathe('pGlass', [[0.022, 0], [0.026, 0.05], [0.019, 0.1], [0.019, 0.24], [0.016, 0.24]].map(p => [p[0] * s, p[1] * s]), 0, 0.3 * s, 0, { seg: 12, t: 0xF0F0F0 });
     k.fl(0, 0.31 * s, 0, 0.04 * s, { halo: 0.55 * s, hk: 0.8 });
-    if (o.light !== false) k.light(0, 0.42 * s, 0, 0xFFB869, o.light === true || o.light === undefined ? 1.0 : o.light, 6);
+    if (o.light !== false) k.light(0, 0.42 * s, 0, 0xFFB869, o.light === true || o.light === undefined ? 1.1 : o.light, 4.5);
     return { top: y + 0.55 * s };
   };
   // 새장 등: 황동 철사 둥근 지붕, 안에 초 또는 마나 수정
@@ -2296,7 +2325,7 @@
     k.tube('iron', [[0, -0.08, 0.02], [0, -0.06, reach * 0.3], [0, 0.0, reach * 0.6], [0, 0.05, reach * 0.62]], 0.01, { rs: 4 });
     k.ring('iron', 0.05, 0.008, 0, -0.01, reach * 0.35, { rz: PI / 2, ry: PI / 2, ts: 12, rs: 3, a0: PI / 2, arc: PI * 1.4 });
     P.lantern(b, ...k.w(0, 0.04, reach), rot, { s, hang: true, light: false });
-    if (o.soot !== false) k.add('pSoot', quad(0.4, 0.5), L(0, 0.3, 0.003), 0.6);
+    if (o.soot !== false) k.add('pSoot', quad(0.4, 0.5, U01), L(0, 0.3, 0.003), 0.6);
     k.light(0, -0.25 * s, reach, 0xFFB060, opt(o, 'light', 1.2), 10);
   };
   // 두레박
@@ -2475,5 +2504,107 @@
     k.col(0, 0, Rb + 0.1, Rb + 0.1, 0.72, 0, { r: Rb + 0.1 });
     return { r: Rb + 0.5 };
   };
+
+  // =====================================================================
+  // 13. 흩기 (밀도 규칙: 큰+중간+작은 셋 묶음, 15~25% 비틀기 3~20°, 무질서)
+  // =====================================================================
+  // 물건 종류 → [반지름(m), 등급 0 작음 1 중간 2 큼]
+  const ITEM = {
+    candle: [0.05, 0], book: [0.16, 0], paper: [0.15, 0], cup: [0.07, 0], goblet: [0.045, 0], bottle: [0.05, 0], inkAndQuill: [0.06, 0], hourglass: [0.06, 0],
+    magnifier: [0.09, 0], keyring: [0.06, 0], plate: [0.13, 0], bread: [0.13, 0], quill: [0.12, 0], pitcher: [0.09, 0],
+    bookStack: [0.18, 1], openBook: [0.24, 1], scrolls: [0.2, 1], candelabrum: [0.13, 1], oilLamp: [0.1, 1], teaSet: [0.22, 1], fruitBowl: [0.15, 1], armillarySphere: [0.15, 1], basket: [0.2, 1],
+    crate: [0.42, 2], sack: [0.28, 1], barrel: [0.32, 2], pottedPlant: [0.2, 1], floorStack: [0.2, 1], trunk: [0.5, 2], cauldron: [0.36, 2], globe: [0.45, 2],
+  };
+  P.ITEM = ITEM;
+  function placeItem(b, kind, x, y, z, rot, R, o) {
+    const lit = o.lit === undefined ? 0.45 : o.lit;
+    switch (kind) {
+      case 'candle': return P.candle(b, x, y, z, rot, { holder: R.p(['stick', 'dish', 'pewter', 'none', 'stick']), lit: R() < lit, melt: R.r(0.3, 1), light: false, seed: R.i(1e9) });
+      case 'bookStack': return P.bookStack(b, x, y, z, rot, { n: 2 + R.i(4), seed: R.i(1e9), candle: R() < 0.15 });
+      case 'floorStack': return P.bookStack(b, x, y, z, rot, { n: 4 + R.i(6), seed: R.i(1e9) });
+      case 'paper': return P.paper(b, x, y + R.r(0, 0.003), z, rot, { crumple: R() < 0.2, seed: R.i(1e9) });
+      case 'scrolls': return P.scrolls(b, x, y, z, rot, { n: 2 + R.i(3), open: R() < 0.12, seed: R.i(1e9) });
+      case 'candelabrum': return P.candelabrum(b, x, y, z, rot, { arms: 3, light: false, h: 0.32, seed: R.i(1e9) });
+      case 'oilLamp': return P.oilLamp(b, x, y, z, rot, { light: false });
+      case 'quill': return P.quill(b, x, y, z, rot, { tilt: PI / 2 - 0.02 });
+      case 'armillarySphere': return P.armillarySphere(b, x, y, z, rot, { r: 0.12 });
+      case 'basket': return P.basket(b, x, y, z, rot, { r: 0.18, seed: R.i(1e9) });
+      case 'crate': return P.crate(b, x, y, z, rot, { s: R.r(0.45, 0.65), lid: R() < 0.6, seed: R.i(1e9) });
+      case 'barrel': return P.barrel(b, x, y, z, rot, { seed: R.i(1e9) });
+      case 'pottedPlant': return P.pottedPlant(b, x, y, z, rot, { kind: R() < 0.4 ? 'fern' : 'broad', seed: R.i(1e9) });
+      default: return P[kind] ? P[kind](b, x, y, z, rot, { seed: R.i(1e9) }) : null;
+    }
+  }
+  // area {x,y,z,w,d,rot}: y는 윗면. o.kinds 종류 목록(겹치면 그만큼 자주), o.density 1 m²당 수, o.floor 바닥 물건, o.avoid [{x,z,r}], o.lit 촛불 켤 확률, o.max
+  P.clutter = (b, area, o) => {
+    o = o || {};
+    const R = rng(o.seed !== undefined ? o.seed : seedOf(area.x, area.y, area.z, 7)), k = new K(b, area.x, area.y, area.z, area.rot || 0), w = area.w, d = area.d;
+    const kinds = o.kinds || (o.floor ? ['floorStack', 'floorStack', 'crate', 'sack', 'basket', 'scrolls', 'candle', 'pottedPlant', 'barrel'] : ['book', 'bookStack', 'candle', 'candle', 'scrolls', 'cup', 'bottle', 'paper', 'paper', 'inkAndQuill', 'openBook', 'hourglass', 'magnifier', 'keyring', 'quill']);
+    const med = kinds.filter(q => (ITEM[q] || [0.1, 0])[1] >= 1), sml = kinds.filter(q => (ITEM[q] || [0.1, 0])[1] === 0);
+    const n = Math.min(o.max || 80, Math.max(1, Math.round(w * d * (o.density || (o.floor ? 1.2 : 6)))));
+    const placed = (o.avoid || []).map(a => { const lx = (a.x - area.x) * k.cs - (a.z - area.z) * k.sn, lz = (a.x - area.x) * k.sn + (a.z - area.z) * k.cs; return { x: lx, z: lz, r: a.r, flat: false }; });
+    const out = [];
+    const tryPut = (kind, cx, cz, spread) => {
+      const [r] = ITEM[kind] || [0.1, 0], flat = kind === 'paper';
+      for (let t = 0; t < 14; t++) {
+        const px = cx + R.r(-spread, spread), pz = cz + R.r(-spread, spread);
+        if (Math.abs(px) > w / 2 - r * 0.8 || Math.abs(pz) > d / 2 - r * 0.8) continue;
+        if (placed.some(p => (!flat || !p.flat) && Math.hypot(p.x - px, p.z - pz) < (p.r + r) * (flat || p.flat ? 0.75 : 0.95))) continue;
+        let lr = R.p([0, PI / 2, PI, -PI / 2]) * (kind === 'book' || kind === 'bookStack' || kind === 'paper' || kind === 'openBook' ? 1 : 0) + R.r(-0.03, 0.03);
+        if (R() < 0.22) lr += R.s() * R.r(0.05, 0.35);
+        placed.push({ x: px, z: pz, r, flat });
+        const p = k.w(px, 0, pz), res = placeItem(b, kind, p[0], p[1], p[2], k.r + lr, R, o);
+        out.push({ kind, x: p[0], z: p[2], r, res });
+        return true;
+      }
+      return false;
+    };
+    let left = n, guard = n * 4 + 10;
+    while (left > 0 && guard-- > 0) {
+      const cx = R.r(-w / 2, w / 2) * 0.8, cz = R.r(-d / 2, d / 2) * 0.8;
+      if (med.length) { tryPut(R.p(med), cx, cz, 0.1); left--; }
+      const ns = 2 + R.i(3);
+      for (let i = 0; i < ns && left > 0; i++) { if (sml.length) tryPut(R.p(sml), cx, cz, 0.38); left--; }
+      if (!med.length && !sml.length) break;
+    }
+    return out;
+  };
+  // 탁자 윗면 꾸미기: 한쪽으로 치우친 중심물(촛대·등잔·책더미+초) + 펼친 책 또는 찻잔 + 작은 물건들
+  P.dress = (b, top, o) => {
+    o = o || {};
+    const R = rng(o.seed !== undefined ? o.seed : seedOf(top.x, top.y, top.z, 3)), k = new K(b, top.x, top.y, top.z, top.rot || 0), w = top.w, d = top.d;
+    const sx = R.s() * w * 0.2, sz = -d * 0.12, center = o.center || R.p(['candelabrum', 'oilLamp', 'stackCandle', 'candelabrum']), avoid = [];
+    const cp = k.w(sx, 0, sz);
+    if (center === 'candelabrum') P.candelabrum(b, cp[0], cp[1], cp[2], k.r + R.r(-0.3, 0.3), { arms: R() < 0.5 ? 3 : 5, light: o.light !== false, h: R.r(0.32, 0.42) });
+    else if (center === 'oilLamp') P.oilLamp(b, cp[0], cp[1], cp[2], k.r, { light: o.light !== false });
+    else { P.bookStack(b, cp[0], cp[1], cp[2], k.r + R.r(-0.3, 0.3), { n: 3 + R.i(3), candle: true, light: o.light !== false }); }
+    avoid.push({ x: cp[0], z: cp[2], r: 0.2 });
+    if (w * d > 0.5) {
+      const p2 = k.w(-sx * 0.9, 0, d * 0.12), mk = o.second || (R() < 0.65 ? 'openBook' : 'teaSet');
+      placeItem(b, mk, p2[0], p2[1], p2[2], k.r + R.r(-0.25, 0.25), R, o); avoid.push({ x: p2[0], z: p2[2], r: 0.25 });
+    }
+    return P.clutter(b, top, Object.assign({ density: 5, avoid, seed: R.i(1e9), kinds: o.kinds }, o, { avoid: avoid.concat(o.avoid || []) }));
+  };
+
+  // =====================================================================
+  // 14. 목록 (보기 페이지·시험용): [이름, 함수, 자리 크기(m), 기본 옵션]
+  // =====================================================================
+  P.list = [
+    ['longTable', P.longTable, 4.6, { len: 3.2 }], ['bench', P.bench, 2.0], ['chair', P.chair, 1.0], ['armchair', P.armchair, 1.2], ['sofa', P.sofa, 2.2], ['desk', P.desk, 1.8, { hutch: true }],
+    ['roundTable', P.roundTable, 1.4, { dress: true }], ['lectern', P.lectern, 1.0, { candle: true }], ['bookshelf', P.bookshelf, 2.2, { bays: 2, rail: true, ladder: 0.3 }], ['bookStack', P.bookStack, 0.8, { n: 6 }],
+    ['scrollRack', P.scrollRack, 1.2], ['cardCatalog', P.cardCatalog, 1.3], ['rollingLadder', P.rollingLadder, 1.0], ['bed', P.bed, 2.6], ['trunk', P.trunk, 1.2, { open: true }],
+    ['wardrobe', P.wardrobe, 1.6, { open: true }], ['nightstand', P.nightstand, 0.8], ['windowSeat', P.windowSeat, 1.7], ['cushion', P.cushion, 0.6], ['window', P.window, 1.6],
+    ['fireplace', P.fireplace, 2.8, { breast: 2.6 }], ['candle', P.candle, 0.4], ['candelabrum', P.candelabrum, 0.6], ['wallSconce', P.wallSconce, 0.6, { n: 2 }], ['chandelier', P.chandelier, 2.2, { drop: 0.3 }],
+    ['lantern', P.lantern, 0.5], ['oilLamp', P.oilLamp, 0.5], ['birdcage', P.birdcage, 0.6, { crystal: true }], ['globe', P.globe, 1.1], ['armillarySphere', P.armillarySphere, 0.9, { stand: 'floor', spin: true }],
+    ['orrery', P.orrery, 1.0], ['telescope', P.telescope, 1.4], ['tuningForkRack', P.tuningForkRack, 1.3], ['bell', P.bell, 1.0], ['chalkboard', P.chalkboard, 2.2, { stand: true }],
+    ['mapEasel', P.mapEasel, 1.2], ['potionShelf', P.potionShelf, 1.3], ['cauldron', P.cauldron, 1.0, { fire: true }], ['herbBundle', P.herbBundle, 1.2, { n: 4 }], ['pottedPlant', P.pottedPlant, 0.8],
+    ['crate', P.crate, 0.9, { lid: false }], ['barrel', P.barrel, 0.8], ['sack', P.sack, 0.7], ['basket', P.basket, 0.6, { handle: true }], ['banner', P.banner, 1.2, { free: true }],
+    ['tapestry', P.tapestry, 2.7], ['rug', P.rug, 3.0, { w: 1.6, l: 2.4, layer: true }], ['painting', P.painting, 1.3], ['memoryGlass', P.memoryGlass, 1.1], ['statue', P.statue, 1.0],
+    ['armorStand', P.armorStand, 1.1], ['clock', P.clock, 0.8], ['teaSet', P.teaSet, 0.6], ['inkAndQuill', P.inkAndQuill, 0.4], ['scrolls', P.scrolls, 0.6], ['magnifier', P.magnifier, 0.4],
+    ['keyring', P.keyring, 0.4], ['goblet', P.goblet, 0.3], ['fruitBowl', P.fruitBowl, 0.5], ['bottle', P.bottle, 0.3], ['openBook', P.openBook, 0.6], ['hourglass', P.hourglass, 0.3],
+    ['flowers', P.flowers, 0.7], ['urn', P.urn, 1.0], ['planter', P.planter, 1.4], ['gardenBench', P.gardenBench, 1.8, { kind: 'iron' }], ['lanternPost', P.lanternPost, 1.0, { arms: 2 }],
+    ['wallLantern', P.wallLantern, 0.8], ['well', P.well, 2.2], ['cart', P.cart, 3.2], ['flagPole', P.flagPole, 1.4], ['noticeBoard', P.noticeBoard, 1.8], ['lowWall', P.lowWall, 4.2, { len: 4 }],
+    ['railing', P.railing, 3.2], ['marketStall', P.marketStall, 3.0], ['engineFountain', P.engineFountain, 8.0],
+  ];
   // @@END (이 줄 위에 이어 쓴다)
 })();

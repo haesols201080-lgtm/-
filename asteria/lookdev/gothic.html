@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gothic Kit Look-dev</title>
+<style>
+  :root { --bg: #0d0c18; --ink: #f2eee4; --dim: #b9b4c8; --brass: #d4a94e; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden; font: 13px/1.4 "IBM Plex Sans KR", system-ui, sans-serif; }
+  #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #bar { position: fixed; left: 12px; top: 12px; display: flex; gap: 6px; flex-wrap: wrap; max-width: calc(100% - 24px); }
+  #bar a { color: var(--ink); background: rgba(13, 12, 24, 0.7); border: 1px solid rgba(255, 255, 255, 0.15); padding: 4px 9px; border-radius: 999px; text-decoration: none; }
+  #bar a.on { border-color: var(--brass); color: var(--brass); }
+  #info { position: fixed; right: 12px; bottom: 10px; color: var(--dim); background: rgba(13, 12, 24, 0.6); padding: 3px 8px; border-radius: 6px; }
+  body.shot #bar, body.shot #info { display: none; }
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="bar"></div>
+<div id="info"></div>
+<script>window.ATMOS_MANUAL = true; var HUD = { w: 800, h: 600, dpr: 1 };</script>
+<script src="../vendor/three.min.js"></script>
+<script src="../vendor/three-post.js"></script>
+<script src="../vendor/atmos-fflate.js"></script>
+<script src="../vendor/atmos-exrloader.js"></script>
+<script src="../vendor/atmos-roomenv.js"></script>
+<script src="../vendor/atmos-smaa-shader.js"></script>
+<script src="../vendor/atmos-smaa-pass.js"></script>
+<script src="../js/core.js"></script>
+<script src="../js/gfx.js"></script>
+<script src="../js/atmos.js"></script>
+<script src="../js/tex.js"></script>
+<script src="../js/batch.js"></script>
+<script src="../js/gothic.js"></script>
+<script>
+'use strict';
+// ------------------------------------------------------------------
+// 고딕 키트 보기 페이지. #parts #parts_roofs #castle #castle_eye #castle_far #castle_dusk #silhouette
+// ------------------------------------------------------------------
+if (/shot/.test(location.search)) document.body.classList.add('shot');
+initGfx();
+const S = GFX.scene, HAS_TEX = !!(window.TEX && TEX.lib);
+const name = (location.hash || '#castle').slice(1);
+const PI = Math.PI;
+
+// ---------- 땅 ----------
+const C = 13;   // 학원 마당 높이
+function hill(x, z) {
+  const r = Math.hypot(x * 0.85, z * 1.0);
+  let h = 3 + 13 * Math.exp(-(r * r) / (2 * 95 * 95)) + (fbm(x / 70, z / 70, 3) - 0.5) * 6 * smooth(50, 120, r);
+  const gz = 100 + Math.sin(x * 0.025) * 8, gd = z - gz;          // 고가교가 건너는 골짜기
+  h -= 12 * Math.exp(-(gd * gd) / (2 * 13 * 13)) * smooth(-120, -40, x) * smooth(120, 40, x);
+  // 마당: 평평하게, 남동쪽은 한 단 낮은 기숙사 단
+  const k = smooth(80, 62, Math.hypot(x * 0.9, z * 1.05 - 4));
+  const lower = x > 14 && z > 20 ? 1 : 0;
+  h = lerp(h, C - 4.2 * lower, k);
+  return h;
+}
+const flat = () => 0;
+const GROUND = /^parts/.test(name) ? flat : hill;
+function makeGround(fn) {
+  const N = 220, size = /^parts/.test(name) ? 400 : 900;
+  const g = new THREE.PlaneGeometry(size, size, N, N); g.rotateX(-PI / 2);
+  const p = g.attributes.position, uv = g.attributes.uv;
+  for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i); p.setY(i, fn(x, z) - 0.02); uv.setXY(i, x, -z); }
+  g.computeVertexNormals();
+  let m;
+  try { m = HAS_TEX ? (TEX.terrain ? TEX.terrain({}) : TEX.lib('grass')) : null; } catch (e) { console.warn('terrain mat', e.message); }
+  if (!m) m = new THREE.MeshStandardMaterial({ color: 0x5d6b3c, roughness: 1 });
+  const me = new THREE.Mesh(g, m); me.receiveShadow = true; me.name = 'ground'; S.add(me);
+  if (HAS_TEX && TEX.setGround) try { TEX.setGround(fn === flat ? { flat: 0 } : { fn, x0: -size / 2, z0: -size / 2, w: size, d: size, res: 256 }); } catch (e) { console.warn('setGround', e.message); }
+  return me;
+}
+makeGround(GROUND);
+
+// ---------- 짓기 ----------
+const t0 = performance.now();
+const b = new KIT.Builder({ seed: 7, ground: GROUND, detail: /low/.test(location.search) ? 0.5 : 1, lit: 0.42 });
+const TOPS = {};
+function buildParts() {
+  // 앞줄: 창 종류, 문, 버팀벽+첨탑, 장미창 박공
+  const y = 0.0;
+  const wall = (x0, x1, o) => b.wall(x0, 0, x1, 0, Object.assign({ y, h: 9, thick: 1.2, buttress: false, endButtress: true, cornice: true }, o));
+  wall(-30, -24, { windows: [{ type: 'lancet', sill: 1.2 }], era: 'high', bay: 6 });
+  wall(-23, -16.5, { windows: [{ type: 'paired', sill: 1.0, h: 6.2 }], bay: 7 });
+  wall(-15.5, -9, { windows: [{ type: 'pointed', sill: 1.2, h: 5.6 }], bay: 7, ancient: 2.4 });
+  wall(-8, -3, { era: 'early', windows: [{ type: 'round', sill: 1.6 }, { type: 'roundPair', sill: 5.2 }], h: 9, bay: 5 });
+  wall(-2, 6, { doors: [{ at: 4, w: 2.8, h: 4.8, orders: 4, leaves: 'closed' }], windows: [{ type: 'square', sill: 6.2, h: 1.8 }], bay: 8, ancient: 2 });
+  wall(7, 19, { windows: [{ type: 'triple', sill: 1.4, h: 6.6 }, { type: 'oculus', sill: 8.1, w: 1.0 }], bay: 6, buttress: true, h: 10, endButtress: true });
+  b.hall(30, -6, { w: 14, d: 13, h: 9, rot: PI / 2, rose: '+x', ends: { '-x': false }, windows: false, cornerButtress: true, roofCol: false, chimneys: 0 });
+  b.pinnacle(-34, 0, 3, { h: 4.4 }); b.pinnacle(-36, 0, 4, { tuning: true, h: 4 });
+  b.stairs(-2, 9, -PI / 2, { rise: 1.5, run: 3, w: 3, y: -1.5 });
+  b.balustrade(-30, 6, -20, 6, { y: 0 });
+}
+function buildRoofs() {
+  const z = -6, y = 0;
+  TOPS.cone = b.tower(-30, z, { r: 3.4, h: 11, roof: 'cone', lucarnes: 3, turret: { a: 2.2, h: 3.5 } }).top;
+  TOPS.spire = b.tower(-18, z, { w: 6.5, h: 11, roof: 'spire' }).top;
+  TOPS.pyramid = b.tower(-7, z, { w: 6, h: 10, roof: 'pyramid' }).top;
+  TOPS.belfry = b.tower(6, z - 2, { w: 9, h: 9, roof: 'belfry', belfry: { h: 8 }, clock: { y: 6 } }).top;
+  TOPS.dome = b.tower(20, z, { r: 3.6, h: 10, roof: 'dome', corbelStage: { h: 4.5, out: 0.6 } }).top;
+  TOPS.arm = b.tower(31, z, { r: 3.4, h: 10, roof: 'armillary' }).top;
+  TOPS.batt = b.tower(41, z, { r: 3, h: 10, roof: 'battlement', cap: true }).top;
+  TOPS.lantern = b.tower(51, z, { r: 3.2, h: 10, roof: 'lantern' }).top;
+}
+function buildCastle() {
+  const G = b.gatehouse(-6, 50, { rot: 0, w: 15, d: 11, h: 14, y: C, ancient: 3, towers: [{ h: 19, roof: 'cone', ratio: 2.1 }, { h: 23.5, roof: 'battlement', cap: true }] });
+  TOPS.gateL = G.towers[0].top; TOPS.gateR = G.towers[1].top;
+  // 대식당: 날개 버팀벽, 장미창, 플레시
+  const R = b.hall(0, -20, { w: 42, d: 20, h: 14, y: C, flying: true, rose: '+x', fleche: { h: 9 }, chimneys: 1, ancient: 2.6, doors: [{ side: '+z', at: -8, w: 3.0, h: 5.2 }], windows: [{ type: 'paired', sill: 2.4, h: 8.4, w: 2.5 }], gableWin: { type: 'lancet', n: 3 } });
+  TOPS.refectory = R.yR;
+  // 도서관: 아래층은 옛 (둥근 창), 위는 고딕
+  b.hall(-38, 12, { w: 34, d: 14, h: 13, y: C, rot: PI / 2, lower: { h: 5.2, era: 'early' }, windows: [{ type: 'round', sill: 1.8, era: 'early' }, { type: 'triple', sill: 6.4, h: 5.8, w: 2.9 }], rose: false, chimneys: 2, dormers: 0, ancient: 2.2, doors: [{ side: '+z', at: 4, w: 2.6, h: 4.4 }] });
+  // 기숙사: 낮은 단, 지붕창, 굴뚝
+  b.hall(36, 36, { w: 30, d: 11, h: 8.5, y: C - 4.2, rot: -0.3, era: 'early', windows: [{ type: 'square', sill: 1.2, h: 1.9 }, { type: 'square', sill: 4.8, h: 1.9 }], dormers: 4, chimneys: 3, pitch: 57, buttress: false, rose: false, gableWin: { type: 'square', n: 2, sill: 1.4 } });
+  // 탑들: 높이 1 : 1.3 : 1.7 : 2.2 : 3
+  TOPS.bell = b.tower(27, -31, { w: 10, h: 39, y: C, roof: 'belfry', belfry: { h: 9.5 }, ancient: 3, clock: { y: C + 33, sides: [1, 2] }, roofH: 24 }).top;
+  TOPS.nw = b.tower(-24, -33, { r: 5.2, h: 29, y: C, corbelStage: { h: 6 }, turret: { a: -2.3, h: 5 }, ancient: 3, ratio: 1.9, lucarnes: 4 }).top;
+  TOPS.study = b.tower(-45, -16, { r: 4.6, h: 30, y: C, roof: 'armillary', ancient: 2.5, corbelStage: { h: 5, out: 0.6 } }).top;
+  TOPS.lib = b.tower(-47, 32, { r: 3.9, h: 18, y: C, roof: 'cone', ratio: 1.75, turret: { a: 0.6, h: 3.5 } }).top;
+  TOPS.east = b.tower(15, 9, { w: 7, h: 14, y: C, roof: 'pyramid', ratio: 1.5 }).top;
+  // 회랑 (가운데 뜰을 둘러싼 세 변)
+  b.arcade(-21, 6, 2, 6, { y: C, gaps: [3] });
+  b.arcade(2, 6, 2, 29, { y: C });
+  b.arcade(2, 29, -21, 29, { y: C, gaps: [3] });
+  // 성벽과 낮은 단
+  b.curtain([[-13.5, 49], [-30, 44], [-44, 37]], { y: C, h: 8, ancient: 2.5 });
+  b.curtain([[1.5, 49], [12, 47]], { y: C, h: 8, turrets: false });
+  b.wall(14, 60, 14, 26, { y: C, h: 0.05, thick: 1.0, windows: false, buttress: true, pinnacle: false, courses: false, cornice: false, parapet: 'balustrade', ancient: 0 });
+  b.wall(14, 20, 21.5, 20, { y: C, h: 0.05, thick: 1.0, windows: false, buttress: false, courses: false, cornice: false, parapet: 'balustrade' });
+  b.wall(26.5, 20, 60, 20, { y: C, h: 0.05, thick: 1.0, windows: false, buttress: true, pinnacle: false, courses: false, cornice: false, parapet: 'balustrade' });
+  b.stairs(24, 27.2, PI / 2, { rise: 4.2, run: 7, w: 4, y: C - 4.2 });
+  // 고가교
+  const V = b.bridge(-6, 62, -6, 140, { y0: C, y1: hill(-6, 140) + 0.3, width: 7, arches: 5 });
+  window.VIA = V;
+}
+if (/^parts$/.test(name)) buildParts(); else if (/^parts_roofs/.test(name)) buildRoofs(); else buildCastle();
+const tBuild = performance.now() - t0;
+const group = b.build();
+S.add(group);
+const st = KIT.stats(group);
+console.warn('KIT STATS ' + JSON.stringify(Object.assign(st, { build: Math.round(tBuild), colliders: b.colliders.length, lights: b.lights.length, marks: b.marks.length, tops: Object.fromEntries(Object.entries(TOPS).map(([k, v]) => [k, Math.round(v * 10) / 10])) })));
+window.KIT_GROUP = group;
+
+// ---------- 장면 ----------
+const SHOTS = {
+  parts: { p: 'goldenHour', cam: [2, 2.0, 27], look: [2, 5.4, -4], sun: [16, 210] },
+  parts_roofs: { p: 'goldenHour', cam: [10, 3, 52], look: [10, 15, -6], sun: [18, 215] },
+  castle: { p: 'goldenHour', cam: [118, 46, 150], look: [-6, 22, -2], sun: [15, 238] },
+  castle_eye: { p: 'goldenHour', cam: [-3.2, 0, 72], look: [-7, 34, 22], eye: true, sun: [15, 238] },
+  castle_far: { p: 'goldenHour', cam: [150, 24, 205], look: [-4, 26, 0], sun: [15, 238] },
+  castle_dusk: { p: 'dusk', cam: [118, 46, 150], look: [-6, 22, -2], lit: 1 },
+  silhouette: { p: 'goldenHour', cam: [150, 24, 205], look: [-4, 26, 0], sil: true },
+};
+const shot = SHOTS[name] || SHOTS.castle;
+const bar = document.getElementById('bar');
+for (const k in SHOTS) { const a = document.createElement('a'); a.href = '#' + k; a.textContent = k; if (k === name) a.className = 'on'; a.onclick = () => setTimeout(() => location.reload(), 10); bar.appendChild(a); }
+ATMOS.preset(shot.p, 0, shot.sun ? { sun: shot.sun } : undefined);
+const cam = GFX.camera;
+cam.fov = 48; cam.near = 0.3; cam.far = 2000; cam.updateProjectionMatrix();
+if (shot.eye) { const V = window.VIA; shot.cam[1] = V ? V.deck(shot.cam[2] - 62) + 1.6 : C + 1.6; }
+cam.position.set(...shot.cam); cam.lookAt(...shot.look);
+const focus = new THREE.Vector3(...shot.look); focus.y = 0;
+if (shot.eye) focus.set(shot.cam[0], 0, shot.cam[2] - 26);
+KIT.setLit(group, shot.lit ?? 0);
+// 점광원: 카메라에 가까운 등불부터
+const P = GFX.pool, L = b.lights.slice().sort((a, c) => Math.hypot(a.x - cam.position.x, a.z - cam.position.z) - Math.hypot(c.x - cam.position.x, c.z - cam.position.z));
+for (let i = 0; i < P.length; i++) { const l = L[i]; if (!l) { P[i].intensity = 0; continue; } P[i].position.set(l.x, l.y, l.z); P[i].color.setHex(l.c); P[i].intensity = (l.k || 1) * (shot.p === 'dusk' ? 2.2 : 0.7); P[i].distance = l.d || 10; }
+// 실루엣: 하늘은 흰색, 모든 것은 검은색
+if (shot.sil) {
+  S.traverse(o => { if (o.isMesh || o.isPoints || o.isSprite) o.visible = false; });
+  group.traverse(o => { o.visible = true; });
+  S.getObjectByName('ground').visible = true;
+  S.background = new THREE.Color(0xffffff); S.fog = null;
+  S.overrideMaterial = new THREE.MeshBasicMaterial({ color: 0x000000 });
+}
+const info = document.getElementById('info');
+info.textContent = name + ' · ' + st.tris + ' tris · ' + st.calls + ' calls' + (HAS_TEX ? ' · TEX' : ' · flat');
+let last = performance.now(), T = 0;
+window.__frames = 0;
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; T += dt;
+  for (const f of b.anims) f(T);
+  if (shot.sil) { GFX.renderer.toneMapping = THREE.NoToneMapping; GFX.renderer.render(S, cam); }
+  else { ATMOS.update(dt, focus); ATMOS.render(); }
+  window.__frames++;
+}
+ATMOS.whenLoaded().then(() => { window.__envReady = true; });
+if (HAS_TEX && TEX.ready) { try { TEX.ready().then(() => { window.__texReady = true; if (GFX.renderer.shadowMap) GFX.renderer.shadowMap.needsUpdate = true; }); } catch (e) { } }
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -268,8 +268,9 @@ function grassTuftGeo(blades, segs, flower) {
       const w = w0 * Math.pow(1 - t, 0.85) * (1 + 0.6 * Math.sin(t * 3.0) * (1 - t));
       // 법선: 위쪽 + 눕는 쪽 + 넓은 면 조금 (들판이 지형처럼 고르게 밝도록)
       let nx = -fz * 0.35 + lx * 0.25, ny = 0.75, nz = fx * 0.35 + lz * 0.25; const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
-      if (i < segs) { for (const sg of [-1, 1]) { P.push(cx + fx * w * sg, cy, cz + fz * w * sg); N.push(nx, ny, nz); B.push(t, rb, 0); C.push(1, 1, 1); } }
-      else { P.push(cx, cy, cz); N.push(nx, ny, nz); B.push(1, rb, 0); C.push(1, 1, 1); }
+      const tag = flower ? 2 : 0;   // gb.z: 0 풀잎, 1 꽃 머리, 2 꽃대
+      if (i < segs) { for (const sg of [-1, 1]) { P.push(cx + fx * w * sg, cy, cz + fz * w * sg); N.push(nx, ny, nz); B.push(t, rb, tag); C.push(1, 1, 1); } }
+      else { P.push(cx, cy, cz); N.push(nx, ny, nz); B.push(1, rb, tag); C.push(1, 1, 1); }
     }
     for (let i = 0; i < segs - 1; i++) { const a = i0 + i * 2; I.push(a, a + 1, a + 3, a, a + 3, a + 2); }
     const a = i0 + (segs - 1) * 2; I.push(a, a + 1, a + 2);
@@ -288,9 +289,9 @@ function grassTuftGeo(blades, segs, flower) {
   g.setIndex(I);
   return g;
 }
-function grassMat(flower) {
+function grassMat() {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.82, metalness: 0, envMapIntensity: 0.9 });
-  m.customProgramCacheKey = () => 'grass' + (flower ? 'F' : '');
+  m.customProgramCacheKey = () => 'grass';
   m.onBeforeCompile = sh => {
     sh.uniforms.uT = GFX.timeU;
     const NOISE = `float gHash( vec2 p ) { vec3 q = fract( vec3( p.xyx ) * 0.1031 ); q += dot( q, q.yzx + 33.33 ); return fract( ( q.x + q.y ) * q.z ); }
@@ -321,9 +322,10 @@ varying vec2 vGw;
 }`);
     // 잎 색: 뿌리 어둡게 → 몸통(땅 색) → 끝은 밝고 마른 색. 꽃은 머리만 물든다
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vGb;\nvarying vec2 vGw;\n')
-      .replace('#include <color_fragment>', flower ? `#include <color_fragment>
-	diffuseColor.rgb = vGb.z > 0.5 ? diffuseColor.rgb * ( 0.85 + 0.3 * vGb.y ) : vec3( 0.075, 0.11, 0.035 ) * ( 0.5 + 0.7 * vGb.x );` : `#include <color_fragment>
-	{
+      .replace('#include <color_fragment>', `#include <color_fragment>
+	if ( vGb.z > 1.5 ) diffuseColor.rgb = vec3( 0.075, 0.11, 0.035 ) * ( 0.5 + 0.7 * vGb.x );
+	else if ( vGb.z > 0.5 ) diffuseColor.rgb *= 0.85 + 0.3 * vGb.y;
+	else {
 		vec3 gBase = diffuseColor.rgb, gDry = vec3( 0.39, 0.31, 0.1 );
 		float dk = smoothstep( 0.45, 0.85, vGw.y ) * 0.6 + vGb.y * 0.2;
 		vec3 gTip = mix( gBase * vec3( 1.4, 1.38, 1.15 ), gDry, dk * 0.75 );
@@ -354,8 +356,9 @@ function initGrass() {
     GFX.scene.add(im);
     return im;
   };
-  const im = mk(grassTuftGeo(mob ? 7 : 11, mob ? 2 : 3, false), grassMat(false), N);
-  const fl = mk(grassTuftGeo(3, mob ? 3 : 4, true), grassMat(true), NF);
+  const mat = grassMat();   // 풀과 꽃이 한 프로그램을 같이 쓴다
+  const im = mk(grassTuftGeo(mob ? 7 : 11, mob ? 2 : 3, false), mat, N);
+  const fl = mk(grassTuftGeo(3, mob ? 3 : 4, true), mat, NF);
   GFX.grass = { im, N, fl, NF, cx: 1e9, cz: 1e9, on: false };
 }
 const _gm = new THREE.Matrix4(), _gq = new THREE.Quaternion(), _gs = new THREE.Vector3(), _gp = new THREE.Vector3(), _gc = new THREE.Color(), _gy = new THREE.Vector3(0, 1, 0);
