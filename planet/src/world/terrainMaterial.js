@@ -98,6 +98,10 @@ void computeTerrain() {
   rockC = mix(rockC, s2l(vec3(0.45, 0.47, 0.52)) * (0.7 + 0.5 * rock.b), smoothstep(0.3, 0.8, snowW));
   rockC = mix(rockC, crysC * 1.1, smoothstep(0.3, 0.8, crysW) * 0.6);
 
+  // scree / exposed rock on eroded crests and steeper hillsides (before cliffs)
+  float scree = smoothstep(0.07, 0.2, slope + (nzC.b - 0.5) * 0.08) * (0.35 + 0.65 * smoothstep(0.15, 0.45, bio.b)) * (1.0 - cliff);
+  vec3 screeC = mix(rockC * 0.85, ground * 0.8, smoothstep(0.35, 0.75, rock.g)) * (0.8 + 0.35 * rock.b);
+  ground = mix(ground, screeC, scree * 0.75);
   vec3 alb = mix(ground, rockC, cliff) * macro;
   float rough = mix(mix(0.93, 0.97, sandW), 0.82, cliff);
   float ao = mix(mix(soilA.a, 1.0, sandW), rock.a, cliff);
@@ -155,22 +159,46 @@ void computeTerrain() {
   float mThr = 1.0 - clamp(uMoss + localG * 0.8, 0.0, 1.0);
   float gThr = 1.0 - clamp(uGrass + localG * 0.55, 0.0, 1.0);
   fertile *= 1.0 - snowCov * 0.9 - smoothstep(0.4, 0.8, saltW) * 0.6;
-  float mossCov = smoothstep(mThr, mThr + 0.12, fertile) * step(0.001, uMoss + localG) * flat_ * step(0.4, above) * (1.0 - packed);
-  float grassCov = smoothstep(gThr, gThr + 0.14, fertile + nzC.g * 0.06) * step(0.001, uGrass + localG * 0.5) * flat_ * smoothstep(0.6, 2.5, above) * (1.0 - packed * 0.8);
-  vec3 mossC = mix(s2l(vec3(0.17, 0.22, 0.08)), s2l(vec3(0.33, 0.39, 0.13)), mossT.b);
-  vec3 grassC = mix(s2l(vec3(0.20, 0.33, 0.09)), s2l(vec3(0.46, 0.55, 0.16)), mossT.b * 0.7 + nzB.g * 0.3);
-  grassC = mix(grassC, s2l(vec3(0.18, 0.40, 0.25)), smoothstep(0.55, 0.85, nzA.b) * 0.6);
-  grassC = mix(grassC * vec3(1.1, 0.95, 0.7), grassC, uLush);
-  // dry golden patches, darker hollows, bare soil openings
-  grassC = mix(grassC, s2l(vec3(0.55, 0.5, 0.26)), smoothstep(0.58, 0.82, nzB.b) * 0.55 * (1.0 - uLush * 0.5));
-  grassC *= 0.8 + 0.35 * nzC.r;
+  float mossCov = smoothstep(mThr, mThr + 0.12, fertile) * step(0.001, uMoss + localG) * flat_ * step(0.4, above) * (1.0 - packed) * (1.0 - scree * 0.6);
+  float grassCov = smoothstep(gThr, gThr + 0.14, fertile + nzC.g * 0.06) * step(0.001, uGrass + localG * 0.5) * flat_ * smoothstep(0.6, 2.5, above) * (1.0 - packed * 0.8) * (1.0 - scree * 0.85);
+  // Living ground is built from several scales so it never reads as a smooth
+  // painted surface: tussock clumps (~0.8 m) and blade speckle (~0.2 m) with
+  // shadowed gaps of soil between them, meso hummocks in the normal, natural
+  // olive/straw/deep-green variation and a soft sheen.
+  vec2 gr1 = vec2(vTW.x * 0.6 - vTW.z * 0.8, vTW.x * 0.8 + vTW.z * 0.6);
+  vec4 clump = texture2D(tMoss, gr1 * 1.25 + 0.21);
+  vec4 blade = texture2D(tNoise, vTW.xz * 4.3 + 0.13);
+  vec4 blade2 = texture2D(tNoise, gr1 * 9.7 + 0.61);
+  vec4 hum = texture2D(tMoss, vTW.xz * 0.037 + 0.5);
+  float fwG = length(fwidth(vTW.xz));
+  float nearF = 1.0 - smoothstep(0.08, 0.6, fwG);          // fine detail only where it resolves
+  float speck = mix(0.55, blade.r * 0.6 + blade2.g * 0.4, nearF);
+  float tuft = smoothstep(0.25, 0.75, clump.b * 0.7 + speck * 0.5);
+  vec3 mossC = mix(s2l(vec3(0.15, 0.19, 0.08)), s2l(vec3(0.31, 0.35, 0.14)), mossT.b * 0.6 + clump.b * 0.4);
+  mossC *= 0.78 + 0.4 * speck;
+  vec3 gDark = s2l(vec3(0.14, 0.2, 0.07)), gMid = s2l(vec3(0.27, 0.34, 0.12)), gLight = s2l(vec3(0.42, 0.45, 0.2));
+  vec3 grassC = mix(gDark, gMid, tuft);
+  grassC = mix(grassC, gLight, smoothstep(0.55, 0.95, speck * 0.6 + clump.g * 0.5) * 0.7);
+  grassC = mix(grassC, s2l(vec3(0.16, 0.27, 0.17)), smoothstep(0.55, 0.85, nzA.b) * 0.35);
+  grassC = mix(grassC * vec3(1.08, 0.97, 0.78), grassC, uLush);
+  // straw/dry patches and bare soil peeking between tufts
+  float dry = smoothstep(0.55, 0.85, nzB.b + (clump.r - 0.5) * 0.3) * (1.0 - uLush * 0.5);
+  grassC = mix(grassC, s2l(vec3(0.5, 0.45, 0.26)) * (0.8 + 0.4 * speck), dry * 0.6);
+  grassC *= 0.88 + 0.22 * nzC.r;
+  float gap = (1.0 - smoothstep(0.15, 0.45, speck)) * nearF;
   grassCov *= 1.0 - 0.7 * smoothstep(0.66, 0.86, nzA.b + (soilA.b - 0.5) * 0.2);
+  float edgeSoil = (1.0 - smoothstep(0.0, 0.5, grassCov)) * grassCov * 2.0;   // ragged edges show soil
+  grassC = mix(grassC, alb * 0.75, max(gap * 0.45, edgeSoil * (1.0 - tuft)));
   alb = mix(alb, mossC, mossCov * 0.9);
   alb = mix(alb, grassC, grassCov);
-  vec2 tm = mossT.rg * 2.0 - 1.0;
-  nrm = normalize(mix(nrm, normalize(N + vec3(tm.x, 0.0, tm.y) * 0.7), max(mossCov, grassCov)));
-  rough = mix(rough, 0.88, max(mossCov, grassCov));
-  ao = mix(ao, mossT.a, max(mossCov, grassCov));
+  // normals: meso hummocks + tussock relief + blade grain (bumped from speckle)
+  float live = max(mossCov, grassCov);
+  vec2 tm = mossT.rg * 2.0 - 1.0, tc = clump.rg * 2.0 - 1.0, th = hum.rg * 2.0 - 1.0;
+  vec2 tb = vec2(blade.g - 0.5, blade2.b - 0.5) * 2.0 * nearF;
+  vec3 nLive = normalize(N + vec3(th.x, 0.0, th.y) * 0.35 + vec3(tm.x, 0.0, tm.y) * 0.3 + vec3(tc.x, 0.0, tc.y) * 0.55 + vec3(tb.x, 0.0, tb.y) * 0.45);
+  nrm = normalize(mix(nrm, nLive, live));
+  rough = mix(rough, 0.78 + 0.18 * (1.0 - speck), live);
+  ao = mix(ao, mix(1.0, 0.45, gap) * (0.7 + 0.3 * tuft) * mossT.a, live);
 
   // wet shoreline + rain
   float shore = 1.0 - smoothstep(0.0, 2.2, above);
@@ -201,6 +229,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v5';
+  mat.customProgramCacheKey = () => 'terrain-v7';
   return mat;
 }

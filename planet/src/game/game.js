@@ -9,6 +9,7 @@ import { Player } from '../player/player.js';
 import { Rover } from '../player/rover.js';
 import { Buildings } from '../build/buildings.js';
 import { BuildMode } from '../build/buildmode.js';
+import { Supports } from '../build/supports.js';
 import { Roads } from '../build/roads.js';
 import { Economy, Inventory } from '../sim/economy.js';
 import { Terraform } from '../sim/terraform.js';
@@ -55,6 +56,7 @@ export class Game {
     this.rover = new Rover(this);
     this.build = new BuildMode(this);
     this.roads = new Roads(this);
+    this.supports = new Supports(this);
     this.thumbs = new Thumbs(this);
     this.objectives = new Objectives(this);
     this.isUnlocked = (t) => this.research.isUnlocked(t);
@@ -354,6 +356,7 @@ export class Game {
 
   // ---------------------------------------------------------------- frame
   update(dt) {
+    if (this.supports.dirty) this.supports.rebuild();
     const input = this.input, P = this.player, cam = this.engine.camera;
     const playing = this.started && !this.ui.panel;
     if (playing) {
@@ -617,6 +620,7 @@ export class Game {
     this.eco.gridDirty = true;
     this.npcs.invalidate();
     this.roads.rebuild();
+    this.supports.rebuild();
     this.ui.renderHotbar();
     return true;
   }

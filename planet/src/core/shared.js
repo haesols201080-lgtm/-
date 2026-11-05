@@ -17,6 +17,7 @@ export const U = {
   uTime: { value: 0 },
   uSunDir: { value: new THREE.Vector3(0.4, 0.7, 0.3).normalize() },
   uSunColor: { value: new THREE.Color(1, 0.95, 0.85) },
+  uWB: { value: new THREE.Vector3(1, 1, 1) },   // camera white balance gains
   uNight: { value: 0 },          // 0 day .. 1 deep night
   uFrost: { value: 1 },          // terraform: frost cover on cold ground
   uWet: { value: 0 },            // rain wetness

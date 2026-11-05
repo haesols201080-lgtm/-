@@ -41,6 +41,7 @@ export class ModelBuilder {
     this.interiors = [];       // local boxes {x0,y0,z0,x1,y1,z1}
     this.lights = [];          // {x,y,z,color,intensity,dist}
     this.doors = [];           // {key, gb, slide:[x,y,z], x,z (door center)}
+    this.entries = null;       // local x of front entrances (stairs land here)
     this.top = 0;
   }
 
@@ -103,22 +104,36 @@ export class ModelBuilder {
   colCyl(x, z, r, y0, y1, flags = {}) { this.colliders.push({ cyl: true, x, z, r, y0, y1, ...flags }); }
   interior(x0, y0, z0, x1, y1, z1) { this.interiors.push({ x0, y0, z0, x1, y1, z1 }); }
   light(x, y, z, color = L.warm, intensity = 6, dist = 12) { this.lights.push({ x, y, z, color, intensity, dist }); }
+  entry(x) { (this.entries = this.entries || []).push(x); }
 
   finish() {
     const parts = [];
     for (const [key, gb] of this.groups) if (!gb.empty) parts.push({ key, geo: gb.build() });
     for (const a of this.anims) if (!a.gb.empty) parts.push({ key: a.key, geo: a.gb.build(), anim: a.anim });
     for (const d of this.doors) if (!d.gb.empty) parts.push({ key: d.key, geo: d.gb.build(), anim: { slide: d.slide }, door: true });
-    return { parts, colliders: this.colliders, interiors: this.interiors, lights: this.lights, doors: this.doors.map((d) => ({ x: d.x, z: d.z })), height: this.top };
+    return { parts, colliders: this.colliders, interiors: this.interiors, lights: this.lights, doors: this.doors.map((d) => ({ x: d.x, z: d.z })), entries: this.entries, height: this.top };
   }
 }
 
 // ---------------------------------------------------------------- details
-// Concrete pad: walking surface at y=0, skirt buried to -1.6
-export function plinth(M, w, d, { color = C.CONC, trim = C.G2, h = 0.3, collide = true } = {}) {
-  M.bb('concrete', -w / 2, -2.4, -d / 2, w / 2, 0, d / 2, color);
-  M.bb('metal', -w / 2 - 0.04, -0.12, -d / 2 - 0.04, w / 2 + 0.04, -0.02, d / 2 + 0.04, trim);
-  if (collide) M.col(-w / 2, -1.6, -d / 2, w / 2, 0, d / 2);
+// Base of every building. Small ones sit on a concrete pad (skirt buried);
+// anything 3 m or more stands on a steel deck carried by legs (supports.js):
+// plated deck, edge channel and a beam grid underneath. Floor at y = 0.
+export function plinth(M, w, d, { color = C.CONC, trim = C.G2, collide = true } = {}) {
+  if (Math.min(w, d) < 3) {
+    M.bb('concrete', -w / 2, -2.4, -d / 2, w / 2, 0, d / 2, color);
+    M.bb('metal', -w / 2 - 0.04, -0.12, -d / 2 - 0.04, w / 2 + 0.04, -0.02, d / 2 + 0.04, trim);
+    if (collide) M.col(-w / 2, -2.4, -d / 2, w / 2, 0, d / 2);
+    return;
+  }
+  const sharp = M.sharp; M.sharp = true;
+  M.bb('metal', -w / 2, -0.2, -d / 2, w / 2, 0, d / 2, 0x9ba1a8);
+  for (const [x0, z0, x1, z1] of [[-w / 2 - 0.06, -d / 2 - 0.06, w / 2 + 0.06, -d / 2 + 0.06], [-w / 2 - 0.06, d / 2 - 0.06, w / 2 + 0.06, d / 2 + 0.06], [-w / 2 - 0.06, -d / 2, -w / 2 + 0.06, d / 2], [w / 2 - 0.06, -d / 2, w / 2 + 0.06, d / 2]]) M.bb('metal', x0, -0.45, z0, x1, -0.02, z1, 0x4a4f55);
+  const nb = Math.max(1, Math.round(d / 2.4));
+  for (let i = 1; i < nb; i++) { const z = -d / 2 + i * d / nb; M.bb('metal', -w / 2 + 0.1, -0.42, z - 0.08, w / 2 - 0.1, -0.2, z + 0.08, 0x5b6168); }
+  for (const sx of [-1, 1]) M.bb('metal', sx * (w / 2 - 0.45) - 0.1, -0.45, -d / 2 + 0.1, sx * (w / 2 - 0.45) + 0.1, -0.2, d / 2 - 0.1, 0x5b6168);
+  M.sharp = sharp;
+  if (collide) M.col(-w / 2, -0.45, -d / 2, w / 2, 0, d / 2);
 }
 
 export function hazard(M, x, y, z, w, h, d) {
@@ -528,7 +543,7 @@ export function entryPortal(M, cx, cz, r, { w = 2.3, h = 2.85, out = 1.1, doorW 
 
 // Domed hab unit: one storey drum with punched windows under a shallow dome
 export function habDome(M, x, z, r, { drum = 2.7, sy = 0.55, color = C.W, oculus = true, seg = 48, skip = [], rot = 0.3 } = {}) {
-  M.cyl('concrete', x, -0.05, z, r + 0.12, 0.25, C.CONC2, seg);
+  M.cyl('metal', x, -0.02, z, r + 0.1, 0.22, 0x5b6168, seg);
   const n = Math.max(4, Math.round(Math.PI * 2 * r / 2.3));
   const wins = [];
   for (let i = 0; i < n; i++) {
@@ -592,7 +607,7 @@ export function ribbonTower(M, x, z, r, h, { fh = 3.2, y0 = 0, color = C.W, seg 
   const f = h / floors;
   const n = Math.max(4, Math.round(TAU * r / 2.1));
   const near = (a, s, k) => Math.abs(Math.atan2(Math.sin(a - s), Math.cos(a - s))) < k;
-  M.cyl('concrete', x, y0 - 0.05, z, r + 0.1, 0.3, C.CONC2, seg);
+  M.cyl('metal', x, y0 - 0.02, z, r + 0.1, 0.26, 0x5b6168, seg);
   for (let i = 0; i < floors; i++) {
     const y = y0 + i * f;
     const lob = i === 0 && lobby && y0 === 0;
@@ -807,7 +822,7 @@ export function shed(M, cx, cz, w, d, h, { teeth = 4, rise = 1.4, door = 3.0, co
   const t = 0.3;
   const hi = (st, len) => bays(len, { bay: 2.0, w: 1.6, sill: h - 1.45, head: h - 0.55 });
   const front = (st, len) => [...hi(st, len).filter((o) => Math.abs(o.c) > door / 2 + 1.0), { c: 0, w: door, y: 0, h: Math.min(3.4, h - 1.0), kind: 'shutter' }];
-  const opt = { key: 'rib', color, dado: 1.0 };
+  const opt = { key: 'rib', color: 0xd9dde1, dado: 0.9, dadoKey: 'metal', dadoColor: 0x6f757c };
   facade(M, cx, cz - d / 2, Math.PI, w, 0, 1, h, front, { ...opt, lines: false });
   facade(M, cx, cz + d / 2, 0, w, 0, 1, h, hi, { ...opt, lines: false });
   facade(M, cx - w / 2, cz, -Math.PI / 2, d - 2 * t, 0, 1, h, hi, { ...opt, lines: false });

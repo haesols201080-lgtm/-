@@ -166,6 +166,8 @@ export class Buildings {
       if (c.cyl) b.cols.push(C.addCyl(wx, wz, c.r, b.y + c.y0, b.y + c.y1, b.id, { b, noStand: c.noStand }));
       else b.cols.push(C.addBox(wx, wz, c.hx, c.hz, b.rot, b.y + c.y0, b.y + c.y1, b.id, { b, noStand: c.noStand }));
     }
+    const S = this.game.supports;
+    if (S && b.data.stilts) { S.addColliders(b); S.dirty = true; }
   }
 
   remove(b) {
@@ -176,6 +178,7 @@ export class Buildings {
     const i = this.list.indexOf(b);
     if (i >= 0) this.list.splice(i, 1);
     b.removed = true;
+    if (b.data.stilts && this.game.supports) this.game.supports.dirty = true;
   }
 
   setTier(b, tier) {

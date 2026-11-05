@@ -94,20 +94,23 @@ export function generateTextures(seed = 7) {
   }
 
   const N = 512;
-  // --- rock: layered ridges, cracks and chips ---
+  // --- rock: natural fractured stone. Thin branching cracks along the zero
+  // lines of warped noise (not a polygon cell network), a faint joint set,
+  // fine grain and weak bedding, so it reads as weathered rock up close.
   {
-    const w = worleyTile(N, 10, seed + 21);
-    const w2 = worleyTile(N, 28, seed + 22);
     const h = new Float32Array(N * N);
     const cav = new Float32Array(N * N);
     for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
       const u = x / N, v = y / N, k = y * N + x;
+      const wx = 0.06 * tileNoise(S, u + 3.3, v, 3, 3), wy = 0.06 * tileNoise(S, u, v + 7.1, 3, 3);
       const base = tileNoise(S, u, v, 4, 5) * 0.5 + 0.5;
-      const crack = Math.min(1, (w.f2[k] - w.f1[k]) * 6);
-      const chips = Math.min(1, (w2.f2[k] - w2.f1[k]) * 5);
-      const strata = Math.sin((v * 18 + tileNoise(S, u * 1, v * 1 + 3.1, 3, 3) * 1.6) * Math.PI) * 0.5 + 0.5;
-      h[k] = base * 0.45 + crack * 0.3 + chips * 0.15 + strata * 0.1;
-      cav[k] = 0.55 + 0.45 * Math.min(1, crack * 1.4) * Math.min(1, chips * 1.6);
+      const c1 = Math.pow(1 - Math.abs(tileNoise(S, u + wx, v + wy, 5, 3)), 16);
+      const c2 = Math.pow(1 - Math.abs(tileNoise(S, u * 1 + wy * 2 + 0.5, v + wx * 2, 13, 2)), 22);
+      const joint = Math.pow(Math.abs(Math.sin((u * 7 + v * 3 + tileNoise(S, u, v + 1.7, 2, 2) * 0.8) * Math.PI)), 40);
+      const grain = tileNoise(S, u + 0.21, v + 0.67, 48, 2) * 0.5 + 0.5;
+      const strata = Math.sin((v * 14 + tileNoise(S, u, v + 3.1, 3, 3) * 1.4) * Math.PI) * 0.5 + 0.5;
+      h[k] = base * 0.55 + grain * 0.18 + strata * 0.08 - c1 * 0.22 - c2 * 0.1 - joint * 0.06;
+      cav[k] = 1 - c1 * 0.55 - c2 * 0.3 - joint * 0.15;
     }
     normalize01(h);
     out.rock = toTexture(heightToPacked(N, h, 7.0, cav), N);

@@ -154,7 +154,7 @@ export class WorldGen {
   }
 
   // Returns height; if out provided, fills out[0..6] with surface weights and out[7] = crater-floor flag.
-  sample(x, z, out) {
+  base(x, z, out) {
     const S = this.S, S2 = this.S2;
     const H = PLANET.HALF;
     const lat = z / H;
@@ -171,6 +171,8 @@ export class WorldGen {
 
     // provinces
     const pw = this.provinces(x, z);
+    // erosion resistance of the ground: loose sand, salt pans and crystal grit do not gully
+    this._erodible = clamp(1 - pw[2] - pw[5] * 0.9 - pw[7] - pw[8] * 0.5, 0, 1) * land;
     let sand = 0, basalt = 0, strata = 0, fert = 0.45, snow = 0, salt = 0, crystal = 0;
     let dh = 0;
     for (let pi = 0; pi < pw.length; pi++) {
@@ -365,6 +367,59 @@ export class WorldGen {
       out[7] = craterFloor;
     }
     return h;
+  }
+
+  // Height = base relief + erosion. The erosion layer (after Clay John's
+  // "eroded terrain noise") lays gullies along the local downhill direction:
+  // each octave is a field of cosine stripes whose wavefronts run across the
+  // slope, so ridges and rills point downhill, and every octave is steered by
+  // the slope of the octaves before it, which makes the gullies branch like
+  // real drainage. Depth grows with slope, so flats stay flat and valley
+  // floors stay smooth while hillsides get ridges and runnels.
+  sample(x, z, out) {
+    const h0 = this.base(x, z, out);
+    const er = this._erodible;
+    if (!(er > 0.01) || h0 < -60) return h0;
+    const e = 5;
+    const gx = (this.base(x + e, z) - h0) / e, gz = (this.base(x, z + e) - h0) / e;
+    const slope = Math.hypot(gx, gz);
+    const amp = 8.5 * smoothstep(0.025, 0.4, slope) * er;
+    if (amp < 0.05) return h0;
+    let v = 0, hx = 0, hz = 0, a = 1, f = 1 / 115;
+    const SLOPE = 3.2, BRANCH = 1.6;
+    const r = this._er || (this._er = new Float64Array(3));
+    for (let o = 0; o < 4; o++) {
+      const dx = (gz * SLOPE + hz * BRANCH), dz = -(gx * SLOPE + hx * BRANCH);
+      this.erosionCell(x * f, z * f, dx, dz, r, o);
+      v += r[0] * a;
+      hx += r[1] * a * f * amp; hz += r[2] * a * f * amp;
+      a *= 0.5; f *= 2;
+    }
+    // sharpen crests, keep runnel floors rounded
+    const shaped = v > 0 ? v * (1 + 0.25 * v) : v * 0.85;
+    if (out) {
+      const ridge = clamp(v / 1.4, 0, 1) * smoothstep(0.05, 0.3, slope), valley = clamp(-v / 1.2, 0, 1);
+      out[3] = clamp(out[3] + valley * 0.3 - ridge * 0.35, 0, 1);
+      out[2] = clamp(out[2] + ridge * 0.25 * er, 0, 1);
+    }
+    return h0 + shaped * amp;
+  }
+
+  erosionCell(px, pz, dx, dz, r, oct) {
+    const ix = Math.floor(px), iz = Math.floor(pz), fx = px - ix, fz = pz - iz;
+    let v = 0, vx = 0, vz = 0, wt = 0;
+    const sd = this.seed + 101 + oct * 7;
+    for (let j = -2; j <= 1; j++) for (let i = -2; i <= 1; i++) {
+      const cx = ix - i, cz = iz - j;
+      const ox = hash2(cx, cz, sd) * 0.5, oz = hash2(cx, cz, sd + 3) * 0.5;
+      const ppx = fx + i - ox, ppz = fz + j - oz;
+      const w = Math.exp(-(ppx * ppx + ppz * ppz) * 2);
+      wt += w;
+      const mag = (ppx * dx + ppz * dz) * 6.283185307;
+      const c = Math.cos(mag), s = Math.sin(mag);
+      v += c * w; vx -= s * dx * w; vz -= s * dz * w;
+    }
+    r[0] = v / wt; r[1] = vx / wt; r[2] = vz / wt;
   }
 
   provinceAt(x, z) {

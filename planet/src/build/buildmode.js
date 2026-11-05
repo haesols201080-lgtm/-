@@ -5,6 +5,7 @@
 // Placing a building flattens a pad into the terrain (with a soft skirt) so
 // structures sit on the ground instead of floating or sinking.
 import * as THREE from 'three';
+import { onStilts, CLEAR } from './supports.js';
 import { getModel } from './models.js';
 import { makeHologramMaterial } from './materials.js';
 import { BUILDINGS, STAGES } from '../sim/data.js';
@@ -199,8 +200,9 @@ export class BuildMode {
           const h = T.height(x + lx * c + lz * s, z - lx * s + lz * c);
           sum += h; n++; mn = Math.min(mn, h); mx = Math.max(mx, h);
         }
-        y = sum / n + 0.05;
-        return { x, y, z, rot, mn, mx, snapped, deposit, onFoundation };
+        const st = onStilts(this.type, def);
+        y = st ? mx + CLEAR : sum / n + 0.05;
+        return { x, y, z, rot, mn, mx, snapped, deposit, onFoundation, stilts: st };
       }
     }
     return { x, y, z, rot, snapped, deposit, onFoundation, mn: y, mx: y };
@@ -218,12 +220,12 @@ export class BuildMode {
     if (def.water) {
       const depth = U.uWaterLevel.value - g.terrain.height(p.x, p.z);
       if (depth < 0.5 || depth > 8) return { ok: false, reason: '수심 0.5~8m인 곳에만 띄울 수 있습니다' };
-    } else if (!def.foundation && !p.onFoundation && p.y - 0.25 < U.uWaterLevel.value + 0.2 && U.uIce.value < 0.5) {
+    } else if (!def.foundation && !p.onFoundation && (p.stilts ? p.mn : p.y - 0.25) < U.uWaterLevel.value + 0.2 && U.uIce.value < 0.5) {
       return { ok: false, reason: '물속에는 지을 수 없습니다' };
     }
     if (!def.foundation && !p.onFoundation && !def.water) {
       const diag = Math.hypot(def.size[0], def.size[1]);
-      if (p.mx - p.mn > Math.max(2.2, diag * 0.42)) return { ok: false, reason: '지형이 너무 가파릅니다 (지형 도구로 평탄화하세요)' };
+      if (p.mx - p.mn > (p.stilts ? Math.max(4, diag * 0.6) : Math.max(2.2, diag * 0.42))) return { ok: false, reason: '지형이 너무 가파릅니다 (지형 도구로 평탄화하세요)' };
     }
     if (p.onFoundation) {
       // footprint must be fully supported by foundations at the same level
@@ -262,7 +264,7 @@ export class BuildMode {
     const g = this.game;
     const cost = g.eco.costOf(this.type);
     g.eco.pay(cost, p);
-    if (!def.foundation && !p.onFoundation && !def.water) {
+    if (!def.foundation && !p.onFoundation && !def.water && !p.stilts) {
       // level the ground flush with the floor (3 cm under it) and keep it level
       // a terrain cell past the edge so the slab never stands proud of the ground
       const ext = 1.6;
@@ -271,7 +273,9 @@ export class BuildMode {
     const r = Math.hypot(def.size[0], def.size[1]) / 2 + 0.5;
     if (!p.onFoundation) g.props.clearArea(p.x, p.z, r);
     g.flora.invalidate();
-    const b = g.buildings.add(this.type, p.x, p.y, p.z, p.rot, { data: p.deposit ? { deposit: p.deposit.id, ore: p.deposit.type } : {} });
+    const data = p.deposit ? { deposit: p.deposit.id, ore: p.deposit.type } : {};
+    if (p.stilts && !p.onFoundation) data.stilts = true;
+    const b = g.buildings.add(this.type, p.x, p.y, p.z, p.rot, { data });
     g.onBuilt && g.onBuilt(b);
     g.fx && g.fx.build(p.x, p.y, p.z, Math.max(def.size[0], def.size[1]));
     g.audio && g.audio.play('build');
@@ -326,7 +330,7 @@ export class BuildMode {
     for (let i = 0; i <= n; i++) g.props.clearArea(a.x + (b.x - a.x) * i / n, a.z + (b.z - a.z) * i / n, 4.2);
     g.flora.invalidate();
     g.npcs.invalidate();
-    g.roads.rebuild();
+    g.roads.rebuild(); g.supports.dirty = true;
     g.audio && g.audio.play('build');
     return chk;
   }

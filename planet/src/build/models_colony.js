@@ -18,6 +18,7 @@ export function houseT1(M) {
   gardenDome(M, -2.6, 2.6, 1.15, { seed: 11 });
   linkTube(M, 0.45, 0.55, -2.6, 2.6, 0.75, 0.5);
   airlockTube(M, 0.45, 1.2, -1.7, -3.5, 1.15);
+  M.entry(0.45);
   pvRack(M, 2.75, -3.05, 2.1, 1.0, 0, 2);
   radiator(M, 3.4, 0.3, 2.7, 1.2, 1.3, PI / 2, C.W2);
   vent(M, 1.2, top - 0.42, 0.2, 0.6, 0.45, 0.3);
@@ -33,6 +34,7 @@ export function houseT2(M) {
   linkTube(M, -1.35, 0.95, 2.2, 2.1, 0.95, 0.6);
   linkTube(M, 2.2, 2.1, 2.35, -1.75, 0.8, 0.5);
   airlockTube(M, -1.35, 1.2, -1.2, -3.5, 1.15);
+  M.entry(-1.35);
   antenna(M, -0.5, ta - 0.55, 1.6, 1.6);
   M.cyl('metal', 2.2, tb - 0.25, 2.1, 0.06, 1.3, C.G2, 8);
   M.add('solar', new THREE.BoxGeometry(1.6, 0.05, 0.9), { pos: v(2.2, tb + 1.1, 2.1), rot: e(0.45, 0, 0) });
@@ -41,6 +43,7 @@ export function houseT2(M) {
 
 export function houseT3(M) {
   plinth(M, 8, 8);
+  M.entry(-0.85);
   const ta = ribbonTower(M, -0.85, 0.75, 2.45, 12.8, { door: true, skip: [1.15, 2.31], balconies: [4.1, 5.5], rot: 0.25 });
   ribbonTower(M, 2.4, 2.2, 1.5, 9.6, { skip: [-1.99], rot: 0.6, lobby: false });
   linkTube(M, -0.85, 0.75, 2.4, 2.2, 7.4, 0.55);

@@ -825,6 +825,7 @@ function mirrorModel(src) {
     interiors: src.interiors.map((r) => ({ ...r, x0: -r.x1, x1: -r.x0 })),
     lights: src.lights.map((l) => ({ ...l, x: -l.x })),
     doors: src.doors.map((d) => ({ ...d, x: -d.x })),
+    entries: src.entries ? src.entries.map((x) => -x) : src.entries,
     height: src.height,
   };
 }

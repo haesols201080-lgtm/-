@@ -337,13 +337,13 @@ export class Flora {
           place: (x, z, r1, r2, r3) => {
             const y = groundOK(x, z, 0.35); if (y === null) return null;
             const thr = clamp(1 - fert(x, z) + (r1 - 0.5) * 0.3 - greenBoost(x, z) * 0.8, 0.02, 1);
-            if (U.uGrass.value > 0.6 && r2 > 0.35) return null;
+            if (U.uGrass.value > 0.2) return null;              // grass replaces the moss cushions
             const s = 0.15 + r2 * 0.4;
             return { y: y - 0.06, sx: s * (0.8 + r3 * 0.6), sy: s * 0.6, sz: s, ry: r3 * 6.28, attrs: { iGrow: [thr, 0], iTint: [0.85 + r3 * 0.3, 0.9 + r2 * 0.2, 0.8] } };
           },
         },
         { // grass tufts
-          geo: grassTuft(5, 8, 0.75), mat: this.mat, max: 7500, perTile: 85, castShadow: false, radius: 75, densityFalloff: true,
+          geo: grassTuft(5, 12, 0.6), mat: this.mat, max: 16000, perTile: 210, castShadow: false, radius: 62, densityFalloff: true,
           attrs: { iGrow: 2, iTint: 3 },
           enabled: () => U.uGrowth.value.y > 0.001 || U.uGreen.value.some((g) => g.w > 0.3),
           place: (x, z, r1, r2, r3) => {

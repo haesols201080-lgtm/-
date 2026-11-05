@@ -12,7 +12,7 @@ import { makeFloraMaterial, treeGeometries } from './flora.js';
 import { U } from '../core/shared.js';
 
 export const ORE_TYPES = {
-  iron: { name: '철', tint: [0.42, 0.2, 0.12], glow: false },
+  iron: { name: '철', tint: [0.34, 0.24, 0.22], glow: false },
   silicon: { name: '규소', tint: [0.52, 0.6, 0.7], glow: false },
   titanium: { name: '티타늄', tint: [0.78, 0.8, 0.84], glow: false },
   aluminium: { name: '알루미늄', tint: [0.86, 0.84, 0.78], glow: false },
@@ -45,16 +45,41 @@ export function rockGeometry(seed, detail, { sx = 1, sy = 0.8, sz = 1, cuts = 7,
   return g;
 }
 
+// Crystal cluster: hexagonal prisms with pyramidal terminations growing
+// from a shared matrix, tilted outward like a real druse; flat facets.
 export function crystalGeometry(seed, count = 6, spread = 0.6) {
   const rnd = mulberry32(seed);
   const pos = [];
   for (let i = 0; i < count; i++) {
-    const h = 0.6 + rnd() * 1.4, r = 0.08 + rnd() * 0.12;
-    const c = new THREE.CylinderGeometry(r * 0.6, r, h, 6, 1); c.translate(0, h / 2, 0);
-    const tip = new THREE.ConeGeometry(r * 0.6, r * 2.2, 6); tip.translate(0, h + r * 1.1, 0);
-    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler((rnd() - 0.5) * 1.1, rnd() * 6.28, (rnd() - 0.5) * 1.1));
-    m.setPosition((rnd() - 0.5) * spread, -0.1, (rnd() - 0.5) * spread);
-    for (const g of [c, tip]) { const ng = g.toNonIndexed(); ng.applyMatrix4(m); pos.push(...ng.attributes.position.array); }
+    const big = i === 0 ? 1.3 : 0.55 + rnd() * 0.7;
+    const r = (0.07 + rnd() * 0.08) * big, h = (0.45 + rnd() * 0.9) * big;
+    const prism = new THREE.CylinderGeometry(r, r, h, 6, 1, true); prism.translate(0, h / 2, 0);
+    const tip = new THREE.ConeGeometry(r, r * 1.7, 6); tip.translate(0, h + r * 0.85, 0);
+    const a = rnd() * Math.PI * 2, off = rnd() * spread * 0.45;
+    const tilt = i === 0 ? rnd() * 0.15 : 0.2 + rnd() * 0.55;
+    const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(Math.cos(a) * tilt, rnd() * Math.PI, -Math.sin(a) * tilt));
+    m.setPosition(Math.sin(a) * off, -0.18, Math.cos(a) * off);
+    for (const g of [prism, tip]) { const ng = g.toNonIndexed(); ng.applyMatrix4(m); pos.push(...ng.attributes.position.array); }
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.computeVertexNormals();
+  return out;
+}
+
+// Metal ore: faceted nodules and a vein band bulging out of the host rock
+export function noduleGeometry(seed, count = 9) {
+  const rnd = mulberry32(seed);
+  const S = new Simplex(seed);
+  const pos = [];
+  for (let i = 0; i < count; i++) {
+    let g = new THREE.IcosahedronGeometry(1, 0);
+    const p = g.attributes.position, v = new THREE.Vector3();
+    for (let k = 0; k < p.count; k++) { v.fromBufferAttribute(p, k); v.multiplyScalar(1 + 0.35 * S.noise3(v.x * 2 + i, v.y * 2, v.z * 2)); p.setXYZ(k, v.x, v.y, v.z); }
+    const s = 0.07 + rnd() * 0.12, a = rnd() * Math.PI * 2, d = 0.1 + rnd() * 0.45;
+    g = g.toNonIndexed();
+    g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(Math.sin(a) * d, 0.12 + rnd() * 0.16 - d * 0.18, Math.cos(a) * d * 0.8), new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd() * 3, rnd() * 3, rnd() * 3)), new THREE.Vector3(s * (1 + rnd()), s * 0.7, s)));
+    pos.push(...g.attributes.position.array);
   }
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -154,13 +179,17 @@ export class Props {
     const trees = treeGeometries();
     this.treeLayers = trees.map((g) => new Layer(scene, g, this.treeMat, { cap: 12000, attrs: { iGrow: 2, iTint: 3 }, range: 2200, nearR: 160, visible: () => U.uGrowth.value.w > 0.001 }));
     this.treeKinds = trees.length;
-    const oreBase = rockGeometry(91, 1, { sx: 0.55, sy: 0.32, sz: 0.5, cuts: 5 });
-    const oreCry = crystalGeometry(81, 5, 0.35); oreCry.scale(0.45, 0.45, 0.45);
+    // ore outcrops: an angular, half-buried host rock with either a small
+    // crystal druse (glowing ores) or metallic nodules (metal ores)
+    const oreBase = rockGeometry(91, 2, { sx: 0.7, sy: 0.4, sz: 0.62, cuts: 9, rough: 0.22 });
+    oreBase.translate(0, -0.06, 0);
+    const oreCry = crystalGeometry(81, 9, 0.5); oreCry.scale(0.42, 0.42, 0.42); oreCry.translate(0, 0.14, 0);
+    const oreNod = noduleGeometry(83, 10);
     this.oreLayers = {};
     for (const k in ORE_TYPES) {
       this.oreLayers[k] = {
         base: new Layer(scene, oreBase, this.rockMat, { cap: 600, attrs: { iTint: 3 }, range: 450, nearR: 120 }),
-        cry: new Layer(scene, oreCry, ORE_TYPES[k].glow ? this.crystalMat : this.oreMetalMat, { cap: 600, attrs: { iTint: 3 }, range: 450, nearR: 120 }),
+        cry: new Layer(scene, ORE_TYPES[k].glow ? oreCry : oreNod, ORE_TYPES[k].glow ? this.crystalMat : this.oreMetalMat, { cap: 600, attrs: { iTint: 3 }, range: 450, nearR: 120 }),
       };
     }
     this.depositLayer = new Layer(scene, crystalGeometry(78, 7, 0.9), this.crystalMat, { cap: 3000, attrs: { iTint: 3 }, range: 1800, nearR: 200 });
@@ -229,7 +258,7 @@ export class Props {
       cell.crystals.push({ x, y, z, s, m: mat(x, y, z, 0, Cr[i + 4], 0, s, s, s), iTint: [Cr[i + 5], Cr[i + 6], Cr[i + 7]] });
     }
     cell.ores = r.ores.filter((o) => !this.collected.has(o.id));
-    for (const o of cell.ores) { o.m = mat(o.x, o.y, o.z, 0, o.rot, 0, o.s, o.s, o.s); o.iTint = ORE_TYPES[o.type].tint; o.baseTint = [0.3, 0.24, 0.2]; }
+    for (const o of cell.ores) { o.m = mat(o.x, o.y, o.z, 0, o.rot, 0, o.s, o.s, o.s); o.iTint = ORE_TYPES[o.type].tint; o.baseTint = [0.36, 0.3, 0.26]; }
     cell.deposits = r.deposits;
     cell.depCrystals = [];
     const rnd = mulberry32((cell.ci * 7919 + cell.cj * 104729) >>> 0);

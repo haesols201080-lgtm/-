@@ -153,57 +153,54 @@ function patch(mat, key, fragBody, { anim = null, slide = null, extraUniforms = 
 }
 
 const HULL_MAP = /* glsl */`
-  // painted composite / aluminium cladding: realistic albedo, crisp joints,
-  // per-panel tone and gloss, soft dust where it settles
+  // clean painted-aluminium cladding under a clear coat: neutral cool white,
+  // crisp hairline joints, slight per-panel tone/gloss, only a breath of dust
+  // at the very base - no streaks or grain
   gStagger = 0.0;
   vec3 pin = panelInfo(vOP, normalize(vON), vec2(1.8, 1.6));
-  vec3 baseC = diffuseColor.rgb * 0.8;
-  baseC *= 0.975 + 0.04 * pin.y;
+  vec3 baseC = diffuseColor.rgb * 0.88 * vec3(0.88, 0.96, 1.1);
+  baseC *= 0.98 + 0.035 * pin.y;
   vec4 nz = texture2D(tNoise, vOP.xz * 0.11 + vOP.y * 0.07 + vData.z);
-  float streak = texture2D(tNoise, vec2(vOP.x * 0.9 + vOP.z * 0.9, vOP.y * 0.06) + vData.z).g;
-  float grime = smoothstep(1.2, -0.2, vOP.y) * 0.45 + smoothstep(0.62, 0.92, streak) * 0.12 + smoothstep(0.68, 0.95, nz.b) * 0.06;
-  float top = smoothstep(0.6, 0.95, normalize(vON).y);
-  baseC = mix(baseC, baseC * vec3(0.8, 0.74, 0.68), clamp(grime, 0.0, 1.0) * 0.55);
-  baseC = mix(baseC, vec3(0.42, 0.3, 0.22), top * uDustAmt * smoothstep(0.4, 0.75, nz.r) * 0.35);
-  float lowDust = smoothstep(1.4, 0.0, vOP.y) * (0.45 + 0.4 * nz.g);
-  baseC = mix(baseC, vec3(0.4, 0.28, 0.2), clamp(lowDust * (0.18 + uDustAmt * 0.2), 0.0, 0.35));
-  baseC *= 1.0 - pin.x * 0.28;
-  gH = cladHeight(vOP, normalize(vON), vec2(1.8, 1.6), 0.005) + 1e-6;
+  float low = smoothstep(0.9, 0.0, vOP.y) * (0.5 + 0.5 * nz.g);
+  baseC = mix(baseC, baseC * vec3(0.86, 0.8, 0.74), low * 0.35);
+  float top = smoothstep(0.75, 0.98, normalize(vON).y);
+  baseC = mix(baseC, vec3(0.5, 0.4, 0.32), top * uDustAmt * smoothstep(0.55, 0.85, nz.r) * 0.12);
+  baseC *= 1.0 - pin.x * 0.35;
+  gH = cladHeight(vOP, normalize(vON), vec2(1.8, 1.6), 0.004) + 1e-6;
   diffuseColor.rgb = baseC;
-  gR2 = clamp(0.34 + 0.1 * pin.y + grime * 0.25 + top * uDustAmt * 0.3 + lowDust * 0.12 + pin.x * 0.3, 0.0, 1.0);
+  gR2 = clamp(0.3 + 0.06 * pin.y + low * 0.15 + pin.x * 0.25, 0.0, 1.0);
 `;
 
 export function makeBuildingMaterials() {
   const M = {};
-  M.hull = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.1 }), 'hull', {
+  M.hull = patch(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.32, metalness: 0.04, clearcoat: 1.0, clearcoatRoughness: 0.05, envMapIntensity: 0.9 }), 'hull', {
     map: HULL_MAP, rough: 'float roughnessFactor = gR2;',
   });
   // trapezoidal ribbed metal cladding (industrial sheds, roofs)
-  M.rib = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.35 }), 'rib', {
+  // standing-seam metal cladding: wide smooth pans with thin raised seams,
+  // metallic and glossy (sheds, roofs)
+  M.rib = patch(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.2, clearcoat: 0.9, clearcoatRoughness: 0.08, envMapIntensity: 1.0 }), 'rib', {
     map: /* glsl */`
       gStagger = 0.0;
       vec2 ruv = panelUV(vOP, normalize(vON));
-      float rp = fract(ruv.x / 0.32);
-      float fadeR = 1.0 - smoothstep(0.3, 0.9, fwidth(ruv.x / 0.32) * 2.0);
-      gH = (smoothstep(0.0, 0.1, rp) - smoothstep(0.38, 0.48, rp)) * 0.03 * fadeR + 1e-6;
+      float sp = abs(fract(ruv.x / 0.6) - 0.5) * 0.6;
+      float fadeR = 1.0 - smoothstep(0.3, 0.9, fwidth(ruv.x / 0.6) * 3.0);
+      gH = smoothstep(0.27, 0.295, sp) * 0.012 * fadeR + 1e-6;
       vec4 nz = texture2D(tNoise, vOP.xz * 0.09 + vOP.y * 0.05 + vData.z);
-      float streak = texture2D(tNoise, vec2(ruv.x * 0.3, vOP.y * 0.05) + vData.z).g;
-      vec3 c = diffuseColor.rgb * 0.8 * (0.95 + 0.08 * nz.r);
-      float grime = smoothstep(1.4, -0.1, vOP.y) * 0.4 + smoothstep(0.6, 0.9, streak) * 0.15;
-      c = mix(c, c * vec3(0.78, 0.72, 0.66), clamp(grime, 0.0, 1.0) * 0.5);
-      float top = smoothstep(0.6, 0.95, normalize(vON).y);
-      c = mix(c, vec3(0.42, 0.3, 0.22), top * uDustAmt * smoothstep(0.35, 0.75, nz.b) * 0.35);
+      vec3 c = diffuseColor.rgb * 0.85 * (0.97 + 0.05 * nz.r);
+      float low = smoothstep(0.9, 0.0, vOP.y);
+      c = mix(c, c * vec3(0.85, 0.8, 0.75), low * 0.3);
       diffuseColor.rgb = c;
-      gR2 = clamp(0.42 + grime * 0.25 + top * 0.15, 0.0, 1.0);`,
+      gR2 = clamp(0.26 + 0.06 * nz.g + low * 0.15, 0.0, 1.0);`,
     rough: 'float roughnessFactor = gR2;',
   });
   M.metal = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.75 }), 'metal', {
     map: /* glsl */`
       vec4 bn = texture2D(tPanel, vec2(vOP.x + vOP.z, vOP.y * 0.4) * 0.6);
-      float grime = smoothstep(1.0, -0.2, vOP.y) * 0.4;
-      diffuseColor.rgb *= (0.85 + 0.3 * bn.b) * (1.0 - grime * 0.5);
-      gH = panelHeight(vOP, normalize(vON), vec2(1.1, 0.7), 0.008) + bn.b * 0.004 + 1e-6;
-      gR2 = 0.32 + bn.b * 0.25 + grime * 0.3;`,
+      float grime = smoothstep(0.6, -0.4, vOP.y) * 0.3;
+      diffuseColor.rgb *= (0.92 + 0.12 * bn.b) * (1.0 - grime * 0.4);
+      gH = panelHeight(vOP, normalize(vON), vec2(1.1, 0.7), 0.006) + bn.b * 0.002 + 1e-6;
+      gR2 = 0.22 + bn.b * 0.14 + grime * 0.25;`,
     rough: 'float roughnessFactor = gR2;',
   });
   M.concrete = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.0 }), 'concrete', {
@@ -238,9 +235,9 @@ export function makeBuildingMaterials() {
         vec3 cs = vec3(3.6, 3.2, 3.6);
         vec3 d = rd / cs;
         d = sign(d) * max(abs(d), vec3(1e-4));
-        vec3 ro = vOP / cs;
-        vec3 id = floor(ro + d * 0.03);
-        vec3 f = ro - id;
+        vec3 p0 = vOP / cs + d * 0.03;               // start just inside the room
+        vec3 id = floor(p0);
+        vec3 f = p0 - id;
         vec3 tt = (step(vec3(0.0), d) - f) / d;
         float t = min(tt.x, min(tt.y, tt.z));
         vec3 h = clamp(f + d * t, 0.0, 1.0);
@@ -265,7 +262,7 @@ export function makeBuildingMaterials() {
         float lamp = isCeil * (1.0 - smoothstep(0.1, 0.13, max(abs(h.x - 0.5), abs(h.z - 0.5) * 0.5)));
         float day = 1.0 - uNight;
         vec3 warm = mix(vec3(1.0, 0.78, 0.55), vec3(0.85, 0.92, 1.0), step(0.85, rh2));
-        vec3 rad = c * ao * (day * 0.2 + uNight * lit * warm * 0.8) + lamp * (day * 0.25 + uNight * lit * 3.0) * warm;
+        vec3 rad = c * ao * (day * 0.32 + uNight * lit * warm * 0.8) + lamp * (day * 0.25 + uNight * lit * 3.0) * warm;
         // blinds on some windows, drawn down from the head
         vec3 pid = floor(vOP / cs + vec3(0.0, 0.0, 0.0));
         float rb = hash1(pid.xz * 5.3 + pid.y * 1.9 + seed + 11.0);

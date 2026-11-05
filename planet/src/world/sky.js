@@ -303,6 +303,14 @@ export class Sky {
     f.color.lerp(new THREE.Color(0.25, 0.27, 0.3).multiplyScalar(day), storm * 0.6);
     f.sunColor.copy(sc).multiplyScalar(day * lerp(0.5, 0.9, atmo));
 
+    // camera white balance: partly neutralise the illuminant (sun + sky + red
+    // ground bounce) so whites read white, like an auto-WB camera would
+    const il = this._il || (this._il = new THREE.Vector3());
+    il.set(sc.r * 0.62 + hz.x * 0.28 + 0.1 * 0.62, sc.g * 0.62 + hz.y * 0.28 + 0.1 * 0.38, sc.b * 0.62 + hz.z * 0.28 + 0.1 * 0.24);
+    const lum = il.x * 0.2126 + il.y * 0.7152 + il.z * 0.0722;
+    const k = 0.8 * day;
+    U.uWB.value.set(lerp(1, lum / il.x, k), lerp(1, lum / il.y, k), lerp(1, lum / il.z, k));
+
     // environment map refresh when lighting changed enough
     this.envTimer -= dt;
     const key = [Math.round(elev * 40), Math.round(atmo * 20), Math.round(U.uCloudCover.value * 10), Math.round(storm * 5)].join(',');

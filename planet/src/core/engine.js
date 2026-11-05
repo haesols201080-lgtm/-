@@ -218,7 +218,7 @@ export class Engine {
 
     this.outUniforms = {
       tColor: { value: null }, uHurt: { value: 0 }, uTime: U.uTime, uVignette: { value: 0.35 },
-      uSat: { value: 1.08 }, uExposure: { value: 1.0 },
+      uSat: { value: 1.08 }, uExposure: { value: 1.0 }, uWB: U.uWB,
     };
     this.outMat = new THREE.ShaderMaterial({
       uniforms: this.outUniforms,
@@ -226,9 +226,10 @@ export class Engine {
       fragmentShader: /* glsl */`
         uniform sampler2D tColor;
         uniform float uHurt, uTime, uVignette, uSat, uExposure;
+        uniform vec3 uWB;
         varying vec2 vUv;
         void main() {
-          vec3 c = texture2D(tColor, vUv).rgb * uExposure;
+          vec3 c = texture2D(tColor, vUv).rgb * uExposure * uWB;
           float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
           c = mix(vec3(l), c, uSat);
           vec2 q = vUv - 0.5;
