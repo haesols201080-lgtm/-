@@ -1,0 +1,275 @@
+// Model kit used by every building model: parts grouped by material,
+// colliders, interior volumes and light points, plus reusable details
+// (plinths, walls with real openings, railings, stairs, pipes, tanks,
+// antennas, hazard stripes...).
+import * as THREE from 'three';
+import { GeoBuilder, taperTube } from '../core/geobuilder.js';
+
+export const C = {
+  W: 0xe7e5df, W2: 0xcdcac2, G: 0x80868d, G2: 0x5b6168, D: 0x33373c, K: 0x18191b,
+  O: 0xf0761c, Y: 0xf2c22e, TEAL: 0x2bb3a6, BLUE: 0x3d76c9, RED: 0xc8382c, GREEN: 0x3fa35a,
+  CONC: 0xbdb7ad, CONC2: 0x8f887d, ASPH: 0x2b2b2d, WOOD: 0x8a6a4a, CREAM: 0xefe3c8, TERRA: 0xc0683f,
+  IN1: 0xe9e6df, IN2: 0x9aa3a8, FLOOR: 0x6f7378,
+};
+export const L = {
+  warm: 0xffcc8c, cyan: 0x66e0ff, red: 0xff3322, green: 0x55ff77, orange: 0xff8a2a, white: 0xffffff, violet: 0xb07aff,
+};
+
+const e = (x, y, z) => new THREE.Euler(x, y, z);
+const v = (x, y, z) => new THREE.Vector3(x, y, z);
+
+export class ModelBuilder {
+  constructor() {
+    this.groups = new Map();   // key -> GeoBuilder
+    this.anims = [];           // {key, gb, anim}
+    this.colliders = [];       // local boxes {x,z,hx,hz,y0,y1, flags}
+    this.interiors = [];       // local boxes {x0,y0,z0,x1,y1,z1}
+    this.lights = [];          // {x,y,z,color,intensity,dist}
+    this.doors = [];           // {key, gb, slide:[x,y,z], x,z (door center)}
+    this.top = 0;
+  }
+
+  gb(key) {
+    if (!this.groups.has(key)) this.groups.set(key, new GeoBuilder());
+    return this.groups.get(key);
+  }
+
+  add(key, geo, opts = {}) {
+    this.gb(key).add(geo, opts);
+    const bb = geo.boundingBox || (geo.computeBoundingBox(), geo.boundingBox);
+    const y = (opts.pos ? opts.pos.y : 0) + bb.max.y * (opts.scale ? (opts.scale.y || opts.scale) : 1);
+    if (y > this.top) this.top = y;
+    return this;
+  }
+
+  // centred box
+  box(key, x, y, z, w, h, d, color, rot) {
+    return this.add(key, new THREE.BoxGeometry(w, h, d), { pos: v(x, y, z), rot: rot ? e(0, rot, 0) : undefined, color });
+  }
+  // box from bounds
+  bb(key, x0, y0, z0, x1, y1, z1, color) {
+    return this.box(key, (x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2, Math.abs(x1 - x0), Math.abs(y1 - y0), Math.abs(z1 - z0), color);
+  }
+  // vertical cylinder standing on y
+  cyl(key, x, y, z, r, h, color, seg = 16, rt) {
+    return this.add(key, new THREE.CylinderGeometry(rt === undefined ? r : rt, r, h, seg), { pos: v(x, y + h / 2, z), color });
+  }
+  // horizontal cylinder along axis 'x' | 'z'
+  hcyl(key, x, y, z, r, len, axis, color, seg = 14) {
+    return this.add(key, new THREE.CylinderGeometry(r, r, len, seg), { pos: v(x, y, z), rot: axis === 'x' ? e(0, 0, Math.PI / 2) : e(Math.PI / 2, 0, 0), color });
+  }
+  sphere(key, x, y, z, r, color, seg = 16, sy = 1) {
+    return this.add(key, new THREE.SphereGeometry(r, seg, Math.max(6, seg * 0.6 | 0)), { pos: v(x, y, z), scale: v(1, sy, 1), color });
+  }
+  dome(key, x, y, z, r, color, seg = 24, frac = 0.5) {
+    return this.add(key, new THREE.SphereGeometry(r, seg, seg / 2 | 0, 0, Math.PI * 2, 0, Math.PI * frac), { pos: v(x, y, z), color });
+  }
+  tube(key, points, r, color, seg = 6) {
+    const curve = new THREE.CatmullRomCurve3(points.map((p) => v(...p)), false, 'catmullrom', 0.2);
+    return this.add(key, taperTube(curve, Math.max(4, points.length * 4), seg, () => r), { color });
+  }
+
+  anim(key, geo, opts, anim) {
+    const gb = new GeoBuilder();
+    gb.add(geo, opts);
+    this.anims.push({ key, gb, anim });
+    return gb;
+  }
+  animGroup(key, anim) {
+    const gb = new GeoBuilder();
+    this.anims.push({ key, gb, anim });
+    return gb;
+  }
+
+  col(x0, y0, z0, x1, y1, z1, flags = {}) {
+    this.colliders.push({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, hx: Math.abs(x1 - x0) / 2, hz: Math.abs(z1 - z0) / 2, y0: Math.min(y0, y1), y1: Math.max(y0, y1), ...flags });
+  }
+  colCyl(x, z, r, y0, y1, flags = {}) { this.colliders.push({ cyl: true, x, z, r, y0, y1, ...flags }); }
+  interior(x0, y0, z0, x1, y1, z1) { this.interiors.push({ x0, y0, z0, x1, y1, z1 }); }
+  light(x, y, z, color = L.warm, intensity = 6, dist = 12) { this.lights.push({ x, y, z, color, intensity, dist }); }
+
+  finish() {
+    const parts = [];
+    for (const [key, gb] of this.groups) if (!gb.empty) parts.push({ key, geo: gb.build() });
+    for (const a of this.anims) if (!a.gb.empty) parts.push({ key: a.key, geo: a.gb.build(), anim: a.anim });
+    for (const d of this.doors) if (!d.gb.empty) parts.push({ key: d.key, geo: d.gb.build(), anim: { slide: d.slide }, door: true });
+    return { parts, colliders: this.colliders, interiors: this.interiors, lights: this.lights, doors: this.doors.map((d) => ({ x: d.x, z: d.z })), height: this.top };
+  }
+}
+
+// ---------------------------------------------------------------- details
+// Concrete pad: walking surface at y=0, skirt buried to -1.6
+export function plinth(M, w, d, { color = C.CONC, trim = C.G2, h = 0.3, collide = true } = {}) {
+  M.bb('concrete', -w / 2, -1.6, -d / 2, w / 2, 0, d / 2, color);
+  M.bb('metal', -w / 2 - 0.04, -0.12, -d / 2 - 0.04, w / 2 + 0.04, -0.02, d / 2 + 0.04, trim);
+  if (collide) M.col(-w / 2, -1.6, -d / 2, w / 2, 0, d / 2);
+}
+
+export function hazard(M, x, y, z, w, h, d) {
+  M.add('hull', new THREE.BoxGeometry(w, h, d), {
+    pos: v(x, y, z),
+    color: (lx, ly, lz) => (Math.floor((lx + lz + ly) * 3.2) & 1 ? [0.92, 0.7, 0.08] : [0.05, 0.05, 0.05]),
+  });
+}
+
+export function railing(M, x0, z0, x1, z1, y, h = 1.0, color = C.G) {
+  const len = Math.hypot(x1 - x0, z1 - z0);
+  const n = Math.max(1, Math.round(len / 1.4));
+  const ang = Math.atan2(x1 - x0, z1 - z0);
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    M.cyl('metal', x0 + (x1 - x0) * t, y, z0 + (z1 - z0) * t, 0.03, h, color, 6);
+  }
+  const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
+  M.add('metal', new THREE.CylinderGeometry(0.03, 0.03, len, 6), { pos: v(mx, y + h, mz), rot: e(Math.PI / 2, ang, 0), color });
+  M.add('metal', new THREE.CylinderGeometry(0.02, 0.02, len, 6), { pos: v(mx, y + h * 0.5, mz), rot: e(Math.PI / 2, ang, 0), color });
+}
+
+export function stairs(M, x, z, w, rise, steps, dir = -1, color = C.G2) {
+  const run = 0.3;
+  for (let i = 0; i < steps; i++) {
+    const y1 = rise * (i + 1) / steps;
+    const zz = z + dir * (steps - i - 0.5) * run;
+    M.bb('metal', x - w / 2, y1 - rise / steps, zz - run / 2, x + w / 2, y1, zz + run / 2, color);
+  }
+}
+
+export function antenna(M, x, y, z, h = 3, light = L.red) {
+  M.cyl('metal', x, y, z, 0.05, h, C.G, 6, 0.025);
+  M.cyl('metal', x, y, z, 0.12, 0.15, C.D, 8);
+  M.sphere('blink', x, y + h + 0.06, z, 0.08, light, 8);
+}
+
+export function vent(M, x, y, z, w = 1, d = 0.7, h = 0.5, rot = 0) {
+  M.box('metal', x, y + h / 2, z, w, h, d, C.G2, rot);
+  for (let i = 0; i < 4; i++) M.box('metal', x, y + h + 0.04, z - d / 2 + (i + 0.5) * d / 4, w * 0.92, 0.04, 0.05, C.D, rot);
+}
+
+export function tank(M, x, y, z, r, h, color = C.W2, bandColor = C.O) {
+  M.cyl('hull', x, y, z, r, h, color, 18);
+  M.sphere('hull', x, y + h, z, r, color, 18, 0.5);
+  M.cyl('metal', x, y + h * 0.3, z, r + 0.03, 0.12, bandColor === C.O ? C.D : bandColor, 18);
+  M.cyl('hull', x, y + h * 0.7, z, r + 0.02, 0.18, bandColor, 18);
+}
+
+export function pipe(M, pts, r = 0.12, color = C.G) {
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1];
+    const dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+    const len = Math.hypot(dx, dy, dz);
+    const g = new THREE.CylinderGeometry(r, r, len, 10);
+    const q = new THREE.Quaternion().setFromUnitVectors(v(0, 1, 0), v(dx / len, dy / len, dz / len));
+    const m = new THREE.Matrix4().compose(v((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2), q, v(1, 1, 1));
+    M.gb('metal').add(g, { matrix: m, color });
+    if (i > 0) M.sphere('metal', a[0], a[1], a[2], r * 1.25, color, 10);
+    if (i === 0 || i === pts.length - 2) {
+      const f = i === 0 ? a : b;
+      M.sphere('metal', f[0], f[1], f[2], r * 1.35, C.D, 10);
+    }
+  }
+}
+
+export function lightBar(M, x, y, z, w, h, d, color = L.warm) { M.box('emissive', x, y, z, w, h, d, color); }
+
+// Wall along X (axis 'x') or Z (axis 'z') starting at (x,z), length len, with openings
+// [{a, b, y0, y1, kind:'door'|'window'}] in local wall coordinates (a..b along wall).
+export function wall(M, axis, x, z, len, h, t, openings = [], { key = 'hull', color = C.W, inner = C.IN1, collide = true, frameColor = C.G2 } = {}) {
+  const cuts = new Set([0, len]);
+  for (const o of openings) { cuts.add(o.a); cuts.add(o.b); }
+  const xs = [...cuts].sort((p, q) => p - q);
+  const seg = (a, b, y0, y1, solidCol) => {
+    if (b - a < 1e-3 || y1 - y0 < 1e-3) return;
+    const ca = a, cb = b;
+    let bx0, bx1, bz0, bz1;
+    if (axis === 'x') { bx0 = x + ca; bx1 = x + cb; bz0 = z - t / 2; bz1 = z + t / 2; }
+    else { bz0 = z + ca; bz1 = z + cb; bx0 = x - t / 2; bx1 = x + t / 2; }
+    M.bb(key, bx0, y0, bz0, bx1, y1, bz1, color);
+    if (collide && solidCol) M.col(bx0, y0, bz0, bx1, y1, bz1);
+  };
+  for (let i = 0; i < xs.length - 1; i++) {
+    const a = xs[i], b = xs[i + 1];
+    const mid = (a + b) / 2;
+    const o = openings.find((q) => mid > q.a && mid < q.b);
+    if (!o) { seg(a, b, 0, h, true); continue; }
+    seg(a, b, 0, o.y0, true);
+    seg(a, b, o.y1, h, true);
+    if (o.kind === 'window') {
+      // invisible collider across the window + glass + frame
+      if (collide) {
+        if (axis === 'x') M.col(x + a, o.y0, z - t / 2, x + b, o.y1, z + t / 2);
+        else M.col(x - t / 2, o.y0, z + a, x + t / 2, o.y1, z + b);
+      }
+      const gw = b - a, gh = o.y1 - o.y0;
+      if (axis === 'x') {
+        M.add('window', new THREE.PlaneGeometry(gw, gh), { pos: v(x + mid, (o.y0 + o.y1) / 2, z) });
+        M.bb('metal', x + a, o.y0 - 0.05, z - t / 2 - 0.03, x + b, o.y0 + 0.02, z + t / 2 + 0.03, frameColor);
+        M.bb('metal', x + mid - 0.03, o.y0, z - 0.04, x + mid + 0.03, o.y1, z + 0.04, frameColor);
+      } else {
+        M.add('window', new THREE.PlaneGeometry(gw, gh), { pos: v(x, (o.y0 + o.y1) / 2, z + mid), rot: e(0, Math.PI / 2, 0) });
+        M.bb('metal', x - t / 2 - 0.03, o.y0 - 0.05, z + a, x + t / 2 + 0.03, o.y0 + 0.02, z + b, frameColor);
+        M.bb('metal', x - 0.04, o.y0, z + mid - 0.03, x + 0.04, o.y1, z + mid + 0.03, frameColor);
+      }
+    } else if (o.kind === 'door') {
+      // door frame
+      if (axis === 'x') {
+        M.bb('metal', x + a - 0.08, 0, z - t / 2 - 0.05, x + a, o.y1 + 0.08, z + t / 2 + 0.05, frameColor);
+        M.bb('metal', x + b, 0, z - t / 2 - 0.05, x + b + 0.08, o.y1 + 0.08, z + t / 2 + 0.05, frameColor);
+        M.bb('metal', x + a, o.y1, z - t / 2 - 0.05, x + b, o.y1 + 0.08, z + t / 2 + 0.05, frameColor);
+        lightBar(M, x + mid, o.y1 + 0.16, z - t / 2 - 0.06, b - a - 0.2, 0.06, 0.04, L.cyan);
+      } else {
+        M.bb('metal', x - t / 2 - 0.05, 0, z + a - 0.08, x + t / 2 + 0.05, o.y1 + 0.08, z + a, frameColor);
+        M.bb('metal', x - t / 2 - 0.05, 0, z + b, x + t / 2 + 0.05, o.y1 + 0.08, z + b + 0.08, frameColor);
+        M.bb('metal', x - t / 2 - 0.05, o.y1, z + a, x + t / 2 + 0.05, o.y1 + 0.08, z + b, frameColor);
+      }
+      // sliding door leaves
+      const half = (b - a) / 2;
+      const door = { key: 'hull', gb: new GeoBuilder(), slide: axis === 'x' ? [-half, 0, 0] : [0, 0, -half], x: axis === 'x' ? x + mid : x, z: axis === 'x' ? z : z + mid };
+      const door2 = { key: 'hull', gb: new GeoBuilder(), slide: axis === 'x' ? [half, 0, 0] : [0, 0, half], x: door.x, z: door.z };
+      const dh = o.y1 - 0.02;
+      const stripe = (lx, ly) => (ly > dh * 0.45 && ly < dh * 0.52 ? [0.94, 0.46, 0.1] : [0.82, 0.82, 0.8]);
+      if (axis === 'x') {
+        door.gb.add(new THREE.BoxGeometry(half, dh, 0.08), { pos: v(x + a + half / 2, dh / 2, z), color: (lx, ly) => stripe(lx, ly + dh / 2) });
+        door2.gb.add(new THREE.BoxGeometry(half, dh, 0.08), { pos: v(x + a + half * 1.5, dh / 2, z), color: (lx, ly) => stripe(lx, ly + dh / 2) });
+      } else {
+        door.gb.add(new THREE.BoxGeometry(0.08, dh, half), { pos: v(x, dh / 2, z + a + half / 2), color: (lx, ly) => stripe(lx, ly + dh / 2) });
+        door2.gb.add(new THREE.BoxGeometry(0.08, dh, half), { pos: v(x, dh / 2, z + a + half * 1.5), color: (lx, ly) => stripe(lx, ly + dh / 2) });
+      }
+      M.doors.push(door, door2);
+    }
+  }
+  // inner face colour strip (interior panels) for enterable rooms
+  if (inner && h > 2) {
+    const off = t / 2 + 0.005;
+    void off;
+  }
+}
+
+// Simple 4-wall room: front wall (z = -d/2) has the door at centre.
+export function room(M, w, d, h, { t = 0.24, door = 1.8, doorH = 2.5, winFront = [], winSide = 2, winBack = 2, color = C.W, roof = true, roofColor = C.W2, inner = true } = {}) {
+  const hw = w / 2, hd = d / 2;
+  const fo = [{ a: hw - door / 2, b: hw + door / 2, y0: 0, y1: doorH, kind: 'door' }, ...winFront];
+  wall(M, 'x', -hw, -hd, w, h, t, fo, { color });
+  const wins = (n, len) => {
+    const out = [];
+    for (let i = 0; i < n; i++) { const c = len * (i + 1) / (n + 1); out.push({ a: c - 0.7, b: c + 0.7, y0: 0.95, y1: 2.15, kind: 'window' }); }
+    return out;
+  };
+  wall(M, 'x', -hw, hd, w, h, t, wins(winBack, w), { color });
+  wall(M, 'z', -hw, -hd + t / 2, d - t, h, t, wins(winSide, d - t), { color });
+  wall(M, 'z', hw, -hd + t / 2, d - t, h, t, wins(winSide, d - t), { color });
+  if (roof) {
+    M.bb('hull', -hw - 0.15, h, -hd - 0.15, hw + 0.15, h + 0.3, hd + 0.15, roofColor);
+    M.col(-hw, h, -hd, hw, h + 0.3, hd);
+    M.bb('metal', -hw - 0.2, h + 0.3, -hd - 0.2, hw + 0.2, h + 0.38, hd + 0.2, C.G2);
+  }
+  if (inner) {
+    // interior lining + ceiling panel + floor finish (slightly above structure to avoid z-fighting)
+    M.bb('interior', -hw + t / 2, 0.0, -hd + t / 2, hw - t / 2, 0.02, hd - t / 2, C.FLOOR);
+    M.bb('interior', -hw + t / 2, h - 0.08, -hd + t / 2, hw - t / 2, h - 0.02, hd - t / 2, C.IN1);
+    lightBar(M, 0, h - 0.11, 0, Math.min(w - 2, 4), 0.04, 0.25, 0xfff2e0);
+    M.interior(-hw + t, 0, -hd + t, hw - t, h, hd - t);
+    M.light(0, h - 0.6, 0, 0xfff0e0, 2.2, Math.max(w, d) * 1.3);
+  }
+}
+
+export { v, e };
