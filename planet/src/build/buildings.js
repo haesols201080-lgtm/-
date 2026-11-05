@@ -125,17 +125,20 @@ export class Buildings {
     return b;
   }
 
-  modelKey(type, tier = 0) { return type === 'house' ? 'house:' + tier : type; }
+  // homes use a mirrored variant for half of the instances so streets do not repeat
+  modelKey(type, tier = 0, seed = 0) { return type === 'house' ? 'house:' + tier + (Math.floor(seed * 1000) % 2 ? ':m' : '') : type; }
 
   add(type, x, y, z, rot, extra = {}) {
     const def = BUILDINGS[type];
     const b = {
       id: extra.id || this.nextId++, type, def, x, y, z, rot,
-      tier: extra.tier || 0, lit: 1, active: 1, seed: (def.house ? 2 : 0) + Math.random(), door: 0,
+      tier: extra.tier || 0, lit: 1, active: 1, seed: 0, door: 0,
       cols: [], data: extra.data || {},
     };
     if (b.id >= this.nextId) this.nextId = b.id + 1;
-    b.key = this.modelKey(type, b.tier);
+    if (b.data.seed === undefined) b.data.seed = Math.random();
+    b.seed = (def.house ? 2 : 0) + b.data.seed;
+    b.key = this.modelKey(type, b.tier, b.data.seed);
     b.model = getModel(b.key);
     b.c = Math.cos(rot); b.s = Math.sin(rot);
     b.hw = def.size[0] / 2; b.hd = def.size[1] / 2;
@@ -180,7 +183,7 @@ export class Buildings {
     this.game.colliders.removeOwner(b.id);
     b.cols = [];
     b.tier = tier;
-    b.key = this.modelKey(b.type, tier);
+    b.key = this.modelKey(b.type, tier, b.data.seed);
     b.model = getModel(b.key);
     this.batch(b.key).add(b);
     this.addColliders(b);

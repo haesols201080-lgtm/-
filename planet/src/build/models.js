@@ -820,8 +820,42 @@ const BUILDERS = {
 };
 
 const cache = new Map();
+// mirrored variant (key suffix ':m'): flips X, fixes triangle winding, colliders, lights, doors
+function mirrorModel(src) {
+  const parts = src.parts.map((p) => {
+    const g = p.geo.clone();
+    const P = g.attributes.position, N = g.attributes.normal;
+    for (let i = 0; i < P.count; i++) { P.setX(i, -P.getX(i)); N.setX(i, -N.getX(i)); }
+    for (let i = 0; i < P.count; i += 3) {
+      for (const name of Object.keys(g.attributes)) {
+        const a = g.attributes[name], k = a.itemSize;
+        for (let c = 0; c < k; c++) { const t = a.array[(i + 1) * k + c]; a.array[(i + 1) * k + c] = a.array[(i + 2) * k + c]; a.array[(i + 2) * k + c] = t; }
+      }
+    }
+    let anim = p.anim;
+    if (anim && anim.pivot) anim = { ...anim, pivot: [-anim.pivot[0], anim.pivot[1], anim.pivot[2]], axis: [anim.axis[0], -anim.axis[1], -anim.axis[2]] };
+    if (anim && anim.slide) anim = { slide: [-anim.slide[0], anim.slide[1], anim.slide[2]] };
+    g.computeBoundingBox(); g.computeBoundingSphere();
+    return { ...p, geo: g, anim };
+  });
+  return {
+    parts,
+    colliders: src.colliders.map((c) => ({ ...c, x: -c.x })),
+    interiors: src.interiors.map((r) => ({ ...r, x0: -r.x1, x1: -r.x0 })),
+    lights: src.lights.map((l) => ({ ...l, x: -l.x })),
+    doors: src.doors.map((d) => ({ ...d, x: -d.x })),
+    height: src.height,
+  };
+}
+
 export function getModel(key) {
   if (cache.has(key)) return cache.get(key);
+  if (key.endsWith(':m')) {
+    const model = mirrorModel(getModel(key.slice(0, -2)));
+    model.key = key;
+    cache.set(key, model);
+    return model;
+  }
   const fn = BUILDERS[key];
   if (!fn) throw new Error('no model ' + key);
   const M = new ModelBuilder();
