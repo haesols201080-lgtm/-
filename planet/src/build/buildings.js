@@ -131,7 +131,7 @@ export class Buildings {
     const def = BUILDINGS[type];
     const b = {
       id: extra.id || this.nextId++, type, def, x, y, z, rot,
-      tier: extra.tier || 0, lit: 1, active: 1, seed: Math.random(), door: 0,
+      tier: extra.tier || 0, lit: 1, active: 1, seed: (def.house ? 2 : 0) + Math.random(), door: 0,
       cols: [], data: extra.data || {},
     };
     if (b.id >= this.nextId) this.nextId = b.id + 1;

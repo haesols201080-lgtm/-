@@ -101,7 +101,8 @@ function patch(mat, key, fragBody, { anim = null, slide = null, extraUniforms = 
     // objectNormal is defined before begin_vertex (beginnormal_vertex), so ANIM can rotate it.
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + HEAD_F + PANEL_FN)
-      .replace('#include <map_fragment>', fragBody.map || '')
+      .replace('#include <map_fragment>', (mat.vertexColors ? '#ifdef USE_COLOR\n  diffuseColor.rgb *= vColor;\n#endif\n' : '') + (fragBody.map || ''))
+      .replace('#include <color_fragment>', mat.vertexColors ? '' : '#include <color_fragment>')
       .replace('#include <roughnessmap_fragment>', fragBody.rough || '#include <roughnessmap_fragment>')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + (fragBody.emit || ''));
   };
@@ -111,7 +112,13 @@ function patch(mat, key, fragBody, { anim = null, slide = null, extraUniforms = 
 
 const HULL_MAP = /* glsl */`
   vec3 pin = panelInfo(vOP, normalize(vON), vec2(1.6, 1.0));
-  vec3 baseC = diffuseColor.rgb * (0.93 + 0.1 * pin.y);
+  vec3 baseC = diffuseColor.rgb;
+  // homes get their own accent colour (seed >= 2 marks a residence)
+  if (vData.z >= 2.0 && distance(baseC, vec3(0.871, 0.181, 0.012)) < 0.15) {
+    float k = floor(fract(vData.z) * 6.0);
+    baseC = k < 1.0 ? vec3(0.871, 0.181, 0.012) : k < 2.0 ? vec3(0.03, 0.42, 0.38) : k < 3.0 ? vec3(0.06, 0.18, 0.6) : k < 4.0 ? vec3(0.6, 0.05, 0.04) : k < 5.0 ? vec3(0.85, 0.55, 0.05) : vec3(0.3, 0.1, 0.45);
+  }
+  baseC *= (0.93 + 0.1 * pin.y);
   vec4 nz = texture2D(tNoise, vOP.xz * 0.11 + vOP.y * 0.07 + vData.z);
   float streak = texture2D(tNoise, vec2(vOP.x * 0.9 + vOP.z * 0.9, vOP.y * 0.08) + vData.z).g;
   float grime = smoothstep(1.3, -0.2, vOP.y) * 0.5 + smoothstep(0.55, 0.85, streak) * 0.18 + smoothstep(0.6, 0.9, nz.b) * 0.12;
@@ -148,14 +155,16 @@ export function makeBuildingMaterials() {
       c = mix(c, vec3(0.4, 0.27, 0.18), top * uDustAmt * smoothstep(0.4, 0.75, nz2.r) * 0.5);
       diffuseColor.rgb = c;`,
   });
-  M.glass = patch(new THREE.MeshStandardMaterial({ color: 0x0b1418, roughness: 0.05, metalness: 0.0, envMapIntensity: 1.4 }), 'glass', {
+  M.glass = patch(new THREE.MeshStandardMaterial({ color: 0x45697a, roughness: 0.1, metalness: 0.5, envMapIntensity: 1.5 }), 'glass', {
     map: '',
     emit: /* glsl */`
-      vec3 cell = floor(vOP * vec3(1.1, 0.45, 1.1));
-      float h = hash1(cell.xz + cell.y * 7.3 + vData.z * 11.0);
-      float on = step(0.28, h) * vData.x;
+      vec3 cell = floor(vOP * vec3(0.7, 0.36, 0.7));
+      float h = hash1(cell.xz + cell.y * 7.3 + floor(vData.z * 50.0));
+      float on = step(0.3, h) * vData.x;
       vec3 warm = mix(vec3(1.0, 0.72, 0.42), vec3(0.75, 0.9, 1.0), step(0.85, h));
-      totalEmissiveRadiance += warm * on * (0.08 + 1.5 * uNight) * (0.6 + 0.5 * h);`,
+      totalEmissiveRadiance += warm * on * smoothstep(0.15, 0.6, uNight) * 1.5 * (0.6 + 0.5 * h);
+      // daytime sky sheen so windows read as glass, not holes
+      totalEmissiveRadiance += vec3(0.05, 0.075, 0.1) * (1.0 - uNight) * (0.6 + 0.6 * h);`,
   });
   M.window = new THREE.MeshStandardMaterial({ color: 0x8fb8c8, roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.22, depthWrite: false, envMapIntensity: 1.5, side: THREE.DoubleSide });
   M.window.onBeforeCompile = (sh) => {

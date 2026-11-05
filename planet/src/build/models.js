@@ -940,6 +940,7 @@ function park(M) {
   for (const [x, z, r] of [[-1.8, -3.6, 0], [1.8, 3.6, 0]]) { M.box('interior', x, 0.4, z, 1.6, 0.08, 0.5, C.WOOD, r); M.box('metal', x, 0.2, z, 1.4, 0.4, 0.1, C.G, r); }
   for (const [x, z] of [[-4.4, 0], [4.4, 0]]) { M.cyl('metal', x, 0, z, 0.05, 3.2, C.G2, 6); M.sphere('emissive', x, 3.3, z, 0.18, L.warm, 10); M.light(x, 3.2, z, L.warm, 6, 10); }
   M.colCyl(0, 0, 1.4, 0, 0.5);
+  M.col(-5, -1.2, -5, 5, 0.04, 5);
 }
 
 function culture(M) {
