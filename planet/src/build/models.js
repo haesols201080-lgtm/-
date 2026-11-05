@@ -708,7 +708,21 @@ function farm(M) {
     for (let k = 0; k < rp.count; k++) rp.setY(k, rp.getY(k) * 0.55);
     M.add('metal', rib, { pos: v(0, 2.0, z), color: C.W2 });
   }
-  M.col(-w / 2, 1.0, -d / 2, w / 2, 4.1, d / 2, { noStand: false });
+  // glass end caps of the arch
+  for (const zz of [-d / 2, d / 2]) {
+    const cap = new THREE.CircleGeometry(w / 2, 24, 0, Math.PI);
+    const cp = cap.attributes.position;
+    for (let k = 0; k < cp.count; k++) cp.setY(k, cp.getY(k) * 0.55);
+    M.add('window', cap, { pos: v(0, 2.0, zz) });
+  }
+  // colliders: roof above head height, curved sides and end walls around the door
+  M.col(-w / 2, 3.7, -d / 2, w / 2, 4.1, d / 2);
+  M.col(-w / 2, 1.0, -d / 2, -w / 2 + 0.6, 3.0, d / 2);
+  M.col(w / 2 - 0.6, 1.0, -d / 2, w / 2, 3.0, d / 2);
+  M.col(-w / 2, 1.0, d / 2 - 0.2, w / 2, 3.0, d / 2);
+  M.col(-w / 2, 1.0, -d / 2, -0.9, 3.0, -d / 2 + 0.2);
+  M.col(0.9, 1.0, -d / 2, w / 2, 3.0, -d / 2 + 0.2);
+  M.col(-0.9, 2.3, -d / 2, 0.9, 3.0, -d / 2 + 0.2);
   // end gable framing for door
   M.bb('metal', -1.0, 1.0, -d / 2 - 0.05, -0.9, 2.3, -d / 2 + 0.05, C.G2);
   M.bb('metal', 0.9, 1.0, -d / 2 - 0.05, 1.0, 2.3, -d / 2 + 0.05, C.G2);

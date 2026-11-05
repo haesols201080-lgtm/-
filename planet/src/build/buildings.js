@@ -142,8 +142,19 @@ export class Buildings {
     this.batch(b.key).add(b);
     this.addColliders(b);
     this.list.push(b);
+    this.gridAdd(b);
     return b;
   }
+
+  // coarse spatial hash for footprint queries (plants, rocks, citizens)
+  gridKeys(b) {
+    const r = Math.hypot(b.hw, b.hd) + 2, C = 32, out = [];
+    for (let j = Math.floor((b.z - r) / C); j <= Math.floor((b.z + r) / C); j++)
+      for (let i = Math.floor((b.x - r) / C); i <= Math.floor((b.x + r) / C); i++) out.push(i + ':' + j);
+    return out;
+  }
+  gridAdd(b) { this.grid = this.grid || new Map(); for (const k of this.gridKeys(b)) { let a = this.grid.get(k); if (!a) this.grid.set(k, a = []); a.push(b); } }
+  gridRemove(b) { if (!this.grid) return; for (const k of this.gridKeys(b)) { const a = this.grid.get(k); if (a) { const i = a.indexOf(b); if (i >= 0) a.splice(i, 1); } } }
 
   addColliders(b) {
     const C = this.game.colliders;
@@ -155,6 +166,7 @@ export class Buildings {
   }
 
   remove(b) {
+    this.gridRemove(b);
     if (b.batch) b.batch.remove(b);
     this.game.colliders.removeOwner(b.id);
     b.cols = [];
@@ -190,10 +202,9 @@ export class Buildings {
   }
 
   isBlocked(x, z, pad = 0) {
-    for (const b of this.list) {
-      if (Math.abs(b.x - x) > b.hw + b.hd + pad + 1 || Math.abs(b.z - z) > b.hw + b.hd + pad + 1) continue;
-      if (this.footprintHit(b, x, z, pad + 0.5)) return true;
-    }
+    const a = this.grid && this.grid.get(Math.floor(x / 32) + ':' + Math.floor(z / 32));
+    if (!a) return false;
+    for (const b of a) if (this.footprintHit(b, x, z, pad + 0.5)) return true;
     return false;
   }
 

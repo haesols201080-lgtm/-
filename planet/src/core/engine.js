@@ -38,10 +38,10 @@ varying vec2 vUv;
 void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
 export const QUALITY = {
-  low: { pr: 0.75, msaa: 0, shadow: 1024, bloom: false, view: 0.7, flora: 0.45 },
-  medium: { pr: 1.0, msaa: 2, shadow: 2048, bloom: true, view: 0.85, flora: 0.7 },
-  high: { pr: 1.5, msaa: 4, shadow: 2048, bloom: true, view: 1.0, flora: 1.0 },
-  ultra: { pr: 2.0, msaa: 4, shadow: 4096, bloom: true, view: 1.0, flora: 1.25 },
+  low: { pr: 0.75, msaa: 0, shadow: 1024, bloom: false, ao: false, view: 0.7, flora: 0.45 },
+  medium: { pr: 1.0, msaa: 2, shadow: 2048, bloom: true, ao: true, view: 0.85, flora: 0.7 },
+  high: { pr: 1.5, msaa: 4, shadow: 2048, bloom: true, ao: true, view: 1.0, flora: 1.0 },
+  ultra: { pr: 2.0, msaa: 4, shadow: 4096, bloom: true, ao: true, view: 1.0, flora: 1.25 },
 };
 
 export class Engine {
@@ -75,6 +75,7 @@ export class Engine {
       uFogDensity: { value: 0.0006 }, uFogFalloff: { value: 0.004 },
       uUnderwater: { value: 0 }, uWaterTint: { value: this.waterTint },
       uWaterLevelC: U.uWaterLevel, uFar: { value: 30000 }, tWaterN: { value: null }, uTimeC: U.uTime, uNightC: U.uNight,
+      uAO: { value: 1 }, uRes: { value: new THREE.Vector2(1, 1) }, uProjY: { value: 1 },
     };
     this.compMat = new THREE.ShaderMaterial({
       uniforms: this.compUniforms,
@@ -83,9 +84,38 @@ export class Engine {
         uniform sampler2D tColor, tDepth, tWaterN;
         uniform mat4 uProjInv, uCamWorld;
         uniform vec3 uCamPos2;
-        uniform float uFogDensity, uFogFalloff, uUnderwater, uWaterLevelC, uFar, uTimeC, uNightC;
+        uniform float uFogDensity, uFogFalloff, uUnderwater, uWaterLevelC, uFar, uTimeC, uNightC, uAO, uProjY;
+        uniform vec2 uRes;
         uniform vec3 uWaterTint;
         varying vec2 vUv;
+        vec3 viewPosAt(vec2 uv) {
+          float z = texture2D(tDepth, uv).x;
+          vec4 f = uProjInv * vec4(uv * 2.0 - 1.0, 1.0, 1.0);
+          vec3 d = normalize(f.xyz / f.w);
+          float vz = exp2(z * log2(uFar + 1.0)) - 1.0;
+          return d * (vz / max(-d.z, 1e-4));
+        }
+        // screen-space ambient occlusion (hemisphere test on reconstructed positions)
+        float ssao(vec3 P, float vz) {
+          vec3 n = normalize(cross(dFdx(P), dFdy(P)));
+          if (dot(n, -P) < 0.0) n = -n;
+          float R = 0.85;
+          float rpx = clamp(R * uProjY * uRes.y * 0.5 / max(vz, 0.1), 3.0, 48.0);
+          float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+          float occ = 0.0;
+          for (int i = 0; i < 10; i++) {
+            float fi = float(i);
+            float a = (fi + ign) * 2.39996;
+            float r = sqrt((fi + 0.5) / 10.0) * rpx;
+            vec2 o = vec2(cos(a), sin(a)) * r / uRes;
+            vec3 S = viewPosAt(vUv + o);
+            vec3 v = S - P;
+            float dl = length(v);
+            float fall = 1.0 - smoothstep(R * 0.5, R * 1.6, dl);
+            occ += max(0.0, dot(n, v) / max(dl, 1e-3) - 0.12) * fall;
+          }
+          return clamp(1.0 - occ / 10.0 * 1.6, 0.0, 1.0);
+        }
         const float CURV = ${WORLD.CURV.toExponential(6)};
         float cloudShadow(vec3 wp) {
           if (uCloudCover <= 0.001) return 1.0;
@@ -121,7 +151,14 @@ export class Engine {
           vec3 ro = uCamPos2;
           vec3 wp = ro + rd * dist;
 
-          if (!isSky) col *= cloudShadow(wp);
+          if (!isSky) {
+            col *= cloudShadow(wp);
+            if (uAO > 0.0 && vz < 250.0) {
+              vec3 Pv = vdir * (vz / max(-vdir.z, 1e-4));
+              float ao = ssao(Pv, vz);
+              col *= mix(1.0, ao, uAO * (1.0 - smoothstep(120.0, 250.0, vz)));
+            }
+          }
 
           // --- water surface (liquid oceans/lakes)
           float L = uWaterLevelC;
@@ -273,6 +310,9 @@ export class Engine {
     }
     cu.uUnderwater.value = this.underwater;
     cu.uFar.value = cam.far;
+    cu.uAO.value = this.quality.ao ? 1 : 0;
+    cu.uRes.value.set(this.sceneRT.width, this.sceneRT.height);
+    cu.uProjY.value = cam.projectionMatrix.elements[5];
     if (!cu.tWaterN.value) cu.tWaterN.value = TEX.water;
     r.setRenderTarget(this.postRT);
     r.render(this.compScene, this.fsCam);
