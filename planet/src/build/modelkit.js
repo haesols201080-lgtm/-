@@ -116,7 +116,7 @@ export class ModelBuilder {
 // ---------------------------------------------------------------- details
 // Concrete pad: walking surface at y=0, skirt buried to -1.6
 export function plinth(M, w, d, { color = C.CONC, trim = C.G2, h = 0.3, collide = true } = {}) {
-  M.bb('concrete', -w / 2, -1.6, -d / 2, w / 2, 0, d / 2, color);
+  M.bb('concrete', -w / 2, -2.4, -d / 2, w / 2, 0, d / 2, color);
   M.bb('metal', -w / 2 - 0.04, -0.12, -d / 2 - 0.04, w / 2 + 0.04, -0.02, d / 2 + 0.04, trim);
   if (collide) M.col(-w / 2, -1.6, -d / 2, w / 2, 0, d / 2);
 }
@@ -379,6 +379,11 @@ export function radiator(M, x, y, z, w, h, rot = 0, color = C.W2) {
   }
   M.box('metal', x, y + h, z, w + 0.1, 0.08, 0.66, C.G2, rot);
   M.box('metal', x, y, z, w + 0.1, 0.08, 0.66, C.G2, rot);
+  // feet down to whatever it stands on
+  for (const sx of [-1, 1]) {
+    const lx = sx * (w / 2 - 0.05);
+    M.box('metal', x + lx * c, y - 0.17, z - lx * s, 0.1, 0.36, 0.6, C.D, rot);
+  }
 }
 
 // Scatter small machinery details on a horizontal roof rectangle
@@ -398,17 +403,16 @@ export function greebleRoof(M, x0, z0, x1, z1, y, seed, n = 6) {
 // Airlock vestibule in front of a door on the -z face at z=zf
 export function airlock(M, x, zf, w = 2.4, h = 2.9, depth = 1.6, color = C.W2) {
   const z = zf - depth / 2;
-  M.box('hull', x - w / 2 - 0.12, h / 2, z, 0.24, h, depth, color);
-  M.box('hull', x + w / 2 + 0.12, h / 2, z, 0.24, h, depth, color);
-  M.box('hull', x, h + 0.14, z, w + 0.48, 0.28, depth + 0.1, color);
-  M.box('hull', x, h + 0.32, z - depth / 2 + 0.1, w + 0.6, 0.1, 0.25, C.O);
-  for (const sx of [-1, 1]) M.box('metal', x + sx * (w / 2 + 0.26), h / 2, zf - depth + 0.05, 0.12, h + 0.2, 0.18, C.G2);
-  M.box('emissive', x, h - 0.08, zf - depth + 0.02, w * 0.7, 0.06, 0.03, L.cyan);
-  hazard(M, x, 0.02, zf - depth / 2, w, 0.04, depth * 0.6);
+  for (const sx of [-1, 1]) M.add('hull', new THREE.BoxGeometry(0.24, h, depth), { pos: v(x + sx * (w / 2 + 0.12), h / 2, z), color });
+  M.add('hull', new THREE.BoxGeometry(w + 0.78, 0.22, depth + 0.6), { pos: v(x, h + 0.11, z - 0.3), color: C.W2 });
+  M.add('metal', new THREE.BoxGeometry(w + 0.82, 0.05, depth + 0.64), { pos: v(x, h + 0.245, z - 0.3), color: C.G2 });
+  for (const sx of [-1, 1]) M.add('metal', new THREE.BoxGeometry(0.08, h, 0.1), { pos: v(x + sx * (w / 2 + 0.02), h / 2, zf - depth + 0.05), color: C.D });
+  M.add('emissive', new THREE.BoxGeometry(0.5, 0.02, 0.2), { pos: v(x, h - 0.005, zf - depth - 0.25), color: L.warm });
+  M.add('concrete', new THREE.BoxGeometry(w, 0.03, depth + 0.8), { pos: v(x, 0.015, z - 0.4), color: C.CONC2 });
   M.col(x - w / 2 - 0.24, 0, z - depth / 2, x - w / 2, h, z + depth / 2);
   M.col(x + w / 2, 0, z - depth / 2, x + w / 2 + 0.24, h, z + depth / 2);
   M.col(x - w / 2 - 0.24, h, z - depth / 2, x + w / 2 + 0.24, h + 0.4, z + depth / 2);
-  M.light(x, h - 0.4, zf - depth * 0.6, L.cyan, 1.2, 4);
+  M.light(x, h - 0.4, zf - depth * 0.6, L.warm, 1.2, 4);
 }
 
 // ---------------------------------------------------------------- Mars-city kit
@@ -463,6 +467,63 @@ export function roundStorey(M, x, z, r, y0, y1, wins, { sill = 0.9, head = 2.25,
     if (o.y + o.h < hi) cyl(o.y + o.h, hi, o.a - ha, 2 * ha);
     wallWindow(M, x, z, r, o.a, y0 + o.y, o.w, o.h, { trim, split: o.w > 0.9 });
   }
+}
+
+// Continuous metal railing along a polyline of world points (at walking
+// level): posts at every vertex and ~1.2 m, top and bottom rails, balusters.
+export function rail(M, pts, h = 1.0, { color = C.G2, gap = 0.14 } = {}) {
+  const bar = (a, b, rr) => {
+    const d = b.clone().sub(a), len = d.length();
+    if (len < 1e-3) return;
+    const g = new THREE.CylinderGeometry(rr, rr, len, 6);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(v(0, 1, 0), d.normalize()));
+    M.add('metal', g, { pos: a.clone().add(b).multiplyScalar(0.5), color });
+  };
+  const up = (p, dy) => v(p.x, p.y + dy, p.z);
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1], len = a.distanceTo(b);
+    bar(up(a, h), up(b, h), 0.028);
+    bar(up(a, 0.1), up(b, 0.1), 0.018);
+    const np = Math.max(1, Math.round(len / 1.2));
+    for (let k = 1; k < np; k++) { const p = a.clone().lerp(b, k / np); bar(p, up(p, h), 0.022); }
+    const nb = Math.max(1, Math.floor(len / gap));
+    for (let k = 1; k < nb; k++) { const p = a.clone().lerp(b, k / nb); bar(up(p, 0.1), up(p, h), 0.009); }
+  }
+  for (const p of pts) { bar(p, up(p, h + 0.02), 0.026); M.add('metal', new THREE.SphereGeometry(0.035, 8, 6), { pos: up(p, h), color }); }
+}
+
+// Entrance vestibule built into a round wall (front faces -z, centre (cx, cz),
+// wall radius r): side walls, flat roof overhanging as a canopy, recessed
+// glass double doors with frame, threshold, wall light and house plate.
+export function entryPortal(M, cx, cz, r, { w = 2.3, h = 2.85, out = 1.1, doorW = 1.5, doorH = 2.3, color = C.W } = {}) {
+  const zf = cz - r - out, zb = cz - r + 0.9, len = zb - zf, zm = (zf + zb) / 2;
+  const tw = 0.24;
+  for (const sx of [-1, 1]) M.add('hull', new THREE.BoxGeometry(tw, h, len), { pos: v(cx + sx * (w / 2 - tw / 2), h / 2, zm), color });
+  // front: piers either side of the door and a header
+  const pw = (w - 2 * tw - doorW) / 2;
+  if (pw > 0.02) for (const sx of [-1, 1]) M.add('hull', new THREE.BoxGeometry(pw, h, tw), { pos: v(cx + sx * (doorW / 2 + pw / 2), h / 2, zf + tw / 2), color });
+  M.add('hull', new THREE.BoxGeometry(doorW + 0.02, h - doorH, tw), { pos: v(cx, doorH + (h - doorH) / 2, zf + tw / 2), color });
+  // roof slab overhanging the front as a canopy, with coping and downlight
+  M.add('hull', new THREE.BoxGeometry(w + 0.3, 0.22, len + 0.7), { pos: v(cx, h + 0.11, zm - 0.35), color: C.W2 });
+  M.add('metal', new THREE.BoxGeometry(w + 0.34, 0.05, len + 0.74), { pos: v(cx, h + 0.245, zm - 0.35), color: C.G2 });
+  M.add('emissive', new THREE.BoxGeometry(0.5, 0.02, 0.2), { pos: v(cx, h - 0.005, zf - 0.35), color: L.warm });
+  // recessed doors
+  const zd = zf + 0.2;
+  M.add('glass', new THREE.BoxGeometry(doorW, doorH, 0.04), { pos: v(cx, doorH / 2, zd) });
+  M.add('metal', new THREE.BoxGeometry(doorW + 0.08, 0.07, 0.08), { pos: v(cx, doorH - 0.035, zd - 0.03), color: C.D });
+  for (const sx of [-1, 0, 1]) M.add('metal', new THREE.BoxGeometry(sx ? 0.07 : 0.05, doorH, 0.08), { pos: v(cx + sx * (doorW / 2 - 0.03), doorH / 2, zd - 0.03), color: C.D });
+  M.add('metal', new THREE.BoxGeometry(doorW, 0.05, 0.07), { pos: v(cx, 0.025, zd - 0.03), color: C.D });
+  for (const sx of [-1, 1]) M.add('metal', new THREE.BoxGeometry(0.03, 0.55, 0.04), { pos: v(cx + sx * 0.1, 1.05, zd - 0.08), color: C.G });
+  // reveal lining and threshold
+  for (const sx of [-1, 1]) M.add('hull', new THREE.BoxGeometry(0.03, doorH, 0.2), { pos: v(cx + sx * (doorW / 2 + 0.005), doorH / 2, zf + 0.1), color: C.W2 });
+  M.add('concrete', new THREE.BoxGeometry(w + 0.6, 0.03, 1.0), { pos: v(cx, 0.015, zf - 0.45), color: C.CONC2 });
+  // wall light and house number plate beside the door
+  M.add('metal', new THREE.BoxGeometry(0.34, 0.24, 0.05), { pos: v(cx + doorW / 2 + pw / 2, 1.55, zf - 0.03), color: C.D });
+  M.add('emissive', new THREE.BoxGeometry(0.2, 0.06, 0.02), { pos: v(cx + doorW / 2 + pw / 2, 1.55, zf - 0.06), color: L.white });
+  M.col(cx - w / 2, 0, zf, cx - w / 2 + tw, h, zb);
+  M.col(cx + w / 2 - tw, 0, zf, cx + w / 2, h, zb);
+  M.col(cx - w / 2, 0, zf, cx + w / 2, h + 0.25, zf + tw + 0.2);
+  M.light(cx, h - 0.4, zf - 0.6, L.warm, 1.5, 6);
 }
 
 // Domed hab unit: one storey drum with punched windows under a shallow dome
@@ -520,6 +581,8 @@ export function linkTube(M, x0, z0, x1, z1, y, r = 0.6, color = C.W) {
     const ring = new THREE.TorusGeometry(r + 0.02, 0.045, 6, 24); ring.rotateX(PI2); ring.translate(0, (t - 0.5) * len, 0);
     M.gb('metal').add(ring, { matrix: m, color: C.G2 });
   }
+  // saddle under the middle so an exposed span never floats
+  if (y - r > 0.05) M.add('metal', new THREE.BoxGeometry(r * 1.2, y - r * 0.6, 0.25), { pos: v((x0 + x1) / 2, (y - r * 0.6) / 2, (z0 + z1) / 2), rot: e(0, Math.atan2(dx, dz), 0), color: C.G2 });
 }
 
 // Cylinder tower: punched windows on every floor, expressed floor lines,
@@ -537,7 +600,7 @@ export function ribbonTower(M, x, z, r, h, { fh = 3.2, y0 = 0, color = C.W, seg 
     for (let k = 0; k < n; k++) {
       const a = rot + (k + (i % 2) * 0.0) / n * TAU;
       if (skip.some((s) => near(a, s, 0.5))) continue;
-      if (door && i === 0 && near(a, Math.PI, 0.45)) continue;
+      if (door && i === 0 && near(a, Math.PI, 0.9)) continue;
       const bal = i > 0 && balconies.some((b) => near(a, b, 0.2)) && i % 2 === 1;
       wins.push(lob ? { a, w: 1.5, y: 0.3, h: 2.3 } : bal ? { a, w: 1.1, y: 0.1, h: 2.2 } : { a, w: 1.2 });
     }
@@ -546,12 +609,9 @@ export function ribbonTower(M, x, z, r, h, { fh = 3.2, y0 = 0, color = C.W, seg 
     if (i > 0) M.add('hull', new THREE.CylinderGeometry(r + 0.06, r + 0.06, 0.16, seg, 1, true), { pos: v(x, y + 0.02, z), color: C.W2 });
     if (i > 0 && i % 2 === 1) for (const b of balconies) {
       const q = e(0, b, 0), P = (lx, ly, lz) => v(lx, ly, lz).applyEuler(q).add(v(x, 0, z));
-      M.add('hull', new THREE.BoxGeometry(2.1, 0.16, 1.3), { pos: P(0, y + 0.02, r + 0.45), rot: q, color: C.W2 });
-      for (const lx of [-1.0, -0.33, 0.33, 1.0]) M.add('metal', new THREE.CylinderGeometry(0.025, 0.025, 1.0, 5), { pos: P(lx, y + 0.6, r + 1.05), color: C.G2 });
-      for (const sx of [-1, 1]) M.add('metal', new THREE.CylinderGeometry(0.025, 0.025, 1.0, 5), { pos: P(sx * 1.0, y + 0.6, r + 0.4), color: C.G2 });
-      M.add('metal', new THREE.BoxGeometry(2.05, 0.05, 0.06), { pos: P(0, y + 1.1, r + 1.07), rot: q, color: C.G2 });
-      for (const sx of [-1, 1]) M.add('metal', new THREE.BoxGeometry(0.06, 0.05, 1.0), { pos: P(sx * 1.02, y + 1.1, r + 0.55), rot: q, color: C.G2 });
-      M.add('metal', new THREE.BoxGeometry(2.05, 0.03, 0.03), { pos: P(0, y + 0.6, r + 1.07), rot: q, color: C.G2 });
+      const bw = 1.05, bd = r + 1.05, zw = Math.sqrt(r * r - bw * bw) - 0.03;   // side rails die into the curved wall
+      M.add('hull', new THREE.BoxGeometry(2 * bw + 0.1, 0.16, bd - zw + 0.25), { pos: P(0, y + 0.02, (bd + zw) / 2 - 0.05), rot: q, color: C.W2 });
+      rail(M, [P(-bw, y + 0.1, zw), P(-bw, y + 0.1, bd), P(bw, y + 0.1, bd), P(bw, y + 0.1, zw)], 1.0);
     }
   }
   const top = y0 + h;
@@ -581,19 +641,7 @@ export function ribbonTower(M, x, z, r, h, { fh = 3.2, y0 = 0, color = C.W, seg 
     if (plant) rooftopPlant(M, x, ct + 0.06, z, r * 0.6, 17);
     capTop = ct + 0.6;
   }
-  if (door) {
-    const zf = z - r;
-    M.box('hull', x, 2.75, zf - 0.75, 3.0, 0.16, 1.7, C.W2);
-    M.box('metal', x, 2.66, zf - 0.75, 2.8, 0.03, 1.5, C.D);
-    for (const sx of [-1, 1]) M.cyl('metal', x + sx * 1.35, 0, zf - 1.45, 0.06, 2.67, C.G2, 10);
-    for (const sx of [-0.6, 0, 0.6]) M.box('emissive', x + sx, 2.64, zf - 0.75, 0.25, 0.02, 0.25, L.warm);
-    M.box('metal', x, 1.25, zf + 0.05, 2.0, 2.5, 0.2, C.D);
-    for (const sx of [-0.45, 0.45]) M.box('glass', x + sx, 1.15, zf - 0.07, 0.86, 2.2, 0.04);
-    M.box('metal', x, 1.15, zf - 0.1, 0.05, 2.2, 0.06, C.G2);
-    M.box('metal', x, 2.95, zf - 1.58, 1.2, 0.22, 0.05, C.D);
-    M.box('emissive', x, 2.95, zf - 1.61, 1.0, 0.06, 0.02, L.white);
-    M.light(x, 2.4, zf - 1.0, L.warm, 1.5, 6);
-  }
+  if (door) entryPortal(M, x, z, r, { w: 2.6, h: 3.0, out: 1.0, doorW: 1.8, doorH: 2.45 });
   M.colCyl(x, z, r, y0, top + 0.3);
   if (cap !== 'flat') M.colCyl(x, z, r * 0.75, top, capTop - r * 0.15);
   return capTop;
@@ -615,39 +663,184 @@ export function rooftopPlant(M, x, y, z, rad, seed = 1) {
   vent(M, x + (rnd() - 0.5) * rad, y, z + rad * 0.6, 0.7, 0.5, 0.4);
 }
 
-// Tubular pressurised entry module
-// (white composite cylinder) along -z from z0 (inside the hab) to the hatch at z1.
-export function airlockTube(M, x, y, z0, z1, r = 1.0, color = C.MOD) {
-  const len = z0 - z1, zc = (z0 + z1) / 2;
-  M.hcyl('hull', x, y, zc, r, len, 'z', color, 28);
-  for (const t of [0.12, 0.5, 0.88]) M.add('metal', new THREE.TorusGeometry(r + 0.025, 0.06, 6, 28), { pos: v(x, y, z1 + len * t), color: C.G2 });
-  // hatch frame, door and porthole on the end face
-  M.add('metal', new THREE.TorusGeometry(r - 0.04, 0.045, 6, 28), { pos: v(x, y, z1 - 0.01), color: C.G });
-  M.add('metal', roundedBox(1.16, 1.9, 0.08), { pos: v(x, y - 0.1, z1 - 0.02), color: C.G });
-  M.add('hull', roundedBox(0.98, 1.72, 0.12), { pos: v(x, y - 0.1, z1 - 0.05), color: C.W2 });
-  M.add('glass', new THREE.CylinderGeometry(0.15, 0.15, 0.06, 16), { pos: v(x, y + 0.42, z1 - 0.11), rot: e(PI2, 0, 0) });
-  M.add('metal', new THREE.TorusGeometry(0.17, 0.035, 6, 16), { pos: v(x, y + 0.42, z1 - 0.12), color: C.D });
-  M.box('metal', x + 0.36, y - 0.1, z1 - 0.12, 0.06, 0.4, 0.06, C.D);
-  M.box('emissive', x, y + r * 0.92 - 0.05, z1 - 0.07, 0.5, 0.05, 0.04, L.warm);
-  // saddles and a step plate
-  for (const t of [0.25, 0.75]) M.box('metal', x, (y - r * 0.6) / 2, z1 + len * t, r * 1.3, y - r * 0.6, 0.22, C.G2);
-  M.box('metal', x, 0.08, z1 - 0.45, 1.3, 0.16, 0.8, C.G2);
-  M.col(x - r, 0, z1, x + r, y + r, z0);
-  M.light(x, y + r + 0.2, z1 - 0.6, L.warm, 1.4, 6);
+// ---------------------------------------------------------------- rectilinear buildings
+// Flat facade from a point on its outer face (fx, fz) facing angle a (0 = +z),
+// len wide, `storeys` x fh high from y0. Openings per storey come from
+// openFn(storey, len) -> [{c, w, y, h, kind: 'win' | 'shop' | 'door' | 'shutter'}]
+// with c measured along the face (local x). Wall pieces around openings form
+// real reveals; panes sit recessed. dado: solid base course of another key.
+export function facade(M, fx, fz, a, len, y0, storeys, fh, openFn, { t = 0.3, key = 'hull', color = C.W, trim = C.W2, dado = 0, dadoKey = 'concrete', dadoColor = C.CONC2, lines = true } = {}) {
+  const R = e(0, a, 0);
+  const W = (lx, ly, lz) => v(lx, ly, lz).applyEuler(R).add(v(fx, 0, fz));
+  const box = (k, lx, ly, lz, bw, bh, bd, col) => { if (bw > 1e-3 && bh > 1e-3) M.add(k, new THREE.BoxGeometry(bw, bh, bd), { pos: W(lx, ly, lz), rot: R, color: col }); };
+  const piece = (x0, x1, ya, yb) => {
+    if (yb - ya < 1e-3) return;
+    const mx = (x0 + x1) / 2, bw = x1 - x0;
+    if (dado > ya + 1e-3) {
+      const yd = Math.min(dado, yb);
+      box(dadoKey, mx, (ya + yd) / 2, -t / 2 + 0.02, bw, yd - ya, t, dadoColor);
+      ya = yd;
+    }
+    box(key, mx, (ya + yb) / 2, -t / 2, bw, yb - ya, t, color);
+  };
+  for (let st = 0; st < storeys; st++) {
+    const ys = y0 + st * fh;
+    const ops = openFn(st, len).filter((o) => Math.abs(o.c) + o.w / 2 < len / 2 - 0.05);
+    const cuts = new Set([-len / 2, len / 2]);
+    for (const o of ops) { cuts.add(o.c - o.w / 2); cuts.add(o.c + o.w / 2); }
+    const xs = [...cuts].sort((p, q) => p - q);
+    for (let i = 0; i < xs.length - 1; i++) {
+      const x0 = xs[i], x1 = xs[i + 1], mid = (x0 + x1) / 2;
+      const o = ops.find((q) => mid > q.c - q.w / 2 && mid < q.c + q.w / 2);
+      if (!o) { piece(x0, x1, ys, ys + fh); continue; }
+      piece(x0, x1, ys, ys + o.y);
+      piece(x0, x1, ys + o.y + o.h, ys + fh);
+    }
+    for (const o of ops) opening(M, W, R, o, ys, t, trim);
+    if (lines && st > 0) box('hull', 0, ys + 0.02, 0.03, len + 0.08, 0.14, 0.06, trim);
+  }
+}
+
+function opening(M, W, R, o, ys, t, trim) {
+  const add = (key, geo, lx, ly, lz, color) => M.add(key, geo, { pos: W(lx, ly, lz), rot: R, color });
+  const y = ys + o.y, h = o.h, w = o.w, c = o.c;
+  if (o.kind === 'shutter') {
+    add('metal', new THREE.BoxGeometry(w, h, 0.06), c, y + h / 2, -t + 0.08, C.G);
+    for (let k = 0; k < Math.floor(h / 0.16); k++) add('metal', new THREE.BoxGeometry(w - 0.02, 0.02, 0.02), c, y + 0.08 + k * 0.16, -t + 0.12, C.G2);
+    add('metal', new THREE.BoxGeometry(w + 0.3, 0.32, 0.36), c, y + h + 0.16, 0.12, C.G2);
+    for (const sx of [-1, 1]) add('metal', new THREE.BoxGeometry(0.1, h, 0.12), c + sx * (w / 2 - 0.05), y + h / 2, -t + 0.12, C.D);
+    hazard(M, W(c - w / 2 - 0.3, 0.45, 0.25).x, 0.45, W(c - w / 2 - 0.3, 0.45, 0.25).z, 0.18, 0.9, 0.18);
+    hazard(M, W(c + w / 2 + 0.3, 0.45, 0.25).x, 0.45, W(c + w / 2 + 0.3, 0.45, 0.25).z, 0.18, 0.9, 0.18);
+    return;
+  }
+  const dz = o.kind === 'shop' ? -0.14 : -0.2;
+  add('glass', new THREE.BoxGeometry(w, h, 0.04), c, y + h / 2, dz);
+  const fz = dz + 0.035, f = o.kind === 'win' ? 0.05 : 0.07;
+  add('metal', new THREE.BoxGeometry(w, f, 0.06), c, y + f / 2, fz, C.D);
+  add('metal', new THREE.BoxGeometry(w, f, 0.06), c, y + h - f / 2, fz, C.D);
+  for (const sx of [-1, 1]) add('metal', new THREE.BoxGeometry(f, h, 0.06), c + sx * (w / 2 - f / 2), y + h / 2, fz, C.D);
+  if (o.kind === 'win') {
+    if (w > 1.0) add('metal', new THREE.BoxGeometry(0.04, h, 0.05), c, y + h / 2, fz, C.D);
+    add('hull', new THREE.BoxGeometry(w + 0.16, 0.06, 0.3), c, y - 0.03, 0.04, trim);
+  } else if (o.kind === 'shop') {
+    const n = Math.max(1, Math.round(w / 1.3));
+    for (let k = 1; k < n; k++) add('metal', new THREE.BoxGeometry(0.06, h, 0.06), c - w / 2 + k * w / n, y + h / 2, fz, C.D);
+    add('metal', new THREE.BoxGeometry(w, 0.06, 0.06), c, y + h - 0.55, fz, C.D);
+  } else if (o.kind === 'door') {
+    add('metal', new THREE.BoxGeometry(0.05, h, 0.06), c, y + h / 2, fz, C.D);
+    add('metal', new THREE.BoxGeometry(w, 0.05, 0.06), c, y + 2.25, fz, C.D);
+    for (const sx of [-1, 1]) add('metal', new THREE.BoxGeometry(0.03, 0.5, 0.05), c + sx * 0.12, y + 1.05, fz + 0.04, C.G);
+    add('concrete', new THREE.BoxGeometry(w + 0.2, 0.04, 0.5), c, 0.02, 0.05, C.CONC2);
+  }
+}
+
+// openings helper: evenly spaced windows in bays, optional centred door
+export function bays(len, { bay = 2.2, w = 1.3, sill = 0.95, head = 2.35, door = 0, doorW = 1.9, doorH = 2.6, shop = false, kind = 'win' } = {}) {
+  const out = [];
+  if (shop && door) {
+    // shopfront glazing filling both sides of a centred door
+    const x0 = doorW / 2 + 0.35, x1 = len / 2 - 0.45;
+    if (x1 - x0 > 0.8) for (const sx of [-1, 1]) out.push({ c: sx * (x0 + x1) / 2, w: x1 - x0, y: 0.35, h: Math.min(head, 2.75), kind: 'shop' });
+    out.push({ c: 0, w: doorW, y: 0, h: doorH, kind: 'door' });
+    return out;
+  }
+  const nb = Math.max(1, Math.floor((len - 0.5) / bay));
+  const m = (len - nb * bay) / 2;
+  for (let k = 0; k < nb; k++) {
+    const c = -len / 2 + m + (k + 0.5) * bay;
+    if (door && Math.abs(c) < doorW / 2 + (shop ? bay - 0.45 : w) / 2 + 0.25) continue;
+    out.push(shop ? { c, w: bay - 0.45, y: 0.35, h: Math.min(head, 2.75), kind: 'shop' } : { c, w, y: sill, h: head - sill, kind });
+  }
+  if (door) out.push({ c: 0, w: doorW, y: 0, h: doorH, kind: 'door' });
+  return out;
+}
+
+// Entrance canopy with hangers, downlights and a sign band, on a face
+export function canopy(M, fx, fz, a, w = 3.0, dep = 1.6, y = 2.9, sign = L.white) {
+  const R = e(0, a, 0);
+  const W = (lx, ly, lz) => v(lx, ly, lz).applyEuler(R).add(v(fx, 0, fz));
+  M.add('hull', new THREE.BoxGeometry(w, 0.16, dep), { pos: W(0, y, dep / 2), rot: R, color: C.W2 });
+  M.add('metal', new THREE.BoxGeometry(w - 0.1, 0.03, dep - 0.1), { pos: W(0, y - 0.09, dep / 2), rot: R, color: C.D });
+  for (const sx of [-0.3, 0.3]) M.add('emissive', new THREE.BoxGeometry(0.22, 0.02, 0.22), { pos: W(sx * w, y - 0.1, dep * 0.55), rot: R, color: L.warm });
+  for (const sx of [-1, 1]) {
+    const a0 = W(sx * (w / 2 - 0.2), y + 0.05, dep - 0.15), a1 = W(sx * (w / 2 - 0.2), y + 1.3, 0.02);
+    const d = a1.clone().sub(a0), len = d.length();
+    const g = new THREE.CylinderGeometry(0.02, 0.02, len, 5);
+    g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(v(0, 1, 0), d.normalize()));
+    M.add('metal', g, { pos: a0.clone().add(a1).multiplyScalar(0.5), color: C.G2 });
+  }
+  if (sign) {
+    M.add('metal', new THREE.BoxGeometry(w * 0.6, 0.34, 0.06), { pos: W(0, y + 0.42, 0.05), rot: R, color: C.D });
+    M.add('emissive', new THREE.BoxGeometry(w * 0.5, 0.07, 0.02), { pos: W(0, y + 0.42, 0.09), rot: R, color: sign });
+  }
+  M.light(W(0, y - 0.3, dep * 0.5).x, y - 0.3, W(0, y - 0.3, dep * 0.5).z, L.warm, 1.5, 6);
+}
+
+// Rectilinear block: punched-window facades on four sides, roof slab with
+// parapet and coping, rooftop plant. Front faces -z. Returns roof level.
+export function block(M, cx, cz, w, d, { storeys = 2, fh = 3.3, y0 = 0, color = C.W, bay = 2.2, win = 1.3, door = true, shop = false, parapet = 0.75, plant = true, seed = 1, sides = true, signColor = L.white, canopyW = 3.2, canopyY = 2.95 } = {}) {
+  const t = 0.3, H = y0 + storeys * fh;
+  const fr = (st, len) => bays(len, { bay, w: win, door: door && st === 0 && y0 === 0, shop: shop && st === 0 });
+  const plain = (st, len) => bays(len, { bay, w: win });
+  facade(M, cx, cz - d / 2, Math.PI, w, y0, storeys, fh, fr, { color });
+  facade(M, cx, cz + d / 2, 0, w, y0, storeys, fh, plain, { color });
+  facade(M, cx - w / 2, cz, -Math.PI / 2, d - 2 * t, y0, storeys, fh, sides ? plain : () => [], { color });
+  facade(M, cx + w / 2, cz, Math.PI / 2, d - 2 * t, y0, storeys, fh, sides ? plain : () => [], { color });
+  // roof: slab, membrane, parapet with coping
+  M.add('hull', new THREE.BoxGeometry(w - 0.02, 0.24, d - 0.02), { pos: v(cx, H - 0.1, cz), color: C.W2 });
+  M.add('concrete', new THREE.BoxGeometry(w - 0.5, 0.04, d - 0.5), { pos: v(cx, H + 0.04, cz), color: C.CONC2 });
+  if (parapet > 0) {
+    for (const [px, pz, pw, pd] of [[cx, cz - d / 2 + 0.11, w, 0.22], [cx, cz + d / 2 - 0.11, w, 0.22], [cx - w / 2 + 0.11, cz, 0.22, d - 0.44], [cx + w / 2 - 0.11, cz, 0.22, d - 0.44]]) {
+      M.add('hull', new THREE.BoxGeometry(pw, parapet, pd), { pos: v(px, H + parapet / 2, pz), color });
+      M.add('metal', new THREE.BoxGeometry(pw + 0.06, 0.05, pd + 0.06), { pos: v(px, H + parapet + 0.025, pz), color: C.G2 });
+    }
+  }
+  if (plant) rooftopPlant(M, cx, H + 0.06, cz, Math.min(w, d) * 0.32, seed);
+  if (door && y0 === 0) canopy(M, cx, cz - d / 2, Math.PI, canopyW, 1.6, canopyY, signColor);
+  M.col(cx - w / 2, y0, cz - d / 2, cx + w / 2, H + parapet, cz + d / 2);
+  return H;
+}
+
+// Industrial shed: concrete dado, ribbed metal cladding, high window strip,
+// shutter door, sawtooth north-light roof (teeth along x), gutter.
+export function shed(M, cx, cz, w, d, h, { teeth = 4, rise = 1.4, door = 3.0, color = C.W2 } = {}) {
+  const t = 0.3;
+  const hi = (st, len) => bays(len, { bay: 2.0, w: 1.6, sill: h - 1.45, head: h - 0.55 });
+  const front = (st, len) => [...hi(st, len).filter((o) => Math.abs(o.c) > door / 2 + 1.0), { c: 0, w: door, y: 0, h: Math.min(3.4, h - 1.0), kind: 'shutter' }];
+  const opt = { key: 'rib', color, dado: 1.0 };
+  facade(M, cx, cz - d / 2, Math.PI, w, 0, 1, h, front, { ...opt, lines: false });
+  facade(M, cx, cz + d / 2, 0, w, 0, 1, h, hi, { ...opt, lines: false });
+  facade(M, cx - w / 2, cz, -Math.PI / 2, d - 2 * t, 0, 1, h, hi, { ...opt, lines: false });
+  facade(M, cx + w / 2, cz, Math.PI / 2, d - 2 * t, 0, 1, h, hi, { ...opt, lines: false });
+  const tw = w / teeth, sl = Math.hypot(tw, rise), ang = Math.atan2(rise, tw);
+  for (let i = 0; i < teeth; i++) {
+    const x0 = cx - w / 2 + i * tw;
+    M.add('rib', new THREE.BoxGeometry(sl, 0.12, d + 0.2), { pos: v(x0 + tw / 2, h + rise / 2, cz), rot: e(0, 0, ang), color: C.G });
+    M.add('glass', new THREE.BoxGeometry(0.05, rise - 0.1, d - 0.3), { pos: v(x0 + tw - 0.03, h + rise / 2, cz) });
+    for (let k = 0; k <= Math.round(d / 1.5); k++) M.add('metal', new THREE.BoxGeometry(0.07, rise, 0.06), { pos: v(x0 + tw - 0.01, h + rise / 2, cz - d / 2 + 0.15 + k * (d - 0.3) / Math.round(d / 1.5)), color: C.D });
+    // gable triangles closing each tooth at both ends
+    const tri = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(tw, 0), new THREE.Vector2(tw, rise)]);
+    for (const zz of [cz - d / 2 - 0.05, cz + d / 2 - 0.1]) M.add('rib', new THREE.ExtrudeGeometry(tri, { depth: 0.15, bevelEnabled: false }), { pos: v(x0, h, zz), color });
+  }
+  M.add('metal', new THREE.BoxGeometry(w + 0.3, 0.2, 0.25), { pos: v(cx, h - 0.1, cz - d / 2 - 0.1), color: C.G2 });
+  M.add('metal', new THREE.BoxGeometry(w + 0.3, 0.2, 0.25), { pos: v(cx, h - 0.1, cz + d / 2 + 0.1), color: C.G2 });
+  for (const sx of [-1, 1]) M.add('metal', new THREE.CylinderGeometry(0.06, 0.06, h, 8), { pos: v(cx + sx * (w / 2 + 0.05), h / 2, cz - d / 2 - 0.12), color: C.G2 });
+  canopy(M, cx, cz - d / 2, Math.PI, door + 1.2, 1.8, Math.min(3.4, h - 1.0) + 0.45, null);
+  M.col(cx - w / 2, 0, cz - d / 2, cx + w / 2, h + rise, cz + d / 2);
 }
 
 // Ground-mounted photovoltaic rack, tilted to the sun (south = +z here)
-export function pvRack(M, x, z, w, d, rot = 0, n = 2) {
+export function pvRack(M, x, z, w, d, rot = 0, n = 2, y0 = 0) {
   const c = Math.cos(rot), s = Math.sin(rot);
   const P = (lx, lz) => [x + lx * c + lz * s, z - lx * s + lz * c];
   for (let i = 0; i < n; i++) {
     const lx = -w / 2 + (i + 0.5) * w / n;
     const [px, pz] = P(lx, 0);
-    M.add('solar', new THREE.BoxGeometry(w / n - 0.08, 0.05, d), { pos: v(px, 1.05, pz), rot: new THREE.Euler(0.5, rot, 0, 'YXZ') });
-    for (const lz of [-d * 0.35, d * 0.35]) { const [qx, qz] = P(lx, lz); M.cyl('metal', qx, 0, qz, 0.05, 1.05 - lz * 0.5, C.G2, 6); }
+    M.add('solar', new THREE.BoxGeometry(w / n - 0.08, 0.05, d), { pos: v(px, y0 + 1.05, pz), rot: new THREE.Euler(0.5, rot, 0, 'YXZ') });
+    for (const lz of [-d * 0.35, d * 0.35]) { const [qx, qz] = P(lx, lz); M.cyl('metal', qx, y0, qz, 0.05, 1.05 - lz * 0.5, C.G2, 6); }
   }
   const [bx, bz] = P(0, 0);
-  M.box('metal', bx, 1.0, bz, w, 0.08, 0.08, C.G, rot);
+  M.box('metal', bx, y0 + 1.0, bz, w, 0.08, 0.08, C.G, rot);
 }
 
 export { v, e };

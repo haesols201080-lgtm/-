@@ -199,7 +199,7 @@ export class BuildMode {
           const h = T.height(x + lx * c + lz * s, z - lx * s + lz * c);
           sum += h; n++; mn = Math.min(mn, h); mx = Math.max(mx, h);
         }
-        y = sum / n + 0.25;
+        y = sum / n + 0.05;
         return { x, y, z, rot, mn, mx, snapped, deposit, onFoundation };
       }
     }
@@ -263,8 +263,10 @@ export class BuildMode {
     const cost = g.eco.costOf(this.type);
     g.eco.pay(cost, p);
     if (!def.foundation && !p.onFoundation && !def.water) {
-      // flatten a pad slightly below the floor, with a soft skirt
-      g.terrain.flattenRect(p.x, p.z, def.size[0] / 2 + 0.2, def.size[1] / 2 + 0.2, p.rot, p.y - 0.25, def.size[0] > 6 ? 4 : 2.5, def.apron || 0);
+      // level the ground flush with the floor (3 cm under it) and keep it level
+      // a terrain cell past the edge so the slab never stands proud of the ground
+      const ext = 1.6;
+      g.terrain.flattenRect(p.x, p.z, def.size[0] / 2 + ext, def.size[1] / 2 + ext, p.rot, p.y - 0.03, def.size[0] > 6 ? 4 : 2.5, def.apron ? Math.max(0.4, def.apron - ext + 0.2) : 0);
     }
     const r = Math.hypot(def.size[0], def.size[1]) / 2 + 0.5;
     if (!p.onFoundation) g.props.clearArea(p.x, p.z, r);

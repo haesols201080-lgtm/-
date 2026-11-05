@@ -3,7 +3,7 @@
 // -Z. Every model returns parts by material plus colliders, interior volumes
 // and light points via ModelBuilder.finish().
 import * as THREE from 'three';
-import { ModelBuilder, C, L, v, e, plinth, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, wall, room, airlock, greebleRoof, ribbonTower } from './modelkit.js';
+import { ModelBuilder, C, L, v, e, plinth, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, wall, room, airlock, greebleRoof, ribbonTower, facade, bays, block, shed } from './modelkit.js';
 import { houseT1, houseT2, houseT3, houseT4, market, lounge, clinic, school, lab, comms, hqExtras } from './models_colony.js';
 
 const PI = Math.PI;
@@ -532,47 +532,40 @@ function dronehub(M) {
 
 function depot(M) {
   plinth(M, 6, 6);
-  room(M, 5.8, 5.8, 3.6, { door: 2.6, doorH: 3.0, winSide: 0, winBack: 0, color: C.W2, roofColor: C.G });
-  // container stacks inside
-  const cols = [C.O, C.BLUE, C.TEAL, C.W2, C.RED];
-  let k = 0;
-  for (const x of [-2.0, 1.9]) for (const z of [-0.6, 0.8, 2.1]) {
-    const h = 0.9 + (k % 2) * 0.9;
-    M.bb('hull', x - 0.55, 0.02, z - 0.55, x + 0.55, h, z + 0.55, cols[k % cols.length]);
-    M.col(x - 0.55, 0, z - 0.55, x + 0.55, h, z + 0.55);
-    k++;
-  }
-  hazard(M, 0, 3.15, -2.92, 2.6, 0.12, 0.04);
-  vent(M, 0, 3.98, 1.0, 1.4, 1.0, 0.4);
+  shed(M, 0, 0, 5.6, 5.4, 4.0, { teeth: 2, rise: 1.0, door: 2.8 });
 }
 
-// ------------------------------------------------------------------ colony
+// ------------------------------------------------------------------ HQ
 function hq(M) {
   plinth(M, 16, 16);
   // central hall: enterable lobby (12 x 10 x 5)
   room(M, 11, 9, 4.6, { door: 2.4, doorH: 3.0, winSide: 3, winBack: 3, winFront: [{ a: 1.0, b: 3.4, y0: 1.0, y1: 3.6, kind: 'window' }, { a: 7.6, b: 10.0, y0: 1.0, y1: 3.6, kind: 'window' }], color: C.W });
-  // second floor block + glass crown
-  M.bb('hull', -4.5, 4.9, -3.2, 4.5, 7.6, 3.2, C.W2);
-  M.col(-4.5, 4.9, -3.2, 4.5, 7.6, 3.2);
-  for (let i = 0; i < 6; i++) M.box('glass', -3.6 + i * 1.45, 6.3, -3.22, 1.1, 1.6, 0.04);
-  for (let i = 0; i < 6; i++) M.box('glass', -3.6 + i * 1.45, 6.3, 3.22, 1.1, 1.6, 0.04);
-  M.bb('hull', -4.6, 7.6, -3.3, 4.6, 7.9, 3.3, C.O);
+  // upper storey: punched-window facades, roof slab with parapet
+  const op = (st, len) => bays(len, { bay: 1.6, w: 1.05, sill: 0.8, head: 2.1 });
+  facade(M, 0, -3.2, PI, 9.0, 4.98, 1, 2.7, op, {});
+  facade(M, 0, 3.2, 0, 9.0, 4.98, 1, 2.7, op, {});
+  facade(M, -4.5, 0, -PI / 2, 5.8, 4.98, 1, 2.7, op, {});
+  facade(M, 4.5, 0, PI / 2, 5.8, 4.98, 1, 2.7, op, {});
+  M.add('hull', new THREE.BoxGeometry(9.0, 0.24, 6.4), { pos: v(0, 7.56, 0), color: C.W2 });
+  for (const [px, pz, pw, pd] of [[0, -3.09, 9.0, 0.22], [0, 3.09, 9.0, 0.22], [-4.39, 0, 0.22, 5.96], [4.39, 0, 0.22, 5.96]]) {
+    M.add('hull', new THREE.BoxGeometry(pw, 0.6, pd), { pos: v(px, 7.98, pz), color: C.W });
+    M.add('metal', new THREE.BoxGeometry(pw + 0.06, 0.05, pd + 0.06), { pos: v(px, 8.3, pz), color: C.G2 });
+  }
+  M.col(-4.5, 4.9, -3.2, 4.5, 8.3, 3.2);
   // central tower rising from the roof
-  ribbonTower(M, 0, -0.2, 2.3, 9.6, { y0: 7.9, lobby: false, fins: 6 });
+  ribbonTower(M, 0, -0.2, 2.3, 9.6, { y0: 7.7, lobby: false, fins: 6 });
   // comms tower
-  M.cyl('hull', 4.0, 7.9, 2.0, 0.35, 6, C.W, 12, 0.22);
-  const dish = M.animGroup('hull', { pivot: [4.0, 0, 2.0], axis: [0, 1, 0], speed: 0.3 });
-  const d = new THREE.SphereGeometry(1.1, 18, 6, 0, PI * 2, 0, 0.7); d.rotateX(PI * 0.62); d.translate(4.0, 13.4, 2.0);
+  M.cyl('hull', 3.6, 7.7, 2.2, 0.35, 6, C.W, 12, 0.22);
+  const dish = M.animGroup('hull', { pivot: [3.6, 0, 2.2], axis: [0, 1, 0], speed: 0.3 });
+  const d = new THREE.SphereGeometry(1.1, 18, 6, 0, PI * 2, 0, 0.7); d.rotateX(PI * 0.62); d.translate(3.6, 13.2, 2.2);
   dish.add(d, { color: C.W2 });
-  M.sphere('blink', 4.0, 14.2, 2.0, 0.15, L.red, 8);
+  M.sphere('blink', 3.6, 14.0, 2.2, 0.15, L.red, 8);
   // landing pad on the east wing
   M.bb('concrete', 5.8, 0, -7.6, 7.9, 0.15, 7.6, C.CONC2);
   // west wing: storage silos
   for (const z of [-5.5, -3.3]) tank(M, -6.6, 0, z, 0.9, 3.4, C.W2, C.O);
-  M.bb('hull', -7.6, 0, 1.0, -5.8, 2.6, 7.4, C.W2);
-  M.col(-7.6, 0, 1.0, -5.8, 2.6, 7.4);
+  block(M, -6.7, 4.2, 1.9, 6.4, { storeys: 1, fh: 3.0, bay: 1.6, win: 1.0, door: false, plant: false, parapet: 0.45 });
   M.colCyl(-6.6, -5.5, 0.95, 0, 4.3); M.colCyl(-6.6, -3.3, 0.95, 0, 4.3);
-  for (let i = 0; i < 4; i++) M.box('glass', -5.78, 1.6, 1.8 + i * 1.5, 0.04, 0.8, 1.0);
   // front plaza details
   hazard(M, 0, 0.02, -5.2, 3.0, 0.04, 0.4);
   for (const x of [-3, 3]) { M.cyl('metal', x, 0, -6.6, 0.08, 3.4, C.G2, 8); M.box('metal', x, 3.42, -6.45, 0.22, 0.1, 0.7, C.D); M.box('emissive', x, 3.36, -6.4, 0.14, 0.03, 0.55, L.warm); }
@@ -668,47 +661,35 @@ function pump(M) {
 
 function factory(M) {
   plinth(M, 10, 8);
-  M.bb('hull', -4.8, 0, -3.8, 4.8, 4.2, 3.8, C.W2);
-  // saw-tooth roof
-  for (let i = 0; i < 4; i++) {
-    const x0 = -4.8 + i * 2.4;
-    // sloped panel (as a thin box rotated)
-    M.add('hull', new THREE.BoxGeometry(2.75, 0.1, 7.7), { pos: v(x0 + 1.2, 4.9, 0), rot: e(0, 0, 0.53), color: C.G });
-    M.box('glass', x0 + 2.38, 4.9, 0, 0.04, 1.3, 7.4);
+  shed(M, 0, 0.3, 9.4, 7.0, 5.0, { teeth: 4, rise: 1.4, door: 3.0 });
+  // process stacks with access ladders, pipe rack along the side
+  for (const [x, r, hh] of [[3.4, 0.38, 5.2], [2.4, 0.3, 4.2]]) {
+    M.cyl('hull', x, 5.0, 2.9, r, hh, C.W, 16);
+    M.cyl('metal', x, 5.0 + hh * 0.7, 2.9, r + 0.04, 0.16, C.D, 16);
+    M.cyl('metal', x, 5.0 + hh, 2.9, r + 0.06, 0.1, C.G2, 16);
   }
-  M.bb('hull', -4.9, 4.0, -3.9, 4.9, 4.25, 3.9, C.O);
-  for (const x of [-3.4, -1.1, 1.2, 3.5]) M.box('glass', x, 2.6, -3.82, 1.5, 1.2, 0.04);
-  // loading door
-  M.bb('metal', -1.4, 0, -3.84, 1.4, 2.8, -3.78, C.G2);
-  for (let i = 0; i < 9; i++) M.bb('metal', -1.35, 0.15 + i * 0.3, -3.86, 1.35, 0.25 + i * 0.3, -3.84, C.G);
-  hazard(M, 0, 2.95, -3.84, 2.8, 0.15, 0.03);
-  // chimneys
-  M.cyl('hull', 3.8, 4.2, 2.8, 0.35, 4.5, C.W, 12);
-  M.cyl('hull', 3.8, 7.6, 2.8, 0.37, 0.3, C.RED, 12);
-  M.cyl('hull', 2.9, 4.2, 2.8, 0.3, 3.5, C.W, 12);
-  tank(M, -4.2, 4.2, 2.6, 0.6, 1.4);
-  pipe(M, [[4.8, 2.5, -2.0], [5.3, 2.5, -2.0], [5.3, 2.5, 2.0], [4.8, 2.5, 2.0]], 0.15, C.G);
-  M.col(-4.8, 0, -3.8, 4.8, 5.6, 3.8);
+  for (const z of [-2.6, 0.2, 3.0]) M.box('metal', 4.95, 1.4, z, 0.12, 2.8, 0.12, C.G2);
+  M.box('metal', 4.95, 2.8, 0.2, 0.5, 0.1, 5.8, C.G2);
+  pipe(M, [[4.75, 2.95, -2.6], [5.05, 2.95, -2.6], [5.05, 2.95, 3.0], [4.75, 2.95, 3.0]], 0.12, C.G);
+  pipe(M, [[4.75, 3.25, -1.6], [5.15, 3.25, -1.6], [5.15, 3.25, 2.4]], 0.08, C.W2);
+  tank(M, -4.3, 0, -3.3, 0.45, 1.3, C.W2, C.G2);
 }
 
 function techplant(M) {
   plinth(M, 10, 10);
-  M.bb('hull', -4.6, 0, -4.6, 4.6, 5.2, 4.6, C.W);
-  M.bb('hull', -4.7, 5.2, -4.7, 4.7, 5.5, 4.7, C.TEAL);
-  for (let f = 0; f < 2; f++) {
-    for (let i = 0; i < 6; i++) {
-      M.box('glass', -3.75 + i * 1.5, 1.5 + f * 2.3, -4.62, 1.2, 1.4, 0.04);
-      M.box('glass', -3.75 + i * 1.5, 1.5 + f * 2.3, 4.62, 1.2, 1.4, 0.04);
+  const H = block(M, 0, 0.2, 9.2, 9.0, { storeys: 2, fh: 3.4, bay: 3.0, win: 1.1, seed: 83, plant: false, signColor: L.cyan, canopyW: 3.6 });
+  // clean-room air handling: big AHUs with fan decks, exhaust stacks, ducts
+  for (const z of [-1.8, 1.4]) {
+    M.box('metal', -1.6, H + 0.9, z, 4.2, 1.7, 2.2, C.W2);
+    M.box('metal', -1.6, H + 1.78, z, 4.25, 0.06, 2.25, C.D);
+    for (let k = 0; k < 3; k++) {
+      M.cyl('metal', -3.0 + k * 1.4, H + 1.8, z, 0.5, 0.08, C.D, 20);
+      for (let j = 0; j < 4; j++) M.box('metal', -3.0 + k * 1.4, H + 1.9, z, 0.85, 0.02, 0.04, C.G, j * PI / 4);
     }
   }
-  for (let i = 0; i < 5; i++) M.box('emissive', -4.62, 0.8 + i * 0.9, 0, 0.04, 0.12, 8.0, L.cyan);
-  // clean-room domes on roof
-  M.dome('hull', -2.0, 5.5, -1.5, 1.6, C.W2, 18);
-  M.dome('hull', 2.0, 5.5, -1.5, 1.6, C.W2, 18);
-  M.cyl('metal', 0, 5.5, 2.4, 0.8, 1.6, C.G, 14);
-  M.cyl('emissive', 0, 7.1, 2.4, 0.82, 0.08, L.cyan, 14);
-  antenna(M, 3.8, 5.5, 3.8, 3);
-  M.col(-4.6, 0, -4.6, 4.6, 5.5, 4.6);
+  for (const x of [2.4, 3.3]) { M.cyl('hull', x, H, 2.8, 0.28, 2.6, C.W, 14); M.cyl('metal', x, H + 2.6, 2.8, 0.31, 0.12, C.D, 14); }
+  pipe(M, [[0.5, H + 1.2, -1.8], [1.4, H + 1.2, -1.8], [1.4, H + 0.4, -1.8]], 0.2, C.G2);
+  antenna(M, 3.6, H + 0.05, -3.6, 3);
 }
 
 function terminal(M) {

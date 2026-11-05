@@ -82,7 +82,7 @@ export class Game {
     }
     const [px, pz] = best;
     const y = T.height(px, pz) + 0.25;
-    T.flattenRect(px, pz, 2.4, 2.4, 0, y - 0.25, 3);
+    T.flattenRect(px, pz, 3.8, 3.8, 0, y - 0.03, 3);
     this.props.clearArea(px, pz, 4);
     this.buildings.add('pod', px, y, pz, 0.6);
     this.player.spawn(px + 3.5, pz + 4, 0.6);

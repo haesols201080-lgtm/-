@@ -178,6 +178,25 @@ export function makeBuildingMaterials() {
   M.hull = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.1 }), 'hull', {
     map: HULL_MAP, rough: 'float roughnessFactor = gR2;',
   });
+  // trapezoidal ribbed metal cladding (industrial sheds, roofs)
+  M.rib = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.35 }), 'rib', {
+    map: /* glsl */`
+      gStagger = 0.0;
+      vec2 ruv = panelUV(vOP, normalize(vON));
+      float rp = fract(ruv.x / 0.32);
+      float fadeR = 1.0 - smoothstep(0.3, 0.9, fwidth(ruv.x / 0.32) * 2.0);
+      gH = (smoothstep(0.0, 0.1, rp) - smoothstep(0.38, 0.48, rp)) * 0.03 * fadeR + 1e-6;
+      vec4 nz = texture2D(tNoise, vOP.xz * 0.09 + vOP.y * 0.05 + vData.z);
+      float streak = texture2D(tNoise, vec2(ruv.x * 0.3, vOP.y * 0.05) + vData.z).g;
+      vec3 c = diffuseColor.rgb * 0.8 * (0.95 + 0.08 * nz.r);
+      float grime = smoothstep(1.4, -0.1, vOP.y) * 0.4 + smoothstep(0.6, 0.9, streak) * 0.15;
+      c = mix(c, c * vec3(0.78, 0.72, 0.66), clamp(grime, 0.0, 1.0) * 0.5);
+      float top = smoothstep(0.6, 0.95, normalize(vON).y);
+      c = mix(c, vec3(0.42, 0.3, 0.22), top * uDustAmt * smoothstep(0.35, 0.75, nz.b) * 0.35);
+      diffuseColor.rgb = c;
+      gR2 = clamp(0.42 + grime * 0.25 + top * 0.15, 0.0, 1.0);`,
+    rough: 'float roughnessFactor = gR2;',
+  });
   M.metal = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.4, metalness: 0.75 }), 'metal', {
     map: /* glsl */`
       vec4 bn = texture2D(tPanel, vec2(vOP.x + vOP.z, vOP.y * 0.4) * 0.6);
