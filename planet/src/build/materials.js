@@ -8,7 +8,8 @@ import { TEX } from '../world/texstore.js';
 
 const HEAD_V = /* glsl */`
 attribute vec3 iData;
-varying vec3 vOP; varying vec3 vON; varying vec3 vWP2; varying vec3 vData;
+attribute vec3 aPan;
+varying vec3 vOP; varying vec3 vON; varying vec3 vWP2; varying vec3 vData; varying vec3 vPan;
 #ifdef ANIM
 uniform vec3 uPivot; uniform vec3 uAxis; uniform float uSpeed; uniform float uTime;
 vec3 rotAxis(vec3 p, vec3 a, float ang) { float c = cos(ang), s = sin(ang); return p * c + cross(a, p) * s + a * dot(a, p) * (1.0 - c); }
@@ -34,7 +35,7 @@ const BODY_V = /* glsl */`
   transformed += uSlide * iDoor;
   #endif
 #endif
-  vOP = transformed; vON = objectNormal;
+  vOP = transformed; vON = objectNormal; vPan = aPan;
 `;
 
 const BODY_N = /* glsl */`
@@ -49,20 +50,24 @@ const BODY_N = /* glsl */`
 `;
 
 const HEAD_F = /* glsl */`
-varying vec3 vOP; varying vec3 vON; varying vec3 vWP2; varying vec3 vData;
+varying vec3 vOP; varying vec3 vON; varying vec3 vWP2; varying vec3 vData; varying vec3 vPan;
 uniform sampler2D tPanel, tNoise;
 uniform float uNight, uDustAmt, uTime;
 float hash1(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-vec3 gN2; float gR2; float gH = 0.0; float gBumpK = 1.0;
+vec3 gN2; float gR2; float gH = 0.0; float gBumpK = 1.0; float gStagger = 0.5;
 `;
 
 // object-space panel pattern -> (seam mask, panel hash, uv)
 const PANEL_FN = /* glsl */`
-vec3 panelInfo(vec3 p, vec3 n, vec2 size) {
+vec2 panelUV(vec3 p, vec3 n) {
+  if (vPan.z > 0.5) return vPan.xy;
   vec3 a = abs(n);
-  vec2 uv = a.x > a.y && a.x > a.z ? p.zy : (a.y > a.z ? p.xz : p.xy);
+  return a.x > a.y && a.x > a.z ? p.zy : (a.y > a.z ? p.xz : p.xy);
+}
+vec3 panelInfo(vec3 p, vec3 n, vec2 size) {
+  vec2 uv = panelUV(p, n);
   float row = floor(uv.y / size.y);
-  uv.x += row * size.x * 0.5;
+  uv.x += row * size.x * gStagger;
   vec2 q = uv / size;
   vec2 f = abs(fract(q) - 0.5) * size;
   vec2 d = size * 0.5 - f;
@@ -77,9 +82,16 @@ vec3 panelInfo(vec3 p, vec3 n, vec2 size) {
 
 // relief detail: panel grooves, corner rivets and occasional recessed hatches
 const BUMP_FN = /* glsl */`
+// architectural cladding: only the recessed joints
+float cladHeight(vec3 p, vec3 n, vec2 size, float depth) {
+  vec2 uv = panelUV(p, n);
+  uv.x += floor(uv.y / size.y) * size.x * gStagger;
+  vec2 d = size * 0.5 - abs(fract(uv / size) - 0.5) * size;
+  float fade = 1.0 - smoothstep(0.5, 1.4, length(fwidth(uv)) * 40.0);
+  return smoothstep(0.004, 0.02, min(d.x, d.y)) * depth * fade;
+}
 float panelHeight(vec3 p, vec3 n, vec2 size, float depth) {
-  vec3 a = abs(n);
-  vec2 uv = a.x > a.y && a.x > a.z ? p.zy : (a.y > a.z ? p.xz : p.xy);
+  vec2 uv = panelUV(p, n);
   float row = floor(uv.y / size.y);
   uv.x += row * size.x * 0.5;
   vec2 q = uv / size;
@@ -124,12 +136,12 @@ function patch(mat, key, fragBody, { anim = null, slide = null, extraUniforms = 
       sh.uniforms.uSlide = { value: new THREE.Vector3(...slide) };
     }
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\n' + HEAD_V)
+      .replace('#include <common>', '#include <common>\n' + HEAD_V + (fragBody.vhead || ''))
       .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\n' + BODY_N)
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BODY_V);
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BODY_V + (fragBody.vbody || ''));
     // objectNormal is defined before begin_vertex (beginnormal_vertex), so ANIM can rotate it.
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + HEAD_F + PANEL_FN + BUMP_FN)
+      .replace('#include <common>', '#include <common>\n' + HEAD_F + (fragBody.fhead || '') + PANEL_FN + BUMP_FN)
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nif (gH != 0.0) normal = bumpN(normal, -vViewPosition, gH, gBumpK);')
       .replace('#include <map_fragment>', (mat.vertexColors ? '#ifdef USE_COLOR\n  diffuseColor.rgb *= vColor;\n#endif\n' : '') + (fragBody.map || ''))
       .replace('#include <color_fragment>', mat.vertexColors ? '' : '#include <color_fragment>')
@@ -141,23 +153,24 @@ function patch(mat, key, fragBody, { anim = null, slide = null, extraUniforms = 
 }
 
 const HULL_MAP = /* glsl */`
-  vec3 pin = panelInfo(vOP, normalize(vON), vec2(2.4, 1.6));
-  vec3 baseC = diffuseColor.rgb;
-  baseC *= (0.93 + 0.1 * pin.y);
+  // painted composite / aluminium cladding: realistic albedo, crisp joints,
+  // per-panel tone and gloss, soft dust where it settles
+  gStagger = 0.0;
+  vec3 pin = panelInfo(vOP, normalize(vON), vec2(1.8, 1.6));
+  vec3 baseC = diffuseColor.rgb * 0.8;
+  baseC *= 0.975 + 0.04 * pin.y;
   vec4 nz = texture2D(tNoise, vOP.xz * 0.11 + vOP.y * 0.07 + vData.z);
-  float streak = texture2D(tNoise, vec2(vOP.x * 0.9 + vOP.z * 0.9, vOP.y * 0.08) + vData.z).g;
-  float grime = smoothstep(1.3, -0.2, vOP.y) * 0.5 + smoothstep(0.55, 0.85, streak) * 0.18 + smoothstep(0.6, 0.9, nz.b) * 0.12;
+  float streak = texture2D(tNoise, vec2(vOP.x * 0.9 + vOP.z * 0.9, vOP.y * 0.06) + vData.z).g;
+  float grime = smoothstep(1.2, -0.2, vOP.y) * 0.45 + smoothstep(0.62, 0.92, streak) * 0.12 + smoothstep(0.68, 0.95, nz.b) * 0.06;
   float top = smoothstep(0.6, 0.95, normalize(vON).y);
-  vec3 dirtC = vec3(0.36, 0.31, 0.27);
-  baseC = mix(baseC, baseC * dirtC * 2.0, clamp(grime, 0.0, 1.0) * 0.3);
-  baseC = mix(baseC, vec3(0.42, 0.28, 0.19), top * uDustAmt * smoothstep(0.35, 0.7, nz.r) * 0.4);
-  // wind-blown regolith settles on the lower third and streaks down from ledges
-  float lowDust = smoothstep(2.2, 0.0, vOP.y) * (0.45 + 0.4 * nz.g);
-  baseC = mix(baseC, vec3(0.36, 0.23, 0.15), clamp(lowDust * (0.22 + uDustAmt * 0.3), 0.0, 0.45));
-  baseC *= 1.0 - pin.x * 0.16;
-  gH = panelHeight(vOP, normalize(vON), vec2(2.4, 1.6), 0.008) + 1e-6;
+  baseC = mix(baseC, baseC * vec3(0.8, 0.74, 0.68), clamp(grime, 0.0, 1.0) * 0.55);
+  baseC = mix(baseC, vec3(0.42, 0.3, 0.22), top * uDustAmt * smoothstep(0.4, 0.75, nz.r) * 0.35);
+  float lowDust = smoothstep(1.4, 0.0, vOP.y) * (0.45 + 0.4 * nz.g);
+  baseC = mix(baseC, vec3(0.4, 0.28, 0.2), clamp(lowDust * (0.18 + uDustAmt * 0.2), 0.0, 0.35));
+  baseC *= 1.0 - pin.x * 0.28;
+  gH = cladHeight(vOP, normalize(vON), vec2(1.8, 1.6), 0.005) + 1e-6;
   diffuseColor.rgb = baseC;
-  gR2 = clamp(0.58 + grime * 0.25 + pin.x * 0.15 + top * uDustAmt * 0.2 + lowDust * 0.15, 0.0, 1.0);
+  gR2 = clamp(0.34 + 0.1 * pin.y + grime * 0.25 + top * uDustAmt * 0.3 + lowDust * 0.12 + pin.x * 0.3, 0.0, 1.0);
 `;
 
 export function makeBuildingMaterials() {
@@ -186,16 +199,65 @@ export function makeBuildingMaterials() {
       gH = panelHeight(vOP, normalize(vON), vec2(2.0, 2.0), 0.016) + nz.a * 0.006 + 1e-6;
       diffuseColor.rgb = c;`,
   });
-  M.glass = patch(new THREE.MeshStandardMaterial({ color: 0x45697a, roughness: 0.1, metalness: 0.5, envMapIntensity: 1.5 }), 'glass', {
-    map: '',
+  // Glazing: dark reflective glass (env reflections + fresnel come from the
+  // standard model) over fake rooms ray-cast in object space (interior
+  // mapping): floor, ceiling with a light panel, walls with furniture,
+  // some windows with blinds. Rooms are 3.6 x 3.2 x 3.6 m, aligned to floors.
+  M.glass = patch(new THREE.MeshStandardMaterial({ color: 0x060708, roughness: 0.05, metalness: 0.0, envMapIntensity: 1.0 }), 'glass', {
+    vhead: 'varying vec3 vCamL;',
+    vbody: /* glsl */`
+#ifdef USE_INSTANCING
+      vCamL = (inverse(modelMatrix * instanceMatrix) * vec4(cameraPosition, 1.0)).xyz;
+#else
+      vCamL = (inverse(modelMatrix) * vec4(cameraPosition, 1.0)).xyz;
+#endif`,
+    fhead: 'varying vec3 vCamL;',
+    map: 'diffuseColor.rgb = vec3(0.012, 0.014, 0.016);',
     emit: /* glsl */`
-      vec3 cell = floor(vOP * vec3(0.7, 0.36, 0.7));
-      float h = hash1(cell.xz + cell.y * 7.3 + floor(vData.z * 50.0));
-      float on = step(0.3, h) * vData.x;
-      vec3 warm = mix(vec3(1.0, 0.72, 0.42), vec3(0.75, 0.9, 1.0), step(0.85, h));
-      totalEmissiveRadiance += warm * on * smoothstep(0.15, 0.6, uNight) * 1.5 * (0.6 + 0.5 * h);
-      // daytime sky sheen so windows read as glass, not holes
-      totalEmissiveRadiance += vec3(0.05, 0.075, 0.1) * (1.0 - uNight) * (0.6 + 0.6 * h);`,
+      {
+        vec3 rd = normalize(vOP - vCamL);
+        vec3 cs = vec3(3.6, 3.2, 3.6);
+        vec3 d = rd / cs;
+        d = sign(d) * max(abs(d), vec3(1e-4));
+        vec3 ro = vOP / cs;
+        vec3 id = floor(ro + d * 0.03);
+        vec3 f = ro - id;
+        vec3 tt = (step(vec3(0.0), d) - f) / d;
+        float t = min(tt.x, min(tt.y, tt.z));
+        vec3 h = clamp(f + d * t, 0.0, 1.0);
+        float seed = floor(vData.z * 40.0);
+        float rh = hash1(id.xz * 1.7 + id.y * 9.1 + seed);
+        float rh2 = hash1(id.xz * 3.1 + id.y * 2.3 + 5.0 + seed);
+        vec3 wallC = rh < 0.3 ? vec3(0.6, 0.55, 0.48) : rh < 0.55 ? vec3(0.52, 0.54, 0.55) : rh < 0.8 ? vec3(0.64, 0.6, 0.52) : vec3(0.4, 0.46, 0.5);
+        vec3 c; float isCeil = 0.0; float edge;
+        if (t == tt.y) {
+          if (d.y < 0.0) c = (rh2 < 0.5 ? vec3(0.3, 0.2, 0.13) : vec3(0.24, 0.24, 0.25)) * (0.85 + 0.15 * hash1(floor(h.xz * vec2(9.0, 2.0)) + rh));
+          else { c = vec3(0.7); isCeil = 1.0; }
+          edge = min(min(h.x, 1.0 - h.x), min(h.z, 1.0 - h.z));
+        } else {
+          c = wallC;
+          float u = t == tt.x ? h.z : h.x;
+          edge = min(min(u, 1.0 - u), min(h.y, 1.0 - h.y) * 1.6);
+          if (h.y < 0.27 && fract(u * 1.7 + rh2) < 0.5 && rh2 > 0.2) c = mix(vec3(0.1, 0.09, 0.085), vec3(0.32, 0.22, 0.17), rh2);
+          else if (h.y > 0.45 && h.y < 0.66 && abs(fract(u * 1.3 + rh) - 0.5) < 0.1) c *= 0.5 + 0.6 * vec3(rh, rh2, 1.0 - rh);
+        }
+        float ao = 0.55 + 0.45 * smoothstep(0.0, 0.18, edge);
+        float lit = step(0.35, rh) * vData.x;
+        float lamp = isCeil * (1.0 - smoothstep(0.1, 0.13, max(abs(h.x - 0.5), abs(h.z - 0.5) * 0.5)));
+        float day = 1.0 - uNight;
+        vec3 warm = mix(vec3(1.0, 0.78, 0.55), vec3(0.85, 0.92, 1.0), step(0.85, rh2));
+        vec3 rad = c * ao * (day * 0.2 + uNight * lit * warm * 0.8) + lamp * (day * 0.25 + uNight * lit * 3.0) * warm;
+        // blinds on some windows, drawn down from the head
+        vec3 pid = floor(vOP / cs + vec3(0.0, 0.0, 0.0));
+        float rb = hash1(pid.xz * 5.3 + pid.y * 1.9 + seed + 11.0);
+        float fy = fract(vOP.y / cs.y);
+        float bl = step(0.55, rb) * step(mix(0.82, 0.45, hash1(pid.xz + pid.y + 3.0)), fy);
+        vec3 blind = vec3(0.62, 0.6, 0.55) * (0.85 + 0.15 * step(0.5, fract(vOP.y * 22.0))) * (day * 0.45 + uNight * lit * 0.7);
+        rad = mix(rad, blind, bl);
+        float cosv = abs(dot(normalize(vON), rd));
+        float F = 0.04 + 0.96 * pow(1.0 - cosv, 5.0);
+        totalEmissiveRadiance += rad * vec3(0.8, 0.85, 0.86) * (1.0 - F);
+      }`,
   });
   M.window = new THREE.MeshStandardMaterial({ color: 0x8fb8c8, roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.22, depthWrite: false, envMapIntensity: 1.5, side: THREE.DoubleSide });
   M.window.onBeforeCompile = (sh) => {

@@ -3,7 +3,7 @@
 // trusses, radiators and roof machinery. Same local frame as models.js
 // (origin at footprint centre, y = 0 floor, front = -Z).
 import * as THREE from 'three';
-import { C, L, v, e, plinth, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, room, podModule, ribDome, truss, radiator, greebleRoof, airlock, porthole, habDome, gardenDome, linkTube, ribbonTower, airlockTube, pvRack } from './modelkit.js';
+import { C, L, v, e, plinth, rooftopPlant, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, room, podModule, ribDome, truss, radiator, greebleRoof, airlock, porthole, habDome, gardenDome, linkTube, ribbonTower, airlockTube, pvRack } from './modelkit.js';
 
 const PI = Math.PI;
 
@@ -14,46 +14,45 @@ const PI = Math.PI;
 // diagrid with a garden crown.
 export function houseT1(M) {
   plinth(M, 8, 8);
-  const top = habDome(M, 0.45, 0.55, 2.8, { drum: 1.55 });
-  gardenDome(M, -2.6, 2.55, 1.2, { seed: 11 });
-  linkTube(M, 0.45, 0.55, -2.6, 2.55, 0.75, 0.5);
+  const top = habDome(M, 0.45, 0.55, 2.75, { skip: [PI, -2.15] });
+  gardenDome(M, -2.6, 2.6, 1.15, { seed: 11 });
+  linkTube(M, 0.45, 0.55, -2.6, 2.6, 0.75, 0.5);
   airlockTube(M, 0.45, 1.0, -1.7, -3.75, 0.85, C.W);
   pvRack(M, 2.75, -3.05, 2.1, 1.0, 0, 2);
-  radiator(M, 3.35, 0.3, 2.6, 1.3, 1.3, PI / 2, C.W2);
-  antenna(M, 1.75, top - 0.45, 0.55, 1.3);
+  radiator(M, 3.4, 0.3, 2.7, 1.2, 1.3, PI / 2, C.W2);
+  vent(M, 1.2, top - 0.42, 0.2, 0.6, 0.45, 0.3);
+  antenna(M, -0.6, top - 0.5, 1.2, 1.3);
   for (const x of [-0.7, 1.6]) { M.cyl('metal', x, 0, -3.9, 0.05, 0.7, C.G2, 8); M.box('emissive', x, 0.66, -3.9, 0.09, 0.05, 0.09, L.warm); }
 }
 
 export function houseT2(M) {
   plinth(M, 8, 8);
-  const ta = habDome(M, -1.35, 0.95, 2.55, { drum: 1.8 });
-  const tb = habDome(M, 2.15, 2.05, 1.8, { drum: 1.45 });
-  gardenDome(M, 2.3, -1.65, 1.35, { seed: 23 });
-  linkTube(M, -1.35, 0.95, 2.15, 2.05, 0.95, 0.6);
-  linkTube(M, 2.15, 2.05, 2.3, -1.65, 0.8, 0.5);
+  const ta = habDome(M, -1.35, 0.95, 2.5, { skip: [PI, 1.27] });
+  const tb = habDome(M, 2.2, 2.1, 1.75, { skip: [-1.87, 3.1], drum: 2.7 });
+  gardenDome(M, 2.35, -1.75, 1.3, { seed: 23 });
+  linkTube(M, -1.35, 0.95, 2.2, 2.1, 0.95, 0.6);
+  linkTube(M, 2.2, 2.1, 2.35, -1.75, 0.8, 0.5);
   airlockTube(M, -1.35, 1.0, -1.2, -3.75, 0.85, C.W);
-  antenna(M, -0.4, ta - 0.6, 1.4, 1.6);
-  M.cyl('metal', 2.15, tb - 0.2, 2.05, 0.06, 1.3, C.G2, 8);
-  M.add('solar', new THREE.BoxGeometry(1.6, 0.05, 0.9), { pos: v(2.15, tb + 1.15, 2.05), rot: e(0.45, 0, 0) });
-  radiator(M, -3.45, 0.3, -2.6, 1.0, 1.2, PI / 2, C.W2);
+  antenna(M, -0.5, ta - 0.55, 1.6, 1.6);
+  M.cyl('metal', 2.2, tb - 0.25, 2.1, 0.06, 1.3, C.G2, 8);
+  M.add('solar', new THREE.BoxGeometry(1.6, 0.05, 0.9), { pos: v(2.2, tb + 1.1, 2.1), rot: e(0.45, 0, 0) });
+  radiator(M, -3.5, 0.3, -2.7, 0.9, 1.2, PI / 2, C.W2);
 }
 
 export function houseT3(M) {
   plinth(M, 8, 8);
-  const ta = ribbonTower(M, -0.85, 0.75, 2.45, 12.8, { door: true });
-  ribbonTower(M, 2.4, 2.2, 1.5, 9.6);
-  linkTube(M, -0.85, 0.75, 2.4, 2.2, 7.2, 0.55);
-  const tl = habDome(M, 2.35, -2.15, 1.5, { drum: 1.1, oculus: false });
-  void tl;
+  const ta = ribbonTower(M, -0.85, 0.75, 2.45, 12.8, { door: true, skip: [1.15, 2.31], balconies: [4.1, 5.5], rot: 0.25 });
+  ribbonTower(M, 2.4, 2.2, 1.5, 9.6, { skip: [-1.99], rot: 0.6, lobby: false });
+  linkTube(M, -0.85, 0.75, 2.4, 2.2, 7.4, 0.55);
+  habDome(M, 2.35, -2.15, 1.45, { skip: [-0.83], oculus: false });
   linkTube(M, 2.35, -2.15, -0.85, 0.75, 0.8, 0.5);
   antenna(M, -0.1, ta - 0.4, 1.0, 2.2);
-  pvRack(M, -2.6, -3.15, 2.0, 0.9, 0, 2);
 }
 
 export function houseT4(M) {
   plinth(M, 8, 8);
   // glazed podium with a roof terrace
-  ribbonTower(M, 0, 0, 3.45, 4.2, { fh: 4.2, cap: 'flat', door: true });
+  ribbonTower(M, 0, 0, 3.45, 4.2, { fh: 4.2, cap: 'flat', door: true, plant: false, rot: 0.2 });
   // glazed core in an hourglass steel diagrid
   const H = 27, y0 = 4.5;
   const rad = (t) => 2.75 - 0.75 * Math.sin(t * PI) + 0.15 * t;
@@ -75,9 +74,9 @@ export function houseT4(M) {
     M.sphere('metal', Math.cos(a) * r2, y0 + t * (H - y0), Math.sin(a) * r2, 0.27, C.G, 10, 0.8);
   }
   // floor slabs read through the glazing
-  for (let i = 1; i < 8; i++) {
-    const t = i / 8;
-    M.add('metal', new THREE.TorusGeometry(rad(t) + 0.02, 0.09, 6, 40), { pos: v(0, y0 + t * (H - y0), 0), rot: e(PI / 2, 0, 0), color: C.G2 });
+  for (let y = 6.4; y < H - 0.5; y += 3.2) {
+    const t = (y - y0) / (H - y0);
+    M.add('metal', new THREE.TorusGeometry(rad(t) + 0.02, 0.09, 6, 40), { pos: v(0, y, 0), rot: e(PI / 2, 0, 0), color: C.G2 });
   }
   // mid-height sky terrace
   const ty = y0 + (H - y0) * 0.5;

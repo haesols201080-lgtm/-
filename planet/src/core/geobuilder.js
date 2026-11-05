@@ -8,10 +8,14 @@ const _v = new THREE.Vector3();
 const _c = new THREE.Color();
 
 export class GeoBuilder {
-  constructor(attrNames = []) {
+  constructor(attrNames = [], { pan = false } = {}) {
     this.pos = [];
     this.nor = [];
     this.col = [];
+    // optional per-vertex panel coordinates in metres: (u, v, curved?). Round
+    // primitives (cylinder, sphere, lathe) get arc length around their own axis
+    // so cladding panels wrap them; everything else is projected in the shader.
+    this.pan = pan ? [] : null;
     this.attrNames = attrNames;
     this.attrs = Object.fromEntries(attrNames.map((n) => [n, []]));
   }
@@ -33,6 +37,13 @@ export class GeoBuilder {
     if (Array.isArray(col)) { _c.setRGB(col[0], col[1], col[2], THREE.SRGBColorSpace); fixed = [_c.r, _c.g, _c.b]; }
     else if (col !== undefined && typeof col !== 'function') { _c.set(col); fixed = [_c.r, _c.g, _c.b]; }
     const nv = new THREE.Vector3();
+    let round = null;
+    if (this.pan) {
+      const pr = g.parameters || geo.parameters || {};
+      const UV = g.attributes.uv;
+      if (UV && (geo.type === 'CylinderGeometry' || geo.type === 'ConeGeometry')) round = { uv: UV, a0: pr.thetaStart || 0, al: pr.thetaLength ?? Math.PI * 2 };
+      else if (UV && (geo.type === 'SphereGeometry' || geo.type === 'LatheGeometry')) round = { uv: UV, a0: pr.phiStart || 0, al: pr.phiLength ?? Math.PI * 2 };
+    }
     for (let i = 0; i < P.count; i++) {
       _v.fromBufferAttribute(P, i);
       const lx = _v.x, ly = _v.y, lz = _v.z;
@@ -44,6 +55,12 @@ export class GeoBuilder {
       else if (fixed) this.col.push(fixed[0], fixed[1], fixed[2]);
       else if (C) this.col.push(C.getX(i), C.getY(i), C.getZ(i));
       else this.col.push(1, 1, 1);
+      if (this.pan) {
+        if (round && !((geo.type === 'CylinderGeometry' || geo.type === 'ConeGeometry') && Math.abs(N.getY(i)) > 0.9)) {
+          const rho = Math.hypot(lx, lz), sc = opts.scale instanceof THREE.Vector3 ? opts.scale.x : (opts.scale || 1);
+          this.pan.push((round.a0 + round.uv.getX(i) * round.al) * Math.max(rho, 0.05) * sc, ly * sc, 1);
+        } else this.pan.push(0, 0, 0);
+      }
       for (const name of this.attrNames) {
         const a = opts.attrs && opts.attrs[name];
         this.attrs[name].push(typeof a === 'function' ? a(lx, ly, lz, _v.x, _v.y, _v.z) : (a || 0));
@@ -60,6 +77,7 @@ export class GeoBuilder {
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3));
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     for (const name of this.attrNames) g.setAttribute(name, new THREE.Float32BufferAttribute(this.attrs[name], 1));
+    if (this.pan) g.setAttribute('aPan', new THREE.Float32BufferAttribute(this.pan, 3));
     g.computeBoundingSphere();
     g.computeBoundingBox();
     return g;

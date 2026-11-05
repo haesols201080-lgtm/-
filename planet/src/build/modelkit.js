@@ -45,7 +45,7 @@ export class ModelBuilder {
   }
 
   gb(key) {
-    if (!this.groups.has(key)) this.groups.set(key, new GeoBuilder());
+    if (!this.groups.has(key)) this.groups.set(key, new GeoBuilder([], { pan: true }));
     return this.groups.get(key);
   }
 
@@ -86,13 +86,13 @@ export class ModelBuilder {
   }
 
   anim(key, geo, opts, anim) {
-    const gb = new GeoBuilder();
+    const gb = new GeoBuilder([], { pan: true });
     gb.add(geo, opts);
     this.anims.push({ key, gb, anim });
     return gb;
   }
   animGroup(key, anim) {
-    const gb = new GeoBuilder();
+    const gb = new GeoBuilder([], { pan: true });
     this.anims.push({ key, gb, anim });
     return gb;
   }
@@ -239,8 +239,8 @@ export function wall(M, axis, x, z, len, h, t, openings = [], { key = 'hull', co
       }
       // sliding door leaves
       const half = (b - a) / 2;
-      const door = { key: 'hull', gb: new GeoBuilder(), slide: axis === 'x' ? [-half, 0, 0] : [0, 0, -half], x: axis === 'x' ? x + mid : x, z: axis === 'x' ? z : z + mid };
-      const door2 = { key: 'hull', gb: new GeoBuilder(), slide: axis === 'x' ? [half, 0, 0] : [0, 0, half], x: door.x, z: door.z };
+      const door = { key: 'hull', gb: new GeoBuilder([], { pan: true }), slide: axis === 'x' ? [-half, 0, 0] : [0, 0, -half], x: axis === 'x' ? x + mid : x, z: axis === 'x' ? z : z + mid };
+      const door2 = { key: 'hull', gb: new GeoBuilder([], { pan: true }), slide: axis === 'x' ? [half, 0, 0] : [0, 0, half], x: door.x, z: door.z };
       const dh = o.y1 - 0.02;
       const stripe = (lx, ly) => (ly > dh * 0.45 && ly < dh * 0.52 ? [0.94, 0.46, 0.1] : [0.82, 0.82, 0.8]);
       if (axis === 'x') {
@@ -418,38 +418,75 @@ export function airlock(M, x, zf, w = 2.4, h = 2.9, depth = 1.6, color = C.W2) {
 const PI2 = Math.PI / 2;
 const TAU = Math.PI * 2;
 
-// glazed band between two closing rings, with mullions
-function band(M, x, z, r, y0, y1, seg, mull = 1.25) {
-  M.add('glass', new THREE.CylinderGeometry(r - 0.05, r - 0.05, y1 - y0, seg, 1, true), { pos: v(x, (y0 + y1) / 2, z) });
-  M.cyl('metal', x, y0 - 0.05, z, r + 0.03, 0.1, C.D, seg);
-  M.cyl('metal', x, y1 - 0.05, z, r + 0.03, 0.1, C.D, seg);
-  const n = Math.max(6, Math.round(TAU * r / mull));
-  for (let i = 0; i < n; i++) {
-    const a = i / n * TAU;
-    M.add('metal', new THREE.BoxGeometry(0.06, y1 - y0, 0.09), { pos: v(x + Math.sin(a) * (r - 0.02), (y0 + y1) / 2, z + Math.cos(a) * (r - 0.02)), rot: e(0, a, 0), color: C.G2 });
+// Flat window set into a round wall: pane recessed behind the face, slim
+// frame and mullion, reveals (jambs), a protruding sill and a lintel.
+// Faces angle a (0 = +z) from the wall centre (cx, cz).
+export function wallWindow(M, cx, cz, r, a, y, w, h, { depth = 0.24, split = true, trim = C.W2 } = {}) {
+  const q = new THREE.Quaternion().setFromEuler(e(0, a, 0));
+  const R = e(0, a, 0);
+  const add = (key, geo, lx, ly, lz, color) => M.add(key, geo, { pos: v(lx, ly, lz).applyQuaternion(q).add(v(cx, 0, cz)), rot: R, color });
+  const rp = Math.sqrt(Math.max(0.01, r * r - w * w / 4)) - depth;
+  const dm = r + 0.03 - rp, rm = rp + dm / 2;
+  add('glass', new THREE.BoxGeometry(w, h, 0.04), 0, y + h / 2, rp);
+  for (const sx of [-1, 1]) add('hull', new THREE.BoxGeometry(0.07, h + 0.02, dm), sx * (w / 2 + 0.035), y + h / 2, rm, trim);
+  add('hull', new THREE.BoxGeometry(w + 0.2, 0.07, dm + 0.1), 0, y - 0.035, rm + 0.05, trim);
+  add('hull', new THREE.BoxGeometry(w + 0.14, 0.1, dm), 0, y + h + 0.05, rm, trim);
+  const fz = rp + 0.035;
+  add('metal', new THREE.BoxGeometry(w, 0.05, 0.05), 0, y + 0.025, fz, C.D);
+  add('metal', new THREE.BoxGeometry(w, 0.05, 0.05), 0, y + h - 0.025, fz, C.D);
+  for (const sx of [-1, 1]) add('metal', new THREE.BoxGeometry(0.05, h, 0.05), sx * (w / 2 - 0.025), y + h / 2, fz, C.D);
+  if (split) add('metal', new THREE.BoxGeometry(0.04, h, 0.045), 0, y + h / 2, fz, C.D);
+}
+
+// One storey of round wall with punched windows: solid below the sill and
+// above the head, piers between openings. wins: [{a, w, y?, h?}] (y, h relative).
+export function roundStorey(M, x, z, r, y0, y1, wins, { sill = 0.9, head = 2.25, color = C.W, seg = 48, trim = C.W2 } = {}) {
+  const TAU2 = Math.PI * 2;
+  const ws = wins.map((o) => ({ ...o, a: ((o.a % TAU2) + TAU2) % TAU2, y: o.y ?? sill, h: o.h ?? head - sill }));
+  ws.sort((p, q) => p.a - q.a);
+  const lo = Math.min(sill, ...ws.map((o) => o.y)), hi = Math.max(head, ...ws.map((o) => o.y + o.h));
+  const cyl = (ya, yb, t0, tl) => {
+    if (yb - ya < 1e-3 || tl < 1e-3) return;
+    const n = Math.max(2, Math.ceil(seg * tl / TAU2));
+    M.add('hull', new THREE.CylinderGeometry(r, r, yb - ya, n, 1, true, t0, tl), { pos: v(x, y0 + (ya + yb) / 2, z), color });
+  };
+  cyl(0, lo, 0, TAU2);
+  cyl(hi, y1 - y0, 0, TAU2);
+  if (!ws.length) { cyl(lo, hi, 0, TAU2); return; }
+  for (let i = 0; i < ws.length; i++) {
+    const o = ws[i], nx = ws[(i + 1) % ws.length];
+    const ha = Math.asin(Math.min(0.95, o.w / 2 / r)), hb = Math.asin(Math.min(0.95, nx.w / 2 / r));
+    let t0 = o.a + ha, t1 = nx.a - hb + (i === ws.length - 1 ? TAU2 : 0);
+    cyl(lo, hi, t0, t1 - t0);
+    // wall above/below windows shorter than the band
+    if (o.y > lo) cyl(lo, o.y, o.a - ha, 2 * ha);
+    if (o.y + o.h < hi) cyl(o.y + o.h, hi, o.a - ha, 2 * ha);
+    wallWindow(M, x, z, r, o.a, y0 + o.y, o.w, o.h, { trim, split: o.w > 0.9 });
   }
 }
 
-// Domed hab unit: drum wall with a glazed band, shallow composite dome, oculus
-export function habDome(M, x, z, r, { drum = 1.5, sy = 0.82, color = C.W, glaze = true, oculus = true, seg = 44 } = {}) {
-  M.cyl('metal', x, 0, z, r + 0.07, 0.16, C.D, seg);
-  if (glaze) {
-    const g0 = Math.min(0.55, drum * 0.35), g1 = Math.min(drum - 0.2, g0 + 0.75);
-    M.add('hull', new THREE.CylinderGeometry(r, r, g0, seg, 1, true), { pos: v(x, g0 / 2, z), color });
-    band(M, x, z, r, g0, g1, seg);
-    M.add('hull', new THREE.CylinderGeometry(r, r, drum - g1, seg, 1, true), { pos: v(x, (g1 + drum) / 2, z), color });
-  } else M.add('hull', new THREE.CylinderGeometry(r, r, drum, seg, 1, true), { pos: v(x, drum / 2, z), color });
-  M.add('hull', new THREE.SphereGeometry(r, seg, 16, 0, TAU, 0, PI2), { pos: v(x, drum, z), scale: v(1, sy, 1), color });
-  M.add('metal', new THREE.TorusGeometry(r + 0.01, 0.05, 6, seg), { pos: v(x, drum, z), rot: e(PI2, 0, 0), color: C.G2 });
+// Domed hab unit: one storey drum with punched windows under a shallow dome
+export function habDome(M, x, z, r, { drum = 2.7, sy = 0.55, color = C.W, oculus = true, seg = 48, skip = [], rot = 0.3 } = {}) {
+  M.cyl('concrete', x, -0.05, z, r + 0.12, 0.25, C.CONC2, seg);
+  const n = Math.max(4, Math.round(Math.PI * 2 * r / 2.3));
+  const wins = [];
+  for (let i = 0; i < n; i++) {
+    const a = rot + i / n * TAU;
+    if (skip.some((s) => Math.abs(Math.atan2(Math.sin(a - s), Math.cos(a - s))) < 0.55)) continue;
+    wins.push({ a, w: 1.1 });
+  }
+  roundStorey(M, x, z, r, 0, drum, wins, { sill: 0.85, head: 2.1, color, seg });
+  M.cyl('hull', x, drum - 0.02, z, r + 0.08, 0.16, C.W2, seg);
+  M.add('hull', new THREE.SphereGeometry(r, seg, 14, 0, TAU, 0, PI2), { pos: v(x, drum + 0.14, z), scale: v(1, sy, 1), color });
   if (oculus) {
-    const ro = r * 0.3, yo = drum + r * sy * Math.sqrt(1 - 0.09);
-    M.add('metal', new THREE.TorusGeometry(ro, 0.07, 6, 28), { pos: v(x, yo, z), rot: e(PI2, 0, 0), color: C.G2 });
-    M.add('glass', new THREE.SphereGeometry(ro, 24, 8, 0, TAU, 0, PI2), { pos: v(x, yo, z), scale: v(1, 0.35, 1) });
+    const ro = r * 0.3, yo = drum + 0.14 + r * sy * Math.sqrt(1 - 0.09);
+    M.add('metal', new THREE.TorusGeometry(ro, 0.06, 6, 28), { pos: v(x, yo, z), rot: e(PI2, 0, 0), color: C.G2 });
+    M.add('glass', new THREE.SphereGeometry(ro, 24, 8, 0, TAU, 0, PI2), { pos: v(x, yo, z), scale: v(1, 0.3, 1) });
   }
   M.colCyl(x, z, r, 0, drum);
   M.colCyl(x, z, r * 0.8, drum, drum + r * sy * 0.6);
   M.colCyl(x, z, r * 0.45, drum + r * sy * 0.6, drum + r * sy);
-  return drum + r * sy;
+  return drum + 0.14 + r * sy;
 }
 
 // Glass garden dome on a low drum, framed, with trees inside
@@ -462,10 +499,12 @@ export function gardenDome(M, x, z, r, { drum = 0.55, seed = 3 } = {}) {
   M.cyl('plant', x, drum - 0.02, z, r - 0.1, 0.05, 0x4a3a2a, 28);
   const n = Math.max(3, Math.round(r * 3));
   for (let i = 0; i < n; i++) {
-    const a = rnd() * TAU, d = (0.2 + rnd() * 0.55) * r, th = 0.5 + rnd() * r * 0.5;
+    const a = rnd() * TAU, d = (0.15 + rnd() * 0.45) * r;
+    const room = Math.sqrt(r * r - d * d) - 0.15;            // clearance under the glass
+    const cr = Math.min(0.2 + rnd() * r * 0.15, room * 0.35), th = Math.max(0.15, room - 2 * cr * 0.85 - 0.05);
     const tx = x + Math.sin(a) * d, tz = z + Math.cos(a) * d;
-    M.cyl('plant', tx, drum, tz, 0.06, th, 0x5a3b26, 5);
-    M.sphere('plant', tx, drum + th + 0.2, tz, 0.35 + rnd() * r * 0.18, rnd() < 0.5 ? 0x3d7f3a : 0x2f6b34, 9, 0.85);
+    M.cyl('plant', tx, drum, tz, 0.04, th, 0x5a3b26, 5);
+    M.sphere('plant', tx, drum + th + cr * 0.8, tz, cr, rnd() < 0.5 ? 0x3d7f3a : 0x2f6b34, 9, 0.85);
   }
   M.colCyl(x, z, r, 0, drum + r * 0.55);
   M.colCyl(x, z, r * 0.6, drum + r * 0.55, drum + r);
@@ -483,58 +522,97 @@ export function linkTube(M, x0, z0, x1, z1, y, r = 0.6, color = C.W) {
   }
 }
 
-// Cylinder tower with dark ribbon glazing on every floor (lobby glazed tall)
-export function ribbonTower(M, x, z, r, h, { fh = 3.2, y0 = 0, color = C.W, seg = 48, cap = 'dome', door = false, lobby = true, fins = 0 } = {}) {
+// Cylinder tower: punched windows on every floor, expressed floor lines,
+// a glazed lobby, optional balconies (angles), entrance canopy and cap.
+export function ribbonTower(M, x, z, r, h, { fh = 3.2, y0 = 0, color = C.W, seg = 48, cap = 'dome', door = false, lobby = true, rot = 0, skip = [], balconies = [], fins = 0, plant = true } = {}) {
   const floors = Math.max(1, Math.round(h / fh));
   const f = h / floors;
-  M.cyl('metal', x, y0, z, r + 0.08, 0.18, C.D, seg);
+  const n = Math.max(4, Math.round(TAU * r / 2.1));
+  const near = (a, s, k) => Math.abs(Math.atan2(Math.sin(a - s), Math.cos(a - s))) < k;
+  M.cyl('concrete', x, y0 - 0.05, z, r + 0.1, 0.3, C.CONC2, seg);
   for (let i = 0; i < floors; i++) {
     const y = y0 + i * f;
     const lob = i === 0 && lobby && y0 === 0;
-    const a0 = lob ? 0.35 : 0.95, a1 = lob ? Math.min(f - 0.4, 2.75) : 2.25;
-    M.add('hull', new THREE.CylinderGeometry(r, r, a0, seg, 1, true), { pos: v(x, y + a0 / 2, z), color });
-    band(M, x, z, r, y + a0, y + a1, seg, lob ? 1.5 : 1.15);
-    M.add('hull', new THREE.CylinderGeometry(r, r, f - a1, seg, 1, true), { pos: v(x, y + (a1 + f) / 2, z), color });
+    const wins = [];
+    for (let k = 0; k < n; k++) {
+      const a = rot + (k + (i % 2) * 0.0) / n * TAU;
+      if (skip.some((s) => near(a, s, 0.5))) continue;
+      if (door && i === 0 && near(a, Math.PI, 0.45)) continue;
+      const bal = i > 0 && balconies.some((b) => near(a, b, 0.2)) && i % 2 === 1;
+      wins.push(lob ? { a, w: 1.5, y: 0.3, h: 2.3 } : bal ? { a, w: 1.1, y: 0.1, h: 2.2 } : { a, w: 1.2 });
+    }
+    roundStorey(M, x, z, r, y, y + f, wins, { color, seg, sill: 0.95, head: 2.3 });
+    // expressed floor line
+    if (i > 0) M.add('hull', new THREE.CylinderGeometry(r + 0.06, r + 0.06, 0.16, seg, 1, true), { pos: v(x, y + 0.02, z), color: C.W2 });
+    if (i > 0 && i % 2 === 1) for (const b of balconies) {
+      const q = e(0, b, 0), P = (lx, ly, lz) => v(lx, ly, lz).applyEuler(q).add(v(x, 0, z));
+      M.add('hull', new THREE.BoxGeometry(2.1, 0.16, 1.3), { pos: P(0, y + 0.02, r + 0.45), rot: q, color: C.W2 });
+      for (const lx of [-1.0, -0.33, 0.33, 1.0]) M.add('metal', new THREE.CylinderGeometry(0.025, 0.025, 1.0, 5), { pos: P(lx, y + 0.6, r + 1.05), color: C.G2 });
+      for (const sx of [-1, 1]) M.add('metal', new THREE.CylinderGeometry(0.025, 0.025, 1.0, 5), { pos: P(sx * 1.0, y + 0.6, r + 0.4), color: C.G2 });
+      M.add('metal', new THREE.BoxGeometry(2.05, 0.05, 0.06), { pos: P(0, y + 1.1, r + 1.07), rot: q, color: C.G2 });
+      for (const sx of [-1, 1]) M.add('metal', new THREE.BoxGeometry(0.06, 0.05, 1.0), { pos: P(sx * 1.02, y + 1.1, r + 0.55), rot: q, color: C.G2 });
+      M.add('metal', new THREE.BoxGeometry(2.05, 0.03, 0.03), { pos: P(0, y + 0.6, r + 1.07), rot: q, color: C.G2 });
+    }
   }
   const top = y0 + h;
+  M.add('hull', new THREE.CylinderGeometry(r + 0.08, r + 0.08, 0.3, seg), { pos: v(x, top + 0.13, z), color: C.W2 });
   for (let i = 0; i < fins; i++) {
-    const a = i / fins * TAU + 0.4;
-    M.add('metal', new THREE.BoxGeometry(0.12, h - 3.2, 0.42), { pos: v(x + Math.sin(a) * (r + 0.18), y0 + 3.2 + (h - 3.2) / 2, z + Math.cos(a) * (r + 0.18)), rot: e(0, a, 0), color: C.G2 });
+    const a = i / fins * TAU + rot + TAU / n / 2;
+    M.add('metal', new THREE.BoxGeometry(0.1, h - 0.4, 0.3), { pos: v(x + Math.sin(a) * (r + 0.14), y0 + 0.2 + (h - 0.4) / 2, z + Math.cos(a) * (r + 0.14)), rot: e(0, a, 0), color: C.G2 });
   }
-  let capTop = top;
+  let capTop = top + 0.28;
+  const ct = top + 0.28;
   if (cap === 'dome') {
-    M.add('hull', new THREE.SphereGeometry(r, seg, 16, 0, TAU, 0, PI2), { pos: v(x, top, z), scale: v(1, 0.62, 1), color });
-    M.add('metal', new THREE.TorusGeometry(r + 0.02, 0.06, 6, seg), { pos: v(x, top, z), rot: e(PI2, 0, 0), color: C.D });
-    const ro = r * 0.32, yo = top + r * 0.62 * Math.sqrt(1 - 0.1024);
-    M.add('metal', new THREE.TorusGeometry(ro, 0.07, 6, 28), { pos: v(x, yo, z), rot: e(PI2, 0, 0), color: C.G2 });
-    M.add('glass', new THREE.SphereGeometry(ro, 24, 8, 0, TAU, 0, PI2), { pos: v(x, yo, z), scale: v(1, 0.35, 1) });
-    capTop = top + r * 0.62;
+    M.add('hull', new THREE.SphereGeometry(r, seg, 14, 0, TAU, 0, PI2), { pos: v(x, ct, z), scale: v(1, 0.5, 1), color });
+    const ro = r * 0.32, yo = ct + r * 0.5 * Math.sqrt(1 - 0.1024);
+    M.add('metal', new THREE.TorusGeometry(ro, 0.06, 6, 28), { pos: v(x, yo, z), rot: e(PI2, 0, 0), color: C.G2 });
+    M.add('glass', new THREE.SphereGeometry(ro, 24, 8, 0, TAU, 0, PI2), { pos: v(x, yo, z), scale: v(1, 0.3, 1) });
+    capTop = ct + r * 0.5;
   } else if (cap === 'garden') {
-    M.cyl('hull', x, top, z, r, 0.45, color, seg);
-    M.cyl('metal', x, top + 0.42, z, r + 0.05, 0.08, C.D, seg);
-    ribDome(M, x, top + 0.5, z, r - 0.1, { ribs: 12, rib: C.W2 });
-    M.cyl('plant', x, top + 0.48, z, r - 0.2, 0.05, 0x4a3a2a, 28);
-    for (let i = 0; i < 6; i++) { const a = i * 1.05, d = r * 0.5; M.cyl('plant', x + Math.sin(a) * d, top + 0.5, z + Math.cos(a) * d, 0.07, 0.9, 0x5a3b26, 5); M.sphere('plant', x + Math.sin(a) * d, top + 1.6, z + Math.cos(a) * d, 0.55, i % 2 ? 0x3d7f3a : 0x2f6b34, 9, 0.85); }
-    capTop = top + 0.5 + r;
+    M.cyl('hull', x, ct, z, r, 0.4, color, seg);
+    ribDome(M, x, ct + 0.4, z, r - 0.1, { ribs: 12, rib: C.W2 });
+    M.cyl('plant', x, ct + 0.38, z, r - 0.2, 0.05, 0x4a3a2a, 28);
+    for (let i = 0; i < 6; i++) { const a = i * 1.05, d = r * 0.5; M.cyl('plant', x + Math.sin(a) * d, ct + 0.4, z + Math.cos(a) * d, 0.07, 0.9, 0x5a3b26, 5); M.sphere('plant', x + Math.sin(a) * d, ct + 1.5, z + Math.cos(a) * d, 0.55, i % 2 ? 0x3d7f3a : 0x2f6b34, 9, 0.85); }
+    capTop = ct + 0.4 + r;
   } else {
-    M.cyl('hull', x, top, z, r, 0.3, color, seg);
-    M.cyl('metal', x, top + 0.3, z, r + 0.05, 0.1, C.D, seg);
-    const n = Math.round(TAU * r / 1.3);
-    for (let i = 0; i < n; i++) { const a = i / n * TAU; M.cyl('metal', x + Math.sin(a) * (r - 0.1), top + 0.4, z + Math.cos(a) * (r - 0.1), 0.025, 0.95, C.G, 5); }
-    M.add('metal', new THREE.TorusGeometry(r - 0.1, 0.03, 5, seg), { pos: v(x, top + 1.35, z), rot: e(PI2, 0, 0), color: C.G });
-    capTop = top + 0.4;
+    // flat roof: parapet, plant room, condenser units, railing
+    M.add('hull', new THREE.CylinderGeometry(r + 0.08, r + 0.08, 0.6, seg, 1, true), { pos: v(x, ct + 0.3, z), color: C.W2 });
+    M.cyl('concrete', x, ct, z, r, 0.06, C.CONC2, seg);
+    if (plant) rooftopPlant(M, x, ct + 0.06, z, r * 0.6, 17);
+    capTop = ct + 0.6;
   }
   if (door) {
     const zf = z - r;
-    M.box('metal', x, 2.45, zf - 0.55, 2.6, 0.14, 1.3, C.D);
-    M.box('emissive', x, 2.37, zf - 0.75, 1.8, 0.03, 0.5, L.warm);
-    M.box('metal', x, 1.2, zf - 0.02, 1.5, 2.4, 0.16, C.G2);
-    M.box('hull', x, 1.15, zf - 0.08, 1.2, 2.25, 0.06, C.W2);
-    M.light(x, 2.2, zf - 1.0, L.warm, 1.5, 6);
+    M.box('hull', x, 2.75, zf - 0.75, 3.0, 0.16, 1.7, C.W2);
+    M.box('metal', x, 2.66, zf - 0.75, 2.8, 0.03, 1.5, C.D);
+    for (const sx of [-1, 1]) M.cyl('metal', x + sx * 1.35, 0, zf - 1.45, 0.06, 2.67, C.G2, 10);
+    for (const sx of [-0.6, 0, 0.6]) M.box('emissive', x + sx, 2.64, zf - 0.75, 0.25, 0.02, 0.25, L.warm);
+    M.box('metal', x, 1.25, zf + 0.05, 2.0, 2.5, 0.2, C.D);
+    for (const sx of [-0.45, 0.45]) M.box('glass', x + sx, 1.15, zf - 0.07, 0.86, 2.2, 0.04);
+    M.box('metal', x, 1.15, zf - 0.1, 0.05, 2.2, 0.06, C.G2);
+    M.box('metal', x, 2.95, zf - 1.58, 1.2, 0.22, 0.05, C.D);
+    M.box('emissive', x, 2.95, zf - 1.61, 1.0, 0.06, 0.02, L.white);
+    M.light(x, 2.4, zf - 1.0, L.warm, 1.5, 6);
   }
-  M.colCyl(x, z, r, y0, top);
-  if (cap !== 'flat') M.colCyl(x, z, r * 0.75, top, capTop - r * 0.2);
+  M.colCyl(x, z, r, y0, top + 0.3);
+  if (cap !== 'flat') M.colCyl(x, z, r * 0.75, top, capTop - r * 0.15);
   return capTop;
+}
+
+// Roof plant: stair/lift overrun, condensers with fan grilles, ducts, vents
+export function rooftopPlant(M, x, y, z, rad, seed = 1) {
+  const rnd = mulberry32(seed);
+  M.box('hull', x - rad * 0.3, y + 1.1, z + rad * 0.2, 1.6, 2.2, 1.4, C.W2);
+  M.box('metal', x - rad * 0.3, y + 2.25, z + rad * 0.2, 1.7, 0.08, 1.5, C.D);
+  M.box('metal', x - rad * 0.3, y + 1.0, z + rad * 0.2 - 0.71, 0.8, 2.0, 0.04, C.G);
+  for (let i = 0; i < 2; i++) {
+    const ux = x + rad * 0.35, uz = z - rad * 0.5 + i * 1.1;
+    M.box('metal', ux, y + 0.45, uz, 1.0, 0.9, 0.95, C.W2);
+    M.cyl('metal', ux, y + 0.9, uz, 0.36, 0.05, C.D, 20);
+    for (let k = 0; k < 4; k++) M.box('metal', ux, y + 0.96, uz, 0.68, 0.02, 0.03, C.G, k * Math.PI / 4);
+  }
+  pipe(M, [[x + rad * 0.35, y + 0.6, z - rad * 0.5 - 0.5], [x + rad * 0.35, y + 0.25, z - rad * 0.5 - 0.9], [x - rad * 0.3, y + 0.25, z - rad * 0.5 - 0.9]], 0.09, C.G2);
+  vent(M, x + (rnd() - 0.5) * rad, y, z + rad * 0.6, 0.7, 0.5, 0.4);
 }
 
 // Tubular pressurised entry module

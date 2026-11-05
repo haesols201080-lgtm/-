@@ -26,7 +26,7 @@ vec2 hexPave(vec2 p) {
   vec2 ag = abs(g);
   float e = 0.5 - max(dot(ag, normalize(r)), ag.x);
   float fw = fwidth(p.x) * 1.2;
-  return vec2(1.0 - smoothstep(0.025, 0.05 + fw, e), th21(floor(id * 10.0 + 0.5)));
+  return vec2(1.0 - smoothstep(0.012, 0.03 + fw, e), th21(floor(id * 10.0 + 0.5)));
 }
 vec3 gAlb; float gRough; vec3 gN; float gAO;
 
@@ -118,14 +118,18 @@ void computeTerrain() {
   // paved roads and aprons (mod ~ 1): sintered hex pavers with dust in the joints
   float paved = smoothstep(0.93, 0.985, modv) * (1.0 - cliff);
   if (paved > 0.0) {
-    vec2 hp = hexPave(vTW.xz / 0.55);
-    vec3 paveC = mix(s2l(vec3(0.50, 0.48, 0.46)), s2l(vec3(0.61, 0.59, 0.56)), hp.y) * (0.9 + 0.18 * soilA.b);
-    paveC = mix(paveC, s2l(vec3(0.36, 0.28, 0.23)), hp.x * 0.7);
-    paveC = mix(paveC, s2l(vec3(0.55, 0.42, 0.33)), smoothstep(0.62, 0.9, nzC.g) * 0.25);
+    vec2 hp = hexPave(vTW.xz / 0.36);
+    // sintered pavers: close tonal range, fine aggregate speckle, dust-filled
+    // joints and broad wear/staining so it reads as a used surface, not a tile print
+    vec3 paveC = mix(s2l(vec3(0.53, 0.51, 0.49)), s2l(vec3(0.58, 0.56, 0.53)), hp.y) * (0.92 + 0.12 * soilA.b);
+    paveC *= 0.94 + 0.08 * th21(floor(vTW.xz * 40.0));
+    paveC = mix(paveC, s2l(vec3(0.46, 0.38, 0.32)), hp.x * 0.45);
+    paveC = mix(paveC, s2l(vec3(0.52, 0.41, 0.33)), smoothstep(0.55, 0.9, nzC.g) * 0.3);
+    paveC *= 1.0 - smoothstep(0.6, 0.95, nzC.b) * 0.12;
     alb = mix(alb, paveC, paved);
-    rough = mix(rough, 0.68 + hp.x * 0.25, paved);
+    rough = mix(rough, 0.74 + hp.x * 0.15, paved);
     nrm = normalize(mix(nrm, N, paved * 0.85));
-    ao = mix(ao, 1.0 - hp.x * 0.5, paved);
+    ao = mix(ao, 1.0 - hp.x * 0.25, paved);
   }
 
   // frost in cold hollows and shaded north slopes
@@ -197,6 +201,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v4';
+  mat.customProgramCacheKey = () => 'terrain-v5';
   return mat;
 }
