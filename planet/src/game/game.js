@@ -9,6 +9,7 @@ import { Player } from '../player/player.js';
 import { Rover } from '../player/rover.js';
 import { Buildings } from '../build/buildings.js';
 import { BuildMode } from '../build/buildmode.js';
+import { Roads } from '../build/roads.js';
 import { Economy, Inventory } from '../sim/economy.js';
 import { Terraform } from '../sim/terraform.js';
 import { Colony } from '../sim/colony.js';
@@ -53,6 +54,7 @@ export class Game {
     this.player = new Player(this);
     this.rover = new Rover(this);
     this.build = new BuildMode(this);
+    this.roads = new Roads(this);
     this.thumbs = new Thumbs(this);
     this.objectives = new Objectives(this);
     this.isUnlocked = (t) => this.research.isUnlocked(t);
@@ -402,7 +404,7 @@ export class Game {
     this.audio.ambient(this.sky.uniforms.uAtmo.value, this.terra.weather.storm, this.sky.uniforms.uDust.value, !!P.inside);
     if (this.started) {
       this.ui.update(dt);
-      this.ui.setMode(this.build.mode === 'place' ? `건설: <b>${BUILDINGS[this.build.type].name}</b> · 좌클릭 설치 · 휠/R 회전 · 우클릭 취소` : this.build.mode === 'dismantle' ? '<span style="color:var(--bad)">해체 모드</span> · 좌클릭 길게 · F 종료' : this.build.mode === 'terrain' ? `지형 도구 · 반경 ${this.build.brush.radius.toFixed(1)}m · 좌클릭 올리기 · 우클릭 파기 · Shift 평탄화` : this.rover.driving ? `탐사 로버 · ${Math.abs(this.rover.speed * 3.6).toFixed(0)} km/h` : '');
+      this.ui.setMode(this.build.mode === 'place' ? `건설: <b>${BUILDINGS[this.build.type].name}</b> · 좌클릭 설치 · 휠/R 회전 · 우클릭 취소` : this.build.mode === 'dismantle' ? '<span style="color:var(--bad)">해체 모드</span> · 좌클릭 길게 · F 종료' : this.build.mode === 'road' ? '도로 깔기 · 좌클릭 지점 · 우클릭 끊기 · Esc 종료' : this.build.mode === 'terrain' ? `지형 도구 · 반경 ${this.build.brush.radius.toFixed(1)}m · 좌클릭 올리기 · 우클릭 파기 · Shift 평탄화` : this.rover.driving ? `탐사 로버 · ${Math.abs(this.rover.speed * 3.6).toFixed(0)} km/h` : '');
       if (this.build.active && this.build.mode !== 'terrain') this.ui.setPrompt(this.build.reason ? `<span class="bad">${this.build.reason}</span>` : '');
     }
     input.endFrame();
@@ -614,6 +616,7 @@ export class Game {
     if (d.rover) { this.rover.summon(new THREE.Vector3(d.rover.x, 0, d.rover.z), 0); this.rover.pos.set(d.rover.x, this.terrain.height(d.rover.x, d.rover.z), d.rover.z); this.rover.yaw = d.rover.yaw; }
     this.eco.gridDirty = true;
     this.npcs.invalidate();
+    this.roads.rebuild();
     this.ui.renderHotbar();
     return true;
   }

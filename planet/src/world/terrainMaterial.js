@@ -15,6 +15,19 @@ varying vec3 vTN;
 varying vec4 vS1;
 varying vec4 vS2;
 vec3 s2l(vec3 c) { return pow(c, vec3(2.2)); }
+float th21(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+// interlocking hexagonal sintered-regolith pavers: x = groove mask, y = per-tile id
+vec2 hexPave(vec2 p) {
+  vec2 r = vec2(1.0, 1.7320508);
+  vec2 a = mod(p, r) - r * 0.5;
+  vec2 b = mod(p - r * 0.5, r) - r * 0.5;
+  vec2 g = dot(a, a) < dot(b, b) ? a : b;
+  vec2 id = p - g;
+  vec2 ag = abs(g);
+  float e = 0.5 - max(dot(ag, normalize(r)), ag.x);
+  float fw = fwidth(p.x) * 1.2;
+  return vec2(1.0 - smoothstep(0.025, 0.05 + fw, e), th21(floor(id * 10.0 + 0.5)));
+}
 vec3 gAlb; float gRough; vec3 gN; float gAO;
 
 vec3 strataColor(float y, float n) {
@@ -102,6 +115,18 @@ void computeTerrain() {
   vec3 packedC = alb * mix(0.62, 0.85, soilA.b) * vec3(0.95, 0.93, 0.92);
   alb = mix(alb, packedC, packed * 0.8);
   nrm = normalize(mix(nrm, N, packed * 0.35));
+  // paved roads and aprons (mod ~ 1): sintered hex pavers with dust in the joints
+  float paved = smoothstep(0.93, 0.985, modv) * (1.0 - cliff);
+  if (paved > 0.0) {
+    vec2 hp = hexPave(vTW.xz / 0.55);
+    vec3 paveC = mix(s2l(vec3(0.27, 0.21, 0.18)), s2l(vec3(0.40, 0.31, 0.26)), hp.y) * (0.88 + 0.24 * soilA.b);
+    paveC = mix(paveC, s2l(vec3(0.5, 0.36, 0.26)), hp.x * 0.55);
+    paveC = mix(paveC, s2l(vec3(0.55, 0.40, 0.29)), smoothstep(0.62, 0.9, nzC.g) * 0.3);
+    alb = mix(alb, paveC, paved);
+    rough = mix(rough, 0.68 + hp.x * 0.25, paved);
+    nrm = normalize(mix(nrm, N, paved * 0.85));
+    ao = mix(ao, 1.0 - hp.x * 0.5, paved);
+  }
 
   // frost in cold hollows and shaded north slopes
   float hollow = smoothstep(0.55, 0.85, bio.a) * (1.0 - smoothstep(-25.0, 60.0, vTW.y));
@@ -172,6 +197,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v2';
+  mat.customProgramCacheKey = () => 'terrain-v3';
   return mat;
 }

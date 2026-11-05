@@ -10,7 +10,7 @@
 import * as THREE from 'three';
 import WORKER_SRC from 'virtual:genworker';
 import { WorldGen, PLANET } from './worldgen.js';
-import { EditSet } from './edits.js';
+import { EditSet, applyEdit } from './edits.js';
 import { genChunk, genProps, genMap, chunkIndex, chunkSize, CHUNK_N, L0_SIZE } from './chunkgen.js';
 import { makeTerrainMaterial } from './terrainMaterial.js';
 import { clamp } from '../core/noise.js';
@@ -378,15 +378,43 @@ export class Terrain {
         const x = t.x0 + i * RES;
         if (x < x0 - RES || x > x1 + RES) continue;
         const k = j * V + i;
-        t.h[k] = applyOne(e, x, z, t.h[k], res);
+        t.h[k] = applyEdit(e, x, z, t.h[k], res);
         const m = Math.round(res.mod * 255);
         if (m > t.surf[k * 8 + 7]) t.surf[k * 8 + 7] = m;
       }
     }
   }
 
-  flattenRect(cx, cz, hw, hd, rot, h, margin = 3) {
-    return this.addEdit({ k: 'r', cx, cz, hw, hd, rot, h, margin });
+  flattenRect(cx, cz, hw, hd, rot, h, margin = 3, pave = 0) {
+    const e = { k: 'r', cx, cz, hw, hd, rot, h, margin };
+    if (pave) e.pave = pave;
+    // cut/fill depth decides how far the soft embankment reaches
+    let dmax = 0;
+    for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) dmax = Math.max(dmax, Math.abs(this.height(cx + i * (hw + 2), cz + j * (hd + 2)) - h));
+    e.reach = Math.min(30, Math.max(margin, dmax * 1.8 + 1));
+    return this.addEdit(e);
+  }
+
+  // graded, paved road along points [{x,z}]: heights are smoothed and grade-limited
+  road(points, width = 6) {
+    const pts = [];
+    const step = 3;
+    const raw = [];
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = points[i], b = points[i + 1];
+      const n = Math.max(1, Math.ceil(Math.hypot(b.x - a.x, b.z - a.z) / step));
+      for (let k = 0; k < n; k++) { const t = k / n; raw.push({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t }); }
+    }
+    raw.push(points[points.length - 1]);
+    // sample a little wider than the road so the crown follows the average ground
+    for (const p of raw) { let s = 0; for (const [ox, oz] of [[0, 0], [1.5, 0], [-1.5, 0], [0, 1.5], [0, -1.5]]) s += this.height(p.x + ox, p.z + oz); p.y = s / 5; }
+    for (let it = 0; it < 4; it++) for (let i = 1; i < raw.length - 1; i++) raw[i].y = (raw[i - 1].y + raw[i].y * 2 + raw[i + 1].y) / 4;
+    // gentle grade limit both ways so the road neither tunnels nor climbs walls
+    const lim = (from, to, dir) => { for (let i = from; i !== to; i += dir) { const j = i - dir; const dl = Math.hypot(raw[i].x - raw[j].x, raw[i].z - raw[j].z); const dy = raw[i].y - raw[j].y; const mx = dl * 0.3; if (Math.abs(dy) > mx) raw[i].y = raw[j].y + Math.sign(dy) * mx; } };
+    lim(1, raw.length, 1); lim(raw.length - 2, -1, -1);
+    let reach = 2.5;
+    for (const p of raw) { pts.push(p.x, p.y + 0.05, p.z); reach = Math.max(reach, Math.abs(this.height(p.x, p.z) - p.y) * 2.0 + 1); }
+    return this.addEdit({ k: 'p', pts, w: width, margin: 2.5, reach: Math.min(reach, 40) });
   }
 
   brush(cx, cz, radius, mode, amount, target) {
@@ -473,27 +501,6 @@ export class Terrain {
   // misc jobs for other systems
   requestProps(ci, cj, cb, priority) { this.job({ type: 'props', ci, cj }, cb, priority); }
   requestMap(size, row0, row1, cb) { this.job({ type: 'map', size, row0, row1 }, cb, 1e9); }
-}
-
-function applyOne(e, x, z, h, res) {
-  res.mod = 0;
-  if (e.k === 'r') {
-    const c = Math.cos(e.rot), s = Math.sin(e.rot);
-    const dx = x - e.cx, dz = z - e.cz;
-    const lx = dx * c - dz * s, lz = dx * s + dz * c;
-    const ox = Math.max(0, Math.abs(lx) - e.hw), oz = Math.max(0, Math.abs(lz) - e.hd);
-    const d = Math.sqrt(ox * ox + oz * oz);
-    if (d > e.margin) return h;
-    const t = d <= 0 ? 0 : (d / e.margin) * (d / e.margin) * (3 - 2 * d / e.margin);
-    if (e.pack !== false) res.mod = 1 - t;
-    return e.h + (h - e.h) * t;
-  }
-  const d = Math.hypot(x - e.cx, z - e.cz) / e.radius;
-  if (d >= 1) return h;
-  const w = (1 - d * d) * (1 - d * d);
-  res.mod = w * 0.45;
-  if (e.mode === 0) return h + (e.target - h) * Math.min(1, w * e.amount);
-  return h + e.mode * e.amount * w;
 }
 
 const _n = new THREE.Vector3();

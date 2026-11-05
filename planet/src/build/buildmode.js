@@ -43,6 +43,11 @@ export class BuildMode {
 
   select(type) {
     this.clearGhost();
+    if (BUILDINGS[type].tool === 'road') {
+      this.mode = 'road'; this.type = type; this.roadStart = null;
+      this.game.ui && this.game.ui.toast('도로 — 좌클릭으로 시작점, 다시 좌클릭으로 이어서 깔기 · 우클릭 끊기 · Esc 종료', 'info', 3);
+      return;
+    }
     this.mode = 'place';
     this.type = type;
     this.heightOff = 0;
@@ -70,6 +75,8 @@ export class BuildMode {
 
   exit() {
     this.clearGhost();
+    if (this.game.roads) this.game.roads.showPreview(null);
+    this.roadStart = null;
     this.mode = 'none';
     this.type = null;
     this.ring.visible = false;
@@ -112,6 +119,7 @@ export class BuildMode {
 
   update(dt, input) {
     if (this.mode === 'place') this.updatePlace(dt, input);
+    else if (this.mode === 'road') this.updateRoad(dt, input);
     else if (this.mode === 'dismantle') this.updateDismantle(dt, input);
     else if (this.mode === 'terrain') this.updateTerrain(dt, input);
   }
@@ -256,7 +264,7 @@ export class BuildMode {
     g.eco.pay(cost, p);
     if (!def.foundation && !p.onFoundation && !def.water) {
       // flatten a pad slightly below the floor, with a soft skirt
-      g.terrain.flattenRect(p.x, p.z, def.size[0] / 2 + 0.2, def.size[1] / 2 + 0.2, p.rot, p.y - 0.25, def.size[0] > 6 ? 4 : 2.5);
+      g.terrain.flattenRect(p.x, p.z, def.size[0] / 2 + 0.2, def.size[1] / 2 + 0.2, p.rot, p.y - 0.25, def.size[0] > 6 ? 4 : 2.5, def.apron || 0);
     }
     const r = Math.hypot(def.size[0], def.size[1]) / 2 + 0.5;
     if (!p.onFoundation) g.props.clearArea(p.x, p.z, r);
@@ -287,6 +295,61 @@ export class BuildMode {
     if (v.ok) { this.place(plan, def); b = this.game.buildings.list[this.game.buildings.list.length - 1]; }
     this.type = null;
     return { ok: v.ok, reason: v.reason, b, plan };
+  }
+
+  // ------------------------------------------------------------ roads
+  roadCheck(a, b) {
+    const g = this.game;
+    const L = Math.hypot(b.x - a.x, b.z - a.z);
+    if (L < 4) return { ok: false, reason: '도로가 너무 짧습니다' };
+    if (L > 160) return { ok: false, reason: '한 번에 160m까지 깔 수 있습니다' };
+    if (Math.hypot(b.x - g.player.pos.x, b.z - g.player.pos.z) > 120 && !g.ignoreReach) return { ok: false, reason: '너무 멉니다' };
+    let wet = 0;
+    for (let t = 0; t <= 1; t += 0.1) { const x = a.x + (b.x - a.x) * t, z = a.z + (b.z - a.z) * t; if (g.terrain.height(x, z) < U.uWaterLevel.value + 0.3 && U.uIce.value < 0.5) wet++; }
+    if (wet) return { ok: false, reason: '물속에는 도로를 낼 수 없습니다' };
+    const cost = { iron: Math.max(1, Math.ceil(L / 10)) };
+    if (!g.eco.canAfford(cost, a)) return { ok: false, reason: '자원이 부족합니다: ' + g.eco.missingText(cost, a) };
+    const lock = g.isUnlocked ? g.isUnlocked(this.type) : { ok: true };
+    if (!lock.ok) return { ok: false, reason: lock.reason };
+    return { ok: true, cost, L };
+  }
+
+  layRoad(a, b) {
+    const g = this.game;
+    const chk = this.roadCheck(a, b);
+    if (!chk.ok) return chk;
+    g.eco.pay(chk.cost, a);
+    g.terrain.road([a, b]);
+    const n = Math.ceil(chk.L / 4);
+    for (let i = 0; i <= n; i++) g.props.clearArea(a.x + (b.x - a.x) * i / n, a.z + (b.z - a.z) * i / n, 4.2);
+    g.flora.invalidate();
+    g.npcs.invalidate();
+    g.roads.rebuild();
+    g.audio && g.audio.play('build');
+    return chk;
+  }
+
+  updateRoad(dt, input) {
+    const g = this.game;
+    if (input.hit('Escape')) { this.exit(); return; }
+    if (input.click(2)) { if (this.roadStart) { this.roadStart = null; g.roads.showPreview(null); } else this.exit(); return; }
+    const { hit } = this.aim();
+    if (!hit) { g.roads.showPreview(null); this.reason = '조준 지점이 너무 멉니다'; return; }
+    const p = g.roads.snap(hit.point.x, hit.point.z);
+    if (!this.roadStart) {
+      const r = 1.5;
+      g.roads.showPreview({ x: p.x - r, z: p.z }, { x: p.x + r, z: p.z }, true);
+      this.reason = p.snapped ? '기존 도로에 이어 붙입니다 — 좌클릭으로 시작' : '좌클릭으로 도로 시작점을 찍으세요';
+      if (input.click(0)) this.roadStart = p;
+      return;
+    }
+    const chk = this.roadCheck(this.roadStart, p);
+    g.roads.showPreview(this.roadStart, p, chk.ok);
+    this.reason = chk.ok ? `도로 ${chk.L.toFixed(0)}m · 철 ${chk.cost.iron}${p.snapped ? ' · 교차로 연결' : ''}` : chk.reason;
+    if (input.click(0)) {
+      const r = this.layRoad(this.roadStart, p);
+      if (r.ok) this.roadStart = p; else g.ui && g.ui.toast(r.reason, 'bad', 1.6);
+    }
   }
 
   // ------------------------------------------------------------ dismantle

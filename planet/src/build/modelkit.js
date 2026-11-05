@@ -22,7 +22,7 @@ export function roundedBox(w, h, d) {
 
 export const C = {
   W: 0xf1f2f3, W2: 0xd3d7dc, G: 0x80868d, G2: 0x5b6168, D: 0x33373c, K: 0x18191b,
-  O: 0xf0761c, Y: 0xf2c22e, TEAL: 0x2bb3a6, BLUE: 0x3d76c9, RED: 0xc8382c, GREEN: 0x3fa35a,
+  O: 0xb65a24, REG: 0x93694f, REG2: 0x76594a, BAS: 0x6f6a66, BERM: 0x7d5440, MEM: 0xe9e6df, Y: 0xf2c22e, TEAL: 0x2bb3a6, BLUE: 0x3d76c9, RED: 0xc8382c, GREEN: 0x3fa35a,
   CONC: 0xbdb7ad, CONC2: 0x8f887d, ASPH: 0x2b2b2d, WOOD: 0x8a6a4a, CREAM: 0xefe3c8, TERRA: 0xc0683f,
   IN1: 0xe9e6df, IN2: 0x9aa3a8, FLOOR: 0x6f7378,
 };
@@ -59,7 +59,7 @@ export class ModelBuilder {
 
   // centred box
   box(key, x, y, z, w, h, d, color, rot) {
-    const soft = (key === 'hull' || key === 'metal' || key === 'interior' || key === 'concrete') && Math.min(w, h, d) >= 0.12 && !this.sharp;
+    const soft = (key === 'hull' || key === 'metal' || key === 'interior' || key === 'concrete' || key === 'printed') && Math.min(w, h, d) >= 0.12 && !this.sharp;
     return this.add(key, soft ? roundedBox(w, h, d) : new THREE.BoxGeometry(w, h, d), { pos: v(x, y, z), rot: rot ? e(0, rot, 0) : undefined, color });
   }
   // box from bounds
@@ -409,6 +409,57 @@ export function airlock(M, x, zf, w = 2.4, h = 2.9, depth = 1.6, color = C.W2) {
   M.col(x + w / 2, 0, z - depth / 2, x + w / 2 + 0.24, h, z + depth / 2);
   M.col(x - w / 2 - 0.24, h, z - depth / 2, x + w / 2 + 0.24, h + 0.4, z + depth / 2);
   M.light(x, h - 0.4, zf - depth * 0.6, L.cyan, 1.2, 4);
+}
+
+// ---------------------------------------------------------------- printed-regolith architecture
+// Catenary dome (Foster + Partners / ESA lunar base): lathe of an inverted catenary
+export function catenaryDome(M, x, y, z, r, h, { key = 'printed', color = C.REG, seg = 40 } = {}) {
+  const prof = [];
+  const k = 1.7, ch = Math.cosh(k) - 1;
+  for (let i = 0; i <= 18; i++) {
+    const t = i / 18;
+    const rr = r * (1 - t);
+    prof.push(new THREE.Vector2(Math.max(0.001, rr), y + h * (1 - (Math.cosh(k * (1 - t)) - 1) / ch)));
+  }
+  prof.reverse();
+  // build from apex down so the lathe faces outward
+  M.add(key, new THREE.LatheGeometry(prof.slice().reverse().map((p) => p).reverse(), seg), { pos: v(x, 0, z), color });
+  return (t) => y + h * (1 - (Math.cosh(k * t) - 1) / ch);
+}
+
+// MARSHA-like egg tower: printed outer shell profile (radius by height)
+export function eggProfile(rMax, H, rTop = 0.25) {
+  return (y) => { const t = Math.min(1, Math.max(0, y / H)); return rMax * Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.82 + 0.18)), 0.75) * (1 - t * 0.25) + rTop * t; };
+}
+export function lathe(M, key, fn, H, color, seg = 40, steps = 24, y0 = 0) {
+  const prof = [];
+  for (let i = 0; i <= steps; i++) { const y = y0 + (H - y0) * i / steps; prof.push(new THREE.Vector2(Math.max(0.02, fn(y)), y)); }
+  M.add(key, new THREE.LatheGeometry(prof, seg), { color });
+}
+
+// regolith berm ring hugging a structure's base (radiation / thermal mass)
+export function berm(M, x, z, r, h = 0.9, color = C.BERM) {
+  const g = new THREE.TorusGeometry(r, h, 8, 48);
+  g.rotateX(Math.PI / 2);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const yy = p.getY(i);
+    p.setY(i, Math.max(-0.4, yy) * 0.75);
+    const a = Math.atan2(p.getZ(i), p.getX(i));
+    const k = 1 + 0.08 * Math.sin(a * 7) + 0.05 * Math.sin(a * 17 + 1.3);
+    p.setX(i, p.getX(i) * k); p.setZ(i, p.getZ(i) * k);
+  }
+  g.computeVertexNormals();
+  M.add('berm', g, { pos: v(x, 0, z), color });
+}
+
+// deep-set window on a curved shell: dark reveal + glass + thin frame, facing angle a (0 = +z)
+export function recessedWindow(M, x, y, z, a, w, h) {
+  const R = e(0, a, 0);
+  const off = (d) => v(x + Math.sin(a) * d, y, z + Math.cos(a) * d);
+  M.add('metal', new THREE.BoxGeometry(w + 0.16, h + 0.16, 0.5), { pos: off(-0.05), rot: R, color: C.D });
+  M.add('glass', new THREE.BoxGeometry(w, h, 0.04), { pos: off(0.12), rot: R });
+  M.add('metal', new THREE.BoxGeometry(w + 0.24, 0.07, 0.22), { pos: v(x + Math.sin(a) * 0.2, y - h / 2 - 0.08, z + Math.cos(a) * 0.2), rot: R, color: C.G2 });
 }
 
 export { v, e };

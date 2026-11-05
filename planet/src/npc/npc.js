@@ -28,6 +28,7 @@ class NavGrid {
     for (let j = 0; j < this.h; j++) for (let i = 0; i < this.w; i++) {
       const x = x0 + (i + 0.5) * CELL, z = z0 + (j + 0.5) * CELL;
       if (T.slope(x, z) > 0.45 || T.height(x, z) < U.uWaterLevel.value + 0.2) this.cost[j * this.w + i] = Infinity;
+      else if (T.surfAt(x, z, this._sf || (this._sf = new Float32Array(8)))[7] > 0.95) this.cost[j * this.w + i] = 0.4;
     }
     for (const b of B) {
       const walk = b.def.road || b.def.foundation || b.type === 'park' || b.type === 'market';
