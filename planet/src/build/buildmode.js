@@ -225,7 +225,7 @@ export class BuildMode {
     }
     if (!def.foundation && !p.onFoundation && !def.water) {
       const diag = Math.hypot(def.size[0], def.size[1]);
-      if (p.mx - p.mn > (p.stilts ? Math.max(4, diag * 0.6) : Math.max(2.2, diag * 0.42))) return { ok: false, reason: '지형이 너무 가파릅니다 (지형 도구로 평탄화하세요)' };
+      if (p.mx - p.mn > (p.stilts ? Math.max(5, diag * 0.78) : Math.max(2.2, diag * 0.42))) return { ok: false, reason: '지형이 너무 가파릅니다 (지형 도구로 평탄화하세요)' };
     }
     if (p.onFoundation) {
       // footprint must be fully supported by foundations at the same level

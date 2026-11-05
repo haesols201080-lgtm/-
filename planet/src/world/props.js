@@ -77,7 +77,7 @@ export function noduleGeometry(seed, count = 9) {
     const p = g.attributes.position, v = new THREE.Vector3();
     for (let k = 0; k < p.count; k++) { v.fromBufferAttribute(p, k); v.multiplyScalar(1 + 0.35 * S.noise3(v.x * 2 + i, v.y * 2, v.z * 2)); p.setXYZ(k, v.x, v.y, v.z); }
     const s = 0.07 + rnd() * 0.12, a = rnd() * Math.PI * 2, d = 0.1 + rnd() * 0.45;
-    g = g.toNonIndexed();
+    if (g.index) g = g.toNonIndexed();
     g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(Math.sin(a) * d, 0.12 + rnd() * 0.16 - d * 0.18, Math.cos(a) * d * 0.8), new THREE.Quaternion().setFromEuler(new THREE.Euler(rnd() * 3, rnd() * 3, rnd() * 3)), new THREE.Vector3(s * (1 + rnd()), s * 0.7, s)));
     pos.push(...g.attributes.position.array);
   }

@@ -204,9 +204,10 @@ export class WorldGen {
           break;
         }
         case 3: {
-          const r = S.ridged2(x / 620 + 9, z / 620 + 1, 4, 2.0, 0.45);
-          const flow = smoothstep(0.55, 0.85, S2.ridged2(x / 300, z / 300, 3));
-          dh += w * (14 + 70 * Math.pow(r, 2.3) - flow * 4 + 3 * S.fbm2(x / 70, z / 70, 2));
+          // broad volcanic swells and a few lava ridges, not a field of spikes
+          const r = S.ridged2(x / 1100 + 9, z / 1100 + 1, 3, 2.0, 0.4);
+          const flow = smoothstep(0.6, 0.9, S2.ridged2(x / 420, z / 420, 2));
+          dh += w * (12 + 52 * Math.pow(r, 2.4) + 10 * S.fbm2(x / 700, z / 700, 2) - flow * 3 + 1.5 * S.fbm2(x / 90, z / 90, 2));
           basalt += w;
           fert += w * 0.1;
           break;
@@ -383,12 +384,14 @@ export class WorldGen {
     const e = 5;
     const gx = (this.base(x + e, z) - h0) / e, gz = (this.base(x, z + e) - h0) / e;
     const slope = Math.hypot(gx, gz);
-    const amp = 8.5 * smoothstep(0.025, 0.4, slope) * er;
+    // the landing region stays gentler so a first base fits on it
+    const home = 0.35 + 0.65 * smoothstep(450, 1400, Math.hypot(x, z));
+    const amp = 7.5 * smoothstep(0.06, 0.5, slope) * er * home;
     if (amp < 0.05) return h0;
-    let v = 0, hx = 0, hz = 0, a = 1, f = 1 / 115;
-    const SLOPE = 3.2, BRANCH = 1.6;
+    let v = 0, hx = 0, hz = 0, a = 1, f = 1 / 170;
+    const SLOPE = 2.4, BRANCH = 1.1;
     const r = this._er || (this._er = new Float64Array(3));
-    for (let o = 0; o < 4; o++) {
+    for (let o = 0; o < 3; o++) {
       const dx = (gz * SLOPE + hz * BRANCH), dz = -(gx * SLOPE + hx * BRANCH);
       this.erosionCell(x * f, z * f, dx, dz, r, o);
       v += r[0] * a;
@@ -398,9 +401,9 @@ export class WorldGen {
     // sharpen crests, keep runnel floors rounded
     const shaped = v > 0 ? v * (1 + 0.25 * v) : v * 0.85;
     if (out) {
-      const ridge = clamp(v / 1.4, 0, 1) * smoothstep(0.05, 0.3, slope), valley = clamp(-v / 1.2, 0, 1);
-      out[3] = clamp(out[3] + valley * 0.3 - ridge * 0.35, 0, 1);
-      out[2] = clamp(out[2] + ridge * 0.25 * er, 0, 1);
+      const ridge = clamp(v / 1.4, 0, 1) * smoothstep(0.08, 0.4, slope), valley = clamp(-v / 1.2, 0, 1) * smoothstep(0.05, 0.3, slope);
+      out[3] = clamp(out[3] + valley * 0.3 - ridge * 0.25, 0, 1);
+      out[2] = clamp(out[2] + ridge * 0.15 * er, 0, 1);
     }
     return h0 + shaped * amp;
   }

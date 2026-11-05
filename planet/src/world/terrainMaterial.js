@@ -99,9 +99,9 @@ void computeTerrain() {
   rockC = mix(rockC, crysC * 1.1, smoothstep(0.3, 0.8, crysW) * 0.6);
 
   // scree / exposed rock on eroded crests and steeper hillsides (before cliffs)
-  float scree = smoothstep(0.07, 0.2, slope + (nzC.b - 0.5) * 0.08) * (0.35 + 0.65 * smoothstep(0.15, 0.45, bio.b)) * (1.0 - cliff);
+  float scree = smoothstep(0.17, 0.3, slope + (nzC.b - 0.5) * 0.06) * (0.4 + 0.6 * smoothstep(0.2, 0.5, bio.b)) * (1.0 - cliff);
   vec3 screeC = mix(rockC * 0.85, ground * 0.8, smoothstep(0.35, 0.75, rock.g)) * (0.8 + 0.35 * rock.b);
-  ground = mix(ground, screeC, scree * 0.75);
+  ground = mix(ground, screeC, scree * 0.6);
   vec3 alb = mix(ground, rockC, cliff) * macro;
   float rough = mix(mix(0.93, 0.97, sandW), 0.82, cliff);
   float ao = mix(mix(soilA.a, 1.0, sandW), rock.a, cliff);
@@ -152,7 +152,7 @@ void computeTerrain() {
 
   // living layers
   float above = vTW.y - uWaterLevel;
-  float flat_ = 1.0 - smoothstep(0.18, 0.34, slope);
+  float flat_ = 1.0 - smoothstep(0.26, 0.42, slope);
   float fertile = clamp(bio.a * 0.6 + nzB.r * 0.3 + (mossT.b - 0.5) * 0.2 + nzA.g * 0.15, 0.0, 1.0);
   float localG = 0.0;
   for (int i = 0; i < 8; i++) { vec4 gp = uGreen[i]; if (gp.z > 0.0) localG = max(localG, gp.w * (1.0 - smoothstep(gp.z * 0.6, gp.z, length(vTW.xz - gp.xy)))); }
@@ -180,6 +180,12 @@ void computeTerrain() {
   vec3 grassC = mix(gDark, gMid, tuft);
   grassC = mix(grassC, gLight, smoothstep(0.55, 0.95, speck * 0.6 + clump.g * 0.5) * 0.7);
   grassC = mix(grassC, s2l(vec3(0.16, 0.27, 0.17)), smoothstep(0.55, 0.85, nzA.b) * 0.35);
+  // vegetation follows the land: lush dark drainage lines and hollows, drier
+  // yellowing crests, and broad shrubland / meadow patches
+  float moist = smoothstep(0.3, 0.8, bio.a + (nzB.g - 0.5) * 0.2);
+  grassC = mix(grassC * vec3(1.18, 1.05, 0.72), grassC * vec3(0.78, 0.92, 0.85), moist);
+  float shrub = smoothstep(0.58, 0.8, nzB.r * 0.7 + nzA.g * 0.3 + moist * 0.15);
+  grassC = mix(grassC, s2l(vec3(0.12, 0.17, 0.08)) * (0.75 + 0.5 * clump.b), shrub * 0.55);
   grassC = mix(grassC * vec3(1.08, 0.97, 0.78), grassC, uLush);
   // straw/dry patches and bare soil peeking between tufts
   float dry = smoothstep(0.55, 0.85, nzB.b + (clump.r - 0.5) * 0.3) * (1.0 - uLush * 0.5);
@@ -229,6 +235,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v7';
+  mat.customProgramCacheKey = () => 'terrain-v9';
   return mat;
 }
