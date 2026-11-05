@@ -42,7 +42,9 @@ void computeTerrain() {
   float cliff = smoothstep(0.2, 0.38, slope + (nzB.g - 0.5) * 0.14);
 
   // ground layers (planar projection)
-  vec4 soilA = texture2D(tSoil, vTW.xz * 0.21);
+  // anti-tiling: blend two rotated/offset samples with a low-frequency mask
+  vec2 rp = vec2(vTW.x * 0.82 - vTW.z * 0.57, vTW.x * 0.57 + vTW.z * 0.82);
+  vec4 soilA = mix(texture2D(tSoil, vTW.xz * 0.21), texture2D(tSoil, rp * 0.17 + 0.37), smoothstep(0.35, 0.65, texture2D(tNoise, vTW.xz * 0.006).g));
   vec4 soilB = texture2D(tSoil, vTW.xz * 0.043 + 0.5);
   vec4 sand = texture2D(tSand, vec2(vTW.x * 0.07 + vTW.z * 0.05, vTW.z * 0.08 - vTW.x * 0.03));
   vec4 mossT = texture2D(tMoss, vTW.xz * 0.19);
@@ -95,10 +97,11 @@ void computeTerrain() {
   vec3 nrm = normalize(mix(nGround, nRock, cliff));
 
   // built / packed ground around structures
-  float packed = smoothstep(0.05, 0.6, modv) * (1.0 - cliff * 0.6);
-  vec3 packedC = mix(s2l(vec3(0.33, 0.24, 0.19)), s2l(vec3(0.48, 0.37, 0.30)), soilA.b);
-  alb = mix(alb, packedC, packed * 0.85);
-  nrm = normalize(mix(nrm, N, packed * 0.6));
+  // irregular, soft-edged footprint of construction: darker trampled ground, not a painted rectangle
+  float packed = smoothstep(0.2 + 0.45 * nzC.r, 0.95, modv) * (1.0 - cliff * 0.6);
+  vec3 packedC = alb * mix(0.62, 0.85, soilA.b) * vec3(0.95, 0.93, 0.92);
+  alb = mix(alb, packedC, packed * 0.8);
+  nrm = normalize(mix(nrm, N, packed * 0.35));
 
   // frost in cold hollows and shaded north slopes
   float hollow = smoothstep(0.55, 0.85, bio.a) * (1.0 - smoothstep(-25.0, 60.0, vTW.y));

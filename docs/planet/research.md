@@ -45,6 +45,9 @@
 - 기술마다 특정 행동을 하면 연구가 50% 진행되는 「유레카」가 있고, 시대(era) 단위로 기술이 묶입니다. ([Civilization Wiki](https://civilization.fandom.com/wiki/Great_Scientist_(Civ6)))
 - 반영(`planet/src/sim/research.js`): 5개 시대(개척·정착·마을·도시·문명)로 묶인 16개 연구가 있습니다. 고대 유적을 조사하면 무작위 연구에 유레카(비용 50%)가 붙습니다. 문명 시대 자체도 Civ처럼 조건(인구·계층·기념물)을 채우면 전초기지 → 정착지 → 마을 → 도시 → 문명으로 넘어갑니다.
 
+### 정착민 흐름 (사용자 피드백 반영)
+- 정착민은 본부를 세우는 것만으로 오지 않습니다. 심우주 교신기로 행성 상태를 송신해 초청해야 하고, 구름 단계 전에는 아무도 응답하지 않습니다. 응답 인원은 테라포밍 단계(구름 6명 → 숨쉬는 대기 30명)와 빈 집 수로 정해집니다(`planet/src/sim/colony.js`의 `callStatus`·`sendCall`). 송신 → 약 18초 뒤 응답 → 약 30초 뒤 셔틀 착륙 순서로 진행됩니다.
+
 ### Spore (문명 단계)
 - 도시와 공장이 지속적으로 자원(스파이스/스포어벅스)을 만들고, 그 자원으로 도시와 차량을 늘립니다. ([Civilization Stage](https://spore.fandom.com/wiki/Civilization_Stage), [Making money](https://spore.fandom.com/wiki/Making_money))
 - 반영: 주민 세수(크레딧)로 식민지 건물과 업그레이드 비용을 냅니다. 행성 규모의 목표(궤도 엘리베이터)가 문명의 최종 상징입니다.

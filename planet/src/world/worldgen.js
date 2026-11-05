@@ -65,6 +65,16 @@ export class WorldGen {
     this._t = new Int32Array(9);
   }
 
+  // terraces with varying step height, softness and erosion so cliffs never look like stairs
+  terraceN(h, step, x, z) {
+    const S = this.S, S2 = this.S2;
+    const k = S2.noise2(x / 380 + 7, z / 380 - 3) * 0.5 + 0.5;
+    const st = step * (0.7 + 0.6 * k);
+    const sharp = 0.2 + 0.16 * (S.noise2(x / 260 - 4, z / 260 + 9) * 0.5 + 0.5);
+    const t = terrace(h + 2.2 * S.noise2(x / 45, z / 45), st, sharp);
+    return t + 1.1 * S.fbm2(x / 16, z / 16, 2) + 0.6 * S2.noise2(x / 7, z / 7);
+  }
+
   // province type of a voronoi cell, chosen by latitude of its seed point
   cell(ci, cj) {
     const k = (ci + 5000) * 10007 + (cj + 5000);
@@ -168,14 +178,16 @@ export class WorldGen {
       if (w <= 0.0005) continue;
       switch (pi) {
         case 0: {
-          dh += w * (5 * S.fbm2(x / 320, z / 320, 3));
+          // rolling ground, low rocky ridges and hummocks so plains are never table-flat
+          const rg = S2.ridged2(x / 190 + 3, z / 190 - 8, 3);
+          dh += w * (5 * S.fbm2(x / 320, z / 320, 3) + 3.2 * S.fbm2(x / 105 + 9, z / 105, 2) + 4.5 * Math.pow(rg, 3) + 0.9 * S.fbm2(x / 28, z / 28, 2));
           fert += w * 0.15;
           break;
         }
         case 1: {
           const m = smoothstep(0.0, 0.2, S.fbm2(x / 520 + 40, z / 520 - 12, 4));
           let mh = m * (38 + 20 * S.fbm2(x / 160, z / 160, 2));
-          mh = terrace(mh + 9, 9, 0.17) - 9;
+          mh = lerp(mh, this.terraceN(mh + 9, 9, x, z) - 9, 0.8);
           dh += w * mh;
           strata += w * (0.55 + 0.45 * m);
           break;
@@ -299,7 +311,7 @@ export class WorldGen {
         const t = smoothstep(width * 1.6, width * 0.45, d);
         const floor = -130 + 10 * S.fbm2(x / 200, z / 200, 2);
         let rh = lerp(h, floor, t);
-        rh = lerp(rh, terrace(rh, 14, 0.14), smoothstep(0.05, 0.4, t) * (1 - smoothstep(0.92, 1, t)) * 0.9);
+        rh = lerp(rh, this.terraceN(rh, 14, x, z), smoothstep(0.05, 0.4, t) * (1 - smoothstep(0.92, 1, t)) * 0.8);
         h = rh;
         strata = Math.max(strata, smoothstep(0.0, 0.3, t) * (1 - smoothstep(0.95, 1, t) * 0.6));
         if (t > 0.9) { sand = Math.max(sand, 0.6); fert += 0.3; }
@@ -315,7 +327,7 @@ export class WorldGen {
       if (cw < 0.06 && mask > 0.05) {
         const t = smoothstep(0.06, 0.012, cw) * mask;
         const floor = Math.min(h, 2) - 26;
-        h = lerp(h, terrace(lerp(h, floor, t), 8, 0.18), t);
+        h = lerp(h, lerp(lerp(h, floor, t), this.terraceN(lerp(h, floor, t), 8, x, z), 0.75), t);
         strata = Math.max(strata, t * 0.9);
         fert += t * 0.4;
       }

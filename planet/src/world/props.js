@@ -34,8 +34,9 @@ export function rockGeometry(seed, detail, { sx = 1, sy = 0.8, sz = 1, cuts = 7,
   const v = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) {
     v.fromBufferAttribute(p, i);
-    v.multiplyScalar(1 + rough * S.fbm3(v.x * 1.3, v.y * 1.3, v.z * 1.3, 3) + 0.08 * S.noise3(v.x * 5, v.y * 5, v.z * 5));
-    for (const pl of planes) { const d = v.dot(pl.n); if (d > pl.d) v.addScaledVector(pl.n, -(d - pl.d) * 0.92); }
+    v.multiplyScalar(1 + rough * S.fbm3(v.x * 1.3, v.y * 1.3, v.z * 1.3, 3) + 0.1 * S.noise3(v.x * 4, v.y * 4, v.z * 4) + 0.04 * S.noise3(v.x * 11, v.y * 11, v.z * 11));
+    // soft fracture planes (weathered, not faceted)
+    for (const pl of planes) { const d = v.dot(pl.n); if (d > pl.d) v.addScaledVector(pl.n, -(d - pl.d) * 0.55); }
     if (v.y < -0.35) v.y = -0.35 + (v.y + 0.35) * 0.3;
     p.setXYZ(i, v.x * sx, v.y * sy, v.z * sz);
   }
