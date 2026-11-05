@@ -434,7 +434,7 @@ export class Game {
 
   updateTool(dt) {
     const P = this.player, cam = this.engine.camera;
-    const show = this.started && P.view === 'first' && !this.rover.driving;
+    const show = this.started && P.view === 'first' && !this.rover.driving && !this.hideTool;
     this.tool.visible = show;
     if (!show) return;
     const sp = Math.hypot(P.vel.x, P.vel.z);

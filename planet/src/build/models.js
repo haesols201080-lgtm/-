@@ -3,7 +3,7 @@
 // -Z. Every model returns parts by material plus colliders, interior volumes
 // and light points via ModelBuilder.finish().
 import * as THREE from 'three';
-import { ModelBuilder, C, L, v, e, plinth, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, wall, room, airlock, greebleRoof } from './modelkit.js';
+import { ModelBuilder, C, L, v, e, plinth, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, wall, room, airlock, greebleRoof, ribbonTower } from './modelkit.js';
 import { houseT1, houseT2, houseT3, houseT4, market, lounge, clinic, school, lab, comms, hqExtras } from './models_colony.js';
 
 const PI = Math.PI;
@@ -557,8 +557,8 @@ function hq(M) {
   for (let i = 0; i < 6; i++) M.box('glass', -3.6 + i * 1.45, 6.3, -3.22, 1.1, 1.6, 0.04);
   for (let i = 0; i < 6; i++) M.box('glass', -3.6 + i * 1.45, 6.3, 3.22, 1.1, 1.6, 0.04);
   M.bb('hull', -4.6, 7.6, -3.3, 4.6, 7.9, 3.3, C.O);
-  M.dome('glass', 0, 7.9, 0, 2.6, undefined, 24);
-  M.cyl('metal', 0, 7.85, 0, 2.7, 0.2, C.G2, 24);
+  // central tower rising from the roof
+  ribbonTower(M, 0, -0.2, 2.3, 9.6, { y0: 7.9, lobby: false, fins: 6 });
   // comms tower
   M.cyl('hull', 4.0, 7.9, 2.0, 0.35, 6, C.W, 12, 0.22);
   const dish = M.animGroup('hull', { pivot: [4.0, 0, 2.0], axis: [0, 1, 0], speed: 0.3 });
@@ -575,7 +575,7 @@ function hq(M) {
   for (let i = 0; i < 4; i++) M.box('glass', -5.78, 1.6, 1.8 + i * 1.5, 0.04, 0.8, 1.0);
   // front plaza details
   hazard(M, 0, 0.02, -5.2, 3.0, 0.04, 0.4);
-  for (const x of [-3, 3]) { M.cyl('metal', x, 0, -6.6, 0.12, 3.2, C.G, 8); M.box('hull', x, 3.0, -6.6, 0.1, 1.8, 0.9, x < 0 ? C.O : C.TEAL); }
+  for (const x of [-3, 3]) { M.cyl('metal', x, 0, -6.6, 0.08, 3.4, C.G2, 8); M.box('metal', x, 3.42, -6.45, 0.22, 0.1, 0.7, C.D); M.box('emissive', x, 3.36, -6.4, 0.14, 0.03, 0.55, L.warm); }
   lightBar(M, 0, 4.0, -4.62, 3.0, 0.12, 0.06, L.cyan);
   // lobby interior: reception desk, holo table, benches
   M.bb('metal', -1.8, 0.02, -1.6, 1.8, 1.05, -0.9, C.G2);

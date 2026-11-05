@@ -52,6 +52,24 @@
 - 도시와 공장이 지속적으로 자원(스파이스/스포어벅스)을 만들고, 그 자원으로 도시와 차량을 늘립니다. ([Civilization Stage](https://spore.fandom.com/wiki/Civilization_Stage), [Making money](https://spore.fandom.com/wiki/Making_money))
 - 반영: 주민 세수(크레딧)로 식민지 건물과 업그레이드 비용을 냅니다. 행성 규모의 목표(궤도 엘리베이터)가 문명의 최종 상징입니다.
 
+### 건축 언어 — SpaceX 화성 도시 콘셉트 (사용자 제공 레퍼런스)
+사용자가 보낸 SpaceX 화성 도시 렌더(착륙장 → 가압 연결 통로 → 격자형 도시)를 기준으로 삼았습니다. 렌더에서 읽은 규칙:
+- **재질과 색**: 붉은 지면 위 흰색·밝은 회색 복합재 외피, 짙은 유리, 흑연색 띠. 원색 강조색이 없습니다. → 주황 강조색과 갈색 오염을 걷어내고, 패널 이음매를 크고 옅게 바꿨습니다.
+- **형태**: 낮은 원통 벽 위의 흰 돔 거주 유닛이 2~4개씩 붙은 군집, 반구형 지붕의 원통형 타워(층마다 어두운 띠창), 초록 식물이 보이는 유리 돔, 짧은 가압 튜브 연결.
+- **도시 구성**: 밝은 회색 도로의 격자, 블록마다 돔·타워·온실이 빽빽하게 들어섭니다. → 도로 포장을 밝은 회색으로 바꿨습니다.
+
+주거 등급에 반영한 내용:
+- **1단계**: 띠창이 있는 흰 돔 + 원통형 출입 에어록 + 유리 정원 돔 + 지상 태양광 패널.
+- **2단계**: 크기가 다른 돔 2개 + 정원 돔을 가압 튜브로 연결한 군집.
+- **3단계**: 띠창이 둘린 반구 지붕 원통 타워 2개 + 스카이브리지 + 로비 돔.
+- **4단계**: 유리 코어를 강철 다이어그리드가 감싼 모래시계형 타워(사용자가 괜찮다고 한 디자인) + 유리 포디엄 + 옥상 정원 돔.
+- **본부**: 흰 본관 위에 띠창 타워를 올렸고, 깃발형 배너 대신 조명주를 세웠습니다.
+
+먼저 시도했던 3D 프린팅 레골리스 외피(Foster + Partners/ESA 달 기지, ICON/BIG Mars Dune Alpha, AI SpaceFactory MARSHA)는 적층 결이 "목조 건축물"처럼 읽힌다는 피드백을 받아 폐기했습니다.
+
+### 도로 — 지형에 새긴 포장 통로
+도로는 메시를 덧대지 않고 지형 편집으로 만듭니다. 경사를 제한해 다듬은 폴리라인을 따라 노반을 고르고, 셰이더가 그 면에 육각 소결 포장을 입힙니다. 그래서 교차로와 곡선이 이음매나 Z-파이팅 없이 이어지고, 절토·성토 깊이에 비례해 사면 폭이 넓어져 수직 벽이 생기지 않습니다. 참고: [ESA — How to make roads on the Moon](https://www.esa.int/Enabling_Support/Space_Engineering_Technology/How_to_make_roads_on_the_Moon), [PAVER (IAC 2022)](https://liquifer.com/wp-content/uploads/2022/12/PAVER_IAC22_0109_FINAL.pdf).
+
 ## 3. 직접 짓는 3D 게임플레이 — Satisfactory
 
 - 빌드 건이 홀로그램을 투사합니다. 설치할 수 있으면 파랑, 없으면 빨강입니다(최신 텍스처 홀로그램에서도 같은 규칙이라는 사용자 증언). 화살표 키로 1m씩 미세 이동하고, H로 홀로그램을 고정하고, Ctrl로 월드 그리드에 스냅합니다. 해체 모드(F)에서는 좌클릭을 길게 눌러 해체합니다. ([Build Gun](https://satisfactory.wiki.gg/wiki/Build_Gun), [Foundations](https://satisfactory.wiki.gg/wiki/Foundations), [Prima Games](https://primagames.com/tips/how-to-snap-to-world-grid-in-satisfactory), [Steam 토론](https://steamcommunity.com/app/526870/discussions/0/4329623982987996094/))

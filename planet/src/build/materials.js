@@ -141,26 +141,21 @@ function patch(mat, key, fragBody, { anim = null, slide = null, extraUniforms = 
 }
 
 const HULL_MAP = /* glsl */`
-  vec3 pin = panelInfo(vOP, normalize(vON), vec2(1.6, 1.0));
+  vec3 pin = panelInfo(vOP, normalize(vON), vec2(2.4, 1.6));
   vec3 baseC = diffuseColor.rgb;
-  // homes get their own accent colour (seed >= 2 marks a residence)
-  if (vData.z >= 2.0 && distance(baseC, vec3(0.46, 0.14, 0.035)) < 0.12) {
-    float k = floor(fract(vData.z) * 6.0);
-    baseC = k < 1.0 ? vec3(0.46, 0.14, 0.035) : k < 2.0 ? vec3(0.42, 0.32, 0.17) : k < 3.0 ? vec3(0.1, 0.13, 0.16) : k < 4.0 ? vec3(0.15, 0.15, 0.08) : k < 5.0 ? vec3(0.26, 0.06, 0.03) : vec3(0.05, 0.055, 0.06);
-  }
   baseC *= (0.93 + 0.1 * pin.y);
   vec4 nz = texture2D(tNoise, vOP.xz * 0.11 + vOP.y * 0.07 + vData.z);
   float streak = texture2D(tNoise, vec2(vOP.x * 0.9 + vOP.z * 0.9, vOP.y * 0.08) + vData.z).g;
   float grime = smoothstep(1.3, -0.2, vOP.y) * 0.5 + smoothstep(0.55, 0.85, streak) * 0.18 + smoothstep(0.6, 0.9, nz.b) * 0.12;
   float top = smoothstep(0.6, 0.95, normalize(vON).y);
   vec3 dirtC = vec3(0.36, 0.31, 0.27);
-  baseC = mix(baseC, baseC * dirtC * 2.0, clamp(grime, 0.0, 1.0) * 0.45);
-  baseC = mix(baseC, vec3(0.42, 0.28, 0.19), top * uDustAmt * smoothstep(0.35, 0.7, nz.r) * 0.6);
+  baseC = mix(baseC, baseC * dirtC * 2.0, clamp(grime, 0.0, 1.0) * 0.3);
+  baseC = mix(baseC, vec3(0.42, 0.28, 0.19), top * uDustAmt * smoothstep(0.35, 0.7, nz.r) * 0.4);
   // wind-blown regolith settles on the lower third and streaks down from ledges
   float lowDust = smoothstep(2.2, 0.0, vOP.y) * (0.45 + 0.4 * nz.g);
-  baseC = mix(baseC, vec3(0.36, 0.23, 0.15), clamp(lowDust * (0.35 + uDustAmt * 0.5), 0.0, 0.7));
-  baseC *= 1.0 - pin.x * 0.3;
-  gH = panelHeight(vOP, normalize(vON), vec2(1.6, 1.0), 0.014) + 1e-6;
+  baseC = mix(baseC, vec3(0.36, 0.23, 0.15), clamp(lowDust * (0.22 + uDustAmt * 0.3), 0.0, 0.45));
+  baseC *= 1.0 - pin.x * 0.16;
+  gH = panelHeight(vOP, normalize(vON), vec2(2.4, 1.6), 0.008) + 1e-6;
   diffuseColor.rgb = baseC;
   gR2 = clamp(0.58 + grime * 0.25 + pin.x * 0.15 + top * uDustAmt * 0.2 + lowDust * 0.15, 0.0, 1.0);
 `;
@@ -201,41 +196,6 @@ export function makeBuildingMaterials() {
       totalEmissiveRadiance += warm * on * smoothstep(0.15, 0.6, uNight) * 1.5 * (0.6 + 0.5 * h);
       // daytime sky sheen so windows read as glass, not holes
       totalEmissiveRadiance += vec3(0.05, 0.075, 0.1) * (1.0 - uNight) * (0.6 + 0.6 * h);`,
-  });
-  M.printed = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0.0 }), 'printed', {
-    map: /* glsl */`
-      // additively printed regolith: stacked extrusion beads with a slight wobble
-      float lay = vOP.y / 0.05 + sin(atan(vOP.z, vOP.x) * 5.0 + vOP.y * 1.7) * 0.15;
-      float f = abs(fract(lay) - 0.5);
-      float fadeL = 1.0 - smoothstep(0.25, 0.9, fwidth(lay));
-      gH = (0.25 - f * f) * 0.04 * fadeL + 1e-6;
-      vec4 nz = texture2D(tNoise, vOP.xz * 0.18 + vOP.y * 0.04 + vData.z);
-      vec4 nz2 = texture2D(tNoise, vec2(atan(vOP.z, vOP.x) * 0.6, vOP.y * 0.07) + vData.z);
-      vec3 c = diffuseColor.rgb * (0.8 + 0.28 * nz.r) * (0.94 + 0.12 * (0.25 - f * f) * 4.0 * fadeL);
-      c *= 0.9 + 0.2 * smoothstep(0.3, 0.7, nz2.g);
-      float top = smoothstep(0.5, 0.95, normalize(vON).y);
-      c = mix(c, vec3(0.4, 0.26, 0.17), top * 0.35);
-      c *= 1.0 - smoothstep(1.2, 0.0, vOP.y) * 0.18;
-      diffuseColor.rgb = c;
-      gR2 = 0.9 - fadeL * f * 0.1;`,
-    rough: 'float roughnessFactor = gR2;',
-  });
-  M.berm = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.97, metalness: 0.0 }), 'berm', {
-    map: /* glsl */`
-      vec4 nz = texture2D(tNoise, vOP.xz * 0.35 + vOP.y * 0.2);
-      vec4 nz2 = texture2D(tNoise, vOP.xz * 0.07);
-      gH = (nz.a * 0.05 + nz.b * 0.03) + 1e-6;
-      diffuseColor.rgb *= 0.75 + 0.4 * nz.r * (0.7 + 0.6 * nz2.g);`,
-  });
-  M.membrane = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0.0 }), 'membrane', {
-    map: /* glsl */`
-      // inflatable shell: soft quilted gores
-      float gore = abs(fract(atan(vOP.z, vOP.x) / 6.2831 * 24.0) - 0.5);
-      float band = abs(fract(vOP.y / 0.6) - 0.5);
-      gH = (smoothstep(0.0, 0.5, gore) + smoothstep(0.0, 0.5, band)) * 0.01 + 1e-6;
-      vec4 nz = texture2D(tNoise, vOP.xz * 0.2 + vOP.y * 0.1);
-      diffuseColor.rgb *= 0.9 + 0.1 * nz.r;
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.36, 0.23, 0.15), smoothstep(1.4, 0.0, vOP.y) * 0.4);`,
   });
   M.window = new THREE.MeshStandardMaterial({ color: 0x8fb8c8, roughness: 0.04, metalness: 0.1, transparent: true, opacity: 0.22, depthWrite: false, envMapIntensity: 1.5, side: THREE.DoubleSide });
   M.window.onBeforeCompile = (sh) => {

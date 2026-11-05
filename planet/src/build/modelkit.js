@@ -22,7 +22,7 @@ export function roundedBox(w, h, d) {
 
 export const C = {
   W: 0xf1f2f3, W2: 0xd3d7dc, G: 0x80868d, G2: 0x5b6168, D: 0x33373c, K: 0x18191b,
-  O: 0xb65a24, REG: 0x93694f, REG2: 0x76594a, BAS: 0x6f6a66, BERM: 0x7d5440, MEM: 0xe9e6df, Y: 0xf2c22e, TEAL: 0x2bb3a6, BLUE: 0x3d76c9, RED: 0xc8382c, GREEN: 0x3fa35a,
+  O: 0x3b4046, MOD: 0xdedbd4, Y: 0xf2c22e, TEAL: 0x2bb3a6, BLUE: 0x3d76c9, RED: 0xc8382c, GREEN: 0x3fa35a,
   CONC: 0xbdb7ad, CONC2: 0x8f887d, ASPH: 0x2b2b2d, WOOD: 0x8a6a4a, CREAM: 0xefe3c8, TERRA: 0xc0683f,
   IN1: 0xe9e6df, IN2: 0x9aa3a8, FLOOR: 0x6f7378,
 };
@@ -59,7 +59,7 @@ export class ModelBuilder {
 
   // centred box
   box(key, x, y, z, w, h, d, color, rot) {
-    const soft = (key === 'hull' || key === 'metal' || key === 'interior' || key === 'concrete' || key === 'printed') && Math.min(w, h, d) >= 0.12 && !this.sharp;
+    const soft = (key === 'hull' || key === 'metal' || key === 'interior' || key === 'concrete') && Math.min(w, h, d) >= 0.12 && !this.sharp;
     return this.add(key, soft ? roundedBox(w, h, d) : new THREE.BoxGeometry(w, h, d), { pos: v(x, y, z), rot: rot ? e(0, rot, 0) : undefined, color });
   }
   // box from bounds
@@ -411,55 +411,165 @@ export function airlock(M, x, zf, w = 2.4, h = 2.9, depth = 1.6, color = C.W2) {
   M.light(x, h - 0.4, zf - depth * 0.6, L.cyan, 1.2, 4);
 }
 
-// ---------------------------------------------------------------- printed-regolith architecture
-// Catenary dome (Foster + Partners / ESA lunar base): lathe of an inverted catenary
-export function catenaryDome(M, x, y, z, r, h, { key = 'printed', color = C.REG, seg = 40 } = {}) {
-  const prof = [];
-  const k = 1.7, ch = Math.cosh(k) - 1;
-  for (let i = 0; i <= 18; i++) {
-    const t = i / 18;
-    const rr = r * (1 - t);
-    prof.push(new THREE.Vector2(Math.max(0.001, rr), y + h * (1 - (Math.cosh(k * (1 - t)) - 1) / ch)));
+// ---------------------------------------------------------------- Mars-city kit
+// White composite habitat language after the SpaceX Mars city concept:
+// domed hab units on drum walls, cylinder towers with dark ribbon glazing,
+// glass garden domes and pressurised link tubes.
+const PI2 = Math.PI / 2;
+const TAU = Math.PI * 2;
+
+// glazed band between two closing rings, with mullions
+function band(M, x, z, r, y0, y1, seg, mull = 1.25) {
+  M.add('glass', new THREE.CylinderGeometry(r - 0.05, r - 0.05, y1 - y0, seg, 1, true), { pos: v(x, (y0 + y1) / 2, z) });
+  M.cyl('metal', x, y0 - 0.05, z, r + 0.03, 0.1, C.D, seg);
+  M.cyl('metal', x, y1 - 0.05, z, r + 0.03, 0.1, C.D, seg);
+  const n = Math.max(6, Math.round(TAU * r / mull));
+  for (let i = 0; i < n; i++) {
+    const a = i / n * TAU;
+    M.add('metal', new THREE.BoxGeometry(0.06, y1 - y0, 0.09), { pos: v(x + Math.sin(a) * (r - 0.02), (y0 + y1) / 2, z + Math.cos(a) * (r - 0.02)), rot: e(0, a, 0), color: C.G2 });
   }
-  prof.reverse();
-  // build from apex down so the lathe faces outward
-  M.add(key, new THREE.LatheGeometry(prof.slice().reverse().map((p) => p).reverse(), seg), { pos: v(x, 0, z), color });
-  return (t) => y + h * (1 - (Math.cosh(k * t) - 1) / ch);
 }
 
-// MARSHA-like egg tower: printed outer shell profile (radius by height)
-export function eggProfile(rMax, H, rTop = 0.25) {
-  return (y) => { const t = Math.min(1, Math.max(0, y / H)); return rMax * Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.82 + 0.18)), 0.75) * (1 - t * 0.25) + rTop * t; };
-}
-export function lathe(M, key, fn, H, color, seg = 40, steps = 24, y0 = 0) {
-  const prof = [];
-  for (let i = 0; i <= steps; i++) { const y = y0 + (H - y0) * i / steps; prof.push(new THREE.Vector2(Math.max(0.02, fn(y)), y)); }
-  M.add(key, new THREE.LatheGeometry(prof, seg), { color });
-}
-
-// regolith berm ring hugging a structure's base (radiation / thermal mass)
-export function berm(M, x, z, r, h = 0.9, color = C.BERM) {
-  const g = new THREE.TorusGeometry(r, h, 8, 48);
-  g.rotateX(Math.PI / 2);
-  const p = g.attributes.position;
-  for (let i = 0; i < p.count; i++) {
-    const yy = p.getY(i);
-    p.setY(i, Math.max(-0.4, yy) * 0.75);
-    const a = Math.atan2(p.getZ(i), p.getX(i));
-    const k = 1 + 0.08 * Math.sin(a * 7) + 0.05 * Math.sin(a * 17 + 1.3);
-    p.setX(i, p.getX(i) * k); p.setZ(i, p.getZ(i) * k);
+// Domed hab unit: drum wall with a glazed band, shallow composite dome, oculus
+export function habDome(M, x, z, r, { drum = 1.5, sy = 0.82, color = C.W, glaze = true, oculus = true, seg = 44 } = {}) {
+  M.cyl('metal', x, 0, z, r + 0.07, 0.16, C.D, seg);
+  if (glaze) {
+    const g0 = Math.min(0.55, drum * 0.35), g1 = Math.min(drum - 0.2, g0 + 0.75);
+    M.add('hull', new THREE.CylinderGeometry(r, r, g0, seg, 1, true), { pos: v(x, g0 / 2, z), color });
+    band(M, x, z, r, g0, g1, seg);
+    M.add('hull', new THREE.CylinderGeometry(r, r, drum - g1, seg, 1, true), { pos: v(x, (g1 + drum) / 2, z), color });
+  } else M.add('hull', new THREE.CylinderGeometry(r, r, drum, seg, 1, true), { pos: v(x, drum / 2, z), color });
+  M.add('hull', new THREE.SphereGeometry(r, seg, 16, 0, TAU, 0, PI2), { pos: v(x, drum, z), scale: v(1, sy, 1), color });
+  M.add('metal', new THREE.TorusGeometry(r + 0.01, 0.05, 6, seg), { pos: v(x, drum, z), rot: e(PI2, 0, 0), color: C.G2 });
+  if (oculus) {
+    const ro = r * 0.3, yo = drum + r * sy * Math.sqrt(1 - 0.09);
+    M.add('metal', new THREE.TorusGeometry(ro, 0.07, 6, 28), { pos: v(x, yo, z), rot: e(PI2, 0, 0), color: C.G2 });
+    M.add('glass', new THREE.SphereGeometry(ro, 24, 8, 0, TAU, 0, PI2), { pos: v(x, yo, z), scale: v(1, 0.35, 1) });
   }
-  g.computeVertexNormals();
-  M.add('berm', g, { pos: v(x, 0, z), color });
+  M.colCyl(x, z, r, 0, drum);
+  M.colCyl(x, z, r * 0.8, drum, drum + r * sy * 0.6);
+  M.colCyl(x, z, r * 0.45, drum + r * sy * 0.6, drum + r * sy);
+  return drum + r * sy;
 }
 
-// deep-set window on a curved shell: dark reveal + glass + thin frame, facing angle a (0 = +z)
-export function recessedWindow(M, x, y, z, a, w, h) {
-  const R = e(0, a, 0);
-  const off = (d) => v(x + Math.sin(a) * d, y, z + Math.cos(a) * d);
-  M.add('metal', new THREE.BoxGeometry(w + 0.16, h + 0.16, 0.5), { pos: off(-0.05), rot: R, color: C.D });
-  M.add('glass', new THREE.BoxGeometry(w, h, 0.04), { pos: off(0.12), rot: R });
-  M.add('metal', new THREE.BoxGeometry(w + 0.24, 0.07, 0.22), { pos: v(x + Math.sin(a) * 0.2, y - h / 2 - 0.08, z + Math.cos(a) * 0.2), rot: R, color: C.G2 });
+// Glass garden dome on a low drum, framed, with trees inside
+export function gardenDome(M, x, z, r, { drum = 0.55, seed = 3 } = {}) {
+  const rnd = mulberry32(seed);
+  M.cyl('metal', x, 0, z, r + 0.07, 0.14, C.D, 36);
+  M.cyl('hull', x, 0, z, r, drum, C.W, 36);
+  ribDome(M, x, drum, z, r, { ribs: 10, rib: C.W2 });
+  for (const f of [0.38, 0.72]) M.add('metal', new THREE.TorusGeometry(r * Math.cos(Math.asin(f)) + 0.03, 0.035, 5, 36), { pos: v(x, drum + r * f, z), rot: e(PI2, 0, 0), color: C.W2 });
+  M.cyl('plant', x, drum - 0.02, z, r - 0.1, 0.05, 0x4a3a2a, 28);
+  const n = Math.max(3, Math.round(r * 3));
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * TAU, d = (0.2 + rnd() * 0.55) * r, th = 0.5 + rnd() * r * 0.5;
+    const tx = x + Math.sin(a) * d, tz = z + Math.cos(a) * d;
+    M.cyl('plant', tx, drum, tz, 0.06, th, 0x5a3b26, 5);
+    M.sphere('plant', tx, drum + th + 0.2, tz, 0.35 + rnd() * r * 0.18, rnd() < 0.5 ? 0x3d7f3a : 0x2f6b34, 9, 0.85);
+  }
+  M.colCyl(x, z, r, 0, drum + r * 0.55);
+  M.colCyl(x, z, r * 0.6, drum + r * 0.55, drum + r);
+}
+
+// Pressurised link tube between two points at height y
+export function linkTube(M, x0, z0, x1, z1, y, r = 0.6, color = C.W) {
+  const dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz);
+  const q = new THREE.Quaternion().setFromUnitVectors(v(0, 1, 0), v(dx / len, 0, dz / len));
+  const m = new THREE.Matrix4().compose(v((x0 + x1) / 2, y, (z0 + z1) / 2), q, v(1, 1, 1));
+  M.gb('hull').add(new THREE.CylinderGeometry(r, r, len, 24, 1, true), { matrix: m, color });
+  for (const t of [0.3, 0.5, 0.7]) {
+    const ring = new THREE.TorusGeometry(r + 0.02, 0.045, 6, 24); ring.rotateX(PI2); ring.translate(0, (t - 0.5) * len, 0);
+    M.gb('metal').add(ring, { matrix: m, color: C.G2 });
+  }
+}
+
+// Cylinder tower with dark ribbon glazing on every floor (lobby glazed tall)
+export function ribbonTower(M, x, z, r, h, { fh = 3.2, y0 = 0, color = C.W, seg = 48, cap = 'dome', door = false, lobby = true, fins = 0 } = {}) {
+  const floors = Math.max(1, Math.round(h / fh));
+  const f = h / floors;
+  M.cyl('metal', x, y0, z, r + 0.08, 0.18, C.D, seg);
+  for (let i = 0; i < floors; i++) {
+    const y = y0 + i * f;
+    const lob = i === 0 && lobby && y0 === 0;
+    const a0 = lob ? 0.35 : 0.95, a1 = lob ? Math.min(f - 0.4, 2.75) : 2.25;
+    M.add('hull', new THREE.CylinderGeometry(r, r, a0, seg, 1, true), { pos: v(x, y + a0 / 2, z), color });
+    band(M, x, z, r, y + a0, y + a1, seg, lob ? 1.5 : 1.15);
+    M.add('hull', new THREE.CylinderGeometry(r, r, f - a1, seg, 1, true), { pos: v(x, y + (a1 + f) / 2, z), color });
+  }
+  const top = y0 + h;
+  for (let i = 0; i < fins; i++) {
+    const a = i / fins * TAU + 0.4;
+    M.add('metal', new THREE.BoxGeometry(0.12, h - 3.2, 0.42), { pos: v(x + Math.sin(a) * (r + 0.18), y0 + 3.2 + (h - 3.2) / 2, z + Math.cos(a) * (r + 0.18)), rot: e(0, a, 0), color: C.G2 });
+  }
+  let capTop = top;
+  if (cap === 'dome') {
+    M.add('hull', new THREE.SphereGeometry(r, seg, 16, 0, TAU, 0, PI2), { pos: v(x, top, z), scale: v(1, 0.62, 1), color });
+    M.add('metal', new THREE.TorusGeometry(r + 0.02, 0.06, 6, seg), { pos: v(x, top, z), rot: e(PI2, 0, 0), color: C.D });
+    const ro = r * 0.32, yo = top + r * 0.62 * Math.sqrt(1 - 0.1024);
+    M.add('metal', new THREE.TorusGeometry(ro, 0.07, 6, 28), { pos: v(x, yo, z), rot: e(PI2, 0, 0), color: C.G2 });
+    M.add('glass', new THREE.SphereGeometry(ro, 24, 8, 0, TAU, 0, PI2), { pos: v(x, yo, z), scale: v(1, 0.35, 1) });
+    capTop = top + r * 0.62;
+  } else if (cap === 'garden') {
+    M.cyl('hull', x, top, z, r, 0.45, color, seg);
+    M.cyl('metal', x, top + 0.42, z, r + 0.05, 0.08, C.D, seg);
+    ribDome(M, x, top + 0.5, z, r - 0.1, { ribs: 12, rib: C.W2 });
+    M.cyl('plant', x, top + 0.48, z, r - 0.2, 0.05, 0x4a3a2a, 28);
+    for (let i = 0; i < 6; i++) { const a = i * 1.05, d = r * 0.5; M.cyl('plant', x + Math.sin(a) * d, top + 0.5, z + Math.cos(a) * d, 0.07, 0.9, 0x5a3b26, 5); M.sphere('plant', x + Math.sin(a) * d, top + 1.6, z + Math.cos(a) * d, 0.55, i % 2 ? 0x3d7f3a : 0x2f6b34, 9, 0.85); }
+    capTop = top + 0.5 + r;
+  } else {
+    M.cyl('hull', x, top, z, r, 0.3, color, seg);
+    M.cyl('metal', x, top + 0.3, z, r + 0.05, 0.1, C.D, seg);
+    const n = Math.round(TAU * r / 1.3);
+    for (let i = 0; i < n; i++) { const a = i / n * TAU; M.cyl('metal', x + Math.sin(a) * (r - 0.1), top + 0.4, z + Math.cos(a) * (r - 0.1), 0.025, 0.95, C.G, 5); }
+    M.add('metal', new THREE.TorusGeometry(r - 0.1, 0.03, 5, seg), { pos: v(x, top + 1.35, z), rot: e(PI2, 0, 0), color: C.G });
+    capTop = top + 0.4;
+  }
+  if (door) {
+    const zf = z - r;
+    M.box('metal', x, 2.45, zf - 0.55, 2.6, 0.14, 1.3, C.D);
+    M.box('emissive', x, 2.37, zf - 0.75, 1.8, 0.03, 0.5, L.warm);
+    M.box('metal', x, 1.2, zf - 0.02, 1.5, 2.4, 0.16, C.G2);
+    M.box('hull', x, 1.15, zf - 0.08, 1.2, 2.25, 0.06, C.W2);
+    M.light(x, 2.2, zf - 1.0, L.warm, 1.5, 6);
+  }
+  M.colCyl(x, z, r, y0, top);
+  if (cap !== 'flat') M.colCyl(x, z, r * 0.75, top, capTop - r * 0.2);
+  return capTop;
+}
+
+// Tubular pressurised entry module
+// (white composite cylinder) along -z from z0 (inside the hab) to the hatch at z1.
+export function airlockTube(M, x, y, z0, z1, r = 1.0, color = C.MOD) {
+  const len = z0 - z1, zc = (z0 + z1) / 2;
+  M.hcyl('hull', x, y, zc, r, len, 'z', color, 28);
+  for (const t of [0.12, 0.5, 0.88]) M.add('metal', new THREE.TorusGeometry(r + 0.025, 0.06, 6, 28), { pos: v(x, y, z1 + len * t), color: C.G2 });
+  // hatch frame, door and porthole on the end face
+  M.add('metal', new THREE.TorusGeometry(r - 0.04, 0.045, 6, 28), { pos: v(x, y, z1 - 0.01), color: C.G });
+  M.add('metal', roundedBox(1.16, 1.9, 0.08), { pos: v(x, y - 0.1, z1 - 0.02), color: C.G });
+  M.add('hull', roundedBox(0.98, 1.72, 0.12), { pos: v(x, y - 0.1, z1 - 0.05), color: C.W2 });
+  M.add('glass', new THREE.CylinderGeometry(0.15, 0.15, 0.06, 16), { pos: v(x, y + 0.42, z1 - 0.11), rot: e(PI2, 0, 0) });
+  M.add('metal', new THREE.TorusGeometry(0.17, 0.035, 6, 16), { pos: v(x, y + 0.42, z1 - 0.12), color: C.D });
+  M.box('metal', x + 0.36, y - 0.1, z1 - 0.12, 0.06, 0.4, 0.06, C.D);
+  M.box('emissive', x, y + r * 0.92 - 0.05, z1 - 0.07, 0.5, 0.05, 0.04, L.warm);
+  // saddles and a step plate
+  for (const t of [0.25, 0.75]) M.box('metal', x, (y - r * 0.6) / 2, z1 + len * t, r * 1.3, y - r * 0.6, 0.22, C.G2);
+  M.box('metal', x, 0.08, z1 - 0.45, 1.3, 0.16, 0.8, C.G2);
+  M.col(x - r, 0, z1, x + r, y + r, z0);
+  M.light(x, y + r + 0.2, z1 - 0.6, L.warm, 1.4, 6);
+}
+
+// Ground-mounted photovoltaic rack, tilted to the sun (south = +z here)
+export function pvRack(M, x, z, w, d, rot = 0, n = 2) {
+  const c = Math.cos(rot), s = Math.sin(rot);
+  const P = (lx, lz) => [x + lx * c + lz * s, z - lx * s + lz * c];
+  for (let i = 0; i < n; i++) {
+    const lx = -w / 2 + (i + 0.5) * w / n;
+    const [px, pz] = P(lx, 0);
+    M.add('solar', new THREE.BoxGeometry(w / n - 0.08, 0.05, d), { pos: v(px, 1.05, pz), rot: new THREE.Euler(0.5, rot, 0, 'YXZ') });
+    for (const lz of [-d * 0.35, d * 0.35]) { const [qx, qz] = P(lx, lz); M.cyl('metal', qx, 0, qz, 0.05, 1.05 - lz * 0.5, C.G2, 6); }
+  }
+  const [bx, bz] = P(0, 0);
+  M.box('metal', bx, 1.0, bz, w, 0.08, 0.08, C.G, rot);
 }
 
 export { v, e };

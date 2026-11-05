@@ -119,9 +119,9 @@ void computeTerrain() {
   float paved = smoothstep(0.93, 0.985, modv) * (1.0 - cliff);
   if (paved > 0.0) {
     vec2 hp = hexPave(vTW.xz / 0.55);
-    vec3 paveC = mix(s2l(vec3(0.27, 0.21, 0.18)), s2l(vec3(0.40, 0.31, 0.26)), hp.y) * (0.88 + 0.24 * soilA.b);
-    paveC = mix(paveC, s2l(vec3(0.5, 0.36, 0.26)), hp.x * 0.55);
-    paveC = mix(paveC, s2l(vec3(0.55, 0.40, 0.29)), smoothstep(0.62, 0.9, nzC.g) * 0.3);
+    vec3 paveC = mix(s2l(vec3(0.50, 0.48, 0.46)), s2l(vec3(0.61, 0.59, 0.56)), hp.y) * (0.9 + 0.18 * soilA.b);
+    paveC = mix(paveC, s2l(vec3(0.36, 0.28, 0.23)), hp.x * 0.7);
+    paveC = mix(paveC, s2l(vec3(0.55, 0.42, 0.33)), smoothstep(0.62, 0.9, nzC.g) * 0.25);
     alb = mix(alb, paveC, paved);
     rough = mix(rough, 0.68 + hp.x * 0.25, paved);
     nrm = normalize(mix(nrm, N, paved * 0.85));
@@ -197,6 +197,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v3';
+  mat.customProgramCacheKey = () => 'terrain-v4';
   return mat;
 }
