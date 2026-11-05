@@ -3,7 +3,7 @@
 // trusses, radiators and roof machinery. Same local frame as models.js
 // (origin at footprint centre, y = 0 floor, front = -Z).
 import * as THREE from 'three';
-import { C, L, v, e, plinth, rooftopPlant, block, shed, canopy, facade, bays, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, room, podModule, ribDome, truss, radiator, greebleRoof, airlock, porthole, habDome, gardenDome, linkTube, ribbonTower, entryPortal, pvRack } from './modelkit.js';
+import { C, L, v, e, plinth, rooftopPlant, block, shed, canopy, facade, bays, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, room, podModule, ribDome, truss, radiator, greebleRoof, airlock, porthole, habDome, gardenDome, linkTube, ribbonTower, entryPortal, airlockTube, pvRack } from './modelkit.js';
 
 const PI = Math.PI;
 
@@ -17,7 +17,7 @@ export function houseT1(M) {
   const top = habDome(M, 0.45, 0.55, 2.75, { skip: [PI, -2.15] });
   gardenDome(M, -2.6, 2.6, 1.15, { seed: 11 });
   linkTube(M, 0.45, 0.55, -2.6, 2.6, 0.75, 0.5);
-  entryPortal(M, 0.45, 0.55, 2.75);
+  airlockTube(M, 0.45, 1.2, -1.7, -3.5, 1.15);
   pvRack(M, 2.75, -3.05, 2.1, 1.0, 0, 2);
   radiator(M, 3.4, 0.3, 2.7, 1.2, 1.3, PI / 2, C.W2);
   vent(M, 1.2, top - 0.42, 0.2, 0.6, 0.45, 0.3);
@@ -32,7 +32,7 @@ export function houseT2(M) {
   gardenDome(M, 2.35, -1.75, 1.3, { seed: 23 });
   linkTube(M, -1.35, 0.95, 2.2, 2.1, 0.95, 0.6);
   linkTube(M, 2.2, 2.1, 2.35, -1.75, 0.8, 0.5);
-  entryPortal(M, -1.35, 0.95, 2.5);
+  airlockTube(M, -1.35, 1.2, -1.2, -3.5, 1.15);
   antenna(M, -0.5, ta - 0.55, 1.6, 1.6);
   M.cyl('metal', 2.2, tb - 0.25, 2.1, 0.06, 1.3, C.G2, 8);
   M.add('solar', new THREE.BoxGeometry(1.6, 0.05, 0.9), { pos: v(2.2, tb + 1.1, 2.1), rot: e(0.45, 0, 0) });

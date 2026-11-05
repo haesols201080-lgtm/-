@@ -829,6 +829,52 @@ export function shed(M, cx, cz, w, d, h, { teeth = 4, rise = 1.4, door = 3.0, co
   M.col(cx - w / 2, 0, cz - d / 2, cx + w / 2, h + rise, cz + d / 2);
 }
 
+// Tubular pressurised entry module along -z from z0 (inside the hab) to its
+// end at z1: flanged end with a recessed bulkhead and a rounded pressure
+// hatch that sits inside the tube's circle (frame, leaf, viewport, lever,
+// hinges), status light, lamp, saddles and a step.
+function roundRect(w, h, rr) {
+  const s = new THREE.Shape();
+  const x0 = -w / 2, y0 = -h / 2;
+  s.moveTo(x0 + rr, y0);
+  s.lineTo(x0 + w - rr, y0); s.quadraticCurveTo(x0 + w, y0, x0 + w, y0 + rr);
+  s.lineTo(x0 + w, y0 + h - rr); s.quadraticCurveTo(x0 + w, y0 + h, x0 + w - rr, y0 + h);
+  s.lineTo(x0 + rr, y0 + h); s.quadraticCurveTo(x0, y0 + h, x0, y0 + h - rr);
+  s.lineTo(x0, y0 + rr); s.quadraticCurveTo(x0, y0, x0 + rr, y0);
+  return s;
+}
+export function airlockTube(M, x, y, z0, z1, r = 1.15, color = C.W) {
+  const len = z0 - z1;
+  M.add('hull', new THREE.CylinderGeometry(r, r, len, 40, 1, true), { pos: v(x, y, (z0 + z1) / 2), rot: e(PI2, 0, 0), color });
+  M.add('metal', new THREE.TorusGeometry(r + 0.02, 0.07, 8, 40), { pos: v(x, y, z1 + 0.03), color: C.G2 });
+  M.add('metal', new THREE.TorusGeometry(r + 0.02, 0.045, 6, 40), { pos: v(x, y, z1 + len * 0.55), color: C.G2 });
+  M.add('hull', new THREE.CylinderGeometry(r - 0.01, r - 0.01, 0.06, 40), { pos: v(x, y, z1 + 0.16), rot: e(PI2, 0, 0), color: C.W2 });
+  // hatch: frame proud of the bulkhead, leaf set into it
+  const dw = 0.95, dh = Math.min(1.95, 2 * r - 0.4), dc = y - r + 0.2 + dh / 2;
+  const ring = roundRect(dw + 0.24, dh + 0.24, 0.42);
+  ring.holes.push(roundRect(dw, dh, 0.32));
+  const fr = new THREE.ExtrudeGeometry(ring, { depth: 0.12, bevelEnabled: false, curveSegments: 6 }); fr.rotateY(Math.PI);
+  M.add('metal', fr, { pos: v(x, dc, z1 + 0.04 + 0.12), color: C.G2 });
+  const leaf = new THREE.ExtrudeGeometry(roundRect(dw - 0.03, dh - 0.03, 0.3), { depth: 0.06, bevelEnabled: false, curveSegments: 6 }); leaf.rotateY(Math.PI);
+  M.add('hull', leaf, { pos: v(x, dc, z1 + 0.1 + 0.06), color: C.W2 });
+  const vy = dc + dh * 0.22;
+  M.add('glass', new THREE.CylinderGeometry(0.14, 0.14, 0.04, 20), { pos: v(x, vy, z1 + 0.085), rot: e(PI2, 0, 0) });
+  M.add('metal', new THREE.TorusGeometry(0.15, 0.03, 6, 20), { pos: v(x, vy, z1 + 0.08), color: C.D });
+  M.add('metal', new THREE.CylinderGeometry(0.06, 0.06, 0.06, 12), { pos: v(x + dw * 0.3, dc - 0.05, z1 + 0.07), rot: e(PI2, 0, 0), color: C.D });
+  M.add('metal', new THREE.BoxGeometry(0.26, 0.045, 0.04), { pos: v(x + dw * 0.3 - 0.1, dc - 0.05, z1 + 0.04), color: C.D });
+  for (const sy of [-1, 1]) M.add('metal', new THREE.BoxGeometry(0.09, 0.22, 0.1), { pos: v(x - dw / 2 - 0.13, dc + sy * dh * 0.3, z1 + 0.07), color: C.D });
+  M.add('metal', new THREE.BoxGeometry(0.12, 0.2, 0.05), { pos: v(x + dw / 2 + 0.32, dc + 0.35, z1 + 0.12), color: C.D });
+  M.add('emissive', new THREE.BoxGeometry(0.06, 0.06, 0.02), { pos: v(x + dw / 2 + 0.32, dc + 0.4, z1 + 0.09), color: L.green });
+  // lamp on the crown of the tube, saddles, step
+  M.add('metal', new THREE.BoxGeometry(0.3, 0.1, 0.22), { pos: v(x, y + r + 0.03, z1 + 0.35), color: C.D });
+  M.add('emissive', new THREE.BoxGeometry(0.22, 0.02, 0.14), { pos: v(x, y + r - 0.02, z1 + 0.35), color: L.warm });
+  for (const t of [0.3, 0.75]) M.add('metal', new THREE.BoxGeometry(r * 1.3, Math.max(0.05, y - r * 0.6), 0.24), { pos: v(x, Math.max(0.05, y - r * 0.6) / 2, z1 + len * t), color: C.G2 });
+  const sill = dc - dh / 2;
+  if (sill > 0.08) M.add('concrete', new THREE.BoxGeometry(1.2, sill, 0.5), { pos: v(x, sill / 2, z1 - 0.25), color: C.CONC });
+  M.col(x - r, 0, z1, x + r, y + r, z0);
+  M.light(x, y + r - 0.2, z1 - 0.6, L.warm, 1.4, 6);
+}
+
 // Ground-mounted photovoltaic rack, tilted to the sun (south = +z here)
 export function pvRack(M, x, z, w, d, rot = 0, n = 2, y0 = 0) {
   const c = Math.cos(rot), s = Math.sin(rot);
