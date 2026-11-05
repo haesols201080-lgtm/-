@@ -301,7 +301,7 @@ export class Game {
   onBuilt(b) {
     if (b.type === 'hq') {
       this.colony.credits += 600;
-      this.ui.toast('<b>식민 본부 가동</b>정착 헌장 기금 600 크레딧이 지급되었습니다', 'good', 5, true);
+      this.ui.toast('<b>식민 본부 가동</b>정착 헌장 기금 600 크레딧이 지급되었습니다. 정착민은 심우주 교신기로 초청합니다.', 'good', 6, true);
     }
     this.onChanged();
   }
@@ -504,6 +504,7 @@ export class Game {
           prompt = `<span class="key">E</span>${d.name}${b.type === 'house' ? ` · 주민 ${b.data.res || 0}명` : ''}${sub}`;
           if (input.hit('KeyE')) {
             if (d.storage && (b.type === 'storage')) ui.open('inv', b);
+            else if (d.comms) ui.open('comms', b);
             else ui.open('building', b);
           }
         }

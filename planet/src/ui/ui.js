@@ -200,7 +200,7 @@ export class UI {
     this.panelEl = panel;
     this.panelArg = arg;
     this.panelRefresh = null;
-    ({ build: () => this.buildPanel(panel), inv: () => this.invPanel(panel, arg), research: () => this.researchPanel(panel), map: () => this.mapPanel(panel), building: () => this.buildingPanel(panel, arg), pause: () => this.pausePanel(panel), help: () => this.helpPanel(panel), poi: () => this.poiPanel(panel, arg) })[name]();
+    ({ build: () => this.buildPanel(panel), inv: () => this.invPanel(panel, arg), research: () => this.researchPanel(panel), map: () => this.mapPanel(panel), building: () => this.buildingPanel(panel, arg), pause: () => this.pausePanel(panel), help: () => this.helpPanel(panel), poi: () => this.poiPanel(panel, arg), comms: () => this.commsPanel(panel, arg) })[name]();
   }
 
   close(relock = true) {
@@ -449,6 +449,40 @@ export class UI {
         if (a === 'open') { this.open('inv', d.storage ? b : null); return; }
         render();
       });
+    };
+    render();
+    let t = 0;
+    this.panelRefresh = () => { if ((t++ % 4) === 0) render(); };
+  }
+
+  commsPanel(panel, b) {
+    const g = this.game, C = g.colony, T = g.terra;
+    const body = this.header(panel, '심우주 교신기');
+    const render = () => {
+      const st = C.callStatus();
+      const P = T.p;
+      const press = (0.006 + Math.min(1.2, T.sVis / 10)).toFixed(3);
+      const temp = Math.round(-63 + Math.min(80, T.sVis * 8));
+      body.innerHTML = `
+        <div class="binfo"><img alt="" src="${g.thumbs.get('comms')}"><div>
+          <p style="color:var(--muted);margin:0 0 12px">행성 아르케의 상태를 우주의 개척선과 이주민 정거장으로 송신합니다. 하늘이 바뀔수록 더 많은 사람이 응답합니다.</p>
+          <div class="kv">
+            <div class="k">테라포밍 단계</div><div>${STAGES[T.stage].name} · ${fmtTi(T.ti)}Ti</div>
+            <div class="k">송신 보고</div><div>대기압 약 ${press}기압 · 지표 ${temp}°C · 산소 ${fmtTi(P.oxygen)}ppq</div>
+            <div class="k">맞이할 빈 집</div><div>${C.freeHousing()}명</div>
+            <div class="k">예상 응답</div><div>${st.ok ? `정착민 ${st.n}명` : `<span style="color:var(--warn)">${esc(st.reason)}</span>`}</div>
+          </div>
+          <div class="opts" style="margin-top:14px"><button class="pri" data-a="send" ${st.ok ? '' : 'disabled'}>정착민 초청 교신 송신</button></div>
+          <p class="sec-t" style="margin-top:16px">교신 기록</p>
+          <div style="display:grid;gap:5px;font-size:12.5px">${C.log.length ? C.log.map((l) => `<div style="color:${l.kind === 'in' ? 'var(--good)' : 'var(--muted)'}">${l.kind === 'in' ? '◀ ' : '▶ '}${esc(l.text)}</div>`).join('') : '<div style="color:var(--dim)">아직 송신한 기록이 없습니다.</div>'}</div>
+          ${C.calls.length ? `<p style="color:var(--cyan)">${C.calls[0].phase === 'sent' ? '응답을 기다리는 중…' : `${esc(C.calls[0].ship)} 접근 중 — 곧 본부 착륙장에 내립니다`}</p>` : ''}
+        </div></div>`;
+      const btn = body.querySelector('[data-a=send]');
+      if (btn) btn.onclick = () => {
+        const r = C.sendCall();
+        if (r.ok) { g.fx.skyBeam(b); g.audio.play('stage'); this.toast('교신을 송신했습니다. 응답을 기다립니다.', 'info', 3); }
+        render();
+      };
     };
     render();
     let t = 0;

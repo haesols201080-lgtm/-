@@ -112,6 +112,26 @@ export class FX {
     }
   }
 
+  // transmission beam from the comms dish into the sky
+  skyBeam(b) {
+    const [x, z] = this.game.buildings.toWorld(b, 1.2, -1.4);
+    const g = new THREE.CylinderGeometry(0.25, 0.6, 1600, 10, 1, true);
+    g.translate(0, 800, 0);
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.2, 3.0, 4.0), transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
+    m.position.set(x, b.y + 5.5, z);
+    m.frustumCulled = false;
+    this.game.engine.scene.add(m);
+    const t0 = performance.now();
+    const fade = () => {
+      const k = (performance.now() - t0) / 4000;
+      if (k >= 1) { this.game.engine.scene.remove(m); g.dispose(); return; }
+      m.material.opacity = 0.8 * (1 - k);
+      m.scale.set(1 + k * 2, 1, 1 + k * 2);
+      requestAnimationFrame(fade);
+    };
+    fade();
+  }
+
   setBeam(a, b) {
     if (!a) { this.beam.visible = false; return; }
     const p = this.beam.geometry.attributes.position;

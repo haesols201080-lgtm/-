@@ -70,6 +70,10 @@ export const TIERS = [
     upgrade: { cost: { alloy: 6, electronics: 4, glass: 6, credits: 300 }, research: 'r_culture' } },
 ];
 
+// colonists answering an invitation, by terraforming stage reached
+export const WAVES = { clouds: 6, rain: 8, water: 10, lakes: 12, moss: 14, flora: 16, trees: 20, insects: 24, breathable: 30, fauna: 36, complete: 40 };
+export const SHIPS = ['개척선 새벽별호', '이민선 아우로라', '수송선 헬리오스 7', '정착선 푸른등대', '이주선 오디세이아', '개척선 은하수', '수송선 카론', '정착선 첫걸음'];
+
 export const NEED_NAMES = {
   water: '물', food: '식량', power: '전력', market: '배급소', clinic: '의료소', goods: '생활용품',
   school: '학교', electronics: '전자기기', culture: '문화 센터', lounge: '라운지', park: '공원',
@@ -116,7 +120,8 @@ export const BUILDINGS = {
   dronehub: { name: '드론 허브', cat: 'industry', size: [5, 5], cost: { plate: 4, circuit: 2 }, power: -3, desc: '반경 70m 시설들을 물류망으로 묶습니다. 드론이 생산품을 나르며, 공용 창고 100칸이 있습니다.', network: 70, depot: 100, research: 'r_logistics' },
   depot: { name: '물류 창고', cat: 'industry', size: [6, 6], cost: { plate: 6, iron: 4 }, desc: '물류망 공용 저장 용량 +300.', depot: 300, research: 'r_logistics' },
 
-  hq: { name: '식민 본부', cat: 'colony', size: [16, 16], cost: { plate: 20, glass: 10, alloy: 6, circuit: 4 }, power: 12, desc: '식민지의 심장. 반경 90m 물류망, 공용 창고 400, 착륙장. 첫 정착민을 부릅니다.', network: 90, depot: 400, o2: true, craft: true, unique: true, enter: true, research: 'r_colony' },
+  hq: { name: '식민 본부', cat: 'colony', size: [16, 16], cost: { plate: 20, glass: 10, alloy: 6, circuit: 4 }, power: 12, desc: '식민지의 심장. 반경 90m 물류망, 공용 창고 400, 정착민 셔틀이 내리는 착륙장.', network: 90, depot: 400, o2: true, craft: true, unique: true, enter: true, research: 'r_colony' },
+  comms: { name: '심우주 교신기', cat: 'colony', size: [8, 8], cost: { plate: 8, alloy: 3, circuit: 4, glass: 2 }, power: -4, desc: '행성의 상태를 우주로 송신해 정착민을 초청합니다. 대기가 구름 단계에 이르러야 첫 교신에 응답이 옵니다.', comms: true, unique: true, research: 'r_colony', unlockStage: 'bluesky' },
   house: { name: '주거지', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 4, credits: 0 }, desc: '정착민이 사는 집. 필요가 채워지면 인구가 늘고, 상위 계층으로 업그레이드됩니다.', house: true, research: 'r_colony' },
   farm: { name: '수경 농장', cat: 'colony', size: [8, 12], cost: { plate: 6, glass: 6, ice: 4 }, power: -4, desc: '물 1개로 식량 3개를 기릅니다.', workers: ['pioneer', 4], produce: { food: 3 }, consume: { water: 1 }, cycle: 20, research: 'r_colony' },
   pump: { name: '정수 펌프', cat: 'colony', size: [4, 4], cost: { plate: 3, glass: 1 }, power: -2, desc: '얼음을 녹이거나(물 2) 호숫가에서는 물을 직접 퍼 올립니다(물 3).', workers: ['pioneer', 2], produce: { water: 2 }, consume: { ice: 1 }, cycle: 12, pump: true, research: 'r_colony' },

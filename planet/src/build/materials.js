@@ -53,7 +53,7 @@ varying vec3 vOP; varying vec3 vON; varying vec3 vWP2; varying vec3 vData;
 uniform sampler2D tPanel, tNoise;
 uniform float uNight, uDustAmt, uTime;
 float hash1(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-vec3 gN2; float gR2;
+vec3 gN2; float gR2; float gH = 0.0; float gBumpK = 1.0;
 `;
 
 // object-space panel pattern -> (seam mask, panel hash, uv)
@@ -72,6 +72,35 @@ vec3 panelInfo(vec3 p, vec3 n, vec2 size) {
   float sy = 1.0 - smoothstep(w, w + fw.y, d.y);
   float seamM = max(sx, sy) * (1.0 - smoothstep(0.6, 1.2, length(fw) * 30.0));
   return vec3(seamM, hash1(floor(q) + vData.z * 17.0), uv.y);
+}
+`;
+
+// relief detail: panel grooves, corner rivets and occasional recessed hatches
+const BUMP_FN = /* glsl */`
+float panelHeight(vec3 p, vec3 n, vec2 size, float depth) {
+  vec3 a = abs(n);
+  vec2 uv = a.x > a.y && a.x > a.z ? p.zy : (a.y > a.z ? p.xz : p.xy);
+  float row = floor(uv.y / size.y);
+  uv.x += row * size.x * 0.5;
+  vec2 q = uv / size;
+  vec2 f = abs(fract(q) - 0.5) * size;
+  vec2 d = size * 0.5 - f;
+  float edge = min(d.x, d.y);
+  float h = smoothstep(0.003, 0.028, edge) * depth;
+  vec2 c = size * 0.5 - vec2(0.075);
+  h += (1.0 - smoothstep(0.011, 0.02, length(f - c))) * depth * 0.55;
+  float hs = hash1(floor(q) + 3.7 + floor(vData.z * 13.0));
+  if (hs > 0.7) { float e2 = min(d.x - size.x * 0.16, d.y - size.y * 0.18); h -= smoothstep(-0.008, 0.008, e2) * depth * 0.8; }
+  float fade = 1.0 - smoothstep(0.5, 1.4, length(fwidth(uv)) * 40.0);
+  return h * fade;
+}
+vec3 bumpN(vec3 n, vec3 pos, float h, float k) {
+  vec3 dpx = dFdx(pos), dpy = dFdy(pos);
+  float dhx = dFdx(h), dhy = dFdy(h);
+  vec3 r1 = cross(dpy, n), r2 = cross(n, dpx);
+  float det = dot(dpx, r1);
+  vec3 grad = sign(det) * (dhx * r1 + dhy * r2);
+  return normalize(abs(det) * n - grad * k);
 }
 `;
 
@@ -100,7 +129,8 @@ function patch(mat, key, fragBody, { anim = null, slide = null, extraUniforms = 
       .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + BODY_V);
     // objectNormal is defined before begin_vertex (beginnormal_vertex), so ANIM can rotate it.
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\n' + HEAD_F + PANEL_FN)
+      .replace('#include <common>', '#include <common>\n' + HEAD_F + PANEL_FN + BUMP_FN)
+      .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nif (gH != 0.0) normal = bumpN(normal, -vViewPosition, gH, gBumpK);')
       .replace('#include <map_fragment>', (mat.vertexColors ? '#ifdef USE_COLOR\n  diffuseColor.rgb *= vColor;\n#endif\n' : '') + (fragBody.map || ''))
       .replace('#include <color_fragment>', mat.vertexColors ? '' : '#include <color_fragment>')
       .replace('#include <roughnessmap_fragment>', fragBody.rough || '#include <roughnessmap_fragment>')
@@ -123,10 +153,11 @@ const HULL_MAP = /* glsl */`
   float streak = texture2D(tNoise, vec2(vOP.x * 0.9 + vOP.z * 0.9, vOP.y * 0.08) + vData.z).g;
   float grime = smoothstep(1.3, -0.2, vOP.y) * 0.5 + smoothstep(0.55, 0.85, streak) * 0.18 + smoothstep(0.6, 0.9, nz.b) * 0.12;
   float top = smoothstep(0.6, 0.95, normalize(vON).y);
-  vec3 dirtC = vec3(0.28, 0.19, 0.13);
-  baseC = mix(baseC, baseC * dirtC * 2.2, clamp(grime, 0.0, 1.0) * 0.55);
+  vec3 dirtC = vec3(0.36, 0.31, 0.27);
+  baseC = mix(baseC, baseC * dirtC * 2.0, clamp(grime, 0.0, 1.0) * 0.45);
   baseC = mix(baseC, vec3(0.42, 0.28, 0.19), top * uDustAmt * smoothstep(0.35, 0.7, nz.r) * 0.6);
-  baseC *= 1.0 - pin.x * 0.45;
+  baseC *= 1.0 - pin.x * 0.3;
+  gH = panelHeight(vOP, normalize(vON), vec2(1.6, 1.0), 0.014) + 1e-6;
   diffuseColor.rgb = baseC;
   gR2 = clamp(0.48 + grime * 0.3 + pin.x * 0.2 + top * uDustAmt * 0.2, 0.0, 1.0);
 `;
@@ -141,6 +172,7 @@ export function makeBuildingMaterials() {
       vec4 bn = texture2D(tPanel, vec2(vOP.x + vOP.z, vOP.y * 0.4) * 0.6);
       float grime = smoothstep(1.0, -0.2, vOP.y) * 0.4;
       diffuseColor.rgb *= (0.85 + 0.3 * bn.b) * (1.0 - grime * 0.5);
+      gH = panelHeight(vOP, normalize(vON), vec2(1.1, 0.7), 0.008) + bn.b * 0.004 + 1e-6;
       gR2 = 0.32 + bn.b * 0.25 + grime * 0.3;`,
     rough: 'float roughnessFactor = gR2;',
   });
@@ -153,6 +185,7 @@ export function makeBuildingMaterials() {
       c *= 1.0 - pin.x * 0.35;
       float top = smoothstep(0.6, 0.95, normalize(vON).y);
       c = mix(c, vec3(0.4, 0.27, 0.18), top * uDustAmt * smoothstep(0.4, 0.75, nz2.r) * 0.5);
+      gH = panelHeight(vOP, normalize(vON), vec2(2.0, 2.0), 0.016) + nz.a * 0.006 + 1e-6;
       diffuseColor.rgb = c;`,
   });
   M.glass = patch(new THREE.MeshStandardMaterial({ color: 0x45697a, roughness: 0.1, metalness: 0.5, envMapIntensity: 1.5 }), 'glass', {
@@ -194,7 +227,8 @@ export function makeBuildingMaterials() {
   M.interior = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.0 }), 'interior', {
     map: /* glsl */`
       vec3 pin = panelInfo(vOP, normalize(vON), vec2(1.2, 1.2));
-      diffuseColor.rgb *= (0.95 + 0.06 * pin.y) * (1.0 - pin.x * 0.25);`,
+      diffuseColor.rgb *= (0.95 + 0.06 * pin.y) * (1.0 - pin.x * 0.25);
+      gH = panelHeight(vOP, normalize(vON), vec2(1.2, 1.2), 0.008) + 1e-6;`,
   });
   M.plant = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.0 }), 'plant', {
     map: /* glsl */`

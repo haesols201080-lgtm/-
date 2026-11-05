@@ -5,7 +5,7 @@
 // upgrade materials are in storage. New colonists arrive by shuttle at the
 // HQ landing pad. Eras advance like Civilization: Outpost -> Settlement ->
 // Town -> City -> Civilization.
-import { TIERS, ERAS, BUILDINGS, NEED_NAMES, ITEMS } from './data.js';
+import { TIERS, ERAS, BUILDINGS, NEED_NAMES, ITEMS, STAGES, WAVES, SHIPS } from './data.js';
 
 const GOOD_NEEDS = { water: 0.06, food: 0.05, goods: 0.03, electronics: 0.015 }; // per resident per minute
 
@@ -25,6 +25,71 @@ export class Colony {
     this.consumeAcc = {};
     this.autoUpgrade = true;
     this.arrivals = 0;
+    this.calls = [];          // invitations in flight
+    this.callCooldown = 0;
+    this.log = [];            // transmission / reply log for the comms panel
+  }
+
+  // ---------------------------------------------------------------- invitations (comms)
+  freeHousing() {
+    let free = 0;
+    for (const h of this.game.buildings.list) if (h.def.house) free += Math.max(0, (h.data.target ?? 0) - (h.data.res ?? 0));
+    for (const c of this.calls) free -= c.n;
+    return Math.max(0, free);
+  }
+
+  waveSize() {
+    const st = this.game.terra.stage;
+    let n = 0;
+    for (const [id, k] of Object.entries(WAVES)) if (st >= STAGES.findIndex((s) => s.id === id)) n = k;
+    return n;
+  }
+
+  callStatus() {
+    const g = this.game;
+    const comms = g.buildings.list.find((b) => b.def.comms);
+    if (!comms) return { ok: false, reason: '심우주 교신기가 없습니다' };
+    if (comms.powerRatio < 0.3) return { ok: false, reason: '교신기에 전력이 부족합니다' };
+    if (!g.buildings.list.some((b) => b.type === 'hq')) return { ok: false, reason: '셔틀이 내릴 식민 본부가 필요합니다' };
+    const need = STAGES.findIndex((s) => s.id === 'clouds');
+    if (g.terra.stage < need) return { ok: false, reason: '아직 아무도 오려 하지 않습니다 — 구름 단계까지 테라포밍하세요' };
+    if (this.calls.length) return { ok: false, reason: '응답을 기다리는 중입니다' };
+    if (this.callCooldown > 0) return { ok: false, reason: `송신기 재충전 중 (${Math.ceil(this.callCooldown)}초)` };
+    const free = this.freeHousing();
+    if (free <= 0) return { ok: false, reason: '맞이할 빈 집이 없습니다 — 주거지를 짓고 필요를 채우세요' };
+    return { ok: true, n: Math.min(this.waveSize(), free) };
+  }
+
+  sendCall() {
+    const st = this.callStatus();
+    if (!st.ok) return st;
+    const ship = SHIPS[(this.arrivals + this.log.length) % SHIPS.length];
+    this.calls.push({ t: 0, n: st.n, ship, phase: 'sent' });
+    this.callCooldown = 150;
+    this.log.unshift({ kind: 'out', text: `정착민 ${st.n}명 초청 송신 — 행성 상태: ${STAGES[this.game.terra.stage].name}` });
+    return st;
+  }
+
+  tickCalls(dt) {
+    this.callCooldown = Math.max(0, this.callCooldown - dt);
+    const g = this.game;
+    for (const c of this.calls) {
+      c.t += dt;
+      if (c.phase === 'sent' && c.t > 18) {
+        c.phase = 'reply';
+        const msg = `${c.ship} 응답: "아르케의 하늘을 보았습니다. ${c.n}명이 출발합니다."`;
+        this.log.unshift({ kind: 'in', text: msg });
+        g.ui && g.ui.toast('<b>교신 응답</b>' + msg, 'good', 6, true);
+        g.audio && g.audio.play('done');
+      }
+      if (c.phase === 'reply' && c.t > 48) {
+        c.phase = 'done';
+        const hq = g.buildings.list.find((b) => b.type === 'hq');
+        if (hq) g.shuttle ? g.shuttle.land(hq, c.n) : this.arrive(c.n);
+      }
+    }
+    this.calls = this.calls.filter((c) => c.phase !== 'done');
+    if (this.log.length > 12) this.log.length = 12;
   }
 
   get total() { return this.pop.reduce((a, b) => a + b, 0); }
@@ -35,7 +100,7 @@ export class Colony {
 
   tick(dt) {
     this.t += dt;
-    this.shuttleT -= dt;
+    this.tickCalls(dt);
     if (this.t < 2) return;
     const step = this.t;
     this.t = 0;
@@ -122,15 +187,6 @@ export class Colony {
     this.income = income - upkeep;
     if (hq) this.credits = Math.max(0, this.credits + this.income * step / 60);
 
-    // shuttles bring colonists to free homes
-    if (hq && this.shuttleT <= 0) {
-      this.shuttleT = 45;
-      let free = 0;
-      for (const h of houses) free += Math.max(0, h.data.target - h.data.res);
-      const n = Math.min(8, free);
-      if (n > 0) g.shuttle ? g.shuttle.land(hq, n) : this.arrive(n);
-    }
-
     // house upgrades
     if (this.autoUpgrade) for (const h of houses) this.tryUpgrade(h);
 
@@ -196,7 +252,7 @@ export class Colony {
     };
   }
 
-  serialize() { return { credits: this.credits, era: this.era, shuttleT: this.shuttleT, arrivals: this.arrivals, autoUpgrade: this.autoUpgrade }; }
+  serialize() { return { credits: this.credits, era: this.era, arrivals: this.arrivals, autoUpgrade: this.autoUpgrade, calls: this.calls, callCooldown: this.callCooldown, log: this.log }; }
   load(o) { Object.assign(this, o || {}); }
 }
 

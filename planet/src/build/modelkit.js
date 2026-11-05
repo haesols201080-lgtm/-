@@ -4,9 +4,24 @@
 // antennas, hazard stripes...).
 import * as THREE from 'three';
 import { GeoBuilder, taperTube } from '../core/geobuilder.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mulberry32 } from '../core/noise.js';
+
+// rounded boxes are cached by size so repeated parts share geometry work
+const rbCache = new Map();
+export function roundedBox(w, h, d) {
+  const m = Math.min(w, h, d);
+  const k = w.toFixed(3) + ',' + h.toFixed(3) + ',' + d.toFixed(3);
+  let g = rbCache.get(k);
+  if (!g) {
+    g = new RoundedBoxGeometry(w, h, d, Math.max(w, h, d) > 3 ? 2 : 1, Math.min(0.16, m * 0.22));
+    rbCache.set(k, g);
+  }
+  return g;
+}
 
 export const C = {
-  W: 0xe7e5df, W2: 0xcdcac2, G: 0x80868d, G2: 0x5b6168, D: 0x33373c, K: 0x18191b,
+  W: 0xf1f2f3, W2: 0xd3d7dc, G: 0x80868d, G2: 0x5b6168, D: 0x33373c, K: 0x18191b,
   O: 0xf0761c, Y: 0xf2c22e, TEAL: 0x2bb3a6, BLUE: 0x3d76c9, RED: 0xc8382c, GREEN: 0x3fa35a,
   CONC: 0xbdb7ad, CONC2: 0x8f887d, ASPH: 0x2b2b2d, WOOD: 0x8a6a4a, CREAM: 0xefe3c8, TERRA: 0xc0683f,
   IN1: 0xe9e6df, IN2: 0x9aa3a8, FLOOR: 0x6f7378,
@@ -44,7 +59,8 @@ export class ModelBuilder {
 
   // centred box
   box(key, x, y, z, w, h, d, color, rot) {
-    return this.add(key, new THREE.BoxGeometry(w, h, d), { pos: v(x, y, z), rot: rot ? e(0, rot, 0) : undefined, color });
+    const soft = (key === 'hull' || key === 'metal' || key === 'interior' || key === 'concrete') && Math.min(w, h, d) >= 0.12 && !this.sharp;
+    return this.add(key, soft ? roundedBox(w, h, d) : new THREE.BoxGeometry(w, h, d), { pos: v(x, y, z), rot: rot ? e(0, rot, 0) : undefined, color });
   }
   // box from bounds
   bb(key, x0, y0, z0, x1, y1, z1, color) {
@@ -270,6 +286,129 @@ export function room(M, w, d, h, { t = 0.24, door = 1.8, doorH = 2.5, winFront =
     M.interior(-hw + t, 0, -hd + t, hw - t, h, hd - t);
     M.light(0, h - 0.6, 0, 0xfff0e0, 2.2, Math.max(w, d) * 1.3);
   }
+}
+
+// ---------------------------------------------------------------- sci-fi kit
+// Horizontal pressurised module (cylinder with domed caps) along X, ribs and portholes.
+export function podModule(M, x, y, z, len, r, { color = C.W, rib = C.G2, accent = C.O, ports = 3, rot = 0, legs = true, axis = 'x' } = {}) {
+  const prof = [];
+  const cap = r * 0.55;
+  for (let i = 0; i <= 8; i++) { const a = i / 8 * Math.PI / 2; prof.push(new THREE.Vector2(Math.sin(a) * r, -len / 2 - cap + (1 - Math.cos(a)) * cap)); }
+  for (let i = 0; i <= 8; i++) { const a = i / 8 * Math.PI / 2; prof.push(new THREE.Vector2(Math.cos(a) * r, len / 2 + Math.sin(a) * cap)); }
+  const body = new THREE.LatheGeometry(prof, 28);
+  const R = axis === 'x' ? e(0, rot, Math.PI / 2) : e(Math.PI / 2, rot, 0);
+  const mat = new THREE.Matrix4().compose(v(x, y, z), new THREE.Quaternion().setFromEuler(R), v(1, 1, 1));
+  M.gb('hull').add(body, { matrix: mat, color });
+  const n = Math.max(2, Math.round(len / 1.8));
+  for (let i = 0; i <= n; i++) {
+    const t = -len / 2 + i * len / n;
+    const ring = new THREE.TorusGeometry(r + 0.02, 0.07, 6, 28);
+    ring.rotateX(Math.PI / 2);
+    ring.translate(0, t, 0);
+    M.gb('metal').add(ring, { matrix: mat, color: i === 0 || i === n ? accent : rib });
+  }
+  // portholes on the side facing -z (local), round frames
+  for (let i = 0; i < ports; i++) {
+    const t = -len / 2 + (i + 0.5) * len / ports;
+    const wg = new THREE.CylinderGeometry(r * 0.26, r * 0.26, 0.06, 18);
+    wg.rotateX(Math.PI / 2); wg.translate(0, t, -r + 0.01);
+    M.gb('glass').add(wg, { matrix: mat });
+    const fr = new THREE.TorusGeometry(r * 0.27, 0.045, 6, 18);
+    fr.translate(0, t, -r - 0.015);
+    M.gb('metal').add(fr, { matrix: mat, color: C.G2 });
+    const wg2 = wg.clone(); wg2.translate(0, 0, 2 * r - 0.02);
+    M.gb('glass').add(wg2, { matrix: mat });
+  }
+  // belly stripe + sensor bumps
+  const stripe = new THREE.BoxGeometry(r * 0.5, len * 0.9, 0.05); stripe.translate(0, 0, r - 0.01);
+  M.gb('hull').add(stripe, { matrix: new THREE.Matrix4().multiplyMatrices(mat, new THREE.Matrix4().makeRotationY(Math.PI / 2)), color: accent });
+  if (legs) {
+    for (const t of [-len / 2 + 0.4, len / 2 - 0.4]) for (const sd of [-1, 1]) {
+      const lx = axis === 'x' ? t : sd * r * 0.7, lz = axis === 'x' ? sd * r * 0.7 : t;
+      const c = Math.cos(rot), s2 = Math.sin(rot);
+      const wx = x + lx * c + lz * s2, wz = z - lx * s2 + lz * c;
+      M.cyl('metal', wx, 0, wz, 0.1, y - r * 0.6, C.G2, 8);
+      M.cyl('metal', wx, 0, wz, 0.28, 0.12, C.D, 10);
+    }
+  }
+}
+
+// Dome with meridian ribs and a base ring.
+export function ribDome(M, x, y, z, r, { key = 'window', ribs = 8, rib = C.W2, base = C.G2, sy = 1 } = {}) {
+  M.add(key, new THREE.SphereGeometry(r, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), { pos: v(x, y, z), scale: v(1, sy, 1), color: key === 'window' ? undefined : C.W });
+  for (let i = 0; i < ribs; i++) {
+    const g = new THREE.TorusGeometry(r + 0.03, 0.05, 5, 18, Math.PI / 2);
+    g.rotateZ(0); g.scale(1, sy, 1);
+    M.add('metal', g, { pos: v(x, y, z), rot: e(0, i / ribs * Math.PI * 2, 0), color: rib });
+  }
+  M.add('metal', new THREE.TorusGeometry(r + 0.04, 0.09, 6, 32), { pos: v(x, y + 0.04, z), rot: e(Math.PI / 2, 0, 0), color: base });
+  M.cyl('metal', x, y + r * sy - 0.05, z, r * 0.12, 0.12, C.G2, 10);
+}
+
+// Round window with a chunky frame on a wall facing direction `dir` (+1: +z, -1: -z) or along x.
+export function porthole(M, x, y, z, r, face = '-z') {
+  const rot = face === '-z' || face === '+z' ? e(Math.PI / 2, 0, 0) : e(0, 0, Math.PI / 2);
+  M.add('glass', new THREE.CylinderGeometry(r, r, 0.08, 18), { pos: v(x, y, z), rot });
+  const tr = face === '-z' || face === '+z' ? e(0, 0, 0) : e(0, Math.PI / 2, 0);
+  M.add('metal', new THREE.TorusGeometry(r + 0.02, 0.05, 6, 20), { pos: v(x, y, z + (face === '-z' ? -0.04 : face === '+z' ? 0.04 : 0)), rot: tr, color: C.G2 });
+}
+
+// Lattice truss between two points (two rails + zig-zag)
+export function truss(M, a, b, w = 0.4, color = C.G) {
+  const A = v(...a), B = v(...b);
+  const dir = B.clone().sub(A); const len = dir.length(); dir.normalize();
+  const side = Math.abs(dir.y) > 0.9 ? v(1, 0, 0) : v(0, 1, 0).cross(dir).normalize().multiplyScalar(w / 2);
+  const up = dir.clone().cross(side).normalize().multiplyScalar(w / 2);
+  const rails = [side.clone().add(up), side.clone().sub(up), side.clone().negate().add(up), side.clone().negate().sub(up)];
+  for (const o of rails) pipe(M, [[A.x + o.x, A.y + o.y, A.z + o.z], [B.x + o.x, B.y + o.y, B.z + o.z]], 0.035, color);
+  const n = Math.max(2, Math.round(len / (w * 1.4)));
+  for (let i = 0; i < n; i++) {
+    const p0 = A.clone().addScaledVector(dir, len * i / n), p1 = A.clone().addScaledVector(dir, len * (i + 1) / n);
+    const o0 = rails[i % 2 ? 0 : 1], o1 = rails[i % 2 ? 1 : 0];
+    pipe(M, [[p0.x + o0.x, p0.y + o0.y, p0.z + o0.z], [p1.x + o1.x, p1.y + o1.y, p1.z + o1.z]], 0.02, color);
+  }
+}
+
+// Radiator / heat-rejection panel: thin fins with a frame
+export function radiator(M, x, y, z, w, h, rot = 0, color = C.W2) {
+  const c = Math.cos(rot), s = Math.sin(rot);
+  const n = Math.max(3, Math.round(w / 0.28));
+  for (let i = 0; i < n; i++) {
+    const lx = -w / 2 + (i + 0.5) * w / n;
+    M.box('metal', x + lx * c, y + h / 2, z - lx * s, 0.05, h, 0.6, color, rot);
+  }
+  M.box('metal', x, y + h, z, w + 0.1, 0.08, 0.66, C.G2, rot);
+  M.box('metal', x, y, z, w + 0.1, 0.08, 0.66, C.G2, rot);
+}
+
+// Scatter small machinery details on a horizontal roof rectangle
+export function greebleRoof(M, x0, z0, x1, z1, y, seed, n = 6) {
+  const rnd = mulberry32(seed);
+  for (let i = 0; i < n; i++) {
+    const w = 0.4 + rnd() * 1.0, d = 0.4 + rnd() * 0.9, h = 0.2 + rnd() * 0.5;
+    const x = x0 + w / 2 + rnd() * Math.max(0.01, x1 - x0 - w), z = z0 + d / 2 + rnd() * Math.max(0.01, z1 - z0 - d);
+    const k = rnd();
+    if (k < 0.35) vent(M, x, y, z, w, d, h * 0.7);
+    else if (k < 0.6) { M.cyl('metal', x, y, z, Math.min(w, d) * 0.4, h * 1.4, C.G, 12); M.cyl('metal', x, y + h * 1.4, z, Math.min(w, d) * 0.45, 0.06, C.D, 12); }
+    else if (k < 0.8) { M.box('hull', x, y + h / 2, z, w, h, d, C.W2); M.box('emissive', x, y + h * 0.6, z - d / 2 - 0.01, w * 0.5, 0.05, 0.02, L.cyan); }
+    else antenna(M, x, y, z, 0.8 + rnd() * 1.6, rnd() < 0.5 ? L.red : L.green);
+  }
+}
+
+// Airlock vestibule in front of a door on the -z face at z=zf
+export function airlock(M, x, zf, w = 2.4, h = 2.9, depth = 1.6, color = C.W2) {
+  const z = zf - depth / 2;
+  M.box('hull', x - w / 2 - 0.12, h / 2, z, 0.24, h, depth, color);
+  M.box('hull', x + w / 2 + 0.12, h / 2, z, 0.24, h, depth, color);
+  M.box('hull', x, h + 0.14, z, w + 0.48, 0.28, depth + 0.1, color);
+  M.box('hull', x, h + 0.32, z - depth / 2 + 0.1, w + 0.6, 0.1, 0.25, C.O);
+  for (const sx of [-1, 1]) M.box('metal', x + sx * (w / 2 + 0.26), h / 2, zf - depth + 0.05, 0.12, h + 0.2, 0.18, C.G2);
+  M.box('emissive', x, h - 0.08, zf - depth + 0.02, w * 0.7, 0.06, 0.03, L.cyan);
+  hazard(M, x, 0.02, zf - depth / 2, w, 0.04, depth * 0.6);
+  M.col(x - w / 2 - 0.24, 0, z - depth / 2, x - w / 2, h, z + depth / 2);
+  M.col(x + w / 2, 0, z - depth / 2, x + w / 2 + 0.24, h, z + depth / 2);
+  M.col(x - w / 2 - 0.24, h, z - depth / 2, x + w / 2 + 0.24, h + 0.4, z + depth / 2);
+  M.light(x, h - 0.4, zf - depth * 0.6, L.cyan, 1.2, 4);
 }
 
 export { v, e };

@@ -3,7 +3,8 @@
 // -Z. Every model returns parts by material plus colliders, interior volumes
 // and light points via ModelBuilder.finish().
 import * as THREE from 'three';
-import { ModelBuilder, C, L, v, e, plinth, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, wall, room } from './modelkit.js';
+import { ModelBuilder, C, L, v, e, plinth, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, wall, room, airlock, greebleRoof } from './modelkit.js';
+import { houseT1, houseT2, houseT3, houseT4, market, lounge, clinic, school, lab, comms, hqExtras } from './models_colony.js';
 
 const PI = Math.PI;
 
@@ -50,11 +51,14 @@ function habitat(M) {
     M.bb('metal', sx * 3.7 - 0.18, 0, sz * 3.7 - 0.18, sx * 3.7 + 0.18, 3.5, sz * 3.7 + 0.18, C.G2);
   }
   M.bb('hull', -3.85, 2.95, -3.85, 3.85, 3.2, 3.85, C.O);
-  // entry canopy
-  M.bb('hull', -1.4, 3.0, -4.6, 1.4, 3.15, -3.7, C.W2);
-  M.bb('metal', -1.3, 0, -4.5, -1.2, 3.0, -4.4, C.G);
-  M.bb('metal', 1.2, 0, -4.5, 1.3, 3.0, -4.4, C.G);
-  lightBar(M, 0, 2.98, -4.2, 1.6, 0.04, 0.15, L.warm);
+  // airlock vestibule and wall pilasters
+  airlock(M, 0, -3.7, 1.8, 2.6, 0.55, C.W2);
+  for (const t of [-1.85, 1.85]) {
+    M.box('metal', t, 1.6, 3.82, 0.24, 3.2, 0.2, C.G2);
+    M.box('metal', -3.82, 1.6, t, 0.2, 3.2, 0.24, C.G2);
+    M.box('metal', 3.82, 1.6, t, 0.2, 3.2, 0.24, C.G2);
+  }
+  for (const x of [-2.6, 2.6]) M.box('metal', x, 1.6, -3.82, 0.24, 3.2, 0.2, C.G2);
   // roof equipment
   vent(M, -2.2, 3.5, 1.8, 1.2, 0.9, 0.5);
   tank(M, 2.4, 3.5, 2.2, 0.4, 0.9);
@@ -62,6 +66,7 @@ function habitat(M) {
   M.box('solar', -1.6, 3.75, -1.4, 2.4, 0.06, 1.6);
   M.box('metal', -1.6, 3.6, -1.4, 0.15, 0.3, 0.15, C.G);
   antenna(M, 2.8, 3.5, -2.8, 2.2);
+  greebleRoof(M, -3.4, -3.4, -0.4, -0.2, 3.58, 101, 3);
   pipe(M, [[3.75, 0.6, -2.5], [3.95, 0.6, -2.5], [3.95, 3.2, -2.5], [3.5, 3.5, -2.5]], 0.07, C.G2);
   // ---- interior furnishing
   // bed (back-left)
@@ -86,7 +91,7 @@ function habitat(M) {
   M.cyl('interior', -1.5, 0.74, -1.5, 0.7, 0.05, C.IN1, 20);
   for (const [dx, dz] of [[-0.9, 0], [0.9, 0], [0, 0.9]]) M.cyl('interior', -1.5 + dx, 0.02, -1.5 + dz, 0.2, 0.45, C.O, 12);
   // plant pot
-  M.cyl('interior', -3.1, 0.02, -2.9, 0.25, 0.4, C.TERRA, 12);
+  M.cyl('interior', -3.1, 0.02, -2.9, 0.25, 0.4, C.G2, 12);
   M.sphere('plant', -3.1, 0.65, -2.9, 0.32, 0x3e7a35, 10, 0.9);
   // oxygen console near door
   M.bb('metal', -3.5, 0.02, -3.0, -3.1, 1.6, -2.3, C.G2);
@@ -586,107 +591,6 @@ function hq(M) {
   M.light(2.8, 2.0, 1.8, L.cyan, 3, 6);
 }
 
-// House tiers: pioneer pod, technician duplex, engineer apartments, citizen tower
-function houseT1(M) {
-  plinth(M, 8, 8, { color: C.CONC2 });
-  // garden patch + path
-  M.bb('concrete', -0.6, 0.0, -4, 0.6, 0.03, -2.6, C.CONC);
-  M.cyl('hull', -0.5, 0, 0.5, 3.0, 2.4, C.W, 24);
-  M.dome('hull', -0.5, 2.4, 0.5, 3.0, C.W2, 24);
-  M.cyl('hull', -0.5, 2.25, 0.5, 3.05, 0.2, C.O, 24);
-  M.bb('hull', -1.4, 0, -2.9, 0.4, 2.4, -2.1, C.W2);
-  M.bb('metal', -1.2, 0, -2.93, 0.2, 2.1, -2.88, C.G2);
-  lightBar(M, -0.5, 2.25, -2.95, 1.0, 0.05, 0.04, L.warm);
-  for (let i = 0; i < 4; i++) { const a = PI * 0.15 + i * 0.5; M.box('glass', -0.5 + Math.cos(a) * 2.98, 1.4, 0.5 + Math.sin(a) * 2.98, 0.7, 0.8, 0.06, -a + PI / 2); }
-  M.box('glass', -0.5, 4.3, 0.5, 1.2, 0.06, 1.2);
-  // side shed, solar, planter
-  M.bb('hull', 2.3, 0, 1.5, 3.7, 1.8, 3.6, C.W2);
-  M.box('solar', 3.0, 1.95, 2.5, 1.5, 0.05, 2.2);
-  M.bb('metal', 1.6, 0, -3.6, 3.6, 0.45, -2.6, C.WOOD);
-  for (let i = 0; i < 4; i++) M.sphere('plant', 1.9 + i * 0.5, 0.6, -3.1, 0.22, 0x4a8a35, 8, 0.8);
-  antenna(M, -0.5, 5.4, 0.5, 1.2);
-  M.colCyl(-0.5, 0.5, 3.0, 0, 5.4);
-  M.col(2.3, 0, 1.5, 3.7, 1.95, 3.6);
-}
-
-function houseT2(M) {
-  plinth(M, 8, 8, { color: C.CONC2 });
-  M.bb('hull', -3.4, 0, -1.2, 2.2, 3.0, 3.4, C.W);
-  M.bb('hull', -3.6, 3.0, -2.6, 3.0, 3.25, 3.6, C.O);
-  M.bb('hull', -2.8, 3.25, -1.0, 2.8, 6.1, 3.4, C.CREAM);
-  M.bb('metal', -3.0, 6.1, -1.2, 3.0, 6.35, 3.6, C.G2);
-  // ground floor windows + door
-  for (const x of [-2.6, -1.4, 0.6, 1.6]) M.box('glass', x, 1.6, -1.22, 0.8, 1.2, 0.04);
-  M.box('metal', -0.4, 1.1, -1.24, 0.95, 2.2, 0.06, C.G2);
-  // upper floor balcony
-  M.bb('concrete', -2.8, 3.25, -2.6, 2.8, 3.4, -1.0, C.CONC);
-  railing(M, -2.8, -2.55, 2.8, -2.55, 3.4, 0.9, C.G);
-  for (const x of [-2.0, 0.0, 2.0]) M.box('glass', x, 4.6, -1.02, 1.3, 1.6, 0.04);
-  for (const z of [0.4, 2.2]) M.box('glass', 2.82, 4.6, z, 0.04, 1.2, 1.0);
-  // stairs, planters, AC
-  stairs(M, 3.2, -0.6, 0.8, 3.2, 10, 1, C.G2);
-  M.bb('metal', -3.6, 0, -3.8, -1.0, 0.5, -3.0, C.WOOD);
-  for (let i = 0; i < 4; i++) M.sphere('plant', -3.3 + i * 0.65, 0.65, -3.4, 0.25, 0x3f8a35, 8, 0.8);
-  vent(M, 1.5, 6.35, 2.0, 1.0, 0.8, 0.4);
-  M.box('solar', -1.2, 6.5, 1.8, 2.6, 0.05, 2.0);
-  M.col(-3.4, 0, -1.2, 2.2, 3.25, 3.4);
-  M.col(-2.8, 3.25, -1.0, 2.8, 6.35, 3.4);
-  M.col(-2.8, 3.25, -2.6, 2.8, 3.4, -1.0);
-}
-
-function houseT3(M) {
-  plinth(M, 8, 8, { color: C.CONC });
-  const floors = 4, fh = 2.9;
-  for (let f = 0; f < floors; f++) {
-    const y = f * fh;
-    M.bb('hull', -3.3, y, -2.8, 3.3, y + fh - 0.2, 3.3, f % 2 ? C.W2 : C.W);
-    M.bb('concrete', -3.6, y + fh - 0.2, -3.6, 3.6, y + fh, 3.6, C.CONC);
-    for (const x of [-2.2, -0.7, 0.8, 2.3]) M.box('glass', x, y + 1.4, -2.82, 1.0, 1.4, 0.04);
-    for (const x of [-2.2, -0.7, 0.8, 2.3]) M.box('glass', x, y + 1.4, 3.32, 1.0, 1.4, 0.04);
-    for (const z of [-1.5, 0.3, 2.0]) { M.box('glass', -3.32, y + 1.4, z, 0.04, 1.4, 1.0); M.box('glass', 3.32, y + 1.4, z, 0.04, 1.4, 1.0); }
-    if (f > 0) railing(M, -3.5, -3.5, 3.5, -3.5, y, 0.9, C.G);
-    // balcony planters
-    if (f > 0) for (const x of [-2.6, 2.6]) { M.bb('metal', x - 0.5, y, -3.5, x + 0.5, y + 0.4, -3.0, C.WOOD); M.sphere('plant', x, y + 0.55, -3.25, 0.3, 0x3f8a35, 8, 0.8); }
-  }
-  M.bb('hull', -3.4, 0, -3.0, 3.4, 0.4, -2.8, C.O);
-  M.box('metal', 0, 1.2, -2.84, 1.6, 2.4, 0.06, C.G2);
-  lightBar(M, 0, 2.55, -3.0, 1.8, 0.06, 0.2, L.warm);
-  const top = floors * fh;
-  vent(M, -1.5, top, 1.5, 1.4, 1.2, 0.6);
-  M.box('solar', 1.4, top + 0.5, 0.5, 2.4, 0.05, 3.0);
-  M.cyl('hull', 1.6, top, -2.2, 0.6, 1.4, C.W2, 14);
-  antenna(M, -2.6, top, -2.6, 2.4);
-  M.col(-3.6, 0, -3.6, 3.6, top, 3.6);
-}
-
-function houseT4(M) {
-  plinth(M, 8, 8, { color: C.CONC });
-  const H = 22;
-  // podium
-  M.bb('hull', -3.7, 0, -3.7, 3.7, 4.0, 3.7, C.W);
-  M.box('glass', 0, 2.0, -3.72, 6.4, 3.0, 0.04);
-  M.box('glass', 0, 2.0, 3.72, 6.4, 3.0, 0.04);
-  M.box('glass', -3.72, 2.0, 0, 0.04, 3.0, 6.4);
-  M.box('glass', 3.72, 2.0, 0, 0.04, 3.0, 6.4);
-  M.bb('hull', -3.9, 4.0, -3.9, 3.9, 4.3, 3.9, C.O);
-  // tower: rounded glass shaft with white fins
-  M.cyl('glass', 0, 4.3, 0, 3.0, H - 6, undefined, 28);
-  for (let i = 0; i < 8; i++) {
-    const a = i / 8 * PI * 2;
-    M.box('hull', Math.cos(a) * 3.05, 4.3 + (H - 6) / 2, Math.sin(a) * 3.05, 0.25, H - 6, 0.5, C.W, -a);
-  }
-  for (let f = 0; f < 6; f++) M.cyl('hull', 0, 6.5 + f * 2.6, 0, 3.15, 0.18, C.W2, 28);
-  // sky garden
-  M.cyl('hull', 0, H - 1.7, 0, 3.4, 0.4, C.W, 28);
-  M.dome('window', 0, H - 1.3, 0, 2.8, undefined, 24);
-  for (let i = 0; i < 6; i++) M.sphere('plant', Math.cos(i) * 1.6, H - 1.0, Math.sin(i) * 1.6, 0.6, 0x3a8a3a, 8, 0.8);
-  M.cyl('emissive', 0, H - 1.32, 0, 3.2, 0.05, L.warm, 28);
-  antenna(M, 0, H + 1.4, 0, 4, L.red);
-  M.colCyl(0, 0, 3.7, 0, 4.3);
-  M.col(-3.9, 0, -3.9, 3.9, 4.3, 3.9);
-  M.colCyl(0, 0, 3.4, 4.3, H);
-}
-
 function farm(M) {
   plinth(M, 8, 12);
   const w = 7.4, d = 11.4, h = 2.4;
@@ -762,81 +666,6 @@ function pump(M) {
   M.colCyl(1.2, 1.0, 0.7, 0, 3.0);
 }
 
-function market(M) {
-  plinth(M, 8, 8);
-  // open hall: pillars + wave roof
-  for (const x of [-3.4, 0, 3.4]) for (const z of [-3.4, 3.4]) M.cyl('metal', x, 0, z, 0.14, 3.8, C.G2, 10);
-  const roof = new THREE.PlaneGeometry(8.4, 8.4, 20, 4);
-  roof.rotateX(-PI / 2);
-  const rp = roof.attributes.position;
-  for (let i = 0; i < rp.count; i++) rp.setY(i, Math.sin(rp.getX(i) * 0.8) * 0.25);
-  roof.computeVertexNormals();
-  M.add('hull', roof, { pos: v(0, 4.0, 0), color: C.W });
-  const roofB = roof.clone(); roofB.rotateX(PI);
-  M.add('hull', roofB, { pos: v(0, 3.96, 0), color: C.W2 });
-  M.bb('hull', -4.2, 3.7, -4.2, 4.2, 3.85, -4.0, C.O);
-  M.col(-4.2, 3.7, -4.2, 4.2, 4.3, 4.2, { noStand: true });
-  // stalls
-  const cols = [C.O, C.TEAL, C.BLUE, C.GREEN];
-  for (let i = 0; i < 4; i++) {
-    const x = -2.7 + i * 1.8;
-    M.bb('metal', x - 0.7, 0.02, 1.4, x + 0.7, 0.95, 2.8, C.G2);
-    M.bb('hull', x - 0.75, 0.95, 1.35, x + 0.75, 1.02, 2.85, C.W2);
-    M.bb('hull', x - 0.75, 2.2, 1.6, x + 0.75, 2.3, 3.0, cols[i]);
-    for (let k = 0; k < 3; k++) M.bb('hull', x - 0.55 + k * 0.4, 1.02, 1.6, x - 0.25 + k * 0.4, 1.3, 2.0, [0x9bd25a, 0xf0a65a, 0x46b4ff][k]);
-    M.col(x - 0.75, 0, 1.35, x + 0.75, 1.02, 2.85);
-  }
-  // crates + water dispenser
-  for (let i = 0; i < 4; i++) M.bb('hull', -3.2 + (i % 2) * 0.7, (i >> 1) * 0.6, -2.6, -2.6 + (i % 2) * 0.7, 0.58 + (i >> 1) * 0.6, -2.0, C.O);
-  tank(M, 2.8, 0, -2.6, 0.45, 1.3, C.W2, C.BLUE);
-  M.col(-3.2, 0, -2.6, -1.9, 1.2, -2.0);
-  lightBar(M, 0, 3.75, 0, 5, 0.05, 0.2, L.warm);
-  M.light(0, 3.2, 0, L.warm, 6, 12);
-  M.interior(-4, 0, -4, 4, 3.7, 4);
-}
-
-function lounge(M) {
-  plinth(M, 7, 7);
-  room(M, 6, 5, 3.2, { door: 1.6, winFront: [{ a: 0.4, b: 1.9, y0: 0.6, y1: 2.6, kind: 'window' }, { a: 4.1, b: 5.6, y0: 0.6, y1: 2.6, kind: 'window' }], winSide: 1, winBack: 2, color: C.CREAM, roofColor: C.TERRA });
-  // terrace with tables and umbrellas
-  for (const x of [-2.2, 0.2, 2.4]) {
-    const z = 3.1;
-    M.cyl('metal', x, 0, z, 0.05, 0.75, C.G, 6);
-    M.cyl('interior', x, 0.75, z, 0.45, 0.04, C.W, 14);
-    M.cyl('metal', x, 0.75, z, 0.03, 1.6, C.G, 6);
-    M.add('hull', new THREE.ConeGeometry(1.0, 0.4, 12, 1, true), { pos: v(x, 2.5, z), color: x > 0 ? C.TEAL : C.O });
-  }
-  // bar counter + shelves inside
-  M.bb('metal', -2.6, 0.02, 0.8, 0.4, 1.05, 1.4, C.WOOD);
-  M.bb('interior', -2.65, 1.05, 0.75, 0.45, 1.12, 1.45, C.IN2);
-  M.bb('metal', -2.7, 1.3, 2.2, 0.4, 2.4, 2.35, C.WOOD);
-  for (let i = 0; i < 6; i++) M.cyl('emissive', -2.4 + i * 0.5, 1.75, 2.15, 0.06, 0.25, [0xff9a40, 0x60e0ff, 0xff5080][i % 3], 8);
-  for (const [x, z] of [[1.6, -0.8], [-1.0, -1.0]]) { M.cyl('metal', x, 0.02, z, 0.06, 0.72, C.G, 6); M.cyl('interior', x, 0.74, z, 0.5, 0.04, C.WOOD, 14); M.colCyl(x, z, 0.5, 0, 0.78); }
-  M.col(-2.65, 0, 0.75, 0.45, 1.12, 1.45);
-  M.box('emissive', 0, 3.0, -2.58, 2.2, 0.3, 0.04, 0xff7ad0);
-}
-
-function clinic(M) {
-  plinth(M, 8, 8);
-  M.bb('hull', -3.6, 0, -3.0, 3.6, 3.4, 3.6, C.W);
-  M.bb('hull', -3.8, 3.4, -3.2, 3.8, 3.7, 3.8, C.W2);
-  M.bb('hull', -2.2, 3.7, -1.0, 2.2, 5.6, 3.0, C.W);
-  M.bb('metal', -2.3, 5.6, -1.1, 2.3, 5.8, 3.1, C.G2);
-  for (const x of [-2.6, -1.3, 1.3, 2.6]) M.box('glass', x, 1.8, -3.02, 0.9, 1.4, 0.04);
-  for (const x of [-1.2, 0, 1.2]) M.box('glass', x, 4.7, -1.02, 0.9, 1.2, 0.04);
-  M.box('glass', 0, 1.2, -3.03, 1.6, 2.4, 0.04);
-  // medical sign: green cross
-  M.box('emissive', 0, 3.0, -3.06, 1.0, 0.3, 0.04, L.green);
-  M.box('emissive', 0, 3.0, -3.06, 0.3, 1.0, 0.04, L.green);
-  M.bb('hull', -4.0, 2.6, -4.0, 4.0, 2.75, -3.0, C.W2);
-  for (const x of [-3.7, 3.7]) M.cyl('metal', x, 0, -3.8, 0.08, 2.6, C.G, 8);
-  // ambulance pad
-  M.add('hull', new THREE.RingGeometry(0.9, 1.05, 24), { pos: v(2.6, 3.71, 3.2), rot: e(-PI / 2, 0, 0), color: C.RED });
-  vent(M, -1.0, 5.8, 1.5, 1.2, 1.0, 0.5);
-  M.col(-3.6, 0, -3.0, 3.6, 3.7, 3.6);
-  M.col(-2.2, 3.7, -1.0, 2.2, 5.8, 3.0);
-}
-
 function factory(M) {
   plinth(M, 10, 8);
   M.bb('hull', -4.8, 0, -3.8, 4.8, 4.2, 3.8, C.W2);
@@ -882,44 +711,6 @@ function techplant(M) {
   M.col(-4.6, 0, -4.6, 4.6, 5.5, 4.6);
 }
 
-function school(M) {
-  plinth(M, 10, 8);
-  M.bb('hull', -4.8, 0, -1.0, 4.8, 3.4, 3.8, C.CREAM);
-  M.bb('hull', -4.9, 3.4, -1.1, 4.9, 3.65, 3.9, C.TERRA);
-  for (const x of [-3.6, -2.2, -0.8, 0.8, 2.2, 3.6]) M.box('glass', x, 1.9, -1.02, 0.9, 1.4, 0.04);
-  // clock tower
-  M.bb('hull', -1.0, 0, -2.4, 1.0, 7.0, -0.6, C.CREAM);
-  M.bb('hull', -1.15, 7.0, -2.55, 1.15, 7.3, -0.45, C.TERRA);
-  M.add('hull', new THREE.ConeGeometry(1.3, 1.6, 4), { pos: v(0, 8.1, -1.5), rot: e(0, PI / 4, 0), color: C.TERRA });
-  M.cyl('emissive', 0, 5.6, -2.42, 0.55, 0.04, L.warm, 20);
-  M.add('emissive', new THREE.CylinderGeometry(0.55, 0.55, 0.04, 20), { pos: v(0, 5.6, -2.43), rot: e(PI / 2, 0, 0), color: L.warm });
-  const hands = M.animGroup('metal', { pivot: [0, 5.6, -2.46], axis: [0, 0, 1], speed: 0.1 });
-  hands.add(new THREE.BoxGeometry(0.06, 0.45, 0.02), { pos: v(0, 5.8, -2.47), color: C.K });
-  M.box('metal', 0, 1.2, -2.42, 1.0, 2.4, 0.06, C.WOOD);
-  // courtyard: benches & tree planters
-  for (const x of [-3.5, 3.5]) { M.bb('interior', x - 0.9, 0.02, -2.6, x + 0.9, 0.45, -2.2, C.WOOD); M.cyl('hull', x, 0, -3.3, 0.5, 0.5, C.CONC2, 12); M.sphere('plant', x, 1.3, -3.3, 0.7, 0x3f8a35, 10, 1.1); }
-  M.col(-4.8, 0, -1.0, 4.8, 3.65, 3.8);
-  M.col(-1.0, 0, -2.4, 1.0, 7.3, -0.6);
-}
-
-function lab(M) {
-  plinth(M, 8, 8);
-  room(M, 7, 6, 3.4, { door: 1.6, winSide: 2, winBack: 2, winFront: [{ a: 0.6, b: 2.2, y0: 1.0, y1: 2.6, kind: 'window' }, { a: 4.8, b: 6.4, y0: 1.0, y1: 2.6, kind: 'window' }], color: C.W });
-  M.cyl('hull', 1.5, 3.7, 1.0, 1.6, 0.6, C.W2, 20);
-  M.dome('hull', 1.5, 4.3, 1.0, 1.6, C.W, 20);
-  M.bb('metal', 1.4, 4.4, -0.65, 1.6, 5.8, -0.5, C.D);
-  vent(M, -2.2, 3.7, 1.6, 1.0, 0.8, 0.4);
-  antenna(M, -2.8, 3.7, -2.2, 2);
-  // interior benches with screens and specimen tubes
-  for (const z of [-0.6, 1.6]) {
-    M.bb('metal', -2.8, 0.02, z - 0.4, 0.8, 0.9, z + 0.4, C.G2);
-    M.bb('interior', -2.85, 0.9, z - 0.45, 0.85, 0.96, z + 0.45, C.IN1);
-    for (let i = 0; i < 4; i++) M.cyl('emissive', -2.4 + i * 0.4, 0.96, z, 0.06, 0.35, [L.green, L.cyan, L.violet][i % 3], 8);
-    M.bb('emissive', -0.6, 1.1, z - 0.02, 0.6, 1.7, z + 0.02, L.cyan);
-    M.col(-2.85, 0, z - 0.45, 0.85, 0.96, z + 0.45);
-  }
-}
-
 function terminal(M) {
   M.bb('concrete', -1, -1.2, -1, 1, 0, 1, C.CONC2);
   M.bb('metal', -0.6, 0, -0.4, 0.6, 1.0, 0.4, C.G2);
@@ -937,8 +728,8 @@ function park(M) {
   // lawn
   M.add('plant', new THREE.BoxGeometry(9.6, 0.1, 9.6, 1, 1, 1), { pos: v(0, -0.02, 0), color: 0x3d7a2c });
   // paths (cross)
-  M.bb('concrete', -0.8, 0.0, -5, 0.8, 0.06, 5, C.CREAM);
-  M.bb('concrete', -5, 0.0, -0.8, 5, 0.06, 0.8, C.CREAM);
+  M.bb('concrete', -0.8, 0.0, -5, 0.8, 0.06, 5, C.W2);
+  M.bb('concrete', -5, 0.0, -0.8, 5, 0.06, 0.8, C.W2);
   // fountain
   M.cyl('concrete', 0, 0, 0, 1.4, 0.5, C.CONC, 24);
   M.cyl('water', 0, 0.45, 0, 1.25, 0.06, undefined, 24);
@@ -951,7 +742,7 @@ function park(M) {
     M.sphere('plant', x + 0.5, 2.3, z + 0.3, 0.8, 0x4a8a3a, 10, 0.85);
     M.colCyl(x, z, 0.2, 0, 2.2);
   }
-  for (const [x, z, r] of [[-1.8, -3.6, 0], [1.8, 3.6, 0]]) { M.box('interior', x, 0.4, z, 1.6, 0.08, 0.5, C.WOOD, r); M.box('metal', x, 0.2, z, 1.4, 0.4, 0.1, C.G, r); }
+  for (const [x, z, r] of [[-1.8, -3.6, 0], [1.8, 3.6, 0]]) { M.box('interior', x, 0.4, z, 1.6, 0.08, 0.5, C.G2, r); M.box('metal', x, 0.2, z, 1.4, 0.4, 0.1, C.G, r); }
   for (const [x, z] of [[-4.4, 0], [4.4, 0]]) { M.cyl('metal', x, 0, z, 0.05, 3.2, C.G2, 6); M.sphere('emissive', x, 3.3, z, 0.18, L.warm, 10); M.light(x, 3.2, z, L.warm, 6, 10); }
   M.colCyl(0, 0, 1.4, 0, 0.5);
   M.col(-5, -1.2, -5, 5, 0.04, 5);
@@ -964,10 +755,10 @@ function culture(M) {
     const r = 5.2 - i * 1.2;
     const shell = new THREE.SphereGeometry(r, 28, 10, 0, PI, 0, PI / 2);
     shell.scale(1, 1.25 - i * 0.12, 1);
-    M.add('hull', shell, { pos: v(0, 0, -1.5 + i * 1.6), rot: e(0, -PI / 2, 0), color: i === 1 ? C.CREAM : C.W });
+    M.add('hull', shell, { pos: v(0, 0, -1.5 + i * 1.6), rot: e(0, -PI / 2, 0), color: i === 1 ? C.W2 : C.W });
   }
   M.box('glass', 0, 2.2, -1.6, 9.5, 4.2, 0.04);
-  M.bb('concrete', -5.8, 0, -5.8, 5.8, 0.3, -2.0, C.CREAM);
+  M.bb('concrete', -5.8, 0, -5.8, 5.8, 0.3, -2.0, C.W2);
   for (let i = 0; i < 6; i++) M.cyl('metal', -4.5 + i * 1.8, 0.3, -5.2, 0.12, 3.6, C.W2, 10);
   M.bb('hull', -5.4, 3.9, -5.6, 5.4, 4.15, -4.6, C.W);
   lightBar(M, 0, 3.85, -5.1, 9.5, 0.06, 0.6, L.warm);
@@ -985,8 +776,8 @@ function road(M) {
 }
 
 function monument(M) {
-  plinth(M, 10, 10, { color: C.CREAM });
-  for (let i = 0; i < 3; i++) M.bb('concrete', -4 + i * 0.8, 0, -4 + i * 0.8, 4 - i * 0.8, 0.4 + i * 0.4, 4 - i * 0.8, C.CREAM);
+  plinth(M, 10, 10, { color: C.W2 });
+  for (let i = 0; i < 3; i++) M.bb('concrete', -4 + i * 0.8, 0, -4 + i * 0.8, 4 - i * 0.8, 0.4 + i * 0.4, 4 - i * 0.8, C.W2);
   const prof = [];
   for (let i = 0; i <= 12; i++) { const t = i / 12; prof.push(new THREE.Vector2(1.4 * (1 - t) + 0.12, 1.2 + t * 22)); }
   M.add('hull', new THREE.LatheGeometry(prof, 4), { rot: e(0, PI / 4, 0), color: C.W });
@@ -1024,7 +815,7 @@ const BUILDERS = {
   heater: (M) => heater(M, false), heater2: (M) => heater(M, true), drill: (M) => drill(M, false), drill2: (M) => drill(M, true),
   vegetube, seeder, algae, treespreader, insectdome, mirror,
   extractor, smelter, assembler, dronehub, depot,
-  hq, farm, pump, market, lounge, clinic, factory, techplant, school, lab, terminal, park, culture, road, monument, elevator,
+  hq: (M) => { hq(M); hqExtras(M); }, farm, pump, market, lounge, clinic, factory, techplant, school, lab, terminal, park, culture, road, monument, elevator, comms,
   'house:0': houseT1, 'house:1': houseT2, 'house:2': houseT3, 'house:3': houseT4,
 };
 
