@@ -16,8 +16,8 @@ import { makeTerrainMaterial } from './terrainMaterial.js';
 import { clamp } from '../core/noise.js';
 
 const HALF = PLANET.HALF;
-const LMAX = 8;                       // 64 * 2^8 = 16384 m root
-const SPLIT = 1.6;
+const LMAX = 7;                       // 128 * 2^7 = 16384 m root
+const SPLIT = 0.95;
 const N = CHUNK_N, V = N + 1;
 const RES = L0_SIZE / N;              // 2 m
 
@@ -81,13 +81,22 @@ export class Terrain {
         const w = new Worker(url);
         w.busy = 0;
         w.onmessage = (ev) => this.onWorker(w, ev.data);
-        w.onerror = (e) => { console.warn('worker error', e.message); };
+        w.onerror = (e) => { console.warn('worker failed, generating on the main thread', e.message); this.dropWorkers(); };
         this.workers.push(w);
       }
     } catch (e) {
       console.warn('Workers unavailable, generating on main thread', e);
       this.workers = [];
     }
+  }
+
+  // if a worker cannot run (e.g. blocked blob workers), fall back to the main thread
+  dropWorkers() {
+    if (!this.workers.length) return;
+    for (const w of this.workers) w.terminate();
+    this.workers = [];
+    for (const [, j] of this.jobs) this.queue.push(j);
+    this.jobs.clear();
   }
 
   postEdit(e) {
@@ -122,7 +131,7 @@ export class Terrain {
     for (const w of this.workers) {
       while (w.busy < 2 && this.queue.length) {
         const j = this.queue.shift();
-        this.jobs.set(j.msg.id, j.cb);
+        this.jobs.set(j.msg.id, j);
         w.busy++;
         w.postMessage(j.msg);
       }
@@ -131,9 +140,9 @@ export class Terrain {
 
   onWorker(w, data) {
     w.busy--;
-    const cb = this.jobs.get(data.id);
+    const j = this.jobs.get(data.id);
     this.jobs.delete(data.id);
-    if (cb) cb(data);
+    if (j) j.cb(data);
   }
 
   // ---------------------------------------------------------------- nodes

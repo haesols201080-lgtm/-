@@ -262,6 +262,7 @@ export class Engine {
     cam.updateMatrixWorld();
     r.setRenderTarget(this.sceneRT);
     r.render(this.scene, cam);
+    this.sceneInfo = { calls: r.info.render.calls, tris: r.info.render.triangles };
     const cu = this.compUniforms;
     cu.uProjInv.value.copy(cam.projectionMatrixInverse);
     cu.uCamWorld.value.copy(cam.matrixWorld);

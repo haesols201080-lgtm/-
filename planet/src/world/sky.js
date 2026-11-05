@@ -278,7 +278,7 @@ export class Sky {
     } else {
       this.sun.position.copy(camPos).addScaledVector(moonUp ? md : this.tmp.set(0.2, 1, 0.3).normalize(), 300);
       this.sun.color.setRGB(0.55, 0.65, 0.95);
-      this.sun.intensity = 0.32;
+      this.sun.intensity = 0.55;
     }
     this.sun.target.position.copy(camPos);
     // snap shadow camera to texels to avoid shimmering
@@ -288,7 +288,7 @@ export class Sky {
     this.sun.position.x = this.sun.target.position.x + (this.sun.position.x - camPos.x);
     this.sun.position.z = this.sun.target.position.z + (this.sun.position.z - camPos.z);
 
-    this.hemi.intensity = 0.12 + 0.1 * day;
+    this.hemi.intensity = 0.22 + 0.04 * day;
     this.hemi.color.setRGB(lerp(0.55, 0.45, atmo), lerp(0.4, 0.6, atmo), lerp(0.3, 0.85, atmo));
     this.hemi.groundColor.setRGB(0.3, 0.18, 0.1);
 

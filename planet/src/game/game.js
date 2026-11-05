@@ -91,18 +91,24 @@ export class Game {
   }
 
   makeTool() {
+    // handheld multitool: rounded body, emitter ring, orange rail, grip, status light
     const gb = new GeoBuilder();
-    gb.add(new THREE.BoxGeometry(0.07, 0.09, 0.32), { pos: new THREE.Vector3(0, 0, 0), color: 0xe7e5df });
-    gb.add(new THREE.BoxGeometry(0.075, 0.03, 0.3), { pos: new THREE.Vector3(0, 0.05, 0), color: 0xf0761c });
-    gb.add(new THREE.CylinderGeometry(0.028, 0.035, 0.12, 12), { pos: new THREE.Vector3(0, 0.0, -0.21), rot: new THREE.Euler(Math.PI / 2, 0, 0), color: 0x33373c });
-    gb.add(new THREE.BoxGeometry(0.05, 0.13, 0.06), { pos: new THREE.Vector3(0, -0.09, 0.08), rot: new THREE.Euler(0.3, 0, 0), color: 0x33373c });
-    gb.add(new THREE.BoxGeometry(0.02, 0.02, 0.12), { pos: new THREE.Vector3(0.04, 0.02, 0.02), color: 0x66e0ff });
+    const body = new THREE.CapsuleGeometry(0.032, 0.2, 6, 14); body.rotateX(Math.PI / 2);
+    gb.add(body, { color: 0xe9e7e2 });
+    gb.add(new THREE.BoxGeometry(0.018, 0.012, 0.2), { pos: new THREE.Vector3(0, 0.033, 0.0), color: 0xf0761c });
+    gb.add(new THREE.CylinderGeometry(0.036, 0.036, 0.03, 18), { pos: new THREE.Vector3(0, 0, -0.1), rot: new THREE.Euler(Math.PI / 2, 0, 0), color: 0x3a3e44 });
+    gb.add(new THREE.CylinderGeometry(0.016, 0.026, 0.06, 14), { pos: new THREE.Vector3(0, 0, -0.145), rot: new THREE.Euler(Math.PI / 2, 0, 0), color: 0x24272b });
+    gb.add(new THREE.TorusGeometry(0.03, 0.004, 6, 20), { pos: new THREE.Vector3(0, 0, -0.165), color: 0x80868d });
+    const grip = new THREE.CapsuleGeometry(0.016, 0.07, 4, 10);
+    gb.add(grip, { pos: new THREE.Vector3(0, -0.055, 0.06), rot: new THREE.Euler(0.35, 0, 0), color: 0x2c2f33 });
+    gb.add(new THREE.BoxGeometry(0.012, 0.02, 0.05), { pos: new THREE.Vector3(0.03, 0.012, 0.03), color: 0x33373c });
     const m = new THREE.Mesh(gb.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.3 }));
-    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 3.5, 4.5) }));
-    glow.position.set(0, 0, -0.28);
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.012, 10, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 3.5, 4.5) }));
+    glow.position.set(0, 0, -0.178);
+    const led = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.012, 0.03), new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 2.4, 3.0) }));
+    led.position.set(0.0365, 0.012, 0.03);
     const tool = new THREE.Group();
-    tool.add(m, glow);
-    tool.scale.setScalar(0.7);
+    tool.add(m, glow, led);
     this.tool = tool;
     this.toolGlow = glow;
     const ov = new THREE.Scene();
@@ -435,7 +441,7 @@ export class Game {
     const kick = this.build.active ? 0.03 : 0;
     this.tool.position.copy(cam.position);
     this.tool.quaternion.copy(cam.quaternion);
-    const off = new THREE.Vector3(0.17 + Math.sin(this.toolBob) * 0.006, -0.15 + Math.abs(Math.cos(this.toolBob)) * 0.008 - kick, -0.4 + mining * (Math.random() * 0.005));
+    const off = new THREE.Vector3(0.16 + Math.sin(this.toolBob) * 0.005, -0.13 + Math.abs(Math.cos(this.toolBob)) * 0.006 - kick, -0.36 + mining * (Math.random() * 0.004));
     this.tool.position.add(off.applyQuaternion(cam.quaternion));
     this.toolGlow.material.color.setRGB(mining ? 3 : 1.5, mining ? 5 : 3.5, mining ? 6 : 4.5);
     this.overlay.environment = this.engine.scene.environment;

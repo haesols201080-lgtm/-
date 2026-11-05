@@ -252,8 +252,8 @@ export function makeHologramMaterial() {
         vec3 V = normalize(cameraPosition - vW);
         float fr = pow(1.0 - abs(dot(normalize(vN), V)), 2.0);
         float scan = 0.5 + 0.5 * sin(vW.y * 9.0 - uTime * 5.0);
-        float a = 0.16 + fr * 0.55 + scan * 0.07;
-        gl_FragColor = vec4(uColor * (1.2 + fr * 1.8 + scan * 0.3), a);
+        float a = 0.07 + fr * 0.4 + scan * 0.04;
+        gl_FragColor = vec4(uColor * (0.45 + fr * 1.1 + scan * 0.15), a);
       }`,
     transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
   });

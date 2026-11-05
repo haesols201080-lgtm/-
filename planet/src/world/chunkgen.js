@@ -6,8 +6,8 @@
 import { WorldGen, PLANET } from './worldgen.js';
 import { mulberry32, hash2, clamp, smoothstep } from '../core/noise.js';
 
-export const CHUNK_N = 32;          // cells per chunk side at every level
-export const L0_SIZE = 64;          // metres per level-0 chunk (2 m cells)
+export const CHUNK_N = 64;          // cells per chunk side at every level
+export const L0_SIZE = 128;         // metres per level-0 chunk (2 m cells)
 export const PROP_CELL = 512;
 
 export function chunkSize(L) { return L0_SIZE * (1 << L); }

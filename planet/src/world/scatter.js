@@ -14,6 +14,7 @@ export class Scatter {
       mesh.count = 0;
       mesh.frustumCulled = false;
       mesh.castShadow = !!L.castShadow;
+      if (L.mat.depthMat) mesh.customDepthMaterial = L.mat.depthMat;
       mesh.receiveShadow = true;
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       const extra = {};

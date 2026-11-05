@@ -271,7 +271,8 @@ export class UI {
     wrap.appendChild(right);
     const render = () => {
       const inv = g.eco.inv;
-      let html = `<p class="sec-t">가방 (${inv.usedSlots()}/${inv.slots}칸)${storage ? ' · 클릭하면 보관함으로 옮깁니다' : ''}</p><div class="igrid">`;
+      const net = g.eco.netAccess(g.player.pos) && g.eco.store.cap > 0;
+      let html = `<p class="sec-t">가방 (${inv.usedSlots()}/${inv.slots}칸)${storage ? ' · 클릭하면 보관함으로 옮깁니다' : net ? ' · 클릭하면 공용 창고로 보냅니다 (Shift: 1개)' : ''}</p><div class="igrid">`;
       const ents = [...inv.items.entries()];
       for (let i = 0; i < inv.slots; i++) {
         const e = ents[i];
@@ -289,15 +290,20 @@ export class UI {
         html += '</div>';
       }
       if (g.eco.store.cap > 0) {
-        html += `<p class="sec-t" style="margin-top:14px">식민지 공용 창고 (${g.eco.store.total()}/${g.eco.store.cap}) ${g.eco.netAccess(g.player.pos) ? '· 물류망 안: 건설에 바로 쓰입니다' : '· 물류망 밖'}</p><div class="chips">`;
-        for (const [id, n] of g.eco.store.items) html += `<span class="chip">${itemIcon(id, 14)} ${ITEMS[id].name} ${n}</span>`;
+        html += `<p class="sec-t" style="margin-top:14px">식민지 공용 창고 (${g.eco.store.total()}/${g.eco.store.cap}) ${net ? '· 물류망 안: 건설에 바로 쓰이며, 클릭하면 가방으로 꺼냅니다' : '· 물류망 밖 (드론 허브·본부 반경 안에서 이용)'}</p><div class="chips">`;
+        for (const [id, n] of g.eco.store.items) html += `<span class="chip" data-store="${id}" style="${net ? 'cursor:pointer;pointer-events:auto' : ''}">${itemIcon(id, 14)} ${ITEMS[id].name} ${n}</span>`;
         html += '</div>';
       }
       left.innerHTML = html;
       left.querySelectorAll('[data-id]').forEach((el) => el.onclick = (ev) => {
-        if (!storage) return;
         const id = el.dataset.id, n = ev.shiftKey ? 1 : inv.count(id);
-        const k = g.storageInv(storage).add(id, n); inv.remove(id, k); render();
+        if (storage) { const k = g.storageInv(storage).add(id, n); inv.remove(id, k); render(); return; }
+        if (net) { const k = g.eco.store.add(id, n); inv.remove(id, k); if (k < n) this.toast('공용 창고가 가득 찼습니다', 'warn'); render(); }
+      });
+      left.querySelectorAll('[data-store]').forEach((el) => el.onclick = (ev) => {
+        if (!net) return;
+        const id = el.dataset.store, n = ev.shiftKey ? 1 : g.eco.store.count(id);
+        const k = inv.add(id, n); g.eco.store.remove(id, k); render();
       });
       left.querySelectorAll('[data-sid]').forEach((el) => el.onclick = (ev) => {
         const id = el.dataset.sid, si = g.storageInv(storage), n = ev.shiftKey ? 1 : si.count(id);

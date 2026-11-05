@@ -102,9 +102,9 @@ void computeTerrain() {
 
   // frost in cold hollows and shaded north slopes
   float hollow = smoothstep(0.55, 0.85, bio.a) * (1.0 - smoothstep(-25.0, 60.0, vTW.y));
-  float frostMask = smoothstep(0.72, 0.9, nzB.g * 0.55 + hollow * 0.5 - N.z * 0.12 + nzA.b * 0.2 - sandW * 0.3);
-  float frost = uFrost * frostMask * (1.0 - cliff * 0.8) * 0.6;
-  alb = mix(alb, s2l(vec3(0.74, 0.76, 0.8)) * (0.8 + 0.2 * soilA.b), frost);
+  float frostMask = smoothstep(0.55, 0.95, nzB.g * 0.45 + hollow * 0.4 - N.z * 0.12 + nzA.b * 0.25 + nzC.r * 0.1 - sandW * 0.4);
+  float frost = uFrost * frostMask * (1.0 - cliff * 0.85) * 0.38;
+  alb = mix(alb, s2l(vec3(0.72, 0.74, 0.78)) * (0.85 + 0.15 * soilA.b), frost * (0.6 + 0.4 * soilA.b));
   rough = mix(rough, 0.55, frost);
 
   // polar snow & glacier ice
@@ -129,6 +129,10 @@ void computeTerrain() {
   vec3 grassC = mix(s2l(vec3(0.20, 0.33, 0.09)), s2l(vec3(0.46, 0.55, 0.16)), mossT.b * 0.7 + nzB.g * 0.3);
   grassC = mix(grassC, s2l(vec3(0.18, 0.40, 0.25)), smoothstep(0.55, 0.85, nzA.b) * 0.6);
   grassC = mix(grassC * vec3(1.1, 0.95, 0.7), grassC, uLush);
+  // dry golden patches, darker hollows, bare soil openings
+  grassC = mix(grassC, s2l(vec3(0.55, 0.5, 0.26)), smoothstep(0.58, 0.82, nzB.b) * 0.55 * (1.0 - uLush * 0.5));
+  grassC *= 0.8 + 0.35 * nzC.r;
+  grassCov *= 1.0 - 0.7 * smoothstep(0.66, 0.86, nzA.b + (soilA.b - 0.5) * 0.2);
   alb = mix(alb, mossC, mossCov * 0.9);
   alb = mix(alb, grassC, grassCov);
   vec2 tm = mossT.rg * 2.0 - 1.0;

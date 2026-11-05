@@ -12,34 +12,55 @@ import { makeRockMaterial } from './materials.js';
 
 const HALF = WORLD.SIZE / 2;
 
+const FLORA_HEAD = /* glsl */`
+  uniform float uTime, uWind, uLush; uniform vec4 uGrowth; uniform vec4 uGreen[8];
+  attribute float aSway; attribute float aGlow;
+  attribute vec2 iGrow; attribute vec3 iTint;
+  varying float vGlow; varying vec3 vTintF; varying float vSwayF;`;
+const FLORA_BODY = /* glsl */`
+  float g = 1.0;
+  vTintF = vec3(1.0);
+  #ifdef USE_INSTANCING
+    vec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
+    float lg = iGrow.y < 0.5 ? uGrowth.x : iGrow.y < 1.5 ? uGrowth.y : iGrow.y < 2.5 ? uGrowth.z : uGrowth.w;
+    // local greening around seed / tree spreaders
+    for (int i = 0; i < 8; i++) { vec4 gp = uGreen[i]; if (gp.z > 0.0) lg = max(lg, gp.w * (1.0 - smoothstep(gp.z * 0.6, gp.z, length(ip.xz - gp.xy))) * (iGrow.y < 2.5 ? 1.0 : 0.85)); }
+    g = smoothstep(iGrow.x, iGrow.x + 0.12, lg);
+    vTintF = iTint;
+  #else
+    vec3 ip = vec3(0.0);
+  #endif
+  transformed.y *= g;
+  transformed.xz *= mix(0.2, 1.0, g);
+  float ph = ip.x * 0.13 + ip.z * 0.11;
+  float w = (sin(uTime * 1.7 + ph) * 0.6 + sin(uTime * 3.1 + ph * 1.7) * 0.25) * uWind * aSway;
+  transformed.x += w * 0.35;
+  transformed.z += w * 0.2;
+  vGlow = aGlow; vSwayF = aSway;`;
+
+function floraUniforms(sh) {
+  Object.assign(sh.uniforms, { uTime: U.uTime, uWind: U.uWind, uGrowth: U.uGrowth, uNight: U.uNight, uLush: U.uLush, uSunDir: U.uSunDir, uGreen: U.uGreen });
+}
+
+// shadow-pass material that grows/sways exactly like the visible plant
+export function makeFloraDepthMaterial() {
+  const m = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  m.onBeforeCompile = (sh) => {
+    floraUniforms(sh);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + FLORA_HEAD).replace('#include <begin_vertex>', '#include <begin_vertex>\n' + FLORA_BODY);
+  };
+  m.customProgramCacheKey = () => 'flora-depth';
+  return m;
+}
+
 export function makeFloraMaterial({ side = THREE.FrontSide, translucent = 0.35 } = {}) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.75, metalness: 0, vertexColors: true, side });
   mat.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, { uTime: U.uTime, uWind: U.uWind, uGrowth: U.uGrowth, uNight: U.uNight, uLush: U.uLush, uSunDir: U.uSunDir, uTrans: { value: translucent } });
+    floraUniforms(sh);
+    sh.uniforms.uTrans = { value: translucent };
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', /* glsl */`#include <common>
-        uniform float uTime, uWind, uLush; uniform vec4 uGrowth;
-        attribute float aSway; attribute float aGlow;
-        attribute vec2 iGrow; attribute vec3 iTint;
-        varying float vGlow; varying vec3 vTintF; varying float vSwayF;`)
-      .replace('#include <begin_vertex>', /* glsl */`#include <begin_vertex>
-        float g = 1.0;
-        vTintF = vec3(1.0);
-        #ifdef USE_INSTANCING
-          float lg = iGrow.y < 0.5 ? uGrowth.x : iGrow.y < 1.5 ? uGrowth.y : iGrow.y < 2.5 ? uGrowth.z : uGrowth.w;
-          g = smoothstep(iGrow.x, iGrow.x + 0.12, lg);
-          vTintF = iTint;
-          vec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
-        #else
-          vec3 ip = vec3(0.0);
-        #endif
-        transformed.y *= g;
-        transformed.xz *= mix(0.2, 1.0, g);
-        float ph = ip.x * 0.13 + ip.z * 0.11;
-        float w = (sin(uTime * 1.7 + ph) * 0.6 + sin(uTime * 3.1 + ph * 1.7) * 0.25) * uWind * aSway;
-        transformed.x += w * 0.35;
-        transformed.z += w * 0.2;
-        vGlow = aGlow; vSwayF = aSway;`);
+      .replace('#include <common>', '#include <common>\n' + FLORA_HEAD)
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n' + FLORA_BODY);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float uNight, uLush, uTime, uTrans; uniform vec3 uSunDir;
@@ -51,7 +72,8 @@ export function makeFloraMaterial({ side = THREE.FrontSide, translucent = 0.35 }
         totalEmissiveRadiance += vGlow * vTintF * (0.35 + 2.2 * uNight) * (0.8 + 0.2 * sin(uTime * 2.0 + vSwayF * 7.0));
         totalEmissiveRadiance += diffuseColor.rgb * uTrans * vSwayF * max(uSunDir.y, 0.0) * 0.35;`);
   };
-  mat.customProgramCacheKey = () => 'flora-v1-' + side + translucent;
+  mat.customProgramCacheKey = () => 'flora-v2-' + side + translucent;
+  mat.depthMat = makeFloraDepthMaterial();
   return mat;
 }
 
@@ -105,7 +127,7 @@ function mossClump(seed) {
   }
   g.computeVertexNormals();
   const gb = new GeoBuilder(['aSway', 'aGlow']);
-  gb.add(g, { color: (x, y) => { const t = clamp(y / 0.45, 0, 1); return [0.06 + 0.12 * t, 0.1 + 0.16 * t, 0.03 + 0.04 * t]; }, attrs: { aSway: 0, aGlow: 0 } });
+  gb.add(g, { color: (x, y) => { const t = clamp(y / 0.45, 0, 1); return [0.025 + 0.05 * t, 0.045 + 0.075 * t, 0.012 + 0.02 * t]; }, attrs: { aSway: 0, aGlow: 0 } });
   return gb.build();
 }
 
@@ -315,18 +337,19 @@ export class Flora {
           place: (x, z, r1, r2, r3) => {
             const y = groundOK(x, z, 0.35); if (y === null) return null;
             const thr = clamp(1 - fert(x, z) + (r1 - 0.5) * 0.3 - greenBoost(x, z) * 0.8, 0.02, 1);
-            const s = 0.25 + r2 * 0.7;
-            return { y: y - 0.04, sx: s * (0.8 + r3 * 0.6), sy: s, sz: s, ry: r3 * 6.28, attrs: { iGrow: [thr, 0], iTint: [0.85 + r3 * 0.3, 0.9 + r2 * 0.2, 0.8] } };
+            if (U.uGrass.value > 0.6 && r2 > 0.35) return null;
+            const s = 0.15 + r2 * 0.4;
+            return { y: y - 0.06, sx: s * (0.8 + r3 * 0.6), sy: s * 0.6, sz: s, ry: r3 * 6.28, attrs: { iGrow: [thr, 0], iTint: [0.85 + r3 * 0.3, 0.9 + r2 * 0.2, 0.8] } };
           },
         },
         { // grass tufts
-          geo: grassTuft(5, 10, 0.75), mat: this.mat, max: 9000, perTile: 95, castShadow: false, radius: 75, densityFalloff: true,
+          geo: grassTuft(5, 8, 0.75), mat: this.mat, max: 7500, perTile: 85, castShadow: false, radius: 75, densityFalloff: true,
           attrs: { iGrow: 2, iTint: 3 },
           enabled: () => U.uGrowth.value.y > 0.001 || U.uGreen.value.some((g) => g.w > 0.3),
           place: (x, z, r1, r2, r3) => {
             const y = groundOK(x, z, 0.32); if (y === null) return null;
             const thr = clamp(1 - fert(x, z) + (r1 - 0.5) * 0.35 - greenBoost(x, z) * 0.5, 0.02, 1);
-            const s = 0.7 + r2 * 0.8;
+            const s = 0.8 + r2 * 1.0;
             T.normal(x, z, nrm);
             qn.setFromUnitVectors(up, nrm).multiply(new THREE.Quaternion().setFromAxisAngle(up, r3 * 6.28));
             const dry = smoothstep(0.4, 0.9, r1) * (0.5 + sf[0]);

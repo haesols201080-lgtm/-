@@ -77,6 +77,7 @@ class Layer {
       const m = new THREE.InstancedMesh(g, mat, capN);
       m.count = 0; m.frustumCulled = false;
       m.castShadow = near && shadow; m.receiveShadow = true;
+      if (mat.depthMat) m.customDepthMaterial = mat.depthMat;
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.extra = extra; m.cap = capN;
       scene.add(m);
