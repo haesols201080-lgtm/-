@@ -218,13 +218,13 @@ export class Terrain {
       for (let e = r.gen; e < L.length; e++) this.applyEditToTile(t, L[e], res);
     }
     this.tiles.set(k, t);
-    if (this.tiles.size > 2600) this.evictTiles();
+    if (this.tiles.size > 700) this.evictTiles();
     return t;
   }
 
   evictTiles() {
     const arr = [...this.tiles.values()].sort((a, b) => a.used - b.used);
-    for (let i = 0; i < arr.length - 2000; i++) {
+    for (let i = 0; i < arr.length - 500; i++) {
       const t = arr[i];
       const n = this.nodes.get(this.key(0, t.ix, t.iz));
       if (n && n.mesh && n.show) continue;

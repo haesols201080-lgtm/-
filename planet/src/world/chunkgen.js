@@ -169,9 +169,9 @@ export function genProps(gen, edits, ci, cj) {
     const h = surfAt(gen, edits, px, pz, tmp, res);
     if (res.mod > 0.3) continue;
     const cl = S.fbm2(px / 160, pz / 160, 2) * 0.5 + 0.5;
-    let p = 0.012 + 0.07 * tmp[2] + 0.08 * tmp[1] + 0.03 * (1 - tmp[0]) + 0.04 * tmp[4] + 0.06 * tmp[6] - 0.03 * tmp[5];
-    p *= 0.3 + 1.6 * cl * cl;
-    if (nearStart(px, pz, 50)) p *= 0.3;
+    let p = 0.02 + 0.07 * tmp[2] + 0.08 * tmp[1] + 0.04 * (1 - tmp[0]) + 0.04 * tmp[4] + 0.06 * tmp[6] - 0.03 * tmp[5];
+    p *= 0.35 + 1.6 * cl * cl;
+    if (nearStart(px, pz, 22)) p *= 0.2;
     if (r0 > p) continue;
     const sl = slopeAt(gen, px, pz, h);
     let proto = r1 < 0.3 ? 1 : r1 < 0.65 ? 0 : 3;

@@ -92,13 +92,30 @@ async function boot() {
     tick(1 / 60, false);
     return terrain.stats;
   };
+  // adaptive quality: if the first seconds run slow, step the preset down once or twice
+  const auto = { t: 0, n: 0, sum: 0, steps: 0 };
+  const ladder = ['ultra', 'high', 'medium', 'low'];
   function loop(now) {
-    const dt = Math.min(0.05, (now - last) / 1000);
+    const raw = (now - last) / 1000;
+    const dt = Math.min(0.05, raw);
     last = now;
     if (!manual) {
       tick(dt);
       fpsAcc += dt; fpsN++;
       if (fpsAcc > 1) { game.fps = Math.round(fpsN / fpsAcc); fpsAcc = 0; fpsN = 0; }
+      if (game.settings.autoQuality !== false && auto.steps < 2) {
+        auto.t += raw; auto.n++; auto.sum += raw;
+        if (auto.t > 4) {
+          const avg = auto.sum / auto.n;
+          const i = ladder.indexOf(game.settings.quality);
+          if (avg > 1 / 32 && i >= 0 && i < ladder.length - 1) {
+            game.settings.quality = ladder[i + 1];
+            game.applySettings();
+            auto.steps++;
+          } else auto.steps = 2;
+          auto.t = 0; auto.n = 0; auto.sum = 0;
+        }
+      }
     }
     requestAnimationFrame(loop);
   }

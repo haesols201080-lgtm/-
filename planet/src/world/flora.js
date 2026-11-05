@@ -319,8 +319,8 @@ export class Flora {
           attrs: { iTint: 3 },
           place: (x, z, r1, r2, r3) => {
             const y = groundOK(x, z, 0.6); if (y === null) return null;
-            if (r1 > 0.35 + sf[2] * 0.3 + sf[1] * 0.3 - sf[0] * 0.25 - sf[5] * 0.25) return null;
-            const s = 0.08 + Math.pow(r2, 3) * 0.55;
+            if (r1 > 0.45 + sf[2] * 0.3 + sf[1] * 0.3 - sf[0] * 0.3 - sf[5] * 0.3) return null;
+            const s = 0.08 + Math.pow(r2, 2.6) * 0.65;
             const v = 0.85 + r3 * 0.3;
             let c = [0.46, 0.33, 0.26];
             c = c.map((k, i) => k + ([0.58, 0.46, 0.36][i] - k) * sf[0] * 0.6);

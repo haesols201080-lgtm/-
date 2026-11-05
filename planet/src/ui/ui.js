@@ -482,6 +482,7 @@ export class UI {
     body.querySelector('[data-a=help]').onclick = () => this.open('help');
     body.querySelector('[data-a=title]').onclick = () => { g.save(); location.reload(); };
     const apply = () => {
+      if (s.quality !== $('#q').value) s.autoQuality = false;
       s.quality = $('#q').value; s.sens = +$('#sens').value; s.fov = +$('#fov').value; s.invertY = $('#inv').value === '1'; s.terraSpeed = +$('#tspd').value; s.volume = +$('#vol').value;
       g.applySettings();
     };
