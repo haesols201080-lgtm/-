@@ -440,12 +440,13 @@ export class Terrain {
     for (const n of this.nodes.values()) {
       if (n.mesh) { n.mesh.visible = n.show; meshes++; }
     }
-    // evict unused meshes
-    if (meshes > 900) {
-      for (const n of this.nodes.values()) {
-        if (n.mesh && !n.show && this.frame - n.used > 300 && n.L < LMAX && n.state !== 1 && n.state !== 3) {
+    // evict meshes that have not been shown for a while (GPU memory), and stale node records
+    if (meshes > 420 || this.frame % 600 === 0) {
+      for (const [k, n] of this.nodes) {
+        if (n.mesh && !n.show && this.frame - n.used > 120 && n.L < LMAX && n.state !== 1 && n.state !== 3) {
           n.mesh.geometry.dispose(); this.group.remove(n.mesh); n.mesh = null; n.state = 0;
         }
+        if (!n.mesh && n.state === 0 && this.frame - n.used > 600 && n.L < LMAX) this.nodes.delete(k);
       }
     }
     // prefetch physics tiles around the camera
