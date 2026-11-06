@@ -181,47 +181,56 @@ export class Astronaut {
     // turning on the spot shuffles the feet
     const shuffle = onGround && speed < 0.5 ? Math.min(1, Math.abs(turn) / 3) : 0;
     B.shuf = (B.shuf || 0) + (shuffle - (B.shuf || 0)) * k;
+    // cadence follows ground speed so the planted foot does not slide:
+    // about 2 steps/s walking, 2.9 jogging, 3.7 sprinting (pi per step)
     const stride = onGround ? speed : swim ? 2.5 : 0;
-    this.phase += dt * (stride > 0.1 ? 2.2 + stride * 1.25 : B.shuf > 0.05 ? 7 : 0);
+    const cad = stride > 0.15 ? (1.55 + stride * 0.29) * Math.PI : B.shuf > 0.05 ? 6 : 0;
+    this.phase += dt * cad;
     const p = this.phase;
-    const walk = onGround ? Math.max(Math.min(1, speed / 2), B.shuf * 0.35) : 0;
-    const s = Math.sin(p), c = Math.cos(p);
-    const amp = 0.35 + B.run * 0.35;
-    const fa = Math.abs(B.fr), back = B.fr < 0 ? 1 : 0;
-
-    // legs: swing along the direction of travel (forward, back or side-step)
-    const legSwing = s * amp * walk;
-    const fs = legSwing * B.fr, ss = legSwing * B.sr * 0.7;
-    this.legR.hip.rotation.x = fs - B.air * 0.5 + B.swim * Math.sin(p * 1.5) * 0.4 + this.land * 0.5;
-    this.legL.hip.rotation.x = -fs - B.air * 0.2 - B.swim * Math.sin(p * 1.5) * 0.4 + this.land * 0.5;
-    this.legR.hip.rotation.z = -ss + 0.02;
-    this.legL.hip.rotation.z = ss - 0.02;
-    const kb = (0.4 + B.run * 0.8) * walk * (0.55 + 0.45 * fa);
-    this.legR.knee.rotation.x = Math.max(0, back ? c : -c) * kb + B.air * 0.9 + B.swim * 0.3 + this.land * 1.0;
-    this.legL.knee.rotation.x = Math.max(0, back ? -c : c) * kb + B.air * 0.4 + B.swim * 0.3 + this.land * 1.0;
-    this.legR.ankle.rotation.x = -this.legR.hip.rotation.x * 0.3 - this.land * 0.4;
-    this.legL.ankle.rotation.x = -this.legL.hip.rotation.x * 0.3 - this.land * 0.4;
-    // arms: swing with forward travel, less when stepping sideways
-    const armSwing = s * (0.3 + B.run * 0.5) * walk * (0.25 + 0.75 * fa) * Math.sign(B.fr || 1);
-    this.armR.sh.rotation.x = -armSwing + B.air * -0.4 - B.swim * Math.sin(p * 1.5 + 1) * 1.2 - aim * 1.2;
-    this.armL.sh.rotation.x = armSwing + B.air * -0.4 + B.swim * Math.sin(p * 1.5 + 1) * 1.2;
-    this.armR.sh.rotation.z = 0.12 + B.air * 0.35 + this.land * 0.2;
-    this.armL.sh.rotation.z = -0.12 - B.air * 0.35 - this.land * 0.2;
-    this.armR.el.rotation.x = -0.25 - B.run * 0.9 - aim * 0.2 - (working ? 0.4 : 0);
-    this.armL.el.rotation.x = -0.25 - B.run * 0.9;
-    // body: bob, lean into speed and turns, hips turn toward a side-step
-    const bob = Math.abs(Math.sin(p)) * 0.04 * walk * (1 + B.run);
-    this.hips.position.y = 0.98 - 0.03 * walk + bob - B.air * 0.05 - this.land * 0.14;
+    const walk = onGround ? Math.max(Math.min(1, speed / 1.6), B.shuf * 0.35) : 0;
+    const fa = Math.abs(B.fr), dirS = B.fr < 0 ? -1 : 1;
+    const run = B.run;                       // 0 walk .. 1 sprint
+    const amp = (0.2 + Math.min(speed, 8) * 0.065) * walk;   // thigh swing
+    // per leg: swing phase (leg moving forward) is when cos > 0
+    const leg = (L, ph, sideSign) => {
+      const sn = Math.sin(ph), cs = Math.cos(ph);
+      const thigh = amp * (sn + 0.18 * Math.sin(2 * ph)) ;          // quicker forward swing
+      const swing = Math.max(0, cs);
+      const knee = walk * ((0.75 + run * 1.0) * Math.pow(swing, 1.5) * (0.6 + 0.4 * fa) + 0.06 + run * 0.18 * Math.max(0, -cs));
+      L.hip.rotation.x = thigh * B.fr * (dirS < 0 ? 0.8 : 1) - B.air * (sideSign > 0 ? 0.5 : 0.2) + this.land * 0.5 + B.swim * Math.sin(ph * 1.5) * 0.4 * sideSign;
+      L.hip.rotation.z = -thigh * B.sr * 0.7 * sideSign + 0.02 * sideSign;
+      L.knee.rotation.x = knee + B.air * (sideSign > 0 ? 0.9 : 0.4) + B.swim * 0.3 + this.land * 1.0;
+      // heel strike then toe-off
+      L.ankle.rotation.x = -L.hip.rotation.x * 0.25 + walk * (0.18 * Math.max(0, Math.sin(ph + 0.6)) - 0.22 * Math.max(0, -Math.sin(ph - 0.5)) * (0.5 + run)) - this.land * 0.4;
+    };
+    leg(this.legR, p, 1);
+    leg(this.legL, p + Math.PI, -1);
+    // arms swing against the legs, elbows bend more as the pace rises
+    const sp2 = Math.sin(p);
+    const armA = (0.22 + run * 0.45) * walk * (0.3 + 0.7 * fa) * dirS;
+    this.armR.sh.rotation.x = -armA * sp2 + B.air * -0.4 - B.swim * Math.sin(p * 1.5 + 1) * 1.2 - aim * 1.2;
+    this.armL.sh.rotation.x = armA * sp2 + B.air * -0.4 + B.swim * Math.sin(p * 1.5 + 1) * 1.2;
+    this.armR.sh.rotation.z = 0.1 + B.air * 0.35 + this.land * 0.2;
+    this.armL.sh.rotation.z = -0.1 - B.air * 0.35 - this.land * 0.2;
+    this.armR.el.rotation.x = -0.2 - run * 1.0 - walk * 0.15 * Math.max(0, -sp2) - aim * 0.2 - (working ? 0.4 : 0);
+    this.armL.el.rotation.x = -0.2 - run * 1.0 - walk * 0.15 * Math.max(0, sp2);
+    // pelvis: walking rises over the planted leg, running dips into it;
+    // it sways toward the standing leg and twists with the stride
+    const c2 = Math.cos(2 * p);
+    const bob = walk * (0.022 * c2 * (1 - run) - 0.035 * c2 * run);
+    this.hips.position.y = 0.98 - 0.025 * walk - 0.02 * run + bob - B.air * 0.05 - this.land * 0.14;
+    this.hips.position.x = walk * 0.018 * Math.sin(p) * (1 - run * 0.6);
     const lean = Math.max(-0.22, Math.min(0.22, -turn * 0.035 * Math.min(1, speed / 3)));
-    this.torso.rotation.x = -B.run * 0.18 * B.fr - B.swim * 0.9 + B.air * 0.08 + this.land * 0.25;
-    this.torso.rotation.z = lean;
-    this.hips.rotation.y = -s * 0.06 * walk + B.sr * 0.35 * walk;
-    this.torso.rotation.y = s * 0.08 * walk * fa - B.sr * 0.3 * walk;
+    this.torso.rotation.x = -(0.04 + run * 0.16) * walk * B.fr - B.swim * 0.9 + B.air * 0.08 + this.land * 0.25;
+    this.torso.rotation.z = lean - walk * 0.02 * Math.sin(p);
+    this.hips.rotation.y = -0.1 * Math.sin(p) * walk * fa + B.sr * 0.35 * walk;
+    this.torso.rotation.y = 0.12 * Math.sin(p) * walk * fa - B.sr * 0.3 * walk;
     // idle: weight shifts and the head looks around
     const idle = (1 - walk) * (1 - B.air) * (1 - aim);
     this.hips.rotation.z = Math.sin(t * 0.45) * 0.025 * idle;
-    this.head.rotation.x = B.run * 0.12 + B.swim * 0.6 + aim * -0.3 + Math.sin(t * 0.23) * 0.05 * idle;
-    this.head.rotation.y = Math.sin(t * 0.31) * Math.sin(t * 0.13) * 0.45 * idle - B.sr * 0.2 * walk;
+    this.head.rotation.x = -this.torso.rotation.x * 0.7 + B.swim * 0.6 + aim * -0.3 + Math.sin(t * 0.23) * 0.05 * idle;
+    this.head.rotation.z = -this.torso.rotation.z * 0.8;
+    this.head.rotation.y = Math.sin(t * 0.31) * Math.sin(t * 0.13) * 0.45 * idle - B.sr * 0.2 * walk - this.torso.rotation.y * 0.8;
     this.torso.position.y = 0.08 + Math.sin(t * 2) * 0.006 * idle;
 
     for (const f of this.flames) {

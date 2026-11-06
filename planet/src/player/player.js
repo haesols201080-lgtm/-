@@ -88,22 +88,28 @@ export class Player {
       if (input.hit('KeyL')) this.flashlight = !this.flashlight;
     }
     // --- move intent
-    let mx = 0, mz = 0;
-    if (active) {
+    let mx = 0, mz = 0, mag = 1;
+    if (active && input.axis && input.axis.on) {
+      // analog stick: a light push walks slowly, a full push jogs
+      mx = input.axis.x; mz = input.axis.y;
+      const l = Math.hypot(mx, mz);
+      mag = Math.min(1, Math.max(0, (l - 0.08) / 0.8));
+      if (l > 0) { mx /= l; mz /= l; }
+    } else if (active) {
       if (input.down('KeyW')) mz += 1;
       if (input.down('KeyS')) mz -= 1;
       if (input.down('KeyA')) mx -= 1;
       if (input.down('KeyD')) mx += 1;
+      const len = Math.hypot(mx, mz);
+      if (len > 0) { mx /= len; mz /= len; }
     }
-    const len = Math.hypot(mx, mz);
-    if (len > 0) { mx /= len; mz /= len; }
     const fwd = this.forward(_f);
     const right = _r.set(-fwd.z, 0, fwd.x);
     const sprint = active && (input.down('ShiftLeft') || input.down('ShiftRight'));
     const waterLevel = U.uWaterLevel.value;
     const liquid = U.uIce.value < 0.5;
     this.swimming = liquid && this.pos.y < waterLevel - 1.1 && !this.flyCheat;
-    let speed = (sprint ? 7.6 : 4.5) * this.speedMul;
+    let speed = (sprint ? 7.6 : 1.3 + 3.2 * mag) * this.speedMul;
     if (this.swimming) speed = sprint ? 3.6 : 2.4;
     if (this.inside) speed = Math.min(speed, sprint ? 5.5 : 3.6);
     const wish = _w.set(0, 0, 0).addScaledVector(fwd, mz).addScaledVector(right, mx).multiplyScalar(speed);
@@ -118,7 +124,7 @@ export class Player {
       this.jetting = false;
     } else {
       // horizontal acceleration
-      const accel = this.onGround ? 42 : this.swimming ? 6 : 7;
+      const accel = this.onGround ? 22 : this.swimming ? 6 : 7;
       const vx = this.vel.x, vz = this.vel.z;
       const dvx = wish.x - vx, dvz = wish.z - vz;
       const dl = Math.hypot(dvx, dvz);

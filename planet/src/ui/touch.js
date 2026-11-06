@@ -76,6 +76,9 @@ export class TouchControls {
     const R = 56;
     const setMove = (vx, vy) => {
       const m = Math.hypot(vx, vy);
+      // analog for walking (direction and speed follow the thumb smoothly);
+      // the keys still drive the rover and anything else that reads them
+      I.axis.x = vx; I.axis.y = -vy; I.axis.on = m > 0.05;
       I.hold('KeyW', vy < -0.32); I.hold('KeyS', vy > 0.32);
       I.hold('KeyA', vx < -0.32); I.hold('KeyD', vx > 0.32);
       I.hold('ShiftLeft', m > 0.94);

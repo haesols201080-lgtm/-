@@ -6,6 +6,7 @@ export class Input {
     this.pressed = new Set();
     this.released = new Set();
     this.mouse = { dx: 0, dy: 0, wheel: 0, buttons: 0, pressed: 0, released: 0 };
+    this.axis = { x: 0, y: 0, on: false };   // analog stick (touch): x right, y forward, length 0..1
     this.locked = false;
     this.uiOpen = false;
     this.touch = false;            // touch controls drive input (no pointer lock)
