@@ -35,20 +35,40 @@ export const RECIPES = [
 
 // Terraforming stages (Ti thresholds). Structure follows The Planet Crafter's
 // stage ladder; values are compressed for a few hours of play.
+// Visual milestones keep the original 13 thresholds: sky, water, ice, life
+// and fauna are continuous functions of Ti mapped onto these, so the world
+// keeps changing smoothly whatever the named stages are.
+export const VIS_TI = [0, 1000, 3000, 8000, 20000, 50000, 110000, 220000, 420000, 750000, 1300000, 2200000, 4000000];
+
+// Named stages the player progresses through - many small milestones, each at
+// the Ti where its change actually starts to show.
 export const STAGES = [
   { id: 'barren', name: '불모의 대지', ti: 0, desc: '얇은 대기, 먼지 낀 하늘, 영하의 지표.' },
+  { id: 'warmth', name: '첫 온기', ti: 300, desc: '지표 온도가 오르며 서리가 낮 동안 물러나기 시작합니다.' },
   { id: 'bluesky', name: '푸른 하늘', ti: 1000, desc: '기압이 올라 하늘이 푸르게 산란되기 시작합니다.' },
+  { id: 'haze', name: '옅은 안개', ti: 1800, desc: '짙어진 대기에 지평선이 부드럽게 흐려집니다.' },
   { id: 'clouds', name: '구름', ti: 3000, desc: '수증기가 응결해 첫 구름이 떠오릅니다.' },
+  { id: 'overcast', name: '두꺼운 구름층', ti: 5000, desc: '구름이 넓게 퍼져 그림자가 대지를 지나갑니다.' },
   { id: 'rain', name: '비', ti: 8000, desc: '구름에서 비가 내리기 시작합니다.' },
+  { id: 'thaw', name: '해빙', ti: 13000, desc: '크레이터와 극지의 얼음이 녹기 시작합니다.' },
   { id: 'water', name: '액체 물', ti: 20000, desc: '얼음이 녹아 분지 바닥에 물이 고입니다.' },
+  { id: 'ponds', name: '웅덩이', ti: 32000, desc: '낮은 땅마다 물웅덩이가 생깁니다.' },
   { id: 'lakes', name: '호수', ti: 50000, desc: '수위가 올라 분지와 크레이터가 호수가 됩니다.' },
+  { id: 'lichen', name: '지의류', ti: 78000, desc: '습한 그늘과 바위 틈에 첫 지의류가 앉습니다.' },
   { id: 'moss', name: '이끼', ti: 110000, desc: '습한 저지대부터 이끼가 퍼집니다.' },
-  { id: 'flora', name: '초원', ti: 220000, desc: '풀과 꽃이 대지를 덮기 시작합니다.' },
+  { id: 'sprouts', name: '새싹', ti: 185000, desc: '물길을 따라 첫 풀싹이 돋아납니다.' },
+  { id: 'flora', name: '초원', ti: 220000, desc: '풀이 대지를 덮기 시작합니다.' },
+  { id: 'flowers', name: '꽃', ti: 320000, desc: '풀밭 사이로 첫 꽃이 핍니다.' },
   { id: 'trees', name: '숲', ti: 420000, desc: '첫 나무들이 자라 숲을 이룹니다.' },
+  { id: 'grove', name: '울창한 숲', ti: 560000, desc: '숲이 골짜기를 따라 짙어집니다.' },
   { id: 'insects', name: '곤충', ti: 750000, desc: '꽃가루를 나르는 곤충이 날아다닙니다.' },
+  { id: 'bloom', name: '만개', ti: 1000000, desc: '꽃과 나무가 한창 무성해집니다.' },
   { id: 'breathable', name: '숨쉬는 대기', ti: 1300000, desc: '헬멧 없이도 숨쉴 수 있는 대기가 되었습니다.' },
+  { id: 'temperate', name: '온화한 기후', ti: 1700000, desc: '기온과 습도가 안정되어 사계절이 생깁니다.' },
   { id: 'fauna', name: '생명의 행성', ti: 2200000, desc: '새와 동물들이 행성에 정착합니다.' },
+  { id: 'thriving', name: '생태계 번성', ti: 3000000, desc: '먹이사슬이 자리 잡아 생명이 스스로 늘어납니다.' },
   { id: 'complete', name: '완전한 테라포밍', ti: 4000000, desc: '행성이 스스로 순환하는 생태계를 갖췄습니다.' },
+  { id: 'eden', name: '두 번째 지구', ti: 6500000, desc: '누구나 고향이라 부를 수 있는 행성이 되었습니다.' },
 ];
 
 export const PARAMS = {
@@ -109,7 +129,7 @@ export const BUILDINGS = {
   heater2: { name: '히터 T2', cat: 'terra', size: [4, 4], cost: { alloy: 2, plate: 2 }, power: -5, terra: { heat: 9 }, desc: '고출력 히터.', unlockStage: 'clouds' },
   drill2: { name: '대기 드릴 T2', cat: 'terra', size: [4, 4], cost: { alloy: 3, plate: 3 }, power: -6, terra: { pressure: 7 }, desc: '심부 가스 드릴.', unlockStage: 'rain' },
   seeder: { name: '이끼 살포기', cat: 'terra', size: [3, 3], cost: { plate: 2, glass: 1, seeds: 2 }, power: -2, terra: { biomass: 12, oxygen: 4 }, desc: '주변 60m에 이끼와 풀을 먼저 자라게 합니다.', green: 60, unlockStage: 'water', research: 'r_bio' },
-  algae: { name: '조류 배양기', cat: 'terra', size: [3, 3], cost: { plate: 3, glass: 2 }, power: -2, terra: { oxygen: 30, biomass: 8 }, desc: '얕은 물(수심 0.5~6m)에 띄워 산소를 대량 생산합니다.', water: true, unlockStage: 'lakes' },
+  algae: { name: '조류 배양기', cat: 'terra', size: [3, 3], cost: { plate: 3, glass: 2 }, power: -2, terra: { oxygen: 30, biomass: 8 }, desc: '얕은 물(수심 0.5~6m)에 띄워 산소를 대량 생산합니다.', water: true, unlockStage: 'ponds' },
   treespreader: { name: '나무 살포기', cat: 'terra', size: [4, 4], cost: { alloy: 2, glass: 2, seeds: 4 }, power: -4, terra: { biomass: 160, oxygen: 60 }, desc: '주변 80m에 숲을 키웁니다.', green: 80, unlockStage: 'flora' },
   insectdome: { name: '곤충 사육 돔', cat: 'terra', size: [6, 6], cost: { glass: 6, alloy: 3, seeds: 4 }, power: -6, terra: { biomass: 600 }, desc: '꽃가루 매개 곤충을 길러 방사합니다.', unlockStage: 'trees' },
   mirror: { name: '궤도 반사경 송신소', cat: 'terra', size: [8, 8], cost: { alloy: 10, circuit: 6, electronics: 4 }, power: -20, terra: { heat: 1800, pressure: 400 }, desc: '궤도 반사경을 조종해 행성 전체를 데웁니다.', research: 'r_orbital' },
@@ -133,7 +153,7 @@ export const BUILDINGS = {
   school: { name: '학교', cat: 'colony', size: [10, 8], apron: 2, cost: { plate: 8, glass: 6, credits: 150 }, power: -3, desc: '반경 55m 공학자 이상 계층의 필수 시설.', workers: ['tech', 3], service: 'school', radius: 55, research: 'r_education' },
   lab: { name: '연구소', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 4, circuit: 3, credits: 120 }, power: -5, desc: '연구 점수를 만듭니다 (공학자 4명).', workers: ['engineer', 4], research_rp: 0.6, research: 'r_education' },
   terminal: { name: '연구 단말기', cat: 'base', size: [2, 2], cost: { iron: 3, silicon: 3, cobalt: 1 }, power: -2, desc: '혼자서도 쓸 수 있는 소형 연구 장비. 연구 점수를 천천히 만듭니다.', research_rp: 0.12 },
-  park: { name: '공원', cat: 'colony', size: [10, 10], cost: { plate: 2, seeds: 4, credits: 50 }, desc: '반경 45m 주민 행복도 상승. 초원 단계부터 지을 수 있습니다.', service: 'park', radius: 45, unlockStage: 'flora', research: 'r_roads' },
+  park: { name: '공원', cat: 'colony', size: [10, 10], cost: { plate: 2, seeds: 4, credits: 50 }, desc: '반경 45m 주민 행복도 상승. 초원 단계부터 지을 수 있습니다.', service: 'park', radius: 45, unlockStage: 'flowers', research: 'r_roads' },
   culture: { name: '문화 센터', cat: 'colony', size: [12, 12], apron: 3, cost: { alloy: 8, glass: 8, electronics: 2, credits: 300 }, power: -6, desc: '반경 60m 시민 계층의 필수 시설.', workers: ['engineer', 3], service: 'culture', radius: 60, research: 'r_culture' },
   road: { name: '도로', cat: 'colony', size: [6, 6], cost: { iron: 1 }, desc: '두 지점을 찍어 소결 레골리스 포장도로를 깝니다. 지형을 따라 경사를 다듬고, 다른 도로에 이으면 교차로가 됩니다. 10m당 철 1.', tool: 'road', research: 'r_colony' },
   monument: { name: '개척자 기념탑', cat: 'colony', size: [10, 10], apron: 3, cost: { alloy: 20, glass: 10, electronics: 6, credits: 800 }, desc: '문명 시대로 나아가기 위한 상징. 주민 전체의 행복도가 오릅니다.', unique: true, research: 'r_monument' },

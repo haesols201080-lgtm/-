@@ -63,7 +63,7 @@ async function boot() {
     await new Promise((res) => setTimeout(res, 30));
   }
   game.terra.tick(0.016);
-  game.terra.sVis = game.terra.stageFloat();
+  game.terra.sVis = game.terra.visFloat();
   sky.refreshEnv();
 
   const manual = params.get('test') === '1';
@@ -201,7 +201,7 @@ function devPanel(game) {
     const ti = STAGES[i].ti * 1.02 + 1;
     const cur = g.terra.ti;
     if (ti > cur) g.terra.add('pressure', ti - cur);
-    g.terra.sVis = g.terra.stageFloat();
+    g.terra.sVis = g.terra.visFloat();
   };
 }
 

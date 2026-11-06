@@ -4,7 +4,7 @@
 // insects, breathable air, fauna, complete), and a continuous stage value
 // drives every visual: sky colour, dust, clouds, rain, ice melt, sea level,
 // moss/grass on the ground, plant growth and colour saturation.
-import { STAGES, PARAMS } from './data.js';
+import { STAGES, PARAMS, VIS_TI } from './data.js';
 import { U, WORLD } from '../core/shared.js';
 import { BUILD_U } from '../build/materials.js';
 import { clamp, lerp } from '../core/noise.js';
@@ -34,15 +34,19 @@ export class Terraform {
 
   add(k, v) { this.p[k] += v; this._acc[k] += v; }
 
-  stageFloat() {
-    const ti = this.ti;
+  // continuous position along a list of Ti thresholds (log-interpolated)
+  static along(list, ti) {
     let i = 0;
-    while (i < STAGES.length - 1 && ti >= STAGES[i + 1].ti) i++;
-    if (i >= STAGES.length - 1) return STAGES.length - 1;
-    const a = Math.max(STAGES[i].ti, 1), b = STAGES[i + 1].ti;
+    while (i < list.length - 1 && ti >= list[i + 1]) i++;
+    if (i >= list.length - 1) return list.length - 1;
+    const a = Math.max(list[i], 1), b = list[i + 1];
     const t = i === 0 ? Math.max(0, Math.log(Math.max(ti, 1)) / Math.log(b)) : Math.log(ti / a) / Math.log(b / a);
     return i + clamp(t, 0, 1);
   }
+  // named-stage progress (HUD); visuals run on visFloat()
+  stageFloat() { return Terraform.along(STAGES.map((s) => s.ti), this.ti); }
+  visFloat() { return Terraform.along(VIS_TI, this.ti); }
+  stageAt(ti) { let st = 0; while (st < STAGES.length - 1 && ti >= STAGES[st + 1].ti) st++; return st; }
 
   is(stageId) { return this.stage >= STAGES.findIndex((s) => s.id === stageId); }
 
@@ -60,7 +64,7 @@ export class Terraform {
       for (let k = this.stage + 1; k <= st; k++) this.game.onStage && this.game.onStage(k, STAGES[k]);
       this.stage = st;
     }
-    const target = this.stageFloat();
+    const target = this.visFloat();
     this.sVis += (target - this.sVis) * Math.min(1, dt * 0.25);
     if (Math.abs(target - this.sVis) > 2) this.sVis = target;   // after loading
     this.applyVisuals(dt);
@@ -123,8 +127,8 @@ export class Terraform {
   serialize() { return { p: this.p, stage: this.stage, weather: { kind: this.weather.kind, t: this.weather.t, next: this.weather.next } }; }
   load(o) {
     Object.assign(this.p, o.p || {});
-    this.stage = o.stage || 0;
-    this.sVis = this.stageFloat();
+    this.stage = this.stageAt(this.ti);          // recomputed: the stage list may have changed
+    this.sVis = this.visFloat();
   }
 }
 
