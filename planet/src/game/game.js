@@ -207,6 +207,7 @@ export class Game {
       case 'KeyG': this.build.toggleTerrain(); break;
       case 'KeyN': this.callRover(); break;
       case 'F1': ui.open('help'); break;
+      case 'KeyH': { const k = document.getElementById('keys'); k.hidden = !k.hidden; document.getElementById('keyhint').hidden = !k.hidden; break; }
       default: {
         const m = /^Digit([1-9])$/.exec(e.code);
         if (m) {

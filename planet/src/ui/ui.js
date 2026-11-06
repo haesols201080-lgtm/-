@@ -29,39 +29,42 @@ export class UI {
   buildHUD() {
     const hud = h('div', { id: 'hud' });
     hud.innerHTML = `
-      <div id="planet" class="card">
-        <div class="h-label">행성 아르케 · 테라포밍</div>
+      <div id="planet" class="hudblock">
+        <div class="h-label"><i class="tick"></i>ARKE · 테라포밍</div>
         <div class="stage"><b id="st-name">불모의 대지</b><span class="ti num" id="st-ti">0 Ti</span></div>
-        <div class="bar"><i id="st-bar"></i></div>
+        <div class="bar thin"><i id="st-bar"></i></div>
         <div class="next" id="st-next"></div>
         <div class="params">${Object.keys(PARAMS).map((k) => `
-          <div class="param"><span class="ic" style="background:${PARAMS[k].color}22">${paramIcon(k)}</span>
-          <div><div class="v num" id="pv-${k}">0</div><div class="r num" id="pr-${k}">+0/s</div></div></div>`).join('')}
+          <div class="param" title="${PARAMS[k].name}"><span class="ic" style="color:${PARAMS[k].color}">${paramIcon(k)}</span><span class="v num" id="pv-${k}">0</span><span class="r num" id="pr-${k}"></span></div>`).join('')}
         </div>
       </div>
-      <div id="compass" class="card"><div class="strip" id="cstrip"></div><div class="center"></div></div>
+      <div id="compass"><div class="strip" id="cstrip"></div><div class="center"></div></div>
       <div id="where"></div>
-      <div id="colony" class="card">
-        <div class="row"><div><div class="h-label">시대</div><div class="era" id="era">전초기지</div></div><div style="text-align:right"><div class="h-label">시각</div><div id="clock" class="num">06:00</div></div></div>
-        <div class="row"><span class="h-label">인구</span><span class="num" id="popn">0</span></div>
+      <div id="colony" class="hudblock right">
+        <div class="h-label"><span id="era">전초기지</span><span class="sep">·</span><span id="clock" class="num">06:00</span></div>
+        <div class="stats">
+          <span class="st" title="인구"><svg viewBox="0 0 16 16"><circle cx="8" cy="5" r="2.6"/><path d="M3 14c.6-3 2.6-4.6 5-4.6s4.4 1.6 5 4.6"/></svg><b class="num" id="popn">0</b></span>
+          <span class="st" title="크레딧" id="credits">0</span>
+          <span class="st" title="전력"><svg viewBox="0 0 16 16"><path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z"/></svg><b class="num" id="pow">0/0</b></span>
+        </div>
+        <div class="bar thin"><i id="powbar"></i></div>
         <div class="chips" id="tiers"></div>
-        <div class="row"><span class="h-label">크레딧</span><span class="num" id="credits">0</span></div>
-        <div><div class="row"><span class="h-label">전력</span><span class="num" id="pow">0 / 0 kW</span></div><div class="bar"><i id="powbar" style="background:var(--warn)"></i></div></div>
-        <div><div class="row"><span class="h-label">연구</span><span id="rsname" style="font-size:12px"></span></div><div class="bar"><i id="rsbar" style="background:#c49bff"></i></div></div>
+        <div class="rs"><span id="rsname"></span><div class="bar thin"><i id="rsbar"></i></div></div>
       </div>
-      <div id="survival" class="card">
-        <div class="gauge"><span class="lbl">산소</span><div class="bar"><i id="g-o2" style="background:var(--oxy)"></i></div><span class="num" id="g-o2t">100%</span></div>
-        <div class="gauge"><span class="lbl">체력</span><div class="bar"><i id="g-hp" style="background:var(--bad)"></i></div><span class="num" id="g-hpt">100%</span></div>
-        <div class="gauge"><span class="lbl">제트팩</span><div class="bar"><i id="g-jet" style="background:var(--orange)"></i></div><span class="num" id="g-jett"></span></div>
+      <div id="survival">
+        <div class="gauge"><span class="lbl">O₂</span><div class="bar"><i id="g-o2"></i></div><span class="num" id="g-o2t">100</span></div>
+        <div class="gauge"><span class="lbl">HP</span><div class="bar"><i id="g-hp"></i></div><span class="num" id="g-hpt">100</span></div>
+        <div class="gauge"><span class="lbl">JET</span><div class="bar"><i id="g-jet"></i></div><span class="num" id="g-jett"></span></div>
         <div id="o2note"></div>
       </div>
-      <div id="hotbar" class="card"></div>
+      <div id="hotbar"></div>
       <div id="mode" hidden></div>
-      <div id="cross"><svg class="prog" viewBox="0 0 30 30"><circle id="crossprog" cx="15" cy="15" r="13" fill="none" stroke="#66e0ff" stroke-width="2.5" stroke-dasharray="0 82" transform="rotate(-90 15 15)"/></svg></div>
+      <div id="cross"><svg class="prog" viewBox="0 0 30 30"><circle id="crossprog" cx="15" cy="15" r="13" fill="none" stroke="#66e0ff" stroke-width="2" stroke-dasharray="0 82" transform="rotate(-90 15 15)"/></svg></div>
       <div id="prompt"></div>
-      <div id="objective" class="card"></div>
+      <div id="objective" class="hudblock right"></div>
       <div id="toasts"></div>
-      <div id="keys"><div>건설<b>B</b> 가방·제작<b>Tab</b> 연구<b>J</b> 지도<b>M</b></div><div>해체<b>F</b> 지형 도구<b>G</b> 시점<b>V</b> 조명<b>L</b></div><div>상호작용<b>E</b> 채집<b>좌클릭</b> 탐사 로버<b>N</b></div></div>
+      <div id="keys" hidden><div>건설<b>B</b> 가방·제작<b>Tab</b> 연구<b>J</b> 지도<b>M</b></div><div>해체<b>F</b> 지형 도구<b>G</b> 시점<b>V</b> 조명<b>L</b></div><div>상호작용<b>E</b> 채집<b>좌클릭</b> 탐사 로버<b>N</b></div></div>
+      <div id="keyhint"><b>H</b> 조작 안내</div>
       <div id="lockhint" hidden>화면을 클릭하면 조작을 시작합니다</div>`;
     this.root.appendChild(hud);
     this.hud = hud;
@@ -100,18 +103,18 @@ export class UI {
     $('#st-ti').textContent = fmtTi(T.ti) + 'Ti';
     const frac = nx ? (T.stageFloat() - T.stage) : 1;
     $('#st-bar').style.width = (frac * 100).toFixed(1) + '%';
-    $('#st-next').textContent = nx ? `다음: ${nx.name} (${fmtTi(nx.ti)}Ti)` : '테라포밍 완료';
+    $('#st-next').textContent = nx ? `→ ${nx.name} · ${fmtTi(nx.ti)}Ti` : '테라포밍 완료';
     for (const k of Object.keys(PARAMS)) {
       $('#pv-' + k).textContent = fmtTi(T.p[k]) + PARAMS[k].unit;
-      $('#pr-' + k).textContent = '+' + fmtTi(T.rate[k]) + '/s';
+      $('#pr-' + k).textContent = T.rate[k] > 0 ? '+' + fmtTi(T.rate[k]) : '';
     }
     const C = g.colony;
     $('#era').textContent = ERAS[C.era - 1].name;
     $('#popn').textContent = C.total;
-    $('#tiers').innerHTML = TIERS.map((t, i) => C.pop[i] ? `<span class="chip"><i style="background:${t.color}"></i>${t.name} ${C.pop[i]}</span>` : '').join('') || '<span class="chip" style="color:var(--muted)">정착민 없음</span>';
-    $('#credits').innerHTML = `${CREDIT_ICON} ${Math.floor(C.credits)} <span style="color:${C.income >= 0 ? 'var(--good)' : 'var(--bad)'}">(${C.income >= 0 ? '+' : ''}${C.income.toFixed(1)}/분)</span>`;
+    $('#tiers').innerHTML = TIERS.map((t, i) => C.pop[i] ? `<span class="chip"><i style="background:${t.color}"></i>${t.name} ${C.pop[i]}</span>` : '').join('');
+    $('#credits').innerHTML = `${CREDIT_ICON}<b class="num">${Math.floor(C.credits)}</b><small style="color:${C.income >= 0 ? 'var(--good)' : 'var(--bad)'}">${C.income >= 0 ? '+' : ''}${C.income.toFixed(1)}</small>`;
     const P = g.eco.power;
-    $('#pow').textContent = `${P.supply.toFixed(1)} / ${P.demand.toFixed(1)} kW`;
+    $('#pow').textContent = `${P.supply.toFixed(1)}/${P.demand.toFixed(1)}kW`;
     $('#powbar').style.width = Math.min(100, P.demand > 0 ? P.supply / P.demand * 100 : (P.supply > 0 ? 100 : 0)) + '%';
     $('#powbar').style.background = P.supply >= P.demand ? 'var(--good)' : 'var(--bad)';
     const R = g.research;
@@ -119,15 +122,16 @@ export class UI {
       const r = R.get(R.current);
       $('#rsname').textContent = r.name;
       $('#rsbar').style.width = ((R.progress[r.id] || 0) / r.cost * 100).toFixed(1) + '%';
-    } else { $('#rsname').textContent = R.rate > 0 ? '대기' : '연구 장비 없음'; $('#rsbar').style.width = '0%'; }
+    } else { $('#rsname').textContent = R.rate > 0 ? '연구 대기' : ''; $('#rsbar').style.width = '0%'; }
+    $('#colony .rs').hidden = !R.current && !(R.rate > 0);
     const day = g.sky.time;
     const hh = Math.floor(day * 24), mm = Math.floor((day * 24 - hh) * 60);
     $('#clock').textContent = `${g.sky.day}일 ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
     const pl = g.player;
     $('#g-o2').style.width = (pl.oxygen * 100) + '%';
-    $('#g-o2t').textContent = Math.round(pl.oxygen * 100) + '%';
+    $('#g-o2t').textContent = Math.round(pl.oxygen * 100);
     $('#g-hp').style.width = (pl.health * 100) + '%';
-    $('#g-hpt').textContent = Math.round(pl.health * 100) + '%';
+    $('#g-hpt').textContent = Math.round(pl.health * 100);
     $('#g-jet').style.width = (pl.jetFuel * 100) + '%';
     $('#o2note').textContent = g.o2Note || '';
     this.renderObjective();
@@ -173,8 +177,10 @@ export class UI {
     const el = $('#objective');
     if (!o) { el.hidden = true; return; }
     el.hidden = false;
-    const html = `<div class="h-label">목표 ${o.index + 1}/${o.total}</div><div class="t">${esc(o.title)}</div><div class="d">${o.desc}</div>
-      <div class="p">${o.items.map((it) => `<div class="${it.ok ? 'ok' : ''}">${it.ok ? '✔' : '○'} ${esc(it.text)}</div>`).join('')}</div>`;
+    if (o.index !== this._objIdx) { this._objIdx = o.index; this._objShow = performance.now(); }
+    const fresh = performance.now() - (this._objShow || 0) < 14000;
+    const html = `<div class="h-label"><i class="tick"></i>목표 ${o.index + 1}/${o.total}</div><div class="t">${esc(o.title)}</div>${fresh ? `<div class="d">${o.desc}</div>` : ''}
+      <div class="p">${o.items.map((it) => `<div class="${it.ok ? 'ok' : ''}"><i></i>${esc(it.text)}</div>`).join('')}</div>`;
     if (html !== this._obj) { el.innerHTML = html; this._obj = html; }
   }
 

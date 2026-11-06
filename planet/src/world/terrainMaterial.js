@@ -52,7 +52,8 @@ void computeTerrain() {
   vec4 nzB = texture2D(tNoise, vTW.xz * 0.011 + 0.3);
   vec4 nzC = texture2D(tNoise, vTW.xz * 0.045 + 0.7);
   float slope = 1.0 - N.y;
-  float cliff = smoothstep(0.2, 0.38, slope + (nzB.g - 0.5) * 0.14);
+  // wide, noise-broken transition so the rock edge never follows mesh triangles
+  float cliff = smoothstep(0.26, 0.62, slope + (nzB.g - 0.5) * 0.18 + (nzC.r - 0.5) * 0.1);
 
   // ground layers (planar projection)
   // anti-tiling: blend two rotated/offset samples with a low-frequency mask
@@ -102,15 +103,15 @@ void computeTerrain() {
   // sandstone bedding: irregular, low-contrast layers (no candy stripes)
   vec3 strataC = strataColor(vTW.y * 0.45 + rock.b * 3.0 + nzC.r * 4.0 + nzB.g * 6.0, nzB.r);
   strataC = mix(s2l(vec3(0.55, 0.31, 0.19)) * (0.85 + 0.3 * nzC.g), strataC, 0.22) * (0.8 + 0.35 * rock.b);
-  rockC = mix(rockC, strataC, smoothstep(0.15, 0.6, bio.b));
+  rockC = mix(rockC, strataC, smoothstep(0.15, 0.6, bio.b) * smoothstep(0.5, 0.85, slope));
   rockC = mix(rockC, basalt * 1.25, smoothstep(0.2, 0.7, bio.g));
   rockC = mix(rockC, s2l(vec3(0.45, 0.47, 0.52)) * (0.7 + 0.5 * rock.b), smoothstep(0.3, 0.8, snowW));
   rockC = mix(rockC, crysC * 1.1, smoothstep(0.3, 0.8, crysW) * 0.6);
 
   // scree / exposed rock on eroded crests and steeper hillsides (before cliffs)
-  float scree = smoothstep(0.17, 0.3, slope + (nzC.b - 0.5) * 0.06) * (0.4 + 0.6 * smoothstep(0.2, 0.5, bio.b)) * (1.0 - cliff);
+  float scree = smoothstep(0.14, 0.42, slope + (nzC.r - 0.5) * 0.12) * (0.35 + 0.55 * smoothstep(0.2, 0.5, bio.b)) * (1.0 - cliff);
   vec3 screeC = mix(rockC * 0.85, ground * 0.8, smoothstep(0.35, 0.75, rock.g)) * (0.8 + 0.35 * rock.b);
-  ground = mix(ground, screeC, scree * 0.6);
+  ground = mix(ground, screeC, scree * 0.45);
   vec3 alb = mix(ground, rockC, cliff) * macro;
   float rough = mix(mix(0.93, 0.97, sandW), 0.82, cliff);
   float ao = mix(mix(soilA.a, 1.0, sandW), rock.a, cliff);
@@ -254,6 +255,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v14';
+  mat.customProgramCacheKey = () => 'terrain-v15';
   return mat;
 }
