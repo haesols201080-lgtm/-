@@ -89,14 +89,14 @@ export class Terraform {
 
     const atmo = table([[0, 0], [1, 0.55], [2, 0.7], [3, 0.78], [6, 0.86], [10, 1]], s);
     const dust = table([[0, 0.45], [1, 0.35], [3, 0.12], [6, 0.04]], s) + W.dustStorm * 0.6;
-    const cloud = table([[0, 0], [1.8, 0], [2.4, 0.3], [3, 0.45], [5, 0.55], [8, 0.62]], s) * (1 + W.storm * 0.6);
+    const cloud = table([[0, 0], [1.8, 0], [2.4, 0.3], [3, 0.45], [5, 0.55], [8, 0.62], [10.2, 0.62], [11, 0.48]], s) * (1 + W.storm * 0.6);   // temperate: fair-weather skies
     this.game.sky.setAtmosphere({ atmo, dust, cloud: clamp(cloud, 0, 1), storm: W.storm });
     U.uFrost.value = table([[0, 1], [3, 0.55], [4.2, 0]], s);
     U.uIce.value = s >= 4 ? 0 : 1;
-    this.game.props.setMelt(table([[3.8, 0], [4.6, 1]], s));
+    this.game.props.setMelt(table([[3.5, 0], [4.6, 1]], s));          // thaw stage: ice starts to go
     const level = s < 4 ? WORLD.WATER_DRY : table([[4, -295], [5, -95], [6, -28], [8, -7], [10, 0]], s);
     U.uWaterLevel.value = level;
-    U.uSnowMelt.value = table([[4, 0], [10, 0.55], [12, 0.7]], s);
+    U.uSnowMelt.value = table([[3.5, 0], [4, 0.12], [10, 0.55], [10.5, 0.62], [11.5, 0.82], [12, 0.86]], s);   // temperate: snowline climbs
     // life arrives gradually and overlapping (Planet Crafter-like): lichen and
     // moss creep out of damp hollows first, single grass tufts sprout and only
     // slowly close into meadows, flowers follow the grass, trees come last
