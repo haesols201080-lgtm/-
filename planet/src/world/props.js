@@ -172,6 +172,8 @@ export class Props {
       rockGeometry(23, 2, { sx: 1.3, sy: 0.42, sz: 1.0, cuts: 6 }),
       rockGeometry(37, 3, { sx: 0.55, sy: 2.4, sz: 0.6, cuts: 9, rough: 0.22 }),
       rockGeometry(41, 3, { sx: 1.0, sy: 0.9, sz: 1.1, cuts: 11, rough: 0.35 }),
+      rockGeometry(57, 3, { sx: 1.7, sy: 1.35, sz: 0.5, cuts: 12, rough: 0.16 }),   // fin / slab
+      rockGeometry(63, 3, { sx: 1.1, sy: 0.85, sz: 0.95, cuts: 14, rough: 0.12 }),  // angular block
     ];
     this.smallRock = rockGeometry(51, 1, { sx: 1, sy: 0.6, sz: 0.85, cuts: 5 });
     this.rockLayers = protos.map((g, i) => new Layer(scene, g, this.rockMat, { cap: 9000, attrs: { iTint: 3 }, range: 1500, nearR: 200 }));
@@ -325,8 +327,8 @@ export class Props {
         if (r.dead) continue;
         const s = Math.max(r.sx, r.sz);
         if (s < 1.1 || (r.x - cam.x) ** 2 + (r.z - cam.z) ** 2 > R2) continue;
-        const rr = s * (r.proto === 2 ? 0.45 : 0.7);
-        const top = r.y + r.sy * (r.proto === 2 ? 2.2 : r.proto === 1 ? 0.35 : 0.68);
+        const rr = s * (r.proto === 2 ? 0.45 : r.proto === 4 ? 0.55 : 0.7);
+        const top = r.y + r.sy * (r.proto === 2 ? 2.2 : r.proto === 1 ? 0.35 : r.proto === 4 ? 1.2 : 0.68);
         this.cols.push(C.addCyl(r.x, r.z, rr, r.y - 2, top, null, { rock: true }));
       }
       for (const c of cell.crystals) {

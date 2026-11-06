@@ -45,8 +45,7 @@ export function makeRockMaterial({ emissive = 0x000000 } = {}) {
         gN = normalize(N0 + (vec3(0.0, tx.y, tx.x) * bw.x + vec3(ty.x, 0.0, ty.y) * bw.y + vec3(tz.x, tz.y, 0.0) * bw.z) * 1.1);
         float top = smoothstep(0.55, 0.9, gN.y + (nz.g - 0.5) * 0.4);
         vec3 dust = vec3(0.17, 0.08, 0.045) * (0.8 + 0.4 * nz.b);
-        alb = mix(alb, dust, top * 0.55 * (1.0 - uMoss));
-        alb = mix(alb, vec3(0.03, 0.06, 0.012) * (0.7 + 0.6 * nz.a), top * uMoss * smoothstep(0.3, 0.7, nz.g));
+        alb = mix(alb, dust, top * 0.4);
         alb = mix(alb, vec3(0.5, 0.53, 0.58), top * uFrost * smoothstep(0.65, 0.85, nz.r) * 0.4);
         float wet = uWet * (0.5 + 0.5 * top) + (1.0 - smoothstep(0.0, 1.5, vWP.y - uWaterLevel)) * 0.8;
         alb *= mix(1.0, 0.55, clamp(wet, 0.0, 1.0));
@@ -56,7 +55,7 @@ export function makeRockMaterial({ emissive = 0x000000 } = {}) {
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = gR;')
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz);');
   };
-  mat.customProgramCacheKey = () => 'rock-v1-' + emissive;
+  mat.customProgramCacheKey = () => 'rock-v2-' + emissive;
   return mat;
 }
 

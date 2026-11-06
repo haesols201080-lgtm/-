@@ -70,9 +70,9 @@ export class WorldGen {
     const S = this.S, S2 = this.S2;
     const k = S2.noise2(x / 380 + 7, z / 380 - 3) * 0.5 + 0.5;
     const st = step * (0.7 + 0.6 * k);
-    const sharp = 0.2 + 0.16 * (S.noise2(x / 260 - 4, z / 260 + 9) * 0.5 + 0.5);
-    const t = terrace(h + 2.2 * S.noise2(x / 45, z / 45), st, sharp);
-    return t + 1.1 * S.fbm2(x / 16, z / 16, 2) + 0.6 * S2.noise2(x / 7, z / 7);
+    const sharp = 0.3 + 0.14 * (S.noise2(x / 260 - 4, z / 260 + 9) * 0.5 + 0.5);
+    const t = terrace(h + 2.2 * S.noise2(x / 60, z / 60), st, sharp);
+    return t + 0.5 * S.fbm2(x / 30, z / 30, 2);
   }
 
   // province type of a voronoi cell, chosen by latitude of its seed point
@@ -181,8 +181,8 @@ export class WorldGen {
       switch (pi) {
         case 0: {
           // rolling ground, low rocky ridges and hummocks so plains are never table-flat
-          const rg = S2.ridged2(x / 190 + 3, z / 190 - 8, 3);
-          dh += w * (5 * S.fbm2(x / 320, z / 320, 3) + 3.2 * S.fbm2(x / 105 + 9, z / 105, 2) + 4.5 * Math.pow(rg, 3) + 0.9 * S.fbm2(x / 28, z / 28, 2));
+          const rg = S2.ridged2(x / 260 + 3, z / 260 - 8, 2);
+          dh += w * (5 * S.fbm2(x / 320, z / 320, 3) + 3.2 * S.fbm2(x / 105 + 9, z / 105, 2) + 2.6 * Math.pow(rg, 1.6) + 0.5 * S.fbm2(x / 40, z / 40, 2));
           fert += w * 0.15;
           break;
         }
@@ -206,8 +206,7 @@ export class WorldGen {
         case 3: {
           // broad volcanic swells and a few lava ridges, not a field of spikes
           const r = S.ridged2(x / 1100 + 9, z / 1100 + 1, 3, 2.0, 0.4);
-          const flow = smoothstep(0.6, 0.9, S2.ridged2(x / 420, z / 420, 2));
-          dh += w * (12 + 52 * Math.pow(r, 2.4) + 10 * S.fbm2(x / 700, z / 700, 2) - flow * 3 + 1.5 * S.fbm2(x / 90, z / 90, 2));
+          dh += w * (12 + 52 * Math.pow(r, 2.4) + 10 * S.fbm2(x / 700, z / 700, 2) + 1.5 * S.fbm2(x / 90, z / 90, 2));
           basalt += w;
           fert += w * 0.1;
           break;
@@ -224,8 +223,7 @@ export class WorldGen {
         }
         case 6: {
           const r = S.ridged2(x / 560 - 3, z / 560 + 7, 5, 2.0, 0.5);
-          const gully = smoothstep(0.7, 0.95, S2.ridged2(x / 140 + 5, z / 140, 3));
-          dh += w * (30 + 85 * Math.pow(r, 1.6) - gully * 9);
+          dh += w * (30 + 85 * Math.pow(r, 1.6));
           strata += w * 0.35;
           fert -= w * 0.1;
           break;
@@ -246,6 +244,35 @@ export class WorldGen {
       }
     }
     h += dh * smoothstep(-0.25, 0.1, cont + 0.05);
+
+    // escarpments: long, meandering rock walls that step the land between
+    // plateaus (a sharp step across a contour of a warped low-frequency
+    // field), with a lower ledge and layered rock bands in the face
+    {
+      const ew = clamp(pw[0] + pw[3] + pw[4] + pw[6] * 0.9 + pw[1] * 0.6 + pw[5] * 0.4, 0, 1) * land;
+      if (ew > 0.03) {
+        const away = smoothstep(260, 480, Math.hypot(x, z));
+        const wx = x + 220 * S2.noise2(x / 760, z / 760), wz = z + 220 * S2.noise2(x / 760 + 5, z / 760 - 3);
+        const e1 = S.fbm2(wx / 1500 + 31, wz / 1500 - 17, 3) + 0.15 * S2.noise2(wx / 260, wz / 260);
+        const e2 = S2.fbm2(wx / 2300 - 8, wz / 2300 + 21, 2);
+        const tall = 1 + 0.8 * clamp(pw[1] + pw[6], 0, 1);           // mesa & highland country stands higher
+        const wallH = (28 + 40 * (S2.noise2(x / 1100 + 2, z / 1100) * 0.5 + 0.5)) * tall;
+        const e3 = S.fbm2(wx / 820 + 4, wz / 820 + 13, 2);
+        // every wall is different: steepness, ledge height and position drift
+        // along it, and a talus apron runs out below the vertical part
+        const sharp = 0.012 + 0.016 * (S2.noise2(x / 640 + 3, z / 640 - 1) * 0.5 + 0.5);
+        const cliff = (d, sh) => 0.74 * smoothstep(-sh, sh, d) + 0.26 * smoothstep(-sh * 8, sh, d);
+        const k1 = cliff(e1 - 0.12 - 0.035 * S.noise2(x / 380 + 1, z / 380), sharp);
+        const k0 = cliff(e1 - 0.075 - 0.03 * S2.noise2(x / 300, z / 300 + 6), sharp * 0.8) * (0.15 + 0.3 * (S.noise2(x / 520 - 4, z / 520) * 0.5 + 0.5));
+        const k2 = cliff(e2 + 0.18 + 0.03 * S.noise2(x / 450, z / 450 - 2), sharp * 1.3) * (0.45 + 0.4 * (S2.noise2(x / 700, z / 700 + 9) * 0.5 + 0.5));
+        const k3 = cliff(e3 - 0.3, sharp * 1.5) * 0.3;
+        const step = (Math.max(k1, k0) + k2 + k3) * wallH * ew * away;
+        h += step;
+        const face = (k1 * (1 - k1) + k2 * (1 - k2) + k3 * (1 - k3)) * 4 * ew * away;
+        strata = Math.max(strata, clamp(face * 1.6, 0, 1) * 0.9);
+        fert -= face * 0.3;
+      }
+    }
 
     // polar caps: the planet's ends rise into ice plateaus
     const polar = smoothstep(0.72, 0.9, alat);
@@ -321,18 +348,22 @@ export class WorldGen {
       }
     }
 
-    // ordinary canyons: noise zero-crossings in mesa / highland country
+    // canyons: broad valleys with sloping walls and a flat floor, only in mesa
+    // and highland country (no slot trenches across the plains)
     {
-      const mask = (pw[1] + pw[6] * 0.7 + pw[0] * 0.35) * land;
-      const cn0 = mask > 0.05 ? S2.fbm2(x / 1700 + 8, z / 1700 - 2, 3) : 1;
-      const cn = Math.abs(cn0) < 0.35 ? cn0 + 0.25 * S.fbm2(x / 400, z / 400, 2) : cn0;
-      const cw = Math.abs(cn);
-      if (cw < 0.06 && mask > 0.05) {
-        const t = smoothstep(0.06, 0.012, cw) * mask;
-        const floor = Math.min(h, 2) - 26;
-        h = lerp(h, lerp(lerp(h, floor, t), this.terraceN(lerp(h, floor, t), 8, x, z), 0.75), t);
-        strata = Math.max(strata, t * 0.9);
-        fert += t * 0.4;
+      const mask = (pw[1] + pw[6] * 0.8) * land;
+      if (mask > 0.05) {
+        const cn0 = S2.fbm2(x / 1700 + 8, z / 1700 - 2, 3);
+        const cn = Math.abs(cn0) < 0.4 ? cn0 + 0.2 * S.fbm2(x / 500, z / 500, 2) : cn0;
+        const cw = Math.abs(cn);
+        if (cw < 0.14) {
+          const t = smoothstep(0.14, 0.035, cw) * mask;
+          const floor = Math.min(h, 4) - 18 - 6 * (S.noise2(x / 600, z / 600) * 0.5 + 0.5);
+          const v = lerp(h, floor, t * t * (3 - 2 * t));
+          h = lerp(v, this.terraceN(v, 7, x, z), smoothstep(0.2, 0.6, t) * (1 - smoothstep(0.85, 1, t)) * 0.45 * pw[1]);
+          strata = Math.max(strata, t * 0.7);
+          fert += t * 0.35;
+        }
       }
     }
 
@@ -386,7 +417,7 @@ export class WorldGen {
     const slope = Math.hypot(gx, gz);
     // the landing region stays gentler so a first base fits on it
     const home = 0.35 + 0.65 * smoothstep(450, 1400, Math.hypot(x, z));
-    const amp = 7.5 * smoothstep(0.06, 0.5, slope) * er * home;
+    const amp = 5.5 * smoothstep(0.06, 0.5, slope) * (1 - smoothstep(0.55, 1.1, slope)) * er * home;
     if (amp < 0.05) return h0;
     let v = 0, hx = 0, hz = 0, a = 1, f = 1 / 170;
     const SLOPE = 2.4, BRANCH = 1.1;

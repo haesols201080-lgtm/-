@@ -176,7 +176,7 @@ export function genProps(gen, edits, ci, cj) {
     const sl = slopeAt(gen, px, pz, h);
     let proto = r1 < 0.3 ? 1 : r1 < 0.65 ? 0 : 3;
     let s = 0.6 + 4.2 * Math.pow(r2, 3.0) + sl * 3;
-    if ((tmp[2] > 0.4 || tmp[6] > 0.4) && r3 < 0.07) { proto = 2; s = 2 + r4 * 6; }
+    if ((tmp[2] > 0.4 || tmp[6] > 0.4) && r3 < 0.015) { proto = 2; s = 1.5 + r4 * 3.5; }
     if (tmp[1] > 0.5 && r3 > 0.85) s *= 1.6;
     const tint = rockTint(tmp, 0.85 + r5 * 0.3);
     out.rocks.push(px, h - s * (proto === 2 ? 0.1 : 0.25), pz, s * (0.8 + r3 * 0.4), s * (0.7 + r4 * 0.6), s * (0.8 + r5 * 0.4), r4 * 6.28, (r5 - 0.5) * 0.35, (r3 - 0.5) * 0.35, proto, tint[0], tint[1], tint[2]);
@@ -266,6 +266,50 @@ export function genProps(gen, edits, ci, cj) {
       out.deposits.push({ id: 's:' + k, type, x: sp[0], y: gen.sample(sp[0], sp[1]), z: sp[1] });
     }
   });
+
+  // rock formations: tors, fins and boulder piles on crests, slopes and
+  // escarpment edges (never on flats, sand, salt, roads or the landing site)
+  const FS = 44;
+  for (let z = z0; z < z0 + PROP_CELL; z += FS) for (let x = x0; x < x0 + PROP_CELL; x += FS) {
+    const r0 = rnd(), px = x + rnd() * FS, pz = z + rnd() * FS, r1 = rnd(), r2 = rnd(), r3 = rnd();
+    if (!inWorld(px, pz)) continue;
+    const fn = S.fbm2(px / 420 - 7, pz / 420 + 3, 2) * 0.5 + 0.5;
+    if (r0 > 0.1 + 0.55 * smoothstep(0.5, 0.82, fn)) continue;
+    if (nearStart(px, pz, 140)) continue;
+    const h = surfAt(gen, edits, px, pz, tmp, res);
+    if (res.mod > 0.15 || h < -2 || tmp[0] > 0.45 || tmp[5] > 0.4) continue;
+    const sl = slopeAt(gen, px, pz, h);
+    if (sl < 0.07 || sl > 1.6) continue;
+    const n = 2 + Math.floor(r1 * 5);
+    const big = 2.8 + r2 * r2 * 8 + Math.min(sl, 0.8) * 4;
+    const tint = rockTint(tmp, 0.8 + r3 * 0.25);
+    for (let k = 0; k < n; k++) {
+      const a = rnd() * 6.283, d = k === 0 ? 0 : big * (0.45 + rnd() * 0.85);
+      const qx = px + Math.cos(a) * d, qz = pz + Math.sin(a) * d;
+      const qh = surfAt(gen, edits, qx, qz, tmp, res);
+      if (res.mod > 0.15) continue;
+      const sz = big * (k === 0 ? 1 : 0.3 + rnd() * 0.45);
+      const proto = k === 0 ? (r3 < 0.5 ? 5 : 3) : (rnd() < 0.55 ? 5 : 0);
+      out.rocks.push(qx, qh - sz * 0.3, qz, sz * (0.85 + rnd() * 0.3), sz * (0.75 + rnd() * 0.45), sz * (0.85 + rnd() * 0.3), rnd() * 6.28, (rnd() - 0.5) * 0.35, (rnd() - 0.5) * 0.35, proto, tint[0], tint[1], tint[2]);
+    }
+  }
+
+  // giant rock masses (15-35 m): weathered buttes and boulders that frame the
+  // view, mostly at the foot of escarpments and in rough country
+  const GS = 128;
+  for (let z = z0; z < z0 + PROP_CELL; z += GS) for (let x = x0; x < x0 + PROP_CELL; x += GS) {
+    const r0 = rnd(), px = x + rnd() * GS, pz = z + rnd() * GS, r1 = rnd(), r2 = rnd(), r3 = rnd();
+    if (!inWorld(px, pz) || nearStart(px, pz, 260)) continue;
+    const h = surfAt(gen, edits, px, pz, tmp, res);
+    if (res.mod > 0.1 || h < -4 || tmp[0] > 0.5 || tmp[5] > 0.3 || tmp[4] > 0.6) continue;
+    const sl = slopeAt(gen, px, pz, h);
+    const want = 0.12 + 0.5 * tmp[2] + 0.3 * smoothstep(0.15, 0.6, sl);
+    if (r0 > want * 0.55) continue;
+    const big = 13 + r1 * r1 * 24;
+    const tint = rockTint(tmp, 0.85 + r3 * 0.2);
+    const proto = r2 < 0.45 ? 3 : r2 < 0.75 ? 5 : 0;
+    out.rocks.push(px, h - big * 0.32, pz, big * (0.9 + r3 * 0.4), big * (0.55 + r2 * 0.45), big * (0.85 + r1 * 0.35), r3 * 6.28, (r2 - 0.5) * 0.2, (r1 - 0.5) * 0.2, proto, tint[0], tint[1], tint[2]);
+  }
 
   // crater ice sheets
   const CC = 520;

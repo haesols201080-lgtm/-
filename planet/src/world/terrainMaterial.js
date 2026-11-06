@@ -68,6 +68,13 @@ void computeTerrain() {
   vec4 ry = texture2D(tRock, vTW.xz * rs);
   vec4 rz = texture2D(tRock, vec2(vTW.x, vTW.y * 1.6) * rs);
   vec4 rock = rx * bw.x + ry * bw.y + rz * bw.z;
+  // anti-tiling for big faces: a second, larger and rotated rock sample
+  float rs2 = rs * 0.31;
+  vec4 rx2 = texture2D(tRock, vec2(vTW.z * 0.8 + vTW.y * 0.6, vTW.y * 1.2 - vTW.z * 0.3) * rs2 + 0.37);
+  vec4 rz2 = texture2D(tRock, vec2(vTW.x * 0.8 - vTW.y * 0.6, vTW.y * 1.2 + vTW.x * 0.3) * rs2 + 0.61);
+  vec4 ry2 = texture2D(tRock, vec2(vTW.x * 0.7 + vTW.z * 0.7, vTW.z * 0.7 - vTW.x * 0.7) * rs2 + 0.13);
+  float rmix = smoothstep(0.3, 0.7, texture2D(tNoise, vTW.xz * 0.004 + vTW.y * 0.003).g);
+  rock = mix(rock, rx2 * bw.x + ry2 * bw.y + rz2 * bw.z, rmix * 0.65);
 
   float macro = 0.8 + 0.4 * nzA.r * (0.7 + 0.3 * nzB.b);
   float soilDetail = mix(soilA.b, soilB.b, 0.35);
@@ -92,7 +99,9 @@ void computeTerrain() {
   ground = mix(ground, crysC, smoothstep(0.25, 0.7, crysW));
 
   vec3 rockC = mix(s2l(vec3(0.36, 0.21, 0.14)), s2l(vec3(0.66, 0.45, 0.32)), rock.b);
-  vec3 strataC = strataColor(vTW.y + rock.b * 1.5, nzB.r) * (0.75 + 0.45 * rock.b);
+  // sandstone bedding: irregular, low-contrast layers (no candy stripes)
+  vec3 strataC = strataColor(vTW.y * 0.45 + rock.b * 3.0 + nzC.r * 4.0 + nzB.g * 6.0, nzB.r);
+  strataC = mix(s2l(vec3(0.55, 0.31, 0.19)) * (0.85 + 0.3 * nzC.g), strataC, 0.22) * (0.8 + 0.35 * rock.b);
   rockC = mix(rockC, strataC, smoothstep(0.15, 0.6, bio.b));
   rockC = mix(rockC, basalt * 1.25, smoothstep(0.2, 0.7, bio.g));
   rockC = mix(rockC, s2l(vec3(0.45, 0.47, 0.52)) * (0.7 + 0.5 * rock.b), smoothstep(0.3, 0.8, snowW));
@@ -153,14 +162,13 @@ void computeTerrain() {
   // living layers
   float above = vTW.y - uWaterLevel;
   float flat_ = 1.0 - smoothstep(0.26, 0.42, slope);
-  float fertile = clamp(bio.a * 0.6 + nzB.r * 0.3 + (mossT.b - 0.5) * 0.2 + nzA.g * 0.15, 0.0, 1.0);
+  // vegetation settles where water collects: the landform (bio.a) leads, broad
+  // patch noise breaks it up, so terraforming spreads out from hollows and
+  // drainage lines and leaves sand, gravel and rock between the patches
+  float patchN = smoothstep(0.3, 0.7, nzB.r * 0.6 + nzA.g * 0.5 - 0.05);
+  float fertile = clamp(bio.a * 0.62 + patchN * 0.42 + (mossT.b - 0.5) * 0.12 - 0.03, 0.0, 1.0);
   float localG = 0.0;
   for (int i = 0; i < 8; i++) { vec4 gp = uGreen[i]; if (gp.z > 0.0) localG = max(localG, gp.w * (1.0 - smoothstep(gp.z * 0.6, gp.z, length(vTW.xz - gp.xy)))); }
-  float mThr = 1.0 - clamp(uMoss + localG * 0.8, 0.0, 1.0);
-  float gThr = 1.0 - clamp(uGrass + localG * 0.55, 0.0, 1.0);
-  fertile *= 1.0 - snowCov * 0.9 - smoothstep(0.4, 0.8, saltW) * 0.6;
-  float mossCov = smoothstep(mThr, mThr + 0.12, fertile) * step(0.001, uMoss + localG) * flat_ * step(0.4, above) * (1.0 - packed) * (1.0 - scree * 0.6);
-  float grassCov = smoothstep(gThr, gThr + 0.14, fertile + nzC.g * 0.06) * step(0.001, uGrass + localG * 0.5) * flat_ * smoothstep(0.6, 2.5, above) * (1.0 - packed * 0.8) * (1.0 - scree * 0.85);
   // Living ground is built from several scales so it never reads as a smooth
   // painted surface: tussock clumps (~0.8 m) and blade speckle (~0.2 m) with
   // shadowed gaps of soil between them, meso hummocks in the normal, natural
@@ -173,13 +181,24 @@ void computeTerrain() {
   float fwG = length(fwidth(vTW.xz));
   float nearF = 1.0 - smoothstep(0.08, 0.6, fwG);          // fine detail only where it resolves
   float speck = mix(0.55, blade.r * 0.6 + blade2.g * 0.4, nearF);
-  float tuft = smoothstep(0.25, 0.75, clump.b * 0.7 + speck * 0.5);
+  float tuft = smoothstep(0.25, 0.75, clump.b * 0.35 + speck * 0.55 + nzC.a * 0.3);
+  float mThr = 1.0 - clamp(uMoss * 0.92 + localG * 0.8, 0.0, 1.0);
+  float gThr = 1.0 - clamp(uGrass * 0.88 + localG * 0.55, 0.0, 1.0);
+  fertile *= 1.0 - snowCov * 0.9 - smoothstep(0.4, 0.8, saltW) * 0.6;
+  // coverage grows out of the most favourable ground with ragged, stippled
+  // edges (clumps and single tufts first), and the ground itself only turns
+  // green once the cover has thickened - early on it is bare soil with sprouts
+  float rag = (clump.b - 0.5) * 0.28 + (speck - 0.5) * 0.22 * nearF + (nzC.g - 0.5) * 0.12;
+  float mossCov = smoothstep(mThr, mThr + 0.16, fertile + rag) * step(0.001, uMoss + localG) * flat_ * step(0.4, above) * (1.0 - packed) * (1.0 - scree * 0.6);
+  mossCov *= 0.35 + 0.65 * smoothstep(0.15, 0.7, uMoss + localG);
+  float grassCov = smoothstep(gThr, gThr + 0.22, fertile + rag) * step(0.001, uGrass + localG * 0.5) * flat_ * smoothstep(0.6, 2.5, above) * (1.0 - packed * 0.8) * (1.0 - scree * 0.85);
+  grassCov *= 0.2 + 0.8 * smoothstep(0.12, 0.75, uGrass + localG * 0.5);
   vec3 mossC = mix(s2l(vec3(0.15, 0.19, 0.08)), s2l(vec3(0.31, 0.35, 0.14)), mossT.b * 0.6 + clump.b * 0.4);
   mossC *= 0.78 + 0.4 * speck;
   vec3 gDark = s2l(vec3(0.14, 0.2, 0.07)), gMid = s2l(vec3(0.27, 0.34, 0.12)), gLight = s2l(vec3(0.42, 0.45, 0.2));
   vec3 grassC = mix(gDark, gMid, tuft);
   grassC = mix(grassC, gLight, smoothstep(0.55, 0.95, speck * 0.6 + clump.g * 0.5) * 0.7);
-  grassC = mix(grassC, s2l(vec3(0.16, 0.27, 0.17)), smoothstep(0.55, 0.85, nzA.b) * 0.35);
+  grassC = mix(grassC, s2l(vec3(0.16, 0.27, 0.17)), smoothstep(0.55, 0.85, nzA.r) * 0.35);
   // vegetation follows the land: lush dark drainage lines and hollows, drier
   // yellowing crests, and broad shrubland / meadow patches
   float moist = smoothstep(0.3, 0.8, bio.a + (nzB.g - 0.5) * 0.2);
@@ -188,11 +207,11 @@ void computeTerrain() {
   grassC = mix(grassC, s2l(vec3(0.12, 0.17, 0.08)) * (0.75 + 0.5 * clump.b), shrub * 0.55);
   grassC = mix(grassC * vec3(1.08, 0.97, 0.78), grassC, uLush);
   // straw/dry patches and bare soil peeking between tufts
-  float dry = smoothstep(0.55, 0.85, nzB.b + (clump.r - 0.5) * 0.3) * (1.0 - uLush * 0.5);
+  float dry = smoothstep(0.55, 0.85, nzB.a * 0.7 + nzA.g * 0.4 + (clump.r - 0.5) * 0.15) * (1.0 - uLush * 0.5);
   grassC = mix(grassC, s2l(vec3(0.5, 0.45, 0.26)) * (0.8 + 0.4 * speck), dry * 0.6);
   grassC *= 0.88 + 0.22 * nzC.r;
   float gap = (1.0 - smoothstep(0.15, 0.45, speck)) * nearF;
-  grassCov *= 1.0 - 0.7 * smoothstep(0.66, 0.86, nzA.b + (soilA.b - 0.5) * 0.2);
+  grassCov *= 1.0 - 0.6 * smoothstep(0.66, 0.86, nzA.r * 0.8 + nzB.a * 0.3 + (soilA.b - 0.5) * 0.15);
   float edgeSoil = (1.0 - smoothstep(0.0, 0.5, grassCov)) * grassCov * 2.0;   // ragged edges show soil
   grassC = mix(grassC, alb * 0.75, max(gap * 0.45, edgeSoil * (1.0 - tuft)));
   alb = mix(alb, mossC, mossCov * 0.9);
@@ -235,6 +254,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v9';
+  mat.customProgramCacheKey = () => 'terrain-v14';
   return mat;
 }

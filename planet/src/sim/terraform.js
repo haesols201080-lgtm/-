@@ -93,11 +93,14 @@ export class Terraform {
     const level = s < 4 ? WORLD.WATER_DRY : table([[4, -295], [5, -95], [6, -28], [8, -7], [10, 0]], s);
     U.uWaterLevel.value = level;
     U.uSnowMelt.value = table([[4, 0], [10, 0.55], [12, 0.7]], s);
-    const moss = table([[6, 0], [7, 0.7], [9, 1]], s);
-    const grass = table([[7, 0], [8, 0.8], [10, 1]], s);
+    // life arrives gradually and overlapping (Planet Crafter-like): lichen and
+    // moss creep out of damp hollows first, single grass tufts sprout and only
+    // slowly close into meadows, flowers follow the grass, trees come last
+    const moss = table([[5.6, 0], [6.5, 0.22], [7.5, 0.5], [9, 0.8], [11, 1]], s);
+    const grass = table([[6.8, 0], [7.5, 0.16], [8.5, 0.4], [9.5, 0.62], [11, 0.85], [12, 1]], s);
     U.uMoss.value = moss;
     U.uGrass.value = grass;
-    U.uGrowth.value.set(moss, grass, table([[7.3, 0], [9, 1]], s), table([[8, 0], [10, 1]], s));
+    U.uGrowth.value.set(moss, grass, table([[7.6, 0], [9, 0.45], [10.5, 1]], s), table([[8, 0], [9.5, 0.45], [11, 1]], s));
     U.uLush.value = table([[9, 0], [12, 1]], s);
     U.uWet.value = W.wet;
     U.uWind.value = 0.15 + atmo * 0.45 + W.storm * 0.6;

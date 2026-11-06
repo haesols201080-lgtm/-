@@ -153,33 +153,36 @@ function patch(mat, key, fragBody, { anim = null, slide = null, extraUniforms = 
 }
 
 const HULL_MAP = /* glsl */`
-  // clean painted-aluminium cladding under a clear coat: neutral cool white,
-  // crisp hairline joints, slight per-panel tone/gloss, only a breath of dust
-  // at the very base - no streaks or grain
+  // brushed aluminium cladding: silver base, fine brushed grain running along
+  // each panel, per-panel reflectance and grain direction, crisp dark joints,
+  // a breath of dust only at the very base
   gStagger = 0.0;
   vec3 pin = panelInfo(vOP, normalize(vON), vec2(1.8, 1.6));
-  vec3 baseC = diffuseColor.rgb * 0.88 * vec3(0.88, 0.96, 1.1);
-  baseC *= 0.98 + 0.035 * pin.y;
+  vec2 puv = panelUV(vOP, normalize(vON));
+  float vert = step(0.5, fract(pin.y * 7.3));
+  vec2 bu = mix(vec2(puv.x * 0.12, puv.y * 11.0), vec2(puv.x * 11.0, puv.y * 0.12), vert);
+  float brush = texture2D(tNoise, bu + pin.y * 3.7).g;
+  float brush2 = texture2D(tNoise, bu * 3.1 + pin.y * 1.3).a;
+  vec3 baseC = diffuseColor.rgb * vec3(0.9, 0.93, 0.97);
+  baseC *= 0.92 + 0.1 * pin.y + 0.06 * (brush - 0.5);
   vec4 nz = texture2D(tNoise, vOP.xz * 0.11 + vOP.y * 0.07 + vData.z);
-  float low = smoothstep(0.9, 0.0, vOP.y) * (0.5 + 0.5 * nz.g);
-  baseC = mix(baseC, baseC * vec3(0.86, 0.8, 0.74), low * 0.35);
-  float top = smoothstep(0.75, 0.98, normalize(vON).y);
-  baseC = mix(baseC, vec3(0.5, 0.4, 0.32), top * uDustAmt * smoothstep(0.55, 0.85, nz.r) * 0.12);
-  baseC *= 1.0 - pin.x * 0.35;
-  gH = cladHeight(vOP, normalize(vON), vec2(1.8, 1.6), 0.004) + 1e-6;
+  float low = smoothstep(0.7, 0.0, vOP.y) * (0.5 + 0.5 * nz.g);
+  baseC = mix(baseC, baseC * vec3(0.8, 0.74, 0.68), low * 0.3);
+  baseC *= 1.0 - pin.x * 0.55;
+  gH = cladHeight(vOP, normalize(vON), vec2(1.8, 1.6), 0.004) + (brush2 - 0.5) * 0.0004 + 1e-6;
   diffuseColor.rgb = baseC;
-  gR2 = clamp(0.3 + 0.06 * pin.y + low * 0.15 + pin.x * 0.25, 0.0, 1.0);
+  gR2 = clamp(0.2 + 0.1 * pin.y + 0.14 * brush2 + pin.x * 0.35 + low * 0.2, 0.0, 1.0);
 `;
 
 export function makeBuildingMaterials() {
   const M = {};
-  M.hull = patch(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.32, metalness: 0.04, clearcoat: 1.0, clearcoatRoughness: 0.05, envMapIntensity: 0.9 }), 'hull', {
+  M.hull = patch(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.82, envMapIntensity: 1.35 }), 'hull', {
     map: HULL_MAP, rough: 'float roughnessFactor = gR2;',
   });
   // trapezoidal ribbed metal cladding (industrial sheds, roofs)
   // standing-seam metal cladding: wide smooth pans with thin raised seams,
   // metallic and glossy (sheds, roofs)
-  M.rib = patch(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.2, clearcoat: 0.9, clearcoatRoughness: 0.08, envMapIntensity: 1.0 }), 'rib', {
+  M.rib = patch(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.8, envMapIntensity: 1.35 }), 'rib', {
     map: /* glsl */`
       gStagger = 0.0;
       vec2 ruv = panelUV(vOP, normalize(vON));
