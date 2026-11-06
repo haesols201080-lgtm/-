@@ -187,6 +187,128 @@ function fern(seed) {
 }
 
 // Trees ----------------------------------------------------------------
+// ------------------------------------------------------------------ flowers
+// Real flowering plants built from stems, leaves and petals; colours live in
+// the vertex colours (glow = 0 so the per-instance tint only shifts them a little).
+const FV = (x, y, z) => new THREE.Vector3(x, y, z);
+function stemTo(gb, base, top, r, color, sway = 1) {
+  const mid = base.clone().lerp(top, 0.5).add(FV((top.x - base.x) * 0.3, 0, (top.z - base.z) * 0.3));
+  gb.add(taperTube(new THREE.QuadraticBezierCurve3(base, mid, top), 5, 4, (t) => r * (1 - t * 0.4)), { color, attrs: { aSway: (x, y) => clamp(y / Math.max(0.1, top.y), 0, 1) * sway, aGlow: 0 } });
+}
+function basalLeaves(gb, rnd, n, len, color) {
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2 + rnd();
+    const leaf = new THREE.SphereGeometry(1, 6, 4); leaf.scale(0.035, 0.008, len / 2); leaf.translate(0, 0, len / 2);
+    gb.add(leaf, { pos: FV(0, 0.02, 0), rot: new THREE.Euler(-0.5 - rnd() * 0.3, a, 0), color, attrs: { aSway: 0.15, aGlow: 0 } });
+  }
+}
+function petalRing(gb, c, n, len, wid, tilt, color, rnd, sway = 1) {
+  for (let k = 0; k < n; k++) {
+    const pa = k / n * Math.PI * 2 + rnd() * 0.2;
+    const petal = new THREE.SphereGeometry(1, 7, 4); petal.scale(wid, 0.012, len / 2); petal.translate(0, 0, len / 2);
+    gb.add(petal, { pos: c, rot: new THREE.Euler(-tilt, pa, 0, 'YXZ'), color, attrs: { aSway: sway, aGlow: 0 } });
+  }
+}
+function flowerDaisy(seed) {
+  const rnd = mulberry32(seed), gb = new GeoBuilder(['aSway', 'aGlow']);
+  basalLeaves(gb, rnd, 5, 0.14, [0.22, 0.4, 0.12]);
+  const n = 3 + Math.floor(rnd() * 3);
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * 6.28, r = rnd() * 0.12, h = 0.25 + rnd() * 0.22;
+    const top = FV(Math.cos(a) * r + (rnd() - 0.5) * 0.08, h, Math.sin(a) * r + (rnd() - 0.5) * 0.08);
+    stemTo(gb, FV(Math.cos(a) * r * 0.3, 0, Math.sin(a) * r * 0.3), top, 0.007, [0.24, 0.42, 0.14]);
+    petalRing(gb, top, 14, 0.045, 0.011, 0.15, [0.96, 0.96, 0.92], rnd);
+    gb.add(new THREE.SphereGeometry(0.016, 8, 5), { pos: top.clone().add(FV(0, 0.004, 0)), scale: FV(1, 0.55, 1), color: [0.95, 0.72, 0.12], attrs: { aSway: 1, aGlow: 0 } });
+  }
+  return gb.build();
+}
+function flowerPoppy(seed) {
+  const rnd = mulberry32(seed), gb = new GeoBuilder(['aSway', 'aGlow']);
+  basalLeaves(gb, rnd, 4, 0.12, [0.3, 0.42, 0.18]);
+  const n = 2 + Math.floor(rnd() * 3);
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * 6.28, r = rnd() * 0.1, h = 0.35 + rnd() * 0.25;
+    const top = FV(Math.cos(a) * r + (rnd() - 0.5) * 0.12, h, Math.sin(a) * r + (rnd() - 0.5) * 0.12);
+    stemTo(gb, FV(0, 0, 0), top, 0.006, [0.3, 0.44, 0.18]);
+    // cup of four broad petals
+    for (let k = 0; k < 4; k++) {
+      const petal = new THREE.SphereGeometry(1, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2); petal.scale(0.034, 0.045, 0.012); petal.rotateX(-Math.PI / 2); petal.translate(0, 0.02, 0.022);
+      gb.add(petal, { pos: top, rot: new THREE.Euler(-0.55, k * Math.PI / 2 + rnd() * 0.3, 0, 'YXZ'), color: [0.86, 0.12, 0.08], attrs: { aSway: 1, aGlow: 0 } });
+    }
+    gb.add(new THREE.SphereGeometry(0.011, 6, 4), { pos: top.clone().add(FV(0, 0.012, 0)), color: [0.08, 0.06, 0.08], attrs: { aSway: 1, aGlow: 0 } });
+  }
+  return gb.build();
+}
+function flowerBells(seed) {
+  const rnd = mulberry32(seed), gb = new GeoBuilder(['aSway', 'aGlow']);
+  basalLeaves(gb, rnd, 6, 0.2, [0.2, 0.38, 0.16]);
+  const n = 2 + Math.floor(rnd() * 2);
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * 6.28, h = 0.3 + rnd() * 0.12, out = FV(Math.cos(a), 0, Math.sin(a));
+    const curve = new THREE.QuadraticBezierCurve3(FV(0, 0, 0), FV(0, h * 1.1, 0), out.clone().multiplyScalar(0.16).add(FV(0, h * 0.85, 0)));
+    gb.add(taperTube(curve, 6, 4, () => 0.005), { color: [0.22, 0.4, 0.16], attrs: { aSway: (x, y) => clamp(y / h, 0, 1), aGlow: 0 } });
+    for (let k = 0; k < 6; k++) {
+      const t = 0.5 + k * 0.09, p = curve.getPoint(Math.min(1, t));
+      const bell = new THREE.CylinderGeometry(0.012, 0.004, 0.026, 8, 1, true); bell.translate(0, -0.016, 0);
+      gb.add(bell, { pos: p.clone().addScaledVector(out, 0.012), rot: new THREE.Euler(0.25, 0, 0), color: [0.36, 0.38, 0.9], attrs: { aSway: 1, aGlow: 0 } });
+    }
+  }
+  return gb.build();
+}
+function flowerLupine(seed) {
+  const rnd = mulberry32(seed), gb = new GeoBuilder(['aSway', 'aGlow']);
+  // palmate leaves at the base
+  for (let i = 0; i < 4; i++) { const a = i / 4 * 6.28 + rnd(); for (let k = 0; k < 7; k++) { const lf = new THREE.SphereGeometry(1, 5, 3); lf.scale(0.009, 0.004, 0.045); lf.translate(0, 0, 0.045); gb.add(lf, { pos: FV(Math.cos(a) * 0.06, 0.12, Math.sin(a) * 0.06), rot: new THREE.Euler(-0.2, a + (k - 3) * 0.32, 0), color: [0.26, 0.44, 0.2], attrs: { aSway: 0.3, aGlow: 0 } }); } }
+  const n = 2 + Math.floor(rnd() * 3);
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * 6.28, r = 0.03 + rnd() * 0.08, h = 0.55 + rnd() * 0.3;
+    const base = FV(Math.cos(a) * r, 0, Math.sin(a) * r), top = base.clone().add(FV((rnd() - 0.5) * 0.06, h, (rnd() - 0.5) * 0.06));
+    stemTo(gb, base, top, 0.008, [0.26, 0.42, 0.2]);
+    const col = rnd() < 0.7 ? [0.5, 0.32, 0.86] : [0.9, 0.42, 0.66];
+    for (let k = 0; k < 16; k++) {
+      const t = 0.45 + k / 16 * 0.55, p = base.clone().lerp(top, t);
+      const w = 0.028 * (1.1 - t);
+      const fl = new THREE.SphereGeometry(0.011, 6, 4); fl.scale(1, 0.75, 1.3);
+      gb.add(fl, { pos: p.clone().add(FV(Math.cos(k * 2.4) * w, 0, Math.sin(k * 2.4) * w)), color: col.map((c) => c * (0.8 + 0.4 * t)), attrs: { aSway: 1, aGlow: 0 } });
+    }
+  }
+  return gb.build();
+}
+function flowerUmbel(seed) {
+  const rnd = mulberry32(seed), gb = new GeoBuilder(['aSway', 'aGlow']);
+  basalLeaves(gb, rnd, 5, 0.12, [0.26, 0.4, 0.18]);
+  const n = 2 + Math.floor(rnd() * 2);
+  const col = rnd() < 0.6 ? [0.95, 0.94, 0.86] : [0.98, 0.84, 0.36];
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * 6.28, r = rnd() * 0.1, h = 0.4 + rnd() * 0.2;
+    const top = FV(Math.cos(a) * r, h, Math.sin(a) * r);
+    stemTo(gb, FV(0, 0, 0), top, 0.006, [0.3, 0.42, 0.2]);
+    for (let k = 0; k < 18; k++) {
+      const rr = Math.sqrt(k / 18) * 0.05, aa = k * 2.4;
+      gb.add(new THREE.SphereGeometry(0.008, 5, 3), { pos: top.clone().add(FV(Math.cos(aa) * rr, -rr * rr * 4, Math.sin(aa) * rr)), color: col, attrs: { aSway: 1, aGlow: 0 } });
+    }
+  }
+  return gb.build();
+}
+
+// shrubs: low bushy plants of small leaves, some with berries (flowering stage)
+function shrub(seed, berries) {
+  const rnd = mulberry32(seed), gb = new GeoBuilder(['aSway', 'aGlow']);
+  const n = 7 + Math.floor(rnd() * 5);
+  for (let i = 0; i < n; i++) {
+    const a = rnd() * 6.28, out = FV(Math.cos(a), 0, Math.sin(a)), h = 0.45 + rnd() * 0.45;
+    const tip = out.clone().multiplyScalar(0.25 + rnd() * 0.35).add(FV(0, h, 0));
+    stemTo(gb, FV(0, 0, 0), tip, 0.014, [0.3, 0.24, 0.18], 0.6);
+    for (let k = 0; k < 9; k++) {
+      const p = FV(0, 0, 0).lerp(tip, 0.35 + rnd() * 0.65).add(FV((rnd() - 0.5) * 0.18, (rnd() - 0.5) * 0.12, (rnd() - 0.5) * 0.18));
+      const lf = new THREE.SphereGeometry(1, 5, 3); lf.scale(0.05, 0.012, 0.075);
+      gb.add(lf, { pos: p, rot: new THREE.Euler(rnd() - 0.5, rnd() * 6.28, rnd() - 0.5), color: [0.24 + rnd() * 0.08, 0.42 + rnd() * 0.1, 0.16], attrs: { aSway: 0.6, aGlow: 0 } });
+      if (berries && rnd() < 0.35) gb.add(new THREE.SphereGeometry(0.018, 6, 4), { pos: p.clone().add(FV(0, -0.03, 0)), color: berries, attrs: { aSway: 0.6, aGlow: 0 } });
+    }
+  }
+  return gb.build();
+}
+
 function treeParasol(seed) {
   const rnd = mulberry32(seed);
   const S = new Simplex(seed);
@@ -365,19 +487,48 @@ export class Flora {
             return { y: y - 0.03, s, q: qn, attrs: { iGrow: [thr, 1], iTint: [0.85 + dry * 0.35, 0.9 + r3 * 0.2 - dry * 0.05, 0.75 + r2 * 0.2] } };
           },
         },
-        { // flowers
-          geo: flower(9), mat: this.mat, max: 1600, perTile: 10, castShadow: false, radius: 80,
+        // flowering plants in drifts: the ground is split into ~22 m patches,
+        // each patch belongs to one species, so meadows read as natural drifts
+        ...[[flowerDaisy, 21], [flowerPoppy, 22], [flowerBells, 23], [flowerLupine, 24], [flowerUmbel, 25], [flower, 9]].map(([fn, sd], si) => ({
+          geo: fn(sd), mat: this.mat, max: si === 5 ? 300 : 700, perTile: si === 5 ? 3 : 7, castShadow: false, radius: 80,
           attrs: { iGrow: 2, iTint: 3 },
           enabled: () => U.uGrowth.value.z > 0.001,
           place: (x, z, r1, r2, r3) => {
+            const wx = x + this.S.noise2(x / 40, z / 40) * 9, wz = z + this.S.noise2(x / 40 + 7, z / 40) * 9;
+            const pi = Math.floor(wx / 22), pj = Math.floor(wz / 22);
+            const h = ((Math.imul(pi, 73856093) ^ Math.imul(pj, 19349663)) >>> 0) % 1000 / 1000;
+            const sp = h < 0.06 ? 5 : Math.floor(((h - 0.06) / 0.94) * 5);
+            if (sp !== si) return null;
+            const dens = this.S.fbm2(x / 9 + si * 3, z / 9, 2) * 0.5 + 0.5;
+            if (dens < 0.45) return null;
             const y = groundOK(x, z, 0.3); if (y === null) return null;
             const f = fert(x, z);
             if (f < 0.35) return null;
             const thr = clamp(1 - f + (r1 - 0.5) * 0.4 - greenBoost(x, z, true) * 0.3, 0.02, 1);
-            const pal = [[0.45, 0.25, 1.0], [0.2, 0.85, 1.0], [1.0, 0.45, 0.2], [1.0, 0.85, 0.3], [1.0, 0.3, 0.6]];
-            return { y, s: 0.8 + r2 * 0.6, ry: r2 * 6.28, attrs: { iGrow: [thr, 2], iTint: pal[Math.floor(r3 * pal.length) % pal.length] } };
+            if (si === 5) {
+              const pal = [[0.45, 0.25, 1.0], [0.2, 0.85, 1.0], [1.0, 0.45, 0.2], [1.0, 0.3, 0.6]];
+              return { y, s: 0.8 + r2 * 0.6, ry: r2 * 6.28, attrs: { iGrow: [thr, 2], iTint: pal[Math.floor(r3 * pal.length) % pal.length] } };
+            }
+            const v = 0.9 + r3 * 0.2;
+            return { y, s: 1.0 + r2 * 0.7, ry: r2 * 6.28, attrs: { iGrow: [thr, 2], iTint: [v, v, v] } };
           },
-        },
+        })),
+        // shrubs (flowering plants): green and berry bushes at meadow edges
+        ...[[0, null], [1, [0.62, 0.08, 0.12]], [2, [0.2, 0.22, 0.55]]].map(([k, berry]) => ({
+          geo: shrub(41 + k * 7, berry), mat: this.mat, max: 500, perTile: 3, castShadow: true, radius: 90,
+          attrs: { iGrow: 2, iTint: 3 },
+          enabled: () => U.uGrowth.value.z > 0.001,
+          place: (x, z, r1, r2, r3) => {
+            const edge = this.S.fbm2(x / 30 - k * 5, z / 30 + 2, 2) * 0.5 + 0.5;
+            if (edge < 0.58 || r1 > 0.6) return null;
+            const y = groundOK(x, z, 0.35); if (y === null) return null;
+            const f = fert(x, z);
+            if (f < 0.4) return null;
+            const thr = clamp(1.05 - f * 0.9 + (r2 - 0.5) * 0.3 - greenBoost(x, z, true) * 0.3, 0.05, 1);
+            const v = 0.85 + r3 * 0.3;
+            return { y: y - 0.05, s: 0.8 + r2 * 0.9, ry: r3 * 6.28, attrs: { iGrow: [thr, 2], iTint: [v, v * (0.95 + r2 * 0.1), v] } };
+          },
+        })),
         { // ferns: spore plants, the first vascular plants - they follow the
           // moss into damp ground, well before grass and flowers
           geo: fern(13), mat: this.mat, max: 900, perTile: 9, castShadow: true, radius: 95,

@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { ModelBuilder, C, L, v, e, pipe, hazard, antenna } from '../build/modelkit.js';
 import { mulberry32 } from '../core/noise.js';
 import { RESEARCH } from '../sim/data.js';
+import { makeRockMaterial } from './materials.js';
 
 function wreck(M, rnd) {
   // broken fuselage halves, scattered panels, scorched cargo
@@ -57,10 +58,59 @@ function ruin(M, rnd) {
   M.colCyl(0, 0, 2.4, 0, 1.5);
 }
 
+// an old robotic lander from the first survey: leg pads, drill arm, dish
+function probe(M, rnd) {
+  M.cyl('hull', 0, 1.0, 0, 1.0, 0.9, C.W2, 6);
+  M.cyl('metal', 0, 1.9, 0, 1.05, 0.12, C.G2, 6);
+  for (let i = 0; i < 3; i++) {
+    const a = i / 3 * Math.PI * 2 + 0.3;
+    M.add('metal', new THREE.CylinderGeometry(0.05, 0.06, 1.5, 6), { pos: v(Math.cos(a) * 1.2, 0.65, Math.sin(a) * 1.2), rot: e(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5), color: C.G2 });
+    M.cyl('metal', Math.cos(a) * 1.6, 0, Math.sin(a) * 1.6, 0.28, 0.06, C.D, 10);
+  }
+  // tilted dish on a mast, one solar wing snapped and lying in the dust
+  M.cyl('metal', 0.4, 2.0, 0.2, 0.05, 1.2, C.G, 6);
+  M.add('hull', new THREE.SphereGeometry(0.7, 14, 6, 0, Math.PI * 2, 0, 0.6), { pos: v(0.4, 3.3, 0.2), rot: e(2.2, 0.4, 0), color: C.W });
+  M.add('solar', new THREE.BoxGeometry(2.2, 0.05, 1.0), { pos: v(-1.9, 1.5, 0), rot: e(0, 0, 0.1) });
+  M.add('solar', new THREE.BoxGeometry(2.2, 0.05, 1.0), { pos: v(2.6, 0.12, 1.4), rot: e(0.15, 0.9, 0.2) });
+  // sample drill arm reaching into the ground
+  pipe(M, [[0.8, 1.2, -0.6], [1.6, 0.9, -1.2], [1.9, 0.0, -1.5]], 0.07, C.G2);
+  M.box('blink', 0, 2.05, 0, 0.1, 0.06, 0.1, L.red);
+  M.colCyl(0, 0, 1.1, 0, 2.0);
+}
+
+// a geode: a rough boulder split in two, the halves fallen apart so the
+// crystal-lined cut faces look at each other across the gap
+function geode(M, rnd) {
+  const R = 2.0;
+  for (const sd of [-1, 1]) {
+    const cx = sd * 0.9;
+    const half = new THREE.SphereGeometry(R, 20, 14, 0, Math.PI);       // z >= 0 half...
+    half.rotateY(sd * Math.PI / 2);                                       // ...turned to face away from the gap
+    const P = half.attributes.position, q = new THREE.Vector3();
+    for (let i = 0; i < P.count; i++) { q.fromBufferAttribute(P, i); const n = 1 + 0.12 * Math.sin(q.x * 3.1 + q.y * 2.3) * Math.cos(q.z * 2.7); P.setXYZ(i, q.x * n, q.y * n, q.z * n); }
+    half.computeVertexNormals();
+    M.add('rock', half, { pos: v(cx, 0.9, 0), rot: e(0, 0, sd * 0.12), scale: v(1, 0.78, 1) });
+    // cut face: dark agate rim around a hollow lined with crystals
+    const face = new THREE.CircleGeometry(R * 0.96, 28); face.rotateY(-sd * Math.PI / 2);
+    M.add('rock', face, { pos: v(cx - sd * 0.01, 0.9, 0), rot: e(0, 0, sd * 0.12), scale: v(1, 0.78, 1) });
+    const ring = new THREE.TorusGeometry(R * 0.72, 0.1, 6, 28); ring.rotateY(-sd * Math.PI / 2);
+    M.add('concrete', ring, { pos: v(cx - sd * 0.03, 0.9, 0), rot: e(0, 0, sd * 0.12), scale: v(1, 0.78, 1), color: 0xb9a7c4 });
+    for (let k = 0; k < 26; k++) {
+      const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * R * 0.62;
+      const cr = new THREE.ConeGeometry(0.07 + rnd() * 0.07, 0.3 + rnd() * 0.35, 6); cr.rotateZ(sd * Math.PI / 2);
+      M.add('emissive', cr, { pos: v(cx - sd * 0.15, 0.9 + Math.sin(a) * r * 0.78, Math.cos(a) * r), rot: e((rnd() - 0.5) * 0.6, (rnd() - 0.5) * 0.6, 0), color: rnd() < 0.55 ? 0x7ad8ff : 0xb48cff });
+    }
+  }
+  M.colCyl(-1.4, 0, 1.4, 0, 2.4);
+  M.colCyl(1.4, 0, 1.4, 0, 2.4);
+}
+
 const KINDS = {
   wreck: { name: '추락한 수송선 잔해', fn: wreck },
   cache: { name: '보급 캡슐', fn: cache },
   ruin: { name: '고대 유적', fn: ruin },
+  probe: { name: '옛 탐사 착륙선', fn: probe },
+  geode: { name: '결정 정동', fn: geode },
 };
 
 export class POIs {
@@ -85,7 +135,7 @@ export class POIs {
     const group = new THREE.Group();
     const mats = g.buildings.mats;
     for (const part of model.parts) {
-      const m = new THREE.Mesh(part.geo, mats[part.key] || mats.hull);
+      const m = new THREE.Mesh(part.geo, part.key === 'rock' ? (this._rockMat || (this._rockMat = makeRockMaterial())) : (mats[part.key] || mats.hull));
       m.castShadow = part.key !== 'emissive' && part.key !== 'blink';
       m.receiveShadow = true;
       group.add(m);
@@ -146,6 +196,12 @@ export class POIs {
     } else if (p.kind === 'cache') {
       give('plate', 3); give('glass', 3); give('water', 4); if (rnd() < 0.5) give('cobalt', 3); if (rnd() < 0.4) give('seeds', 3);
       rp = 12;
+    } else if (p.kind === 'probe') {
+      give('circuit', 2 + Math.floor(rnd() * 2)); give('electronics', 1 + Math.floor(rnd() * 2)); give('alloy', 2);
+      rp = 40;
+    } else if (p.kind === 'geode') {
+      give('cobalt', 4 + Math.floor(rnd() * 4)); give('silicon', 6 + Math.floor(rnd() * 6)); if (rnd() < 0.4) give('uranium', 2);
+      rp = 20;
     } else {
       rp = 60;
       const av = RESEARCH.filter((r) => !g.research.has(r.id) && !g.research.eureka.has(r.id));

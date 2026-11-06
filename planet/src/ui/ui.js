@@ -398,7 +398,7 @@ export class UI {
       c.lineWidth = 2 * devicePixelRatio;
       const dot = (x, z, col, rr = 4) => { const [sx, sy] = toS(x, z); c.fillStyle = col; c.beginPath(); c.arc(sx, sy, rr * devicePixelRatio, 0, 7); c.fill(); };
       for (const d of g.props.allDeposits()) dot(d.x, d.z, '#79e08a', 3);
-      for (const p of g.pois.discovered.values()) dot(p.x, p.z, p.kind === 'ruin' ? '#b07aff' : '#ffd35a', 5);
+      for (const p of g.pois.discovered.values()) dot(p.x, p.z, p.kind === 'ruin' || p.kind === 'geode' ? '#b07aff' : '#ffd35a', 5);
       for (const b of g.buildings.list) dot(b.x, b.z, b.type === 'beacon' ? '#ffffff' : '#66e0ff', b.type === 'hq' ? 6 : 2.5);
       const P = g.player.pos;
       const [px, py] = toS(P.x, P.z);

@@ -338,7 +338,7 @@ export function genProps(gen, edits, ci, cj) {
     if (sp && inWorld(sp[0], sp[1])) {
       const h = gen.sample(sp[0], sp[1]);
       if (h > -250) {
-        const kinds = ['wreck', 'wreck', 'cache', 'ruin'];
+        const kinds = ['wreck', 'wreck', 'cache', 'ruin', 'probe', 'geode'];
         out.pois.push({ id: 'p:' + ci + ':' + cj, kind: kinds[Math.floor(rnd() * kinds.length)], x: sp[0], y: h, z: sp[1], rot: rnd() * 6.28 });
       }
     }

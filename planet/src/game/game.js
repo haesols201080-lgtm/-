@@ -350,7 +350,7 @@ export class Game {
     for (const p of this.pois.discovered.values()) {
       if (Math.hypot(p.x - P.x, p.z - P.z) > 3000) continue;
       if (this.props.searched.has([...this.pois.discovered.entries()].find(([, v]) => v === p)?.[0])) continue;
-      out.push({ x: p.x, z: p.z, color: p.kind === 'ruin' ? '#b07aff' : '#ffd35a', name: p.name });
+      out.push({ x: p.x, z: p.z, color: p.kind === 'ruin' || p.kind === 'geode' ? '#b07aff' : '#ffd35a', name: p.name });
     }
     if (this.rover.present && !this.rover.driving) out.push({ x: this.rover.pos.x, z: this.rover.pos.z, color: '#79e08a', name: '로버' });
     return out;
@@ -532,6 +532,8 @@ export class Game {
       wreck: '오래전 이 행성에 닿지 못한 수송선이다. 화물칸의 잠금장치가 아직 살아 있다. 쓸 만한 부품과 항법 기록을 회수했다.',
       cache: '궤도에서 투하된 보급 캡슐. 개척단의 표식이 찍혀 있다.',
       ruin: '검은 석판들이 원을 이루고 있다. 표면의 홈을 따라 보랏빛이 흐르다가 손을 대자 문양이 단말기로 흘러들었다. 이 행성에는 우리보다 먼저 온 누군가가 있었다.',
+      probe: '첫 탐사 계획 때 내려온 무인 착륙선이다. 태양광 날개 하나가 부러진 채 수십 년 동안 토양 시료를 모았다. 기록 장치와 회로를 회수했다.',
+      geode: '갈라진 바위 속이 빛나는 결정으로 가득하다. 수백만 년 동안 지하수가 남긴 광물이다. 코발트와 규소 결정을 채취했다.',
     };
     this.ui.open('poi', { title: this.pois.name(a.poi.kind), text: texts[a.poi.kind], ...res });
     this.audio.play('done');
