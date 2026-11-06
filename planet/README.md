@@ -39,3 +39,7 @@ npm run dev     # 소스맵 포함 빌드
 - 지형은 Web Worker가 생성합니다. `build.mjs`가 워커를 문자열로 묶어 `game.js` 하나에 넣기 때문에 `file://`에서도 동작합니다.
 - 레퍼런스 조사와 설계 반영 내용은 [docs/planet/research.md](../docs/planet/research.md)에 있습니다.
 - 글꼴: Pretendard (SIL OFL 1.1, `assets/fonts/LICENSE.txt`).
+
+## 웹에서 바로 플레이 (Claude 아티팩트)
+
+`node build.mjs && node tools/make-artifact.mjs <출력.html>`로 스타일과 번들을 한 페이지에 넣은 아티팩트용 HTML을 만듭니다. 글꼴(`assets/fonts/*.woff2`)은 같은 경로로 함께 게시합니다.

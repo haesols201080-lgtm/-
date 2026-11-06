@@ -80,7 +80,7 @@ export class Terrain {
       for (let i = 0; i < n; i++) {
         const w = new Worker(url);
         w.busy = 0;
-        w.onmessage = (ev) => this.onWorker(w, ev.data);
+        w.onmessage = (ev) => { this._workerOK = true; this.onWorker(w, ev.data); };
         w.onerror = (e) => { console.warn('worker failed, generating on the main thread', e.message); this.dropWorkers(); };
         this.workers.push(w);
       }
@@ -110,6 +110,12 @@ export class Terrain {
   }
 
   pump() {
+    // watchdog: a sandbox may block blob workers without an error event; if
+    // none has answered a few seconds after the first job, generate here
+    if (this.workers.length && !this._workerOK && this.jobs.size) {
+      this._firstJob = this._firstJob || performance.now();
+      if (performance.now() - this._firstJob > 4000) { console.warn('workers silent, generating on the main thread'); this.dropWorkers(); }
+    }
     if (!this.workers.length) {
       // main-thread fallback: a couple of jobs per frame
       const t0 = performance.now();

@@ -123,7 +123,9 @@ async function boot() {
   progress(1, '착륙 준비 완료');
   $('#loading').hidden = true;
   showTitle(game, resume);
-  if (params.get('dev') === '1' || localStorage.getItem('terra-dev') === '1') devPanel(game);
+  let devFlag = false;
+  try { devFlag = localStorage.getItem('terra-dev') === '1'; } catch (e) { /* storage blocked */ }
+  if (params.get('dev') === '1' || devFlag) devPanel(game);
   requestAnimationFrame(loop);
   game.ready = true;
 }
