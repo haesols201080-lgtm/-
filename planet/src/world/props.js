@@ -49,19 +49,22 @@ export function rockGeometry(seed, detail, { sx = 1, sy = 0.8, sz = 1, cuts = 7,
 
 // Crystal cluster: hexagonal prisms with pyramidal terminations growing
 // from a shared matrix, tilted outward like a real druse; flat facets.
-export function crystalGeometry(seed, count = 6, spread = 0.6) {
+export function crystalGeometry(seed, count = 6, spread = 0.6, { sides = 6, tip: tipKind = 'point', rMul = 1, hMul = 1, tiltMul = 1 } = {}) {
   const rnd = mulberry32(seed);
   const pos = [];
   for (let i = 0; i < count; i++) {
     const big = i === 0 ? 1.3 : 0.55 + rnd() * 0.7;
-    const r = (0.07 + rnd() * 0.08) * big, h = (0.45 + rnd() * 0.9) * big;
-    const prism = new THREE.CylinderGeometry(r, r, h, 6, 1, true); prism.translate(0, h / 2, 0);
-    const tip = new THREE.ConeGeometry(r, r * 1.7, 6); tip.translate(0, h + r * 0.85, 0);
+    const r = (0.07 + rnd() * 0.08) * big * rMul, h = (0.45 + rnd() * 0.9) * big * hMul;
+    const prism = new THREE.CylinderGeometry(r, r, h, sides, 1, tipKind === 'flat'); prism.translate(0, h / 2, 0);
+    const tip = tipKind === 'flat' ? new THREE.CylinderGeometry(r, r, 0.001, sides) : new THREE.ConeGeometry(r, r * 1.7, sides);
+    tip.translate(0, tipKind === 'flat' ? h : h + r * 0.85, 0);
+    const parts = [prism, tip];
+    if (tipKind === 'bi') { const t2 = new THREE.ConeGeometry(r, r * 1.7, sides); t2.rotateX(Math.PI); t2.translate(0, -r * 0.85, 0); parts.push(t2); }
     const a = rnd() * Math.PI * 2, off = rnd() * spread * 0.45;
-    const tilt = i === 0 ? rnd() * 0.15 : 0.2 + rnd() * 0.55;
+    const tilt = (i === 0 ? rnd() * 0.15 : 0.2 + rnd() * 0.55) * tiltMul;
     const m = new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(Math.cos(a) * tilt, rnd() * Math.PI, -Math.sin(a) * tilt));
     m.setPosition(Math.sin(a) * off, -0.18, Math.cos(a) * off);
-    for (const g of [prism, tip]) { const ng = g.toNonIndexed(); ng.applyMatrix4(m); pos.push(...ng.attributes.position.array); }
+    for (const g of parts) { const ng = g.toNonIndexed(); ng.applyMatrix4(m); pos.push(...ng.attributes.position.array); }
   }
   const out = new THREE.BufferGeometry();
   out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -176,15 +179,33 @@ export class Props {
       rockGeometry(41, 3, { sx: 1.0, sy: 0.9, sz: 1.1, cuts: 11, rough: 0.35 }),
       rockGeometry(57, 3, { sx: 1.7, sy: 1.35, sz: 0.5, cuts: 12, rough: 0.16 }),   // fin / slab
       rockGeometry(63, 3, { sx: 1.1, sy: 0.85, sz: 0.95, cuts: 14, rough: 0.12 }),  // angular block
+      rockGeometry(67, 3, { sx: 1.0, sy: 0.82, sz: 0.95, cuts: 2, rough: 0.07 }),    // rounded erratic boulder
+      rockGeometry(71, 2, { sx: 0.6, sy: 1.9, sz: 0.6, cuts: 6, rough: 0.05 }),      // basalt column
+      rockGeometry(73, 3, { sx: 1.4, sy: 1.0, sz: 0.8, cuts: 16, rough: 0.2 }),      // split wedge
+      rockGeometry(79, 3, { sx: 1.3, sy: 0.6, sz: 1.2, cuts: 10, rough: 0.1 }),      // flat-topped block
+      rockGeometry(83, 3, { sx: 1.0, sy: 0.9, sz: 1.0, cuts: 8, rough: 0.45 }),      // pitted volcanic
+      rockGeometry(89, 2, { sx: 0.45, sy: 1.6, sz: 1.25, cuts: 9, rough: 0.14 }),    // leaning slab
     ];
     this.smallRock = rockGeometry(51, 1, { sx: 1, sy: 0.6, sz: 0.85, cuts: 5 });
     this.slateRock = rockGeometry(53, 2, { sx: 1.4, sy: 0.22, sz: 1.0, cuts: 8, rough: 0.12 });
     this.pebbleRock = rockGeometry(59, 2, { sx: 0.9, sy: 0.7, sz: 0.8, cuts: 1, rough: 0.12 });
     this.rockLayers = protos.map((g, i) => new Layer(scene, g, this.rockMat, { cap: 9000, attrs: { iTint: 3 }, range: 1500, nearR: 200 }));
     // crystal outcrops in three habits: a broad druse, a tall spire cluster, a low scatter
-    const tall = crystalGeometry(79, 4, 0.4); tall.scale(0.8, 1.7, 0.8);
-    const low = crystalGeometry(83, 12, 1.6); low.scale(1.1, 0.55, 1.1);
-    this.crystalLayers = [crystalGeometry(77, 7, 0.9), tall, low].map((g) => new Layer(scene, g, this.crystalMat, { cap: 1500, attrs: { iTint: 3 }, range: 1600, nearR: 200 }));
+    // ten crystal habits
+    const sc = (g, x, y, z) => { g.scale(x, y, z); return g; };
+    const habits = [
+      crystalGeometry(77, 7, 0.9),                                                   // druse
+      sc(crystalGeometry(79, 4, 0.4), 0.8, 1.7, 0.8),                                 // tall spires
+      sc(crystalGeometry(83, 12, 1.6), 1.1, 0.55, 1.1),                               // low bed
+      sc(crystalGeometry(85, 1, 0), 1.6, 2.3, 1.6),                                   // single giant point
+      crystalGeometry(87, 9, 0.3, { tiltMul: 1.8 }),                                  // fan
+      crystalGeometry(89, 6, 0.8, { sides: 4, tip: 'flat', rMul: 2.2, hMul: 0.45 }),  // cubic
+      crystalGeometry(91, 3, 0.7, { tip: 'bi', tiltMul: 2.4 }),                       // double-terminated
+      crystalGeometry(93, 26, 0.9, { rMul: 0.35, hMul: 0.8 }),                        // needles
+      crystalGeometry(95, 6, 0.8, { sides: 3 }),                                      // trigonal
+      crystalGeometry(97, 5, 0.7, { rMul: 1.8, hMul: 0.5 }),                          // stubby
+    ];
+    this.crystalLayers = habits.map((g) => new Layer(scene, g, this.crystalMat, { cap: 700, attrs: { iTint: 3 }, range: 1600, nearR: 200 }));
     const trees = treeModels();
     this.treeLayers = trees.map((m) => new Layer(scene, m.near, this.treeMat, { farGeo: m.far, cap: 12000, attrs: { iGrow: 2, iTint: 3 }, range: 2200, nearR: 150, visible: () => U.uGrowth.value.w > 0.001 }));
     this.treeKinds = trees.length;
@@ -319,7 +340,8 @@ export class Props {
     const rocks = all('rocks');
     this.rockLayers.forEach((L, i) => L.fill(rocks.filter((r) => r.proto === i), cam));
     const cr = all('crystals');
-    this.crystalLayers.forEach((L, i) => L.fill(cr.filter((c) => ((Math.floor(c.x * 3.1 + c.z * 7.7) % 3) + 3) % 3 === i), cam));
+    const NH = this.crystalLayers.length;
+    this.crystalLayers.forEach((L, i) => L.fill(cr.filter((c) => ((Math.floor(c.x * 3.1 + c.z * 7.7) % NH) + NH) % NH === i), cam));
     const trees = all('trees');
     this.treeLayers.forEach((L, i) => L.fill(trees.filter((t) => t.layer === i), cam));
     const ores = all('ores').filter((o) => !o.dead);

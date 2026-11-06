@@ -21,28 +21,31 @@ export class FX {
     const rg = new THREE.BufferGeometry();
     rg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
     rg.setAttribute('aEnd', new THREE.BufferAttribute(seed, 1));
-    this.rainU = { uCam: { value: new THREE.Vector3() }, uTime: U.uTime, uAmt: { value: 0 }, uSunColor: U.uSunColor };
+    this.rainU = { uCam: { value: new THREE.Vector3() }, uTime: U.uTime, uAmt: { value: 0 }, uSnow: { value: 0 }, uSunColor: U.uSunColor };
     this.rain = new THREE.LineSegments(rg, new THREE.ShaderMaterial({
       uniforms: this.rainU,
       vertexShader: LOGV + /* glsl */`
-        uniform vec3 uCam; uniform float uTime;
+        uniform vec3 uCam; uniform float uTime, uSnow;
         attribute float aEnd;
         varying float vA;
         void main() {
           vec3 p = position;
-          float fall = mod(p.y - uTime * 24.0, 40.0);
+          // rain streaks fall fast; snowflakes drift down slowly and sway
+          float fall = mod(p.y - uTime * mix(24.0, 1.6, uSnow), 40.0);
           vec3 w = vec3(mod(p.x - uCam.x + 30.0, 60.0) - 30.0 + uCam.x, uCam.y - 15.0 + fall, mod(p.z - uCam.z + 30.0, 60.0) - 30.0 + uCam.z);
-          w.y += aEnd * 0.7; w.x += aEnd * 0.08;
+          w.x += uSnow * sin(uTime * 0.9 + p.z * 0.7) * 0.6; w.z += uSnow * cos(uTime * 0.7 + p.x * 0.6) * 0.6;
+          w.y += aEnd * mix(0.7, 0.07, uSnow); w.x += aEnd * mix(0.08, 0.07, uSnow);
           vA = 1.0 - aEnd * 0.6;
           gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
           #include <logdepthbuf_vertex>
         }`,
       fragmentShader: LOGF + /* glsl */`
-        uniform float uAmt; uniform vec3 uSunColor;
+        uniform float uAmt, uSnow; uniform vec3 uSunColor;
         varying float vA;
         void main() {
           #include <logdepthbuf_fragment>
-          gl_FragColor = vec4(vec3(0.7, 0.75, 0.8) * (0.4 + 0.6 * uSunColor), 0.35 * uAmt * vA);
+          vec3 c = mix(vec3(0.7, 0.75, 0.8), vec3(1.0), uSnow) * (0.4 + 0.6 * uSunColor);
+          gl_FragColor = vec4(c, mix(0.35, 0.9, uSnow) * uAmt * vA);
         }`,
       transparent: true, depthWrite: false,
     }));
@@ -140,10 +143,12 @@ export class FX {
     this.beam.visible = true;
   }
 
-  update(dt, cam, storm) {
+  update(dt, cam, storm, snow = 0) {
     this.rainU.uCam.value.copy(cam);
-    this.rainU.uAmt.value = storm;
-    this.rain.visible = storm > 0.05 && U.uWaterLevel.value > -1000;
+    const fall = Math.max(storm, snow);
+    this.rainU.uAmt.value = Math.min(1, fall);
+    this.rainU.uSnow.value = snow > storm ? 1 : 0;
+    this.rain.visible = (storm > 0.05 && U.uWaterLevel.value > -1000) || snow > 0.05;
     for (let i = 0; i < this.pLife.length; i++) {
       if (this.pLife[i] <= 0) continue;
       this.pLife[i] -= dt * 0.8;

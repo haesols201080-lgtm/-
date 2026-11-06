@@ -18,6 +18,22 @@ function table(pts, s) {
   return pts[pts.length - 1][1];
 }
 
+// weather kinds: rain/snow amount, dust, extra cloud, fog, wind, lightning
+export const WEATHER = {
+  clear: { name: '맑음' },
+  fair: { name: '뭉게구름', cloud: 0.15 },
+  overcast: { name: '흐림', cloud: 0.45 },
+  drizzle: { name: '이슬비', rain: 0.35, cloud: 0.35 },
+  rain: { name: '비', rain: 1, cloud: 0.4 },
+  thunder: { name: '뇌우', rain: 1.25, cloud: 0.6, flash: true, wind: 0.5 },
+  fog: { name: '안개', fog: 1, cloud: 0.2 },
+  snow: { name: '눈', snow: 1, cloud: 0.45 },
+  devils: { name: '먼지 회오리', dust: 0.25, wind: 0.4 },
+  dust: { name: '먼지 폭풍', dust: 1, wind: 0.8 },
+  haze: { name: '연무', dust: 0.12, fog: 0.4 },
+  gale: { name: '강풍', wind: 1, cloud: 0.25 },
+};
+
 export class Terraform {
   constructor(game) {
     this.game = game;
@@ -85,24 +101,41 @@ export class Terraform {
   applyVisuals(dt) {
     const s = this.sVis;
     const W = this.weather;
-    // ---- weather events
+    // ---- weather events: eleven kinds, the mix changes as the planet does
     W.t += dt;
     if (W.kind === 'clear' && W.t > W.next) {
-      if (s >= 3) { W.kind = 'rain'; W.dur = 70 + Math.random() * 80; }
-      else if (s < 2.5) { W.kind = 'dust'; W.dur = 50 + Math.random() * 40; }
+      const pool = s < 2.5 ? { devils: 3, dust: 2, haze: 2, gale: 1 }
+        : s < 3 ? { haze: 2, devils: 2, gale: 1, overcast: 1 }
+          : s < 6 ? { snow: 3, overcast: 2, fog: 2, drizzle: 1, gale: 1, fair: 1 }
+            : s < 10 ? { rain: 3, drizzle: 2, overcast: 2, fog: 2, thunder: 1, snow: 1, gale: 1, fair: 2 }
+              : { rain: 2, drizzle: 2, thunder: 1.5, fog: 1.5, fair: 3, overcast: 2, gale: 1, snow: 0.5 };
+      let r = Math.random() * Object.values(pool).reduce((a, b) => a + b, 0);
+      for (const [k, w] of Object.entries(pool)) { r -= w; if (r <= 0) { W.kind = k; break; } }
+      W.dur = 60 + Math.random() * 100;
       W.t = 0;
-    } else if (W.kind !== 'clear' && W.t > W.dur) {
-      W.kind = 'clear'; W.t = 0; W.next = 220 + Math.random() * 260;
+    } else if (W.kind !== 'clear' && W.t > (W.dur || 90)) {
+      W.kind = 'clear'; W.t = 0; W.next = 150 + Math.random() * 220;
     }
-    const raining = W.kind === 'rain';
-    W.storm += ((raining ? 1 : 0) - W.storm) * Math.min(1, dt * 0.08);
-    W.dustStorm += ((W.kind === 'dust' ? 1 : 0) - W.dustStorm) * Math.min(1, dt * 0.06);
-    W.wet = clamp(W.wet + (raining ? dt * 0.02 : -dt * 0.004), 0, 1);
+    const K = WEATHER[W.kind] || WEATHER.clear, ease = Math.min(1, dt * 0.08);
+    W.storm += ((K.rain || 0) - W.storm) * ease;
+    W.dustStorm += ((K.dust || 0) - W.dustStorm) * Math.min(1, dt * 0.06);
+    W.snow = (W.snow || 0) + ((K.snow || 0) - (W.snow || 0)) * ease;
+    W.fog = (W.fog || 0) + ((K.fog || 0) - (W.fog || 0)) * Math.min(1, dt * 0.05);
+    W.cloudAdd = (W.cloudAdd || 0) + ((K.cloud || 0) - (W.cloudAdd || 0)) * Math.min(1, dt * 0.05);
+    W.gale = (W.gale || 0) + ((K.wind || 0) - (W.gale || 0)) * ease;
+    const raining = W.storm > 0.2;
+    W.wet = clamp(W.wet + (raining ? dt * 0.02 * W.storm : -dt * 0.004), 0, 1);
+    // lightning in thunderstorms
+    W.flash = Math.max(0, (W.flash || 0) - dt * 7);
+    if (K.flash && W.storm > 0.8 && Math.random() < dt * 0.1) W.flash = 1;
+    this.game.engine.exposure = 1 + W.flash * (0.8 + 0.6 * Math.sin(W.t * 90));
+    W.name = WEATHER[W.kind] ? WEATHER[W.kind].name : '맑음';
 
     const atmo = table([[0, 0], [1, 0.55], [2, 0.7], [3, 0.78], [6, 0.86], [10, 1]], s);
     const dust = table([[0, 0.45], [1, 0.35], [3, 0.12], [6, 0.04]], s) + W.dustStorm * 0.6;
+    const cloudW = W.cloudAdd;
     const cloud = table([[0, 0], [1.8, 0], [2.4, 0.3], [3, 0.45], [5, 0.55], [8, 0.62], [10.2, 0.62], [11, 0.48]], s) * (1 + W.storm * 0.6);   // temperate: fair-weather skies
-    this.game.sky.setAtmosphere({ atmo, dust, cloud: clamp(cloud, 0, 1), storm: W.storm });
+    this.game.sky.setAtmosphere({ atmo, dust, cloud: clamp(cloud + cloudW * (s >= 1.8 ? 1 : 0.3), 0, 1), storm: W.storm, fog: W.fog });
     U.uFrost.value = table([[0, 1], [3, 0.55], [4.2, 0]], s);
     U.uIce.value = s >= 4 ? 0 : 1;
     this.game.props.setMelt(table([[3.5, 0], [4.6, 1]], s));          // thaw stage: ice starts to go
@@ -125,7 +158,7 @@ export class Terraform {
     U.uGrowth.value.set(moss, grass, table([[7.6, 0], [9, 0.45], [10.5, 1]], s), table([[8, 0], [9.5, 0.45], [11, 1]], s));
     U.uLush.value = table([[9, 0], [12, 1]], s);
     U.uWet.value = W.wet;
-    U.uWind.value = 0.15 + atmo * 0.45 + W.storm * 0.6;
+    U.uWind.value = 0.15 + atmo * 0.45 + W.storm * 0.6 + W.gale * 0.9;
     BUILD_U.uDustAmt.value = dust * 1.2;
     // local greening from seed / tree spreaders (Terra Nil-style restoration around machines)
     const greens = this.game.buildings.list.filter((b) => b.def.green && b.powerRatio > 0.05);

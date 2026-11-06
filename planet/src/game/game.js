@@ -419,7 +419,7 @@ export class Game {
     this.npcs.update(dt, wp);
     this.expedition.update(dt);
     this.pois.update(P.pos);
-    this.fx.update(dt, cam.position, this.terra.weather.storm);
+    this.fx.update(dt, cam.position, this.terra.weather.storm, this.terra.weather.snow || 0);
     this.engine.underwater = cam.position.y < U.uWaterLevel.value && U.uIce.value < 0.5 ? 1 : 0;
     this.engine.hurt = Math.max(0, this.engine.hurt - dt * 0.6, P.oxygen <= 0 ? 0.6 : P.oxygen < 0.2 ? 0.25 : 0);
     this.audio.ambient(this.sky.uniforms.uAtmo.value, this.terra.weather.storm, this.sky.uniforms.uDust.value, !!P.inside);

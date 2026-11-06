@@ -174,7 +174,8 @@ export function genProps(gen, edits, ci, cj) {
     if (nearStart(px, pz, 22)) p *= 0.2;
     if (r0 > p) continue;
     const sl = slopeAt(gen, px, pz, h);
-    let proto = r1 < 0.3 ? 1 : r1 < 0.65 ? 0 : 3;
+    let proto = r1 < 0.22 ? 1 : r1 < 0.44 ? 0 : r1 < 0.6 ? 3 : r1 < 0.68 ? 6 : r1 < 0.76 ? 8 : r1 < 0.84 ? 9 : r1 < 0.91 ? 11 : r1 < 0.96 ? 10 : 6;
+    if (tmp[1] > 0.45 && r1 > 0.8) proto = 7;   // basalt columns on lava ground
     let s = 0.6 + 4.2 * Math.pow(r2, 3.0) + sl * 3;
     if ((tmp[2] > 0.4 || tmp[6] > 0.4) && r3 < 0.015) { proto = 2; s = 1.5 + r4 * 3.5; }
     if (tmp[1] > 0.5 && r3 > 0.85) s *= 1.6;
@@ -307,7 +308,7 @@ export function genProps(gen, edits, ci, cj) {
     if (r0 > want * 0.55) continue;
     const big = 13 + r1 * r1 * 24;
     const tint = rockTint(tmp, 0.85 + r3 * 0.2);
-    const proto = r2 < 0.45 ? 3 : r2 < 0.75 ? 5 : 0;
+    const proto = r2 < 0.35 ? 3 : r2 < 0.6 ? 5 : r2 < 0.74 ? 0 : r2 < 0.87 ? 9 : 8;
     out.rocks.push(px, h - big * 0.32, pz, big * (0.9 + r3 * 0.4), big * (0.55 + r2 * 0.45), big * (0.85 + r1 * 0.35), r3 * 6.28, (r2 - 0.5) * 0.2, (r1 - 0.5) * 0.2, proto, tint[0], tint[1], tint[2]);
   }
 
@@ -338,7 +339,7 @@ export function genProps(gen, edits, ci, cj) {
     if (sp && inWorld(sp[0], sp[1])) {
       const h = gen.sample(sp[0], sp[1]);
       if (h > -250) {
-        const kinds = ['wreck', 'wreck', 'cache', 'ruin', 'probe', 'geode'];
+        const kinds = ['wreck', 'wreck', 'cache', 'ruin', 'probe', 'geode', 'meteor', 'station', 'satellite', 'vent', 'cave'];
         out.pois.push({ id: 'p:' + ci + ':' + cj, kind: kinds[Math.floor(rnd() * kinds.length)], x: sp[0], y: h, z: sp[1], rot: rnd() * 6.28 });
       }
     }

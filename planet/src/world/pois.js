@@ -105,12 +105,93 @@ function geode(M, rnd) {
   M.colCyl(1.4, 0, 1.4, 0, 2.4);
 }
 
+// a meteorite impact: raised rim of ejected blocks around a shallow bowl,
+// the iron-nickel meteorite with thumbprint pits at the centre
+function meteor(M, rnd) {
+  for (let k = 0; k < 22; k++) {
+    const a = k / 22 * Math.PI * 2 + rnd() * 0.2, r = 5.2 + rnd() * 1.4, s2 = 0.4 + rnd() * 0.9;
+    const b = new THREE.DodecahedronGeometry(s2, 0); b.scale(1, 0.6 + rnd() * 0.5, 1);
+    M.add('rock', b, { pos: v(Math.cos(a) * r, s2 * 0.25, Math.sin(a) * r), rot: e(rnd(), rnd() * 6, rnd()) });
+  }
+  const m = new THREE.IcosahedronGeometry(1.1, 3), P = m.attributes.position, q = new THREE.Vector3();
+  for (let i = 0; i < P.count; i++) { q.fromBufferAttribute(P, i); const k = 1 + 0.18 * Math.sin(q.x * 5 + 1) * Math.sin(q.y * 4.5) * Math.sin(q.z * 5.5 + 2) - 0.08 * Math.abs(Math.sin(q.x * 13) * Math.sin(q.z * 12)); P.setXYZ(i, q.x * k, q.y * k * 0.8, q.z * k * 1.2); }
+  m.computeVertexNormals();
+  M.add('metal', m, { pos: v(0, 0.35, 0), rot: e(0.3, 0.7, 0.2), color: 0x3e3a37 });
+  M.add('rock', new THREE.CircleGeometry(4.6, 24).rotateX(-Math.PI / 2), { pos: v(0, 0.04, 0) });
+  M.colCyl(0, 0, 1.3, 0, 1.4);
+}
+
+// an automated weather station left by an earlier robotic mission
+function station(M, rnd) {
+  M.cyl('metal', 0, 0, 0, 0.07, 4.2, C.G, 8);
+  for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2; pipe(M, [[0, 3.2, 0], [Math.cos(a) * 1.9, 0.02, Math.sin(a) * 1.9]], 0.015, C.D); }
+  M.box('hull', 0.25, 1.1, 0, 0.6, 0.8, 0.45, C.W);
+  M.box('metal', 0.25, 1.1, -0.24, 0.45, 0.5, 0.03, C.G2);
+  M.add('solar', new THREE.BoxGeometry(1.2, 0.04, 0.8), { pos: v(0, 2.3, 0.4), rot: e(-0.6, 0, 0) });
+  // cup anemometer and wind vane on the mast top
+  M.cyl('metal', 0, 4.2, 0, 0.03, 0.25, C.G, 6);
+  for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2; M.add('metal', new THREE.CylinderGeometry(0.01, 0.01, 0.35, 4).rotateZ(Math.PI / 2), { pos: v(Math.cos(a) * 0.17, 4.42, Math.sin(a) * 0.17), rot: e(0, -a, 0), color: C.G }); M.sphere('hull', Math.cos(a) * 0.34, 4.42, Math.sin(a) * 0.34, 0.06, C.W, 8); }
+  M.box('metal', 0, 3.85, 0.3, 0.04, 0.2, 0.6, C.G2);
+  M.box('blink', 0, 4.25, 0, 0.06, 0.05, 0.06, L.red);
+  // a sensor box knocked over in the dust
+  M.box('hull', 1.6, 0.18, 1.1, 0.5, 0.36, 0.35, C.W2, 0.6);
+  M.colCyl(0, 0, 0.5, 0, 4.4);
+}
+
+// a crashed relay satellite: bus half buried, one wing torn off
+function satellite(M, rnd) {
+  M.add('hull', new THREE.BoxGeometry(2.0, 1.6, 1.6), { pos: v(0, 0.55, 0), rot: e(0.35, 0.4, 0.25), color: C.W2 });
+  M.add('metal', new THREE.BoxGeometry(2.04, 0.7, 1.64), { pos: v(0, 0.45, 0), rot: e(0.35, 0.4, 0.25), color: 0xc9953a });
+  M.add('hull', new THREE.SphereGeometry(0.9, 18, 6, 0, Math.PI * 2, 0, 0.55), { pos: v(-0.8, 1.6, 0.4), rot: e(1.9, 0.4, 0.3), color: C.W });
+  M.add('solar', new THREE.BoxGeometry(3.4, 0.05, 1.3), { pos: v(2.9, 0.5, 0.3), rot: e(0.1, 0.35, -0.25) });
+  M.add('solar', new THREE.BoxGeometry(2.2, 0.05, 1.3), { pos: v(-3.6, 0.08, -1.8), rot: e(0.05, 1.2, 0.08) });
+  M.add('metal', new THREE.BoxGeometry(1.4, 0.06, 0.06), { pos: v(1.2, 0.6, 0.2), rot: e(0.1, 0.35, -0.2), color: C.G });
+  for (let i = 0; i < 6; i++) { const a = rnd() * 6.28, r = 2 + rnd() * 4; M.add('metal', new THREE.BoxGeometry(0.3 + rnd() * 0.6, 0.04, 0.2 + rnd() * 0.4), { pos: v(Math.cos(a) * r, 0.05, Math.sin(a) * r), rot: e(rnd() - 0.5, rnd() * 6, rnd() - 0.5), color: rnd() < 0.5 ? 0xc9953a : C.G2 }); }
+  M.colCyl(0, 0, 1.3, 0, 1.6);
+}
+
+// a fumarole: mineral-crusted vent cones, sulphur yellow and salt white,
+// faintly warm at night
+function vent(M, rnd) {
+  for (let k = 0; k < 5; k++) {
+    const a = rnd() * 6.28, r = k ? 1.2 + rnd() * 2.4 : 0, h = k ? 0.4 + rnd() * 0.8 : 1.4;
+    const cone = new THREE.CylinderGeometry(0.1 + rnd() * 0.06, 0.45 + h * 0.6, h, 12, 3, true);
+    const P = cone.attributes.position, q = new THREE.Vector3();
+    for (let i = 0; i < P.count; i++) { q.fromBufferAttribute(P, i); const n = 1 + 0.12 * Math.sin(q.y * 9 + Math.atan2(q.x, q.z) * 3); P.setXYZ(i, q.x * n, q.y, q.z * n); }
+    cone.computeVertexNormals();
+    M.add('concrete', cone, { pos: v(Math.cos(a) * r, h / 2, Math.sin(a) * r), color: (x, y) => (y > h * 0.25 ? [0.42, 0.31, 0.06] : [0.46, 0.43, 0.38]) });
+    M.add('emissive', new THREE.CircleGeometry(0.11 + rnd() * 0.06, 10).rotateX(-Math.PI / 2), { pos: v(Math.cos(a) * r, h + 0.01, Math.sin(a) * r), color: 0xff9a40 });
+  }
+  M.add('concrete', new THREE.CircleGeometry(4.2, 24).rotateX(-Math.PI / 2), { pos: v(0, 0.03, 0), color: 0x8a7a5a });
+  M.colCyl(0, 0, 0.9, 0, 1.4);
+}
+
+// a lava-tube skylight: a collapsed roof opening into the dark tube
+function cave(M, rnd) {
+  M.add('interior', new THREE.CircleGeometry(3.2, 28).rotateX(-Math.PI / 2), { pos: v(0, 0.02, 0), color: 0x050505 });
+  const lip = new THREE.CylinderGeometry(3.3, 2.6, 2.4, 28, 2, true);
+  M.add('rock', lip, { pos: v(0, -1.18, 0) });
+  for (let k = 0; k < 18; k++) {
+    const a = k / 18 * Math.PI * 2 + rnd() * 0.2, r = 3.5 + rnd() * 0.9, s2 = 0.3 + rnd() * 0.7;
+    const b = new THREE.DodecahedronGeometry(s2, 0); b.scale(1.3, 0.5 + rnd() * 0.4, 1);
+    M.add('rock', b, { pos: v(Math.cos(a) * r, s2 * 0.15, Math.sin(a) * r), rot: e(rnd() * 0.4, rnd() * 6, rnd() * 0.4) });
+  }
+  // a frost-covered ice shelf glinting just inside the rim
+  M.add('concrete', new THREE.BoxGeometry(1.4, 0.15, 0.9), { pos: v(1.8, -0.5, 0.6), rot: e(0.2, 0.5, 0.1), color: 0xdfeef5 });
+  M.colCyl(0, 0, 3.1, -4, 0.4, { noStand: true });
+}
+
 const KINDS = {
   wreck: { name: '추락한 수송선 잔해', fn: wreck },
   cache: { name: '보급 캡슐', fn: cache },
   ruin: { name: '고대 유적', fn: ruin },
   probe: { name: '옛 탐사 착륙선', fn: probe },
   geode: { name: '결정 정동', fn: geode },
+  meteor: { name: '운석 충돌구', fn: meteor },
+  station: { name: '무인 기상 관측소', fn: station },
+  satellite: { name: '추락한 중계 위성', fn: satellite },
+  vent: { name: '분기공', fn: vent },
+  cave: { name: '용암 동굴 천창', fn: cave },
 };
 
 export class POIs {
@@ -202,6 +283,21 @@ export class POIs {
     } else if (p.kind === 'geode') {
       give('cobalt', 4 + Math.floor(rnd() * 4)); give('silicon', 6 + Math.floor(rnd() * 6)); if (rnd() < 0.4) give('uranium', 2);
       rp = 20;
+    } else if (p.kind === 'meteor') {
+      give('iron', 8 + Math.floor(rnd() * 6)); give('titanium', 3 + Math.floor(rnd() * 3)); if (rnd() < 0.5) give('cobalt', 2);
+      rp = 22;
+    } else if (p.kind === 'station') {
+      give('circuit', 2 + Math.floor(rnd() * 2)); give('electronics', 1); give('glass', 2);
+      rp = 35;
+    } else if (p.kind === 'satellite') {
+      give('alloy', 3 + Math.floor(rnd() * 2)); give('circuit', 2); give('glass', 3); if (rnd() < 0.5) give('electronics', 1);
+      rp = 30;
+    } else if (p.kind === 'vent') {
+      give('water', 3); give('silicon', 4 + Math.floor(rnd() * 4)); if (rnd() < 0.5) give('aluminium', 3);
+      rp = 18;
+    } else if (p.kind === 'cave') {
+      give('ice', 8 + Math.floor(rnd() * 6)); give('cobalt', 2 + Math.floor(rnd() * 3));
+      rp = 26;
     } else {
       rp = 60;
       const av = RESEARCH.filter((r) => !g.research.has(r.id) && !g.research.eureka.has(r.id));
