@@ -349,7 +349,7 @@ export class Engine {
     }
     if (this.quality.bloom) this.bloom.render(r, null, this.postRT, 0, false);
     this.outUniforms.uHurt.value = this.hurt;
-    this.outUniforms.uExposure.value = this.exposure;
+    this.outUniforms.uExposure.value = this.exposure * (this.spaceScene || !this.sky ? 1 : this.sky.adapt || 1);
     // space has no dusty sky to correct for: neutral white balance there
     const wb = this.outUniforms.uWB.value, wb0 = this.spaceScene ? wb.clone() : null;
     if (wb0) wb.set(1, 1, 1);

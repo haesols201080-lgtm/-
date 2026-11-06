@@ -1,18 +1,29 @@
 // Opening sequence for a new game. A short mission briefing (why humanity
-// is leaving Earth), then the expedition ship in orbit over Arke, the
-// deorbit burn, entry belly-first through the thin atmosphere, the flip
-// and landing burn over the real landing site, and the cargo elevator
-// lowering the rover with the explorer aboard. Any key or the skip button
-// ends it. Tone: mission log, not drama.
+// is leaving Earth) over the Kronos system: the ringed giant, its moons and
+// an inner planet, tagged as the targets after Arke. Then the expedition
+// ship in orbit over Arke, the deorbit burn, entry belly-first through the
+// thin atmosphere, the flip and landing burn over the real landing site,
+// and the cargo elevator lowering the rover with the explorer aboard. Any
+// key or the skip button ends it. Tone: mission log, not drama.
 import * as THREE from 'three';
 import { ShipRig, shipDescent, DESCENT_TIME, SHIP } from '../npc/craft.js';
+import { SPACE_GLSL, SYSTEM } from '../world/sky.js';
+import { U } from '../core/shared.js';
 
 const BRIEF = [
-  ['2148', '지구 평균기온, 산업화 이전보다 3.9 °C 상승.'],
-  ['', '해수면 1.2 m 상승. 저위도 곡창지대 붕괴. 연안 대도시 41곳 포기.'],
-  ['', '국제 이주 기구, 지구 밖 거주지 확보 계획 「아르케」 승인.'],
-  ['후보 행성 아르케', '중력 0.84 g · 기압 0.006 atm · 평균 −63 °C · 지하 얼음 매장 확인.'],
-  ['임무', '선발 탐사대 착륙. 대기·물·생물권을 조성한 뒤 이주민을 받는다.'],
+  ['2148', '지구 평균기온, 산업화 이전보다 3.9 °C 상승. 해수면 1.2 m 상승.'],
+  ['', '저위도 곡창지대 붕괴, 연안 대도시 41곳 포기. 국제 이주 기구, 지구 밖 거주지 확보 계획 「아르케」 승인.'],
+  ['크로노스 계', '고리를 가진 가스 행성 크로노스와 대형 위성 셋, 안쪽 행성 하나. 지금 사람이 살 수 있는 곳은 없다.'],
+  ['후보지 아르케', '크로노스의 위성. 중력 0.84 g · 기압 0.006 atm · 평균 −63 °C · 지하 얼음 확인.'],
+  ['임무', '선발 탐사대 착륙. 대기·물·생물권을 조성한 뒤 이주민을 받는다. 나머지 천체는 다음 단계 탐사 대상.'],
+];
+// tags on the bodies while the briefing describes the system: [key, name, note, from]
+const TAGS = [
+  ['giant', '크로노스', '가스 행성 · 고리계', 9.6],
+  ['pele', '펠레', '화산 위성 · 2차 탐사 후보', 10.4],
+  ['themis', '테미스', '얼음 위성 · 지하 해양 추정', 11.1],
+  ['nereid', '네레이드', '안쪽 행성 · 3차 탐사 후보', 11.8],
+  ['arke', '아르케', '착륙 목표', 14.2],
 ];
 const T_BRIEF = 23, T_ORBIT = 33, T_ENTRY = 41, SPEED = 1.6;
 const T_TOUCH = T_ENTRY + DESCENT_TIME / SPEED;            // ~62 s
@@ -31,6 +42,7 @@ const CAPTIONS = [
 ];
 const ease = (k) => k * k * (3 - 2 * k);
 const clamp01 = (x) => Math.max(0, Math.min(1, x));
+const lerp = (a, b, k) => a + (b - a) * k;
 
 // ------------------------------------------------------------------ space scene
 const PLANET_V = /* glsl */`
@@ -55,26 +67,48 @@ const NOISE = /* glsl */`
 const PLANET_F = /* glsl */`
   #include <common>
   #include <logdepthbuf_pars_fragment>
-  uniform vec3 uSun;
+  uniform vec3 uSun, uGiantDir; uniform sampler2D tNoise;
   varying vec3 vN; varying vec3 vW; varying vec3 vWN;
   ${NOISE}
+  float worley(vec3 c, float s) {
+    vec3 w = abs(c); w = w * w * w; w /= (w.x + w.y + w.z);
+    return texture2D(tNoise, c.yz * s).b * w.x + texture2D(tNoise, c.zx * s + 0.31).b * w.y + texture2D(tNoise, c.xy * s + 0.67).b * w.z;
+  }
+  float crater(float f, float k) {
+    return -(1.0 - smoothstep(0.0, 0.2, f)) * k + smoothstep(0.15, 0.22, f) * (1.0 - smoothstep(0.22, 0.32, f)) * k * 0.4;
+  }
   void main() {
     #include <logdepthbuf_fragment>
     vec3 n = normalize(vN);
-    float c = fbm(n * 3.2), d = fbm(n * 11.0 + 4.0), e = fbm(n * 38.0 + 9.0);
-    vec3 rust = vec3(0.36, 0.12, 0.05), dark = vec3(0.12, 0.055, 0.035), dust = vec3(0.5, 0.26, 0.13);
-    vec3 col = mix(rust, dark, smoothstep(0.45, 0.66, c));
-    col = mix(col, dust, smoothstep(0.55, 0.8, d) * 0.6);
-    col *= 0.82 + 0.36 * e;
-    // basins and old craters as darker rings
-    float cr = fbm(n * 7.0 + 2.0);
-    col *= 1.0 - 0.25 * smoothstep(0.62, 0.7, cr) + 0.12 * smoothstep(0.7, 0.74, cr);
-    // polar caps
-    float cap = smoothstep(0.84, 0.9, abs(n.y) + (d - 0.5) * 0.08);
+    float c = fbm(n * 2.6), d = fbm(n * 9.0 + 4.0), e = fbm(n * 34.0 + 9.0);
+    // relief: broad uplands and basins, two sizes of craters, fine grit
+    // craters only where old terrain survives, softer as they age
+    float old = smoothstep(0.4, 0.62, fbm(n * 4.0 + 7.0));
+    float cr = (crater(worley(n, 2.3), 0.35) + crater(worley(n, 7.3), 0.3) * 0.7) * old + crater(worley(n, 23.0), 0.25) * 0.35 * (0.4 + 0.6 * old);
+    float hgt = (c - 0.5) * 2.2 + cr * 0.8 + (e - 0.5) * 0.35 + (d - 0.5) * 0.6;
+    // albedo: butterscotch dust, dark basalt provinces, bright dust plains, white polar caps
+    vec3 dust = vec3(0.5, 0.29, 0.16), basalt = vec3(0.26, 0.16, 0.11), bright = vec3(0.62, 0.42, 0.27);
+    float m = fbm(n * 18.0 + 2.0);
+    float prov = smoothstep(0.47, 0.68, c + (d - 0.5) * 0.45 + (m - 0.5) * 0.25);
+    vec3 col = mix(dust, basalt, prov * 0.75);
+    col = mix(col, bright, smoothstep(0.55, 0.8, d + (m - 0.5) * 0.3) * (1.0 - prov) * 0.6);
+    col *= (0.84 + 0.32 * e) * (0.9 + 0.2 * m) * (1.0 + cr * 0.15);
+    float cap = smoothstep(0.86, 0.9, abs(n.y) + (d - 0.5) * 0.09);
     col = mix(col, vec3(0.86, 0.85, 0.83), cap);
-    float l = dot(normalize(vWN), uSun);
-    float lit = smoothstep(-0.08, 0.35, l) * (0.35 + 0.65 * max(l, 0.0));
-    gl_FragColor = vec4(col * lit * 1.35 + col * 0.004, 1.0);
+    // bump lighting from the relief through screen-space derivatives
+    vec3 N = normalize(vWN);
+    vec3 dpx = dFdx(vW), dpy = dFdy(vW);
+    float hx = dFdx(hgt), hy = dFdy(hgt);
+    vec3 r1 = cross(dpy, N), r2 = cross(N, dpx);
+    float det = dot(dpx, r1);
+    vec3 Nb = normalize(abs(det) * N - sign(det) * (hx * r1 + hy * r2) * 5.0);
+    float l = dot(N, uSun), lb = dot(Nb, uSun);
+    float lit = smoothstep(-0.06, 0.25, l) * max(lb * 0.85 + 0.15 * max(l, 0.0), 0.0);
+    // thin haze softens the terminator
+    float haze = smoothstep(-0.12, 0.2, l) * 0.03;
+    // the night side catches a little sunlight reflected off Kronos
+    float gs = max(dot(Nb, uGiantDir), 0.0) * (1.0 - smoothstep(-0.1, 0.15, l)) * 0.02;
+    gl_FragColor = vec4(col * lit * 1.3 + vec3(0.6, 0.45, 0.35) * haze + col * (0.003 + gs), 1.0);
   }`;
 const ATMO_F = /* glsl */`
   #include <common>
@@ -84,9 +118,29 @@ const ATMO_F = /* glsl */`
   void main() {
     #include <logdepthbuf_fragment>
     vec3 n = normalize(vWN), v = normalize(uCam - vW);
-    float rim = pow(1.0 - abs(dot(n, v)), 4.0);
-    float lit = smoothstep(-0.25, 0.4, dot(n, uSun));
-    gl_FragColor = vec4(vec3(1.0, 0.6, 0.38) * rim * lit * 1.1, rim * lit);
+    float rim = pow(1.0 - abs(dot(n, v)), 5.0);
+    float lit = smoothstep(-0.2, 0.35, dot(n, uSun));
+    vec3 c = mix(vec3(1.0, 0.72, 0.5), vec3(0.62, 0.7, 1.0), rim * rim);
+    gl_FragColor = vec4(c * rim * lit * 0.55, rim * lit);
+  }`;
+const BACK_V = /* glsl */`
+  varying vec3 vDir;
+  void main() {
+    vDir = position;
+    vec4 p = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    gl_Position = vec4(p.xy, p.w * 0.99999, p.w);
+  }`;
+// the sky beyond: stars, the Milky Way, the sun and the Kronos system
+const BACK_F = SPACE_GLSL + /* glsl */`
+  varying vec3 vDir;
+  void main() {
+    vec3 d = normalize(vDir);
+    float px = max(length(fwidth(d)), 1e-5);
+    float cover;
+    vec3 col = heavens(d, px, 1.0, 0.0, cover);
+    float sd = max(dot(d, uSunDir), 0.0);
+    col += uSunColor * (pow(sd, 4000.0) * 4.0 + pow(sd, 300.0) * 0.12 + pow(sd, 20.0) * 0.012);
+    gl_FragColor = vec4(col, 1.0);
   }`;
 
 function buildSpace(engine) {
@@ -101,24 +155,52 @@ function buildSpace(engine) {
   const pm = new THREE.PMREMGenerator(engine.renderer);
   scene.environment = pm.fromEquirectangular(et).texture;
   pm.dispose(); et.dispose();
+  const V = (x = 0, y = 0, z = 0) => new THREE.Vector3(x, y, z);
   const PR = 3000;
-  const sun = new THREE.Vector3(0.75, 0.45, -0.5).normalize();
-  const planet = new THREE.Mesh(new THREE.SphereGeometry(PR, 160, 120), new THREE.ShaderMaterial({ uniforms: { uSun: { value: sun } }, vertexShader: PLANET_V, fragmentShader: PLANET_F }));
-  const atmoU = { uSun: { value: sun }, uCam: { value: new THREE.Vector3() } };
-  const atmo = new THREE.Mesh(new THREE.SphereGeometry(PR * 1.018, 160, 120), new THREE.ShaderMaterial({ uniforms: atmoU, vertexShader: PLANET_V, fragmentShader: ATMO_F, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
-  // stars on a sphere that follows the camera
-  const N = 5000, sp = new Float32Array(N * 3), sc = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) {
-    const u = Math.random() * 2 - 1, a = Math.random() * Math.PI * 2, r = Math.sqrt(1 - u * u);
-    sp.set([r * Math.cos(a) * 20000, u * 20000, r * Math.sin(a) * 20000], i * 3);
-    const b = Math.pow(Math.random(), 3) * 2.2 + 0.15, t = Math.random();
-    sc.set([b * (0.85 + 0.15 * t), b * 0.9, b * (1.05 - 0.2 * t)], i * 3);
-  }
-  const sg = new THREE.BufferGeometry();
-  sg.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3));
-  sg.setAttribute('color', new THREE.Float32BufferAttribute(sc, 3));
-  const stars = new THREE.Points(sg, new THREE.PointsMaterial({ size: 1.6, sizeAttenuation: false, vertexColors: true, depthWrite: false }));
-  stars.frustumCulled = false;
+  const sun = V(0.75, 0.45, -0.5).normalize();
+  const planet = new THREE.Mesh(new THREE.SphereGeometry(PR, 192, 144), new THREE.ShaderMaterial({ uniforms: { uSun: { value: sun }, uGiantDir: { value: V() }, tNoise: U.tNoise }, vertexShader: PLANET_V, fragmentShader: PLANET_F }));
+  const atmoU = { uSun: { value: sun }, uCam: { value: V() } };
+  const atmo = new THREE.Mesh(new THREE.SphereGeometry(PR * 1.007, 192, 144), new THREE.ShaderMaterial({ uniforms: atmoU, vertexShader: PLANET_V, fragmentShader: ATMO_F, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+
+  // the Kronos system at its real proportions: Arke circles the giant at 7.6 giant radii
+  const RG = PR * 12, DG = RG * SYSTEM.ARKE.a;
+  const C1n = V(0.6, 0.3, 0.75).normalize();               // where the briefing ends, looking back at Arke
+  const toA = C1n.clone().negate(), away = sun.clone().negate();
+  const w = away.clone().addScaledVector(toA, -away.dot(toA)).normalize();
+  const dirG = toA.clone().multiplyScalar(Math.cos(0.5)).addScaledVector(w, Math.sin(0.5)).add(V(0, 0.18, 0)).normalize();
+  const Gc = dirG.clone().multiplyScalar(DG);
+  planet.material.uniforms.uGiantDir.value.copy(dirG);
+  // rings opened ~20° toward Arke, lying roughly level in the frame
+  const up = V(0, 1, 0).addScaledVector(dirG, -dirG.y).normalize();
+  const ax = up.clone().multiplyScalar(Math.cos(0.36)).addScaledVector(dirG, -Math.sin(0.36)).normalize();
+  const U0 = dirG.clone().negate().addScaledVector(ax, dirG.dot(ax)).normalize();
+  const V0 = V().crossVectors(ax, U0);
+  const moonAt = (a, psi) => Gc.clone().addScaledVector(U0, Math.cos(psi) * a * RG).addScaledVector(V0, Math.sin(psi) * a * RG);
+  const bodies = {
+    giant: { pos: Gc, R: RG },
+    pele: { pos: moonAt(SYSTEM.MOONS[0].a, -2.4), R: SYSTEM.MOONS[0].R * RG },
+    themis: { pos: moonAt(SYSTEM.MOONS[1].a, 2.72), R: SYSTEM.MOONS[1].R * RG },
+    arke: { pos: V(), R: PR },
+    // the inner planet: a bright point a little way from the giant
+    nereid: { dir: dirG.clone().applyAxisAngle(V(0, 1, 0), 0.3).add(V(0, 0.16, 0)).normalize() },
+  };
+  const nd = bodies.nereid.dir;
+  // the Milky Way band behind the giant, crossing the frame on a slant
+  const pole = V().crossVectors(dirG, V(0.5, 0.86, 0).normalize()).normalize().applyAxisAngle(dirG, 0.5);
+  const core = dirG.clone().addScaledVector(pole, -dirG.dot(pole)).normalize().applyAxisAngle(pole, -0.55);
+  const GNP = V(-0.5097, 0.7002, 0.5).normalize(), GCD = V(0.8085, 0.5885, 0).normalize();
+  const Mc = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeBasis(GCD, V().crossVectors(GNP, GCD), GNP));
+  const Ml = new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeBasis(core, V().crossVectors(pole, core), pole));
+  const backU = {
+    uSunDir: { value: sun }, uSunColor: { value: V(1, 0.97, 0.92) }, uTimeS: U.uTime, tNoise: U.tNoise,
+    uSkyRot: { value: Mc.multiply(Ml.transpose()) },
+    uGiant: { value: new THREE.Vector4() }, uGiantAx: { value: ax }, uGiantRef: { value: V() }, uGiantSpin: { value: 0 },
+    uMoonA: { value: new THREE.Vector4() }, uMoonB: { value: new THREE.Vector4() }, uMoonD: { value: new THREE.Vector2() },
+    uWandA: { value: new THREE.Vector4(nd.x, nd.y, nd.z, 9) }, uWandB: { value: new THREE.Vector4(0, -1, 0, 0) },
+    uSunVis: { value: 1 },
+  };
+  const back = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), new THREE.ShaderMaterial({ uniforms: backU, vertexShader: BACK_V, fragmentShader: BACK_F, side: THREE.BackSide, depthWrite: false, depthTest: false }));
+  back.renderOrder = -1000; back.frustumCulled = false;
   // the sun: bright disc with a soft halo
   const cv = document.createElement('canvas'); cv.width = cv.height = 128;
   const cx = cv.getContext('2d'), gr = cx.createRadialGradient(64, 64, 2, 64, 64, 64);
@@ -130,7 +212,7 @@ function buildSpace(engine) {
   const amb = new THREE.HemisphereLight(0x405060, 0x3a2216, 0.25);
   // poles on the z axis, so the orbit (in the xy plane) crosses the equator
   planet.rotation.x = Math.PI / 2;
-  scene.add(planet, atmo, stars, sunS, light, amb);
+  scene.add(back, planet, atmo, sunS, light, amb);
   const rig = new ShipRig(scene);
   rig.group.visible = true;
   // in vacuum the exhaust is a faint core, no plume or shock diamonds
@@ -160,7 +242,22 @@ function buildSpace(engine) {
   }));
   plasma.scale.set(6.4, 29, 5.6); plasma.position.set(0, 24, -2.6);
   rig.body.add(plasma);
-  return { scene, planet, atmo, atmoU, stars, sunS, sun, rig, plasma, PR };
+  return { scene, planet, atmo, atmoU, back, backU, bodies, C1n, dirG, sunS, sun, rig, plasma, PR };
+}
+
+// aim the backdrop's giant and moons from where the camera is
+function placeBodies(S, camPos, t) {
+  const u = S.backU, B = S.bodies, g = new THREE.Vector3().copy(B.giant.pos).sub(camPos), dG = g.length();
+  g.divideScalar(dG);
+  u.uGiant.value.set(g.x, g.y, g.z, B.giant.R / dG);
+  u.uGiantRef.value.copy(g).negate().addScaledVector(u.uGiantAx.value, g.dot(u.uGiantAx.value)).normalize();
+  u.uGiantSpin.value = t * 0.03;
+  [[B.pele, u.uMoonA.value], [B.themis, u.uMoonB.value]].forEach(([b, U4], i) => {
+    const v = new THREE.Vector3().copy(b.pos).sub(camPos), d = v.length();
+    v.divideScalar(d);
+    U4.set(v.x, v.y, v.z, b.R / d);
+    u.uMoonD.value.setComponent(i, d / dG);
+  });
 }
 
 // ------------------------------------------------------------------ intro
@@ -184,6 +281,7 @@ export class Intro {
     el.innerHTML = `<div class="lb top"></div><div class="lb bot"></div>
       <div class="brief"><div class="b-k"></div><div class="b-t"></div></div>
       <div class="cap"><span class="c-k"></span><span class="c-t"></span></div>
+      <div class="tags">${TAGS.map(([k, n, d]) => `<div class="tag" data-k="${k}"><i></i><b>${n}</b><span>${d}</span></div>`).join('')}</div>
       <div class="fade"></div>
       <button class="skip">건너뛰기 <kbd>Space</kbd></button>`;
     document.getElementById('ui').appendChild(el);
@@ -195,12 +293,31 @@ export class Intro {
     g.cinematic = this;
   }
 
+  // brackets and names on the bodies while the briefing describes the system
+  updateTags(t, cam, S) {
+    const W = window.innerWidth, H = window.innerHeight, v = new THREE.Vector3(), fwd = cam.getWorldDirection(new THREE.Vector3());
+    const pxPerRad = H * 0.5 / Math.tan(cam.fov * Math.PI / 360);
+    for (const el of this.el.querySelectorAll('.tag')) {
+      const tag = TAGS.find((x) => x[0] === el.dataset.k), b = S.bodies[tag[0]];
+      if (b.dir) v.copy(cam.position).addScaledVector(b.dir, 1e5); else v.copy(b.pos);
+      const ahead = v.clone().sub(cam.position).dot(fwd) > 0;
+      const r = b.R ? Math.max(8, Math.min(H * 0.3, b.R / cam.position.distanceTo(b.pos) * pxPerRad)) : 8;
+      v.project(cam);
+      const x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * H;
+      const inView = ahead && x > 30 && x < W - 30 && y > H * 0.1 && y < H * 0.9;
+      el.classList.toggle('on', t >= tag[3] && t < T_BRIEF - 0.6 && inView);
+      el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+      el.style.setProperty('--r', r.toFixed(1) + 'px');
+    }
+  }
+
   setBrief(i) {
     if (i === this.briefI) return;
     this.briefI = i;
     const b = this.$('.brief');
     b.classList.remove('on');
     if (i < 0 || i >= BRIEF.length) return;
+    b.classList.toggle('low', i >= 2);
     setTimeout(() => { if (this.briefI !== i || this.done) return; this.$('.b-k').textContent = BRIEF[i][0]; this.$('.b-t').textContent = BRIEF[i][1]; b.classList.add('on'); }, 260);
   }
 
@@ -234,10 +351,17 @@ export class Intro {
     cam.fov = 38; cam.updateProjectionMatrix();
     const PR = S.PR;
     if (t < T_BRIEF) {
-      // briefing: the planet small and far, the sun rising past its limb
-      const k = t / T_BRIEF;
-      cam.position.set(-9000 + k * 1200, 2600 - k * 600, 12500 - k * 2500);
-      cam.lookAt(0, 0, 0);
+      // briefing: drift across the Milky Way onto Kronos and its moons, then
+      // turn to Arke with the giant hanging beyond it
+      const k = ease(t / T_BRIEF), Y = new THREE.Vector3(0, 1, 0);
+      cam.position.copy(S.C1n).multiplyScalar(lerp(26000, 15500, k)).addScaledVector(Y, 2400 * (1 - k));
+      const toA = cam.position.clone().negate().normalize();
+      const start = S.dirG.clone().applyAxisAngle(Y, 0.55).addScaledVector(Y, 0.1).normalize();
+      const sys = S.dirG.clone().applyAxisAngle(Y, 0.1);
+      const end = toA.lerp(S.dirG, 0.42).normalize();
+      const dir = start.lerp(sys, ease(clamp01(t / 9.5))).lerp(end, ease(clamp01((t - 13.2) / 7.5))).normalize();
+      cam.up.set(0, 1, 0);
+      cam.lookAt(cam.position.clone().add(dir));
       S.rig.group.visible = false;
     } else if (t < T_ORBIT) {
       // orbit: the ship belly-down over the day side, deorbit burn
@@ -266,7 +390,10 @@ export class Intro {
       cam.up.set(Math.sin(a), Math.cos(a), 0);
       cam.lookAt(p);
     }
-    S.stars.position.copy(cam.position);
+    S.back.position.copy(cam.position);
+    placeBodies(S, cam.position, t);
+    cam.updateMatrixWorld();
+    this.updateTags(t, cam, S);
     S.sunS.position.copy(cam.position).addScaledVector(S.sun, 18000);
     S.atmoU.uCam.value.copy(cam.position);
   }
@@ -339,7 +466,7 @@ export class Intro {
     window.removeEventListener('keydown', this.onKey);
     this.el.remove();
     if (this.space) {
-      for (const k of ['planet', 'atmo', 'stars', 'plasma']) { this.space[k].geometry.dispose(); this.space[k].material.dispose(); }
+      for (const k of ['planet', 'atmo', 'back', 'plasma']) { this.space[k].geometry.dispose(); this.space[k].material.dispose(); }
       this.space = null;
     }
     // the world as the game starts: ship landed, elevator down, rover parked

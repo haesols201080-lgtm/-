@@ -408,8 +408,22 @@ select { font-family: var(--font); background: #1a232b; color: var(--ink); borde
 #intro .fade { position: absolute; inset: 0; background: #000; opacity: 1; z-index: 1; }
 #intro .brief { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -46%); width: min(760px, 86vw); text-align: center; opacity: 0; transition: opacity .7s ease, transform .9s ease; z-index: 3; }
 #intro .brief.on { opacity: 1; transform: translate(-50%, -50%); }
+#intro .brief.low { left: 6vw; top: auto; bottom: calc(9vh + 34px); width: min(520px, 80vw); text-align: left; transform: translateY(8px); }
+#intro .brief.low.on { transform: none; }
+#intro .brief.low .b-t { font-size: clamp(15px, 1.6vw, 20px); text-shadow: 0 1px 12px rgba(0, 0, 0, .8); }
+#intro .tags { position: absolute; inset: 0; z-index: 2; }
+#intro .tag { position: absolute; left: 0; top: 0; --r: 10px; --c: rgba(120, 220, 235, .85); opacity: 0; transition: opacity .6s ease; }
+#intro .tag.on { opacity: 1; }
+#intro .tag i { position: absolute; left: calc(-1 * var(--r) - 5px); top: calc(-1 * var(--r) - 5px); width: calc(2 * var(--r) + 10px); height: calc(2 * var(--r) + 10px);
+  background: linear-gradient(var(--c), var(--c)) 0 0 / 9px 1px no-repeat, linear-gradient(var(--c), var(--c)) 0 0 / 1px 9px no-repeat,
+    linear-gradient(var(--c), var(--c)) 100% 0 / 9px 1px no-repeat, linear-gradient(var(--c), var(--c)) 100% 0 / 1px 9px no-repeat,
+    linear-gradient(var(--c), var(--c)) 0 100% / 9px 1px no-repeat, linear-gradient(var(--c), var(--c)) 0 100% / 1px 9px no-repeat,
+    linear-gradient(var(--c), var(--c)) 100% 100% / 9px 1px no-repeat, linear-gradient(var(--c), var(--c)) 100% 100% / 1px 9px no-repeat; }
+#intro .tag b, #intro .tag span { position: absolute; left: calc(var(--r) + 12px); white-space: nowrap; text-shadow: 0 1px 8px rgba(0, 0, 0, .9); }
+#intro .tag b { top: calc(-1 * var(--r) - 20px); font: 600 12px 'Oxanium', var(--font); letter-spacing: .16em; color: #f2f0ea; }
+#intro .tag span { top: calc(-1 * var(--r) - 3px); font-size: 11px; color: #a9bcc4; letter-spacing: .02em; }
 #intro .b-k { font-family: 'Oxanium', var(--font); font-weight: 600; letter-spacing: .34em; font-size: 12px; color: var(--orange); margin-bottom: 14px; min-height: 1em; }
-#intro .b-t { font-size: clamp(17px, 2.2vw, 27px); font-weight: 300; line-height: 1.55; color: #eceae4; letter-spacing: -.01em; }
+#intro .b-t { font-size: clamp(17px, 2.2vw, 27px); font-weight: 300; line-height: 1.55; color: #eceae4; letter-spacing: -.01em; text-shadow: 0 1px 14px rgba(0, 0, 0, .85), 0 0 2px rgba(0, 0, 0, .6); }
 #intro .cap { position: absolute; left: 6vw; bottom: calc(9vh + 26px); display: flex; flex-direction: column; gap: 6px; opacity: 0; transition: opacity .45s ease; z-index: 3; }
 #intro .cap.on { opacity: 1; }
 #intro .c-k { font-family: 'Oxanium', var(--font); font-size: 11px; letter-spacing: .28em; color: var(--cyan); }

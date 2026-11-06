@@ -205,7 +205,7 @@ export class Economy {
     if (d.solar) {
       const e = U.uSunDir.value.y;
       const sky = this.game.sky;
-      return d.power * Math.max(0, Math.min(1, e * 1.8 + 0.1)) * (1 - sky.uniforms.uStorm.value * 0.6) * (1 - sky.uniforms.uDust.value * 0.25);
+      return d.power * Math.max(0, Math.min(1, e * 1.8 + 0.1)) * sky.sunVis * (1 - sky.uniforms.uStorm.value * 0.6) * (1 - sky.uniforms.uDust.value * 0.25);
     }
     if (d.wind) return d.power * (0.25 + 0.75 * this.game.sky.uniforms.uAtmo.value) * (0.75 + 0.25 * Math.sin(U.uTime.value * 0.1 + b.seed * 10));
     if (d.fuel) return b.data.fuelLeft > 0 ? d.power : 0;

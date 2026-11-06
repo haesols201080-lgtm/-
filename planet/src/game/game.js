@@ -413,6 +413,10 @@ export class Game {
     // world (during space shots of the intro, keep streaming the landing site)
     const wp = this.engine.spaceScene && this.expedition.b ? this._wp || (this._wp = new THREE.Vector3(this.expedition.b.x, this.expedition.b.y + 30, this.expedition.b.z)) : cam.position;
     this.sky.update(dt, wp);
+    // the giant crossing the sun
+    const ecl = this.sky.sunVis < 0.85 && this.sky.sunElevation() > 0.02;
+    if (ecl && !this._ecl && !this.cinematic) this.ui.toast(this.sky.sunVis < 0.1 ? '일식 — 크로노스가 태양을 가렸습니다. 태양광 발전이 멈춥니다' : '일식 — 크로노스가 태양을 가리기 시작합니다. 태양광 발전량 감소', 'info');
+    this._ecl = ecl;
     this.terrain.update(wp);
     this.props.update(wp);
     this.flora.update(wp);

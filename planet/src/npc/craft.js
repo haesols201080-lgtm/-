@@ -363,7 +363,7 @@ export class ShipRig {
       f.visible = on > 0.02;
       f.scale.set(1, on * fl, 1);
     }
-    const near = thr > 0 ? Math.max(0, 1 - alt / 90) : 0;
+    const near = thr > 0 && !p.vac ? Math.max(0, 1 - alt / 90) : 0;   // no ground to stir up in orbit
     this.dust.visible = near > 0;
     this.dust.position.set(site.x + ax, site.y + 0.4, site.z + az);
     this.dust.scale.setScalar(12 + 30 * (1 - near) + dustGrow);

@@ -139,7 +139,7 @@ export class UI {
     $('#colony .rs').hidden = !R.current && !(R.rate > 0);
     const day = g.sky.time;
     const hh = Math.floor(day * 24), mm = Math.floor((day * 24 - hh) * 60);
-    $('#clock').textContent = `${g.sky.day}일 ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    $('#clock').textContent = `${g.sky.day}일 · ${g.sky.season()} ${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
     const pl = g.player;
     $('#g-o2').style.width = (pl.oxygen * 100) + '%';
     $('#g-o2t').textContent = Math.round(pl.oxygen * 100);
