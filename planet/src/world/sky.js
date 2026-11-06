@@ -295,7 +295,7 @@ export class Sky {
 
     // fog parameters follow the atmosphere
     const f = this.fog;
-    f.density = lerp(0.00017, 0.00014, atmo) * (1 + u.uDust.value * 1.4 + storm * 5.0) * (1 + (s.fog || 0) * 22);
+    f.density = lerp(0.00017, 0.00014, atmo) * (1 + u.uDust.value * 3.2 + storm * 5.0) * (1 + (s.fog || 0) * 22);
     f.falloff = lerp(0.0021, 0.0027, atmo);
     const hz = this.tmp;
     hz.set(lerp(0.62, 0.55, atmo), lerp(0.40, 0.70, atmo), lerp(0.25, 0.86, atmo));

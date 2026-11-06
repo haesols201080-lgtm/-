@@ -80,6 +80,7 @@ export class Input {
   }
   tapBtn(b) { this.holdBtn(b, true); this._tapBtns |= 1 << b; }
   look(dx, dy) { this.mouse.dx += dx; this.mouse.dy += dy; }
+  wheelTap(v) { this.mouse.wheel += v; }
 
   onKey(fn) { this.listeners.push(fn); }
 

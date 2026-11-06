@@ -433,3 +433,8 @@ select { font-family: var(--font); background: #1a232b; color: var(--ink); borde
 #starthelp .x { pointer-events: auto; background: none; border: 0; color: var(--dim); font-size: 13px; cursor: pointer; padding: 2px 4px; }
 .touch #starthelp { bottom: auto; left: 12px; transform: none; max-width: 210px; padding: 6px 8px; }
 .touch #starthelp .sh { justify-content: flex-start; gap: 4px 10px; font-size: 10px; }
+
+.help.h3 { grid-template-columns: 1fr; }
+.help.h3 > div { display: grid; grid-template-columns: 1.1fr 1fr 1.2fr; gap: 10px; align-items: center; }
+.help.h3 .hh { font-size: 10.5px; color: var(--dim); letter-spacing: .08em; border-bottom: 1px solid var(--line); padding-bottom: 6px; }
+.help.h3 b { font-weight: 600; }

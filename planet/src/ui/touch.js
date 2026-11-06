@@ -2,6 +2,8 @@
 // moves (push to the rim to run), dragging anywhere on the right half looks
 // around, and a thumb cluster carries the actions. Build-mode buttons appear
 // only while building. Everything feeds the same Input the keyboard does.
+import { BUILDINGS } from '../sim/data.js';
+
 export function isTouchDevice() {
   try { return matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && 'ontouchstart' in window); } catch (e) { return false; }
 }
@@ -43,12 +45,19 @@ export class TouchControls {
         <button class="tc" data-tap="KeyG">지형 도구</button>
         <button class="tc" data-tap="KeyN">로버</button>
         <button class="tc" data-tap="KeyL">조명</button>
+        <button class="tc" data-tap="F1">조작법</button>
       </div>
       <div class="bar buildbar" hidden>
-        <button class="tc" data-tap="KeyR">회전</button>
-        <button class="tc" data-tap="KeyT">높이 +</button>
-        <button class="tc" data-tap="KeyY">높이 −</button>
-        <button class="tc dig" data-hold="btn2" hidden>깎기</button>
+        <button class="tc m-place" data-tap="KeyR">90° 회전</button>
+        <button class="tc m-place" data-wheel="-1">↺ 15°</button>
+        <button class="tc m-place" data-wheel="1">↻ 15°</button>
+        <button class="tc m-found" data-tap="KeyT">높이 +</button>
+        <button class="tc m-found" data-tap="KeyY">높이 −</button>
+        <button class="tc m-road" data-tapbtn="2">연결 끊기</button>
+        <button class="tc m-terrain" data-hold="btn2">깎기</button>
+        <button class="tc m-terrain" data-hold="flatten">평탄화</button>
+        <button class="tc m-terrain" data-wheel="-1">붓 크게</button>
+        <button class="tc m-terrain" data-wheel="1">붓 작게</button>
         <button class="tc cancel" data-tap="Escape">취소</button>
       </div>`;
     document.getElementById('ui').appendChild(el);
@@ -58,7 +67,8 @@ export class TouchControls {
     this.drawer = el.querySelector('.drawer');
     this.buildbar = el.querySelector('.buildbar');
     this.actLabel = el.querySelector('.act span');
-    this.dig = el.querySelector('.dig');
+    this.jumpLabel = el.querySelector('.jump span');
+    this.useLabel = el.querySelector('.use span');
     this.moveId = null; this.lookId = null;
     this.stickC = { x: 0, y: 0 };
     this.lastLook = { x: 0, y: 0 };
@@ -111,12 +121,22 @@ export class TouchControls {
     // buttons: hold-buttons stay down while pressed, tap-buttons fire once
     for (const b of el.querySelectorAll('[data-hold]')) {
       const code = b.dataset.hold;
-      const on = (v) => { if (code === 'btn0') I.holdBtn(0, v); else if (code === 'btn2') I.holdBtn(2, v); else I.hold(code, v); b.classList.toggle('down', v); };
+      const on = (v) => {
+        // the act button accelerates while driving (W), flatten = Shift + primary
+        if (code === 'btn0' && game.driving && game.driving()) { I.hold('KeyW', v); I.holdBtn(0, false); }
+        else if (code === 'btn0') I.holdBtn(0, v);
+        else if (code === 'btn2') I.holdBtn(2, v);
+        else if (code === 'flatten') { I.hold('ShiftLeft', v); I.holdBtn(0, v); }
+        else I.hold(code, v);
+        b.classList.toggle('down', v);
+      };
       b.addEventListener('pointerdown', (e) => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (err) { /* optional */ } on(true); });
       b.addEventListener('pointerup', () => on(false));
       b.addEventListener('pointercancel', () => on(false));
     }
     for (const b of el.querySelectorAll('[data-tap]')) b.addEventListener('pointerdown', (e) => { e.preventDefault(); I.tap(b.dataset.tap); });
+    for (const b of el.querySelectorAll('[data-wheel]')) b.addEventListener('pointerdown', (e) => { e.preventDefault(); I.wheelTap(+b.dataset.wheel); });
+    for (const b of el.querySelectorAll('[data-tapbtn]')) b.addEventListener('pointerdown', (e) => { e.preventDefault(); I.tapBtn(+b.dataset.tapbtn); });
     el.querySelector('[data-more]').addEventListener('pointerdown', (e) => { e.preventDefault(); this.drawer.hidden = !this.drawer.hidden; });
     el.querySelector('[data-menu]').addEventListener('pointerdown', (e) => { e.preventDefault(); game.ui.open('pause'); });
     // hotbar slots become buttons
@@ -137,8 +157,19 @@ export class TouchControls {
     const mode = g.build.mode;
     const building = mode === 'place' || mode === 'road' || mode === 'terrain' || mode === 'dismantle';
     this.buildbar.hidden = !building;
-    this.dig.hidden = mode !== 'terrain';
-    const label = mode === 'place' || mode === 'road' ? '설치' : mode === 'dismantle' ? '해체' : mode === 'terrain' ? '돋우기' : g.driving && g.driving() ? '가속' : '채집';
+    if (building && this._mode !== mode + (g.build.type || '')) {
+      this._mode = mode + (g.build.type || '');
+      const found = mode === 'place' && BUILDINGS[g.build.type] && BUILDINGS[g.build.type].foundation;
+      for (const b of this.buildbar.children) {
+        const c = b.classList;
+        b.hidden = c.contains('m-place') ? mode !== 'place' : c.contains('m-found') ? !found : c.contains('m-road') ? mode !== 'road' : c.contains('m-terrain') ? mode !== 'terrain' : false;
+      }
+    }
+    const driving = g.driving && g.driving();
+    const label = mode === 'place' || mode === 'road' ? '설치' : mode === 'dismantle' ? '해체' : mode === 'terrain' ? '돋우기' : driving ? '가속' : '채집';
+    const jl = driving ? '브레이크' : '점프', ul = driving ? '하차' : '사용';
+    if (this.jumpLabel.textContent !== jl) this.jumpLabel.textContent = jl;
+    if (this.useLabel.textContent !== ul) this.useLabel.textContent = ul;
     if (this.actLabel.textContent !== label) this.actLabel.textContent = label;
   }
 }
