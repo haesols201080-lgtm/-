@@ -14,7 +14,7 @@ const PI = Math.PI;
 function pod(M) {
   M.colCyl(0, 0, 4.6, 0, 50);
   for (let k = 0; k < 6; k++) { const a = k * PI / 3 + PI / 6; M.colCyl(Math.cos(a) * 5.6, Math.sin(a) * 5.6, 0.65, 0, 1.2); }
-  M.col(-1.25, 0, 6.3, 1.25, 0.2, 8.4);
+  M.col(-3.4, 0, 4.85, 3.4, 0.22, 8.45);
   M.light(0, 3, 8, L.warm, 4, 12);
 }
 

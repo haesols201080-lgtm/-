@@ -87,20 +87,16 @@ export class Game {
       if (s < bs) { bs = s; best = [x, z]; }
     }
     const [px, pz] = best;
-    const rot = 0.6, c = Math.cos(rot), sn = Math.sin(rot);
-    const W = (lx, lz) => [px + lx * c + lz * sn, pz - lx * sn + lz * c];
+    const rot = 0.6;
     const y = T.height(px, pz);
     T.flattenRect(px, pz, 7.5, 7.5, rot, y, 5);
     this.props.clearArea(px, pz, 18);
     this.buildings.add('pod', px, y, pz, rot);
     this.expedition.attach();
-    // the explorer stands off the elevator side; the rover is parked where it
-    // drove off the elevator platform
-    const [sx, sz] = W(-7.5, 21);
-    this.player.spawn(sx, sz, Math.atan2(-(px - sx), -(pz - sz)) - 0.35);
-    const [rx, rz] = W(4.2, 15.5);
-    this.rover.pos.set(rx, T.height(rx, rz), rz);
-    this.rover.yaw = rot + Math.PI - 0.4; this.rover.speed = 0; this.rover.present = true; this.rover.group.visible = true; this.rover.updateMesh(0);
+    // the rover is parked where it drove off the elevator; the explorer stands beside it
+    this.expedition.parkRover();
+    const sp = this.expedition.spawnPoint();
+    this.player.spawn(sp.x, sp.z, sp.yaw);
     this.eco.gridDirty = true;
     this.sky.time = 0.31;
     this.flags.newGame = true;
@@ -406,19 +402,21 @@ export class Game {
       if (this.autosaveT <= 0) { this.autosaveT = 60; this.save(); }
     }
     // camera
-    if (this.started) {
+    if (this.cinematic) this.cinematic.update(dt, cam);
+    else if (this.started) {
       if (this.rover.driving) this.roverCamera(dt, cam, input);
       else P.updateCamera(dt, cam);
     } else this.titleCamera(dt, cam);
     this.updateTool(dt);
-    // world
-    this.sky.update(dt, cam.position);
-    this.terrain.update(cam.position);
-    this.props.update(cam.position);
-    this.flora.update(cam.position);
-    this.fauna.update(dt, cam.position);
-    this.buildings.update(dt, cam.position, P);
-    this.npcs.update(dt, cam.position);
+    // world (during space shots of the intro, keep streaming the landing site)
+    const wp = this.engine.spaceScene && this.expedition.b ? this._wp || (this._wp = new THREE.Vector3(this.expedition.b.x, this.expedition.b.y + 30, this.expedition.b.z)) : cam.position;
+    this.sky.update(dt, wp);
+    this.terrain.update(wp);
+    this.props.update(wp);
+    this.flora.update(wp);
+    this.fauna.update(dt, wp);
+    this.buildings.update(dt, wp, P);
+    this.npcs.update(dt, wp);
     this.expedition.update(dt);
     this.pois.update(P.pos);
     this.fx.update(dt, cam.position, this.terra.weather.storm);

@@ -259,7 +259,7 @@ export class NPCs {
       if (S.t >= 13 && !S.spawned) {
         S.spawned = true;
         const placed = this.game.colony.arrive(S.n);
-        const [fx, fz] = ShipRig.toWorld(site, S.rot, 0, SHIP.R + 3.6);
+        const [fx, fz] = ShipRig.toWorld(site, S.rot, 0, SHIP.R + SHIP.lift + 2.3);
         for (let i = 0; i < Math.min(placed, 6); i++) this.spawnArrival({ x: fx, z: fz }, i);
         if (placed) this.game.ui && this.game.ui.toast('이주선이 정착민 ' + placed + '명을 데려왔습니다', 'good', 3);
       }

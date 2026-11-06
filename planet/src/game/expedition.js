@@ -3,7 +3,7 @@
 // unprepared ground with its cargo elevator lowered. The landing burn left a
 // scorched, blasted patch around it.
 import * as THREE from 'three';
-import { ShipRig } from '../npc/craft.js';
+import { ShipRig, SHIP } from '../npc/craft.js';
 
 export class Expedition {
   constructor(game) {
@@ -55,6 +55,29 @@ export class Expedition {
     this.scorch.receiveShadow = true;
     this.scorch.renderOrder = 1;
     g.engine.scene.add(this.scorch);
+  }
+
+  // the route the rover drove off the elevator platform (world xz, y unused)
+  roverPath() {
+    const b = this.b, site = this.site, L = SHIP.R + SHIP.lift;
+    const pts = [[0, L], [5.5, L + 0.4], [9.5, L + 3.8], [11.5, L + 9]].map(([x, z]) => { const [wx, wz] = ShipRig.toWorld(site, b.rot, x, z); return new THREE.Vector3(wx, 0, wz); });
+    return new THREE.CatmullRomCurve3(pts);
+  }
+
+  parkRover() {
+    const R = this.game.rover, T = this.game.terrain, path = this.roverPath();
+    const p = path.getPointAt(1), d = path.getTangentAt(0.999);
+    R.pos.set(p.x, T.height(p.x, p.z), p.z);
+    R.yaw = Math.atan2(-d.x, -d.z);
+    R.speed = 0; R.present = true; R.group.visible = true;
+    R.updateMesh(0);
+  }
+
+  // where the explorer stands when the game begins: beside the parked rover,
+  // facing the ship
+  spawnPoint() {
+    const b = this.b, [x, z] = ShipRig.toWorld(this.site, b.rot, 8.5, SHIP.R + SHIP.lift + 11.5);
+    return { x, z, yaw: Math.atan2(-(b.x - x), -(b.z - z)) - 0.3 };
   }
 
   update(dt) {

@@ -389,3 +389,20 @@ select { font-family: var(--font); background: #1a232b; color: var(--ink); borde
   #touch .bar.drawer { top: 236px; max-width: 70vw; }
   #touch .bar.buildbar { bottom: 250px; }
 }
+
+/* ---------------------------------------------------------------- intro cinematic */
+#intro { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
+#intro .lb { position: absolute; left: 0; right: 0; height: 9vh; background: #000; z-index: 2; }
+#intro .lb.top { top: 0; } #intro .lb.bot { bottom: 0; }
+#intro .fade { position: absolute; inset: 0; background: #000; opacity: 1; z-index: 1; }
+#intro .brief { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -46%); width: min(760px, 86vw); text-align: center; opacity: 0; transition: opacity .7s ease, transform .9s ease; z-index: 3; }
+#intro .brief.on { opacity: 1; transform: translate(-50%, -50%); }
+#intro .b-k { font-family: 'Oxanium', var(--font); font-weight: 600; letter-spacing: .34em; font-size: 12px; color: var(--orange); margin-bottom: 14px; min-height: 1em; }
+#intro .b-t { font-size: clamp(17px, 2.2vw, 27px); font-weight: 300; line-height: 1.55; color: #eceae4; letter-spacing: -.01em; }
+#intro .cap { position: absolute; left: 6vw; bottom: calc(9vh + 26px); display: flex; flex-direction: column; gap: 6px; opacity: 0; transition: opacity .45s ease; z-index: 3; }
+#intro .cap.on { opacity: 1; }
+#intro .c-k { font-family: 'Oxanium', var(--font); font-size: 11px; letter-spacing: .28em; color: var(--cyan); }
+#intro .c-t { font-size: clamp(14px, 1.5vw, 19px); color: #f2f0ea; text-shadow: 0 1px 10px rgba(0, 0, 0, .7); }
+#intro .skip { pointer-events: auto; position: absolute; right: 4vw; bottom: calc(9vh + 22px); z-index: 3; background: rgba(10, 12, 14, .45); color: #cfd6da; border: 1px solid rgba(255, 255, 255, .16); padding: 8px 14px; font: 600 11px 'Oxanium', var(--font); letter-spacing: .18em; cursor: pointer; backdrop-filter: blur(6px); }
+#intro .skip:hover { border-color: var(--cyan); color: #fff; }
+#intro .skip kbd { font: inherit; opacity: .55; margin-left: 6px; }

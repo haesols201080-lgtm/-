@@ -154,7 +154,7 @@ export class Rover {
   }
 
   update(dt, input) {
-    if (!this.present) return;
+    if (!this.present || this.cinematic) return;
     const g = this.game, T = g.terrain;
     if (this.driving) {
       const active = input.active;

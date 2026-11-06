@@ -149,7 +149,7 @@ export const SHUTTLE_FANS = [[-2.85, -0.62, 2.75], [2.85, -0.62, 2.75], [-2.1, -
 // engines (three gimballed sea-level bells inside three large vacuum bells),
 // six landing legs, crew windows and a cargo elevator on the leeward (+z)
 // side. Origin is the ground contact; the elevator platform is separate.
-export const SHIP = { R: 4.5, H: 50, door: 28.2 };
+export const SHIP = { R: 4.5, H: 50, door: 28.2, lift: 2.15 };   // lift: platform centre out from the hull
 export function shipGeometry() {
   const R = SHIP.R, L = 14, Y0 = 36, rho = (R * R + L * L) / (2 * R);
   const nose = (yy) => (yy <= 0 ? R : yy >= L ? 0 : Math.sqrt(rho * rho - yy * yy) + R - rho);
@@ -199,14 +199,19 @@ export function shipGeometry() {
   // crew windows: two decks of small dark panes on the leeward side
   const pane = (y, a, w, h) => D.add(lathe([[rAt(y - h / 2) * 1.006, y - h / 2], [rAt(y + h / 2) * 1.006, y + h / 2]], 2, a - w / 2, w), { color: [0.05, 0.07, 0.09] });
   for (const y of [32.6, 34.9]) for (let i = -6; i <= 6; i++) if (Math.abs(i) > 0) pane(y, i * 0.13, 0.075, 0.55);
-  // cargo door outline, elevator boom and its winch
-  const dy = SHIP.door, half = 0.36;
-  for (const [y0, y1, a0, a1] of [[dy, dy + 3.4, -half - 0.02, -half + 0.02], [dy, dy + 3.4, half - 0.02, half + 0.02], [dy - 0.03, dy + 0.03, -half, half], [dy + 3.37, dy + 3.43, -half, half]]) {
-    D.add(lathe([[R * 1.005, y0], [R * 1.005, y1]], 4, a0, a1 - a0), { color: [0.2, 0.21, 0.23] });
+  // cargo door (7 m wide, sized for the rover), elevator booms and winch beam
+  const dy = SHIP.door, half = 0.8, DH = 3.7;
+  for (const [y0, y1, a0, a1] of [[dy, dy + DH, -half - 0.015, -half + 0.015], [dy, dy + DH, half - 0.015, half + 0.015], [dy - 0.04, dy + 0.04, -half, half], [dy + DH - 0.04, dy + DH + 0.04, -half, half]]) {
+    D.add(lathe([[R * 1.005, y0], [R * 1.005, y1]], 12, a0, a1 - a0), { color: [0.2, 0.21, 0.23] });
   }
-  S.add(new THREE.BoxGeometry(0.5, 0.45, 3.2), { pos: V(0, dy + 3.75, R + 1.45), color: STEEL });
-  for (const sx of [-1, 1]) S.add(new THREE.BoxGeometry(0.12, 0.12, 3.0), { pos: V(sx * 1.1, dy + 3.6, R + 1.4), color: STEEL });
-  D.add(new THREE.BoxGeometry(2.6, 0.3, 0.4), { pos: V(0, dy + 3.55, R + 2.85), color: [0.25, 0.26, 0.28] });
+  for (const a of [-0.4, 0, 0.4]) D.add(lathe([[R * 1.004, dy + 0.1], [R * 1.004, dy + DH - 0.1]], 2, a - 0.004, 0.008), { color: [0.4, 0.41, 0.43] });
+  for (const sx of [-1, 1]) {
+    S.add(new THREE.BoxGeometry(0.3, 0.4, 2.7), { pos: V(sx * 3.1, dy + DH + 0.35, R + 0.85), color: STEEL });
+    const br = new THREE.BoxGeometry(0.14, 0.14, 2.2); br.rotateX(-0.6);
+    S.add(br, { pos: V(sx * 3.1, dy + DH - 0.45, R + 0.75), color: STEEL });
+  }
+  D.add(new THREE.BoxGeometry(6.6, 0.32, 0.42), { pos: V(0, dy + DH + 0.3, R + SHIP.lift + 0.05), color: [0.25, 0.26, 0.28] });
+  for (const sx of [-1, 1]) D.add(new THREE.CylinderGeometry(0.22, 0.22, 0.3, 14).rotateZ(Math.PI / 2), { pos: V(sx * 3.1, dy + DH + 0.05, R + SHIP.lift), color: [0.85, 0.65, 0.2] });
   // RCS thruster blocks near the top and bottom
   for (const y of [Y0 - 1.5, 5.5]) for (const a of [0.55, -0.55]) D.add(new THREE.BoxGeometry(0.5, 0.7, 0.2), { pos: V(Math.sin(a) * (R + 0.08), y, Math.cos(a) * (R + 0.08)), rot: E(0, a, 0), color: [0.18, 0.19, 0.2] });
   // aft skirt, thrust plate and engines
@@ -230,14 +235,19 @@ export function shipGeometry() {
     D.add(br, { pos: b0.clone().add(foot).multiplyScalar(0.5), color: [0.28, 0.29, 0.31] });
     D.add(new THREE.CylinderGeometry(0.55, 0.65, 0.3, 18), { pos: V(foot.x, 0.15, foot.z), color: [0.22, 0.23, 0.25] });
   }
-  // elevator platform (animated separately): grating deck, rails, cable sheaves
+  // elevator platform (animated separately): 6.8 x 3.6 m grating deck that
+  // takes the rover, kick plates, rails on three sides, open toward +x
   const P = new GeoBuilder();
-  P.add(new THREE.BoxGeometry(2.5, 0.18, 2.1), { pos: V(0, 0.09, 0), color: [0.42, 0.44, 0.47] });
-  for (const sx of [-1, 1]) {
-    P.add(new THREE.BoxGeometry(0.05, 0.05, 2.1), { pos: V(sx * 1.22, 1.05, 0), color: [0.85, 0.65, 0.2] });
-    for (const z of [-1.0, 0, 1.0]) P.add(new THREE.CylinderGeometry(0.025, 0.025, 1.0, 6), { pos: V(sx * 1.22, 0.6, z), color: [0.7, 0.72, 0.74] });
+  const PW = 6.8, PD = 3.6;
+  P.add(new THREE.BoxGeometry(PW, 0.22, PD), { pos: V(0, 0.11, 0), color: [0.36, 0.38, 0.41] });
+  for (let x = -PW / 2 + 0.4; x < PW / 2; x += 0.4) P.add(new THREE.BoxGeometry(0.04, 0.02, PD - 0.1), { pos: V(x, 0.225, 0), color: [0.2, 0.21, 0.23] });
+  for (const sz of [-1, 1]) {
+    P.add(new THREE.BoxGeometry(PW, 0.12, 0.06), { pos: V(0, 0.28, sz * (PD / 2 - 0.03)), color: [0.85, 0.65, 0.2] });
+    P.add(new THREE.BoxGeometry(PW - 1.6, 0.05, 0.05), { pos: V(-0.8, 1.1, sz * (PD / 2 - 0.03)), color: [0.85, 0.65, 0.2] });
+    for (let x = -PW / 2 + 0.05; x < PW / 2 - 1.5; x += 1.3) P.add(new THREE.CylinderGeometry(0.03, 0.03, 0.9, 6), { pos: V(x, 0.65, sz * (PD / 2 - 0.03)), color: [0.7, 0.72, 0.74] });
   }
-  P.add(new THREE.BoxGeometry(2.5, 0.05, 0.05), { pos: V(0, 1.05, 1.03), color: [0.85, 0.65, 0.2] });
+  P.add(new THREE.BoxGeometry(0.05, 0.05, PD), { pos: V(-PW / 2 + 0.03, 1.1, 0), color: [0.85, 0.65, 0.2] });
+  for (const sx of [-1, 1]) P.add(new THREE.BoxGeometry(0.3, 0.25, 0.3), { pos: V(sx * 3.1, 0.3, 0), color: [0.3, 0.31, 0.33] });
   return {
     steel: mergeVertices(S.build(), 1e-5), tiles: mergeVertices(T.build(), 1e-5), dark: mergeVertices(D.build(), 1e-5), platform: P.build(),
   };
@@ -304,7 +314,7 @@ export class ShipRig {
       const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; body.add(m);
     }
     this.plat = new THREE.Mesh(g.platform, M.steel); this.plat.castShadow = true; this.plat.receiveShadow = true;
-    this.cables = [-1, 1].map((sx) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 5).translate(0, -0.5, 0), M.dark); c.position.set(sx * 1.1, SHIP.door + 3.45, SHIP.R + 2.85); body.add(c); return c; });
+    this.cables = [-1, 1].map((sx) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 5).translate(0, -0.5, 0), M.dark); c.position.set(sx * 3.1, SHIP.door + 3.75, SHIP.R + SHIP.lift); body.add(c); return c; });
     body.add(this.plat);
     // methalox exhaust: nearly transparent blue-violet plume with a bright
     // core at the nozzle and shock diamonds down the axis
@@ -340,9 +350,10 @@ export class ShipRig {
     const ax = Math.sin(from) * (p.off || 0), az = Math.cos(from) * (p.off || 0), alt = p.alt || 0;
     this.group.position.set(site.x + ax, site.y + 20 + alt, site.z + az);
     this.group.rotation.set(p.pitch || 0, rot, 0, 'YXZ');
-    const top = SHIP.door + 3.45, py = top - 0.6 - (top - 0.6) * (p.elev || 0);
-    this.plat.position.set(0, py, SHIP.R + 2.85);
-    for (const c of this.cables) c.scale.y = Math.max(0.01, top - py - 0.1);
+    const top = SHIP.door + 3.75, py = SHIP.door - (SHIP.door) * (p.elev || 0);
+    this.plat.position.set(0, py, SHIP.R + SHIP.lift);
+    this.platY = py;
+    for (const c of this.cables) c.scale.y = Math.max(0.01, top - py - 0.4);
     const thr = p.thr || 0;
     this.flames.visible = thr > 0;
     const fl = 1 + 0.06 * Math.sin(t * 41) + 0.04 * Math.sin(t * 67);
@@ -362,5 +373,5 @@ export class ShipRig {
   // world position of a point in the landed ship's frame
   static toWorld(site, rot, lx, lz) { const c = Math.cos(rot), s = Math.sin(rot); return [site.x + lx * c + lz * s, site.z - lx * s + lz * c]; }
   // the elevator platform's world position at the ground
-  static elevatorFoot(site, rot) { return ShipRig.toWorld(site, rot, 0, SHIP.R + 2.85); }
+  static elevatorFoot(site, rot) { return ShipRig.toWorld(site, rot, 0, SHIP.R + SHIP.lift); }
 }

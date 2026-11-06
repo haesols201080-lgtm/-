@@ -72,7 +72,7 @@ export class Engine {
       tColor: { value: null }, tDepth: { value: null },
       uProjInv: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
       uCamPos2: { value: new THREE.Vector3() },
-      uFogDensity: { value: 0.0006 }, uFogFalloff: { value: 0.004 },
+      uFogDensity: { value: 0.0006 }, uFogFalloff: { value: 0.004 }, uSpace: { value: 0 },
       uUnderwater: { value: 0 }, uWaterTint: { value: this.waterTint }, uAlgae: U.uAlgae,
       uWaterLevelC: U.uWaterLevel, uFar: { value: 30000 }, tWaterN: { value: null }, uTimeC: U.uTime, uNightC: U.uNight,
       uAO: { value: 1 }, uRes: { value: new THREE.Vector2(1, 1) }, uProjY: { value: 1 },
@@ -84,7 +84,7 @@ export class Engine {
         uniform sampler2D tColor, tDepth, tWaterN;
         uniform mat4 uProjInv, uCamWorld;
         uniform vec3 uCamPos2;
-        uniform float uFogDensity, uFogFalloff, uUnderwater, uWaterLevelC, uFar, uTimeC, uNightC, uAO, uProjY;
+        uniform float uFogDensity, uFogFalloff, uUnderwater, uWaterLevelC, uFar, uTimeC, uNightC, uAO, uProjY, uSpace;
         uniform vec2 uRes;
         uniform vec3 uWaterTint; uniform float uAlgae;
         varying vec2 vUv;
@@ -141,6 +141,8 @@ export class Engine {
         }
         void main() {
           vec3 col = texture2D(tColor, vUv).rgb;
+          // space shots (intro): no world fog, water or cloud shadows
+          if (uSpace > 0.5) { gl_FragColor = vec4(col, 1.0); return; }
           float z = texture2D(tDepth, vUv).x;
           vec4 fp = uProjInv * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
           vec3 vdir = normalize(fp.xyz / fp.w);
@@ -299,7 +301,9 @@ export class Engine {
     const r = this.renderer, cam = this.camera;
     cam.updateMatrixWorld();
     r.setRenderTarget(this.sceneRT);
-    r.render(this.scene, cam);
+    // the intro can swap in its own space scene for a shot
+    r.render(this.spaceScene || this.scene, cam);
+    this.compUniforms.uSpace.value = this.spaceScene ? 1 : 0;
     this.sceneInfo = { calls: r.info.render.calls, tris: r.info.render.triangles };
     const cu = this.compUniforms;
     cu.uProjInv.value.copy(cam.projectionMatrixInverse);
@@ -327,7 +331,11 @@ export class Engine {
     if (this.quality.bloom) this.bloom.render(r, null, this.postRT, 0, false);
     this.outUniforms.uHurt.value = this.hurt;
     this.outUniforms.uExposure.value = this.exposure;
+    // space has no dusty sky to correct for: neutral white balance there
+    const wb = this.outUniforms.uWB.value, wb0 = this.spaceScene ? wb.clone() : null;
+    if (wb0) wb.set(1, 1, 1);
     r.setRenderTarget(null);
     r.render(this.outScene, this.fsCam);
+    if (wb0) wb.copy(wb0);
   }
 }

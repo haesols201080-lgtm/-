@@ -1,6 +1,7 @@
 // Entry point: boot sequence (textures, streamed planet around the landing
 // site), title screen, main loop, developer panel (?dev=1).
 import * as THREE from 'three';
+import { Intro } from './game/intro.js';
 import { Engine } from './core/engine.js';
 import { U, WORLD } from './core/shared.js';
 import { generateTextures } from './world/textures.js';
@@ -189,18 +190,29 @@ function start(game, el) {
     // phones: go fullscreen and landscape when the browser allows it
     try { const r = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); if (r && r.catch) r.then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {}); } catch (e) { /* not allowed */ }
   }
-  game.ui.hud.hidden = false;
-  game.started = true;
   game.audio.start();
   game.ui.close(false);
+  // a new expedition opens with the landing; then the game begins
+  if (game.flags.newGame && !game.flags.introShown && !params.has('nointro') && game.expedition.b) {
+    game.flags.introShown = true;
+    new Intro(game, () => begin(game)).start();
+    return;
+  }
+  begin(game);
+}
+
+function begin(game) {
+  game.ui.hud.hidden = false;
+  game.started = true;
   game.input.lock();
   game.updateLockHint();
-  if (game.flags.newGame && !game.flags.introShown) {
-    game.flags.introShown = true;
-    game.ui.toast('<b>행성 아르케, 착륙 완료</b>대기압 0.006기압 · 지표 −63°C · 산소 없음. 착륙 포드가 산소를 공급합니다.', 'info', 8, true);
+  if (game.flags.newGame && !game.flags.landedToast) {
+    game.flags.landedToast = true;
+    game.ui.toast('<b>행성 아르케, 착륙 완료</b>대기압 0.006기압 · 지표 −63°C · 산소 없음. 탐사선 화물 승강기 아래에서 산소를 보충할 수 있습니다.', 'info', 8, true);
   }
 }
-window.__start = () => { const g = window.__game; if (g && g.titleEl) start(g, g.titleEl); };
+window.__start = () => { const g = window.__game; if (g && g.titleEl) { g.flags.introShown = true; start(g, g.titleEl); } };
+window.__intro = () => { const g = window.__game; if (g && g.titleEl) start(g, g.titleEl); };
 
 // --------------------------------------------------------------- developer panel
 function devPanel(game) {
