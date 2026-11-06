@@ -50,7 +50,7 @@ export class Colony {
     const comms = g.buildings.list.find((b) => b.def.comms);
     if (!comms) return { ok: false, reason: '심우주 교신기가 없습니다' };
     if (comms.powerRatio < 0.3) return { ok: false, reason: '교신기에 전력이 부족합니다' };
-    if (!g.buildings.list.some((b) => b.type === 'hq')) return { ok: false, reason: '셔틀이 내릴 식민 본부가 필요합니다' };
+    if (!g.buildings.list.some((b) => b.type === 'hq')) return { ok: false, reason: '이주선을 맞을 식민 본부가 필요합니다' };
     const need = STAGES.findIndex((s) => s.id === 'clouds');
     if (g.terra.stage < need) return { ok: false, reason: '아직 아무도 오려 하지 않습니다 — 구름 단계까지 테라포밍하세요' };
     if (this.calls.length) return { ok: false, reason: '응답을 기다리는 중입니다' };

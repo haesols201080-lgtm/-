@@ -6,6 +6,8 @@ import { TIERS, ITEMS } from '../sim/data.js';
 import { U } from '../core/shared.js';
 import { GeoBuilder } from '../core/geobuilder.js';
 import { colonistMesh } from './colonist.js';
+import { droneGeometry, shipGeometry, tileMaterial, SHIP } from './craft.js';
+import { buildLandingZone, zoneBlocks, zoneColliders } from './landingzone.js';
 
 const CELL = 2;
 const tmpC = new THREE.Color();
@@ -114,19 +116,12 @@ export class NPCs {
     this.NEAR = 14;
     this.people = [colonistMesh(scene, this.NEAR, 0), colonistMesh(scene, this.CAP, 1)];
 
-    // drones
-    const dg = new GeoBuilder();
-    dg.add(new THREE.BoxGeometry(0.7, 0.18, 0.7), { color: 0xe7e5df });
-    dg.add(new THREE.BoxGeometry(0.72, 0.05, 0.72), { pos: new THREE.Vector3(0, 0.08, 0), color: 0xf0761c });
-    for (const [x, z] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]]) {
-      dg.add(new THREE.CylinderGeometry(0.04, 0.04, 0.1, 6), { pos: new THREE.Vector3(x, 0.08, z), color: 0x333333 });
-      dg.add(new THREE.CylinderGeometry(0.26, 0.26, 0.015, 14), { pos: new THREE.Vector3(x, 0.14, z), color: 0x222222 });
-    }
-    dg.add(new THREE.BoxGeometry(0.4, 0.3, 0.4), { pos: new THREE.Vector3(0, -0.28, 0), color: 0xffffff });
-    this.droneMesh = new THREE.InstancedMesh(dg.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.3 }), 40);
-    this.droneMesh.count = 0; this.droneMesh.castShadow = true; this.droneMesh.frustumCulled = false;
-    this.droneMesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(40 * 3).fill(1), 3);
-    scene.add(this.droneMesh);
+    // drones: carbon and white quadcopter frame, cargo pod tinted by its load
+    const dg = droneGeometry();
+    const craftMat = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.32, metalness: 0.25, clearcoat: 0.5, clearcoatRoughness: 0.25 });
+    const im = (geo, n, tint) => { const m = new THREE.InstancedMesh(geo, craftMat, n); m.count = 0; m.castShadow = true; m.frustumCulled = false; if (tint) m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3).fill(1), 3); scene.add(m); return m; };
+    this.droneMesh = im(dg.frame, 40, false);
+    this.podMesh = im(dg.pod, 40, true);
     this.drones = [];
 
     // shuttle
@@ -148,61 +143,215 @@ export class NPCs {
   }
 
   // ---------------------------------------------------------------- shuttle
+  // The colony ship: a 50 m steel lander that comes in belly-first, flips
+  // upright, lands on its engines at a pad near the HQ, lowers its cargo
+  // elevator to let the colonists off and launches again.
   makeShuttle() {
-    const gb = new GeoBuilder();
-    gb.add(new THREE.CapsuleGeometry(1.6, 5.0, 6, 16), { rot: new THREE.Euler(Math.PI / 2, 0, 0), color: 0xe7e5df });
-    gb.add(new THREE.BoxGeometry(7.5, 0.25, 2.2), { pos: new THREE.Vector3(0, -0.3, 1.0), color: 0xcdcac2 });
-    gb.add(new THREE.BoxGeometry(0.25, 2.0, 1.6), { pos: new THREE.Vector3(0, 1.3, 2.6), color: 0xf0761c });
-    gb.add(new THREE.SphereGeometry(1.1, 14, 10, 0, Math.PI * 2, 0, Math.PI / 2), { pos: new THREE.Vector3(0, 0.5, -2.6), rot: new THREE.Euler(-Math.PI / 2.4, 0, 0), color: 0x1a2a33 });
-    for (const x of [-2.6, 2.6]) gb.add(new THREE.CylinderGeometry(0.45, 0.55, 1.6, 12), { pos: new THREE.Vector3(x, -0.2, 2.4), rot: new THREE.Euler(Math.PI / 2, 0, 0), color: 0x5b6168 });
-    for (const [x, z] of [[-1.1, -2], [1.1, -2], [-1.1, 2], [1.1, 2]]) gb.add(new THREE.CylinderGeometry(0.06, 0.08, 1.4, 6), { pos: new THREE.Vector3(x, -1.8, z), color: 0x33373c });
-    const mesh = new THREE.Mesh(gb.build(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.25 }));
-    mesh.castShadow = true;
-    const flame = new THREE.Mesh(new THREE.ConeGeometry(0.6, 3.2, 12, 1, true), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 2.2, 0.8), transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
-    flame.rotation.x = Math.PI; flame.position.y = -3.2;
+    const g = shipGeometry();
+    const steel = new THREE.MeshPhysicalMaterial({ vertexColors: true, color: 0xd6d9de, metalness: 0.95, roughness: 0.3, envMapIntensity: 1.25 });
+    const dark = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.45, side: THREE.DoubleSide });
+    const body = new THREE.Group();         // ship frame: origin at the ground contact
+    for (const [geo, mat] of [[g.steel, steel], [g.tiles, tileMaterial()], [g.dark, dark]]) {
+      const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; body.add(m);
+    }
+    // cargo elevator platform and its two cables
+    const plat = new THREE.Mesh(g.platform, steel); plat.castShadow = true;
+    const cables = [-1, 1].map((sx) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 5).translate(0, -0.5, 0), dark); c.position.set(sx * 1.1, SHIP.door + 3.45, SHIP.R + 2.85); body.add(c); return c; });
+    body.add(plat);
+    // methalox exhaust: nearly transparent blue-violet plume with a bright
+    // core at the nozzle and shock diamonds down the axis
+    const flames = new THREE.Group();
+    const add = (c, o) => new THREE.MeshBasicMaterial({ color: new THREE.Color(...c), transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
+    const core = add([3.2, 3.6, 5.5], 0.75), plume = add([0.45, 0.42, 1.25], 0.22), diamond = add([2.6, 2.4, 4.2], 0.6);
+    for (let k = 0; k < 6; k++) {
+      const inner = k < 3, a = inner ? k * Math.PI * 2 / 3 + Math.PI / 2 : (k - 3) * Math.PI * 2 / 3 + Math.PI / 6, r = inner ? 1.25 : 2.85;
+      const e = new THREE.Group(), w = inner ? 1 : 1.75;
+      e.add(new THREE.Mesh(new THREE.ConeGeometry(0.5 * w, 3.2, 14, 1, true).translate(0, 1.6, 0), core));
+      e.add(new THREE.Mesh(new THREE.CylinderGeometry(1.1 * w, 0.62 * w, 16, 16, 1, true).translate(0, 8, 0), plume));
+      for (let d = 0; d < 5; d++) e.add(new THREE.Mesh(new THREE.SphereGeometry(0.42 * w * (1 - d * 0.12), 10, 8).scale(1, 1.6, 1).translate(0, 1.6 + d * 2.3 * w, 0), diamond));
+      e.rotation.x = Math.PI; e.position.set(Math.cos(a) * r, inner ? 0.85 : 0.25, Math.sin(a) * r);
+      e.userData = { inner, k };
+      flames.add(e);
+    }
+    body.add(flames);
+    // dust kicked up by the engines near the ground
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const cx = cv.getContext('2d'), gr = cx.createRadialGradient(32, 32, 4, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,0.0)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.75)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = gr; cx.fillRect(0, 0, 64, 64);
+    const dust = new THREE.Mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), color: 0xb08a6a, transparent: true, opacity: 0, depthWrite: false }));
+    // the ship pivots about its centre of mass (20 m up) for the flip
     const group = new THREE.Group();
-    group.add(mesh, flame);
+    body.position.y = -20;
+    group.add(body);
     group.visible = false;
-    return { group, flame, state: 'idle', t: 0 };
+    this.game.engine.scene.add(dust);
+    return { group, body, flames, plat, cables, dust, zone: null, state: 'idle', t: 0 };
+  }
+
+  // a naturally flat, open spot 70-150 m from the HQ for the ship's pad
+  shipSite(hq) {
+    const S = this.shuttle, T = this.game.terrain, B = this.game.buildings.list;
+    if (S.site && S.site.hq === hq.id) return S.site;
+    let best = null;
+    for (let r = 90; r <= 180 && !best; r += 10) {
+      for (let k = 0; k < 24; k++) {
+        const a = k / 24 * Math.PI * 2 + r * 0.37, x = hq.x + Math.cos(a) * r, z = hq.z + Math.sin(a) * r;
+        let lo = Infinity, hi = -Infinity;
+        for (let j = 0; j < 13; j++) {
+          const rr = j ? 22 * (j > 6 ? 1 : 0.55) : 0, aa = j * 1.05;
+          const h = T.height(x + Math.cos(aa) * rr, z + Math.sin(aa) * rr);
+          lo = Math.min(lo, h); hi = Math.max(hi, h);
+        }
+        if (hi - lo > 2.2 || lo < U.uWaterLevel.value + 1) continue;
+        if (B.some((b) => Math.hypot(b.x - x, b.z - z) < 50 + Math.hypot(b.hw, b.hd))) continue;
+        const score = hi - lo + r * 0.004;
+        if (!best || score < best.score) best = { x, z, y: hi + 0.05, score };
+      }
+    }
+    if (!best) { const [x, z] = this.game.buildings.toWorld(hq, 0, -hq.hd - 60); best = { x, z, y: T.height(x, z) + 0.05 }; }
+    best.hq = hq.id;
+    best.rot = Math.atan2(hq.x - best.x, hq.z - best.z);   // apron and elevator face the HQ
+    S.site = best;
+    this.buildZone();
+    return best;
+  }
+
+  // landing zone meshes, colliders, and clearing the ground under them
+  buildZone() {
+    const S = this.shuttle, s = S.site, g = this.game, C = g.colliders;
+    if (S.zone) { g.engine.scene.remove(S.zone); S.zone.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+    S.zone = buildLandingZone(g, s, s.rot);
+    g.engine.scene.add(S.zone);
+    const c = Math.cos(s.rot), sn = Math.sin(s.rot);
+    const W = (lx, lz) => [s.x + lx * c + lz * sn, s.z - lx * sn + lz * c];
+    const gh = (lx, lz) => { const [x, z] = W(lx, lz); return g.terrain.height(x, z) - s.y; };
+    C.removeOwner('zone');
+    C.addCyl(s.x, s.z, 22.1, s.y - 4, s.y + 0.07, 'zone', {});
+    const { cyl, box } = zoneColliders(gh);
+    for (const [lx, lz, r, y0, y1] of cyl) { const [x, z] = W(lx, lz); C.addCyl(x, z, r, s.y + y0, s.y + y1, 'zone', { noStand: true }); }
+    for (const [lx, lz, hx, hz, y0, y1] of box) { const [x, z] = W(lx, lz); C.addBox(x, z, hx, hz, s.rot, s.y + y0, s.y + y1, 'zone', {}); }
+    g.props && g.props.clearArea(s.x, s.z, 45);
+    g.flora && g.flora.invalidate();
+  }
+
+  padBlocks(x, z, r = 0) {
+    const s = this.shuttle && this.shuttle.site;
+    if (!s || (x - s.x) ** 2 + (z - s.z) ** 2 > 3025) return false;
+    const c = Math.cos(s.rot), sn = Math.sin(s.rot), dx = x - s.x, dz = z - s.z;
+    return zoneBlocks(dx * c - dz * sn, dx * sn + dz * c, r);
   }
 
   land(hq, n) {
     const S = this.shuttle;
+    const site = this.shipSite(hq);
+    // the parked ship launches for home first, the new one lands after it
+    if (S.state === 'landed' && S.spawned && S.t > 30) {
+      S.state = 'ascend'; S.t = 0; S.queue = n;
+      this.game.colliders.removeOwner('ship');
+      this.game.audio && this.game.audio.play('shuttle');
+      return;
+    }
     if (S.state !== 'idle') { this.game.colony.arrive(n); return; }
-    const [px, pz] = this.game.buildings.toWorld(hq, 6.85, 0);
-    S.pad = new THREE.Vector3(px, hq.y + 2.0, pz);
-    S.rot = hq.rot;
-    S.n = n; S.state = 'descend'; S.t = 0;
+    // elevator side faces the HQ
+    S.rot = site.rot;
+    S.from = Math.random() * Math.PI * 2;
+    S.n = n; S.state = 'descend'; S.t = 0; S.spawned = false;
     S.group.visible = true;
     this.game.audio && this.game.audio.play('shuttle');
   }
 
+  shipState() { const S = this.shuttle; return { parked: S.state === 'landed' || S.state === 'descend' }; }
+  restoreShip(d) { if (d && d.parked) this.shuttle.restoreParked = true; }
+
+  // hand over passengers still aboard (used before saving)
+  flushShip() {
+    const S = this.shuttle;
+    if (S.state !== 'idle' && !S.spawned && S.n) { S.spawned = true; this.game.colony.arrive(S.n); }
+  }
+
   updateShuttle(dt) {
     const S = this.shuttle;
+    // the pad is laid out as soon as there is an HQ
+    if (!S.site && (S.siteT = (S.siteT || 0) - dt) <= 0) {
+      S.siteT = 2;
+      const hq = this.game.buildings.list.find((b) => b.type === 'hq');
+      if (hq) this.shipSite(hq);
+    }
+    if (S.restoreParked && S.site) {
+      S.restoreParked = false;
+      S.state = 'landed'; S.t = 60; S.spawned = true; S.rot = S.site.rot; S.from = 0; S.group.visible = true;
+      this.addShipColliders();
+    }
     if (S.state === 'idle') return;
     S.t += dt;
-    const g = S.group;
-    g.rotation.y = S.rot;
+    const site = S.site, C = 20;          // centre of mass height above the feet
+    let alt = 0, off = 0, pitch = 0, thr = 0, engines = 0, vac = false, elev = 0;
+    const ease = (k) => k * k * (3 - 2 * k);
     if (S.state === 'descend') {
-      const k = Math.min(1, S.t / 9);
-      const e = 1 - Math.pow(1 - k, 3);
-      g.position.set(S.pad.x, S.pad.y + (1 - e) * 380, S.pad.z);
-      S.flame.scale.setScalar(0.6 + (1 - e) * 0.8);
-      S.flame.visible = true;
-      if (k >= 1) {
-        S.state = 'landed'; S.t = 0; S.flame.visible = false;
-        const placed = this.game.colony.arrive(S.n);
-        for (let i = 0; i < Math.min(placed, 6); i++) this.spawnArrival(S.pad, i);
-        if (placed) this.game.ui && this.game.ui.toast('셔틀이 정착민 ' + placed + '명을 데려왔습니다', 'good', 3);
+      const t = S.t;
+      if (t < 16) {            // belly flop: broadside at terminal velocity (~90 m/s), tiles to the wind
+        const k = t / 16;
+        alt = 2000 - 1450 * k; off = 600 * (1 - k) + 60; pitch = -1.42 + 0.03 * Math.sin(t * 0.9);
+      } else if (t < 19.5) {   // flip at ~500 m: the three sea-level engines light and swing the nose up
+        const k = (t - 16) / 3.5;
+        alt = 550 - 70 * k; off = 60 - 15 * k; pitch = -1.42 * (1 - ease(k)) + 0.16 * Math.sin(k * Math.PI); thr = 1; engines = 3;
+      } else {                 // landing burn: three engines, then one for the touchdown
+        const k = Math.min(1, (t - 19.5) / 14);
+        alt = 480 * Math.pow(1 - k, 2.2); off = 45 * Math.pow(1 - k, 2); pitch = 0.04 * (1 - k) * Math.sin(t * 2); thr = 0.75 + 0.25 * (1 - k); engines = k < 0.55 ? 3 : 1;
+        if (k >= 1) { S.state = 'landed'; S.t = 0; this.addShipColliders(); }
       }
     } else if (S.state === 'landed') {
-      if (S.t > 7) { S.state = 'ascend'; S.t = 0; }
+      const t = S.t;
+      // elevator: down (4-13 s), colonists step off, back up (20-29 s); the
+      // ship then stays parked, refuelling from the propellant farm, until
+      // the next ship is inbound
+      elev = t < 4 ? 0 : t < 13 ? ease((t - 4) / 9) : t < 20 ? 1 : t < 29 ? 1 - ease((t - 20) / 9) : 0;
+      if (t >= 13 && !S.spawned) {
+        S.spawned = true;
+        const placed = this.game.colony.arrive(S.n);
+        const [fx, fz] = [site.x + Math.sin(S.rot) * (SHIP.R + 3.6), site.z + Math.cos(S.rot) * (SHIP.R + 3.6)];
+        for (let i = 0; i < Math.min(placed, 6); i++) this.spawnArrival({ x: fx, z: fz }, i);
+        if (placed) this.game.ui && this.game.ui.toast('이주선이 정착민 ' + placed + '명을 데려왔습니다', 'good', 3);
+      }
     } else if (S.state === 'ascend') {
-      const k = Math.min(1, S.t / 8);
-      g.position.set(S.pad.x, S.pad.y + k * k * 420, S.pad.z);
-      S.flame.visible = true; S.flame.scale.setScalar(1.2);
-      if (k >= 1) { S.state = 'idle'; g.visible = false; }
+      // lift-off on all six engines, gravity turn after the tower is cleared
+      const t = S.t;
+      alt = 0.5 * 11 * t * t; pitch = -Math.max(0, t - 7) * 0.045; thr = 1; engines = 3; vac = t > 1.5;
+      if (t > 18) {
+        if (S.queue) { const n = S.queue; S.queue = 0; S.from = Math.random() * Math.PI * 2; S.n = n; S.state = 'descend'; S.t = 0; S.spawned = false; }
+        else { S.state = 'idle'; S.group.visible = false; }
+      }
     }
+    // place the ship: approach from S.from, pivot about the centre of mass
+    const ax = Math.sin(S.from) * off, az = Math.cos(S.from) * off;
+    S.group.position.set(site.x + ax, site.y + C + alt, site.z + az);
+    S.group.rotation.set(pitch, S.rot, 0, 'YXZ');
+    // elevator platform and cables
+    const top = SHIP.door + 3.45, py = top - 0.6 - (top - 0.6) * elev;
+    S.plat.position.set(0, py, SHIP.R + 2.85);
+    for (const c of S.cables) c.scale.y = Math.max(0.01, top - py - 0.1);
+    // engines and dust
+    S.flames.visible = thr > 0;
+    const fl = 1 + 0.06 * Math.sin(S.t * 41) + 0.04 * Math.sin(S.t * 67);
+    for (const f of S.flames.children) {
+      const { inner, k } = f.userData;
+      const on = inner ? (k < engines ? thr : 0) : (vac ? thr : 0);
+      f.visible = on > 0.02;
+      f.scale.set(1, on * fl, 1);
+    }
+    const near = thr > 0 ? Math.max(0, 1 - alt / 90) : 0;
+    S.dust.visible = near > 0;
+    S.dust.position.set(site.x + ax, site.y + 0.4, site.z + az);
+    S.dust.scale.setScalar(12 + 30 * (1 - near) + (S.state === 'ascend' ? S.t * 6 : 0));
+    S.dust.material.opacity = near * 0.55;
+  }
+
+  addShipColliders() {
+    const S = this.shuttle, C = this.game.colliders, s = S.site;
+    C.removeOwner('ship');
+    C.addCyl(s.x, s.z, SHIP.R + 0.1, s.y, s.y + SHIP.H, 'ship', {});
+    for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3 + Math.PI / 6 - S.rot; C.addCyl(s.x + Math.cos(a) * 5.6, s.z + Math.sin(a) * 5.6, 0.65, s.y - 1, s.y + 0.35, 'ship', {}); }
   }
 
   // ---------------------------------------------------------------- walkers
@@ -341,11 +490,11 @@ export class NPCs {
       const yaw = Math.atan2(d.b[0] - d.a[0], d.b[2] - d.a[2]);
       M.compose(p.set(x, y, z), q.setFromEuler(e.set(0.15 * Math.sin(t * Math.PI), yaw, 0)), s);
       this.droneMesh.setMatrixAt(n, M);
-      this.droneMesh.setColorAt(n, d.color);
+      this.podMesh.setMatrixAt(n, M);
+      this.podMesh.setColorAt(n, d.color);
       n++;
     }
-    this.droneMesh.count = n;
-    this.droneMesh.instanceMatrix.needsUpdate = true;
-    if (this.droneMesh.instanceColor) this.droneMesh.instanceColor.needsUpdate = true;
+    for (const m of [this.droneMesh, this.podMesh]) { m.count = n; m.instanceMatrix.needsUpdate = true; }
+    this.podMesh.instanceColor.needsUpdate = true;
   }
 }

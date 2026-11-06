@@ -41,7 +41,7 @@ export class Game {
     this.input = new Input(this.engine.renderer.domElement);
     this.audio = new Audio();
     this.buildings = new Buildings(this);
-    this.isBlocked = (x, z, r) => this.buildings.isBlocked(x, z, r);
+    this.isBlocked = (x, z, r) => this.buildings.isBlocked(x, z, r) || (this.npcs ? this.npcs.padBlocks(x, z, r) : false);
     this.eco = new Economy(this);
     this.terra = new Terraform(this);
     this.colony = new Colony(this);
@@ -593,11 +593,13 @@ export class Game {
   // ---------------------------------------------------------------- save / load
   save() {
     if (!this.started) return;
+    this.npcs.flushShip();
     const data = {
       v: 1, t: Date.now(),
       player: { x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z, yaw: this.player.yaw, pitch: this.player.pitch, o2: this.player.oxygen, hp: this.player.health, view: this.player.view },
       sky: { time: this.sky.time, day: this.sky.day },
       eco: this.eco.serialize(), terra: this.terra.serialize(), colony: this.colony.serialize(), research: this.research.serialize(),
+      ship: this.npcs.shipState(),
       buildings: this.buildings.list.map((b) => ({ id: b.id, type: b.type, x: b.x, y: b.y, z: b.z, rot: b.rot, tier: b.tier, enabled: b.enabled, data: { ...b.data, inv: b.inv ? b.inv.toJSON() : b.data.inv } })),
       edits: this.terrain.editList, collected: [...this.props.collected], searched: [...this.props.searched], pois: this.pois.serialize(),
       hotbar: this.ui.hotbar, obj: this.objectives.index, flags: this.flags,
@@ -618,6 +620,7 @@ export class Game {
     this.eco.load(d.eco || {});
     this.terra.load(d.terra || {});
     this.colony.load(d.colony || {});
+    this.npcs.restoreShip(d.ship);
     this.research.load(d.research || {});
     for (const b of d.buildings || []) {
       const nb = this.buildings.add(b.type, b.x, b.y, b.z, b.rot, { id: b.id, tier: b.tier, data: b.data });

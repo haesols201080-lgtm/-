@@ -25,7 +25,7 @@ export function makeObjectives(game) {
       items: () => [{ text: '자동 채굴기', ok: built('extractor') }, { text: '「드론 물류」 연구', ok: g.research.has('r_logistics') }, { text: '드론 허브', ok: built('dronehub') }] },
     { title: '푸른 하늘', desc: '테라포밍 지수를 1kTi까지 올리면 하늘이 푸르게 변합니다. 히터와 드릴을 늘리세요.',
       items: () => [{ text: '푸른 하늘 단계', ok: g.terra.stage >= stageIdx('bluesky') }] },
-    { title: '식민지 건설', desc: '「정착 프로토콜」을 연구하고 식민 본부를 세우세요. 정착민 셔틀이 내릴 착륙장이 본부에 있습니다.',
+    { title: '식민지 건설', desc: '「정착 프로토콜」을 연구하고 식민 본부를 세우세요. 본부를 세우면 근처 평지에 이주선 착륙장이 생깁니다.',
       items: () => [{ text: '「정착 프로토콜」', ok: g.research.has('r_colony') }, { text: '식민 본부', ok: built('hq') }] },
     { title: '사람들을 부르다', desc: '심우주 교신기를 세우고, 하늘에 구름이 생길 만큼 테라포밍한 뒤 <b>E</b>로 교신기를 열어 정착민을 초청하세요. 주거지와 필요(물·식량·배급소·전력)를 먼저 준비해야 맞이할 수 있습니다.',
       items: () => [{ text: '심우주 교신기', ok: built('comms') }, { text: '주거지 3채', ok: built('house', 3) }, { text: '구름 단계', ok: g.terra.stage >= stageIdx('clouds') }, { text: '첫 교신 송신', ok: g.colony.log.some((l) => l.kind === 'out') }] },
