@@ -192,28 +192,35 @@ export class Astronaut {
     const run = B.run;                       // 0 walk .. 1 sprint
     const amp = (0.2 + Math.min(speed, 8) * 0.065) * walk;   // thigh swing
     // per leg: swing phase (leg moving forward) is when cos > 0
+    // joint conventions on this rig (forward is -Z): hip +x swings the thigh
+    // forward, knee flexion is NEGATIVE x (shin goes back), elbow flexion is
+    // POSITIVE x (forearm comes forward), shoulder +x raises the arm forward,
+    // ankle +x lifts the toes
     const leg = (L, ph, sideSign) => {
       const sn = Math.sin(ph), cs = Math.cos(ph);
-      const thigh = amp * (sn + 0.18 * Math.sin(2 * ph)) ;          // quicker forward swing
+      const thigh = amp * (sn + 0.18 * Math.sin(2 * ph));          // quicker forward swing
       const swing = Math.max(0, cs);
-      const knee = walk * ((0.75 + run * 1.0) * Math.pow(swing, 1.5) * (0.6 + 0.4 * fa) + 0.06 + run * 0.18 * Math.max(0, -cs));
-      L.hip.rotation.x = thigh * B.fr * (dirS < 0 ? 0.8 : 1) - B.air * (sideSign > 0 ? 0.5 : 0.2) + this.land * 0.5 + B.swim * Math.sin(ph * 1.5) * 0.4 * sideSign;
+      const flex = walk * ((0.75 + run * 1.0) * Math.pow(swing, 1.5) * (0.6 + 0.4 * fa) + 0.06 + run * 0.18 * Math.max(0, -cs));
+      const airT = sideSign > 0 ? 0.45 : -0.1, airK = sideSign > 0 ? 1.0 : 0.45;
+      L.hip.rotation.x = thigh * B.fr * (dirS < 0 ? 0.8 : 1) + B.air * airT + this.land * 0.55 + B.swim * Math.sin(ph * 1.5) * 0.4 * sideSign;
       L.hip.rotation.z = -thigh * B.sr * 0.7 * sideSign + 0.02 * sideSign;
-      L.knee.rotation.x = knee + B.air * (sideSign > 0 ? 0.9 : 0.4) + B.swim * 0.3 + this.land * 1.0;
-      // heel strike then toe-off
-      L.ankle.rotation.x = -L.hip.rotation.x * 0.25 + walk * (0.18 * Math.max(0, Math.sin(ph + 0.6)) - 0.22 * Math.max(0, -Math.sin(ph - 0.5)) * (0.5 + run)) - this.land * 0.4;
+      L.knee.rotation.x = -(flex + B.air * airK + B.swim * 0.3 + this.land * 1.05);
+      // heel strike (toes up) then toe-off (toes down); the foot stays level
+      // with the ground through the stance
+      L.ankle.rotation.x = -(L.hip.rotation.x + L.knee.rotation.x) * 0.85 + walk * (0.16 * Math.max(0, Math.sin(ph + 0.6)) - 0.24 * Math.max(0, -Math.sin(ph - 0.5)) * (0.5 + run));
     };
     leg(this.legR, p, 1);
     leg(this.legL, p + Math.PI, -1);
-    // arms swing against the legs, elbows bend more as the pace rises
+    // arms swing against the legs (right arm back while the right leg is
+    // forward), elbows bend more as the pace rises
     const sp2 = Math.sin(p);
     const armA = (0.22 + run * 0.45) * walk * (0.3 + 0.7 * fa) * dirS;
-    this.armR.sh.rotation.x = -armA * sp2 + B.air * -0.4 - B.swim * Math.sin(p * 1.5 + 1) * 1.2 - aim * 1.2;
-    this.armL.sh.rotation.x = armA * sp2 + B.air * -0.4 + B.swim * Math.sin(p * 1.5 + 1) * 1.2;
-    this.armR.sh.rotation.z = 0.1 + B.air * 0.35 + this.land * 0.2;
-    this.armL.sh.rotation.z = -0.1 - B.air * 0.35 - this.land * 0.2;
-    this.armR.el.rotation.x = -0.2 - run * 1.0 - walk * 0.15 * Math.max(0, -sp2) - aim * 0.2 - (working ? 0.4 : 0);
-    this.armL.el.rotation.x = -0.2 - run * 1.0 - walk * 0.15 * Math.max(0, sp2);
+    this.armR.sh.rotation.x = -armA * sp2 + B.air * 0.25 - B.swim * Math.sin(p * 1.5 + 1) * 1.2 + aim * 1.1;
+    this.armL.sh.rotation.x = armA * sp2 + B.air * 0.25 + B.swim * Math.sin(p * 1.5 + 1) * 1.2;
+    this.armR.sh.rotation.z = 0.12 + B.air * 0.35 + this.land * 0.2;
+    this.armL.sh.rotation.z = -0.12 - B.air * 0.35 - this.land * 0.2;
+    this.armR.el.rotation.x = 0.18 + run * 1.05 + walk * 0.25 * (0.5 + 0.5 * Math.max(0, -sp2)) + aim * 0.35 + (working ? 0.3 : 0);
+    this.armL.el.rotation.x = 0.18 + run * 1.05 + walk * 0.25 * (0.5 + 0.5 * Math.max(0, sp2));
     // pelvis: walking rises over the planted leg, running dips into it;
     // it sways toward the standing leg and twists with the stride
     const c2 = Math.cos(2 * p);
