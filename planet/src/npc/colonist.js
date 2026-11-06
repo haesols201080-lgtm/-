@@ -13,7 +13,7 @@ import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 const E = (x, y, z) => new THREE.Euler(x, y, z);
 
-export const HAIR_STYLES = 7;
+export const HAIR_STYLES = 14;
 // colour slots
 const TOP = 0, SKIN = 1, HAIR = 2, PANTS = 3, FIXED = 4, ACCENT = 5, VISOR = 6;
 // visibility: always, helmet only, bare head only, beard, hair style s -> 4 + s
@@ -36,21 +36,72 @@ const ell = (r, sx, sy, sz, w = 16, h = 12) => { const g = new THREE.SphereGeome
 // head: a sphere shaped into cranium, tapering jaw and chin, flatter face and
 // a nape that tucks into the neck. k scales it up for hair and beard shells;
 // the sphere seam faces backwards.
+function headDeform(x, y, z, out) {
+  const lo = Math.max(0, -y), hi = Math.max(0, y);
+  x *= 1 - 0.3 * Math.pow(lo, 1.4) + 0.04 * Math.exp(-((y + 0.15) ** 2) * 20) * (z < 0 ? 1 : 0);
+  if (z > 0) z *= 1 - 0.42 * lo + 0.06 * hi;
+  else z *= 0.93 - 0.05 * lo;
+  return out.set(x * 0.077, y * 0.116, z * 0.1);
+}
 function headGeo(k = 1, phiStart = 0, phiLength = Math.PI * 2, thetaStart = 0, thetaLength = Math.PI) {
   const g = new THREE.SphereGeometry(1, sg(28, 10), sg(20, 8), phiStart, phiLength, thetaStart, thetaLength);
   g.rotateY(Math.PI / 2);
-  const P = g.attributes.position, q = new THREE.Vector3();
+  const P = g.attributes.position, q = new THREE.Vector3(), o = new THREE.Vector3();
   for (let i = 0; i < P.count; i++) {
     q.fromBufferAttribute(P, i);
-    let { x, y, z } = q;
-    const lo = Math.max(0, -y), hi = Math.max(0, y);
-    x *= 1 - 0.3 * Math.pow(lo, 1.4) + 0.04 * Math.exp(-((y + 0.15) ** 2) * 20) * (z < 0 ? 1 : 0);
-    if (z > 0) z *= 1 - 0.42 * lo + 0.06 * hi;
-    else z *= 0.93 - 0.05 * lo;
-    P.setXYZ(i, x * 0.077 * k, y * 0.116 * k, z * 0.1 * k);
+    headDeform(q.x, q.y, q.z, o).multiplyScalar(k);
+    P.setXYZ(i, o.x, o.y, o.z);
   }
   g.computeVertexNormals();
   return g;
+}
+
+// Hair: a shell over the head whose hairline is set per direction (polar
+// angle from the crown at the front, temples, sides and back), with volume
+// on top, a soft taper to the skin at the hairline and, below the ears,
+// hair that falls straight instead of following the jaw.
+function hairShell({ k = 1.07, front = 1.12, temple = 1.45, side = 1.65, back = 2.05, vol = 0.03, part = 0, lumps = 0, wave = 0 }) {
+  const NP = sg(40, 14), NT = sg(16, 7), pos = [], idx = [];
+  const sm = (t) => t * t * (3 - 2 * t), o = new THREE.Vector3(), eq = new THREE.Vector3();
+  for (let i = 0; i <= NP; i++) {
+    const phi = -Math.PI + 2 * Math.PI * i / NP, a = Math.abs(phi);
+    let tm = a < Math.PI / 4 ? front + (temple - front) * sm(a / (Math.PI / 4))
+      : a < Math.PI / 2 ? temple + (side - temple) * sm((a - Math.PI / 4) / (Math.PI / 4))
+        : side + (back - side) * sm((a - Math.PI / 2) / (Math.PI / 2));
+    if (part && a < Math.PI / 2) tm += part * Math.sin(phi) * 0.16 * Math.cos(a);
+    const sp = Math.sin(phi), cp = Math.cos(phi);
+    for (let j = 0; j <= NT; j++) {
+      const f = j / NT, th = tm * f;
+      const st = Math.sin(th), ct = Math.cos(th);
+      if (ct < 0) {
+        // below the equator: hang straight down from the widest ring
+        headDeform(sp, 0, -cp, eq);
+        o.set(eq.x, ct * 0.116 * 1.05, eq.z).multiplyScalar(1 + 0.04 * -ct);
+      } else headDeform(sp * st, ct, -cp * st, o);
+      let m = k + vol * Math.max(0, ct) ** 1.5;
+      m = 1.012 + (m - 1.012) * (1 - sm(Math.max(0, (f - 0.72) / 0.28)) * (ct > 0.15 ? 1 : 0.35));
+      if (lumps) m *= 1 + lumps * Math.sin(o.x * 160 + 1.3) * Math.sin(o.y * 150) * Math.sin(o.z * 140 + 0.7);
+      if (wave && ct < 0.2) m *= 1 + wave * Math.sin(ct * 40 + phi * 3);
+      pos.push(o.x * m, o.y * m, o.z * m);
+    }
+  }
+  const W = NT + 1;
+  for (let i = 0; i < NP; i++) for (let j = 0; j < NT; j++) {
+    const a = i * W + j, b = (i + 1) * W + j;
+    idx.push(a, a + 1, b, b, a + 1, b + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  // weld the crown pole and the back seam so the shading is smooth there
+  const m = mergeVertices(g.toNonIndexed(), 1e-6);
+  m.computeVertexNormals();
+  // make sure the shell faces outwards
+  const n = m.attributes.normal, p = m.attributes.position;
+  let dot = 0;
+  for (let i = 0; i < p.count; i += 7) dot += n.getX(i) * p.getX(i) + n.getY(i) * (p.getY(i) + 0.03) + n.getZ(i) * p.getZ(i);
+  if (dot < 0) { const ix = m.index.array; for (let i = 0; i < ix.length; i += 3) { const t = ix[i]; ix[i] = ix[i + 1]; ix[i + 1] = t; } m.index.needsUpdate = true; m.computeVertexNormals(); }
+  return m;
 }
 
 export function colonistGeometry(lod = 0) {
@@ -133,38 +184,44 @@ export function colonistGeometry(lod = 0) {
   }
   if (D) put(new THREE.BoxGeometry(0.028, 0.005, 0.006), HEAD, FIXED, { pos: V(0, 1.579, -0.08), color: LIP });
 
-  // ---- hair styles: shells that follow the head shape, tilted back so the
-  // hairline sits high on the forehead and low on the nape
-  const cap = (k, theta, tilt = 0.36) => { const g = headGeo(k, 0, Math.PI * 2, 0, theta); g.rotateX(tilt); return g; };
+  // ---- hair: fourteen styles
   const hair = (geo, st, opt = {}) => put(geo, HEAD, HAIR, { pos: HC, ...opt, show: STYLE + st });
+  const shell = (st, spec) => hair(hairShell(spec), st);
   // 0 short crop
-  hair(cap(1.06, Math.PI * 0.5), 0);
-  // 1 long, to the shoulders
-  hair(cap(1.07, Math.PI * 0.56, 0.3), 1);
-  hair(ell(0.1, 0.9, 1.45, 0.55, 14, 10), 1, { pos: V(0, 1.56, 0.07) });
-  for (const sx of [-1, 1]) hair(ell(0.03, 0.8, 2.6, 1.4, 8, 8), 1, { pos: V(sx * 0.074, 1.585, 0.014), rot: E(0, 0, sx * 0.08) });
+  shell(0, { k: 1.075, vol: 0.04 });
+  // 1 long, straight, past the shoulders
+  shell(1, { k: 1.08, front: 1.18, temple: 1.75, side: 2.45, back: 2.6, vol: 0.05 });
+  hair(ell(0.1, 0.92, 1.6, 0.5, 14, 10), 1, { pos: V(0, 1.5, 0.072) });
   // 2 bun
-  hair(cap(1.06, Math.PI * 0.52), 2);
-  hair(ell(0.042, 1, 0.9, 1, 12, 10), 2, { pos: V(0, 1.722, 0.094) });
+  shell(2, { k: 1.065, front: 1.15, vol: 0.03 });
+  hair(ell(0.046, 1, 0.88, 1, 12, 10), 2, { pos: V(0, 1.728, 0.1) });
   // 3 ponytail
-  hair(cap(1.06, Math.PI * 0.52), 3);
-  hair(ell(0.024, 1, 1, 1, 8, 6), 3, { pos: V(0, 1.665, 0.112) });
-  hair(ell(0.028, 0.9, 3.4, 0.85, 10, 8), 3, { pos: V(0, 1.575, 0.118), rot: E(-0.18, 0, 0) });
+  shell(3, { k: 1.065, front: 1.15, vol: 0.03 });
+  hair(ell(0.026, 1, 1, 1, 8, 6), 3, { pos: V(0, 1.668, 0.118) });
+  hair(ell(0.03, 0.9, 3.6, 0.85, 10, 8), 3, { pos: V(0, 1.57, 0.126), rot: E(-0.16, 0, 0) });
   // 4 buzz cut
-  hair(cap(1.02, Math.PI * 0.5, 0.42), 4);
-  // 5 curls: a lumpy, fuller shell
-  const curls = cap(1.16, Math.PI * 0.55, 0.32);
-  const P = curls.attributes.position, q = new THREE.Vector3();
-  for (let i = 0; i < P.count; i++) {
-    q.fromBufferAttribute(P, i);
-    const k = 1 + 0.07 * Math.sin(q.x * 95) * Math.sin(q.y * 90 + 1.3) * Math.sin(q.z * 88 + 0.7);
-    P.setXYZ(i, q.x * k, q.y * k, q.z * k);
-  }
-  curls.computeVertexNormals();
-  hair(curls, 5);
-  // 6 swept fringe
-  hair(cap(1.06, Math.PI * 0.5, 0.3), 6);
-  hair(ell(0.058, 1.15, 0.4, 0.8, 12, 8), 6, { pos: V(0.016, 1.716, -0.04), rot: E(0.15, 0, -0.28) });
+  shell(4, { k: 1.028, front: 1.1, temple: 1.38, side: 1.6, back: 2.0, vol: 0 });
+  // 5 curls
+  shell(5, { k: 1.14, front: 1.2, side: 1.72, back: 2.1, vol: 0.07, lumps: 0.06 });
+  // 6 side part with a swept fringe
+  shell(6, { k: 1.075, front: 1.3, temple: 1.5, vol: 0.05, part: 1 });
+  hair(ell(0.058, 1.15, 0.4, 0.8, 12, 8), 6, { pos: V(0.02, 1.72, -0.05), rot: E(0.2, 0, -0.3) });
+  // 7 bob with bangs, to the jaw
+  shell(7, { k: 1.09, front: 1.4, temple: 1.95, side: 2.25, back: 2.25, vol: 0.05 });
+  // 8 afro
+  shell(8, { k: 1.3, front: 1.15, temple: 1.5, side: 1.75, back: 2.1, vol: 0.14, lumps: 0.045 });
+  // 9 undercut with a quiff
+  shell(9, { k: 1.03, front: 1.1, temple: 1.36, side: 1.56, back: 1.95, vol: 0.2 });
+  hair(ell(0.05, 1.2, 0.55, 0.9, 12, 8), 9, { pos: V(0, 1.735, -0.052), rot: E(0.5, 0, 0) });
+  // 10 pixie
+  shell(10, { k: 1.06, front: 1.32, temple: 1.62, side: 1.74, back: 2.15, vol: 0.04, part: -1 });
+  // 11 shoulder-length waves
+  shell(11, { k: 1.1, front: 1.25, temple: 1.95, side: 2.4, back: 2.45, vol: 0.06, wave: 0.05 });
+  // 12 single braid down the back
+  shell(12, { k: 1.065, front: 1.15, vol: 0.03 });
+  for (let i = 0; i < 7; i++) hair(ell(0.026 - i * 0.0018, 1.05, 1.35, 0.9, 8, 6), 12, { pos: V(Math.sin(i * 1.7) * 0.004, 1.65 - i * 0.036, 0.122 + i * 0.004) });
+  // 13 slicked back
+  shell(13, { k: 1.045, front: 1.05, temple: 1.4, side: 1.62, back: 2.08, vol: 0.02 });
 
   // beard: the lower front of the head shape, a little proud of the skin
   put(headGeo(1.07, Math.PI - 1.25, 2.5, 1.95, Math.PI - 1.95), HEAD, HAIR, { pos: HC, show: BEARD });
@@ -253,12 +310,12 @@ vec3 colPose(vec3 p, inout vec3 n) {
 `;
 
 export function colonistMaterials() {
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0 });
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, metalness: 0, side: THREE.DoubleSide });
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = U.uTime;
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\n' + POSE + '\nvarying float vSlot;')
-      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvec3 cN = objectNormal; vec3 cP = colPose(position, cN); objectNormal = cN;')
+      .replace('#include <common>', '#include <common>\n' + POSE + '\nvarying float vSlot; varying vec3 vRest;')
+      .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>\nvec3 cN = objectNormal; vec3 cP = colPose(position, cN); objectNormal = cN; vRest = position;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed = cP;')
       .replace('#include <color_vertex>', `#include <color_vertex>
         float aSlot = aPart.y;
@@ -268,17 +325,27 @@ export function colonistMaterials() {
         if (iLook.z > 0.5 && aSlot > 0.5 && aSlot < 1.5) slotRGB = vec3(0.32, 0.34, 0.37);
         vColor.rgb *= slotRGB; vSlot = aSlot;`);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying float vSlot;')
+      .replace('#include <common>', '#include <common>\nvarying float vSlot; varying vec3 vRest;')
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        if (vSlot > 1.5 && vSlot < 2.5) {
+          // hair: fine strands running from the crown, clumped, with root shading
+          vec3 hp = vRest - vec3(0.0, 1.632, 0.004);
+          float ang = atan(hp.x, -hp.z);
+          float down = 1.0 - normalize(hp).y;
+          float clump = sin(ang * 23.0 + sin(down * 9.0) * 1.3);
+          float fine = sin(ang * 170.0 + clump * 2.5 + down * 14.0) * 0.5 + 0.5;
+          diffuseColor.rgb *= 0.74 + 0.22 * fine + 0.1 * clump;
+        }`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         if (vSlot > 5.5) roughnessFactor = 0.1;
         else if (vSlot > 0.5 && vSlot < 1.5) roughnessFactor = 0.55;
-        else if (vSlot > 1.5 && vSlot < 2.5) roughnessFactor = 0.48;
+        else if (vSlot > 1.5 && vSlot < 2.5) roughnessFactor = 0.42;
         else if (vSlot > 3.5 && vSlot < 4.5) roughnessFactor = 0.42;`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
         if (vSlot > 5.5) metalnessFactor = 0.8;`);
   };
-  mat.customProgramCacheKey = () => 'colonist-v1';
-  const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  mat.customProgramCacheKey = () => 'colonist-v3';
+  const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide });
   depth.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = U.uTime;
     sh.vertexShader = sh.vertexShader

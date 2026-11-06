@@ -9,37 +9,13 @@ import { houseT1, houseT2, houseT3, houseT4, houseT1b, houseT2b, houseT3b, house
 const PI = Math.PI;
 
 // ------------------------------------------------------------------ base
+// The expedition ship stands here; its meshes are a ShipRig (npc/craft.js)
+// shared with the colony ships. The model only carries its colliders.
 function pod(M) {
-  plinth(M, 4, 4, { color: C.CONC2 });
-  // landing legs
-  for (let i = 0; i < 4; i++) {
-    const a = i / 4 * PI * 2 + PI / 4;
-    const x = Math.cos(a) * 1.7, z = Math.sin(a) * 1.7;
-    M.add('metal', new THREE.CylinderGeometry(0.07, 0.09, 2.2, 8), { pos: v(x * 0.75, 1.0, z * 0.75), rot: e(Math.sin(a) * 0.45, 0, -Math.cos(a) * 0.45), color: C.G2 });
-    M.cyl('metal', x, 0, z, 0.32, 0.12, C.D, 12);
-  }
-  // capsule body
-  const prof = [];
-  for (let i = 0; i <= 16; i++) { const t = i / 16; prof.push(new THREE.Vector2(1.55 * Math.sin(Math.min(1, t * 1.25) * PI * 0.5) * (1 - Math.pow(t, 3) * 0.55) + 0.02, 0.6 + t * 3.2)); }
-  M.add('hull', new THREE.LatheGeometry(prof, 28), { color: C.W });
-  M.cyl('hull', 0, 0.45, 0, 1.5, 0.2, C.O, 28);
-  M.cyl('metal', 0, 0.3, 0, 1.2, 0.2, C.D, 24);
-  // heat shield scorch ring
-  M.cyl('metal', 0, 0.62, 0, 1.58, 0.06, C.G2, 28);
-  // hatch (front, -z)
-  M.box('metal', 0, 1.6, -1.42, 0.95, 1.5, 0.2, C.G2);
-  M.box('hull', 0, 1.6, -1.5, 0.8, 1.35, 0.08, C.W2);
-  M.box('glass', 0, 2.0, -1.55, 0.4, 0.3, 0.04);
-  lightBar(M, 0, 2.45, -1.5, 0.7, 0.05, 0.05, L.cyan);
-  // windows & details
-  for (let i = 0; i < 3; i++) { const a = PI * 0.5 + (i - 1) * 0.9 + PI; M.box('glass', Math.cos(a) * 1.38, 2.6, Math.sin(a) * 1.38, 0.35, 0.25, 0.1, undefined); }
-  M.cyl('metal', 0, 3.75, 0, 0.35, 0.3, C.G, 16);
-  antenna(M, 0.15, 4.0, 0, 1.2);
-  M.box('hull', 0.9, 2.2, 1.0, 0.35, 0.8, 0.35, C.O);
-  // parachute housing
-  M.cyl('hull', 0, 3.55, 0, 0.6, 0.2, C.O, 20);
-  M.colCyl(0, 0, 1.55, 0, 3.8);
-  M.light(0, 2.5, -2.0, L.cyan, 3, 6);
+  M.colCyl(0, 0, 4.6, 0, 50);
+  for (let k = 0; k < 6; k++) { const a = k * PI / 3 + PI / 6; M.colCyl(Math.cos(a) * 5.6, Math.sin(a) * 5.6, 0.65, 0, 1.2); }
+  M.col(-1.25, 0, 6.3, 1.25, 0.2, 8.4);
+  M.light(0, 3, 8, L.warm, 4, 12);
 }
 
 function habitat(M) {

@@ -1,6 +1,6 @@
 // Ship landing zone next to the HQ: an octagonal pad of jointed concrete
 // slabs with a hazard-striped curb, a scorched steel blast plate and
-// touchdown markings, edge lights, an apron paved toward the HQ, four
+// touchdown markings, edge lights, four
 // floodlight masts, blast berms, a propellant tank farm piped to an
 // umbilical tower at the pad edge, and a windsock. Built in the pad's frame
 // (+z faces the HQ, y = 0 is the pad top); everything outside the pad sits
@@ -21,7 +21,6 @@ export function zoneBlocks(lx, lz, r = 0) {
   const d = Math.hypot(lx, lz);
   if (d < PAD + 3 + r) return true;                                         // pad and its lights
   if (Math.abs(lx) < 15 + r && lz < -AP + r && lz > FARM_Z - 9 - r) return true;  // propellant farm
-  if (Math.abs(lx) < 8 + r && lz > AP - r && lz < AP + 22 + r) return true;       // apron
   if (d > 36 - r && d < 39 + r && Math.abs(lz) < Math.abs(lx) * 0.5) return true;  // blast walls
   return false;
 }
@@ -79,7 +78,7 @@ export function buildLandingZone(game, site, rot) {
     const a = k * Math.PI / 3 + Math.PI / 6;
     STL.add(new THREE.CylinderGeometry(1.0, 1.05, 0.08, 24), { pos: V(Math.cos(a) * 5.6, 0.1, Math.sin(a) * 5.6), color: 0x6a6e73 });
   }
-  // touchdown ring, corner brackets and an approach arrow toward the apron
+  // touchdown ring, corner brackets and an arrow toward the HQ
   const tr = new THREE.RingGeometry(15, 15.6, 96); tr.rotateX(-Math.PI / 2);
   PNT.add(tr, { pos: V(0, 0.07, 0), color: 0xd8a531 });
   for (let k = 0; k < 4; k++) {
@@ -93,19 +92,7 @@ export function buildLandingZone(game, site, rot) {
     const a = k * Math.PI / 8 + Math.PI / 8, r = k % 2 ? AP + 0.35 : PAD + 0.35;
     const x = Math.cos(a) * r, z = Math.sin(a) * r;
     STL.add(new THREE.CylinderGeometry(0.07, 0.09, 0.5, 8), { pos: V(x, 0.25, z), color: 0x5d6268 });
-    LIT.add(new THREE.SphereGeometry(0.13, 10, 8), { pos: V(x, 0.56, z), color: z > AP - 2 ? [6, 3.2, 0.6] : [0.9, 2.6, 7] });
-  }
-
-  // ---- apron toward the HQ: paved strip that follows the ground
-  const AW = 12, AL = 22, ap = new THREE.PlaneGeometry(AW, AL, 6, 22); ap.rotateX(-Math.PI / 2); ap.translate(0, 0, AP + AL / 2 - 1.5);
-  const app = ap.attributes.position;
-  const apY = (x, z) => (z < AP + 1 ? 0.03 : gh(x, z) + 0.09);
-  for (let i = 0; i < app.count; i++) app.setY(i, apY(app.getX(i), app.getZ(i)));
-  ap.computeVertexNormals();
-  CON.add(ap, { color: 0x77736d });
-  for (let z = AP + 1.5; z < AP + AL - 2; z += 1) {
-    for (const sx of [-1, 1]) PNT.add(new THREE.BoxGeometry(0.22, 0.03, 1.0), { pos: V(sx * (AW / 2 - 0.4), apY(sx * (AW / 2 - 0.4), z) + 0.02, z), color: 0xd8a531 });
-    if (Math.round(z - AP) % 3 === 0) PNT.add(new THREE.BoxGeometry(0.25, 0.03, 1.4), { pos: V(0, apY(0, z) + 0.02, z), color: 0xf2f0ea });
+    LIT.add(new THREE.SphereGeometry(0.13, 10, 8), { pos: V(x, 0.56, z), color: k % 4 === 1 ? [6, 3.2, 0.6] : [0.9, 2.6, 7] });
   }
 
   // ---- floodlight masts: lattice towers at the four diagonals
@@ -190,8 +177,8 @@ export function buildLandingZone(game, site, rot) {
   STL.add(new THREE.BoxGeometry(0.8, 0.6, 0.5), { pos: V(ux * 0.55, 2.3, -5.4), color: 0x3a3d42 });
   LIT.add(new THREE.SphereGeometry(0.12, 8, 6), { pos: V(ux, UH + 0.3, uz), color: [7, 0.6, 0.3] });
 
-  // ---- windsock by the apron
-  const wx = -AW / 2 - 3, wz = AP + 6, wg = gh(wx, wz);
+  // ---- windsock at the pad edge
+  const wx = -9, wz = AP + 5, wg = gh(wx, wz);
   STL.add(new THREE.CylinderGeometry(0.06, 0.08, 6, 8), { pos: V(wx, wg + 3, wz), color: 0xd0d3d6 });
   const sock = new THREE.CylinderGeometry(0.35, 0.16, 2.0, 12, 4, true); sock.rotateZ(Math.PI / 2 - 0.25);
   PNT.add(sock, { pos: V(wx + 1.0, wg + 5.7, wz), color: (x) => ((Math.floor((x + 1) * 2.5) % 2) ? [0.9, 0.9, 0.88] : [0.85, 0.22, 0.06]) });

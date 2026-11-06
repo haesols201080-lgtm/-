@@ -148,7 +148,7 @@ export const ERAS = [
 // Buildings. size = [width(x), depth(z)] in metres. power: + generates, - consumes (kW).
 // cat: base | power | terra | industry | colony
 export const BUILDINGS = {
-  pod: { name: '착륙 포드', cat: 'base', size: [4, 4], hidden: true, cost: {}, desc: '당신을 이 행성에 내려준 착륙선. 산소를 보충하고 간단한 제작을 할 수 있습니다.', o2: true, craft: true, storage: 16 },
+  pod: { name: '탐사선 아르케-1', cat: 'base', size: [13, 13], hidden: true, cost: {}, desc: '선발 탐사대와 가압 로버를 싣고 이 행성에 처음 내린 스테인리스 우주선. 화물 승강기 아래에서 산소를 보충하고 간단한 제작을 할 수 있습니다.', o2: true, craft: true, storage: 16 },
   habitat: { name: '거주 모듈', cat: 'base', size: [8, 8], cost: { plate: 4, glass: 2 }, desc: '여압된 생활 공간. 안에서 산소가 채워지고, 침대에서 밤을 넘길 수 있으며 작업대와 보관함이 있습니다.', o2: true, craft: true, storage: 24, sleep: true, enter: true },
   foundation: { name: '기초 판', cat: 'base', size: [8, 8], cost: { iron: 2 }, desc: '8×8m 구조 기초. 서로 붙여 넓은 바닥을 만들고, 지형 위로 띄워 지을 수 있습니다.', foundation: true, free: true },
   storage: { name: '보관함', cat: 'base', size: [2, 1.4], cost: { plate: 2 }, desc: '30칸 물품 보관함.', storage: 30 },

@@ -270,3 +270,97 @@ export function tileMaterial() {
   m.customProgramCacheKey = () => 'ship-tiles-v1';
   return m;
 }
+
+// ------------------------------------------------------------------ flight profiles
+const ease = (k) => k * k * (3 - 2 * k);
+// entry, flip and landing burn; t in seconds from 2 km altitude
+export function shipDescent(t) {
+  if (t < 16) { const k = t / 16; return { alt: 2000 - 1450 * k, off: 600 * (1 - k) + 60, pitch: -1.42 + 0.03 * Math.sin(t * 0.9), thr: 0, engines: 0 }; }
+  if (t < 19.5) { const k = (t - 16) / 3.5; return { alt: 550 - 70 * k, off: 60 - 15 * k, pitch: -1.42 * (1 - ease(k)) + 0.16 * Math.sin(k * Math.PI), thr: 1, engines: 3 }; }
+  const k = Math.min(1, (t - 19.5) / 14);
+  return { alt: 480 * Math.pow(1 - k, 2.2), off: 45 * Math.pow(1 - k, 2), pitch: 0.04 * (1 - k) * Math.sin(t * 2), thr: 0.75 + 0.25 * (1 - k), engines: k < 0.55 ? 3 : 1, done: k >= 1 };
+}
+export const DESCENT_TIME = 33.5;
+export function shipAscent(t) {
+  return { alt: 0.5 * 11 * t * t, off: 0, pitch: -Math.max(0, t - 7) * 0.045, thr: 1, engines: 3, vac: t > 1.5, done: t > 18 };
+}
+export const elevatorAt = (t, down = 4, up = 20) => (t < down ? 0 : t < down + 9 ? ease((t - down) / 9) : t < up ? 1 : t < up + 9 ? 1 - ease((t - up) / 9) : 0);
+
+// ------------------------------------------------------------------ ship rig
+// Meshes, engine plumes, dust and the cargo elevator of one ship; pose()
+// places it for any phase of flight. The ship pivots about its centre of
+// mass, 20 m above the feet.
+let shipGeo = null, shipMats = null;
+export class ShipRig {
+  constructor(scene) {
+    const g = shipGeo || (shipGeo = shipGeometry());
+    const M = shipMats || (shipMats = {
+      steel: new THREE.MeshPhysicalMaterial({ vertexColors: true, color: 0xd6d9de, metalness: 0.95, roughness: 0.3, envMapIntensity: 1.25 }),
+      dark: new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.45, side: THREE.DoubleSide }),
+      tiles: tileMaterial(),
+    });
+    const body = this.body = new THREE.Group();
+    for (const [geo, mat] of [[g.steel, M.steel], [g.tiles, M.tiles], [g.dark, M.dark]]) {
+      const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; body.add(m);
+    }
+    this.plat = new THREE.Mesh(g.platform, M.steel); this.plat.castShadow = true; this.plat.receiveShadow = true;
+    this.cables = [-1, 1].map((sx) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 5).translate(0, -0.5, 0), M.dark); c.position.set(sx * 1.1, SHIP.door + 3.45, SHIP.R + 2.85); body.add(c); return c; });
+    body.add(this.plat);
+    // methalox exhaust: nearly transparent blue-violet plume with a bright
+    // core at the nozzle and shock diamonds down the axis
+    const flames = this.flames = new THREE.Group();
+    const add = (c, o) => new THREE.MeshBasicMaterial({ color: new THREE.Color(...c), transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
+    const core = add([3.2, 3.6, 5.5], 0.75), plume = add([0.45, 0.42, 1.25], 0.22), diamond = add([2.6, 2.4, 4.2], 0.6);
+    for (let k = 0; k < 6; k++) {
+      const inner = k < 3, a = inner ? k * Math.PI * 2 / 3 + Math.PI / 2 : (k - 3) * Math.PI * 2 / 3 + Math.PI / 6, r = inner ? 1.25 : 2.85;
+      const e = new THREE.Group(), w = inner ? 1 : 1.75;
+      e.add(new THREE.Mesh(new THREE.ConeGeometry(0.5 * w, 3.2, 14, 1, true).translate(0, 1.6, 0), core));
+      e.add(new THREE.Mesh(new THREE.CylinderGeometry(1.1 * w, 0.62 * w, 16, 16, 1, true).translate(0, 8, 0), plume));
+      for (let d = 0; d < 5; d++) e.add(new THREE.Mesh(new THREE.SphereGeometry(0.42 * w * (1 - d * 0.12), 10, 8).scale(1, 1.6, 1).translate(0, 1.6 + d * 2.3 * w, 0), diamond));
+      e.rotation.x = Math.PI; e.position.set(Math.cos(a) * r, inner ? 0.85 : 0.25, Math.sin(a) * r);
+      e.userData = { inner, k };
+      flames.add(e);
+    }
+    body.add(flames);
+    // dust kicked up by the engines near the ground
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
+    const cx = cv.getContext('2d'), gr = cx.createRadialGradient(32, 32, 4, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,0.0)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.75)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    cx.fillStyle = gr; cx.fillRect(0, 0, 64, 64);
+    this.dust = new THREE.Mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), color: 0xb08a6a, transparent: true, opacity: 0, depthWrite: false }));
+    this.group = new THREE.Group();
+    body.position.y = -20;
+    this.group.add(body);
+    this.group.visible = false;
+    scene.add(this.group, this.dust);
+  }
+
+  // site: ground point {x, y, z}; p: {alt, off, pitch, thr, engines, vac, elev}
+  pose(site, rot, from, p, t = 0, dustGrow = 0) {
+    const ax = Math.sin(from) * (p.off || 0), az = Math.cos(from) * (p.off || 0), alt = p.alt || 0;
+    this.group.position.set(site.x + ax, site.y + 20 + alt, site.z + az);
+    this.group.rotation.set(p.pitch || 0, rot, 0, 'YXZ');
+    const top = SHIP.door + 3.45, py = top - 0.6 - (top - 0.6) * (p.elev || 0);
+    this.plat.position.set(0, py, SHIP.R + 2.85);
+    for (const c of this.cables) c.scale.y = Math.max(0.01, top - py - 0.1);
+    const thr = p.thr || 0;
+    this.flames.visible = thr > 0;
+    const fl = 1 + 0.06 * Math.sin(t * 41) + 0.04 * Math.sin(t * 67);
+    for (const f of this.flames.children) {
+      const { inner, k } = f.userData;
+      const on = inner ? (k < (p.engines || 0) ? thr : 0) : (p.vac ? thr : 0);
+      f.visible = on > 0.02;
+      f.scale.set(1, on * fl, 1);
+    }
+    const near = thr > 0 ? Math.max(0, 1 - alt / 90) : 0;
+    this.dust.visible = near > 0;
+    this.dust.position.set(site.x + ax, site.y + 0.4, site.z + az);
+    this.dust.scale.setScalar(12 + 30 * (1 - near) + dustGrow);
+    this.dust.material.opacity = near * 0.55;
+  }
+
+  // world position of a point in the landed ship's frame
+  static toWorld(site, rot, lx, lz) { const c = Math.cos(rot), s = Math.sin(rot); return [site.x + lx * c + lz * s, site.z - lx * s + lz * c]; }
+  // the elevator platform's world position at the ground
+  static elevatorFoot(site, rot) { return ShipRig.toWorld(site, rot, 0, SHIP.R + 2.85); }
+}

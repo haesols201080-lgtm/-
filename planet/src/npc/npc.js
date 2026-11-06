@@ -6,7 +6,7 @@ import { TIERS, ITEMS } from '../sim/data.js';
 import { U } from '../core/shared.js';
 import { GeoBuilder } from '../core/geobuilder.js';
 import { colonistMesh } from './colonist.js';
-import { droneGeometry, shipGeometry, tileMaterial, SHIP } from './craft.js';
+import { droneGeometry, SHIP, ShipRig, shipDescent, shipAscent, elevatorAt } from './craft.js';
 import { buildLandingZone, zoneBlocks, zoneColliders } from './landingzone.js';
 
 const CELL = 2;
@@ -126,7 +126,6 @@ export class NPCs {
 
     // shuttle
     this.shuttle = this.makeShuttle();
-    scene.add(this.shuttle.group);
     this.m4 = new THREE.Matrix4();
   }
 
@@ -147,46 +146,8 @@ export class NPCs {
   // upright, lands on its engines at a pad near the HQ, lowers its cargo
   // elevator to let the colonists off and launches again.
   makeShuttle() {
-    const g = shipGeometry();
-    const steel = new THREE.MeshPhysicalMaterial({ vertexColors: true, color: 0xd6d9de, metalness: 0.95, roughness: 0.3, envMapIntensity: 1.25 });
-    const dark = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.45, side: THREE.DoubleSide });
-    const body = new THREE.Group();         // ship frame: origin at the ground contact
-    for (const [geo, mat] of [[g.steel, steel], [g.tiles, tileMaterial()], [g.dark, dark]]) {
-      const m = new THREE.Mesh(geo, mat); m.castShadow = true; m.receiveShadow = true; body.add(m);
-    }
-    // cargo elevator platform and its two cables
-    const plat = new THREE.Mesh(g.platform, steel); plat.castShadow = true;
-    const cables = [-1, 1].map((sx) => { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1, 5).translate(0, -0.5, 0), dark); c.position.set(sx * 1.1, SHIP.door + 3.45, SHIP.R + 2.85); body.add(c); return c; });
-    body.add(plat);
-    // methalox exhaust: nearly transparent blue-violet plume with a bright
-    // core at the nozzle and shock diamonds down the axis
-    const flames = new THREE.Group();
-    const add = (c, o) => new THREE.MeshBasicMaterial({ color: new THREE.Color(...c), transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
-    const core = add([3.2, 3.6, 5.5], 0.75), plume = add([0.45, 0.42, 1.25], 0.22), diamond = add([2.6, 2.4, 4.2], 0.6);
-    for (let k = 0; k < 6; k++) {
-      const inner = k < 3, a = inner ? k * Math.PI * 2 / 3 + Math.PI / 2 : (k - 3) * Math.PI * 2 / 3 + Math.PI / 6, r = inner ? 1.25 : 2.85;
-      const e = new THREE.Group(), w = inner ? 1 : 1.75;
-      e.add(new THREE.Mesh(new THREE.ConeGeometry(0.5 * w, 3.2, 14, 1, true).translate(0, 1.6, 0), core));
-      e.add(new THREE.Mesh(new THREE.CylinderGeometry(1.1 * w, 0.62 * w, 16, 16, 1, true).translate(0, 8, 0), plume));
-      for (let d = 0; d < 5; d++) e.add(new THREE.Mesh(new THREE.SphereGeometry(0.42 * w * (1 - d * 0.12), 10, 8).scale(1, 1.6, 1).translate(0, 1.6 + d * 2.3 * w, 0), diamond));
-      e.rotation.x = Math.PI; e.position.set(Math.cos(a) * r, inner ? 0.85 : 0.25, Math.sin(a) * r);
-      e.userData = { inner, k };
-      flames.add(e);
-    }
-    body.add(flames);
-    // dust kicked up by the engines near the ground
-    const cv = document.createElement('canvas'); cv.width = cv.height = 64;
-    const cx = cv.getContext('2d'), gr = cx.createRadialGradient(32, 32, 4, 32, 32, 32);
-    gr.addColorStop(0, 'rgba(255,255,255,0.0)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.75)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    cx.fillStyle = gr; cx.fillRect(0, 0, 64, 64);
-    const dust = new THREE.Mesh(new THREE.CircleGeometry(1, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(cv), color: 0xb08a6a, transparent: true, opacity: 0, depthWrite: false }));
-    // the ship pivots about its centre of mass (20 m up) for the flip
-    const group = new THREE.Group();
-    body.position.y = -20;
-    group.add(body);
-    group.visible = false;
-    this.game.engine.scene.add(dust);
-    return { group, body, flames, plat, cables, dust, zone: null, state: 'idle', t: 0 };
+    const rig = new ShipRig(this.game.engine.scene);
+    return { rig, group: rig.group, zone: null, state: 'idle', t: 0 };
   }
 
   // a naturally flat, open spot 70-150 m from the HQ for the ship's pad
@@ -285,66 +246,32 @@ export class NPCs {
     }
     if (S.state === 'idle') return;
     S.t += dt;
-    const site = S.site, C = 20;          // centre of mass height above the feet
-    let alt = 0, off = 0, pitch = 0, thr = 0, engines = 0, vac = false, elev = 0;
-    const ease = (k) => k * k * (3 - 2 * k);
+    const site = S.site;
+    let p = { elev: 0 };
     if (S.state === 'descend') {
-      const t = S.t;
-      if (t < 16) {            // belly flop: broadside at terminal velocity (~90 m/s), tiles to the wind
-        const k = t / 16;
-        alt = 2000 - 1450 * k; off = 600 * (1 - k) + 60; pitch = -1.42 + 0.03 * Math.sin(t * 0.9);
-      } else if (t < 19.5) {   // flip at ~500 m: the three sea-level engines light and swing the nose up
-        const k = (t - 16) / 3.5;
-        alt = 550 - 70 * k; off = 60 - 15 * k; pitch = -1.42 * (1 - ease(k)) + 0.16 * Math.sin(k * Math.PI); thr = 1; engines = 3;
-      } else {                 // landing burn: three engines, then one for the touchdown
-        const k = Math.min(1, (t - 19.5) / 14);
-        alt = 480 * Math.pow(1 - k, 2.2); off = 45 * Math.pow(1 - k, 2); pitch = 0.04 * (1 - k) * Math.sin(t * 2); thr = 0.75 + 0.25 * (1 - k); engines = k < 0.55 ? 3 : 1;
-        if (k >= 1) { S.state = 'landed'; S.t = 0; this.addShipColliders(); }
-      }
+      p = shipDescent(S.t);
+      if (p.done) { S.state = 'landed'; S.t = 0; this.addShipColliders(); }
     } else if (S.state === 'landed') {
-      const t = S.t;
       // elevator: down (4-13 s), colonists step off, back up (20-29 s); the
       // ship then stays parked, refuelling from the propellant farm, until
       // the next ship is inbound
-      elev = t < 4 ? 0 : t < 13 ? ease((t - 4) / 9) : t < 20 ? 1 : t < 29 ? 1 - ease((t - 20) / 9) : 0;
-      if (t >= 13 && !S.spawned) {
+      p.elev = elevatorAt(S.t);
+      if (S.t >= 13 && !S.spawned) {
         S.spawned = true;
         const placed = this.game.colony.arrive(S.n);
-        const [fx, fz] = [site.x + Math.sin(S.rot) * (SHIP.R + 3.6), site.z + Math.cos(S.rot) * (SHIP.R + 3.6)];
+        const [fx, fz] = ShipRig.toWorld(site, S.rot, 0, SHIP.R + 3.6);
         for (let i = 0; i < Math.min(placed, 6); i++) this.spawnArrival({ x: fx, z: fz }, i);
         if (placed) this.game.ui && this.game.ui.toast('이주선이 정착민 ' + placed + '명을 데려왔습니다', 'good', 3);
       }
     } else if (S.state === 'ascend') {
       // lift-off on all six engines, gravity turn after the tower is cleared
-      const t = S.t;
-      alt = 0.5 * 11 * t * t; pitch = -Math.max(0, t - 7) * 0.045; thr = 1; engines = 3; vac = t > 1.5;
-      if (t > 18) {
+      p = shipAscent(S.t);
+      if (p.done) {
         if (S.queue) { const n = S.queue; S.queue = 0; S.from = Math.random() * Math.PI * 2; S.n = n; S.state = 'descend'; S.t = 0; S.spawned = false; }
-        else { S.state = 'idle'; S.group.visible = false; }
+        else { S.state = 'idle'; S.group.visible = false; S.rig.dust.visible = false; return; }
       }
     }
-    // place the ship: approach from S.from, pivot about the centre of mass
-    const ax = Math.sin(S.from) * off, az = Math.cos(S.from) * off;
-    S.group.position.set(site.x + ax, site.y + C + alt, site.z + az);
-    S.group.rotation.set(pitch, S.rot, 0, 'YXZ');
-    // elevator platform and cables
-    const top = SHIP.door + 3.45, py = top - 0.6 - (top - 0.6) * elev;
-    S.plat.position.set(0, py, SHIP.R + 2.85);
-    for (const c of S.cables) c.scale.y = Math.max(0.01, top - py - 0.1);
-    // engines and dust
-    S.flames.visible = thr > 0;
-    const fl = 1 + 0.06 * Math.sin(S.t * 41) + 0.04 * Math.sin(S.t * 67);
-    for (const f of S.flames.children) {
-      const { inner, k } = f.userData;
-      const on = inner ? (k < engines ? thr : 0) : (vac ? thr : 0);
-      f.visible = on > 0.02;
-      f.scale.set(1, on * fl, 1);
-    }
-    const near = thr > 0 ? Math.max(0, 1 - alt / 90) : 0;
-    S.dust.visible = near > 0;
-    S.dust.position.set(site.x + ax, site.y + 0.4, site.z + az);
-    S.dust.scale.setScalar(12 + 30 * (1 - near) + (S.state === 'ascend' ? S.t * 6 : 0));
-    S.dust.material.opacity = near * 0.55;
+    S.rig.pose(site, S.rot, S.from, p, S.t, S.state === 'ascend' ? S.t * 6 : 0);
   }
 
   addShipColliders() {
@@ -375,11 +302,11 @@ export class NPCs {
     // accent piping on yoke, sleeves and badge)
     const R = Math.random, pick = (a) => a[Math.floor(R() * a.length)];
     const fem = R() < 0.5;
-    const SKIN = [0xf3d5bf, 0xe8bf9c, 0xd6a07a, 0xb97f57, 0x93603e, 0x6e4529, 0x4f3020];
-    const HAIR = [0x16110e, 0x2b1e16, 0x4a3222, 0x6e4a2c, 0x9a6a3a, 0xc9a46a, 0xe0cc9a, 0x7a2e1a, 0x8d8a86, 0xc8c6c2];
+    const SKIN = [0xf6dcc8, 0xf3d5bf, 0xecc7a8, 0xe8bf9c, 0xdcae88, 0xd6a07a, 0xc48c64, 0xb97f57, 0xa36e4a, 0x93603e, 0x7d5034, 0x6e4529, 0x5a3a24, 0x4f3020];
+    const HAIR = [0x16110e, 0x221812, 0x2b1e16, 0x3a2719, 0x4a3222, 0x5e3d25, 0x6e4a2c, 0x8a5a30, 0x9a6a3a, 0xb8894e, 0xc9a46a, 0x7a2e1a, 0x93401f, 0x6f6c69, 0xa9a6a2];
     const TOPS = [0xeeeeea, 0xd8dade, 0x5d6b7a, 0x2f3d52, 0x6f7a55, 0xc9b48f, 0x3f6f73, 0x8a4d3c, 0x9aa3ad, 0x3b3f45, 0xa8826a, 0x4d5a3a];
-    const PANTS = [0x3a3d42, 0x2d3440, 0x4a3f36, 0x56595e, 0x23262b, 0x5a5446, 0x2e3a33];
-    const style = fem ? pick([1, 1, 2, 3, 3, 0, 5, 6]) : pick([0, 0, 4, 4, 5, 6, 6, 1]);
+    const PANTS = [0x3a3d42, 0x2d3440, 0x4a3f36, 0x56595e, 0x23262b, 0x5a5446, 0x2e3a33, 0x3d3a36, 0x26303d, 0x4b4f45, 0x6b6156, 0x1f2228];
+    const style = fem ? pick([1, 1, 2, 3, 7, 7, 10, 11, 11, 12, 5, 8, 6]) : pick([0, 0, 4, 4, 9, 9, 6, 13, 5, 8, 10, 1]);
     const look = {
       fem: fem ? 0.75 + R() * 0.25 : R() * 0.15,
       h: fem ? 0.93 + R() * 0.08 : 0.97 + R() * 0.09, w: 0.94 + R() * 0.12,

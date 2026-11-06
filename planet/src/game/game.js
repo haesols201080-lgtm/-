@@ -7,6 +7,7 @@ import { U, WORLD } from '../core/shared.js';
 import { Input } from '../core/input.js';
 import { Player } from '../player/player.js';
 import { Rover } from '../player/rover.js';
+import { Expedition } from './expedition.js';
 import { Buildings } from '../build/buildings.js';
 import { BuildMode } from '../build/buildmode.js';
 import { Supports } from '../build/supports.js';
@@ -55,6 +56,7 @@ export class Game {
     this.fx = new FX(this);
     this.player = new Player(this);
     this.rover = new Rover(this);
+    this.expedition = new Expedition(this);
     this.build = new BuildMode(this);
     this.roads = new Roads(this);
     this.supports = new Supports(this);
@@ -85,12 +87,20 @@ export class Game {
       if (s < bs) { bs = s; best = [x, z]; }
     }
     const [px, pz] = best;
-    const y = T.height(px, pz) + 0.25;
-    T.flattenRect(px, pz, 3.8, 3.8, 0, y - 0.03, 3);
-    this.props.clearArea(px, pz, 4);
-    this.buildings.add('pod', px, y, pz, 0.6);
-    this.player.spawn(px + 3.5, pz + 4, 0.6);
-    this.rover.summon(new THREE.Vector3(px - 6, 0, pz + 2), 0.6 + Math.PI / 2);
+    const rot = 0.6, c = Math.cos(rot), sn = Math.sin(rot);
+    const W = (lx, lz) => [px + lx * c + lz * sn, pz - lx * sn + lz * c];
+    const y = T.height(px, pz);
+    T.flattenRect(px, pz, 7.5, 7.5, rot, y, 5);
+    this.props.clearArea(px, pz, 18);
+    this.buildings.add('pod', px, y, pz, rot);
+    this.expedition.attach();
+    // the explorer stands off the elevator side; the rover is parked where it
+    // drove off the elevator platform
+    const [sx, sz] = W(-7.5, 21);
+    this.player.spawn(sx, sz, Math.atan2(-(px - sx), -(pz - sz)) - 0.35);
+    const [rx, rz] = W(4.2, 15.5);
+    this.rover.pos.set(rx, T.height(rx, rz), rz);
+    this.rover.yaw = rot + Math.PI - 0.4; this.rover.speed = 0; this.rover.present = true; this.rover.group.visible = true; this.rover.updateMesh(0);
     this.eco.gridDirty = true;
     this.sky.time = 0.31;
     this.flags.newGame = true;
@@ -409,6 +419,7 @@ export class Game {
     this.fauna.update(dt, cam.position);
     this.buildings.update(dt, cam.position, P);
     this.npcs.update(dt, cam.position);
+    this.expedition.update(dt);
     this.pois.update(P.pos);
     this.fx.update(dt, cam.position, this.terra.weather.storm);
     this.engine.underwater = cam.position.y < U.uWaterLevel.value && U.uIce.value < 0.5 ? 1 : 0;
