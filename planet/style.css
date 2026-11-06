@@ -361,7 +361,11 @@ select { font-family: var(--font); background: #1a232b; color: var(--ink); borde
 #touch .tc { padding: 9px 12px; font-size: 12px; font-weight: 600; background: rgba(10, 16, 22, .58); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22); clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
 #touch .tc:active { background: rgba(111, 227, 255, .3); }
 #touch .tc.cancel { box-shadow: inset 0 0 0 1px rgba(255, 106, 92, .7); }
-.touch #hotbar { pointer-events: auto; bottom: max(10px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%) scale(.86); transform-origin: 50% 100%; }
+/* the HUD sits above the stick and look zones: its buttons (hotbar, close)
+   take taps, everything else is see-through to the zones underneath */
+.touch #hud { z-index: 13; }
+.touch #hotbar .slot { pointer-events: auto; }
+.touch #hotbar { pointer-events: none; bottom: max(10px, env(safe-area-inset-bottom, 0px)); transform: translateX(-50%) scale(.86); transform-origin: 50% 100%; }
 .touch #survival { left: auto; right: auto; top: 118px; bottom: auto; left: 12px; width: 150px; }
 .touch #objective { width: 210px; }
 .touch #objective .d, .touch #objective .p { display: none; }
