@@ -8,7 +8,8 @@ const _v = new THREE.Vector3();
 const _c = new THREE.Color();
 
 export class GeoBuilder {
-  constructor(attrNames = [], { pan = false } = {}) {
+  constructor(attrNames = [], { pan = false, uv = false } = {}) {
+    this.uvs = uv ? [] : null;      // optional texture coords, remapped per part by opts.uvRect
     this.pos = [];
     this.nor = [];
     this.col = [];
@@ -55,6 +56,11 @@ export class GeoBuilder {
       else if (fixed) this.col.push(fixed[0], fixed[1], fixed[2]);
       else if (C) this.col.push(C.getX(i), C.getY(i), C.getZ(i));
       else this.col.push(1, 1, 1);
+      if (this.uvs) {
+        const UVa = g.attributes.uv, r = opts.uvRect || [0, 0, 0.001, 0.001];
+        const u = UVa ? UVa.getX(i) : 0.5, w = UVa ? UVa.getY(i) : 0.5;
+        this.uvs.push(r[0] + (r[2] - r[0]) * u, r[1] + (r[3] - r[1]) * w);
+      }
       if (this.pan) {
         if (round && !((geo.type === 'CylinderGeometry' || geo.type === 'ConeGeometry') && Math.abs(N.getY(i)) > 0.9)) {
           const rho = Math.hypot(lx, lz), sc = opts.scale instanceof THREE.Vector3 ? opts.scale.x : (opts.scale || 1);
@@ -78,6 +84,7 @@ export class GeoBuilder {
     g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
     for (const name of this.attrNames) g.setAttribute(name, new THREE.Float32BufferAttribute(this.attrs[name], 1));
     if (this.pan) g.setAttribute('aPan', new THREE.Float32BufferAttribute(this.pan, 3));
+    if (this.uvs) g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uvs, 2));
     g.computeBoundingSphere();
     g.computeBoundingBox();
     return g;

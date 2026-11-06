@@ -14,9 +14,9 @@ const HALF = WORLD.SIZE / 2;
 
 const FLORA_HEAD = /* glsl */`
   uniform float uTime, uWind, uLush; uniform vec4 uGrowth; uniform vec4 uGreen[8];
-  attribute float aSway; attribute float aGlow;
+  attribute float aSway; attribute float aGlow; attribute float aBark;
   attribute vec2 iGrow; attribute vec3 iTint;
-  varying float vGlow; varying vec3 vTintF; varying float vSwayF;`;
+  varying float vGlow; varying vec3 vTintF; varying float vSwayF; varying float vBark;`;
 const FLORA_BODY = /* glsl */`
   float g = 1.0;
   vTintF = vec3(1.0);
@@ -36,25 +36,26 @@ const FLORA_BODY = /* glsl */`
   float w = (sin(uTime * 1.7 + ph) * 0.6 + sin(uTime * 3.1 + ph * 1.7) * 0.25) * uWind * aSway;
   transformed.x += w * 0.35;
   transformed.z += w * 0.2;
-  vGlow = aGlow; vSwayF = aSway;`;
+  vGlow = aGlow; vSwayF = aSway; vBark = aBark;`;
 
 function floraUniforms(sh) {
   Object.assign(sh.uniforms, { uTime: U.uTime, uWind: U.uWind, uGrowth: U.uGrowth, uNight: U.uNight, uLush: U.uLush, uSunDir: U.uSunDir, uGreen: U.uGreen });
 }
 
 // shadow-pass material that grows/sways exactly like the visible plant
-export function makeFloraDepthMaterial() {
-  const m = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+export function makeFloraDepthMaterial({ map = null, alphaTest = 0 } = {}) {
+  const m = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map, alphaTest });
   m.onBeforeCompile = (sh) => {
     floraUniforms(sh);
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + FLORA_HEAD).replace('#include <begin_vertex>', '#include <begin_vertex>\n' + FLORA_BODY);
   };
-  m.customProgramCacheKey = () => 'flora-depth';
+  m.customProgramCacheKey = () => 'flora-depth' + (map ? '-map' : '');
   return m;
 }
 
-export function makeFloraMaterial({ side = THREE.FrontSide, translucent = 0.35 } = {}) {
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.75, metalness: 0, vertexColors: true, side });
+export function makeFloraMaterial({ side = THREE.FrontSide, translucent = 0.35, map = null, alphaTest = 0 } = {}) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.75, metalness: 0, vertexColors: true, side, map, alphaTest });
+  if (map) mat.alphaToCoverage = true;
   mat.onBeforeCompile = (sh) => {
     floraUniforms(sh);
     sh.uniforms.uTrans = { value: translucent };
@@ -64,16 +65,16 @@ export function makeFloraMaterial({ side = THREE.FrontSide, translucent = 0.35 }
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>
         uniform float uNight, uLush, uTime, uTrans; uniform vec3 uSunDir;
-        varying float vGlow; varying vec3 vTintF; varying float vSwayF;`)
+        varying float vGlow; varying vec3 vTintF; varying float vSwayF; varying float vBark;`)
       .replace('#include <color_fragment>', `#include <color_fragment>
-        diffuseColor.rgb *= mix(vec3(1.0), vTintF, step(vGlow, 0.5));
+        diffuseColor.rgb *= mix(vec3(1.0), vTintF, step(vGlow, 0.5) * (1.0 - step(0.5, vBark)));
         diffuseColor.rgb *= mix(vec3(1.0), vec3(0.85, 1.05, 0.8), uLush * (1.0 - vGlow));`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
         totalEmissiveRadiance += vGlow * vTintF * (0.35 + 2.2 * uNight) * (0.8 + 0.2 * sin(uTime * 2.0 + vSwayF * 7.0));
         totalEmissiveRadiance += diffuseColor.rgb * uTrans * vSwayF * max(uSunDir.y, 0.0) * 0.35;`);
   };
-  mat.customProgramCacheKey = () => 'flora-v2-' + side + translucent;
-  mat.depthMat = makeFloraDepthMaterial();
+  mat.customProgramCacheKey = () => 'flora-v3-' + side + translucent + (map ? '-map' : '');
+  mat.depthMat = makeFloraDepthMaterial({ map, alphaTest });
   return mat;
 }
 
@@ -321,6 +322,8 @@ export class Flora {
           place: (x, z, r1, r2, r3) => {
             const y = groundOK(x, z, 0.6); if (y === null) return null;
             if (r1 > 0.45 + sf[2] * 0.3 + sf[1] * 0.3 - sf[0] * 0.3 - sf[5] * 0.3) return null;
+            // vegetation buries loose stones: far fewer on grassy, fertile ground
+            if (r3 < (U.uGrass.value * 0.8 + U.uMoss.value * 0.2) * clamp(fert(x, z) * 1.4, 0, 1)) return null;
             const s = 0.08 + Math.pow(r2, 2.6) * 0.65;
             const v = 0.85 + r3 * 0.3;
             let c = [0.46, 0.33, 0.26];
@@ -346,11 +349,14 @@ export class Flora {
           },
         },
         { // grass tufts
-          geo: grassTuft(5, 12, 0.6), mat: this.mat, max: 16000, perTile: 210, castShadow: false, radius: 62, densityFalloff: true,
+          geo: grassTuft(5, 12, 0.6), mat: this.mat, max: 9000, perTile: 120, castShadow: false, radius: 62, densityFalloff: true,
           attrs: { iGrow: 2, iTint: 3 },
           enabled: () => U.uGrowth.value.y > 0.001 || U.uGreen.value.some((g) => g.z > 0 && g.w >= 2.3),
           place: (x, z, r1, r2, r3) => {
             const y = groundOK(x, z, 0.32); if (y === null) return null;
+            // tall tufts gather in meadow patches; between them stays short turf
+            const meadow = this.S.fbm2(x / 26 + 11, z / 26 - 4, 2) * 0.5 + 0.5;
+            if (meadow < 0.48 + r2 * 0.12) return null;
             const thr = clamp(1 - fert(x, z) + (r1 - 0.5) * 0.35 - greenBoost(x, z, true) * 0.5, 0.02, 1);
             const s = 0.8 + r2 * 1.0;
             T.normal(x, z, nrm);
@@ -374,13 +380,16 @@ export class Flora {
         },
         { // ferns: spore plants, the first vascular plants - they follow the
           // moss into damp ground, well before grass and flowers
-          geo: fern(13), mat: this.mat, max: 1400, perTile: 9, castShadow: true, radius: 95,
+          geo: fern(13), mat: this.mat, max: 900, perTile: 9, castShadow: true, radius: 95,
           attrs: { iGrow: 2, iTint: 3 },
           enabled: () => U.uGrowth.value.x > 0.2,
           place: (x, z, r1, r2, r3) => {
             const y = groundOK(x, z, 0.4); if (y === null) return null;
             const f = fert(x, z);
-            if (f < 0.35) return null;
+            if (f < 0.45) return null;
+            // ferns grow in clumps in damp, shaded spots, not everywhere
+            const clump = this.S.fbm2(x / 14 - 7, z / 14 + 3, 2) * 0.5 + 0.5;
+            if (clump < 0.6) return null;
             const thr = clamp(0.24 + (1 - f) * 0.45 + (r1 - 0.5) * 0.2, 0.22, 1);
             return { y: y - 0.05, s: 0.8 + r2 * 1.1, ry: r3 * 6.28, attrs: { iGrow: [thr, 0], iTint: [0.9 + r3 * 0.2, 0.95 + r2 * 0.15, 0.85] } };
           },

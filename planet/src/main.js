@@ -42,6 +42,7 @@ async function boot() {
   game.props.game = game; game.flora.game = game;
   base.isBlocked = (x, z, r) => game.isBlocked(x, z, r);
   window.__game = game;
+  window.__THREE = THREE;   // test / dev hook
 
   const resume = game.hasSave() && !params.has('new');
   const cam = engine.camera;

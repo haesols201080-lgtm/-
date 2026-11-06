@@ -8,7 +8,9 @@ import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Simplex, mulberry32 } from '../core/noise.js';
 import { PROP_CELL } from './chunkgen.js';
 import { makeRockMaterial, makeCrystalMaterial } from './materials.js';
-import { makeFloraMaterial, treeGeometries } from './flora.js';
+import { makeFloraMaterial } from './flora.js';
+import { treeModels, leafAtlas, TREE_FORMS } from './trees.js';
+import { treeThreshold } from './treespecies.js';
 import { U } from '../core/shared.js';
 
 export const ORE_TYPES = {
@@ -89,10 +91,10 @@ export function noduleGeometry(seed, count = 9) {
 
 // One instanced layer with a near (shadow-casting) and a far mesh.
 class Layer {
-  constructor(scene, geo, mat, { cap = 20000, attrs = {}, range = 1400, nearR = 220, shadow = true, visible = () => true }) {
+  constructor(scene, geo, mat, { cap = 20000, attrs = {}, range = 1400, nearR = 220, shadow = true, visible = () => true, farGeo = null }) {
     this.range = range; this.nearR = nearR; this.visibleFn = visible;
     this.meshes = [true, false].map((near) => {
-      const g = geo.clone();
+      const g = (!near && farGeo ? farGeo : geo).clone();
       const capN = near ? Math.min(cap, 4000) : cap;
       const extra = {};
       for (const [name, size] of Object.entries(attrs)) {
@@ -158,7 +160,7 @@ export class Props {
     this.searched = new Set();      // POI ids searched
     this.rockMat = makeRockMaterial();
     this.crystalMat = makeCrystalMaterial();
-    this.treeMat = makeFloraMaterial({ side: THREE.FrontSide, translucent: 0.15 });
+    this.treeMat = makeFloraMaterial({ side: THREE.DoubleSide, translucent: 0.35, map: leafAtlas(), alphaTest: 0.45 });
     this.oreMetalMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.75 });
     this.oreMetalMat.onBeforeCompile = (sh) => {
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 iTint; varying vec3 vTint;')
@@ -178,8 +180,8 @@ export class Props {
     this.smallRock = rockGeometry(51, 1, { sx: 1, sy: 0.6, sz: 0.85, cuts: 5 });
     this.rockLayers = protos.map((g, i) => new Layer(scene, g, this.rockMat, { cap: 9000, attrs: { iTint: 3 }, range: 1500, nearR: 200 }));
     this.crystalLayer = new Layer(scene, crystalGeometry(77, 7, 0.9), this.crystalMat, { cap: 3000, attrs: { iTint: 3 }, range: 1600, nearR: 200 });
-    const trees = treeGeometries();
-    this.treeLayers = trees.map((g) => new Layer(scene, g, this.treeMat, { cap: 12000, attrs: { iGrow: 2, iTint: 3 }, range: 2200, nearR: 160, visible: () => U.uGrowth.value.w > 0.001 }));
+    const trees = treeModels();
+    this.treeLayers = trees.map((m) => new Layer(scene, m.near, this.treeMat, { farGeo: m.far, cap: 12000, attrs: { iGrow: 2, iTint: 3 }, range: 2200, nearR: 150, visible: () => U.uGrowth.value.w > 0.001 }));
     this.treeKinds = trees.length;
     // ore outcrops: an angular, half-buried host rock with either a small
     // crystal druse (glowing ores) or metallic nodules (metal ores)
@@ -249,11 +251,20 @@ export class Props {
     for (let i = 0; i < Tr.length; i += 8) {
       const x = Tr[i], y = Tr[i + 1], z = Tr[i + 2], s = Tr[i + 3];
       if (blocked(x, z, 2)) continue;
-      const kind = Math.min(this.treeKinds - 1, Tr[i + 6] * 2 + Tr[i + 7]);
-      // seed plants in order: conifers (spire kinds) first, broadleaf trees
-      // follow one stage later
-      const thr = kind === 2 || kind === 3 ? Tr[i + 5] * 0.8 : Math.min(1, 0.14 + Tr[i + 5] * 0.86);
-      cell.trees.push({ x, y, z, s, kind, thr, m: mat(x, y, z, 0, Tr[i + 4], 0, s, s, s), iGrow: [thr, 3], iTint: Tr[i + 6] === 2 ? [0.4, 1.0, 0.85] : [1, 1, 1] });
+      const kind = Tr[i + 6];
+      // form (young / mature / old) and per-tree proportions and lean
+      const v = Tr[i + 7], h1 = ((x * 12.9898 + z * 78.233) % 1 + 1) % 1, h2 = ((x * 39.346 + z * 11.135) % 1 + 1) % 1;
+      const form = Math.min(TREE_FORMS - 1, Math.floor(((v * 3.7) % 1) * TREE_FORMS));
+      const layer = kind * TREE_FORMS + form;
+      const sx = s * (0.86 + h1 * 0.28), sy = s * (0.84 + h2 * 0.34), sz = s * (0.86 + ((h1 + h2) % 1) * 0.28);
+      const lx = (h2 - 0.5) * 0.12, lz = (h1 - 0.5) * 0.12;
+      // seed plants in order: conifers first, broadleaf one stage later,
+      // the alien bloom tree last
+      const thr = treeThreshold(kind, Tr[i + 5]);
+      // per-tree leaf colour variation; some maples and birches turn autumnal
+      const tv = 0.88 + h1 * 0.24;
+      const autumn = (kind === 5 && v > 0.62) ? [1.55, 0.72, 0.42] : (kind === 4 && v > 0.8) ? [1.35, 1.1, 0.5] : [tv, tv * (0.97 + v * 0.06), tv];
+      cell.trees.push({ x, y, z, s, kind, layer, thr, m: mat(x, y, z, lx, Tr[i + 4], lz, sx, sy, sz), iGrow: [thr, 3], iTint: autumn });
     }
     cell.crystals = [];
     const Cr = r.crystals;
@@ -304,7 +315,7 @@ export class Props {
     this.rockLayers.forEach((L, i) => L.fill(rocks.filter((r) => r.proto === i), cam));
     this.crystalLayer.fill(all('crystals'), cam);
     const trees = all('trees');
-    this.treeLayers.forEach((L, i) => L.fill(trees.filter((t) => t.kind === i), cam));
+    this.treeLayers.forEach((L, i) => L.fill(trees.filter((t) => t.layer === i), cam));
     const ores = all('ores').filter((o) => !o.dead);
     for (const k in this.oreLayers) {
       const list = ores.filter((o) => o.type === k);

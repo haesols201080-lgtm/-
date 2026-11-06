@@ -5,6 +5,7 @@
 //  - overview map samples
 import { WorldGen, PLANET } from './worldgen.js';
 import { mulberry32, hash2, clamp, smoothstep } from '../core/noise.js';
+import { pickTreeSpecies } from './treespecies.js';
 
 export const CHUNK_N = 64;          // cells per chunk side at every level
 export const L0_SIZE = 128;         // metres per level-0 chunk (2 m cells)
@@ -98,7 +99,6 @@ export function chunkIndex(n) {
 
 // ------------------------------------------------------------------ props
 export const ORE_KEYS = ['iron', 'silicon', 'titanium', 'aluminium', 'cobalt', 'ice', 'uranium'];
-const TREE_SPECIES = 3;
 
 function surfAt(gen, edits, x, z, tmp, res) {
   let h = gen.sample(x, z, tmp);
@@ -199,11 +199,11 @@ export function genProps(gen, edits, ci, cj) {
     if (r0 > p) continue;
     const sl = slopeAt(gen, px, pz, h);
     if (sl > 0.28) continue;
-    const ws = [1.0 + tmp[0] * 0.2, 0.5 + (h > 60 ? 1.2 : 0) + tmp[4] * 2, 0.25 + tmp[1] * 1.6 + tmp[6] * 1.5];
-    let tot = ws[0] + ws[1] + ws[2], rr = r1 * tot, si = 0;
-    for (; si < TREE_SPECIES - 1; si++) { rr -= ws[si]; if (rr <= 0) break; }
+    // species from the site; neighbours share a species often (groves)
+    const grove = S.fbm2(px / 90 - 3, pz / 90 + 5, 2) * 0.5 + 0.5;
+    const si = pickTreeSpecies((r1 * 0.55 + grove * 0.45) % 1, h, pz / PLANET.HALF, tmp);
     const thr = clamp(1 - f * 0.8 - forest * 0.3 + (r2 - 0.5) * 0.3 + 0.15, 0.02, 1);
-    out.trees.push(px, h - 0.1, pz, 0.75 + r3 * 0.6, r2 * 6.28, thr, si, r3 < 0.5 ? 0 : 1);
+    out.trees.push(px, h - 0.1, pz, 0.7 + r3 * 0.55, r2 * 6.28, thr, si, rnd());
   }
 
   // crystals

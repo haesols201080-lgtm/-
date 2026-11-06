@@ -221,10 +221,10 @@ void computeTerrain() {
   float dry = smoothstep(0.55, 0.85, nzB.a * 0.7 + nzA.g * 0.4 + (clump.r - 0.5) * 0.15 * midF) * (1.0 - uLush * 0.5);
   grassC = mix(grassC, s2l(vec3(0.5, 0.45, 0.26)) * (0.8 + 0.4 * speck), dry * 0.6);
   grassC *= 0.88 + 0.22 * nzC.r;
-  float gap = (1.0 - smoothstep(0.15, 0.45, speck)) * nearF;
+  float gap = (1.0 - smoothstep(0.1, 0.3, speck)) * nearF * 0.35;
   grassCov *= 1.0 - 0.6 * smoothstep(0.66, 0.86, nzA.r * 0.8 + nzB.a * 0.3 + (soilA.b - 0.5) * 0.15);
   float edgeSoil = (1.0 - smoothstep(0.0, 0.5, grassCov)) * grassCov * 2.0;   // ragged edges show soil
-  grassC = mix(grassC, alb * 0.75, max(gap * 0.45, edgeSoil * (1.0 - tuft)));
+  grassC = mix(grassC, alb * 0.85, max(gap * 0.3, edgeSoil * (1.0 - tuft) * 0.6));
   alb = mix(alb, mossC, mossCov * 0.85);
   alb = mix(alb, grassC, grassCov);
   // normals: meso hummocks + tussock relief + blade grain (bumped from speckle)
@@ -234,7 +234,7 @@ void computeTerrain() {
   vec3 nLive = normalize(N + vec3(th.x, 0.0, th.y) * 0.3 + vec3(tm.x, 0.0, tm.y) * 0.14 * midF + vec3(tc.x, 0.0, tc.y) * 0.25 * midF + vec3(tb.x, 0.0, tb.y) * 0.4);
   nrm = normalize(mix(nrm, nLive, live));
   rough = mix(rough, 0.78 + 0.18 * (1.0 - speck), live);
-  ao = mix(ao, mix(1.0, 0.45, gap) * (0.7 + 0.3 * tuft) * mossT.a, grassCov);
+  ao = mix(ao, (0.85 + 0.15 * tuft) * mix(1.0, mossT.a, 0.5), grassCov);
   ao = mix(ao, 0.82 + 0.18 * clump.b, mossCov * (1.0 - grassCov));   // moss: soft cushion shading, no dark specks
 
   // microbial mats: thin orange-to-green bands right at the water's edge,
@@ -274,6 +274,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v20';
+  mat.customProgramCacheKey = () => 'terrain-v21';
   return mat;
 }
