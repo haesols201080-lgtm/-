@@ -22,6 +22,9 @@ export const U = {
   uFrost: { value: 1 },          // terraform: frost cover on cold ground
   uWet: { value: 0 },            // rain wetness
   uMoss: { value: 0 },           // moss coverage 0..1
+  uMicrobe: { value: 0 },        // microbial mats on wet shores 0..1
+  uAlgae: { value: 0 },          // algae in lakes 0..1
+  uLichen: { value: 0 },         // lichen rosettes on rock 0..1
   uGrass: { value: 0 },          // grass coverage 0..1
   uLush: { value: 0 },           // late-stage colour saturation
   uWaterLevel: { value: WORLD.WATER_DRY },

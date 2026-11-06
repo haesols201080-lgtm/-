@@ -23,7 +23,7 @@ import { UI } from '../ui/ui.js';
 import { Thumbs } from '../ui/thumbs.js';
 import { Objectives } from './objectives.js';
 import { Audio } from './audio.js';
-import { BUILDINGS, RECIPES, ITEMS, STAGES, ERAS } from '../sim/data.js';
+import { BUILDINGS, RECIPES, ITEMS, STAGES, ERAS, PARAMS } from '../sim/data.js';
 import { ORE_TYPES } from '../world/props.js';
 import { LANDMARKS } from '../world/worldgen.js';
 import { GeoBuilder } from '../core/geobuilder.js';
@@ -319,6 +319,12 @@ export class Game {
     this.ui.renderHotbar();
     this.renderMapImage();
     if (st.id === 'breathable') this.ui.toast('이제 헬멧 없이도 숨쉴 수 있습니다 — 산소가 더 이상 줄지 않습니다', 'good', 6);
+  }
+
+  onMilestone(k, m) {
+    this.research.addPoints(4);
+    this.ui.toast(`<b>${PARAMS[k].name} · ${m[1]}</b> ${m[2]}`, 'good', 4.5);
+    this.audio.play('done');
   }
 
   onResearch(r, unlocked) {

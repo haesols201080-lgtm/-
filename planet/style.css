@@ -89,6 +89,9 @@ button:disabled { opacity: .4; cursor: default; }
 .param { display: flex; align-items: center; gap: 4px; font-size: 11px; white-space: nowrap; }
 .param .ic svg { width: 12px; height: 12px; display: block; }
 .param .v { font-family: var(--disp); font-weight: 600; color: var(--ink2); }
+.param { position: relative; padding-bottom: 4px; }
+.param .mp { position: absolute; left: 16px; right: 0; bottom: 0; height: 1px; background: rgba(255,255,255,.1); }
+.param .mp b { display: block; height: 100%; width: 0; opacity: .9; transition: width .4s; }
 
 /* compass */
 #compass { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); width: min(400px, 34vw); height: 24px; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent); mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent); }

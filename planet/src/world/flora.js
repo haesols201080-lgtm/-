@@ -371,14 +371,17 @@ export class Flora {
             return { y, s: 0.8 + r2 * 0.6, ry: r2 * 6.28, attrs: { iGrow: [thr, 2], iTint: pal[Math.floor(r3 * pal.length) % pal.length] } };
           },
         },
-        { // ferns / shrubs
+        { // ferns: spore plants, the first vascular plants - they follow the
+          // moss into damp ground, well before grass and flowers
           geo: fern(13), mat: this.mat, max: 1400, perTile: 9, castShadow: true, radius: 95,
           attrs: { iGrow: 2, iTint: 3 },
-          enabled: () => U.uGrowth.value.z > 0.001,
+          enabled: () => U.uGrowth.value.x > 0.2,
           place: (x, z, r1, r2, r3) => {
             const y = groundOK(x, z, 0.4); if (y === null) return null;
-            const thr = clamp(1 - fert(x, z) * 0.9 + (r1 - 0.5) * 0.4 + 0.1, 0.02, 1);
-            return { y: y - 0.05, s: 0.8 + r2 * 1.1, ry: r3 * 6.28, attrs: { iGrow: [thr, 2], iTint: [0.9 + r3 * 0.2, 0.95 + r2 * 0.15, 0.85] } };
+            const f = fert(x, z);
+            if (f < 0.35) return null;
+            const thr = clamp(0.24 + (1 - f) * 0.45 + (r1 - 0.5) * 0.2, 0.22, 1);
+            return { y: y - 0.05, s: 0.8 + r2 * 1.1, ry: r3 * 6.28, attrs: { iGrow: [thr, 0], iTint: [0.9 + r3 * 0.2, 0.95 + r2 * 0.15, 0.85] } };
           },
         },
       ],

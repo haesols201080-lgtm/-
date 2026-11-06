@@ -4,7 +4,7 @@
 // insects, breathable air, fauna, complete), and a continuous stage value
 // drives every visual: sky colour, dust, clouds, rain, ice melt, sea level,
 // moss/grass on the ground, plant growth and colour saturation.
-import { STAGES, PARAMS, VIS_TI } from './data.js';
+import { STAGES, PARAMS, VIS_TI, MILESTONES } from './data.js';
 import { U, WORLD } from '../core/shared.js';
 import { BUILD_U } from '../build/materials.js';
 import { clamp, lerp } from '../core/noise.js';
@@ -25,6 +25,7 @@ export class Terraform {
     this.rate = { heat: 0, pressure: 0, oxygen: 0, biomass: 0 };
     this._acc = { heat: 0, pressure: 0, oxygen: 0, biomass: 0 };
     this.stage = 0;
+    this.ms = { heat: 0, pressure: 0, oxygen: 0, biomass: 0 };   // next milestone index per parameter
     this.sVis = 0;          // smoothed continuous stage used for visuals
     this.weather = { kind: 'clear', t: 0, next: 240, storm: 0, wet: 0, dustStorm: 0 };
     this.rateT = 0;
@@ -46,6 +47,13 @@ export class Terraform {
   // named-stage progress (HUD); visuals run on visFloat()
   stageFloat() { return Terraform.along(STAGES.map((s) => s.ti), this.ti); }
   visFloat() { return Terraform.along(VIS_TI, this.ti); }
+  // progress (0..1, log) from the last reached milestone to the next one
+  milestoneFrac(k) {
+    const L = MILESTONES[k], i = this.ms[k];
+    if (i >= L.length) return 1;
+    const a = Math.max(1, i > 0 ? L[i - 1][0] : 1), b = L[i][0], v = Math.max(1, this.p[k]);
+    return clamp(Math.log(v / a) / Math.log(b / a), 0, 1);
+  }
   stageAt(ti) { let st = 0; while (st < STAGES.length - 1 && ti >= STAGES[st + 1].ti) st++; return st; }
 
   is(stageId) { return this.stage >= STAGES.findIndex((s) => s.id === stageId); }
@@ -60,6 +68,10 @@ export class Terraform {
     const ti = this.ti;
     let st = 0;
     while (st < STAGES.length - 1 && ti >= STAGES[st + 1].ti) st++;
+    for (const k in MILESTONES) {
+      const L = MILESTONES[k];
+      while (this.ms[k] < L.length && this.p[k] >= L[this.ms[k]][0]) { this.game.onMilestone && this.game.onMilestone(k, L[this.ms[k]]); this.ms[k]++; }
+    }
     if (st > this.stage) {
       for (let k = this.stage + 1; k <= st; k++) this.game.onStage && this.game.onStage(k, STAGES[k]);
       this.stage = st;
@@ -100,7 +112,13 @@ export class Terraform {
     // life arrives gradually and overlapping (Planet Crafter-like): lichen and
     // moss creep out of damp hollows first, single grass tufts sprout and only
     // slowly close into meadows, flowers follow the grass, trees come last
-    const moss = table([[5.6, 0], [6.5, 0.22], [7.5, 0.5], [9, 0.8], [11, 1]], s);
+    // primary succession, in the order life really arrives: microbial mats on
+    // warm wet shores, algae in the lakes, lichen on bare rock, then moss,
+    // ferns (via the moss ramp), grass, flowers, conifers and broadleaf trees
+    U.uMicrobe.value = table([[4.6, 0], [5.0, 0.6], [6, 1], [7.5, 0.4], [9, 0]], s);
+    U.uAlgae.value = table([[5.1, 0], [5.5, 0.6], [6.5, 1], [9, 0.55]], s);
+    U.uLichen.value = table([[5.35, 0], [5.8, 0.6], [7, 1]], s);
+    const moss = table([[5.9, 0], [6.5, 0.26], [7.5, 0.5], [9, 0.8], [11, 1]], s);
     const grass = table([[6.8, 0], [7.5, 0.16], [8.5, 0.4], [9.5, 0.62], [11, 0.85], [12, 1]], s);
     U.uMoss.value = moss;
     U.uGrass.value = grass;
@@ -128,6 +146,7 @@ export class Terraform {
   load(o) {
     Object.assign(this.p, o.p || {});
     this.stage = this.stageAt(this.ti);          // recomputed: the stage list may have changed
+    for (const k in MILESTONES) { let i = 0; while (i < MILESTONES[k].length && this.p[k] >= MILESTONES[k][i][0]) i++; this.ms[k] = i; }
     this.sVis = this.visFloat();
   }
 }

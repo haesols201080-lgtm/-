@@ -1,7 +1,7 @@
 // HUD and menus. Plain DOM, updated a few times per second (compass and
 // prompt every frame). Menus release the pointer lock.
 import * as THREE from 'three';
-import { ITEMS, BUILDINGS, CATEGORIES, RECIPES, STAGES, PARAMS, TIERS, ERAS, RESEARCH, fmtTi } from '../sim/data.js';
+import { ITEMS, BUILDINGS, CATEGORIES, RECIPES, STAGES, PARAMS, TIERS, ERAS, RESEARCH, MILESTONES, fmtTi } from '../sim/data.js';
 import { itemIcon, CREDIT_ICON, paramIcon } from './icons.js';
 import { U, WORLD } from '../core/shared.js';
 import { QUALITY } from '../core/engine.js';
@@ -38,7 +38,7 @@ export class UI {
           <div class="next" id="st-next"></div>
         </div>
         <div class="params">${Object.keys(PARAMS).map((k) => `
-          <div class="param" title="${PARAMS[k].name}"><span class="ic">${paramIcon(k)}</span><span class="v num" id="pv-${k}">0</span></div>`).join('')}
+          <div class="param" id="pp-${k}" title="${PARAMS[k].name}"><span class="ic">${paramIcon(k)}</span><span class="v num" id="pv-${k}">0</span><i class="mp"><b id="pm-${k}" style="background:${PARAMS[k].color}"></b></i></div>`).join('')}
         </div>
         <span id="st-ti" hidden></span><span id="st-bar" hidden></span><span id="pr-heat" hidden></span><span id="pr-pressure" hidden></span><span id="pr-oxygen" hidden></span><span id="pr-biomass" hidden></span>
       </div></div>
@@ -112,6 +112,9 @@ export class UI {
     $('#st-next').textContent = nx ? `→ ${nx.name} · ${fmtTi(nx.ti)}Ti` : '테라포밍 완료';
     for (const k of Object.keys(PARAMS)) {
       $('#pv-' + k).textContent = fmtTi(T.p[k]) + PARAMS[k].unit;
+      $('#pm-' + k).style.width = (T.milestoneFrac(k) * 100).toFixed(0) + '%';
+      const nm = MILESTONES[k][T.ms[k]];
+      $('#pp-' + k).title = PARAMS[k].name + (nm ? ' · 다음: ' + nm[1] : ' · 모든 단계 달성');
     }
     const C = g.colony;
     $('#era').textContent = ERAS[C.era - 1].name;

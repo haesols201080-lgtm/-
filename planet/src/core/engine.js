@@ -73,7 +73,7 @@ export class Engine {
       uProjInv: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
       uCamPos2: { value: new THREE.Vector3() },
       uFogDensity: { value: 0.0006 }, uFogFalloff: { value: 0.004 },
-      uUnderwater: { value: 0 }, uWaterTint: { value: this.waterTint },
+      uUnderwater: { value: 0 }, uWaterTint: { value: this.waterTint }, uAlgae: U.uAlgae,
       uWaterLevelC: U.uWaterLevel, uFar: { value: 30000 }, tWaterN: { value: null }, uTimeC: U.uTime, uNightC: U.uNight,
       uAO: { value: 1 }, uRes: { value: new THREE.Vector2(1, 1) }, uProjY: { value: 1 },
     };
@@ -86,7 +86,7 @@ export class Engine {
         uniform vec3 uCamPos2;
         uniform float uFogDensity, uFogFalloff, uUnderwater, uWaterLevelC, uFar, uTimeC, uNightC, uAO, uProjY;
         uniform vec2 uRes;
-        uniform vec3 uWaterTint;
+        uniform vec3 uWaterTint; uniform float uAlgae;
         varying vec2 vUv;
         vec3 viewPosAt(vec2 uv) {
           float z = texture2D(tDepth, uv).x;
@@ -178,7 +178,7 @@ export class Engine {
             vec3 R = reflect(rd, N); R.y = abs(R.y) + 0.01;
             vec3 refl = skyColor(normalize(R), hp);
             vec3 absorb = exp(-thick * vec3(0.38, 0.075, 0.055));
-            vec3 scatter = uWaterTint * (0.25 + 0.75 * day) * (uSunColor * 0.7 + 0.3);
+            vec3 scatter = mix(uWaterTint, vec3(0.05, 0.16, 0.07), uAlgae * 0.75) * (0.25 + 0.75 * day) * (uSunColor * 0.7 + 0.3);
             vec3 refr = col * absorb + scatter * (1.0 - absorb);
             vec3 Hh = normalize(uSunDir + V);
             float spec = pow(max(dot(N, Hh), 0.0), 700.0) * 22.0 + pow(max(dot(N, Hh), 0.0), 60.0) * 0.2;
@@ -204,7 +204,7 @@ export class Engine {
             float dd = isSky ? 80.0 : dist;
             if (rd.y > 0.0) { float ts = (L - ro.y) / rd.y; if (ts < dd) dd = ts + (dd - ts) * 0.2; }
             float depthBelow = max(L - ro.y, 0.0);
-            vec3 tint = uWaterTint * (0.3 + 0.7 * exp(-depthBelow * 0.04)) * (0.12 + 0.88 * smoothstep(-0.1, 0.2, uSunDir.y));
+            vec3 tint = mix(uWaterTint, vec3(0.05, 0.16, 0.07), uAlgae * 0.75) * (0.3 + 0.7 * exp(-depthBelow * 0.04)) * (0.12 + 0.88 * smoothstep(-0.1, 0.2, uSunDir.y));
             col = mix(tint, col * vec3(0.5, 0.85, 0.9), exp(-dd * 0.06));
           }
           gl_FragColor = vec4(col, 1.0);

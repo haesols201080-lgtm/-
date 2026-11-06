@@ -8,7 +8,7 @@ import { TEX } from './texstore.js';
 
 export const TERRAIN_GLSL_COMMON = /* glsl */`
 uniform sampler2D tRock, tSoil, tSand, tMoss, tNoise;
-uniform float uFrost, uWet, uMoss, uGrass, uLush, uWaterLevel, uTime, uSnowMelt;
+uniform float uFrost, uWet, uMoss, uGrass, uLush, uWaterLevel, uTime, uSnowMelt, uMicrobe;
 uniform vec4 uGreen[8];
 varying vec3 vTW;
 varying vec3 vTN;
@@ -181,8 +181,9 @@ void computeTerrain() {
   vec4 hum = texture2D(tMoss, vTW.xz * 0.037 + 0.5);
   float fwG = length(fwidth(vTW.xz));
   float nearF = 1.0 - smoothstep(0.08, 0.6, fwG);          // fine detail only where it resolves
+  float midF = 1.0 - smoothstep(0.015, 0.09, fwG);         // tile-sized relief fades before it can repeat (no moire)
   float speck = mix(0.55, blade.r * 0.6 + blade2.g * 0.4, nearF);
-  float tuft = smoothstep(0.25, 0.75, clump.b * 0.35 + speck * 0.55 + nzC.a * 0.3);
+  float tuft = smoothstep(0.25, 0.75, mix(0.5, clump.b, midF) * 0.35 + speck * 0.55 + nzC.a * 0.3);
   float mThr = 1.0 - clamp(uMoss * 0.92 + localG * 0.8, 0.0, 1.0);
   float gThr = 1.0 - clamp(uGrass * 0.88 + localG * 0.55, 0.0, 1.0);
   fertile *= 1.0 - snowCov * 0.9 - smoothstep(0.4, 0.8, saltW) * 0.6;
@@ -206,7 +207,7 @@ void computeTerrain() {
   mossC *= 0.9 + 0.18 * speck;
   vec3 gDark = s2l(vec3(0.14, 0.2, 0.07)), gMid = s2l(vec3(0.27, 0.34, 0.12)), gLight = s2l(vec3(0.42, 0.45, 0.2));
   vec3 grassC = mix(gDark, gMid, tuft);
-  grassC = mix(grassC, gLight, smoothstep(0.55, 0.95, speck * 0.6 + clump.g * 0.5) * 0.7);
+  grassC = mix(grassC, gLight, smoothstep(0.55, 0.95, speck * 0.6 + mix(0.5, clump.g, midF) * 0.5) * 0.7);
   grassC = mix(grassC, s2l(vec3(0.16, 0.27, 0.17)), smoothstep(0.55, 0.85, nzA.r) * 0.35);
   // vegetation follows the land: lush dark drainage lines and hollows, drier
   // yellowing crests, and broad shrubland / meadow patches
@@ -216,7 +217,7 @@ void computeTerrain() {
   grassC = mix(grassC, s2l(vec3(0.12, 0.17, 0.08)) * (0.75 + 0.5 * clump.b), shrub * 0.55);
   grassC = mix(grassC * vec3(1.08, 0.97, 0.78), grassC, uLush);
   // straw/dry patches and bare soil peeking between tufts
-  float dry = smoothstep(0.55, 0.85, nzB.a * 0.7 + nzA.g * 0.4 + (clump.r - 0.5) * 0.15) * (1.0 - uLush * 0.5);
+  float dry = smoothstep(0.55, 0.85, nzB.a * 0.7 + nzA.g * 0.4 + (clump.r - 0.5) * 0.15 * midF) * (1.0 - uLush * 0.5);
   grassC = mix(grassC, s2l(vec3(0.5, 0.45, 0.26)) * (0.8 + 0.4 * speck), dry * 0.6);
   grassC *= 0.88 + 0.22 * nzC.r;
   float gap = (1.0 - smoothstep(0.15, 0.45, speck)) * nearF;
@@ -229,12 +230,20 @@ void computeTerrain() {
   float live = max(mossCov, grassCov);
   vec2 tm = mossT.rg * 2.0 - 1.0, tc = clump.rg * 2.0 - 1.0, th = hum.rg * 2.0 - 1.0;
   vec2 tb = vec2(blade.g - 0.5, blade2.b - 0.5) * 2.0 * nearF;
-  vec3 nLive = normalize(N + vec3(th.x, 0.0, th.y) * 0.35 + vec3(tm.x, 0.0, tm.y) * 0.3 + vec3(tc.x, 0.0, tc.y) * 0.55 + vec3(tb.x, 0.0, tb.y) * 0.45);
+  vec3 nLive = normalize(N + vec3(th.x, 0.0, th.y) * 0.3 + vec3(tm.x, 0.0, tm.y) * 0.14 * midF + vec3(tc.x, 0.0, tc.y) * 0.25 * midF + vec3(tb.x, 0.0, tb.y) * 0.4);
   nrm = normalize(mix(nrm, nLive, live));
   rough = mix(rough, 0.78 + 0.18 * (1.0 - speck), live);
   ao = mix(ao, mix(1.0, 0.45, gap) * (0.7 + 0.3 * tuft) * mossT.a, grassCov);
   ao = mix(ao, 0.82 + 0.18 * clump.b, mossCov * (1.0 - grassCov));   // moss: soft cushion shading, no dark specks
 
+  // microbial mats: thin orange-to-green bands right at the water's edge,
+  // the first visible life (like hot-spring cyanobacteria mats)
+  if (uMicrobe > 0.001) {
+    float edgeBand = (1.0 - smoothstep(0.0, 2.6 + nzC.r * 2.0, above)) * step(-0.6, above) * (1.0 - cliff);
+    float mcov = edgeBand * smoothstep(0.35, 0.6, nzC.g * 0.7 + nzB.b * 0.4) * uMicrobe;
+    vec3 matC = mix(s2l(vec3(0.66, 0.36, 0.12)), s2l(vec3(0.36, 0.42, 0.14)), smoothstep(0.3, 1.4, above + nzC.a));
+    alb = mix(alb, matC, mcov * 0.75);
+  }
   // wet shoreline + rain
   float shore = 1.0 - smoothstep(0.0, 2.2, above);
   float wet = max(shore * step(-280.0, uWaterLevel), uWet * (0.55 + 0.45 * nzC.g));
@@ -252,7 +261,7 @@ export function makeTerrainMaterial() {
     Object.assign(shader.uniforms, {
       tRock: { value: TEX.rock }, tSoil: { value: TEX.soil }, tSand: { value: TEX.sand }, tMoss: { value: TEX.moss },
       tNoise: U.tNoise, uFrost: U.uFrost, uWet: U.uWet, uMoss: U.uMoss, uGrass: U.uGrass, uSnowMelt: U.uSnowMelt,
-      uLush: U.uLush, uWaterLevel: U.uWaterLevel, uTime: U.uTime, uGreen: U.uGreen,
+      uLush: U.uLush, uWaterLevel: U.uWaterLevel, uTime: U.uTime, uGreen: U.uGreen, uMicrobe: U.uMicrobe,
     });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vTW;\nvarying vec3 vTN;\nattribute vec4 aS1;\nattribute vec4 aS2;\nvarying vec4 vS1;\nvarying vec4 vS2;')
@@ -264,6 +273,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v17';
+  mat.customProgramCacheKey = () => 'terrain-v19';
   return mat;
 }

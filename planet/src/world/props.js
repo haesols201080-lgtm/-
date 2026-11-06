@@ -250,7 +250,10 @@ export class Props {
       const x = Tr[i], y = Tr[i + 1], z = Tr[i + 2], s = Tr[i + 3];
       if (blocked(x, z, 2)) continue;
       const kind = Math.min(this.treeKinds - 1, Tr[i + 6] * 2 + Tr[i + 7]);
-      cell.trees.push({ x, y, z, s, kind, thr: Tr[i + 5], m: mat(x, y, z, 0, Tr[i + 4], 0, s, s, s), iGrow: [Tr[i + 5], 3], iTint: Tr[i + 6] === 2 ? [0.4, 1.0, 0.85] : [1, 1, 1] });
+      // seed plants in order: conifers (spire kinds) first, broadleaf trees
+      // follow one stage later
+      const thr = kind === 2 || kind === 3 ? Tr[i + 5] * 0.8 : Math.min(1, 0.14 + Tr[i + 5] * 0.86);
+      cell.trees.push({ x, y, z, s, kind, thr, m: mat(x, y, z, 0, Tr[i + 4], 0, s, s, s), iGrow: [thr, 3], iTint: Tr[i + 6] === 2 ? [0.4, 1.0, 0.85] : [1, 1, 1] });
     }
     cell.crystals = [];
     const Cr = r.crystals;
