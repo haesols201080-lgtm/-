@@ -73,6 +73,7 @@ export class Engine {
       uProjInv: { value: new THREE.Matrix4() }, uCamWorld: { value: new THREE.Matrix4() },
       uCamPos2: { value: new THREE.Vector3() },
       uFogDensity: { value: 0.0006 }, uFogFalloff: { value: 0.004 }, uSpace: { value: 0 },
+      uDustGround: { value: 0 }, uWindO: { value: new THREE.Vector2() }, uGround: { value: 0 },
       uUnderwater: { value: 0 }, uWaterTint: { value: this.waterTint }, uAlgae: U.uAlgae,
       uWaterLevelC: U.uWaterLevel, uFar: { value: 30000 }, tWaterN: { value: null }, uTimeC: U.uTime, uNightC: U.uNight,
       uAO: { value: 1 }, uRes: { value: new THREE.Vector2(1, 1) }, uProjY: { value: 1 },
@@ -84,7 +85,8 @@ export class Engine {
         uniform sampler2D tColor, tDepth, tWaterN;
         uniform mat4 uProjInv, uCamWorld;
         uniform vec3 uCamPos2;
-        uniform float uFogDensity, uFogFalloff, uUnderwater, uWaterLevelC, uFar, uTimeC, uNightC, uAO, uProjY, uSpace;
+        uniform float uFogDensity, uFogFalloff, uUnderwater, uWaterLevelC, uFar, uTimeC, uNightC, uAO, uProjY, uSpace, uDustGround, uGround;
+        uniform vec2 uWindO;
         uniform vec2 uRes;
         uniform vec3 uWaterTint; uniform float uAlgae;
         varying vec2 vUv;
@@ -201,6 +203,23 @@ export class Engine {
             vec3 fd = normalize(vec3(rd.x, max(rd.y + uDip, 0.0) * 0.35 + 0.02 - uDip, rd.z));
             vec3 fogCol = skyBase(fd);
             col = mix(fogCol, col, exp(-od));
+          }
+          // airborne dust: a haze that hugs the ground, thickest in the lows,
+          // thinning with height, patchy and drifting with the wind
+          if (uDustGround > 0.001 && !below) {
+            float Ld = min(dist, 1600.0), dg = 0.0;
+            for (int i = 0; i < 5; i++) {
+              float tt = (float(i) + 0.5) / 5.0 * Ld;
+              vec3 sp = ro + rd * tt;
+              float hh = max(sp.y - uGround + 4.0, 0.0);
+              vec2 q = sp.xz - uWindO;
+              float nz = texture2D(tNoise, q * 0.0021).r * 0.6 + texture2D(tNoise, q * 0.0067 + 0.37).g * 0.4;
+              dg += exp(-hh / 22.0) * (0.25 + 1.2 * smoothstep(0.35, 0.8, nz));
+            }
+            dg *= uDustGround * Ld / 5.0 * 0.0016;
+            float day = smoothstep(-0.1, 0.25, uSunDir.y);
+            vec3 dc = vec3(0.6, 0.44, 0.31) * (0.08 + 0.95 * day * uSunColor);
+            col = mix(dc, col, exp(-dg));
           }
           if (below) {
             float dd = isSky ? 80.0 : dist;

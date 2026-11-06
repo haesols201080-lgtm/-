@@ -228,10 +228,20 @@ export class Player {
   updateModel(dt, speed) {
     const m = this.model;
     m.root.position.copy(this.pos);
-    // body turns toward movement / camera yaw
-    let target = this.yaw;
-    m.root.rotation.y = lerpAngle(m.root.rotation.y, target, Math.min(1, dt * 12));
-    m.update(dt, { speed, onGround: this.onGround, jet: this.jetting, swim: this.swimming, vy: this.vel.y, aim: this.aiming ? 1 : 0, working: this.working });
+    // third person: the body turns to where it is going; while mining or
+    // building it keeps facing the aim and steps sideways / backwards instead
+    const vx = this.vel.x, vz = this.vel.z;
+    const lock = this.working || this.game.build.active || this.view === 'first';
+    const prev = m.root.rotation.y;
+    let target = prev;
+    if (lock) target = this.yaw;
+    else if (speed > 0.6) target = Math.atan2(-vx, -vz);
+    m.root.rotation.y = lerpAngle(prev, target, Math.min(1, dt * (speed > 0.6 ? 8 : 5)));
+    const yaw = m.root.rotation.y;
+    const turn = Math.atan2(Math.sin(yaw - prev), Math.cos(yaw - prev)) / Math.max(dt, 1e-3);
+    // velocity in the body frame (the model faces -Z)
+    const fwd = -vx * Math.sin(yaw) - vz * Math.cos(yaw), side = vx * Math.cos(yaw) - vz * Math.sin(yaw);
+    m.update(dt, { speed, fwd, side, turn, onGround: this.onGround, jet: this.jetting, swim: this.swimming, vy: this.vel.y, aim: this.working ? 1 : 0, working: this.working });
     m.root.visible = this.view === 'third';
   }
 

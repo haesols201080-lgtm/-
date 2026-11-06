@@ -161,46 +161,68 @@ export class Astronaut {
   }
 
   // speed: horizontal m/s; state flags
-  update(dt, { speed = 0, onGround = true, jet = false, swim = false, vy = 0, aim = 0, working = false }) {
+  update(dt, { speed = 0, fwd = null, side = 0, turn = 0, onGround = true, jet = false, swim = false, vy = 0, aim = 0, working = false }) {
     const B = this.blend;
     const k = Math.min(1, dt * 8);
+    const t = performance.now() * 0.001;
+    // direction of travel relative to the body: forward 1, backward -1, sideways
+    const sp = Math.max(speed, 1e-3);
+    const fr = fwd === null ? 1 : fwd / sp, sr = fwd === null ? 0 : side / sp;
+    B.fr = (B.fr ?? 1) + (fr - (B.fr ?? 1)) * k;
+    B.sr = (B.sr ?? 0) + (sr - (B.sr ?? 0)) * k;
     B.run += ((onGround ? Math.min(1, speed / 7) : 0) - B.run) * k;
     B.air += ((onGround || swim ? 0 : 1) - B.air) * k;
     B.swim += ((swim ? 1 : 0) - B.swim) * k;
     B.jet += ((jet ? 1 : 0) - B.jet) * Math.min(1, dt * 12);
+    // landing: knees take the impact
+    if (onGround && !this.wasGround && this.lastVy < -3.5) this.land = Math.min(1, -this.lastVy / 10);
+    this.wasGround = onGround; this.lastVy = vy;
+    this.land = Math.max(0, (this.land || 0) - dt * 3.2);
+    // turning on the spot shuffles the feet
+    const shuffle = onGround && speed < 0.5 ? Math.min(1, Math.abs(turn) / 3) : 0;
+    B.shuf = (B.shuf || 0) + (shuffle - (B.shuf || 0)) * k;
     const stride = onGround ? speed : swim ? 2.5 : 0;
-    this.phase += dt * (stride > 0.1 ? 2.2 + stride * 1.25 : 0);
+    this.phase += dt * (stride > 0.1 ? 2.2 + stride * 1.25 : B.shuf > 0.05 ? 7 : 0);
     const p = this.phase;
-    const walk = onGround ? Math.min(1, speed / 2) : 0;
+    const walk = onGround ? Math.max(Math.min(1, speed / 2), B.shuf * 0.35) : 0;
     const s = Math.sin(p), c = Math.cos(p);
     const amp = 0.35 + B.run * 0.35;
+    const fa = Math.abs(B.fr), back = B.fr < 0 ? 1 : 0;
 
-    // legs
+    // legs: swing along the direction of travel (forward, back or side-step)
     const legSwing = s * amp * walk;
-    this.legR.hip.rotation.x = legSwing - B.air * 0.5 + B.swim * Math.sin(p * 1.5) * 0.4;
-    this.legL.hip.rotation.x = -legSwing - B.air * 0.2 - B.swim * Math.sin(p * 1.5) * 0.4;
-    this.legR.knee.rotation.x = Math.max(0, -c) * (0.4 + B.run * 0.8) * walk + B.air * 0.9 + B.swim * 0.3;
-    this.legL.knee.rotation.x = Math.max(0, c) * (0.4 + B.run * 0.8) * walk + B.air * 0.4 + B.swim * 0.3;
-    this.legR.ankle.rotation.x = -this.legR.hip.rotation.x * 0.3;
-    this.legL.ankle.rotation.x = -this.legL.hip.rotation.x * 0.3;
-    // arms
-    const armSwing = s * (0.3 + B.run * 0.5) * walk;
+    const fs = legSwing * B.fr, ss = legSwing * B.sr * 0.7;
+    this.legR.hip.rotation.x = fs - B.air * 0.5 + B.swim * Math.sin(p * 1.5) * 0.4 + this.land * 0.5;
+    this.legL.hip.rotation.x = -fs - B.air * 0.2 - B.swim * Math.sin(p * 1.5) * 0.4 + this.land * 0.5;
+    this.legR.hip.rotation.z = -ss + 0.02;
+    this.legL.hip.rotation.z = ss - 0.02;
+    const kb = (0.4 + B.run * 0.8) * walk * (0.55 + 0.45 * fa);
+    this.legR.knee.rotation.x = Math.max(0, back ? c : -c) * kb + B.air * 0.9 + B.swim * 0.3 + this.land * 1.0;
+    this.legL.knee.rotation.x = Math.max(0, back ? -c : c) * kb + B.air * 0.4 + B.swim * 0.3 + this.land * 1.0;
+    this.legR.ankle.rotation.x = -this.legR.hip.rotation.x * 0.3 - this.land * 0.4;
+    this.legL.ankle.rotation.x = -this.legL.hip.rotation.x * 0.3 - this.land * 0.4;
+    // arms: swing with forward travel, less when stepping sideways
+    const armSwing = s * (0.3 + B.run * 0.5) * walk * (0.25 + 0.75 * fa) * Math.sign(B.fr || 1);
     this.armR.sh.rotation.x = -armSwing + B.air * -0.4 - B.swim * Math.sin(p * 1.5 + 1) * 1.2 - aim * 1.2;
     this.armL.sh.rotation.x = armSwing + B.air * -0.4 + B.swim * Math.sin(p * 1.5 + 1) * 1.2;
-    this.armR.sh.rotation.z = 0.12 + B.air * 0.35;
-    this.armL.sh.rotation.z = -0.12 - B.air * 0.35;
+    this.armR.sh.rotation.z = 0.12 + B.air * 0.35 + this.land * 0.2;
+    this.armL.sh.rotation.z = -0.12 - B.air * 0.35 - this.land * 0.2;
     this.armR.el.rotation.x = -0.25 - B.run * 0.9 - aim * 0.2 - (working ? 0.4 : 0);
     this.armL.el.rotation.x = -0.25 - B.run * 0.9;
-    // body
+    // body: bob, lean into speed and turns, hips turn toward a side-step
     const bob = Math.abs(Math.sin(p)) * 0.04 * walk * (1 + B.run);
-    this.hips.position.y = 0.98 - 0.03 * walk + bob - B.air * 0.05;
-    this.torso.rotation.x = -B.run * 0.18 - B.swim * 0.9 + B.air * 0.08;
-    this.torso.rotation.y = s * 0.08 * walk;
-    this.hips.rotation.y = -s * 0.06 * walk;
-    this.head.rotation.x = B.run * 0.12 + B.swim * 0.6 + aim * -0.3;
-    // breathing idle
-    const idle = (1 - walk) * (1 - B.air);
-    this.torso.position.y = 0.08 + Math.sin(performance.now() * 0.002) * 0.006 * idle;
+    this.hips.position.y = 0.98 - 0.03 * walk + bob - B.air * 0.05 - this.land * 0.14;
+    const lean = Math.max(-0.22, Math.min(0.22, -turn * 0.035 * Math.min(1, speed / 3)));
+    this.torso.rotation.x = -B.run * 0.18 * B.fr - B.swim * 0.9 + B.air * 0.08 + this.land * 0.25;
+    this.torso.rotation.z = lean;
+    this.hips.rotation.y = -s * 0.06 * walk + B.sr * 0.35 * walk;
+    this.torso.rotation.y = s * 0.08 * walk * fa - B.sr * 0.3 * walk;
+    // idle: weight shifts and the head looks around
+    const idle = (1 - walk) * (1 - B.air) * (1 - aim);
+    this.hips.rotation.z = Math.sin(t * 0.45) * 0.025 * idle;
+    this.head.rotation.x = B.run * 0.12 + B.swim * 0.6 + aim * -0.3 + Math.sin(t * 0.23) * 0.05 * idle;
+    this.head.rotation.y = Math.sin(t * 0.31) * Math.sin(t * 0.13) * 0.45 * idle - B.sr * 0.2 * walk;
+    this.torso.position.y = 0.08 + Math.sin(t * 2) * 0.006 * idle;
 
     for (const f of this.flames) {
       f.visible = B.jet > 0.05;
