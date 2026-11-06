@@ -24,7 +24,7 @@ const FLORA_BODY = /* glsl */`
     vec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
     float lg = iGrow.y < 0.5 ? uGrowth.x : iGrow.y < 1.5 ? uGrowth.y : iGrow.y < 2.5 ? uGrowth.z : uGrowth.w;
     // local greening around seed / tree spreaders
-    for (int i = 0; i < 8; i++) { vec4 gp = uGreen[i]; if (gp.z > 0.0) lg = max(lg, gp.w * (1.0 - smoothstep(gp.z * 0.6, gp.z, length(ip.xz - gp.xy))) * (iGrow.y < 2.5 ? 1.0 : 0.85)); }
+    for (int i = 0; i < 8; i++) { vec4 gp = uGreen[i]; if (gp.z > 0.0) { float kd = floor(gp.w * 0.5); float st = gp.w - kd * 2.0; bool ok = kd > 0.5 || iGrow.y < 0.5; if (ok) lg = max(lg, st * (1.0 - smoothstep(gp.z * 0.6, gp.z, length(ip.xz - gp.xy))) * (iGrow.y < 2.5 ? 1.0 : 0.85)); } }
     g = smoothstep(iGrow.x, iGrow.x + 0.12, lg);
     vTintF = iTint;
   #else
@@ -305,9 +305,10 @@ export class Flora {
     };
     this.groundOK = groundOK;
     const fert = (x, z) => clamp(sf[3] * 0.7 + (this.S.fbm2(x / 90, z / 90, 2) * 0.5 + 0.5) * 0.3 - sf[1] * 0.1 - sf[5] * 0.4, 0, 1);
-    const greenBoost = (x, z) => {
+    // local boost from spreaders; seedsOnly ignores the moss (spore) spreader
+    const greenBoost = (x, z, seedsOnly = false) => {
       let b = 0;
-      for (const g of U.uGreen.value) if (g.z > 0) { const d = Math.hypot(x - g.x, z - g.y); if (d < g.z) b = Math.max(b, g.w * (1 - Math.max(0, (d - g.z * 0.6) / (g.z * 0.4)))); }
+      for (const g of U.uGreen.value) if (g.z > 0) { const kd = Math.floor(g.w * 0.5), st = g.w - kd * 2; if (seedsOnly && kd < 1) continue; const d = Math.hypot(x - g.x, z - g.y); if (d < g.z) b = Math.max(b, st * (1 - Math.max(0, (d - g.z * 0.6) / (g.z * 0.4)))); }
       return b;
     };
     const stone = game.props.smallRock;
@@ -333,7 +334,7 @@ export class Flora {
         { // moss clumps
           geo: mossClump(3), mat: this.mat, max: 1600, perTile: 14, castShadow: false, radius: 70,
           attrs: { iGrow: 2, iTint: 3 },
-          enabled: () => U.uGrowth.value.x > 0.001 || U.uGreen.value.some((g) => g.w > 0),
+          enabled: () => U.uGrowth.value.x > 0.001 || U.uGreen.value.some((g) => g.z > 0 && g.w > 0),
           place: (x, z, r1, r2, r3) => {
             const y = groundOK(x, z, 0.35); if (y === null) return null;
             if (U.uGrass.value > 0.2) return null;              // grass replaces the moss cushions
@@ -347,10 +348,10 @@ export class Flora {
         { // grass tufts
           geo: grassTuft(5, 12, 0.6), mat: this.mat, max: 16000, perTile: 210, castShadow: false, radius: 62, densityFalloff: true,
           attrs: { iGrow: 2, iTint: 3 },
-          enabled: () => U.uGrowth.value.y > 0.001 || U.uGreen.value.some((g) => g.w > 0.3),
+          enabled: () => U.uGrowth.value.y > 0.001 || U.uGreen.value.some((g) => g.z > 0 && g.w >= 2.3),
           place: (x, z, r1, r2, r3) => {
             const y = groundOK(x, z, 0.32); if (y === null) return null;
-            const thr = clamp(1 - fert(x, z) + (r1 - 0.5) * 0.35 - greenBoost(x, z) * 0.5, 0.02, 1);
+            const thr = clamp(1 - fert(x, z) + (r1 - 0.5) * 0.35 - greenBoost(x, z, true) * 0.5, 0.02, 1);
             const s = 0.8 + r2 * 1.0;
             T.normal(x, z, nrm);
             qn.setFromUnitVectors(up, nrm).multiply(new THREE.Quaternion().setFromAxisAngle(up, r3 * 6.28));
@@ -366,7 +367,7 @@ export class Flora {
             const y = groundOK(x, z, 0.3); if (y === null) return null;
             const f = fert(x, z);
             if (f < 0.35) return null;
-            const thr = clamp(1 - f + (r1 - 0.5) * 0.4 - greenBoost(x, z) * 0.3, 0.02, 1);
+            const thr = clamp(1 - f + (r1 - 0.5) * 0.4 - greenBoost(x, z, true) * 0.3, 0.02, 1);
             const pal = [[0.45, 0.25, 1.0], [0.2, 0.85, 1.0], [1.0, 0.45, 0.2], [1.0, 0.85, 0.3], [1.0, 0.3, 0.6]];
             return { y, s: 0.8 + r2 * 0.6, ry: r2 * 6.28, attrs: { iGrow: [thr, 2], iTint: pal[Math.floor(r3 * pal.length) % pal.length] } };
           },

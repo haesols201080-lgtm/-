@@ -169,7 +169,8 @@ void computeTerrain() {
   float patchN = smoothstep(0.3, 0.7, nzB.r * 0.6 + nzA.g * 0.5 - 0.05);
   float fertile = clamp(bio.a * 0.62 + patchN * 0.42 + (mossT.b - 0.5) * 0.12 - 0.03, 0.0, 1.0);
   float localG = 0.0;
-  for (int i = 0; i < 8; i++) { vec4 gp = uGreen[i]; if (gp.z > 0.0) localG = max(localG, gp.w * (1.0 - smoothstep(gp.z * 0.6, gp.z, length(vTW.xz - gp.xy)))); }
+  float localSeed = 0.0;   // tree spreader (seeds) - spores only grow moss
+  for (int i = 0; i < 8; i++) { vec4 gp = uGreen[i]; if (gp.z > 0.0) { float kd = floor(gp.w * 0.5); float st = gp.w - kd * 2.0; float v = st * (1.0 - smoothstep(gp.z * 0.6, gp.z, length(vTW.xz - gp.xy))); localG = max(localG, v); if (kd > 0.5) localSeed = max(localSeed, v); } }
   // Living ground is built from several scales so it never reads as a smooth
   // painted surface: tussock clumps (~0.8 m) and blade speckle (~0.2 m) with
   // shadowed gaps of soil between them, meso hummocks in the normal, natural
@@ -185,7 +186,7 @@ void computeTerrain() {
   float speck = mix(0.55, blade.r * 0.6 + blade2.g * 0.4, nearF);
   float tuft = smoothstep(0.25, 0.75, mix(0.5, clump.b, midF) * 0.35 + speck * 0.55 + nzC.a * 0.3);
   float mThr = 1.0 - clamp(uMoss * 0.92 + localG * 0.8, 0.0, 1.0);
-  float gThr = 1.0 - clamp(uGrass * 0.88 + localG * 0.55, 0.0, 1.0);
+  float gThr = 1.0 - clamp(uGrass * 0.88 + localSeed * 0.55, 0.0, 1.0);
   fertile *= 1.0 - snowCov * 0.9 - smoothstep(0.4, 0.8, saltW) * 0.6;
   // coverage grows out of the most favourable ground with ragged, stippled
   // edges (clumps and single tufts first), and the ground itself only turns
@@ -199,8 +200,8 @@ void computeTerrain() {
   float mossCov = smoothstep(mThr, mThr + 0.24, fertile * 0.5 + damp * 0.6 + (nzC.r - 0.5) * 0.12 + (clump.b - 0.5) * 0.08) * damp
                 * step(0.001, uMoss + localG) * flat_ * step(0.4, above) * (1.0 - packed) * (1.0 - cliff);
   mossCov *= (0.5 + 0.5 * smoothstep(0.15, 0.6, uMoss + localG)) * (0.7 + 0.3 * smoothstep(0.2, 0.7, clump.b * 0.5 + nzC.a * 0.5));
-  float grassCov = smoothstep(gThr, gThr + 0.22, fertile + rag) * step(0.001, uGrass + localG * 0.5) * flat_ * smoothstep(0.6, 2.5, above) * (1.0 - packed * 0.8) * (1.0 - scree * 0.85);
-  grassCov *= 0.2 + 0.8 * smoothstep(0.12, 0.75, uGrass + localG * 0.5);
+  float grassCov = smoothstep(gThr, gThr + 0.22, fertile + rag) * step(0.001, uGrass + localSeed * 0.5) * flat_ * smoothstep(0.6, 2.5, above) * (1.0 - packed * 0.8) * (1.0 - scree * 0.85);
+  grassCov *= 0.2 + 0.8 * smoothstep(0.12, 0.75, uGrass + localSeed * 0.5);
   // clean cushion moss: yellow-green tips over emerald, fine cushion relief
   vec3 mossC = mix(s2l(vec3(0.25, 0.34, 0.11)), s2l(vec3(0.42, 0.49, 0.17)), smoothstep(0.3, 0.8, clump.b * 0.6 + nzC.a * 0.4));
   mossC = mix(mossC, s2l(vec3(0.2, 0.4, 0.22)), smoothstep(0.55, 0.85, nzB.a) * 0.4);
@@ -273,6 +274,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v19';
+  mat.customProgramCacheKey = () => 'terrain-v20';
   return mat;
 }

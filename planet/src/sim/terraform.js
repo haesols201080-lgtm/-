@@ -134,7 +134,10 @@ export class Terraform {
       const u = U.uGreen.value[i];
       if (g) {
         g.data.green = Math.min(1, (g.data.green || 0) + dt / 90);
-        u.set(g.x, g.z, g.def.green * (0.4 + 0.6 * g.data.green), g.data.green * (s >= 4 ? 1 : 0.35));
+        // w packs kind and strength: spores (moss spreader) only advance lichen,
+        // moss and ferns locally; seeds (tree spreader) advance grass, flowers, trees
+        const kind = g.type === 'seeder' ? 0 : 1;
+        u.set(g.x, g.z, g.def.green * (0.4 + 0.6 * g.data.green), kind * 2 + Math.min(0.999, g.data.green * (s >= 4 ? 1 : 0.35)));
       } else u.set(0, 0, 0, 0);
     }
     if (this.game.flora && this._lastGreen !== greens.length) { this._lastGreen = greens.length; this.game.flora.invalidate(); }

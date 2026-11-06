@@ -49,22 +49,16 @@ export function makeRockMaterial({ emissive = 0x000000 } = {}) {
         // crustose lichen: crisp round rosettes, pale sage and orange, on
         // faces that catch light and damp (not under overhangs)
         if (uLichen > 0.001) {
-          // crustose lichen: irregular lobed colonies of varied size, clustered
-          // in patches of the rock (domain-warped cells), muted sage / ochre
-          float ls = 0.42;
-          vec4 wx = texture2D(tNoise, vWP.zy * 2.2 + 0.3), wy = texture2D(tNoise, vWP.xz * 2.2 + 0.7), wz = texture2D(tNoise, vWP.xy * 2.2 + 0.1);
-          vec4 w = wx * bw.x + wy * bw.y + wz * bw.z;
-          vec2 wp = (w.ra - 0.5) * 0.05;               // lobed edges: warp of about a third of a colony
-          vec4 lx = texture2D(tNoise, vWP.zy * ls + wp + 0.13), ly = texture2D(tNoise, vWP.xz * ls + wp + 0.57), lzz = texture2D(tNoise, vWP.xy * ls + wp + 0.91);
-          vec4 lz = lx * bw.x + ly * bw.y + lzz * bw.z;
-          vec4 lc = texture2D(tNoise, vWP.xz * 0.11 + vWP.y * 0.07 + 0.5);
-          float face = smoothstep(-0.3, 0.3, gN.y);
-          float cluster = smoothstep(0.36, 0.62, lc.g * 0.8 + uLichen * 0.3);
-          float size = (0.14 + 0.14 * w.g) * (0.45 + 0.55 * uLichen) * cluster;
-          float ros = smoothstep(0.86 - size, 0.88 - size, lz.b + (w.a - 0.5) * 0.12) * face;
-          vec3 sage = vec3(0.16, 0.18, 0.13), ochre = vec3(0.28, 0.14, 0.05), grey = vec3(0.24, 0.24, 0.22);
-          vec3 lic = mix(sage, mix(ochre, grey, step(0.5, lc.b)), smoothstep(0.5, 0.6, lc.r)) * (0.8 + 0.35 * w.b);
-          alb = mix(alb, lic, ros * 0.8);
+          // lichen reads, at normal viewing distance, as a soft change of
+          // colour on the rock: a pale sage / ochre bloom on the faces that
+          // catch light and rain, with broad soft edges - no spots or shapes
+          vec4 lc = texture2D(tNoise, vWP.xz * 0.045 + vWP.y * 0.02 + 0.5);
+          vec4 lc2 = texture2D(tNoise, vWP.xz * 0.13 + vWP.y * 0.05 + 0.2);
+          float face = smoothstep(0.0, 0.7, gN.y);
+          float cov = smoothstep(0.35, 0.75, lc.g * 0.7 + lc2.r * 0.3 + uLichen * 0.25 - 0.1) * face * uLichen;
+          float lum = dot(alb, vec3(0.3, 0.55, 0.15));
+          vec3 tint = mix(vec3(0.85, 1.0, 0.82), vec3(1.15, 0.95, 0.7), smoothstep(0.45, 0.6, lc.r));
+          alb = mix(alb, vec3(lum) * tint * 1.25, cov * 0.4);
         }
         alb = mix(alb, vec3(0.5, 0.53, 0.58), top * uFrost * smoothstep(0.65, 0.85, nz.r) * 0.4);
         float wet = uWet * (0.5 + 0.5 * top) + (1.0 - smoothstep(0.0, 1.5, vWP.y - uWaterLevel)) * 0.8;
@@ -75,7 +69,7 @@ export function makeRockMaterial({ emissive = 0x000000 } = {}) {
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = gR;')
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz);');
   };
-  mat.customProgramCacheKey = () => 'rock-v5-' + emissive;
+  mat.customProgramCacheKey = () => 'rock-v6-' + emissive;
   return mat;
 }
 

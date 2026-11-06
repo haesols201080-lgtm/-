@@ -166,7 +166,7 @@ export const BUILDINGS = {
   vegetube: { name: '식물 배양관', cat: 'terra', size: [2.4, 2.4], cost: { glass: 2, plate: 1, ice: 1 }, power: -1, terra: { oxygen: 1.6, biomass: 0.2 }, desc: '밀폐 배양관의 식물이 산소(ppq)를 만듭니다.', unlockStage: 'bluesky' },
   heater2: { name: '히터 T2', cat: 'terra', size: [4, 4], cost: { alloy: 2, plate: 2 }, power: -5, terra: { heat: 9 }, desc: '고출력 히터.', unlockStage: 'clouds' },
   drill2: { name: '대기 드릴 T2', cat: 'terra', size: [4, 4], cost: { alloy: 3, plate: 3 }, power: -6, terra: { pressure: 7 }, desc: '심부 가스 드릴.', unlockStage: 'rain' },
-  seeder: { name: '이끼 살포기', cat: 'terra', size: [3, 3], cost: { plate: 2, glass: 1, seeds: 2 }, power: -2, terra: { biomass: 12, oxygen: 4 }, desc: '주변 60m에 이끼와 풀을 먼저 자라게 합니다.', green: 60, unlockStage: 'water', research: 'r_bio' },
+  seeder: { name: '이끼 살포기', cat: 'terra', size: [3, 3], cost: { plate: 2, glass: 1, seeds: 2 }, power: -2, terra: { biomass: 12, oxygen: 4 }, desc: '지의류·이끼·고사리 포자를 뿌려 주변 60m에서 이 단계의 생명이 먼저 자리 잡게 합니다. 풀과 나무는 퍼뜨리지 못합니다.', green: 60, unlockStage: 'water', research: 'r_bio' },
   algae: { name: '조류 배양기', cat: 'terra', size: [3, 3], cost: { plate: 3, glass: 2 }, power: -2, terra: { oxygen: 30, biomass: 8 }, desc: '얕은 물(수심 0.5~6m)에 띄워 산소를 대량 생산합니다.', water: true, unlockStage: 'ponds' },
   treespreader: { name: '나무 살포기', cat: 'terra', size: [4, 4], cost: { alloy: 2, glass: 2, seeds: 4 }, power: -4, terra: { biomass: 160, oxygen: 60 }, desc: '주변 80m에 숲을 키웁니다.', green: 80, unlockStage: 'flora' },
   insectdome: { name: '곤충 사육 돔', cat: 'terra', size: [6, 6], cost: { glass: 6, alloy: 3, seeds: 4 }, power: -6, terra: { biomass: 600 }, desc: '꽃가루 매개 곤충을 길러 방사합니다.', unlockStage: 'trees' },
