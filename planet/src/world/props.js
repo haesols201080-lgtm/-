@@ -401,6 +401,19 @@ export class Props {
   }
 
   // ---- ores
+  nearestOre(type, pos, maxR = 200) {
+    let best = null, bd = maxR * maxR;
+    for (const c of this.cells.values()) {
+      if (!c.ready) continue;
+      for (const o of c.ores) {
+        if (o.dead || o.type !== type) continue;
+        const d = (o.x - pos.x) ** 2 + (o.z - pos.z) ** 2;
+        if (d < bd) { bd = d; best = o; }
+      }
+    }
+    return best;
+  }
+
   pickOre(origin, dir, maxT = 6) {
     let best = null, bt = maxT;
     for (const c of this.cells.values()) {

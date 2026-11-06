@@ -132,7 +132,8 @@ vec4 cloudLayer(vec3 d, vec3 ro) {
 vec3 skyColor(vec3 d, vec3 ro) {
   vec3 col = skyBase(d);
   float day = smoothstep(-0.16, 0.12, uSunDir.y);
-  float starVis = clamp((1.0 - day) + (1.0 - uAtmo) * 0.25 * day, 0.0, 1.0) * (1.0 - uCloudCover * 0.6);
+  // stars only once the sky is dark: even a thin dusty atmosphere outshines them by day
+  float starVis = clamp(1.0 - day * 1.6, 0.0, 1.0) * (1.0 - uCloudCover * 0.6);
   if (d.y > -0.05) col += starField(d) * starVis;
   vec4 gg = gasGiant(d);
   float ggVis = mix(1.0, 0.45, day * uAtmo);

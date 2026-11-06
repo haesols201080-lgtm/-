@@ -48,6 +48,24 @@ export function applyEdit(e, x, z, h, res) {
     res.mod = r.d <= hw ? 1 : 0.9 * (1 - t);
     return lerp(r.y, h, t);
   }
+  if (e.k === 'l') {
+    // natural landform at a point of interest: impact crater, collapse pit or
+    // vent mound, with a wobbly outline so it never reads as a perfect circle
+    const dx = x - e.cx, dz = z - e.cz, dd = Math.hypot(dx, dz);
+    if (dd >= e.radius * 2.2) return h;
+    const ang = Math.atan2(dz, dx);
+    const wob = 1 + 0.13 * Math.sin(ang * 3 + e.seed) + 0.07 * Math.sin(ang * 7 + e.seed * 2.3) + 0.04 * Math.sin(ang * 13 + e.seed * 0.7);
+    const u = dd / (e.radius * wob);
+    let dh = 0;
+    if (e.form === 'crater') {
+      dh = u < 1 ? -e.depth * (1 - u * u) + e.rim * Math.pow(u, 5) : e.rim * Math.exp(-(u - 1) * 3.0) * (1 - smoothstep(1.4, 1.8, u));
+    } else if (e.form === 'pit') {
+      dh = -e.depth * (1 - smoothstep(0.35, 1.0, u)) + 0.35 * Math.exp(-((u - 1.05) ** 2) * 40);
+    } else {
+      dh = u < 1 ? e.height * (1 - u * u) * (1 - u * u) - (e.vent || 0) * Math.max(0, 1 - u * 4.5) : 0;
+    }
+    return h + dh;
+  }
   const d = Math.hypot(x - e.cx, z - e.cz) / e.radius;
   if (d >= 1) return h;
   const w = (1 - d * d) * (1 - d * d);
@@ -72,7 +90,8 @@ export class EditSet {
       const R = e.w / 2 + (e.reach || e.margin);
       return [x0 - R, z0 - R, x1 + R, z1 + R];
     }
-    return [e.cx - e.radius, e.cz - e.radius, e.cx + e.radius, e.cz + e.radius];
+    const R = e.k === 'l' ? e.radius * 2.6 : e.radius;
+    return [e.cx - R, e.cz - R, e.cx + R, e.cz + R];
   }
 
   add(e) {

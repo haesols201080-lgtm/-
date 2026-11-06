@@ -270,24 +270,30 @@ vec3 colPose(vec3 p, inout vec3 n) {
   if (b < 0.5) p.x *= 1.0 + fem * (0.1 * (1.0 - smoothstep(0.98, 1.14, restY)) - 0.08 * smoothstep(1.18, 1.42, restY));
   float s = sin(ph), c = cos(ph);
   float side = (abs(b - 2.0) < 0.5 || abs(b - 3.0) < 0.5 || abs(b - 6.0) < 0.5 || abs(b - 7.0) < 0.5) ? -1.0 : 1.0;
+  // standing still, everyone settles into their own stance: weight on one
+  // leg, arms hanging differently, head a little tilted
+  float idle = 1.0 - amp, sd = iAnim.z;
+  float rA = fract(sd * 7.13 + (side < 0.0 ? 0.0 : 0.37)), rB = fract(sd * 3.71 + (side < 0.0 ? 0.11 : 0.59));
+  float relaxed = fract(sd * 5.3) > 0.5 ? -1.0 : 1.0;
   if (b > 5.5) p.x -= side * fem * 0.014;
   if (b > 1.5 && b < 5.5) {
     // legs: thigh swings from the hip, the knee folds most while the leg swings through
     float ls = side < 0.0 ? s : -s, lc = side < 0.0 ? c : -c;
     float thigh = amp * 0.44 * ls + amp * 0.06;
     float knee = -(0.04 + amp * (0.1 + 0.72 * pow(max(0.0, lc), 1.6)));
+    if (side == relaxed) { thigh += idle * 0.12; knee -= idle * 0.24; }
     vec3 hip = vec3(side * 0.092, 0.93, 0.0), kn = vec3(side * 0.092, 0.5, 0.0);
     if (b > 2.5 && b < 3.5 || b > 4.5) { p = cRX(p - kn, knee) + kn; n = cRX(n, knee); }
     p = cRX(p - hip, thigh) + hip; n = cRX(n, thigh);
   } else if (b > 5.5) {
     // arms swing against the legs, elbows soft
     float as = side < 0.0 ? -s : s;
-    float upper = amp * 0.36 * as - 0.03;
-    float elbow = 0.16 + amp * (0.12 + 0.3 * max(0.0, as)) + (1.0 - amp) * 0.04 * sin(uTime * 0.7 + iAnim.z * 9.0);
+    float upper = amp * 0.36 * as - 0.03 + idle * (0.03 + 0.17 * rB);
+    float elbow = 0.16 + amp * (0.12 + 0.3 * max(0.0, as)) + idle * (0.1 + 0.42 * rA + 0.04 * sin(uTime * 0.7 + sd * 9.0));
     vec3 sh = vec3(side * 0.2, 1.41, 0.0), el = vec3(side * 0.2, 1.115, 0.0);
     if (b > 6.5 && b < 7.5 || b > 8.5) { p = cRX(p - el, elbow) + el; n = cRX(n, elbow); }
     p = cRX(p - sh, upper) + sh; n = cRX(n, upper);
-    float abd = side * (0.07 + fem * 0.02);
+    float abd = side * (0.07 + fem * 0.02 + idle * 0.06 * rB);
     p = cRZ(p - sh, abd) + sh; n = cRZ(n, abd);
   } else if (b > 0.5) {
     // head: settles with each step, looks around when standing
@@ -295,6 +301,8 @@ vec3 colPose(vec3 p, inout vec3 n) {
     float nod = amp * 0.04 * cos(2.0 * ph) - 0.03;
     vec3 nk = vec3(0.0, 1.5, 0.0);
     p = cRX(p - nk, nod) + nk; n = cRX(n, nod);
+    float roll = idle * (fract(sd * 9.7) - 0.5) * 0.16;
+    p = cRZ(p - nk, roll) + nk; n = cRZ(n, roll);
     p = cRY(p - nk, look) + nk; n = cRY(n, look);
   }
   // shoulders counter-rotate against the hips
@@ -305,6 +313,9 @@ vec3 colPose(vec3 p, inout vec3 n) {
   p.y += amp * (0.022 * cos(2.0 * ph) - 0.01) + (1.0 - amp) * w * 0.004 * sin(uTime * 1.6 + iAnim.z * 7.0);
   float lean = -amp * 0.05;
   p = cRX(p, lean); n = cRX(n, lean);
+  // hip shift onto the standing leg
+  float sway = idle * relaxed * 0.022;
+  p = cRZ(p, sway); n = cRZ(n, sway);
   return p;
 }
 `;
@@ -344,7 +355,7 @@ export function colonistMaterials() {
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
         if (vSlot > 5.5) metalnessFactor = 0.8;`);
   };
-  mat.customProgramCacheKey = () => 'colonist-v3';
+  mat.customProgramCacheKey = () => 'colonist-v4';
   const depth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide });
   depth.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = U.uTime;
@@ -352,7 +363,7 @@ export function colonistMaterials() {
       .replace('#include <common>', '#include <common>\n' + POSE)
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvec3 cN = vec3(0.0, 1.0, 0.0); transformed = colPose(position, cN);');
   };
-  depth.customProgramCacheKey = () => 'colonist-depth-v1';
+  depth.customProgramCacheKey = () => 'colonist-depth-v2';
   return { mat, depth };
 }
 

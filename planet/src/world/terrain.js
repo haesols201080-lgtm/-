@@ -429,7 +429,8 @@ export class Terrain {
 
   replayEdits(list) { for (const e of list) this.addEdit({ ...e }); }
 
-  get editList() { return this.edits.list.map(({ i, c, s, ...rest }) => rest); }
+  // landforms at points of interest are rebuilt when they stream in, not saved
+  get editList() { return this.edits.list.filter((e) => !e.poi).map(({ i, c, s, ...rest }) => rest); }
 
   // ---------------------------------------------------------------- per frame
   update(cam) {

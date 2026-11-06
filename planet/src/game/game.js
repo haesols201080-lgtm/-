@@ -350,7 +350,7 @@ export class Game {
     const out = [];
     for (const b of this.buildings.list) {
       if (b.type === 'hq') out.push({ x: b.x, z: b.z, color: '#ff9d4d', name: '식민 본부' });
-      else if (b.type === 'pod') out.push({ x: b.x, z: b.z, color: '#66e0ff', name: '착륙 포드' });
+      else if (b.type === 'pod') out.push({ x: b.x, z: b.z, color: '#66e0ff', name: '탐사선' });
       else if (b.type === 'beacon') out.push({ x: b.x, z: b.z, color: '#ffffff', name: '비콘' });
       else if (b.type === 'habitat') out.push({ x: b.x, z: b.z, color: '#9fe3ea', name: '거주 모듈' });
     }
@@ -572,14 +572,15 @@ export class Game {
     P.inside = this.buildings.inside(P.pos);
     let refill = null;
     if (P.inside && P.inside.def.o2) refill = P.inside.def.name;
-    for (const b of this.buildings.list) if (b.type === 'pod' && Math.hypot(b.x - P.pos.x, b.z - P.pos.z) < 7) refill = '착륙 포드';
+    const ex = this.expedition.b;
+    if (ex && Math.hypot(ex.x - P.pos.x, ex.z - P.pos.z) < 14) refill = '탐사선';
     if (this.rover.driving) refill = '탐사 로버';
     if (this.terra.breathable) { P.oxygen = Math.min(1, P.oxygen + dt * 0.2); this.o2Note = '숨쉬는 대기 — 산소 무제한'; }
     else if (refill) { P.oxygen = Math.min(1, P.oxygen + dt * 0.25); this.o2Note = refill + '에서 산소 충전 중'; }
     else {
       const k = (P.jetting ? 1.4 : 1) * ((this.input.down('ShiftLeft') && Math.hypot(P.vel.x, P.vel.z) > 5) ? 1.25 : 1);
       P.oxygen = Math.max(0, P.oxygen - dt / P.o2Capacity * k);
-      this.o2Note = P.oxygen < 0.25 ? '산소 부족! 포드·거주 모듈·로버로 돌아가세요' : '';
+      this.o2Note = P.oxygen < 0.25 ? '산소 부족! 탐사선·거주 모듈·로버로 돌아가세요' : '';
       if (P.oxygen < 0.25 && !this._o2warn) { this._o2warn = true; this.ui.toast('산소가 25% 남았습니다', 'bad', 3); this.audio.play('warn'); }
       if (P.oxygen > 0.4) this._o2warn = false;
     }

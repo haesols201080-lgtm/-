@@ -8,19 +8,30 @@ export function makeObjectives(game) {
   const g = game;
   const has = (id, n) => g.eco.inv.count(id) + g.eco.store.count(id) >= n;
   const built = (t, n = 1) => g.buildings.count(t) >= n;
+  const ship = () => { const b = g.expedition && g.expedition.b; if (!b) return null; const [x, z] = g.expedition.elevatorFoot(); return { x, y: b.y + 1.5, z, label: '탐사선 승강기' }; };
+  const ore = (type, label) => { const o = g.props.nearestOre(type, g.player.pos, 260); return o ? { x: o.x, y: o.y + 0.6, z: o.z, label } : null; };
   return [
-    { title: '착륙 지점 조사', desc: '착륙 포드 주변의 빛나는 광석을 조준하고 <b>좌클릭</b>으로 채집하세요. 산소는 포드 근처에서 다시 채워집니다.',
-      items: () => [{ text: '철 6개', ok: has('iron', 6) || g.flags.platesMade }, { text: '규소 4개', ok: has('silicon', 4) || g.flags.platesMade }] },
-    { title: '첫 부품 제작', desc: '포드 옆에서 <b>Tab</b>을 눌러 제작 화면을 열고 철판과 유리를 만드세요.',
-      items: () => [{ text: '철판 4개', ok: has('plate', 4) || built('solar') }, { text: '유리 2개', ok: has('glass', 2) || built('solar') }] },
+    { title: '착륙 지점 조사', desc: '탐사선 주변의 광석 덩어리를 조준하고 <b>좌클릭을 누르고 있으면</b> 채집됩니다. 화면의 표시가 가장 가까운 광석을 가리킵니다. 산소는 탐사선 승강기 아래에서 다시 채워집니다.',
+      items: () => [{ text: '철 6개', ok: has('iron', 6) || g.flags.platesMade }, { text: '규소 4개', ok: has('silicon', 4) || g.flags.platesMade }],
+      step: () => (!has('iron', 6) ? '표시된 철광석(붉은 갈색 덩어리)을 조준하고 좌클릭 유지' : '표시된 규소 광석(회청색 덩어리)을 조준하고 좌클릭 유지'),
+      target: () => (!has('iron', 6) ? ore('iron', '철광석') : ore('silicon', '규소 광석')) },
+    { title: '첫 부품 제작', desc: '탐사선 승강기 아래로 가서 <b>Tab</b>을 눌러 가방·제작 화면을 열고, 철판과 유리를 만드세요. 제작은 작업대(탐사선·거주 모듈·제작대) 근처에서만 됩니다.',
+      items: () => [{ text: '철판 4개', ok: has('plate', 4) || built('solar') }, { text: '유리 2개', ok: has('glass', 2) || built('solar') }],
+      step: () => (g.nearCraft() ? '<b>Tab</b> → 제작에서 철판 4개, 유리 2개' : '표시된 탐사선 승강기 아래로 이동'),
+      target: () => (g.nearCraft() ? null : ship()) },
     { title: '전력 확보', desc: '<b>B</b>로 건설 메뉴를 열어 태양광 패널을 세우세요. 시설은 가까운 발전기·송전탑과 자동으로 전선이 이어집니다.',
-      items: () => [{ text: '태양광 패널', ok: built('solar') }] },
+      items: () => [{ text: '태양광 패널', ok: built('solar') }],
+      step: () => (g.build.mode === 'place' ? '평평한 땅을 조준하고 좌클릭으로 설치 · R/휠 회전' : '<b>B</b> → 전력 → 태양광 패널 선택') },
     { title: '테라포밍 시작', desc: '히터는 열을, 대기 드릴은 기압을 올립니다. 둘 다 전력이 필요합니다. 수치가 합쳐진 Ti가 행성의 단계를 바꿉니다.',
-      items: () => [{ text: '히터', ok: built('heater') }, { text: '대기 드릴', ok: built('drill') }] },
+      items: () => [{ text: '히터', ok: built('heater') }, { text: '대기 드릴', ok: built('drill') }],
+      step: () => '<b>B</b> → 테라포밍 → ' + (!built('heater') ? '히터' : '대기 드릴') + ' · 태양광 패널 가까이 세우기' },
     { title: '기지 세우기', desc: '거주 모듈은 들어가면 산소가 채워지고, 침대에서 밤을 넘길 수 있습니다. 문은 다가가면 열립니다.',
-      items: () => [{ text: '거주 모듈', ok: built('habitat') }] },
+      items: () => [{ text: '거주 모듈', ok: built('habitat') }],
+      step: () => '<b>B</b> → 기지 → 거주 모듈' },
     { title: '연구의 시작', desc: '연구 단말기를 세우면 연구 점수가 쌓입니다(<b>J</b>). 코발트는 현무암 지대와 결정 평원에서 찾을 수 있습니다.',
-      items: () => [{ text: '연구 단말기', ok: built('terminal') }, { text: '「자동 채굴」 연구', ok: g.research.has('r_auto') }] },
+      items: () => [{ text: '연구 단말기', ok: built('terminal') }, { text: '「자동 채굴」 연구', ok: g.research.has('r_auto') }],
+      step: () => (!built('terminal') ? '<b>B</b> → 기지 → 연구 단말기' : '<b>J</b>로 연구 화면 → 「자동 채굴」 선택'),
+      target: () => (!has('cobalt', 2) ? ore('cobalt', '코발트') : null) },
     { title: '자동화', desc: '빛나는 결정이 둘러싼 광맥 위에 자동 채굴기를 세우세요. 이후 정련과 드론 물류를 연구하면 공장이 스스로 돌아갑니다.',
       items: () => [{ text: '자동 채굴기', ok: built('extractor') }, { text: '「드론 물류」 연구', ok: g.research.has('r_logistics') }, { text: '드론 허브', ok: built('dronehub') }] },
     { title: '푸른 하늘', desc: '테라포밍 지수를 1kTi까지 올리면 하늘이 푸르게 변합니다. 히터와 드릴을 늘리세요.',
@@ -65,7 +76,7 @@ export class Objectives {
         this.game.audio && this.game.audio.play('done');
         continue;
       }
-      return { index: this.index, total: this.list.length, title: o.title, desc: o.desc, items };
+      return { index: this.index, total: this.list.length, title: o.title, desc: o.desc, items, step: o.step ? o.step() : '', target: o.target ? o.target() : null };
     }
     return null;
   }

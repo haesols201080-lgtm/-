@@ -66,6 +66,8 @@ export class UI {
       <div id="cross"><svg class="prog" viewBox="0 0 30 30"><circle id="crossprog" cx="15" cy="15" r="13" fill="none" stroke="#66e0ff" stroke-width="2" stroke-dasharray="0 82" transform="rotate(-90 15 15)"/></svg></div>
       <div id="prompt"></div>
       <div id="objective" class="frame r"></div>
+      <div id="waypoint" hidden><i class="d"></i><i class="ar"></i><span></span></div>
+      <div id="starthelp" hidden></div>
       <div id="toasts"></div>
       <div id="keys" hidden><div>건설<b>B</b> 가방·제작<b>Tab</b> 연구<b>J</b> 지도<b>M</b></div><div>해체<b>F</b> 지형 도구<b>G</b> 시점<b>V</b> 조명<b>L</b></div><div>상호작용<b>E</b> 채집<b>좌클릭</b> 탐사 로버<b>N</b></div></div>
       <div id="keyhint"><b>H</b>조작 안내</div>
@@ -97,12 +99,15 @@ export class UI {
   update(dt) {
     const g = this.game;
     this.updateCompass();
+    this.updateWaypoint();
     this.t -= dt;
     if (this.t > 0 && !this._dirty) return;
     this.t = 0.25;
     this._dirty = false;
     const T = g.terra;
     const st = STAGES[T.stage], nx = STAGES[T.stage + 1];
+    this.layoutHUD();
+    this.renderStartHelp();
     $('#st-name').textContent = st.name;
     const tis = fmtTi(T.ti).split(' ');
     $('#st-tiv').textContent = tis[0];
@@ -188,14 +193,80 @@ export class UI {
     }
   }
 
+  // panels stack by their real size so nothing overlaps on small screens
+  layoutHUD() {
+    const pl = $('#planet'), sv = $('#survival'), co = $('#colony'), ob = $('#objective');
+    if (!pl || !sv) return;
+    const pr = pl.getBoundingClientRect(), hr = this.hud.getBoundingClientRect();
+    sv.style.top = ''; sv.style.bottom = '';
+    const sr = sv.getBoundingClientRect();
+    if (this.game.input.touch || sr.top < pr.bottom + 10) { sv.style.top = (pr.bottom - hr.top + 10) + 'px'; sv.style.bottom = 'auto'; }
+    if (co && ob) {
+      // on phones the objective sits under the touch button bars on the right
+      let below = co.getBoundingClientRect().bottom;
+      if (this.game.input.touch) for (const b of document.querySelectorAll('#touch .bar.top, #touch .bar.drawer')) { if (!b.hidden && b.offsetParent) below = Math.max(below, b.getBoundingClientRect().bottom); }
+      ob.style.top = (below - hr.top + 10) + 'px';
+    }
+    // phones: the controls card goes under the gauges instead of across the top
+    const sh = $('#starthelp');
+    if (sh && this.game.input.touch) sh.style.top = (sv.getBoundingClientRect().bottom - hr.top + 10) + 'px';
+  }
+
+  // on-screen marker for the current objective (or the way back to air)
+  updateWaypoint() {
+    const g = this.game, el = $('#waypoint'), P = g.player;
+    if (!el || !g.started) { if (el) el.hidden = true; return; }
+    let t = this._wpT;
+    if (!g.terra.breathable && P.oxygen < 0.3 && !P.inside && !g.rover.driving && g.expedition.b) {
+      const [x, z] = g.expedition.elevatorFoot();
+      t = { x, y: g.expedition.b.y + 1.5, z, label: '산소 충전 · 탐사선', warn: true };
+    }
+    const dist = t ? Math.hypot(t.x - P.pos.x, t.z - P.pos.z) : 0;
+    if (!t || dist < 2.2 || g.build.active) { el.hidden = true; return; }
+    const cam = g.engine.camera, v = this._wpv || (this._wpv = new THREE.Vector3());
+    v.set(t.x, t.y, t.z).applyMatrix4(cam.matrixWorldInverse);
+    const behind = v.z > 0;
+    v.applyMatrix4(cam.projectionMatrix);
+    const W = innerWidth, H = innerHeight, m = 46, mx = 96, mb = g.input.touch ? 150 : 110;
+    let x = (v.x * 0.5 + 0.5) * W, y = (-v.y * 0.5 + 0.5) * H;
+    if (behind) { x = W - x; y = H - m; }
+    if (behind) y = H - mb;
+    const off = behind || x < mx || x > W - mx || y < m || y > H - mb;
+    const cx = Math.min(W - mx, Math.max(mx, x)), cy = Math.min(H - mb, Math.max(m, y));
+    el.hidden = false;
+    el.classList.toggle('off', off);
+    el.classList.toggle('warn', !!t.warn);
+    el.style.transform = `translate(${cx.toFixed(0)}px, ${cy.toFixed(0)}px)`;
+    if (off) el.querySelector('.ar').style.transform = `rotate(${Math.atan2(y - H / 2, x - W / 2).toFixed(3)}rad)`;
+    const txt = `${t.label} · ${dist < 1000 ? Math.round(dist) + ' m' : (dist / 1000).toFixed(1) + ' km'}`;
+    if (txt !== this._wpTxt) { this._wpTxt = txt; el.querySelector('span').textContent = txt; }
+  }
+
+  // the basic controls, shown until the first objective is done
+  renderStartHelp() {
+    const g = this.game, el = $('#starthelp');
+    const o = g.objectives.current();
+    const show = g.started && !g.flags.helpClosed && o && o.index === 0;
+    el.hidden = !show;
+    if (!show || el.dataset.ready) return;
+    el.dataset.ready = 1;
+    const keys = g.input.touch
+      ? [['왼쪽 드래그', '이동'], ['오른쪽 드래그', '시점'], ['채집 버튼 길게', '채집'], ['점프', '점프·제트팩'], ['가방', '제작']]
+      : [['W A S D', '이동'], ['마우스', '시점'], ['좌클릭 유지', '채집'], ['Space', '점프·제트팩'], ['Tab', '가방·제작'], ['B', '건설'], ['E', '상호작용'], ['H', '조작 안내']];
+    el.innerHTML = `<div class="sh">${keys.map(([k, d]) => `<span><b>${k}</b>${d}</span>`).join('')}</div><button class="x" title="닫기">✕</button>`;
+    el.querySelector('.x').onclick = () => { g.flags.helpClosed = true; el.hidden = true; };
+  }
+
   renderObjective() {
     const o = this.game.objectives.current();
     const el = $('#objective');
-    if (!o) { el.hidden = true; return; }
+    if (!o) { el.hidden = true; this._wpT = null; return; }
     el.hidden = false;
     if (o.index !== this._objIdx) { this._objIdx = o.index; this._objShow = performance.now(); }
     const fresh = performance.now() - (this._objShow || 0) < 14000;
+    this._wpT = o.target;
     const html = `<div class="in"><div class="lbl">OBJECTIVE <b class="num">${String(o.index + 1).padStart(2, '0')}</b><span>/ ${o.total}</span></div><div class="t">${esc(o.title)}</div>${fresh ? `<div class="d">${o.desc}</div>` : ''}
+      ${o.step ? `<div class="s">${o.step}</div>` : ''}
       <div class="p">${o.items.map((it) => `<div class="${it.ok ? 'ok' : ''}"><i></i>${esc(it.text)}</div>`).join('')}</div></div>`;
     if (html !== this._obj) { el.innerHTML = html; this._obj = html; }
   }
@@ -333,7 +404,7 @@ export class UI {
       });
       // crafting
       const bench = g.nearCraft();
-      let r = `<p class="sec-t">제작 ${bench ? '· ' + esc(bench) : '· 작업대(착륙 포드·거주 모듈·제작대) 근처에서 가능'}</p><div class="recipes">`;
+      let r = `<p class="sec-t">제작 ${bench ? '· ' + esc(bench) : '· 작업대(탐사선·거주 모듈·제작대) 근처에서 가능'}</p><div class="recipes">`;
       for (const rec of RECIPES) {
         if (rec.factoryOnly) continue;
         if (rec.research && !g.research.has(rec.research)) continue;

@@ -57,6 +57,8 @@ export class Expedition {
     g.engine.scene.add(this.scorch);
   }
 
+  elevatorFoot() { return ShipRig.elevatorFoot(this.site, this.b.rot); }
+
   // the route the rover drove off the elevator platform (world xz, y unused)
   roverPath() {
     const b = this.b, site = this.site, L = SHIP.R + SHIP.lift;
