@@ -126,7 +126,8 @@ export class Buildings {
   }
 
   // homes use a mirrored variant for half of the instances so streets do not repeat
-  modelKey(type, tier = 0, seed = 0) { return type === 'house' ? 'house:' + tier + (Math.floor(seed * 1000) % 2 ? ':m' : '') : type; }
+  // homes come in two designs per tier, each also mirrored: four looks per tier
+  modelKey(type, tier = 0, seed = 0) { return type === 'house' ? 'house:' + tier + (Math.floor(seed * 7919) % 2 ? 'b' : '') + (Math.floor(seed * 1000) % 2 ? ':m' : '') : type; }
 
   add(type, x, y, z, rot, extra = {}) {
     const def = BUILDINGS[type];

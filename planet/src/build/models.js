@@ -4,7 +4,7 @@
 // and light points via ModelBuilder.finish().
 import * as THREE from 'three';
 import { ModelBuilder, C, L, v, e, plinth, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, wall, room, airlock, greebleRoof, ribbonTower, facade, bays, block, shed } from './modelkit.js';
-import { houseT1, houseT2, houseT3, houseT4, market, lounge, clinic, school, lab, comms, hqExtras } from './models_colony.js';
+import { houseT1, houseT2, houseT3, houseT4, houseT1b, houseT2b, houseT3b, houseT4b, market, lounge, clinic, school, lab, comms, hqExtras } from './models_colony.js';
 
 const PI = Math.PI;
 
@@ -797,7 +797,8 @@ const BUILDERS = {
   vegetube, seeder, algae, treespreader, insectdome, mirror,
   extractor, smelter, assembler, dronehub, depot,
   hq: (M) => { hq(M); hqExtras(M); }, farm, pump, market, lounge, clinic, factory, techplant, school, lab, terminal, park, culture, road, monument, elevator, comms,
-  'house:0': houseT1, 'house:1': houseT2, 'house:2': houseT3, 'house:3': houseT4,
+  'house:0': houseT1, 'house:1': houseT2, 'house:2': houseT3, 'house:3': (M) => houseT4(M),
+  'house:0b': houseT1b, 'house:1b': houseT2b, 'house:2b': houseT3b, 'house:3b': houseT4b,
 };
 
 const cache = new Map();

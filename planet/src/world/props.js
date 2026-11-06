@@ -178,8 +178,13 @@ export class Props {
       rockGeometry(63, 3, { sx: 1.1, sy: 0.85, sz: 0.95, cuts: 14, rough: 0.12 }),  // angular block
     ];
     this.smallRock = rockGeometry(51, 1, { sx: 1, sy: 0.6, sz: 0.85, cuts: 5 });
+    this.slateRock = rockGeometry(53, 2, { sx: 1.4, sy: 0.22, sz: 1.0, cuts: 8, rough: 0.12 });
+    this.pebbleRock = rockGeometry(59, 2, { sx: 0.9, sy: 0.7, sz: 0.8, cuts: 1, rough: 0.12 });
     this.rockLayers = protos.map((g, i) => new Layer(scene, g, this.rockMat, { cap: 9000, attrs: { iTint: 3 }, range: 1500, nearR: 200 }));
-    this.crystalLayer = new Layer(scene, crystalGeometry(77, 7, 0.9), this.crystalMat, { cap: 3000, attrs: { iTint: 3 }, range: 1600, nearR: 200 });
+    // crystal outcrops in three habits: a broad druse, a tall spire cluster, a low scatter
+    const tall = crystalGeometry(79, 4, 0.4); tall.scale(0.8, 1.7, 0.8);
+    const low = crystalGeometry(83, 12, 1.6); low.scale(1.1, 0.55, 1.1);
+    this.crystalLayers = [crystalGeometry(77, 7, 0.9), tall, low].map((g) => new Layer(scene, g, this.crystalMat, { cap: 1500, attrs: { iTint: 3 }, range: 1600, nearR: 200 }));
     const trees = treeModels();
     this.treeLayers = trees.map((m) => new Layer(scene, m.near, this.treeMat, { farGeo: m.far, cap: 12000, attrs: { iGrow: 2, iTint: 3 }, range: 2200, nearR: 150, visible: () => U.uGrowth.value.w > 0.001 }));
     this.treeKinds = trees.length;
@@ -313,7 +318,8 @@ export class Props {
     const all = (key) => { const out = []; for (const c of this.cells.values()) if (c.ready && c[key]) for (const it of c[key]) out.push(it); return out; };
     const rocks = all('rocks');
     this.rockLayers.forEach((L, i) => L.fill(rocks.filter((r) => r.proto === i), cam));
-    this.crystalLayer.fill(all('crystals'), cam);
+    const cr = all('crystals');
+    this.crystalLayers.forEach((L, i) => L.fill(cr.filter((c) => ((Math.floor(c.x * 3.1 + c.z * 7.7) % 3) + 3) % 3 === i), cam));
     const trees = all('trees');
     this.treeLayers.forEach((L, i) => L.fill(trees.filter((t) => t.layer === i), cam));
     const ores = all('ores').filter((o) => !o.dead);

@@ -52,20 +52,66 @@ export function houseT3(M) {
   antenna(M, -0.1, ta - 0.4, 1.0, 2.2);
 }
 
-export function houseT4(M) {
+// ---- second designs per tier, so a street of homes is not one model repeated
+// T1b: twin pods - two small domes joined by a tube, entry on the larger one
+export function houseT1b(M) {
+  plinth(M, 8, 8);
+  const ta = habDome(M, -1.25, 0.2, 2.15, { skip: [PI, 1.57], rot: 0.6 });
+  const tb = habDome(M, 2.05, 1.7, 1.6, { skip: [-1.98], drum: 2.7, oculus: false });
+  linkTube(M, -1.25, 0.2, 2.05, 1.7, 0.85, 0.5);
+  airlockTube(M, -1.25, 1.2, -1.3, -3.5, 1.1);
+  M.entry(-1.25);
+  pvRack(M, 2.2, -2.6, 2.4, 1.0, 0.3, 2);
+  M.hcyl('hull', -3.2, 0.62, 2.9, 0.42, 1.4, 'z', C.MOD, 18);
+  for (const dz of [-0.5, 0.5]) M.box('metal', -3.2, 0.2, 2.9 + dz, 0.8, 0.4, 0.12, C.G2);
+  antenna(M, 2.05, tb - 0.3, 1.7, 1.5);
+  vent(M, -1.6, ta - 0.4, 0.5, 0.5, 0.4, 0.3);
+}
+
+// T2b: L-shaped cluster of three domes around a garden court
+export function houseT2b(M) {
+  plinth(M, 8, 8);
+  const ta = habDome(M, -1.6, -1.2, 2.2, { skip: [PI, 0.9, 1.9] });
+  habDome(M, -1.8, 2.4, 1.5, { skip: [-0.3, PI], drum: 2.7, oculus: false });
+  habDome(M, 2.2, -1.6, 1.6, { skip: [-1.6, 0.3], drum: 2.7, oculus: false });
+  gardenDome(M, 1.9, 2.0, 1.45, { seed: 29 });
+  linkTube(M, -1.6, -1.2, -1.8, 2.4, 0.8, 0.5);
+  linkTube(M, -1.6, -1.2, 2.2, -1.6, 0.8, 0.5);
+  linkTube(M, -1.6, -1.2, 1.9, 2.0, 0.75, 0.45);
+  airlockTube(M, -1.6, 1.2, -2.6, -3.7, 1.0);
+  M.entry(-1.6);
+  M.cyl('metal', -1.6, ta - 0.25, -1.2, 0.06, 1.4, C.G2, 8);
+  M.add('solar', new THREE.BoxGeometry(1.8, 0.05, 1.0), { pos: v(-1.6, ta + 1.2, -1.2), rot: e(0.45, 0.5, 0) });
+  radiator(M, 3.4, 0.3, 2.0, 1.0, 1.2, PI / 2, C.W2);
+}
+
+// T3b: one taller tower with stacked balconies beside a low lobby dome
+export function houseT3b(M) {
+  plinth(M, 8, 8);
+  M.entry(1.6);
+  const ta = ribbonTower(M, -1.0, 0.9, 2.3, 16, { skip: [0.7], balconies: [3.6, 2.0, 5.2], rot: 0.5, cap: 'garden', lobby: false });
+  habDome(M, 1.6, -1.6, 1.9, { skip: [PI, -0.75], oculus: false });
+  airlockTube(M, 1.6, 1.2, -1.0, -3.6, 0.95);
+  linkTube(M, 1.6, -1.6, -1.0, 0.9, 0.9, 0.55);
+  pvRack(M, 2.4, 2.6, 2.2, 1.0, PI, 2);
+  antenna(M, -1.6, ta - 0.6, 1.4, 2.0);
+}
+export function houseT4b(M) { houseT4(M, true); }
+
+export function houseT4(M, alt = false) {
   plinth(M, 8, 8);
   // glazed podium with a roof terrace
-  ribbonTower(M, 0, 0, 3.45, 4.2, { fh: 4.2, cap: 'flat', door: true, plant: false, rot: 0.2 });
-  // glazed core in an hourglass steel diagrid
-  const H = 27, y0 = 4.5;
-  const rad = (t) => 2.75 - 0.75 * Math.sin(t * PI) + 0.15 * t;
+  ribbonTower(M, 0, 0, 3.45, 4.2, { fh: 4.2, cap: 'flat', door: true, plant: false, rot: alt ? 0.9 : 0.2 });
+  // glazed core in an hourglass steel diagrid (variant: taller, slimmer, flared crown)
+  const H = alt ? 32 : 27, y0 = 4.5;
+  const rad = alt ? (t) => 2.35 - 0.55 * Math.sin(t * PI * 0.85) + 0.55 * t * t : (t) => 2.75 - 0.75 * Math.sin(t * PI) + 0.15 * t;
   const prof = [];
   for (let i = 0; i <= 18; i++) { const t = i / 18; prof.push(new THREE.Vector2(rad(t), y0 + t * (H - y0))); }
   M.add('glass', new THREE.LatheGeometry(prof, 40));
   for (const dir of [1, -1]) for (let k = 0; k < 7; k++) {
     const pts = [];
     for (let i = 0; i <= 16; i++) {
-      const t = i / 16, a = k / 7 * PI * 2 + dir * t * PI * 0.62;
+      const t = i / 16, a = k / 7 * PI * 2 + dir * t * PI * (alt ? 0.85 : 0.62);
       const r2 = rad(t) + 0.17;
       pts.push([Math.cos(a) * r2, y0 + t * (H - y0), Math.sin(a) * r2]);
     }
@@ -73,7 +119,7 @@ export function houseT4(M) {
   }
   // diagrid nodes where the two spirals cross
   for (let j = 0; j * 2 / (7 * 1.24) <= 1.0001; j++) for (let k = 0; k < 7; k++) {
-    const t = j * 2 / (7 * 1.24), a = k / 7 * PI * 2 + t * PI * 0.62, r2 = rad(t) + 0.17;
+    const t = j * 2 / (7 * 1.24), a = k / 7 * PI * 2 + t * PI * (alt ? 0.85 : 0.62), r2 = rad(t) + 0.17;
     M.sphere('metal', Math.cos(a) * r2, y0 + t * (H - y0), Math.sin(a) * r2, 0.27, C.G, 10, 0.8);
   }
   // floor slabs read through the glazing

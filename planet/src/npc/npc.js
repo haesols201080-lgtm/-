@@ -5,8 +5,10 @@ import * as THREE from 'three';
 import { TIERS, ITEMS } from '../sim/data.js';
 import { U } from '../core/shared.js';
 import { GeoBuilder } from '../core/geobuilder.js';
+import { colonistMesh } from './colonist.js';
 
 const CELL = 2;
+const tmpC = new THREE.Color();
 
 // ------------------------------------------------------------------ nav grid
 class NavGrid {
@@ -101,30 +103,16 @@ class NavGrid {
   }
 }
 
-// ------------------------------------------------------------------ colonist meshes (instanced per body part)
-function colonistParts() {
-  const cap = (r, l) => new THREE.CapsuleGeometry(r, l, 4, 8);
-  const mk = (fn) => { const gb = new GeoBuilder(); fn(gb); return gb.build(); };
-  return {
-    torso: mk((g) => { g.add(cap(0.17, 0.32), { pos: new THREE.Vector3(0, 1.2, 0), color: 0xffffff }); g.add(new THREE.BoxGeometry(0.3, 0.32, 0.14), { pos: new THREE.Vector3(0, 1.22, 0.16), color: 0x777777 }); }),
-    head: mk((g) => { g.add(new THREE.SphereGeometry(0.15, 12, 10), { pos: new THREE.Vector3(0, 1.66, 0), color: 0xffffff }); g.add(new THREE.SphereGeometry(0.12, 10, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), { pos: new THREE.Vector3(0, 1.66, -0.06), rot: new THREE.Euler(-Math.PI / 2, 0, 0), color: 0x222018 }); }),
-    leg: mk((g) => { g.add(cap(0.075, 0.5), { pos: new THREE.Vector3(0, -0.36, 0), color: 0xffffff }); g.add(new THREE.BoxGeometry(0.13, 0.1, 0.24), { pos: new THREE.Vector3(0, -0.72, -0.04), color: 0x333333 }); }),
-    arm: mk((g) => { g.add(cap(0.06, 0.42), { pos: new THREE.Vector3(0, -0.3, 0), color: 0xffffff }); }),
-  };
-}
-
 export class NPCs {
   constructor(game) {
     this.game = game;
     const scene = game.engine.scene;
     this.nav = new NavGrid(game);
     this.walkers = [];
-    const parts = colonistParts();
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 });
-    const mk = (geo, n) => { const m = new THREE.InstancedMesh(geo, mat, n); m.count = 0; m.castShadow = true; m.frustumCulled = false; m.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(n * 3).fill(1), 3); scene.add(m); return m; };
     this.CAP = 64;
-    this.mTorso = mk(parts.torso, this.CAP); this.mHead = mk(parts.head, this.CAP);
-    this.mLeg = mk(parts.leg, this.CAP * 2); this.mArm = mk(parts.arm, this.CAP * 2);
+    // detailed bodies close to the camera, a light model for the rest
+    this.NEAR = 14;
+    this.people = [colonistMesh(scene, this.NEAR, 0), colonistMesh(scene, this.CAP, 1)];
 
     // drones
     const dg = new GeoBuilder();
@@ -233,7 +221,23 @@ export class NPCs {
   }
 
   newWalker(x, z, tier) {
-    const w = { x, z, y: this.game.terrain.height(x, z), yaw: 0, path: null, pi: 0, hidden: 0, tier, phase: Math.random() * 6, speed: 1.25 + Math.random() * 0.4, wait: 0 };
+    // every colonist is a person of their own: build, height, skin, hair
+    // style and colour, beard, and their own work clothes (tier shows as the
+    // accent piping on yoke, sleeves and badge)
+    const R = Math.random, pick = (a) => a[Math.floor(R() * a.length)];
+    const fem = R() < 0.5;
+    const SKIN = [0xf3d5bf, 0xe8bf9c, 0xd6a07a, 0xb97f57, 0x93603e, 0x6e4529, 0x4f3020];
+    const HAIR = [0x16110e, 0x2b1e16, 0x4a3222, 0x6e4a2c, 0x9a6a3a, 0xc9a46a, 0xe0cc9a, 0x7a2e1a, 0x8d8a86, 0xc8c6c2];
+    const TOPS = [0xeeeeea, 0xd8dade, 0x5d6b7a, 0x2f3d52, 0x6f7a55, 0xc9b48f, 0x3f6f73, 0x8a4d3c, 0x9aa3ad, 0x3b3f45, 0xa8826a, 0x4d5a3a];
+    const PANTS = [0x3a3d42, 0x2d3440, 0x4a3f36, 0x56595e, 0x23262b, 0x5a5446, 0x2e3a33];
+    const style = fem ? pick([1, 1, 2, 3, 3, 0, 5, 6]) : pick([0, 0, 4, 4, 5, 6, 6, 1]);
+    const look = {
+      fem: fem ? 0.75 + R() * 0.25 : R() * 0.15,
+      h: fem ? 0.93 + R() * 0.08 : 0.97 + R() * 0.09, w: 0.94 + R() * 0.12,
+      skin: pick(SKIN), hair: pick(HAIR), style, beard: !fem && R() < 0.35 ? 1 : 0,
+      top: pick(TOPS), pants: pick(PANTS), seed: R(),
+    };
+    const w = { x, z, y: this.game.terrain.height(x, z), yaw: 0, path: null, pi: 0, hidden: 0, tier, look, phase: Math.random() * 6, speed: (fem ? 1.08 : 1.15) + Math.random() * 0.45, wait: 0, amp: 1, pause: 0 };
     this.walkers.push(w);
     return w;
   }
@@ -279,7 +283,11 @@ export class NPCs {
       if (!p) { w.hidden = (night > 0.5 ? 25 : 6) + Math.random() * 12; w.path = null; continue; }
       const dx = p[0] - w.x, dz = p[1] - w.z, d = Math.hypot(dx, dz);
       if (d < 0.3) { w.pi++; continue; }
-      const sp = w.speed * dt;
+      // now and then someone stops for a moment and looks around
+      if (w.pause > 0) { w.pause -= dt; w.amp = Math.max(0, w.amp - dt * 3); continue; }
+      if (d > 6 && Math.random() < dt * 0.015) w.pause = 2 + Math.random() * 5;
+      w.amp = Math.min(1, w.amp + dt * 3);
+      const sp = w.speed * dt * (0.25 + 0.75 * w.amp);
       w.x += dx / d * Math.min(sp, d); w.z += dz / d * Math.min(sp, d);
       const ty = Math.atan2(-dx, -dz);
       let dy = ty - w.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
@@ -288,39 +296,37 @@ export class NPCs {
       w.y = Math.max(g.terrain.height(w.x, w.z), ground);
       w.phase += dt * w.speed * 4.2;
     }
-    this.drawWalkers();
+    this.drawWalkers(cam);
     this.updateDrones(dt);
   }
 
-  drawWalkers() {
-    const M = this.m4, q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(1, 1, 1);
-    const part = new THREE.Matrix4(), base = new THREE.Matrix4();
-    const col = new THREE.Color();
-    const helmet = !this.game.terra.breathable;
-    let n = 0;
+  drawWalkers(cam) {
+    const M = this.m4, q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
+    const col = new THREE.Color(), suit = new THREE.Color(0xe4e2dc);
+    const helmet = this.game.terra.breathable ? 0 : 1;
+    const nearCap = this.game.engine.qualityName === 'low' ? 6 : this.NEAR, nearD2 = 22 * 22;
+    const cnt = [0, 0];
     for (const w of this.walkers) {
       if (w.hidden > 0 || w.wait > 0) continue;
-      const tier = TIERS[w.tier] || TIERS[0];
-      base.compose(p.set(w.x, w.y, w.z), q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), w.yaw), s);
-      const sw = Math.sin(w.phase), bob = Math.abs(Math.cos(w.phase)) * 0.03;
-      M.copy(base).multiply(part.makeTranslation(0, bob, 0));
-      this.mTorso.setMatrixAt(n, M);
-      this.mHead.setMatrixAt(n, M);
-      col.set(tier.color);
-      this.mTorso.setColorAt(n, col);
-      this.mHead.setColorAt(n, helmet ? col.set(0xe8e8e8) : col.set(0xd9a77f));
-      for (const [k, side] of [[0, -1], [1, 1]]) {
-        const legM = base.clone().multiply(part.makeTranslation(side * 0.1, 0.9 + bob, 0)).multiply(new THREE.Matrix4().makeRotationX(sw * 0.55 * side));
-        this.mLeg.setMatrixAt(n * 2 + k, legM);
-        this.mLeg.setColorAt(n * 2 + k, col.set(0x3a3d42));
-        const armM = base.clone().multiply(part.makeTranslation(side * 0.24, 1.42 + bob, 0)).multiply(new THREE.Matrix4().makeRotationX(-sw * 0.45 * side));
-        this.mArm.setMatrixAt(n * 2 + k, armM);
-        this.mArm.setColorAt(n * 2 + k, col.set(tier.color));
-      }
-      n++;
+      const lod = cam && cnt[0] < nearCap && (w.x - cam.x) ** 2 + (w.z - cam.z) ** 2 < nearD2 ? 0 : 1;
+      if (lod && cnt[1] >= this.CAP) continue;
+      const { mesh, attrs: A } = this.people[lod];
+      const n = cnt[lod]++;
+      const L = w.look;
+      M.compose(p.set(w.x, w.y, w.z), q.setFromAxisAngle(Y, w.yaw), s.set(L.w, L.h, L.w));
+      mesh.setMatrixAt(n, M);
+      A.iAnim.setXYZW(n, w.phase, w.amp ?? 1, L.seed, L.fem);
+      // before the air is breathable everyone wears the white surface suit
+      const top = helmet ? col.copy(suit).lerp(tmpC.set(L.top), 0.12).getHex() : L.top;
+      const pants = helmet ? col.copy(suit).multiplyScalar(0.92).getHex() : L.pants;
+      A.iLook.setXYZW(n, L.style, L.beard, helmet, parseInt((TIERS[w.tier] || TIERS[0]).color.slice(1), 16));
+      A.iCols.setXYZW(n, top, L.skin, L.hair, pants);
     }
-    for (const m of [this.mTorso, this.mHead]) { m.count = n; m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true; }
-    for (const m of [this.mLeg, this.mArm]) { m.count = n * 2; m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true; }
+    this.people.forEach(({ mesh, attrs }, i) => {
+      mesh.count = cnt[i];
+      mesh.instanceMatrix.needsUpdate = true;
+      for (const a of Object.values(attrs)) a.needsUpdate = true;
+    });
   }
 
   updateDrones(dt) {

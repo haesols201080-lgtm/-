@@ -157,20 +157,20 @@ function flower(seed) {
   return gb.build();
 }
 
-function fern(seed) {
+// fern forms: classic shuttlecock, low spreading bracken, upright narrow fronds
+function fern(seed, { fronds = 7, len0 = 0.9, lift = 0.55, wid = 0.16 } = {}) {
   const rnd = mulberry32(seed);
   const gb = new GeoBuilder(['aSway', 'aGlow']);
-  const fronds = 7;
   for (let f = 0; f < fronds; f++) {
     const a = f / fronds * Math.PI * 2 + rnd() * 0.4;
-    const len = 0.9 + rnd() * 0.6;
+    const len = len0 + rnd() * len0 * 0.6;
     const segs = 6;
     const pos = [], nor = [];
     const ptsL = [];
     for (let s = 0; s <= segs; s++) {
       const t = s / segs;
-      const x = t * len, y = Math.sin(t * Math.PI * 0.75) * len * 0.55 - t * t * 0.2;
-      const w = 0.16 * Math.sin(t * Math.PI) + 0.02;
+      const x = t * len * (1 - lift * 0.35), y = Math.sin(t * Math.PI * 0.75) * len * lift - t * t * 0.2;
+      const w = wid * Math.sin(t * Math.PI) + 0.02;
       ptsL.push([x, y, w]);
     }
     for (let s = 0; s < segs; s++) {
@@ -287,6 +287,39 @@ function flowerUmbel(seed) {
       const rr = Math.sqrt(k / 18) * 0.05, aa = k * 2.4;
       gb.add(new THREE.SphereGeometry(0.008, 5, 3), { pos: top.clone().add(FV(Math.cos(aa) * rr, -rr * rr * 4, Math.sin(aa) * rr)), color: col, attrs: { aSway: 1, aGlow: 0 } });
     }
+  }
+  return gb.build();
+}
+
+// tall seed-head grass: thin stems with oat-like spikelets
+function seedGrass(seed) {
+  const rnd = mulberry32(seed), gb = new GeoBuilder(['aSway', 'aGlow']);
+  for (let i = 0; i < 9; i++) {
+    const a = rnd() * 6.28, r = rnd() * 0.08, h = 0.6 + rnd() * 0.45;
+    const base = FV(Math.cos(a) * r, 0, Math.sin(a) * r), top = base.clone().add(FV((rnd() - 0.5) * 0.25, h, (rnd() - 0.5) * 0.25));
+    stemTo(gb, base, top, 0.006, [0.5, 0.55, 0.28]);
+    for (let k = 0; k < 7; k++) {
+      const p = base.clone().lerp(top, 0.62 + k * 0.055);
+      const sp = new THREE.SphereGeometry(1, 5, 3); sp.scale(0.012, 0.035, 0.012);
+      gb.add(sp, { pos: p.add(FV((rnd() - 0.5) * 0.04, 0, (rnd() - 0.5) * 0.04)), rot: new THREE.Euler(rnd() - 0.5, 0, rnd() - 0.5), color: [0.74, 0.68, 0.42], attrs: { aSway: 1, aGlow: 0 } });
+    }
+  }
+  return gb.build();
+}
+// cattail reeds for wet shores: long arching blades and brown seed spikes
+function reeds(seed) {
+  const rnd = mulberry32(seed), gb = new GeoBuilder(['aSway', 'aGlow']);
+  for (let i = 0; i < 12; i++) {
+    const a = rnd() * 6.28, h = 1.0 + rnd() * 0.8, lean = (rnd() - 0.5) * 0.5;
+    const blade = new THREE.PlaneGeometry(0.05, h, 1, 4); blade.translate(0, h / 2, 0);
+    const P = blade.attributes.position; for (let k = 0; k < P.count; k++) { const y = P.getY(k) / h; P.setZ(k, y * y * lean); P.setX(k, P.getX(k) * (1 - y * 0.85)); }
+    blade.computeVertexNormals();
+    gb.add(blade, { pos: FV(Math.cos(a) * rnd() * 0.15, 0, Math.sin(a) * rnd() * 0.15), rot: new THREE.Euler(0, a, 0), color: [0.36, 0.48, 0.22], attrs: { aSway: (x, y) => clamp(y / h, 0, 1), aGlow: 0 } });
+  }
+  for (let i = 0; i < 4; i++) {
+    const a = rnd() * 6.28, h = 1.3 + rnd() * 0.5, base = FV(Math.cos(a) * 0.08, 0, Math.sin(a) * 0.08), top = base.clone().add(FV(0, h, 0));
+    stemTo(gb, base, top, 0.007, [0.42, 0.5, 0.26]);
+    gb.add(new THREE.CapsuleGeometry(0.03, 0.16, 4, 8), { pos: top.clone().add(FV(0, -0.14, 0)), color: [0.36, 0.22, 0.12], attrs: { aSway: 1, aGlow: 0 } });
   }
   return gb.build();
 }
@@ -438,12 +471,13 @@ export class Flora {
     this.scatter = new Scatter(scene, {
       tile: 24, radius: 95,
       layers: [
-        { // stones
-          geo: stone.clone(), mat: this.stoneMat, max: 2600, perTile: 22, castShadow: true, radius: 70,
+        ...[stone, game.props.slateRock, game.props.pebbleRock].map((sg, si) => ({ // stones: rough cobble, flat slate, rounded pebble
+          geo: sg.clone(), mat: this.stoneMat, max: 1100, perTile: [12, 6, 8][si], castShadow: true, radius: 70,
           attrs: { iTint: 3 },
           place: (x, z, r1, r2, r3) => {
             const y = groundOK(x, z, 0.6); if (y === null) return null;
             if (r1 > 0.45 + sf[2] * 0.3 + sf[1] * 0.3 - sf[0] * 0.3 - sf[5] * 0.3) return null;
+            if (si === 1 && sf[2] < 0.2 && sf[1] < 0.3) return null;   // slates break off layered rock
             // vegetation buries loose stones: far fewer on grassy, fertile ground
             if (r3 < (U.uGrass.value * 0.8 + U.uMoss.value * 0.2) * clamp(fert(x, z) * 1.4, 0, 1)) return null;
             const s = 0.08 + Math.pow(r2, 2.6) * 0.65;
@@ -455,7 +489,7 @@ export class Flora {
             c = c.map((k, i) => k + ([0.38, 0.33, 0.42][i] - k) * sf[6] * 0.7);
             return { y: y - s * 0.15, s, ry: r3 * 6.28, rx: (r2 - 0.5) * 0.4, attrs: { iTint: c.map((k) => k * v) } };
           },
-        },
+        })),
         { // moss clumps
           geo: mossClump(3), mat: this.mat, max: 1600, perTile: 14, castShadow: false, radius: 70,
           attrs: { iGrow: 2, iTint: 3 },
@@ -529,9 +563,10 @@ export class Flora {
             return { y: y - 0.05, s: 0.8 + r2 * 0.9, ry: r3 * 6.28, attrs: { iGrow: [thr, 2], iTint: [v, v * (0.95 + r2 * 0.1), v] } };
           },
         })),
-        { // ferns: spore plants, the first vascular plants - they follow the
-          // moss into damp ground, well before grass and flowers
-          geo: fern(13), mat: this.mat, max: 900, perTile: 9, castShadow: true, radius: 95,
+        // ferns: spore plants, the first vascular plants - they follow the
+        // moss into damp ground, well before grass and flowers; three forms
+        ...[fern(13), fern(17, { fronds: 5, len0: 1.2, lift: 0.25, wid: 0.24 }), fern(19, { fronds: 11, len0: 0.7, lift: 0.95, wid: 0.1 })].map((fg, fi) => ({
+          geo: fg, mat: this.mat, max: 400, perTile: 3, castShadow: true, radius: 95,
           attrs: { iGrow: 2, iTint: 3 },
           enabled: () => U.uGrowth.value.x > 0.2,
           place: (x, z, r1, r2, r3) => {
@@ -539,10 +574,35 @@ export class Flora {
             const f = fert(x, z);
             if (f < 0.45) return null;
             // ferns grow in clumps in damp, shaded spots, not everywhere
-            const clump = this.S.fbm2(x / 14 - 7, z / 14 + 3, 2) * 0.5 + 0.5;
+            const clump = this.S.fbm2(x / 14 - 7 + fi * 13, z / 14 + 3, 2) * 0.5 + 0.5;
             if (clump < 0.6) return null;
             const thr = clamp(0.24 + (1 - f) * 0.45 + (r1 - 0.5) * 0.2, 0.22, 1);
             return { y: y - 0.05, s: 0.8 + r2 * 1.1, ry: r3 * 6.28, attrs: { iGrow: [thr, 0], iTint: [0.9 + r3 * 0.2, 0.95 + r2 * 0.15, 0.85] } };
+          },
+        })),
+        { // tall seed-head grass in meadow patches
+          geo: seedGrass(31), mat: this.mat, max: 1600, perTile: 18, castShadow: false, radius: 60,
+          attrs: { iGrow: 2, iTint: 3 },
+          enabled: () => U.uGrowth.value.y > 0.2,
+          place: (x, z, r1, r2, r3) => {
+            const meadow = this.S.fbm2(x / 34 - 9, z / 34 + 6, 2) * 0.5 + 0.5;
+            if (meadow < 0.62) return null;
+            const y = groundOK(x, z, 0.3); if (y === null) return null;
+            const thr = clamp(1.15 - fert(x, z) + (r1 - 0.5) * 0.3, 0.1, 1);
+            const v = 0.85 + r3 * 0.3;
+            return { y: y - 0.03, s: 0.8 + r2 * 0.5, ry: r3 * 6.28, attrs: { iGrow: [thr, 1], iTint: [v, v, v * 0.95] } };
+          },
+        },
+        { // cattail reeds on wet shores, just above the waterline
+          geo: reeds(37), mat: this.mat, max: 900, perTile: 14, castShadow: false, radius: 80,
+          attrs: { iGrow: 2, iTint: 3 },
+          enabled: () => U.uGrowth.value.y > 0.05 && U.uWaterLevel.value > -300,
+          place: (x, z, r1, r2, r3) => {
+            const y = groundOK(x, z, 0.4); if (y === null) return null;
+            const above = y - U.uWaterLevel.value;
+            if (above > 1.6 || above < 0.1) return null;
+            const thr = clamp(0.5 + (r1 - 0.5) * 0.4, 0.05, 1);
+            return { y: y - 0.05, s: 0.8 + r2 * 0.5, ry: r3 * 6.28, attrs: { iGrow: [thr, 1], iTint: [1, 0.95 + r3 * 0.1, 0.95] } };
           },
         },
       ],
