@@ -127,7 +127,7 @@ function mossClump(seed) {
   }
   g.computeVertexNormals();
   const gb = new GeoBuilder(['aSway', 'aGlow']);
-  gb.add(g, { color: (x, y) => { const t = clamp(y / 0.45, 0, 1); return [0.025 + 0.05 * t, 0.045 + 0.075 * t, 0.012 + 0.02 * t]; }, attrs: { aSway: 0, aGlow: 0 } });
+  gb.add(g, { color: (x, y) => { const t = clamp(y / 0.45, 0, 1); return [0.06 + 0.06 * t, 0.12 + 0.1 * t, 0.025 + 0.02 * t]; }, attrs: { aSway: 0, aGlow: 0 } });
   return gb.build();
 }
 
@@ -331,13 +331,15 @@ export class Flora {
           },
         },
         { // moss clumps
-          geo: mossClump(3), mat: this.mat, max: 2400, perTile: 26, castShadow: false, radius: 85,
+          geo: mossClump(3), mat: this.mat, max: 1600, perTile: 14, castShadow: false, radius: 70,
           attrs: { iGrow: 2, iTint: 3 },
           enabled: () => U.uGrowth.value.x > 0.001 || U.uGreen.value.some((g) => g.w > 0),
           place: (x, z, r1, r2, r3) => {
             const y = groundOK(x, z, 0.35); if (y === null) return null;
-            const thr = clamp(1 - fert(x, z) + (r1 - 0.5) * 0.3 - greenBoost(x, z) * 0.8, 0.02, 1);
             if (U.uGrass.value > 0.2) return null;              // grass replaces the moss cushions
+            const f = fert(x, z);
+            if (f < 0.5 && greenBoost(x, z) < 0.3) return null;  // cushions only in damp ground
+            const thr = clamp(1.25 - f * 1.1 + (r1 - 0.5) * 0.2 - greenBoost(x, z) * 0.8, 0.02, 1);
             const s = 0.15 + r2 * 0.4;
             return { y: y - 0.06, sx: s * (0.8 + r3 * 0.6), sy: s * 0.6, sz: s, ry: r3 * 6.28, attrs: { iGrow: [thr, 0], iTint: [0.85 + r3 * 0.3, 0.9 + r2 * 0.2, 0.8] } };
           },
