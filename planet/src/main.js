@@ -133,16 +133,46 @@ async function boot() {
 function showTitle(game, resume) {
   const el = document.createElement('div');
   el.id = 'title';
+  const touch = game.input.touch;
+  const T = game.terra, st = STAGES[T.stage];
+  const sv = T.sVis;
+  // planet readout: the real surface state (the start values on a new game)
+  const temp = Math.round(-63 + Math.min(80, sv * 8)), press = (0.006 + Math.min(1.2, sv / 10)).toFixed(3);
+  const o2 = Math.min(21, sv >= 10 ? 21 : sv * 1.6).toFixed(1);
+  const fmt = (v) => (v >= 1e6 ? (v / 1e6).toFixed(2) + ' M' : v >= 1e3 ? (v / 1e3).toFixed(1) + ' k' : Math.round(v) + ' ');
   el.innerHTML = `
-    <h1>TERRA GENESIS</h1>
-    <div class="tag">행성 아르케 개척 기록 — 붉은 먼지뿐인 16km의 행성에 홀로 내려앉아, 하늘을 푸르게 바꾸고, 바다를 채우고, 숲과 도시와 문명을 세우십시오.</div>
-    <div class="menu">
-      <button class="pri" data-a="go">${resume ? '이어하기' : '착륙 시작'}</button>
-      ${resume ? '<button data-a="new">새 게임 (저장 덮어쓰기)</button>' : ''}
-      <button data-a="help">조작법</button>
-      <button data-a="set">설정</button>
+    <svg class="t-orbit" viewBox="0 0 400 400" aria-hidden="true">
+      <circle cx="200" cy="200" r="186" class="o1"/><circle cx="200" cy="200" r="150" class="o2"/>
+      <circle cx="200" cy="200" r="186" class="ticks"/>
+      <g class="sat"><circle cx="386" cy="200" r="4"/></g>
+    </svg>
+    <div class="t-main">
+      <div class="t-eyebrow"><i></i>행성 재생 계획 · ARKE-${4207}</div>
+      <h1 class="t-logo"><span>TERRA</span><span>GENESIS</span></h1>
+      <div class="t-ko">테라 제네시스</div>
+      <p class="t-tag">붉은 먼지뿐인 행성 아르케에 홀로 내려앉아, 하늘을 푸르게 바꾸고 호수를 채우고, 숲과 도시를 세우십시오.</p>
+      <div class="t-menu">
+        <button class="t-btn pri" data-a="go"><b>${resume ? '이어하기' : '착륙 시작'}</b><small>${resume ? `${game.sky.day}일차 · ${st.name} · ${fmt(T.ti)}Ti` : '착륙 포드 · 산소 100% · 1일차'}</small></button>
+        ${resume ? '<button class="t-btn" data-a="new"><b>새 개척</b><small>지금의 기록을 지우고 처음부터</small></button>' : ''}
+        <div class="t-row">
+          <button class="t-btn sm" data-a="help"><b>조작법</b></button>
+          <button class="t-btn sm" data-a="set"><b>설정</b></button>
+        </div>
+      </div>
     </div>
-    <div class="foot">시작한 뒤 화면을 클릭하면 마우스로 시점을 돌릴 수 있습니다 · Esc 일시 정지</div>`;
+    <aside class="t-data">
+      <div class="lbl"><i></i>행성 관측 · ${resume ? '현재' : '착륙 전'}</div>
+      <dl>
+        <div><dt>지표 온도</dt><dd>${temp} °C</dd></div>
+        <div><dt>기압</dt><dd>${press} atm</dd></div>
+        <div><dt>산소</dt><dd>${o2} %</dd></div>
+        <div><dt>중력</dt><dd>0.84 g</dd></div>
+        <div><dt>탐사 구역</dt><dd>16 × 16 km</dd></div>
+        <div><dt>테라포밍</dt><dd>${fmt(T.ti)}Ti</dd></div>
+      </dl>
+      <div class="stage">${st.name}</div>
+    </aside>
+    <div class="t-foot">${touch ? '왼쪽을 끌어 이동 · 오른쪽을 끌어 시점 · 가로 화면을 권장합니다' : '시작 후 화면을 클릭하면 마우스로 시점을 돌립니다 · Esc 일시 정지 · H 조작 안내'}</div>`;
   document.getElementById('ui').appendChild(el);
   el.querySelector('[data-a=go]').onclick = () => start(game, el);
   const nb = el.querySelector('[data-a=new]');
@@ -155,6 +185,10 @@ function showTitle(game, resume) {
 
 function start(game, el) {
   el.remove();
+  if (game.input.touch) {
+    // phones: go fullscreen and landscape when the browser allows it
+    try { const r = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen(); if (r && r.catch) r.then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape').catch(() => {})).catch(() => {}); } catch (e) { /* not allowed */ }
+  }
   game.ui.hud.hidden = false;
   game.started = true;
   game.audio.start();

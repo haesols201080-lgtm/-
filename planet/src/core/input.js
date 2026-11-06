@@ -8,6 +8,9 @@ export class Input {
     this.mouse = { dx: 0, dy: 0, wheel: 0, buttons: 0, pressed: 0, released: 0 };
     this.locked = false;
     this.uiOpen = false;
+    this.touch = false;            // touch controls drive input (no pointer lock)
+    this._tapKeys = [];            // keys pressed by a tap, released after one frame
+    this._tapBtns = 0;
     this.sensitivity = 0.0022;
     this.invertY = false;
     this.listeners = [];
@@ -46,7 +49,7 @@ export class Input {
   }
 
   lock() {
-    if (this.uiOpen) return;
+    if (this.uiOpen || this.touch) return;
     try {
       const p = this.canvas.requestPointerLock();
       if (p && p.catch) p.catch(() => { this.cursorMode = true; });
@@ -59,11 +62,31 @@ export class Input {
   hit(code) { return this.pressed.has(code); }
   btn(b) { return (this.mouse.buttons & (1 << b)) !== 0; }
   click(b) { return (this.mouse.pressed & (1 << b)) !== 0; }
-  get active() { return (this.locked || this.cursorMode) && !this.uiOpen; }
+  get active() { return (this.locked || this.cursorMode || this.touch) && !this.uiOpen; }
+
+  // ---- synthetic input used by the touch controls
+  tap(code) {
+    this.pressed.add(code); this.keys.add(code); this._tapKeys.push(code);
+    const ev = { code, key: code, target: null, preventDefault() {} };
+    for (const l of this.listeners) l(ev);
+  }
+  hold(code, on) {
+    if (on) { if (!this.keys.has(code)) this.pressed.add(code); this.keys.add(code); }
+    else if (this.keys.has(code)) { this.keys.delete(code); this.released.add(code); }
+  }
+  holdBtn(b, on) {
+    if (on) { this.mouse.buttons |= 1 << b; this.mouse.pressed |= 1 << b; }
+    else { this.mouse.buttons &= ~(1 << b); this.mouse.released |= 1 << b; }
+  }
+  tapBtn(b) { this.holdBtn(b, true); this._tapBtns |= 1 << b; }
+  look(dx, dy) { this.mouse.dx += dx; this.mouse.dy += dy; }
 
   onKey(fn) { this.listeners.push(fn); }
 
   endFrame() {
+    for (const c of this._tapKeys) { this.keys.delete(c); this.released.add(c); }
+    this._tapKeys.length = 0;
+    if (this._tapBtns) { this.mouse.buttons &= ~this._tapBtns; this._tapBtns = 0; }
     this.pressed.clear();
     this.released.clear();
     this.mouse.dx = 0; this.mouse.dy = 0; this.mouse.wheel = 0;

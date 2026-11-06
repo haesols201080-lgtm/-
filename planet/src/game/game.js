@@ -27,6 +27,7 @@ import { BUILDINGS, RECIPES, ITEMS, STAGES, ERAS, PARAMS } from '../sim/data.js'
 import { ORE_TYPES } from '../world/props.js';
 import { LANDMARKS } from '../world/worldgen.js';
 import { GeoBuilder } from '../core/geobuilder.js';
+import { TouchControls, isTouchDevice } from '../ui/touch.js';
 
 const SAVE_KEY = 'terra-genesis-save-v1';
 const SET_KEY = 'terra-genesis-settings-v1';
@@ -36,7 +37,7 @@ export class Game {
     Object.assign(this, base);       // engine, terrain, sky, colliders, props, flora
     this.flags = {};
     this.cheats = { god: false };
-    this.settings = Object.assign({ quality: 'high', sens: 1, fov: 72, invertY: false, terraSpeed: 1, volume: 0.6 }, readJSON(SET_KEY));
+    this.settings = Object.assign({ quality: isTouchDevice() ? 'low' : 'high', sens: 1, fov: 72, invertY: false, terraSpeed: 1, volume: 0.6 }, readJSON(SET_KEY));
     this.input = new Input(this.engine.renderer.domElement);
     this.audio = new Audio();
     this.buildings = new Buildings(this);
@@ -61,6 +62,7 @@ export class Game {
     this.objectives = new Objectives(this);
     this.isUnlocked = (t) => this.research.isUnlocked(t);
     this.ui = new UI(this);
+    if (isTouchDevice()) this.touch = new TouchControls(this);
     this.landmarks = { volcano: LANDMARKS.volcano, volcano2: LANDMARKS.volcano2, basin: LANDMARKS.basin, rift: { x: -1200, z: -1650, name: LANDMARKS.rift.name }, start: { x: 0, z: 0, name: '착륙 지점' } };
     this.mining = { t: 0, ore: null };
     this.makeTool();
@@ -358,7 +360,7 @@ export class Game {
 
   updateLockHint() {
     const el = document.getElementById('lockhint');
-    if (el) el.hidden = !this.started || this.input.locked || this.input.uiOpen || this.input.cursorMode;
+    if (el) el.hidden = !this.started || this.input.locked || this.input.uiOpen || this.input.cursorMode || this.input.touch;
   }
 
   // ---------------------------------------------------------------- frame
@@ -414,6 +416,7 @@ export class Game {
     this.audio.ambient(this.sky.uniforms.uAtmo.value, this.terra.weather.storm, this.sky.uniforms.uDust.value, !!P.inside);
     if (this.started) {
       this.ui.update(dt);
+      this.touch && this.touch.update();
       this.ui.setMode(this.build.mode === 'place' ? `건설: <b>${BUILDINGS[this.build.type].name}</b> · 좌클릭 설치 · 휠/R 회전 · 우클릭 취소` : this.build.mode === 'dismantle' ? '<span style="color:var(--bad)">해체 모드</span> · 좌클릭 길게 · F 종료' : this.build.mode === 'road' ? '도로 깔기 · 좌클릭 지점 · 우클릭 끊기 · Esc 종료' : this.build.mode === 'terrain' ? `지형 도구 · 반경 ${this.build.brush.radius.toFixed(1)}m · 좌클릭 올리기 · 우클릭 파기 · Shift 평탄화` : this.rover.driving ? `탐사 로버 · ${Math.abs(this.rover.speed * 3.6).toFixed(0)} km/h` : '');
       if (this.build.active && this.build.mode !== 'terrain') this.ui.setPrompt(this.build.reason ? `<span class="bad">${this.build.reason}</span>` : '');
     }
@@ -434,12 +437,15 @@ export class Game {
   }
 
   titleCamera(dt, cam) {
-    this.titleT = (this.titleT || 0) + dt * 0.02;
-    const a = this.titleT;
+    this.titleT = (this.titleT || 0) + dt * 0.012;
+    const a = this.titleT + 0.8;
     const c = this.titleCenter || new THREE.Vector3();
-    const x = c.x + Math.cos(a) * 60, z = c.z + Math.sin(a) * 60;
-    cam.position.set(x, Math.max(this.terrain.height(x, z) + 14, c.y + 12), z);
-    cam.lookAt(c.x, c.y + 3, c.z);
+    const r = 46 + Math.sin(a * 0.7) * 10;
+    const x = c.x + Math.cos(a) * r, z = c.z + Math.sin(a) * r;
+    cam.position.set(x, Math.max(this.terrain.height(x, z) + 6, c.y + 5 + Math.sin(a * 0.5) * 2.5), z);
+    // look past the landing site toward the horizon, framing it right of centre
+    const side = new THREE.Vector3(-Math.sin(a), 0, Math.cos(a)).multiplyScalar(14);
+    cam.lookAt(c.x + side.x, c.y + 6, c.z + side.z);
   }
 
   updateTool(dt) {
