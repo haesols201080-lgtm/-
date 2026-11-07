@@ -337,8 +337,8 @@ export class Game {
     this.audio.play('done');
   }
 
-  onResearch(r, unlocked) {
-    this.ui.toast(`<b>연구 완료: ${r.name}</b>${unlocked.length ? '해금: ' + unlocked.join(', ') : r.desc}`, 'good', 5, true);
+  onResearch(r, unlocked, found = []) {
+    this.ui.toast(`<b>연구 완료: ${r.name}</b>${unlocked.length ? '해금: ' + unlocked.join(', ') : r.desc}${found.length ? `<br>새 연구 발견: ${found.join(', ')}` : ''}`, 'good', 6, true);
     this.audio.play('done');
     this.ui.renderHotbar();
   }
@@ -559,6 +559,17 @@ export class Game {
     };
     this.ui.open('poi', { title: this.pois.name(a.poi.kind), text: texts[a.poi.kind], ...res });
     this.audio.play('done');
+  }
+
+  // ride the tram from one stop to another
+  rideTram(from, to) {
+    if (!to || this.rover.driving) return;
+    const [x, z] = this.npcs.doorOf(to);
+    this.ui.close();
+    this.ui.flash && this.ui.flash();
+    this.player.spawn(x, z, to.rot + Math.PI);
+    this.ui.toast(`트램으로 ${Math.round(Math.hypot(to.x - from.x, to.z - from.z))} m 이동했습니다`, 'info');
+    this.audio && this.audio.play('done');
   }
 
   sleep() {

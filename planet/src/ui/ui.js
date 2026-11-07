@@ -125,7 +125,10 @@ export class UI {
     const C = g.colony;
     $('#era').textContent = ERAS[C.era - 1].name;
     $('#popn').textContent = C.total;
-    $('#tiers').innerHTML = TIERS.map((t, i) => C.pop[i] ? `<span class="chip"><i style="background:${t.color}"></i>${t.name} ${C.pop[i]}</span>` : '').join('');
+    const sick = C.sick ? C.sick.reduce((a, c) => a + c, 0) : 0;
+    $('#tiers').innerHTML = TIERS.map((t, i) => C.pop[i] ? `<span class="chip"><i style="background:${t.color}"></i>${t.name} ${C.pop[i]}</span>` : '').join('')
+      + (C.edu.diploma ? `<span class="chip" title="학교 수료생 — 공학자·연구원 업그레이드에 필요">수료생 ${C.edu.diploma}</span>` : '') + (C.edu.degree ? `<span class="chip" title="대학 졸업생 — 전문직 이상 업그레이드에 필요">졸업생 ${C.edu.degree}</span>` : '')
+      + (sick ? `<span class="chip" title="앓아누운 주민 — 의료소가 필요합니다" style="color:#ff9a8a">환자 ${sick}</span>` : '');
     $('#credits').innerHTML = `${CREDIT_ICON}<b class="num">${Math.floor(C.credits)}</b><small style="color:${C.income >= 0 ? 'var(--good)' : 'var(--bad)'}">${C.income >= 0 ? '+' : ''}${C.income.toFixed(1)}</small>`;
     const P = g.eco.power;
     $('#pow').textContent = `${P.supply.toFixed(1)}/${P.demand.toFixed(1)}kW`;
@@ -475,6 +478,35 @@ export class UI {
     this.panelRefresh = draw;
   }
 
+  // short black fade, for cuts like a tram ride
+  flash() {
+    const f = h('div', { class: 'cutfade' });
+    this.root.appendChild(f);
+    setTimeout(() => f.remove(), 900);
+  }
+
+  // what is going on inside a building right now, in plain words
+  activity(b) {
+    const g = this.game, C = g.colony, D = b.data, t = b.type;
+    if (b.def.service && !b.serviceOk) {
+      const why = b.def.power < 0 && !(b.powerRatio > 0.3) ? '전력이 부족해' : b.def.workers ? `일손이 부족해 (${b.workersHave || 0} / ${b.def.workers[1]}명, ${TIERS.find((x) => x.id === b.def.workers[0]).name} 이상)` : '';
+      return `<span style="color:var(--warn)">${why} 문을 닫았습니다. 지금은 아무 일도 하지 않습니다.</span>`;
+    }
+    if (t === 'school' || t === 'university') {
+      const cyc = t === 'school' ? 60 : 90, cap = t === 'school' ? 40 : 30;
+      const who = t === 'school' ? '아이' : '학생';
+      return `재학 ${who} ${D.students || 0} / ${cap}명 · 다음 ${t === 'school' ? '수료' : '졸업'}까지 ${Math.ceil((1 - (D.prog || 0)) * cyc)}초 · 지금까지 ${D.grads || 0}명 배출${t === 'university' ? ` · 연구 +${((D.students || 0) * 0.012).toFixed(2)}/s` : ''}<br><span style="color:var(--muted)">식민지 보유: 학교 수료생 ${C.edu.diploma}명 · 대학 졸업생 ${C.edu.degree}명</span>`;
+    }
+    if (t === 'clinic') return `진료 중인 환자 ${D.patients || 0}명 · 식민지 전체 앓아누운 주민 ${C.sick.reduce((a, c) => a + c, 0)}명`;
+    if (t === 'gym') return `운동하는 주민 ${D.users || 0}명 · 식민지 체력 ${Math.round((C.fitness || 0) * 100)}% (작업 효율 +${Math.round((C.fitness || 0) * 8)}%)`;
+    if (t === 'lounge' || t === 'park' || t === 'culture') return `찾아온 주민 ${D.visitors || 0}명 · 식민지 행복도 ${Math.round(C.happiness * 100)}% → 작업 효율 ${Math.round((C.productivity || 1) * 100)}%${t === 'culture' ? ` · 이주민 응답 +${25 * Math.min(2, g.buildings.list.filter((x) => x.type === 'culture' && x.serviceOk).length)}%` : ''}`;
+    if (t === 'market') return `배급받는 주거지 ${D.served || 0}채`;
+    if (t === 'transit') { const n = g.buildings.list.filter((x) => x.type === 'transit').length; return n > 1 ? `연결된 정류장 ${n}곳 · 트램 이용 주민 ${D.riders || 0}명` : '정류장이 하나뿐이라 트램이 아직 다니지 않습니다'; }
+    if (t === 'elevator') return `궤도 수출 누적 ${Math.round(D.exported || 0)} 크레딧${D.last && D.last.length ? ' · 최근: ' + D.last.map(([id, n]) => `${ITEMS[id]?.name || id} ${n}`).join(', ') : ' · 150개 넘게 쌓인 물자가 없어 대기 중'}`;
+    if (t === 'monument') return `방문객이 분당 20 크레딧을 남깁니다 · 주민 전체 행복도 +10%`;
+    return '';
+  }
+
   buildingPanel(panel, b) {
     const g = this.game;
     const d = b.def;
@@ -482,17 +514,19 @@ export class UI {
     const render = () => {
       const rows = [];
       if (d.power) rows.push(['전력', d.power > 0 ? `${g.eco.generatorOutput(b).toFixed(1)} / ${d.power} kW 생산` : `${-d.power} kW 사용 · 공급 ${Math.round((b.powerRatio || 0) * 100)}%`]);
-      if (d.workers) rows.push(['일손', `${b.workersHave || 0} / ${d.workers[1]} (${TIERS.find((t) => t.id === d.workers[0]).name})`]);
+      if (d.workers) rows.push(['일손', `${b.workersHave || 0} / ${d.workers[1]} (${TIERS.find((t) => t.id === d.workers[0]).name}) · 작업 효율 ${Math.round((g.colony.productivity || 1) * 100)}%`]);
       if (d.terra) rows.push(['테라포밍', Object.entries(d.terra).map(([k, v]) => `${PARAMS[k].name} +${(v * (b.rate || 0)).toFixed(2)}/s`).join(' · ')]);
       if (d.deposit) rows.push(['채굴', `${ITEMS[b.data.ore]?.name || ''} · 6초마다 1개 · 내부 저장 ${b.data.buf || 0}/${d.buffer}`]);
       if (d.research_rp) rows.push(['연구', `${(d.research_rp * (b.rate || 0)).toFixed(2)} 점/s`]);
       if (d.network) rows.push(['물류망', `반경 ${d.network}m`]);
-      if (d.service) rows.push(['서비스', `반경 ${d.radius}m · ${b.serviceOk ? '운영 중' : '운영 안 됨'}`]);
+      if (d.service) rows.push(['서비스', `반경 ${d.radius}m · ${b.serviceOk ? '운영 중' : '운영 안 됨 (전력·일손 확인)'}`]);
+      const act = this.activity(b);
+      if (act) rows.push(['안에서는', act]);
       rows.push(['상태', b.status || (b.idle ? '대기' : '가동 중')]);
       if (d.house) {
         const rep = g.colony.needReport(b);
         rows.push(['계층', `${b.tier + 1} / ${TIERS.length} · ${esc(TIERS[b.tier].desc || '')}`]);
-        rows.push(['거주', `${b.data.res || 0} / ${TIERS[b.tier].max}명 (목표 ${b.data.target ?? 0})`]);
+        rows.push(['거주', `${b.data.res || 0} / ${TIERS[b.tier].max}명 (목표 ${b.data.target ?? 0})${b.data.sick ? ` · 앓아누운 주민 ${b.data.sick}명` : ''}`]);
         rows.push(['기본 필요', `<div class="needs">${rep.basic.map((n) => `<span class="need ${n.ok ? 'ok' : ''}">${n.name}</span>`).join('')}</div>`]);
         rows.push(['사치 필요', `<div class="needs">${rep.luxury.map((n) => `<span class="need ${n.ok ? 'ok' : ''}">${n.name}</span>`).join('')}</div>`]);
         const up = g.colony.canUpgrade(b);
@@ -511,11 +545,17 @@ export class UI {
       if (d.deposit && b.data.buf) extra += `<button data-act="collect" class="pri">광석 ${b.data.buf}개 가져가기</button>`;
       if (d.house) extra += `<button data-act="upgrade" ${g.colony.canUpgrade(b).ok ? '' : 'disabled'}>지금 업그레이드</button><button data-act="auto" class="${g.colony.autoUpgrade ? 'on' : ''}">자동 업그레이드 ${g.colony.autoUpgrade ? '켜짐' : '꺼짐'}</button>`;
       if (d.storage || d.craft) extra += `<button data-act="open">보관함·제작 열기</button>`;
+      if (b.type === 'clinic') extra += `<button data-act="heal" class="pri" ${b.serviceOk ? '' : 'disabled'}>치료받기 · 산소 보충</button>`;
+      if (b.type === 'transit') {
+        const others = g.buildings.list.filter((x) => x.type === 'transit' && x !== b);
+        extra += others.length ? others.map((x) => `<button data-tram="${x.id}" ${b.serviceOk && x.serviceOk ? '' : 'disabled'}>트램 타고 이동 · ${Math.round(Math.hypot(x.x - b.x, x.z - b.z))} m</button>`).join('') : '<span style="color:var(--muted)">정류장을 하나 더 지으면 트램이 다닙니다</span>';
+      }
       extra += '</div>';
       body.innerHTML = `<div class="binfo"><img alt="" src="${g.thumbs.get(b.type === 'house' ? 'house:' + b.tier : b.type)}"><div>
         <p style="color:var(--muted);margin:0 0 12px">${esc(d.desc)}</p>
         <div class="kv">${rows.map(([k, v]) => `<div class="k">${k}</div><div>${v}</div>`).join('')}</div>${extra}</div></div>`;
       body.querySelectorAll('[data-rec]').forEach((x) => x.onclick = () => { b.data.recipe = x.dataset.rec; b.data.busy = false; render(); });
+      body.querySelectorAll('[data-tram]').forEach((x) => x.onclick = () => g.rideTram(b, g.buildings.list.find((o) => o.id === +x.dataset.tram)));
       body.querySelectorAll('[data-act]').forEach((x) => x.onclick = () => {
         const a = x.dataset.act;
         if (a === 'toggle') b.enabled = b.enabled === false;
@@ -523,6 +563,7 @@ export class UI {
         if (a === 'upgrade') g.colony.tryUpgrade(b);
         if (a === 'auto') g.colony.autoUpgrade = !g.colony.autoUpgrade;
         if (a === 'open') { this.open('inv', d.storage ? b : null); return; }
+        if (a === 'heal') { g.player.health = 1; g.player.oxygen = 1; this.toast('의료소에서 치료받고 산소를 채웠습니다', 'good'); g.audio && g.audio.play('done'); }
         render();
       });
     };

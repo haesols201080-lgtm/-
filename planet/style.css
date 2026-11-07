@@ -285,7 +285,18 @@ button:disabled { opacity: .4; cursor: default; }
 .tt-key em { display: inline-block; width: 18px; height: 9px; margin: 0 5px 0 10px; border: 1px solid; vertical-align: -1px; }
 .tt-key .k-done { border-color: rgba(121,224,138,.7); background: rgba(121,224,138,.18); }
 .tt-key .k-av { border-color: rgba(111,227,255,.8); background: rgba(111,227,255,.12); }
-.tt-key .k-lock { border-color: rgba(255,255,255,.15); background: rgba(255,255,255,.03); }
+.tt-key .k-seal { border-color: rgba(255,255,255,.18); border-style: dashed; background: rgba(255,255,255,.02); }
+.tt-eras { display: inline-flex; gap: 14px; flex-wrap: wrap; }
+.tt-fog { position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; background: linear-gradient(90deg, rgba(4,8,12,0), rgba(4,8,12,.92) 70%); display: grid; place-items: center; }
+.tt-fog span { font: 600 11px 'Oxanium', var(--font); letter-spacing: .5em; color: rgba(159,180,189,.28); writing-mode: vertical-rl; }
+.tt-edges .stub { fill: rgba(160,175,185,.35); stroke: rgba(160,175,185,.3); stroke-dasharray: 3 4; }
+.tt-node.sealed { border-style: dashed; border-color: rgba(255,255,255,.16); border-left: 3px dashed rgba(255,255,255,.22); background: rgba(10,15,20,.85); color: #9aa6ad; }
+.tt-node.sealed .ic { background: rgba(255,255,255,.03); }
+.tt-node.sealed .q { font: 700 24px 'Oxanium', var(--font); color: rgba(159,180,189,.5); }
+.tt-node.sealed b { color: #b5c0c6; }
+.tt-node.sealed small { white-space: normal; line-height: 1.25; }
+.tt-node.sealed.queued { border-color: rgba(255,180,106,.55); }
+.tt-side .chip.seal { color: #9aa6ad; border-style: dashed; }
 .tt-hint { margin-left: auto; opacity: .75; }
 .tt-wrap { flex: 1; min-height: 0; overflow: auto; position: relative; cursor: grab; border: 1px solid rgba(111,227,255,.12);
   background: radial-gradient(circle at 1px 1px, rgba(111,227,255,.09) 1px, transparent 1.6px) 0 0 / 26px 26px, rgba(4, 8, 12, .55); overscroll-behavior: contain; }
@@ -527,3 +538,6 @@ select { font-family: var(--font); background: #1a232b; color: var(--ink); borde
   .tt-legend { display: none; }
   .tt-canvas { zoom: .8; }
 }
+
+.cutfade { position: fixed; inset: 0; background: #000; z-index: 70; pointer-events: none; animation: cutfade .9s ease forwards; }
+@keyframes cutfade { 0% { opacity: 1; } 40% { opacity: 1; } 100% { opacity: 0; } }

@@ -9,6 +9,15 @@ import { TIERS, ERAS, BUILDINGS, NEED_NAMES, ITEMS, STAGES, WAVES, SHIPS } from 
 
 const GOOD_NEEDS = { water: 0.06, food: 0.05, goods: 0.03, textiles: 0.025, electronics: 0.015, medicine: 0.012, delicacy: 0.02 }; // per resident per minute
 const zeros = () => TIERS.map(() => 0);
+// schools teach the children of settler families and up, the university takes
+// young adults from engineer homes and up; each turns out graduates on a cycle
+const EDU = {
+  school: { from: 1, share: 0.25, cap: 40, cycle: 60, rate: 0.2, yields: 'diploma' },
+  university: { from: 4, share: 0.2, cap: 30, cycle: 90, rate: 0.25, yields: 'degree' },
+};
+const EDU_NAMES = { diploma: '학교 수료생', degree: '대학 졸업생' };
+// credits per unit the orbital elevator gets for exports
+const PRICE = { plate: 2, glass: 2, wire: 2, water: 1, food: 2, seeds: 2, alloy: 4, lightalloy: 4, circuit: 4, fertilizer: 3, textiles: 4, goods: 5, electronics: 7, battery: 6, medicine: 7, delicacy: 6, fuelrod: 8 };
 
 export class Colony {
   constructor(game) {
@@ -20,6 +29,10 @@ export class Colony {
     this.happiness = 0.5;
     this.income = 0;
     this.pop = zeros();
+    this.sick = zeros();
+    this.edu = { diploma: 0, degree: 0 };   // graduates waiting for jobs that need them
+    this.productivity = 1;
+    this.fitness = 0;
     this.workforce = zeros();
     this.demand = zeros();
     this.lack = {};
@@ -43,7 +56,11 @@ export class Colony {
     const st = this.game.terra.stage;
     let n = 0;
     for (const [id, k] of Object.entries(WAVES)) if (st >= STAGES.findIndex((s) => s.id === id)) n = k;
-    return n;
+    // culture draws people (+25% a centre, up to +50%); the elevator brings them down in bulk
+    const B = this.game.buildings.list;
+    const culture = B.filter((b) => b.type === 'culture' && b.serviceOk).length;
+    const lift = B.some((b) => b.type === 'elevator' && b.powerRatio > 0.3);
+    return Math.round(n * (1 + 0.25 * Math.min(2, culture)) * (lift ? 1.5 : 1));
   }
 
   callStatus() {
@@ -120,12 +137,18 @@ export class Colony {
       if (!ok) continue;
       (services[b.def.service] = services[b.def.service] || []).push(b);
     }
-    const covered = (h, svc) => (services[svc] || []).some((s) => (s.x - h.x) ** 2 + (s.z - h.z) ** 2 < s.def.radius * s.def.radius);
+    const near = (a, b, r) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2 < r * r;
+    // tram network: with two or more stops, a home near any stop reaches any
+    // service near any stop
+    const stops = services.transit || [];
+    const onNet = (p) => stops.length > 1 && stops.some((s) => near(p, s, s.def.radius));
+    const reach = (h, s) => near(s, h, s.def.radius) || (onNet(h) && onNet(s));
+    const covered = (h, svc) => (services[svc] || []).some((s) => reach(h, s));
 
     // totals per need for consumption
-    const pop = zeros();
+    const pop = zeros(), sick = zeros();
     const needTotals = {};
-    let happySum = 0, resSum = 0;
+    let happySum = 0, resSum = 0, fitRes = 0;
     for (const h of houses) {
       const tier = TIERS[h.tier];
       h.data.res = h.data.res ?? 0;
@@ -144,12 +167,21 @@ export class Colony {
       const lux = tier.luxury.length ? tier.luxury.filter((n) => met[n]).length / tier.luxury.length : 0;
       h.data.happy = 0.35 + 0.45 * frac + 0.2 * lux + (g.buildings.count('monument') ? 0.1 : 0) + (g.terra.breathable ? 0.05 : 0);
       if (h.data.res > h.data.target) h.data.res = Math.max(h.data.target, h.data.res - 1);
+      // illness: without a clinic many residents are laid up; a gym halves the risk
+      const fit = covered(h, 'gym');
+      h.data.sick = Math.round(h.data.res * (covered(h, 'clinic') ? 0.03 : 0.16) * (fit ? 0.5 : 1));
       pop[h.tier] += h.data.res;
+      sick[h.tier] += h.data.sick;
+      if (fit) fitRes += h.data.res;
       for (const need of tier.basic) if (GOOD_NEEDS[need] !== undefined && market) needTotals[need] = (needTotals[need] || 0) + h.data.res;
       happySum += h.data.happy * h.data.res; resSum += h.data.res;
     }
     this.pop = pop;
+    this.sick = sick;
     this.happiness = resSum ? happySum / resSum : 0.5;
+    this.fitness = resSum ? fitRes / resSum : 0;
+    // happy, fit people work faster
+    this.productivity = (0.85 + 0.3 * this.happiness) * (1 + 0.08 * this.fitness);
 
     // consume goods from storage
     for (const [need, residents] of Object.entries(needTotals)) {
@@ -163,9 +195,9 @@ export class Colony {
       else if (eco.store.count(need) > 0) this.lack[need] = false;
     }
 
-    // workforce & staffing (Anno: each building needs workers of a tier)
-    this.workforce = pop.slice();
-    const avail = pop.slice();
+    // workforce & staffing (Anno: each building needs workers of a tier); the sick stay home
+    this.workforce = pop.map((n, i) => n - sick[i]);
+    const avail = this.workforce.slice();
     const demand = zeros();
     const workplaces = B.filter((b) => b.def.workers).sort((a, b) => a.id - b.id);
     for (const b of workplaces) {
@@ -181,13 +213,57 @@ export class Colony {
     this.demand = demand;
     this.unemployed = avail;
 
-    // credits: taxes minus upkeep
+    // what goes on inside the service buildings
+    const around = (b, f) => { let n = 0; for (const h of houses) if (reach(h, b)) n += f(h); return n; };
+    for (const b of B) {
+      const t = b.type, D = b.data;
+      if (EDU[t]) {
+        const E = EDU[t];
+        if (!b.serviceOk) { D.students = 0; continue; }
+        const pool = around(b, (h) => (h.tier >= E.from ? (h.data.res - (h.data.sick || 0)) * E.share : 0));
+        D.students = Math.min(Math.floor(E.cap * Math.min(1, this.staffing(b)) * Math.min(1, b.powerRatio ?? 1)), Math.floor(pool));
+        D.prog = (D.prog || 0) + step / E.cycle;
+        if (D.prog >= 1) {
+          D.prog -= 1;
+          D.gacc = (D.gacc || 0) + D.students * E.rate;
+          const n = Math.floor(D.gacc);
+          D.gacc -= n;
+          if (n > 0) { this.edu[E.yields] += n; D.grads = (D.grads || 0) + n; }
+        }
+        if (t === 'university' && g.research && D.students) g.research.addPoints(D.students * 0.012 * step);
+      } else if (t === 'clinic') D.patients = b.serviceOk ? Math.round(around(b, (h) => h.data.res * 0.13)) : 0;
+      else if (t === 'gym') D.users = b.serviceOk ? Math.round(around(b, (h) => h.data.res * 0.3)) : 0;
+      else if (t === 'lounge' || t === 'park' || t === 'culture') D.visitors = b.serviceOk ? Math.round(around(b, (h) => h.data.res * 0.2)) : 0;
+      else if (t === 'market') D.served = b.serviceOk ? around(b, () => 1) : 0;
+      else if (t === 'transit') D.riders = b.serviceOk && stops.length > 1 ? Math.round(around(b, (h) => h.data.res * 0.25)) : 0;
+    }
+
+    // credits: taxes minus upkeep, plus visitors to the monument
     let income = 0;
     for (const h of houses) income += h.data.res * TIERS[h.tier].tax * (0.6 + 0.8 * h.data.happy);
     let upkeep = 0;
     for (const b of B) if (b.def.cat === 'colony' && !b.def.house && b.type !== 'road') upkeep += b.type === 'hq' ? 0 : 1.2;
+    if (g.buildings.count('monument')) income += 20;
     this.income = income - upkeep;
     if (hq) this.credits = Math.max(0, this.credits + this.income * step / 60);
+
+    // the orbital elevator exports surplus from the depot for credits
+    const lift = B.find((b) => b.type === 'elevator' && b.powerRatio > 0.3);
+    this.exportT = (this.exportT || 0) + step;
+    if (lift && this.exportT >= 30) {
+      this.exportT = 0;
+      let earned = 0; const sent = [];
+      for (const [id, have] of eco.store.items) {
+        const n = Math.min(20, Math.floor((have - 150) * 0.2));
+        if (n <= 0) continue;
+        eco.store.remove(id, n);
+        earned += n * (PRICE[id] || 2);
+        sent.push([id, n]);
+      }
+      this.credits += earned;
+      lift.data.exported = (lift.data.exported || 0) + earned;
+      lift.data.last = sent;
+    } else if (!lift) this.exportT = 0;
 
     // house upgrades
     if (this.autoUpgrade) for (const h of houses) this.tryUpgrade(h);
@@ -220,6 +296,7 @@ export class Colony {
     const cost = next.upgrade.cost;
     for (const [id, n] of Object.entries(cost)) {
       if (id === 'credits') { if (this.credits < n) return { ok: false, reason: '크레딧 ' + n + ' 필요' }; }
+      else if (EDU_NAMES[id]) { if (this.edu[id] < n) return { ok: false, reason: `${EDU_NAMES[id]} ${n}명 필요 (현재 ${this.edu[id]}명)` }; }
       else if (this.game.eco.store.count(id) < n) return { ok: false, reason: '창고에 ' + ITEMS[id].name + ' ' + n + '개 필요' };
     }
     return { ok: true };
@@ -229,7 +306,7 @@ export class Colony {
     if (!this.canUpgrade(h).ok) return false;
     const next = TIERS[h.tier + 1];
     for (const [id, n] of Object.entries(next.upgrade.cost)) {
-      if (id === 'credits') this.credits -= n; else this.game.eco.store.remove(id, n);
+      if (id === 'credits') this.credits -= n; else if (EDU_NAMES[id]) this.edu[id] -= n; else this.game.eco.store.remove(id, n);
     }
     this.game.buildings.setTier(h, h.tier + 1);
     h.data.res = TIERS[h.tier].base;
@@ -258,11 +335,12 @@ export class Colony {
     };
   }
 
-  serialize() { return { credits: this.credits, era: this.era, arrivals: this.arrivals, autoUpgrade: this.autoUpgrade, calls: this.calls, callCooldown: this.callCooldown, log: this.log }; }
+  serialize() { return { credits: this.credits, era: this.era, arrivals: this.arrivals, autoUpgrade: this.autoUpgrade, calls: this.calls, callCooldown: this.callCooldown, log: this.log, edu: this.edu }; }
   load(o) {
     Object.assign(this, o || {});
-    for (const k of ['pop', 'workforce', 'demand']) if (!Array.isArray(this[k]) || this[k].length !== TIERS.length) this[k] = zeros();
+    for (const k of ['pop', 'workforce', 'demand', 'sick']) if (!Array.isArray(this[k]) || this[k].length !== TIERS.length) this[k] = zeros();
+    this.edu = { diploma: 0, degree: 0, ...(o && o.edu) };
   }
 }
 
-export { GOOD_NEEDS };
+export { GOOD_NEEDS, EDU, EDU_NAMES };

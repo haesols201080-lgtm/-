@@ -252,9 +252,11 @@ export class Economy {
     for (const b of list) this.produce(b, dt);
   }
 
+  // staffed share of the jobs, times how well the colony works (happiness, fitness)
   workFactor(b) {
     if (!b.def.workers) return 1;
-    return this.game.colony ? this.game.colony.staffing(b) : 0;
+    const C = this.game.colony;
+    return C ? C.staffing(b) * (C.productivity || 1) : 0;
   }
 
   produce(b, dt) {

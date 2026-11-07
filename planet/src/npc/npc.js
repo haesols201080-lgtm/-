@@ -324,10 +324,31 @@ export class NPCs {
     w.pi = 0; w.target = b;
   }
 
+  // where a colonist heads depends on the hour and who they are: work and
+  // classes by day (school for families, the university for engineer homes
+  // and up), the lounge, park, gym or culture centre in the evening, the clinic
+  // and the ration store now and then, home last
   pickTarget(w) {
-    const B = this.game.buildings.list.filter((b) => !b.def.foundation && !b.def.road && b.type !== 'pylon' && b.type !== 'lamp' && (b.def.cat === 'colony' || b.def.workers || b.def.house));
-    if (!B.length) return;
-    this.goTo(w, B[Math.floor(Math.random() * B.length)]);
+    const g = this.game, t = g.sky.time;
+    const day = t > 0.3 && t < 0.68, evening = t >= 0.68 && t < 0.9;
+    const weight = (b) => {
+      const d = b.def;
+      if (d.foundation || d.road || b.type === 'pylon' || b.type === 'lamp' || b.type === 'beacon') return 0;
+      if (d.house) return evening ? 0.8 : 0.4;
+      if (b.type === 'school') return day && w.tier >= 1 && b.data.students ? 3 : 0.1;
+      if (b.type === 'university') return day && w.tier >= 4 && b.data.students ? 4 : 0.1;
+      if (['lounge', 'park', 'gym', 'culture', 'monument'].includes(b.type)) return evening ? 3 : 0.6;
+      if (b.type === 'clinic') return b.data.patients ? 0.8 : 0.2;
+      if (b.type === 'market' || b.type === 'transit') return 1;
+      if (d.workers) return day ? 2 : 0.3;
+      return d.cat === 'colony' ? 0.3 : 0;
+    };
+    const B = g.buildings.list, W = B.map(weight);
+    let tot = 0;
+    for (const x of W) tot += x;
+    if (tot <= 0) return;
+    let r = Math.random() * tot;
+    for (let i = 0; i < B.length; i++) { r -= W[i]; if (r <= 0) { this.goTo(w, B[i]); return; } }
   }
 
   npcNearDoor(x, z) {

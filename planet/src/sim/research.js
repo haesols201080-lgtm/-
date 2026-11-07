@@ -89,9 +89,12 @@ export class Research {
   }
 
   complete(id) {
+    const before = new Set(RESEARCH.filter((r) => this.available(r.id)).map((r) => r.id));
     this.done.add(id);
     const unlocked = Object.entries(BUILDINGS).filter(([, d]) => d.research === id).map(([, d]) => d.name);
-    this.game.onResearch && this.game.onResearch(this.get(id), unlocked);
+    // techs that just came out of the dark
+    const found = RESEARCH.filter((r) => this.available(r.id) && !before.has(r.id)).map((r) => r.name);
+    this.game.onResearch && this.game.onResearch(this.get(id), unlocked, found);
   }
 
   grantEureka(id) {
