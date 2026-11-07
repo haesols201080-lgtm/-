@@ -356,7 +356,7 @@ export class POIs {
       give('cobalt', 4 + Math.floor(rnd() * 4)); give('silicon', 6 + Math.floor(rnd() * 6)); if (rnd() < 0.4) give('uranium', 2);
       rp = 20;
     } else if (p.kind === 'meteor') {
-      give('iron', 8 + Math.floor(rnd() * 6)); give('titanium', 3 + Math.floor(rnd() * 3)); if (rnd() < 0.5) give('cobalt', 2);
+      give('iron', 8 + Math.floor(rnd() * 6)); give('nickel', 4 + Math.floor(rnd() * 4)); give('titanium', 3 + Math.floor(rnd() * 3)); if (rnd() < 0.5) give('cobalt', 2);
       rp = 22;
     } else if (p.kind === 'station') {
       give('circuit', 2 + Math.floor(rnd() * 2)); give('electronics', 1); give('glass', 2);
@@ -365,10 +365,10 @@ export class POIs {
       give('alloy', 3 + Math.floor(rnd() * 2)); give('circuit', 2); give('glass', 3); if (rnd() < 0.5) give('electronics', 1);
       rp = 30;
     } else if (p.kind === 'vent') {
-      give('water', 3); give('silicon', 4 + Math.floor(rnd() * 4)); if (rnd() < 0.5) give('aluminium', 3);
+      give('water', 3); give('sulfur', 5 + Math.floor(rnd() * 4)); give('silicon', 4 + Math.floor(rnd() * 4)); if (rnd() < 0.5) give('copper', 3);
       rp = 18;
     } else if (p.kind === 'cave') {
-      give('ice', 8 + Math.floor(rnd() * 6)); give('cobalt', 2 + Math.floor(rnd() * 3));
+      give('ice', 8 + Math.floor(rnd() * 6)); give('cobalt', 2 + Math.floor(rnd() * 3)); if (rnd() < 0.6) give('phosphate', 3 + Math.floor(rnd() * 3));
       rp = 26;
     } else {
       rp = 60;

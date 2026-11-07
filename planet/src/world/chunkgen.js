@@ -98,7 +98,7 @@ export function chunkIndex(n) {
 }
 
 // ------------------------------------------------------------------ props
-export const ORE_KEYS = ['iron', 'silicon', 'titanium', 'aluminium', 'cobalt', 'ice', 'uranium'];
+export const ORE_KEYS = ['iron', 'silicon', 'titanium', 'aluminium', 'cobalt', 'ice', 'uranium', 'copper', 'nickel', 'sulfur', 'phosphate', 'magnesium'];
 
 function surfAt(gen, edits, x, z, tmp, res) {
   let h = gen.sample(x, z, tmp);
@@ -121,6 +121,11 @@ function pickOre(rnd, s, h, z) {
     s[1] * 1.3 + s[6] * 0.4,                // cobalt
     (h < -5 ? 0.8 : 0) + s[4] * 2.5 + (Math.abs(z) > 4500 ? 0.6 : 0), // ice
     s[6] * 1.6 + s[1] * 0.15,               // uranium
+    0.12 + s[1] * 0.7 + s[2] * 0.5,         // copper: hydrothermal veins in basalt and strata
+    0.06 + s[1] * 0.3 + s[7] * 1.4,         // nickel: meteoritic, in crater floors
+    s[1] * 1.1 + s[6] * 0.15,               // sulfur: volcanic vents
+    0.04 + s[2] * 0.9 + s[5] * 0.3,         // phosphate: sedimentary strata
+    0.04 + s[5] * 1.4 + s[0] * 0.15,        // magnesium: salt-flat evaporites
   ];
   let tot = 0;
   for (const v of w) tot += v;
@@ -146,8 +151,8 @@ const START_POI = [
   { kind: 'wreck', x: 260, z: -190 }, { kind: 'cache', x: -150, z: 120 }, { kind: 'ruin', x: -620, z: 540 },
   { kind: 'wreck', x: 980, z: 360 }, { kind: 'ruin', x: 1300, z: -900 }, { kind: 'cache', x: 420, z: 700 },
 ];
-const START_DEPOSITS = [['iron', 70, -40], ['silicon', -80, 60], ['titanium', 140, 130], ['iron', -160, -110], ['silicon', 190, -150], ['aluminium', -60, -230], ['cobalt', 420, -60], ['ice', -380, 300]];
-const START_ORES = [[25, 30, 'iron'], [-30, 40, 'silicon'], [45, -20, 'iron'], [-50, -25, 'silicon'], [60, 60, 'titanium'], [-70, 70, 'iron'], [80, -60, 'silicon'], [-20, -75, 'aluminium'], [100, 10, 'titanium'], [-110, 0, 'iron'], [30, 110, 'silicon'], [5, -120, 'iron'], [140, -40, 'cobalt'], [-140, 80, 'titanium']];
+const START_DEPOSITS = [['iron', 70, -40], ['silicon', -80, 60], ['titanium', 140, 130], ['iron', -160, -110], ['silicon', 190, -150], ['aluminium', -60, -230], ['cobalt', 420, -60], ['ice', -380, 300], ['copper', -260, -60], ['nickel', 310, 250], ['magnesium', -480, -260], ['sulfur', 560, 160], ['phosphate', -150, 470]];
+const START_ORES = [[25, 30, 'iron'], [-30, 40, 'silicon'], [45, -20, 'iron'], [-50, -25, 'silicon'], [60, 60, 'titanium'], [-70, 70, 'iron'], [80, -60, 'silicon'], [-20, -75, 'aluminium'], [100, 10, 'titanium'], [-110, 0, 'iron'], [30, 110, 'silicon'], [5, -120, 'iron'], [140, -40, 'cobalt'], [-140, 80, 'titanium'], [170, 95, 'copper'], [-175, -60, 'copper'], [200, 200, 'nickel'], [-210, 150, 'phosphate']];
 
 export function genProps(gen, edits, ci, cj) {
   const x0 = ci * PROP_CELL, z0 = cj * PROP_CELL;

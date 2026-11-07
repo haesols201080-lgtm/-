@@ -612,7 +612,7 @@ export class Game {
     if (!this.started) return;
     this.npcs.flushShip();
     const data = {
-      v: 1, t: Date.now(),
+      v: 2, t: Date.now(),
       player: { x: this.player.pos.x, y: this.player.pos.y, z: this.player.pos.z, yaw: this.player.yaw, pitch: this.player.pitch, o2: this.player.oxygen, hp: this.player.health, view: this.player.view },
       sky: { time: this.sky.time, day: this.sky.day },
       eco: this.eco.serialize(), terra: this.terra.serialize(), colony: this.colony.serialize(), research: this.research.serialize(),
@@ -636,11 +636,15 @@ export class Game {
     this.pois.load(d.pois);
     this.eco.load(d.eco || {});
     this.terra.load(d.terra || {});
+    // v1 saves had 4 tiers and 5 eras; map them onto the 10-step ladders
+    const v1 = (d.v || 1) < 2;
+    if (v1 && d.colony && d.colony.era) d.colony.era = [1, 2, 3, 6, 9][d.colony.era - 1] || d.colony.era;
     this.colony.load(d.colony || {});
     this.npcs.restoreShip(d.ship);
     this.research.load(d.research || {});
     for (const b of d.buildings || []) {
-      const nb = this.buildings.add(b.type, b.x, b.y, b.z, b.rot, { id: b.id, tier: b.tier, data: b.data });
+      const tier = v1 && b.type === 'house' ? [0, 2, 4, 6][b.tier || 0] : b.tier;
+      const nb = this.buildings.add(b.type, b.x, b.y, b.z, b.rot, { id: b.id, tier, data: b.data });
       if (b.enabled === false) nb.enabled = false;
     }
     for (const b of this.buildings.list) this.props.clearArea(b.x, b.z, Math.hypot(b.hw, b.hd) + 0.5);

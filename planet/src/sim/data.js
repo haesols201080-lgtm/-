@@ -9,6 +9,11 @@ export const ITEMS = {
   cobalt: { name: '코발트', desc: '푸르게 빛나는 결정. 회로에 쓰인다.', color: '#2f6dff', shape: 'ore' },
   ice: { name: '얼음', desc: '크레이터 바닥의 물 얼음.', color: '#a7e3ff', shape: 'ore' },
   uranium: { name: '우라늄', desc: '녹색으로 빛나는 방사성 결정.', color: '#52ff6b', shape: 'ore' },
+  copper: { name: '구리', desc: '녹청이 낀 적갈색 광석. 화산대와 층암의 열수 광맥에서 난다.', color: '#c8743f', shape: 'ore' },
+  nickel: { name: '니켈', desc: '크레이터 바닥에 묻힌 운석 기원의 은회색 광석.', color: '#a9aa9a', shape: 'ore' },
+  sulfur: { name: '황', desc: '화산 분기공 둘레에 맺힌 노란 결정.', color: '#e8cf3a', shape: 'ore' },
+  phosphate: { name: '인회석', desc: '층암에서 나는 청록색 인산염 광물. 비료의 재료.', color: '#5fb3a3', shape: 'ore' },
+  magnesium: { name: '마그네슘', desc: '소금 평원 증발암의 하얀 광석. 가벼운 합금의 재료.', color: '#e4e6ea', shape: 'ore' },
   plate: { name: '철판', desc: '표준 구조재.', color: '#9aa3ab', shape: 'plate' },
   glass: { name: '유리', desc: '여압 유리 패널.', color: '#9fe3ea', shape: 'glass' },
   alloy: { name: '합금', desc: '티타늄 강화 합금 잉곳.', color: '#c9cfd8', shape: 'ingot' },
@@ -19,6 +24,13 @@ export const ITEMS = {
   electronics: { name: '전자기기', desc: '단말기와 가전 부품.', color: '#ffd35a', shape: 'chip2' },
   fuelrod: { name: '연료봉', desc: '우라늄 연료봉. 원자로 연료.', color: '#7dff8c', shape: 'rod' },
   seeds: { name: '씨앗', desc: '배양실에서 개량한 행성 적응 씨앗.', color: '#c6e070', shape: 'seed' },
+  wire: { name: '구리선', desc: '절연 피복을 입힌 구리 배선 코일.', color: '#d98a4a', shape: 'coil' },
+  lightalloy: { name: '경합금', desc: '마그네슘·알루미늄 경량 합금. 높은 주거 타워의 골조.', color: '#e9edf2', shape: 'ingot' },
+  battery: { name: '배터리', desc: '니켈·구리 전지 팩. 트램과 대학 설비에 들어간다.', color: '#7ad1a8', shape: 'cell' },
+  fertilizer: { name: '비료', desc: '인회석과 황으로 만든 인산 비료.', color: '#b9a46a', shape: 'sack' },
+  medicine: { name: '의약품', desc: '배양 씨앗에서 추출한 항생제와 방사선 차단제.', color: '#ff6b7a', shape: 'vial' },
+  textiles: { name: '의류', desc: '식물 섬유로 짠 실내복과 작업복.', color: '#7a8cff', shape: 'cloth' },
+  delicacy: { name: '온실 과일', desc: '돔 과수원에서 기른 신선한 과일.', color: '#ff9a3c', shape: 'fruit' },
 };
 
 export const RECIPES = [
@@ -31,6 +43,13 @@ export const RECIPES = [
   { id: 'fuelrod', out: { fuelrod: 1 }, in: { uranium: 2, alloy: 1 }, time: 10, name: '연료봉', research: 'r_fission' },
   { id: 'goods', out: { goods: 2 }, in: { plate: 1, glass: 1, water: 1 }, time: 8, name: '생활용품', research: 'r_goods', factoryOnly: true },
   { id: 'electronics', out: { electronics: 1 }, in: { circuit: 1, alloy: 1, aluminium: 1 }, time: 10, name: '전자기기', research: 'r_electronics', factoryOnly: true },
+  { id: 'wire', out: { wire: 2 }, in: { copper: 2 }, time: 4, name: '구리선', research: 'r_metallurgy' },
+  { id: 'lightalloy', out: { lightalloy: 1 }, in: { magnesium: 2, aluminium: 1 }, time: 7, name: '경합금', research: 'r_metallurgy' },
+  { id: 'battery', out: { battery: 1 }, in: { nickel: 1, copper: 1 }, time: 8, name: '배터리', research: 'r_battery' },
+  { id: 'fertilizer', out: { fertilizer: 2 }, in: { phosphate: 1, sulfur: 1 }, time: 6, name: '비료', research: 'r_agri' },
+  { id: 'textiles', out: { textiles: 2 }, in: { seeds: 2, water: 1 }, time: 8, name: '의류', research: 'r_textile', factoryOnly: true },
+  { id: 'medicine', out: { medicine: 2 }, in: { sulfur: 1, seeds: 1, water: 1 }, time: 10, name: '의약품', research: 'r_pharma', factoryOnly: true },
+  { id: 'delicacy', out: { delicacy: 2 }, in: { fertilizer: 1, water: 2 }, time: 12, name: '온실 과일', research: 'r_agri', factoryOnly: true },
 ];
 
 // Terraforming stages (Ti thresholds). Structure follows The Planet Crafter's
@@ -83,29 +102,37 @@ export const MILESTONES = {
     [60, '첫 열원', '지표에서 처음으로 열이 감지됩니다.'], [400, '영하 60도', '혹한이 조금 누그러졌습니다.'],
     [1500, '영하 40도', '낮에는 서리가 물러납니다.'], [5000, '영하 20도', '얼음이 햇볕에 승화하기 시작합니다.'],
     [15000, '어는점', '지표 온도가 0°C를 넘는 날이 생깁니다.'], [45000, '영상 8도', '물이 얼지 않고 고여 있습니다.'],
+    [80000, '영상 12도', '봄날 같은 낮이 이어집니다.'],
     [140000, '영상 15도', '사람이 지내기에 쾌적한 기온입니다.'], [450000, '영상 22도', '따뜻한 바람이 붑니다.'],
-    [1200000, '아열대', '골짜기마다 습하고 따뜻한 공기가 머뭅니다.'],
+    [1200000, '아열대', '골짜기마다 습하고 따뜻한 공기가 머뭅니다.'], [2500000, '열대 저지', '적도 저지대가 덥고 습해집니다.'],
+    [5000000, '열 평형', '온실 대기가 스스로 열을 붙잡아 둡니다. 히터 없이도 따뜻합니다.'],
   ],
   pressure: [
     [60, '희미한 대기', '기체 분자가 겨우 감지됩니다.'], [400, '0.005 atm', '먼지가 바람에 실려 날립니다.'],
     [1500, '0.02 atm', '이제 소리가 공기를 타고 전해집니다.'], [5000, '0.08 atm', '하늘의 색이 짙어집니다.'],
     [15000, '0.25 atm', '물이 금방 끓어 없어지지 않습니다.'], [45000, '0.5 atm', '구름이 무겁게 떠다닙니다.'],
+    [80000, '0.65 atm', '바람에 실린 먼지가 눈에 띄게 줄어듭니다.'],
     [140000, '0.8 atm', '압력복 없이도 버틸 만한 기압입니다.'], [450000, '1 atm', '지구와 같은 기압에 도달했습니다.'],
-    [1200000, '1.2 atm', '풍부한 대기가 행성을 감쌉니다.'],
+    [1200000, '1.2 atm', '풍부한 대기가 행성을 감쌉니다.'], [2500000, '1.3 atm', '바다 수준의 기압이 고원 꼭대기까지 닿습니다.'],
+    [5000000, '안정 대기', '자기권과 두꺼운 대기가 균형을 이뤄 공기가 우주로 새지 않습니다.'],
   ],
   oxygen: [
     [60, '산소 흔적', '대기에서 산소 분자가 검출됩니다.'], [400, '산소 0.05%', '자외선을 막는 오존층이 생기기 시작합니다.'],
     [1500, '산소 0.2%', '오존층이 짙어져 하늘이 푸르러집니다.'], [5000, '산소 0.7%', '금속이 녹슬기 시작합니다.'],
     [15000, '산소 2%', '불꽃이 타오를 수 있습니다.'], [45000, '산소 5%', '물속 생물이 숨쉴 수 있습니다.'],
+    [80000, '산소 7%', '작은 동물이 숨쉴 수 있는 공기입니다.'],
     [140000, '산소 10%', '숨은 가쁘지만 생존할 수 있는 공기입니다.'], [450000, '산소 16%', '거의 숨쉴 수 있는 공기입니다.'],
-    [1200000, '산소 21%', '지구와 같은 공기입니다.'],
+    [1200000, '산소 21%', '지구와 같은 공기입니다.'], [2500000, '산소 23%', '불이 잘 붙어 건조한 계절엔 산불을 조심해야 합니다.'],
+    [5000000, '산소 순환', '광합성과 호흡이 균형을 이뤄 산소 농도가 스스로 유지됩니다.'],
   ],
   biomass: [
     [5, '첫 미생물', '토양에서 미생물이 번식을 시작합니다.'], [50, '미생물 막', '젖은 바위에 얇은 생물막이 생깁니다.'],
     [400, '남조류', '물웅덩이가 초록빛을 띱니다.'], [2000, '바이오필름', '흙이 생명을 품기 시작합니다.'],
     [8000, '토양 생성', '레골리스가 비옥한 흙으로 바뀝니다.'], [30000, '부엽토', '쓰러진 풀이 흙을 기름지게 합니다.'],
+    [70000, '초지 뿌리', '풀뿌리가 흙을 붙잡아 먼지 폭풍이 잦아듭니다.'],
     [120000, '풍부한 토양', '어디든 씨앗이 뿌리내릴 수 있습니다.'], [450000, '생물량 폭증', '생명이 스스로 퍼져 나갑니다.'],
-    [1200000, '숲의 무게', '행성의 생물량이 숲을 이룹니다.'],
+    [1200000, '숲의 무게', '행성의 생물량이 숲을 이룹니다.'], [2500000, '원시림', '수백 년 된 숲처럼 나무가 빽빽합니다.'],
+    [5000000, '생명의 행성', '생물량이 지구의 숲에 견줄 만합니다.'],
   ],
 };
 
@@ -116,33 +143,57 @@ export const PARAMS = {
   biomass: { name: '바이오매스', unit: 'g', color: '#7fdc6a' },
 };
 
-// Population tiers (Anno-style). needs: basic needs add residents; luxury add happiness/income.
+// Population tiers (Anno-style). needs: basic needs add residents; luxury add
+// happiness/income. Each tier adds needs on top of the one below, so a street
+// climbs the ladder as the colony learns to make and serve more.
+const B0 = ['water', 'food', 'power', 'market'];
+const B1 = [...B0, 'clinic'], B2 = [...B1, 'goods'], B3 = [...B2, 'textiles'], B4 = [...B3, 'school', 'electronics'];
+const B5 = [...B4, 'medicine', 'transit'], B6 = [...B5, 'culture'], B7 = [...B6, 'university'], B8 = [...B7, 'delicacy'];
 export const TIERS = [
-  { id: 'pioneer', name: '개척민', color: '#e9b46a', base: 2, max: 10, tax: 0.6, basic: ['water', 'food', 'power', 'market'], luxury: ['lounge'],
-    upgrade: null },
-  { id: 'tech', name: '기술자', color: '#7fd6ff', base: 4, max: 18, tax: 1.3, basic: ['water', 'food', 'power', 'market', 'clinic', 'goods'], luxury: ['lounge', 'park'],
-    upgrade: { cost: { alloy: 2, glass: 4, credits: 60 }, research: 'r_goods' } },
-  { id: 'engineer', name: '공학자', color: '#b39bff', base: 6, max: 26, tax: 2.2, basic: ['water', 'food', 'power', 'market', 'clinic', 'goods', 'school', 'electronics'], luxury: ['lounge', 'park', 'culture'],
-    upgrade: { cost: { alloy: 4, circuit: 2, glass: 4, credits: 150 }, research: 'r_education' } },
-  { id: 'citizen', name: '시민', color: '#ffe27a', base: 8, max: 36, tax: 3.6, basic: ['water', 'food', 'power', 'market', 'clinic', 'goods', 'school', 'electronics', 'culture'], luxury: ['park', 'lounge'],
-    upgrade: { cost: { alloy: 6, electronics: 4, glass: 6, credits: 300 }, research: 'r_culture' } },
+  { id: 'pioneer', name: '개척민', color: '#e9b46a', base: 2, max: 10, tax: 0.6, basic: B0, luxury: ['lounge'], upgrade: null,
+    desc: '돔 하나에 몇 명이 함께 사는 첫 정착민.' },
+  { id: 'settler', name: '정착민', color: '#d9835a', base: 3, max: 13, tax: 0.9, basic: B1, luxury: ['lounge', 'gym'],
+    upgrade: { cost: { plate: 4, glass: 2, credits: 30 }, research: 'r_medicine' }, desc: '가족을 꾸려 눌러앉은 사람들. 의료소가 가까워야 합니다.' },
+  { id: 'tech', name: '기술자', color: '#7fd6ff', base: 4, max: 18, tax: 1.3, basic: B2, luxury: ['lounge', 'gym', 'park'],
+    upgrade: { cost: { alloy: 2, glass: 4, credits: 60 }, research: 'r_goods' }, desc: '설비를 고치고 돌리는 기술자.' },
+  { id: 'artisan', name: '숙련공', color: '#5fd3a8', base: 5, max: 22, tax: 1.7, basic: B3, luxury: ['lounge', 'gym', 'park'],
+    upgrade: { cost: { alloy: 3, wire: 4, credits: 90 }, research: 'r_textile' }, desc: '손재주로 공방을 꾸리는 숙련공. 옷을 지어 입습니다.' },
+  { id: 'engineer', name: '공학자', color: '#b39bff', base: 6, max: 26, tax: 2.2, basic: B4, luxury: ['gym', 'park', 'culture'],
+    upgrade: { cost: { alloy: 4, circuit: 2, glass: 4, credits: 150 }, research: 'r_education' }, desc: '학교를 나와 설계를 맡는 공학자.' },
+  { id: 'scientist', name: '연구원', color: '#6fa8ff', base: 7, max: 30, tax: 2.8, basic: B5, luxury: ['park', 'culture', 'gym'],
+    upgrade: { cost: { lightalloy: 4, circuit: 3, credits: 210 }, research: 'r_transit' }, desc: '행성을 연구하는 과학자. 약과 교통편이 필요합니다.' },
+  { id: 'citizen', name: '시민', color: '#ffe27a', base: 8, max: 36, tax: 3.6, basic: B6, luxury: ['park', 'lounge', 'gym'],
+    upgrade: { cost: { alloy: 6, electronics: 4, glass: 6, credits: 300 }, research: 'r_culture' }, desc: '문화를 누리는 도시의 시민.' },
+  { id: 'professional', name: '전문직', color: '#ff9fd0', base: 9, max: 42, tax: 4.6, basic: B7, luxury: ['park', 'gym', 'lounge'],
+    upgrade: { cost: { lightalloy: 6, battery: 4, electronics: 4, credits: 450 }, research: 'r_university' }, desc: '의사·변호사·설계사. 대학이 가까워야 합니다.' },
+  { id: 'notable', name: '명사', color: '#c9f27a', base: 10, max: 48, tax: 5.8, basic: B8, luxury: ['park', 'culture', 'gym'],
+    upgrade: { cost: { lightalloy: 8, battery: 6, glass: 10, credits: 650 }, research: 'r_highrise' }, desc: '식민지를 이끄는 명사. 다이아그리드 타워에 삽니다.' },
+  { id: 'native', name: '아르케인', color: '#9ff0ff', base: 12, max: 56, tax: 7.2, basic: B8, luxury: ['park', 'culture', 'gym', 'lounge'],
+    upgrade: { cost: { lightalloy: 10, electronics: 8, battery: 8, credits: 900 }, research: 'r_native', stage: 'breathable' },
+    desc: '아르케에서 나고 자란 첫 세대. 에어록 없는 집에서 바깥 공기를 마십니다.' },
 ];
 
 // colonists answering an invitation, by terraforming stage reached
 export const WAVES = { clouds: 6, rain: 8, water: 10, lakes: 12, moss: 14, flora: 16, trees: 20, insects: 24, breathable: 30, fauna: 36, complete: 40 };
-export const SHIPS = ['개척선 새벽별호', '이민선 아우로라', '수송선 헬리오스 7', '정착선 푸른등대', '이주선 오디세이아', '개척선 은하수', '수송선 카론', '정착선 첫걸음'];
+export const SHIPS = ['개척선 새벽별호', '이민선 아우로라', '수송선 헬리오스 7', '정착선 푸른등대', '이주선 오디세이아', '개척선 은하수', '수송선 카론', '정착선 첫걸음', '이민선 마지막 여름', '수송선 베링 12', '정착선 씨앗창고', '이주선 늦은 귀향'];
 
 export const NEED_NAMES = {
   water: '물', food: '식량', power: '전력', market: '배급소', clinic: '의료소', goods: '생활용품',
   school: '학교', electronics: '전자기기', culture: '문화 센터', lounge: '라운지', park: '공원',
+  textiles: '의류', medicine: '의약품', delicacy: '온실 과일', gym: '체육관', transit: '트램', university: '대학',
 };
 
 export const ERAS = [
   { id: 1, name: '전초기지', desc: '홀로 착륙한 개척자의 시대' },
   { id: 2, name: '정착지', desc: '식민 본부를 세우고 첫 정착민을 맞이합니다', req: { building: 'hq' } },
-  { id: 3, name: '마을', desc: '기술자 계층이 자리 잡은 마을', req: { pop: 40, tier: ['tech', 10] } },
-  { id: 4, name: '도시', desc: '공학자와 산업이 자라나는 도시', req: { pop: 120, tier: ['engineer', 20] } },
-  { id: 5, name: '문명', desc: '행성 문명의 탄생', req: { pop: 240, tier: ['citizen', 30], building: 'monument' } },
+  { id: 3, name: '마을', desc: '정착민 가족이 자리 잡은 마을', req: { pop: 25, tier: ['settler', 8] } },
+  { id: 4, name: '소도시', desc: '기술자들이 공장을 돌리는 소도시', req: { pop: 50, tier: ['tech', 12] } },
+  { id: 5, name: '공업 도시', desc: '숙련공의 공방에서 물자가 넘쳐나는 도시', req: { pop: 90, tier: ['artisan', 16] } },
+  { id: 6, name: '도시', desc: '공학자와 산업이 자라나는 도시', req: { pop: 140, tier: ['engineer', 20] } },
+  { id: 7, name: '학술 도시', desc: '연구원이 모여드는 학술 도시', req: { pop: 200, tier: ['scientist', 24] } },
+  { id: 8, name: '대도시', desc: '시민 문화가 꽃피는 대도시', req: { pop: 280, tier: ['citizen', 30] } },
+  { id: 9, name: '행성 문명', desc: '행성 문명의 탄생', req: { pop: 380, tier: ['professional', 30], building: 'monument' } },
+  { id: 10, name: '두 번째 고향', desc: '아르케에서 태어난 세대가 도시를 이끕니다', req: { pop: 500, tier: ['native', 30] } },
 ];
 
 // Buildings. size = [width(x), depth(z)] in metres. power: + generates, - consumes (kW).
@@ -173,8 +224,8 @@ export const BUILDINGS = {
   mirror: { name: '궤도 반사경 송신소', cat: 'terra', size: [8, 8], cost: { alloy: 10, circuit: 6, electronics: 4 }, power: -20, terra: { heat: 1800, pressure: 400 }, desc: '궤도 반사경을 조종해 행성 전체를 데웁니다.', research: 'r_orbital' },
 
   extractor: { name: '자동 채굴기', cat: 'industry', size: [5, 5], cost: { iron: 6, silicon: 2 }, power: -3, desc: '광맥 위에 설치하면 6초마다 광석을 캐냅니다. 드론망에 연결되면 자동으로 창고로 보냅니다.', deposit: true, buffer: 60, research: 'r_auto' },
-  smelter: { name: '정련소', cat: 'industry', size: [6, 5], cost: { plate: 4, iron: 4, silicon: 2 }, power: -4, desc: '드론망의 재료로 철판·유리·합금 등을 자동 생산합니다.', factory: ['plate', 'glass', 'alloy', 'water'], research: 'r_refine' },
-  assembler: { name: '조립기', cat: 'industry', size: [6, 6], cost: { plate: 6, alloy: 2, circuit: 1 }, power: -6, desc: '회로·연료봉·씨앗을 자동 생산합니다.', factory: ['circuit', 'fuelrod', 'seeds'], research: 'r_assembly' },
+  smelter: { name: '정련소', cat: 'industry', size: [6, 5], cost: { plate: 4, iron: 4, silicon: 2 }, power: -4, desc: '드론망의 재료로 철판·유리·합금 등을 자동 생산합니다.', factory: ['plate', 'glass', 'alloy', 'water', 'wire', 'lightalloy'], research: 'r_refine' },
+  assembler: { name: '조립기', cat: 'industry', size: [6, 6], cost: { plate: 6, alloy: 2, circuit: 1 }, power: -6, desc: '회로·연료봉·씨앗·배터리·비료를 자동 생산합니다.', factory: ['circuit', 'fuelrod', 'seeds', 'battery', 'fertilizer'], research: 'r_assembly' },
   dronehub: { name: '드론 허브', cat: 'industry', size: [5, 5], apron: 2.5, cost: { plate: 4, circuit: 2 }, power: -3, desc: '반경 70m 시설들을 물류망으로 묶습니다. 드론이 생산품을 나르며, 공용 창고 100칸이 있습니다.', network: 70, depot: 100, research: 'r_logistics' },
   depot: { name: '물류 창고', cat: 'industry', size: [6, 6], apron: 2.5, cost: { plate: 6, iron: 4 }, desc: '물류망 공용 저장 용량 +300.', depot: 300, research: 'r_logistics' },
 
@@ -185,7 +236,7 @@ export const BUILDINGS = {
   pump: { name: '정수 펌프', cat: 'colony', size: [4, 4], cost: { plate: 3, glass: 1 }, power: -2, desc: '얼음을 녹이거나(물 2) 호숫가에서는 물을 직접 퍼 올립니다(물 3).', workers: ['pioneer', 2], produce: { water: 2 }, consume: { ice: 1 }, cycle: 12, pump: true, research: 'r_colony' },
   market: { name: '배급소', cat: 'colony', size: [8, 8], apron: 2.5, cost: { plate: 6, glass: 2, credits: 40 }, desc: '반경 45m 주거지에 물·식량·물자를 배급합니다.', workers: ['pioneer', 2], service: 'market', radius: 45, research: 'r_colony' },
   lounge: { name: '라운지', cat: 'colony', size: [7, 7], cost: { plate: 4, glass: 4, credits: 60 }, power: -2, desc: '반경 40m 주민의 행복도와 세수를 높입니다.', workers: ['pioneer', 2], service: 'lounge', radius: 40, research: 'r_medicine' },
-  clinic: { name: '의료소', cat: 'colony', size: [8, 8], apron: 2, cost: { plate: 6, glass: 4, alloy: 2, credits: 80 }, power: -3, desc: '반경 50m 기술자 이상 계층의 필수 시설.', workers: ['tech', 2], service: 'clinic', radius: 50, research: 'r_medicine' },
+  clinic: { name: '의료소', cat: 'colony', size: [8, 8], apron: 2, cost: { plate: 6, glass: 4, alloy: 2, credits: 80 }, power: -3, desc: '반경 50m 정착민 이상 계층의 필수 시설.', workers: ['tech', 2], service: 'clinic', radius: 50, research: 'r_medicine' },
   factory: { name: '생활용품 공장', cat: 'colony', size: [10, 8], cost: { plate: 8, alloy: 2, circuit: 1, credits: 100 }, power: -6, desc: '철판·유리·물로 생활용품을 만듭니다.', workers: ['tech', 4], recipe: 'goods', research: 'r_goods' },
   techplant: { name: '전자 공장', cat: 'colony', size: [10, 10], cost: { alloy: 6, circuit: 4, glass: 4, credits: 180 }, power: -10, desc: '회로·합금·알루미늄으로 전자기기를 만듭니다.', workers: ['engineer', 4], recipe: 'electronics', research: 'r_electronics' },
   school: { name: '학교', cat: 'colony', size: [10, 8], apron: 2, cost: { plate: 8, glass: 6, credits: 150 }, power: -3, desc: '반경 55m 공학자 이상 계층의 필수 시설.', workers: ['tech', 3], service: 'school', radius: 55, research: 'r_education' },
@@ -193,6 +244,12 @@ export const BUILDINGS = {
   terminal: { name: '연구 단말기', cat: 'base', size: [2, 2], cost: { iron: 3, silicon: 3, cobalt: 1 }, power: -2, desc: '혼자서도 쓸 수 있는 소형 연구 장비. 연구 점수를 천천히 만듭니다.', research_rp: 0.12 },
   park: { name: '공원', cat: 'colony', size: [10, 10], cost: { plate: 2, seeds: 4, credits: 50 }, desc: '반경 45m 주민 행복도 상승. 초원 단계부터 지을 수 있습니다.', service: 'park', radius: 45, unlockStage: 'flowers', research: 'r_roads' },
   culture: { name: '문화 센터', cat: 'colony', size: [12, 12], apron: 3, cost: { alloy: 8, glass: 8, electronics: 2, credits: 300 }, power: -6, desc: '반경 60m 시민 계층의 필수 시설.', workers: ['engineer', 3], service: 'culture', radius: 60, research: 'r_culture' },
+  gym: { name: '체육관', cat: 'colony', size: [10, 8], apron: 2, cost: { plate: 8, glass: 4, credits: 90 }, power: -3, desc: '반경 50m 주민의 행복도를 높입니다. 저중력에서 근육과 뼈를 지키는 운동 시설.', workers: ['settler', 2], service: 'gym', radius: 50, research: 'r_sports' },
+  textile: { name: '섬유 공방', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 2, wire: 2, credits: 80 }, power: -4, desc: '씨앗과 물로 식물 섬유 의류를 짭니다.', workers: ['settler', 4], recipe: 'textiles', research: 'r_textile' },
+  orchard: { name: '돔 과수원', cat: 'colony', size: [10, 10], cost: { glass: 10, plate: 4, fertilizer: 4, credits: 160 }, power: -4, desc: '비료와 물로 온실 과일을 기릅니다.', workers: ['tech', 4], recipe: 'delicacy', research: 'r_agri' },
+  pharma: { name: '제약소', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 4, circuit: 2, credits: 140 }, power: -5, desc: '황·씨앗·물로 의약품을 만듭니다.', workers: ['artisan', 3], recipe: 'medicine', research: 'r_pharma' },
+  transit: { name: '트램 정류장', cat: 'colony', size: [10, 6], cost: { plate: 4, lightalloy: 4, wire: 4, credits: 120 }, power: -3, desc: '반경 65m 주거지를 트램망으로 잇습니다. 연구원 이상 계층의 필수 시설.', workers: ['tech', 2], service: 'transit', radius: 65, research: 'r_transit' },
+  university: { name: '대학', cat: 'colony', size: [12, 12], apron: 3, cost: { lightalloy: 8, glass: 10, electronics: 4, battery: 4, credits: 400 }, power: -8, desc: '반경 70m 전문직 이상 계층의 필수 시설. 연구 점수도 만듭니다.', workers: ['scientist', 4], service: 'university', radius: 70, research_rp: 0.4, research: 'r_university' },
   road: { name: '도로', cat: 'colony', size: [6, 6], cost: { iron: 1 }, desc: '두 지점을 찍어 소결 레골리스 포장도로를 깝니다. 지형을 따라 경사를 다듬고, 다른 도로에 이으면 교차로가 됩니다. 10m당 철 1.', tool: 'road', research: 'r_colony' },
   monument: { name: '개척자 기념탑', cat: 'colony', size: [10, 10], apron: 3, cost: { alloy: 20, glass: 10, electronics: 6, credits: 800 }, desc: '문명 시대로 나아가기 위한 상징. 주민 전체의 행복도가 오릅니다.', unique: true, research: 'r_monument' },
   elevator: { name: '궤도 엘리베이터', cat: 'colony', size: [16, 16], apron: 4, cost: { alloy: 60, electronics: 20, circuit: 30, glass: 30, credits: 3000 }, power: -40, desc: '행성 문명의 완성. 하늘과 궤도를 잇는 탑.', unique: true, research: 'r_orbital', wonder: true },
@@ -215,15 +272,25 @@ export const RESEARCH = [
   { id: 'r_colony', name: '정착 프로토콜', era: 1, cost: 90, req: ['r_logistics'], desc: '식민 본부, 주거지, 농장, 정수 펌프, 배급소.' },
   { id: 'r_wind', name: '풍력 발전', era: 2, cost: 60, req: ['r_colony'], desc: '풍력 터빈.' },
   { id: 'r_assembly', name: '조립 자동화', era: 2, cost: 120, req: ['r_colony'], desc: '조립기로 회로·씨앗·연료봉 자동 생산.' },
-  { id: 'r_medicine', name: '의료와 여가', era: 2, cost: 110, req: ['r_colony'], desc: '의료소와 라운지.' },
-  { id: 'r_goods', name: '경공업', era: 2, cost: 160, req: ['r_assembly'], desc: '생활용품 공장. 개척민 → 기술자 업그레이드.' },
+  { id: 'r_medicine', name: '의료와 여가', era: 2, cost: 110, req: ['r_colony'], desc: '의료소와 라운지. 개척민 → 정착민 업그레이드.' },
+  { id: 'r_goods', name: '경공업', era: 2, cost: 160, req: ['r_assembly'], desc: '생활용품 공장. 정착민 → 기술자 업그레이드.' },
   { id: 'r_roads', name: '도시 계획', era: 3, cost: 120, req: ['r_goods'], desc: '도로와 공원.' },
-  { id: 'r_education', name: '교육', era: 3, cost: 240, req: ['r_goods', 'r_medicine'], desc: '학교와 연구소. 기술자 → 공학자 업그레이드.' },
+  { id: 'r_education', name: '교육', era: 3, cost: 240, req: ['r_goods', 'r_medicine'], desc: '학교와 연구소. 숙련공 → 공학자 업그레이드.' },
   { id: 'r_electronics', name: '전자공학', era: 3, cost: 280, req: ['r_education'], desc: '전자 공장.' },
   { id: 'r_fission', name: '핵분열', era: 3, cost: 300, req: ['r_assembly'], desc: '연료봉과 핵분열 원자로.' },
-  { id: 'r_culture', name: '문화', era: 4, cost: 420, req: ['r_electronics'], desc: '문화 센터. 공학자 → 시민 업그레이드.' },
+  { id: 'r_culture', name: '문화', era: 4, cost: 420, req: ['r_electronics'], desc: '문화 센터. 연구원 → 시민 업그레이드.' },
   { id: 'r_monument', name: '기념비 건축', era: 4, cost: 380, req: ['r_culture'], desc: '개척자 기념탑.' },
   { id: 'r_orbital', name: '궤도 공학', era: 5, cost: 700, req: ['r_monument', 'r_fission'], desc: '궤도 반사경 송신소와 궤도 엘리베이터.' },
+  { id: 'r_metallurgy', name: '비철 야금', era: 2, cost: 100, req: ['r_refine'], desc: '정련소에서 구리선과 경합금을 뽑습니다.' },
+  { id: 'r_sports', name: '체육', era: 2, cost: 80, req: ['r_colony'], desc: '체육관.' },
+  { id: 'r_textile', name: '섬유', era: 2, cost: 130, req: ['r_goods', 'r_metallurgy'], desc: '섬유 공방. 기술자 → 숙련공 업그레이드.' },
+  { id: 'r_battery', name: '전지', era: 3, cost: 180, req: ['r_metallurgy', 'r_assembly'], desc: '조립기에서 니켈·구리 배터리를 만듭니다.' },
+  { id: 'r_agri', name: '농화학', era: 3, cost: 200, req: ['r_bio', 'r_assembly'], desc: '비료와 돔 과수원.' },
+  { id: 'r_pharma', name: '제약', era: 3, cost: 260, req: ['r_medicine', 'r_education'], desc: '제약소.' },
+  { id: 'r_transit', name: '대중교통', era: 3, cost: 280, req: ['r_roads', 'r_metallurgy'], desc: '트램 정류장. 공학자 → 연구원 업그레이드.' },
+  { id: 'r_university', name: '고등 교육', era: 4, cost: 480, req: ['r_culture', 'r_battery'], desc: '대학. 시민 → 전문직 업그레이드.' },
+  { id: 'r_highrise', name: '초고층 건축', era: 4, cost: 560, req: ['r_university', 'r_agri'], desc: '다이아그리드 타워. 전문직 → 명사 업그레이드.' },
+  { id: 'r_native', name: '요람 프로그램', era: 5, cost: 800, req: ['r_highrise', 'r_monument'], desc: '아르케에서 태어난 첫 세대를 위한 개방형 주거. 숨쉬는 대기 이후 명사 → 아르케인 업그레이드.' },
 ];
 
 export function fmtTi(v) {

@@ -3,11 +3,12 @@
 // needs raise happiness and taxes, and houses upgrade to the next tier when
 // all basic needs are met, the house is full, the tier is researched and the
 // upgrade materials are in storage. New colonists arrive by shuttle at the
-// HQ landing pad. Eras advance like Civilization: Outpost -> Settlement ->
-// Town -> City -> Civilization.
+// HQ landing pad. Eras advance like Civilization, from the lone outpost to a
+// second home run by people born on Arke.
 import { TIERS, ERAS, BUILDINGS, NEED_NAMES, ITEMS, STAGES, WAVES, SHIPS } from './data.js';
 
-const GOOD_NEEDS = { water: 0.06, food: 0.05, goods: 0.03, electronics: 0.015 }; // per resident per minute
+const GOOD_NEEDS = { water: 0.06, food: 0.05, goods: 0.03, textiles: 0.025, electronics: 0.015, medicine: 0.012, delicacy: 0.02 }; // per resident per minute
+const zeros = () => TIERS.map(() => 0);
 
 export class Colony {
   constructor(game) {
@@ -18,9 +19,9 @@ export class Colony {
     this.shuttleT = 30;
     this.happiness = 0.5;
     this.income = 0;
-    this.pop = [0, 0, 0, 0];
-    this.workforce = [0, 0, 0, 0];
-    this.demand = [0, 0, 0, 0];
+    this.pop = zeros();
+    this.workforce = zeros();
+    this.demand = zeros();
     this.lack = {};
     this.consumeAcc = {};
     this.autoUpgrade = true;
@@ -97,6 +98,7 @@ export class Colony {
   staffing(b) { return b.staff ?? 0; }
 
   tierIndex(id) { return TIERS.findIndex((t) => t.id === id); }
+  popOf(id) { return this.pop[this.tierIndex(id)] || 0; }
 
   tick(dt) {
     this.t += dt;
@@ -121,7 +123,7 @@ export class Colony {
     const covered = (h, svc) => (services[svc] || []).some((s) => (s.x - h.x) ** 2 + (s.z - h.z) ** 2 < s.def.radius * s.def.radius);
 
     // totals per need for consumption
-    const pop = [0, 0, 0, 0];
+    const pop = zeros();
     const needTotals = {};
     let happySum = 0, resSum = 0;
     for (const h of houses) {
@@ -164,7 +166,7 @@ export class Colony {
     // workforce & staffing (Anno: each building needs workers of a tier)
     this.workforce = pop.slice();
     const avail = pop.slice();
-    const demand = [0, 0, 0, 0];
+    const demand = zeros();
     const workplaces = B.filter((b) => b.def.workers).sort((a, b) => a.id - b.id);
     for (const b of workplaces) {
       const [tierId, n] = b.def.workers;
@@ -172,7 +174,7 @@ export class Colony {
       demand[ti] += n;
       // higher tiers can fill lower-tier jobs if needed
       let need = n, got = 0;
-      for (let k = ti; k < 4 && need > 0; k++) { const take = Math.min(need, avail[k]); avail[k] -= take; need -= take; got += take; }
+      for (let k = ti; k < TIERS.length && need > 0; k++) { const take = Math.min(need, avail[k]); avail[k] -= take; need -= take; got += take; }
       b.staff = b.enabled === false ? 0 : got / n;
       b.workersHave = got;
     }
@@ -211,6 +213,10 @@ export class Colony {
     if (!h.data.met || !tier.basic.every((n) => h.data.met[n])) return { ok: false, reason: '기본 필요가 모두 채워져야 합니다' };
     if (h.data.res < tier.max) return { ok: false, reason: '집이 가득 차야 합니다' };
     if (next.upgrade.research && !this.game.research.has(next.upgrade.research)) return { ok: false, reason: '연구 필요: ' + this.game.research.name(next.upgrade.research) };
+    if (next.upgrade.stage) {
+      const si = STAGES.findIndex((s) => s.id === next.upgrade.stage);
+      if (this.game.terra.stage < si) return { ok: false, reason: `「${STAGES[si].name}」 단계 이후에 가능합니다` };
+    }
     const cost = next.upgrade.cost;
     for (const [id, n] of Object.entries(cost)) {
       if (id === 'credits') { if (this.credits < n) return { ok: false, reason: '크레딧 ' + n + ' 필요' }; }
@@ -253,7 +259,10 @@ export class Colony {
   }
 
   serialize() { return { credits: this.credits, era: this.era, arrivals: this.arrivals, autoUpgrade: this.autoUpgrade, calls: this.calls, callCooldown: this.callCooldown, log: this.log }; }
-  load(o) { Object.assign(this, o || {}); }
+  load(o) {
+    Object.assign(this, o || {});
+    for (const k of ['pop', 'workforce', 'demand']) if (!Array.isArray(this[k]) || this[k].length !== TIERS.length) this[k] = zeros();
+  }
 }
 
 export { GOOD_NEEDS };

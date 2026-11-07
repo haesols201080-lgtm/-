@@ -18,6 +18,12 @@ const SHAPES = {
   leaf: (c) => `<rect x="7" y="14" width="18" height="12" rx="2" fill="#8a6a4a"/><path d="M16 15 C10 13 9 6 16 4 C23 6 22 13 16 15 Z" fill="${c}"/><path d="M16 15 L16 7" stroke="${shade(c, 0.6)}" stroke-width="1.2"/>`,
   box: (c) => `<path d="M16 5 L27 10 L27 22 L16 27 L5 22 L5 10 Z" fill="${shade(c, 0.8)}"/><path d="M16 5 L27 10 L16 15 L5 10 Z" fill="${shade(c, 1.15)}"/><path d="M16 15 L16 27" stroke="${shade(c, 0.5)}" stroke-width="1.2"/>`,
   rod: (c) => `<rect x="12" y="4" width="8" height="24" rx="4" fill="#9aa3ab"/><rect x="13.5" y="7" width="5" height="18" rx="2.5" fill="${c}"/>`,
+  coil: (c) => `<ellipse cx="16" cy="16" rx="11" ry="11" fill="${shade(c, 0.6)}"/>${[10.5, 8.5, 6.5].map((r, i) => `<circle cx="16" cy="16" r="${r}" fill="none" stroke="${shade(c, 1.1 - i * 0.12)}" stroke-width="1.8"/>`).join('')}<circle cx="16" cy="16" r="4" fill="#3a3f45"/>`,
+  cell: (c) => `<rect x="10" y="4" width="12" height="3" rx="1" fill="#8d959c"/><rect x="7" y="6" width="18" height="22" rx="3" fill="#2f353b"/><rect x="9" y="9" width="14" height="16" rx="2" fill="${c}"/><path d="M17 11 L13 18 L16 18 L15 23 L19 15 L16 15 Z" fill="#fff" fill-opacity=".85"/>`,
+  sack: (c) => `<path d="M10 9 L22 9 L26 26 Q16 29 6 26 Z" fill="${shade(c, 0.85)}"/><path d="M10 9 Q16 5 22 9 L21 12 Q16 9 11 12 Z" fill="${shade(c, 1.2)}"/><rect x="11" y="16" width="10" height="6" rx="1" fill="${shade(c, 0.6)}"/>`,
+  vial: (c) => `<rect x="12" y="3" width="8" height="4" rx="1" fill="#d6dbe0"/><path d="M12 7 L20 7 L20 12 L25 22 Q26 28 16 28 Q6 28 7 22 L12 12 Z" fill="#e8eef2" fill-opacity=".5" stroke="#cfd6dc" stroke-width="1.2"/><path d="M9 21 L23 21 Q24 27 16 27 Q8 27 9 21 Z" fill="${c}"/>`,
+  cloth: (c) => `<path d="M11 5 L16 8 L21 5 L28 10 L25 15 L22 13 L22 27 L10 27 L10 13 L7 15 L4 10 Z" fill="${c}"/><path d="M16 8 L16 27" stroke="${shade(c, 0.7)}" stroke-width="1.1"/><path d="M11 5 L16 8 L21 5" stroke="${shade(c, 1.3)}" stroke-width="1.4" fill="none"/>`,
+  fruit: (c) => `<circle cx="12" cy="19" r="7" fill="${c}"/><circle cx="21" cy="18" r="6.5" fill="${shade(c, 0.82)}"/><path d="M16 11 C16 8 18 6 20 5" stroke="#6a4a2a" stroke-width="1.6" fill="none"/><path d="M17 9 C20 6 24 7 25 9 C22 11 19 11 17 9 Z" fill="#5aa04a"/><circle cx="10" cy="17" r="2" fill="#fff" fill-opacity=".35"/>`,
   seed: (c) => `<ellipse cx="12" cy="18" rx="5" ry="7" transform="rotate(-25 12 18)" fill="${c}"/><ellipse cx="20" cy="15" rx="4.5" ry="6.5" transform="rotate(20 20 15)" fill="${shade(c, 0.8)}"/>`,
 };
 

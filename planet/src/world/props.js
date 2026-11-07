@@ -21,6 +21,11 @@ export const ORE_TYPES = {
   cobalt: { name: '코발트', tint: [0.12, 0.3, 1.0], glow: true },
   ice: { name: '얼음', tint: [0.55, 0.85, 1.0], glow: true },
   uranium: { name: '우라늄', tint: [0.3, 1.0, 0.35], glow: true },
+  copper: { name: '구리', tint: [0.6, 0.32, 0.18], glow: false },
+  nickel: { name: '니켈', tint: [0.6, 0.6, 0.54], glow: false },
+  sulfur: { name: '황', tint: [0.92, 0.78, 0.16], glow: false },
+  phosphate: { name: '인회석', tint: [0.34, 0.62, 0.56], glow: false },
+  magnesium: { name: '마그네슘', tint: [0.88, 0.89, 0.9], glow: false },
 };
 
 export function rockGeometry(seed, detail, { sx = 1, sy = 0.8, sz = 1, cuts = 7, rough = 0.3 } = {}) {

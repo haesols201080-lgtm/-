@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { ModelBuilder, C, L, v, e, plinth, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, wall, room, airlock, greebleRoof, ribbonTower, facade, bays, block, shed } from './modelkit.js';
 import { houseT1, houseT2, houseT3, houseT4, houseT1b, houseT2b, houseT3b, houseT4b, market, lounge, clinic, school, lab, comms, hqExtras } from './models_colony.js';
+import { houseS, houseSb, houseA, houseAb, houseR, houseRb, houseC, houseCb, houseP, housePb, houseN, houseNb, gym, textile, orchard, pharma, transit, university } from './models_homes.js';
 
 const PI = Math.PI;
 
@@ -773,8 +774,13 @@ const BUILDERS = {
   vegetube, seeder, algae, treespreader, insectdome, mirror,
   extractor, smelter, assembler, dronehub, depot,
   hq: (M) => { hq(M); hqExtras(M); }, farm, pump, market, lounge, clinic, factory, techplant, school, lab, terminal, park, culture, road, monument, elevator, comms,
-  'house:0': houseT1, 'house:1': houseT2, 'house:2': houseT3, 'house:3': (M) => houseT4(M),
-  'house:0b': houseT1b, 'house:1b': houseT2b, 'house:2b': houseT3b, 'house:3b': houseT4b,
+  gym, textile, orchard, pharma, transit, university,
+  // two home designs per tier, from the first domes to open-air houses
+  'house:0': houseT1, 'house:0b': houseT1b, 'house:1': houseS, 'house:1b': houseSb,
+  'house:2': houseT2, 'house:2b': houseT2b, 'house:3': houseA, 'house:3b': houseAb,
+  'house:4': houseT3, 'house:4b': houseT3b, 'house:5': houseR, 'house:5b': houseRb,
+  'house:6': houseC, 'house:6b': houseCb, 'house:7': houseP, 'house:7b': housePb,
+  'house:8': (M) => houseT4(M), 'house:8b': houseT4b, 'house:9': houseN, 'house:9b': houseNb,
 };
 
 const cache = new Map();

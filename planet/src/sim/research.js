@@ -11,6 +11,7 @@ export class Research {
     this.current = null;
     this.progress = {};       // id -> points invested
     this.eureka = new Set();
+    this.queue = [];          // planned path to a chosen tech, researched in order
     this.rate = 0;
     this._acc = 0; this._t = 0;
   }
@@ -31,12 +32,41 @@ export class Research {
     return true;
   }
 
+  // every missing prerequisite of a tech, then the tech itself, in research order
+  plan(id) {
+    const out = [], seen = new Set();
+    const visit = (q) => {
+      if (seen.has(q) || this.done.has(q)) return;
+      seen.add(q);
+      for (const p of this.get(q).req) visit(p);
+      out.push(q);
+    };
+    visit(id);
+    return out;
+  }
+
+  // aim at any tech: its locked prerequisites are queued and researched first
+  target(id) {
+    if (!this.get(id) || this.done.has(id)) return false;
+    this.queue = this.plan(id);
+    const first = this.queue.find((q) => this.available(q));
+    if (first) { this.current = first; this.spendBank(); }
+    return true;
+  }
+
+  nextFromQueue() {
+    this.queue = this.queue.filter((q) => !this.done.has(q));
+    return this.queue.find((q) => this.available(q)) || null;
+  }
+
   addPoints(p) {
     this._acc += p;
     if (!this.current) {
-      // auto-pick the cheapest available tech so points are never wasted
+      // next step of the planned path, else the cheapest available tech so points are never wasted
+      const q = this.nextFromQueue();
       const av = RESEARCH.filter((r) => this.available(r.id)).sort((a, b) => a.cost - b.cost);
-      if (av.length) this.current = av[0].id;
+      if (q) this.current = q;
+      else if (av.length) this.current = av[0].id;
       else { this.points += p; return; }
     }
     this.invest(p);
@@ -48,7 +78,7 @@ export class Research {
     if (this.progress[r.id] >= r.cost) {
       const over = this.progress[r.id] - r.cost;
       this.complete(r.id);
-      this.current = null;
+      this.current = this.nextFromQueue();
       if (over > 0) this.points += over;
       this.spendBank();
     }
@@ -90,12 +120,13 @@ export class Research {
     return { ok: true, reason: '' };
   }
 
-  serialize() { return { done: [...this.done], points: this.points, current: this.current, progress: this.progress, eureka: [...this.eureka] }; }
+  serialize() { return { done: [...this.done], points: this.points, current: this.current, progress: this.progress, eureka: [...this.eureka], queue: this.queue }; }
   load(o) {
     this.done = new Set(o.done || []);
     this.points = o.points || 0;
     this.current = o.current || null;
     this.progress = o.progress || {};
     this.eureka = new Set(o.eureka || []);
+    this.queue = o.queue || [];
   }
 }

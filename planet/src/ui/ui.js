@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { ITEMS, BUILDINGS, CATEGORIES, RECIPES, STAGES, PARAMS, TIERS, ERAS, RESEARCH, MILESTONES, fmtTi } from '../sim/data.js';
 import { itemIcon, CREDIT_ICON, paramIcon } from './icons.js';
+import { techTreePanel } from './techtree.js';
 import { U, WORLD } from '../core/shared.js';
 import { QUALITY } from '../core/engine.js';
 
@@ -422,26 +423,7 @@ export class UI {
     this.panelRefresh = null;
   }
 
-  researchPanel(panel) {
-    const g = this.game, R = g.research;
-    const body = this.header(panel, '연구', `<span style="color:var(--muted)">연구 속도 ${R.rate.toFixed(2)}/s · 보유 ${Math.floor(R.points)}</span>`);
-    const render = () => {
-      const eras = ['개척', '정착', '마을', '도시', '문명'];
-      body.innerHTML = `<div class="tree">${eras.map((name, i) => `<div class="tcol"><h3>${i + 1}. ${name}</h3>${RESEARCH.filter((r) => r.era === i + 1).map((r) => {
-        const done = R.has(r.id), cur = R.current === r.id, av = R.available(r.id);
-        const prog = Math.min(1, (R.progress[r.id] || 0) / r.cost);
-        const unlocks = Object.values(BUILDINGS).filter((d) => d.research === r.id).map((d) => d.name).join(', ');
-        return `<div class="tnode ${done ? 'done' : ''} ${cur ? 'cur' : ''} ${!done && !av ? 'lock' : ''}" data-id="${r.id}">
-          <div class="n">${esc(r.name)} ${R.eureka.has(r.id) ? '<span class="eu">유레카!</span>' : ''}</div>
-          <div class="d">${esc(r.desc)}${unlocks ? '<br>해금: ' + esc(unlocks) : ''}</div>
-          <div class="bar"><i style="width:${done ? 100 : prog * 100}%;background:${done ? 'var(--good)' : '#c49bff'}"></i></div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">${done ? '완료' : `${Math.floor(R.progress[r.id] || 0)} / ${r.cost}`}${!done && !av ? ' · 선행: ' + r.req.map((q) => R.name(q)).join(', ') : ''}</div></div>`;
-      }).join('')}</div>`).join('')}</div>
-      <p style="color:var(--muted);margin-top:10px">연구 점수는 연구 단말기·연구소, 테라포밍 단계 달성, 잔해 탐색에서 얻습니다. 고대 유적을 조사하면 무작위 기술에 「유레카」(비용 50%)가 붙습니다.</p>`;
-      body.querySelectorAll('.tnode').forEach((n) => n.onclick = () => { if (R.setCurrent(n.dataset.id)) { this.toast(R.name(n.dataset.id) + ' 연구 시작', 'info'); render(); } });
-    };
-    render();
-  }
+  researchPanel(panel) { techTreePanel(this, panel); }
 
   mapPanel(panel) {
     const g = this.game;
@@ -509,6 +491,7 @@ export class UI {
       rows.push(['상태', b.status || (b.idle ? '대기' : '가동 중')]);
       if (d.house) {
         const rep = g.colony.needReport(b);
+        rows.push(['계층', `${b.tier + 1} / ${TIERS.length} · ${esc(TIERS[b.tier].desc || '')}`]);
         rows.push(['거주', `${b.data.res || 0} / ${TIERS[b.tier].max}명 (목표 ${b.data.target ?? 0})`]);
         rows.push(['기본 필요', `<div class="needs">${rep.basic.map((n) => `<span class="need ${n.ok ? 'ok' : ''}">${n.name}</span>`).join('')}</div>`]);
         rows.push(['사치 필요', `<div class="needs">${rep.luxury.map((n) => `<span class="need ${n.ok ? 'ok' : ''}">${n.name}</span>`).join('')}</div>`]);
