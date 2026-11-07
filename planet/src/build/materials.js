@@ -315,6 +315,57 @@ export function makeBuildingMaterials() {
       diffuseColor.rgb *= 0.75 + 0.5 * n;`,
     emit: 'totalEmissiveRadiance += diffuseColor.rgb * 0.15 * vData.x;',
   });
+  // gold Kapton multi-layer insulation on avionics boxes and tanks:
+  // crinkled foil, mirror-bright where it faces you, dark in the creases
+  M.foil = patch(new THREE.MeshStandardMaterial({ vertexColors: true, color: 0xffffff, metalness: 1.0, roughness: 0.28, envMapIntensity: 1.6 }), 'foil', {
+    map: /* glsl */`
+      vec4 n1 = texture2D(tNoise, vOP.xy * 1.7 + vOP.z * 1.3 + vData.z);
+      vec4 n2 = texture2D(tNoise, vOP.zy * 4.1 + vOP.x * 0.7);
+      float cr = n1.g * 0.6 + n2.a * 0.4;
+      diffuseColor.rgb *= 0.75 + 0.45 * cr;
+      gH = cr * 0.02 + 1e-6;
+      gR2 = 0.18 + 0.3 * (1.0 - cr);`,
+    rough: 'float roughnessFactor = gR2;',
+  });
+  // stainless steel like the ships: ring welds every 1.8 m, faint vertical
+  // panel seams, heat tint along the welds, streaks in the brushing, red dust
+  // low down
+  M.steel = patch(new THREE.MeshPhysicalMaterial({ vertexColors: true, color: 0xffffff, metalness: 0.95, roughness: 0.3, envMapIntensity: 1.45 }), 'steel', {
+    map: /* glsl */`
+      float ring = vOP.y / 1.8;
+      float seamY = 1.0 - smoothstep(0.0, 0.02, abs(fract(ring) - 0.5) - 0.48);
+      float pv = (vOP.x * 0.83 + vOP.z * 0.56) / 2.3;
+      float seamX = 1.0 - smoothstep(0.0, 0.015, abs(fract(pv) - 0.5) - 0.485);
+      float fade = 1.0 - smoothstep(0.25, 0.8, length(fwidth(vec2(ring, pv))) * 3.0);
+      vec4 nz = texture2D(tNoise, vec2(vOP.x * 0.4 + vOP.z * 0.4, vOP.y * 2.2) + vData.z);
+      float panel = hash1(vec2(floor(ring), floor(pv)) + vData.z * 5.0);
+      vec3 c = diffuseColor.rgb * (0.9 + 0.1 * panel) * (0.95 + 0.08 * nz.g);
+      float heat = smoothstep(0.42, 0.5, abs(fract(ring) - 0.5)) * fade;
+      c = mix(c, c * vec3(0.92, 0.86, 0.74), heat * 0.6);
+      c *= 1.0 - max(seamY, seamX * 0.5) * 0.4 * fade;
+      float low = smoothstep(1.4, 0.0, vOP.y) * (0.5 + 0.5 * nz.r);
+      c = mix(c, c * vec3(0.75, 0.6, 0.48), low * 0.45);
+      diffuseColor.rgb = c;
+      gH = -seamY * 0.004 * fade + 1e-6;
+      gR2 = clamp(0.22 + 0.12 * panel + 0.1 * nz.b + low * 0.3, 0.0, 1.0);`,
+    rough: 'float roughnessFactor = gR2;',
+  });
+  // heat-shield tiles like the ships' belly: black hexagons with pale gaps
+  M.tiles = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78, metalness: 0.05 }), 'tiles', {
+    map: /* glsl */`
+      vec2 tp = vec2(vOP.x * 0.8 + vOP.z * 0.6, vOP.y) / 0.62;
+      vec2 hr = vec2(1.0, 1.7320508), hh = hr * 0.5;
+      vec2 ha = mod(tp, hr) - hh, hb = mod(tp - hh, hr) - hh;
+      vec2 gv = dot(ha, ha) < dot(hb, hb) ? ha : hb;
+      vec2 id = tp - gv, ag = abs(gv);
+      float hd = max(dot(ag, vec2(0.5, 0.8660254)), ag.x);
+      float gap = smoothstep(0.455, 0.49, hd) * (1.0 - smoothstep(0.3, 1.0, fwidth(tp.x) * 2.0));
+      float rnd = hash1(id);
+      vec3 tc = vec3(0.055, 0.056, 0.06) * (0.85 + 0.3 * rnd);
+      tc = mix(tc, vec3(0.62, 0.6, 0.57), step(0.996, rnd));
+      diffuseColor.rgb = mix(tc, vec3(0.32, 0.32, 0.33), gap);
+      gH = (1.0 - gap) * 0.004 + 1e-6;`,
+  });
   // mirror curtain wall (NEOM-style): reflective glass, a faint grid of
   // spandrel lines and per-floor tint variation; at night some floors glow
   M.mirror = patch(new THREE.MeshPhysicalMaterial({ vertexColors: true, color: 0x86a8c6, roughness: 0.05, metalness: 0.88, envMapIntensity: 1.5, clearcoat: 0.6, clearcoatRoughness: 0.05 }), 'mirror', {
@@ -451,4 +502,29 @@ export function makeHologramMaterial() {
     transparent: true, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending,
   });
   return mat;
+}
+
+// Materials for real hardware models (assets.js): their own texture with the
+// AO it was baked with, plus the same Mars weathering as everything else:
+// dust settled on up-facing surfaces, a dirty band at the base, slight
+// sun-fade on the paint. Instancing data, ANIM and SLIDE work as for the rest.
+const ASSET_MAP = /* glsl */`
+  #include <map_fragment>
+  vec4 nzA = texture2D(tNoise, vOP.xz * 0.13 + vOP.y * 0.04 + vData.z);
+  vec4 nzB = texture2D(tNoise, vOP.xz * 0.9 + vOP.zy * 0.35);
+  float upA = clamp(normalize(vON).y, 0.0, 1.0);
+  float lowA = smoothstep(1.6, 0.0, vOP.y) * (0.45 + 0.55 * nzA.g);
+  float dustA = clamp((upA * upA * 0.42 * (0.45 + 0.9 * nzA.r) + lowA * 0.55) * (0.75 + 0.5 * nzB.b) * uDustAmt / 0.6, 0.0, 0.85);
+  vec3 paintA = diffuseColor.rgb * vec3(0.95, 0.93, 0.9) * (0.94 + 0.08 * nzB.g);
+  diffuseColor.rgb = mix(paintA, vec3(0.6, 0.43, 0.31) * (0.82 + 0.3 * nzA.b), dustA);
+  gR2 = clamp(roughness + dustA * 0.35, 0.0, 1.0);
+`;
+const assetCache = new Map();
+export function assetMaterial(src, anim = null) {
+  const k = src.uuid + (anim ? JSON.stringify(anim) : '');
+  if (assetCache.has(k)) return assetCache.get(k);
+  const m = patch(src.clone(), 'asset:' + src.name, { map: ASSET_MAP, rough: 'float roughnessFactor = gR2;' }, anim && anim.slide ? { slide: anim.slide } : { anim });
+  m.envMapIntensity = 0.9;
+  assetCache.set(k, m);
+  return m;
 }

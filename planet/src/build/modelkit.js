@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { GeoBuilder, taperTube } from '../core/geobuilder.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mulberry32 } from '../core/noise.js';
+import { ASSETS } from './assets.js';
 
 // rounded boxes are cached by size so repeated parts share geometry work
 const rbCache = new Map();
@@ -43,6 +44,7 @@ export class ModelBuilder {
     this.lights = [];          // {x,y,z,color,intensity,dist}
     this.doors = [];           // {key, gb, slide:[x,y,z], x,z (door center)}
     this.entries = null;       // local x of front entrances (stairs land here)
+    this.assets = [];          // real hardware models: {geo, material, anim}
     this.top = 0;
   }
 
@@ -99,6 +101,25 @@ export class ModelBuilder {
     return gb;
   }
 
+  // a real hardware model from assets.js (its own textured material), set at
+  // (x, y, z), turned by rotY and scaled uniformly; anim turns it like
+  // animGroup, except the parts whose material name matches `fixed`
+  // `ground` sets the model's lowest point on y
+  asset(name, x, y, z, { rotY = 0, scale = 1, anim = null, fixed = null, ground = false } = {}) {
+    const A = ASSETS[name];
+    if (!A) return this;
+    if (ground) y -= A.box.min.y * scale;
+    const m = new THREE.Matrix4().compose(v(x, y, z), new THREE.Quaternion().setFromAxisAngle(v(0, 1, 0), rotY), v(scale, scale, scale));
+    for (const g of A.groups) {
+      const geo = g.geo.clone().applyMatrix4(m);
+      geo.computeBoundingBox(); geo.computeBoundingSphere();
+      this.assets.push({ geo, material: g.material, anim: fixed && fixed.test(g.material.name) ? null : anim });
+    }
+    const top = y + A.box.max.y * scale;
+    if (top > this.top) this.top = top;
+    return this;
+  }
+
   col(x0, y0, z0, x1, y1, z1, flags = {}) {
     this.colliders.push({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, hx: Math.abs(x1 - x0) / 2, hz: Math.abs(z1 - z0) / 2, y0: Math.min(y0, y1), y1: Math.max(y0, y1), ...flags });
   }
@@ -112,6 +133,7 @@ export class ModelBuilder {
     for (const [key, gb] of this.groups) if (!gb.empty) parts.push({ key, geo: gb.build() });
     for (const a of this.anims) if (!a.gb.empty) parts.push({ key: a.key, geo: a.gb.build(), anim: a.anim });
     for (const d of this.doors) if (!d.gb.empty) parts.push({ key: d.key, geo: d.gb.build(), anim: { slide: d.slide }, door: true });
+    for (const a of this.assets) parts.push(a.anim ? { key: 'asset', geo: a.geo, material: a.material, anim: a.anim } : { key: 'asset', geo: a.geo, material: a.material });
     return { parts, colliders: this.colliders, interiors: this.interiors, lights: this.lights, doors: this.doors.map((d) => ({ x: d.x, z: d.z })), entries: this.entries, height: this.top };
   }
 }

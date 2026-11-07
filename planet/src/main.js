@@ -12,6 +12,7 @@ import { Colliders } from './core/colliders.js';
 import { Props } from './world/props.js';
 import { Flora } from './world/flora.js';
 import { Game } from './game/game.js';
+import { loadAssets } from './build/assets.js';
 import { STAGES, ITEMS, RESEARCH } from './sim/data.js';
 
 const $ = (s) => document.querySelector(s);
@@ -28,6 +29,8 @@ async function boot() {
   await frame();
   Object.assign(TEX, generateTextures(WORLD.SEED));
   U.tNoise.value = TEX.noise;
+  progress(0.07, '장비 모델 불러오는 중');
+  try { await loadAssets(); } catch (e) { console.warn('assets', e); }
   progress(0.1, '대기 모델 계산 중');
   await frame();
   const terrain = new Terrain(engine.scene);

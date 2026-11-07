@@ -289,7 +289,7 @@ export class POIs {
     const group = new THREE.Group();
     const mats = g.buildings.mats;
     for (const part of model.parts) {
-      const m = new THREE.Mesh(part.geo, part.key === 'rock' ? (this._rockMat || (this._rockMat = makeRockMaterial())) : (mats[part.key] || mats.hull));
+      const m = new THREE.Mesh(part.geo, part.material ? part.material : part.key === 'rock' ? (this._rockMat || (this._rockMat = makeRockMaterial())) : (mats[part.key] || mats.hull));
       m.castShadow = part.key !== 'emissive' && part.key !== 'blink';
       m.receiveShadow = true;
       group.add(m);

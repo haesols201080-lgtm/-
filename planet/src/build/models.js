@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { ModelBuilder, C, L, v, e, plinth, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, wall, room, airlock, greebleRoof, ribbonTower, facade, bays, block, shed } from './modelkit.js';
 import { houseT1, houseT2, houseT3, houseT4, houseT1b, houseT2b, houseT3b, houseT4b, market, lounge, clinic, school, lab, comms, hqExtras } from './models_colony.js';
+import * as NASA from './models_nasa.js';
 import { lifesupport, sewage, recycling, powerbank, firestation, police, nursery, cityhall, tradepost } from './models_civic.js';
 import { houseS, houseSb, houseA, houseAb, houseR, houseRb, houseC, houseCb, houseP, housePb, houseN, houseNb, gym, textile, orchard, pharma, transit, university } from './models_homes.js';
 
@@ -784,6 +785,11 @@ const BUILDERS = {
   'house:6': houseC, 'house:6b': houseCb, 'house:7': houseP, 'house:7b': housePb,
   'house:8': (M) => houseT4(M), 'house:8b': houseT4b, 'house:9': houseN, 'house:9b': houseNb,
 };
+
+// agency-built base: printed halls, rigid modules and their working kit
+Object.assign(BUILDERS, { cityhall: NASA.cityhall, clinic: NASA.clinic, 'cityhall@open': NASA.cityhallOpen, 'clinic@open': NASA.clinicOpen });
+// a building type that has an open-air form for after the air is breathable
+export function hasOpenForm(type) { return !!BUILDERS[type + '@open']; }
 
 const cache = new Map();
 // mirrored variant (key suffix ':m'): flips X, fixes triangle winding, colliders, lights, doors

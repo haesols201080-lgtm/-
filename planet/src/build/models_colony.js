@@ -230,44 +230,30 @@ export function lab(M) {
   for (let i = 0; i < 3; i++) antenna(M, -2.6 + i * 0.7, H + 0.05, -1.6 + i * 0.3, 1.6 + i * 0.6, i % 2 ? L.green : L.red);
 }
 
-// deep-space comms: equipment building, steerable dish on a pedestal, masts
+// deep-space comms: a beam-waveguide tracking antenna of the Deep Space
+// Network type (NASA public-domain model, about 1:4.8 so the dish is ~7 m),
+// slewing in azimuth while powered; the receivers live in its pedestal.
+// Around it: the cable trench to the colony grid, a foil-wrapped equipment
+// cabinet, a timing/beacon mast and the pad floodlight.
 export function comms(M) {
   plinth(M, 8, 8);
-  block(M, -2.0, 2.2, 3.6, 3.4, { storeys: 1, fh: 3.2, bay: 1.7, win: 1.0, seed: 71, plant: false, signColor: L.cyan, canopyW: 2.0 });
-  vent(M, -2.4, 3.26, 2.8, 0.8, 0.6, 0.4);
-  M.cyl('concrete', 1.2, 0, -0.6, 1.4, 0.6, C.CONC, 24);
-  M.cyl('hull', 1.2, 0.6, -0.6, 0.8, 2.2, C.W2, 24);
-  M.cyl('metal', 1.2, 2.8, -0.6, 0.95, 0.16, C.G2, 24);
-  const dish = M.animGroup('hull', { pivot: [1.2, 0, -0.6], axis: [0, 1, 0], speed: 0.12 });
-  const prof = [];
-  for (let i = 0; i <= 10; i++) { const r = i / 10 * 3.2; prof.push(new THREE.Vector2(r, r * r * 0.09)); }
-  const g = new THREE.LatheGeometry(prof, 40);
-  g.rotateX(-0.75); g.translate(1.2, 4.1, -0.6);
-  dish.add(g, { color: C.W });
-  const back = new THREE.LatheGeometry(prof.map((p) => new THREE.Vector2(p.x, p.y - 0.12)).reverse(), 40);
-  back.rotateX(-0.75); back.translate(1.2, 4.1, -0.6);
-  dish.add(back, { color: C.G2 });
-  for (let k = 0; k < 3; k++) {
-    const a = k / 3 * PI * 2;
-    const rim = new THREE.Vector3(Math.cos(a) * 3.0, 0.8, Math.sin(a) * 3.0).applyEuler(e(-0.75, 0, 0)).add(v(1.2, 4.1, -0.6));
-    const focus = new THREE.Vector3(0, 2.4, 0).applyEuler(e(-0.75, 0, 0)).add(v(1.2, 4.1, -0.6));
-    const dir = focus.clone().sub(rim), len = dir.length();
-    const c = new THREE.CylinderGeometry(0.04, 0.04, len, 6);
-    const q = new THREE.Quaternion().setFromUnitVectors(v(0, 1, 0), dir.normalize());
-    c.applyQuaternion(q); c.translate((rim.x + focus.x) / 2, (rim.y + focus.y) / 2, (rim.z + focus.z) / 2);
-    dish.add(c, { color: C.G });
-  }
-  const f = new THREE.Vector3(0, 2.4, 0).applyEuler(e(-0.75, 0, 0)).add(v(1.2, 4.1, -0.6));
-  dish.add(new THREE.CylinderGeometry(0.18, 0.28, 0.5, 12), { pos: f, rot: e(-0.75, 0, 0), color: C.D });
-  M.box('metal', 1.2, 3.3, -0.6, 1.0, 1.3, 0.5, C.G2);
-  for (let i = 0; i < 3; i++) {
-    const x = 3.0 + (i % 2) * 0.5, z = 1.4 + i * 0.9;
-    M.cyl('metal', x, 0, z, 0.05, 4 + i * 0.8, C.G2, 6);
-    for (let k = 0; k < 3; k++) M.box('metal', x, 1.4 + k * 1.1 + i * 0.3, z, 0.7, 0.04, 0.04, C.G);
-    M.sphere('blink', x, 4.05 + i * 0.8, z, 0.07, i % 2 ? L.red : L.green, 6);
-  }
-  M.colCyl(1.2, -0.6, 1.4, 0, 3.0);
-  M.light(1.2, 3.0, -2.0, L.cyan, 1.5, 6);
+  M.asset('dsn34', 0, 0, 0.2, { scale: 0.21, anim: { pivot: [0, 0, 0.2], axis: [0, 1, 0], speed: 0.05 }, fixed: /base/ });
+  M.colCyl(0, 0.2, 2.05, 0, 3.2);
+  // cable trench cover from the pedestal to the cabinet
+  M.box('metal', -2.9, 0.05, -2.2, 0.5, 0.1, 2.6, 0x5c6168);
+  for (let i = 0; i < 5; i++) M.box('metal', -2.9, 0.11, -3.3 + i * 0.55, 0.52, 0.02, 0.04, 0x3a3f45);
+  // equipment cabinet in gold MLI with a radiator face
+  M.box('foil', -3.0, 0.65, -3.35, 1.3, 1.3, 0.9);
+  M.box('metal', -3.0, 1.34, -3.35, 1.4, 0.08, 1.0, 0x8a9096);
+  M.box('hull', -3.0, 0.65, -3.82, 1.1, 1.0, 0.04, 0xd8dade);
+  M.box('emissive', -2.65, 1.05, -3.85, 0.12, 0.05, 0.02, L.green);
+  M.col(-3.65, 0, -3.8, -2.35, 1.4, -2.9);
+  // timing/beacon mast with GPS-style puck and obstruction light
+  M.cyl('metal', 3.3, 0, -3.3, 0.05, 4.4, 0x8a9096, 8);
+  M.cyl('hull', 3.3, 4.4, -3.3, 0.16, 0.08, 0xe6e8ea, 12);
+  M.sphere('blink', 3.3, 4.6, -3.3, 0.07, L.red, 6);
+  for (let k = 0; k < 3; k++) M.box('metal', 3.3, 1.2 + k * 1.1, -3.3, 0.5, 0.03, 0.03, 0x5c6168);
+  M.light(-3.0, 1.6, -4.4, L.white, 1.2, 6);
 }
 
 // HQ exterior upgrade: airlock, mullions, roof modules (interior from models.js)

@@ -1,6 +1,7 @@
 // Renders building models to small images for the build menu and hotbar.
 import * as THREE from 'three';
 import { getModel } from '../build/models.js';
+import { assetMaterial } from '../build/materials.js';
 
 export class Thumbs {
   constructor(game) {
@@ -37,7 +38,7 @@ export class Thumbs {
     const grp = new THREE.Group();
     const box = new THREE.Box3();
     for (const p of model.parts) {
-      const m = new THREE.Mesh(p.geo, g.buildings.mats[p.key] || g.buildings.mats.hull);
+      const m = new THREE.Mesh(p.geo, p.material ? assetMaterial(p.material) : (g.buildings.mats[p.key] || g.buildings.mats.hull));
       grp.add(m);
       p.geo.computeBoundingBox();
       box.union(p.geo.boundingBox);

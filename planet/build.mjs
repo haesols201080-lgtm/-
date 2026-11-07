@@ -9,7 +9,7 @@ const worker = await esbuild.build({
 const workerCode = worker.outputFiles[0].text;
 await esbuild.build({
   entryPoints: ['src/main.js'], bundle: true, format: 'iife', outfile: 'game.js', minify, target: 'es2020',
-  legalComments: 'none', sourcemap: minify ? false : 'inline',
+  legalComments: 'none', sourcemap: minify ? false : 'inline', loader: { '.glb': 'binary' },
   plugins: [{
     name: 'inline-worker',
     setup(b) {

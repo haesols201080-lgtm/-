@@ -3,8 +3,8 @@
 // the player approaches, interior volumes and the pool of point lights that
 // follow the camera.
 import * as THREE from 'three';
-import { getModel } from './models.js';
-import { makeBuildingMaterials, animMaterial } from './materials.js';
+import { hasOpenForm, getModel } from './models.js';
+import { makeBuildingMaterials, animMaterial, assetMaterial } from './materials.js';
 import { BUILDINGS } from '../sim/data.js';
 import { U } from '../core/shared.js';
 
@@ -18,7 +18,8 @@ class ModelBatch {
     this.cap = 0;
     this.parts = model.parts.map((p) => {
       let mat;
-      if (p.anim) mat = animMaterial(mats, p.key, p.anim);
+      if (p.material) mat = assetMaterial(p.material, p.anim);
+      else if (p.anim) mat = animMaterial(mats, p.key, p.anim);
       else mat = mats[p.key];
       return { part: p, mat, mesh: null };
     });
@@ -127,7 +128,30 @@ export class Buildings {
 
   // homes use a mirrored variant for half of the instances so streets do not repeat
   // homes come in two designs per tier, each also mirrored: four looks per tier
-  modelKey(type, tier = 0, seed = 0) { return type === 'house' ? 'house:' + tier + (Math.floor(seed * 7919) % 2 ? 'b' : '') + (Math.floor(seed * 1000) % 2 ? ':m' : '') : type; }
+  // civic buildings with an open-air form switch to it once the air is breathable
+  modelKey(type, tier = 0, seed = 0) {
+    if (type === 'house') return 'house:' + tier + (Math.floor(seed * 7919) % 2 ? 'b' : '') + (Math.floor(seed * 1000) % 2 ? ':m' : '');
+    return this.isOpen() && hasOpenForm(type) ? type + '@open' : type;
+  }
+  isOpen() { return !!(this.game.terra && this.game.terra.breathable); }
+  // rebuild buildings whose form depends on the air (sealed vs open)
+  refreshForms() {
+    let n = 0;
+    for (const b of this.list) {
+      if (b.def.house) continue;
+      const key = this.modelKey(b.type, b.tier, b.data.seed);
+      if (key === b.key) continue;
+      b.batch.remove(b);
+      this.game.colliders.removeOwner(b.id);
+      b.cols = [];
+      b.key = key; b.model = getModel(key);
+      this.batch(key).add(b);
+      this.addColliders(b);
+      this.game.fx && this.game.fx.build(b.x, b.y, b.z, Math.max(b.hw, b.hd));
+      n++;
+    }
+    return n;
+  }
 
   add(type, x, y, z, rot, extra = {}) {
     const def = BUILDINGS[type];
