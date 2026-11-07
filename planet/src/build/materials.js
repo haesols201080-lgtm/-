@@ -315,6 +315,59 @@ export function makeBuildingMaterials() {
       diffuseColor.rgb *= 0.75 + 0.5 * n;`,
     emit: 'totalEmissiveRadiance += diffuseColor.rgb * 0.15 * vData.x;',
   });
+  // mirror curtain wall (NEOM-style): reflective glass, a faint grid of
+  // spandrel lines and per-floor tint variation; at night some floors glow
+  M.mirror = patch(new THREE.MeshPhysicalMaterial({ vertexColors: true, color: 0x86a8c6, roughness: 0.05, metalness: 0.88, envMapIntensity: 1.5, clearcoat: 0.6, clearcoatRoughness: 0.05 }), 'mirror', {
+    map: /* glsl */`
+      float fy = vOP.y / 3.6;
+      float hz = abs(vOP.x) + abs(vOP.z);
+      float fx = (vOP.x + vOP.z * 1.37) / 1.5;
+      float lineY = 1.0 - smoothstep(0.0, 0.035, abs(fract(fy) - 0.06));
+      float lineX = 1.0 - smoothstep(0.0, 0.05, abs(fract(fx) - 0.5) - 0.47);
+      float fade = 1.0 - smoothstep(0.3, 0.9, length(fwidth(vec2(fy, fx))) * 2.0);
+      float tint = hash1(vec2(floor(fy), floor(fx)) + vData.z * 9.0);
+      diffuseColor.rgb *= (0.9 + 0.12 * tint) * (1.0 - 0.45 * max(lineY, lineX * 0.6) * fade);
+      gR2 = 0.05 + 0.06 * tint + lineY * 0.2;`,
+    rough: 'float roughnessFactor = gR2;',
+    emit: /* glsl */`
+      {
+        float fy2 = vOP.y / 3.6, fx2 = (vOP.x + vOP.z * 1.37) / 1.5;
+        float r = hash1(vec2(floor(fy2), floor(fx2 * 0.5)) + vData.z * 3.0);
+        float win = step(0.12, fract(fy2)) * step(fract(fy2), 0.92);
+        totalEmissiveRadiance += vec3(1.0, 0.82, 0.6) * step(0.45, r) * win * uNight * vData.x * 0.55;
+        // a sky gradient caught in the glass, strongest at grazing angles, so the
+        // towers read as glass even when the real sky is dull
+        vec3 Vv = normalize(vViewPosition);
+        vec3 Rw = inverseTransformDirection(reflect(-Vv, normal), viewMatrix);
+        float fres = pow(1.0 - clamp(dot(normal, Vv), 0.0, 1.0), 3.0);
+        vec3 skyR = mix(vec3(0.78, 0.84, 0.9), vec3(0.16, 0.3, 0.55), smoothstep(-0.05, 0.6, Rw.y));
+        skyR = mix(vec3(0.22, 0.17, 0.14), skyR, smoothstep(-0.25, 0.0, Rw.y));
+        totalEmissiveRadiance += skyR * (0.12 + 0.5 * fres) * (1.0 - uNight * 0.85);
+      }`,
+  });
+  // multi-layer insulation: white beta-cloth blanket, quilted in pillowed
+  // cells with darker stitch lines, cloth sheen varying cell to cell, red dust
+  // settling on the lower curve
+  M.mli = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.0 }), 'mli', {
+    map: /* glsl */`
+      vec3 nn = normalize(vON);
+      vec2 uv = abs(nn.y) > 0.92 ? vOP.xz : vec2(vOP.x + vOP.z * 0.0, atan(vOP.y, vOP.z) * 2.0);
+      if (abs(nn.x) > 0.6) uv = vOP.zy;
+      vec2 cell = vec2(0.62, 0.55);
+      vec2 q = uv / cell, f = fract(q) - 0.5;
+      float fw = length(fwidth(q));
+      float fade = 1.0 - smoothstep(0.25, 0.7, fw);
+      float stitch = max(smoothstep(0.455, 0.5, abs(f.x)), smoothstep(0.455, 0.5, abs(f.y))) * fade;
+      float hc = hash1(floor(q) + vData.z * 7.0);
+      vec4 nz = texture2D(tNoise, vOP.xz * 0.09 + vOP.y * 0.13 + vData.z);
+      vec3 c = diffuseColor.rgb * (0.9 + 0.08 * hc) * (1.0 - stitch * 0.22);
+      float low = smoothstep(0.1, -0.7, nn.y) * 0.5 + smoothstep(1.6, 0.0, vOP.y) * 0.4;
+      c = mix(c, c * vec3(0.78, 0.62, 0.5), clamp(low * (0.4 + 0.6 * nz.g), 0.0, 1.0) * 0.55);
+      diffuseColor.rgb = c;
+      gH = (0.5 - dot(f, f) * 2.0) * 0.014 * fade + 1e-6;
+      gR2 = 0.62 + 0.18 * hc + stitch * 0.1;`,
+    rough: 'float roughnessFactor = gR2;',
+  });
   // sintered regolith, printed in layers: fine horizontal beads a few cm
   // apart, slight wander between passes, warm iron-oxide colour, dust on top
   M.regolith = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0.0 }), 'regolith', {

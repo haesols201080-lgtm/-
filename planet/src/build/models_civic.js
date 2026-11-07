@@ -3,7 +3,7 @@
 // stations, a nursery under glass, the city hall and the orbital trade post.
 // Same local frame as models.js (origin at the footprint centre, front = -Z).
 import * as THREE from 'three';
-import { C, L, v, e, plinth, block, tank, pipe, vent, radiator, antenna, ribDome, habDome, linkTube, airlockTube, railing, truss, rooftopPlant } from './modelkit.js';
+import { C, L, v, e, plinth, block, tank, pipe, vent, radiator, antenna, ribDome, habDome, linkTube, airlockTube, railing, truss, rooftopPlant, futureTower, facility } from './modelkit.js';
 
 const PI = Math.PI;
 
@@ -114,24 +114,20 @@ export function firestation(M) {
 }
 
 // police: two-storey station, blue light band, radio mast, a patrol drone pad
+// police: a compact blade tower with a blue halo crown over a station podium,
+// radio mast, patrol rover and bollards
 export function police(M) {
   plinth(M, 8, 8);
-  const H = block(M, 0, 1.0, 7.0, 5.4, { storeys: 2, fh: 3.3, bay: 1.7, win: 1.1, plant: false, seed: 241, signColor: 0x5a8cff, canopyW: 2.4 });
-  M.box('emissive', 0, 6.2, -1.72, 6.6, 0.12, 0.04, 0x4d7dff);
-  M.cyl('metal', -2.2, H, 2.4, 0.08, 5.0, C.G2, 8);
-  for (const y of [2, 3.5, 4.6]) M.box('metal', -2.2, H + y, 2.4, 0.9 - y * 0.12, 0.05, 0.05, C.G2);
-  M.sphere('blink', -2.2, H + 5.05, 2.4, 0.1, L.red, 8);
-  // drone pad with a parked drone
-  M.cyl('metal', 1.6, H + 0.05, 1.2, 1.3, 0.1, C.D, 28);
-  M.add('hull', new THREE.TorusGeometry(1.0, 0.04, 4, 28), { pos: v(1.6, H + 0.16, 1.2), rot: e(PI / 2, 0, 0), color: C.Y });
-  M.box('hull', 1.6, H + 0.38, 1.2, 0.5, 0.2, 0.5, C.W);
-  for (const [dx, dz] of [[-0.45, -0.45], [0.45, -0.45], [-0.45, 0.45], [0.45, 0.45]]) M.cyl('metal', 1.6 + dx, H + 0.4, 1.2 + dz, 0.22, 0.03, C.D, 12);
-  // patrol rover and bollards
+  const H = block(M, 0, 1.0, 7.0, 5.4, { storeys: 1, fh: 3.8, bay: 1.7, win: 1.1, plant: false, seed: 241, signColor: 0x4d7dff, canopyW: 2.4 });
+  futureTower(M, 0.9, 1.6, { y0: H, h: 12, w: 4.4, d: 3.4, form: 'blade', taper: 0.7, crown: 'ring', accent: 0x4d7dff, rot: 0.3 });
+  M.cyl('metal', -2.4, H, 2.6, 0.08, 6.0, C.G2, 8);
+  for (const y of [2, 3.6, 5.0]) M.box('metal', -2.4, H + y, 2.6, 0.9 - y * 0.1, 0.05, 0.05, C.G2);
+  M.sphere('blink', -2.4, H + 6.05, 2.6, 0.1, L.red, 8);
   M.box('hull', 2.6, 0.75, -3.2, 2.4, 0.9, 1.3, C.W);
   M.box('glass', 2.3, 1.3, -3.2, 1.2, 0.45, 1.25);
   M.box('hull', 2.6, 0.75, -3.86, 2.4, 0.2, 0.02, 0x3d76c9);
   M.box('emissive', 2.3, 1.58, -3.2, 0.6, 0.08, 0.3, 0x4d7dff);
-  for (const x of [1.7, 3.5]) for (const z of [-3.75, -2.65]) wheel(M, x, 0.32, z, 0.32, 0.2);
+  for (const x of [1.7, 3.5]) for (const z of [-3.75, -2.65]) M.add('metal', new THREE.CylinderGeometry(0.32, 0.32, 0.2, 16), { pos: v(x, 0.32, z), rot: e(0, 0, Math.PI / 2), color: C.K });
   M.col(1.4, 0, -3.85, 3.8, 1.6, -2.55);
   for (const x of [-3.4, -2.6, -1.8]) M.cyl('metal', x, 0, -3.7, 0.1, 0.8, C.G2, 10);
 }
@@ -161,31 +157,27 @@ export function nursery(M) {
 }
 
 // city hall: three storeys behind a colonnade, a glazed rotunda, flags, steps
+// city hall: a twisting mirror-glass tower over a civic podium, a portico on
+// steel columns, a plaza with flags and a fountain
 export function cityhall(M) {
   plinth(M, 14, 12);
-  const H = block(M, 0, 2.0, 12.0, 6.0, { storeys: 3, fh: 3.4, bay: 2.2, win: 1.3, plant: false, seed: 251, signColor: 0xffd79a, canopyW: 3.2 });
-  // portico: a deep cantilevered canopy on four slender steel columns
-  for (const x of [-4.2, -1.4, 1.4, 4.2]) M.cyl('metal', x, 0.3, -3.6, 0.12, 6.6, C.G2, 12);
-  M.box('hull', 0, 7.0, -2.5, 11.4, 0.36, 3.6, C.W);
-  M.box('metal', 0, 6.8, -2.5, 11.0, 0.04, 3.2, C.D);
-  for (let i = 0; i < 9; i++) M.box('emissive', -4.8 + i * 1.2, 6.77, -2.5, 0.5, 0.02, 2.6, L.warm);
-  M.col(-5.7, 6.82, -4.3, 5.7, 7.2, -0.7);
-  // rotunda: glazed drum and ribbed dome over the council chamber
-  M.cyl('hull', 0, H, 2.0, 3.0, 1.6, C.W2, 40);
-  for (let i = 0; i < 16; i++) { const a = i / 16 * PI * 2; M.box('glass', Math.sin(a) * 3.02, H + 0.8, 2.0 + Math.cos(a) * 3.02, 0.9, 1.1, 0.04, undefined, a); }
-  ribDome(M, 0, H + 1.6, 2.0, 2.9, { ribs: 14, rib: C.W2 });
-  M.colCyl(0, 2.0, 3.0, H, H + 4.5);
-  // broad steps and the plaza with flags and a fountain
-  for (let k = 0; k < 3; k++) M.box('concrete', 0, 0.1 + k * 0.1, -2.9 - k * 0.45, 9 - k * 0.6, 0.2 + k * 0.2, 0.6, C.CONC2);
-  for (const [x, c] of [[-4.5, C.BLUE], [-3.6, 0xf2f2f2], [-2.7, C.TEAL]]) {
-    M.cyl('metal', x, 0, -5.0, 0.05, 7.0, C.G, 8);
-    M.box('hull', x + 0.55, 6.4, -5.0, 1.0, 0.6, 0.02, c);
+  const H = block(M, 0, 2.2, 12.6, 6.4, { storeys: 1, fh: 4.6, bay: 2.4, win: 1.6, shop: true, plant: false, seed: 251, signColor: 0xffd79a, canopyW: 3.4, canopyY: 3.6 });
+  futureTower(M, 0.6, 2.6, { y0: H, h: 30, w: 6.2, d: 5.2, form: 'twist', twist: 1.15, taper: 0.62, crown: 'ring', accent: 0xffd79a, rot: 0.2 });
+  // portico: a deep cantilevered canopy on slender steel columns
+  for (const x of [-4.4, -1.5, 1.5, 4.4]) M.cyl('metal', x, 0.3, -3.6, 0.11, 4.4, C.G2, 12);
+  M.box('hull', 0, 4.8, -2.4, 11.6, 0.32, 3.8, C.W);
+  M.box('metal', 0, 4.62, -2.4, 11.2, 0.04, 3.4, C.D);
+  for (let i = 0; i < 9; i++) M.box('emissive', -4.8 + i * 1.2, 4.59, -2.4, 0.5, 0.02, 2.8, L.warm);
+  M.col(-5.8, 4.6, -4.3, 5.8, 4.96, -0.5);
+  for (let k = 0; k < 3; k++) M.box('concrete', 0, 0.1 + k * 0.1, -4.6 - k * 0.4, 9 - k * 0.6, 0.2 + k * 0.2, 0.55, C.CONC2);
+  for (const [x, c] of [[-5.4, C.BLUE], [-4.6, 0xf2f2f2], [-3.8, C.TEAL]]) {
+    M.cyl('metal', x, 0, -5.4, 0.05, 7.0, C.G, 8);
+    M.box('hull', x + 0.55, 6.4, -5.4, 1.0, 0.6, 0.02, c);
   }
-  M.cyl('concrete', 3.6, 0, -4.6, 1.2, 0.45, C.CONC, 28);
-  M.cyl('hull', 3.6, 0.38, -4.6, 1.05, 0.04, 0x2c6a7a, 28);
-  M.cyl('concrete', 3.6, 0.4, -4.6, 0.15, 0.7, C.CONC2, 10);
-  M.colCyl(3.6, -4.6, 1.2, 0, 0.45);
-  rooftopPlant(M, 4.0, H + 0.04, 3.4, 1.6, 31);
+  M.cyl('concrete', 4.4, 0, -5.0, 1.0, 0.45, C.CONC, 28);
+  M.cyl('hull', 4.4, 0.38, -5.0, 0.86, 0.04, 0x2c6a7a, 28);
+  M.cyl('concrete', 4.4, 0.4, -5.0, 0.12, 0.7, C.CONC2, 10);
+  M.colCyl(4.4, -5.0, 1.0, 0, 0.45);
 }
 
 // orbital trade post: a lander on its pad, a crane over stacked containers, a warehouse

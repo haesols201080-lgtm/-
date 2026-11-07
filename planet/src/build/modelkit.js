@@ -803,12 +803,15 @@ export function canopy(M, fx, fz, a, w = 3.0, dep = 1.6, y = 2.9, sign = L.white
 
 // Rectilinear block: punched-window facades on four sides, roof slab with
 // parapet and coping, rooftop plant. Front faces -z. Returns roof level.
-// Pressurised civic building, the way a Mars town would build one: a
-// rounded pressure shell (no sharp corners), continuous ribbon glazing that
-// wraps the corners between composite spandrels, a protruding slab line at
-// every floor, a 3D-printed regolith base the walls stand in, a regolith
-// shielding berm on the roof against radiation, and an airlock vestibule
-// at the entrance. Same signature as before; returns the roof height.
+// Surface facility, built the way a space agency would put one on Mars:
+// rigid pressure modules (4.2 m like station modules, ellipsoidal heads)
+// wrapped in white multi-layer insulation, ring frames at the segment joints,
+// small portholes, handrails, sitting on saddle supports. Two-storey
+// buildings stack a second row on a steel rack with a vertical node tower
+// for the stairs. The back is buried in a sintered-regolith shielding berm.
+// An airlock tube with a hatch is the door. A grated equipment deck on top
+// carries radiators, masts and lights (and whatever the caller adds at H).
+// Same signature as pavilion(); returns the deck height H.
 function ringShape(w, d, r, t) {
   const s = roundRect(w, d, r);
   s.holes.push(roundRect(w - 2 * t, d - 2 * t, Math.max(0.04, r - t)));
@@ -825,7 +828,130 @@ function slab(M, key, cx, y, cz, h, w, d, r, color, bevel = 0) {
   g.rotateX(-Math.PI / 2);
   M.add(key, g, { pos: v(cx, y, cz), color });
 }
-export function block(M, cx, cz, w, d, { storeys = 2, fh = 3.3, y0 = 0, color = C.W, bay = 2.2, win = 1.3, door = true, shop = false, parapet = 0.75, plant = true, seed = 1, sides = true, signColor = L.white, canopyW = 3.2, canopyY = 2.95 } = {}) {
+
+// one horizontal pressure module along x, centred at (x, y, z)
+export function habModule(M, x, y, z, len, r, { accent = C.BLUE, ports = 3, portSide = -1, saddles = true, hatchEnd = 0, label = null } = {}) {
+  const head = r * 0.5, body = Math.max(0.5, len - 2 * head);
+  const prof = [];
+  for (let i = 0; i <= 10; i++) { const a = i / 10 * Math.PI / 2; prof.push(new THREE.Vector2(Math.sin(a) * r, -body / 2 - Math.cos(a) * head)); }
+  for (let i = 0; i <= 10; i++) { const a = i / 10 * Math.PI / 2; prof.push(new THREE.Vector2(Math.cos(a) * r, body / 2 + Math.sin(a) * head)); }
+  const g = new THREE.LatheGeometry(prof, 40);
+  g.rotateZ(-Math.PI / 2);
+  M.add('mli', g, { pos: v(x, y, z), color: C.W });
+  // segment rings, the end flanges darker, an identity band near the door end
+  const n = Math.max(2, Math.round(body / 1.6));
+  for (let i = 0; i <= n; i++) {
+    const t = -body / 2 + i * body / n;
+    M.add('metal', new THREE.TorusGeometry(r + 0.025, i === 0 || i === n ? 0.075 : 0.04, 6, 40), { pos: v(x + t, y, z), rot: e(0, Math.PI / 2, 0), color: i === 0 || i === n ? C.G2 : C.W2 });
+  }
+  M.add('hull', new THREE.CylinderGeometry(r + 0.03, r + 0.03, 0.42, 40, 1, true), { pos: v(x - body / 2 + 0.55, y, z), rot: e(0, 0, Math.PI / 2), color: accent });
+  // portholes on one side: small, thick-rimmed, with a sunshade lip
+  for (let i = 0; i < ports; i++) {
+    const t = -body / 2 + (i + 0.5) * body / ports;
+    const pz = z + portSide * (r + 0.02), py = y + 0.15;
+    M.add('glass', new THREE.CylinderGeometry(0.2, 0.2, 0.06, 20), { pos: v(x + t, py, pz), rot: e(Math.PI / 2, 0, 0) });
+    M.add('metal', new THREE.TorusGeometry(0.23, 0.055, 8, 22), { pos: v(x + t, py, pz + portSide * 0.02), color: C.G2 });
+    M.add('metal', new THREE.BoxGeometry(0.56, 0.05, 0.16), { pos: v(x + t, py + 0.3, pz + portSide * 0.06), color: C.G2 });
+  }
+  // handrail along the upper flank
+  const hz = z + portSide * r * 0.72, hy = y + r * 0.72;
+  M.tube('metal', [[x - body / 2 + 0.3, hy, hz], [x + body / 2 - 0.3, hy, hz]], 0.025, 0xc9a640, 4);
+  for (let i = 0; i <= 3; i++) M.box('metal', x - body / 2 + 0.3 + i * (body - 0.6) / 3, hy - 0.05, hz - portSide * 0.04, 0.04, 0.12, 0.08, 0xc9a640);
+  // label plate with the facility code light
+  if (label !== null) {
+    M.box('metal', x + body * 0.22, y + 0.85, z + portSide * (r * 0.42 + 0.02), 1.4, 0.36, 0.03, C.D, 0);
+    M.box('emissive', x + body * 0.22, y + 0.85, z + portSide * (r * 0.42 + 0.04), 1.1, 0.08, 0.02, label);
+  }
+  // hatch on an end head
+  if (hatchEnd) {
+    const ex = x + hatchEnd * (body / 2 + head - 0.06);
+    M.box('metal', ex, y - 0.2, z, 0.12, 1.5, 1.1, C.G2);
+    M.box('hull', ex + hatchEnd * 0.05, y - 0.2, z, 0.06, 1.3, 0.9, C.W2);
+  }
+  // saddle supports on footings
+  if (saddles) for (const t of [-body * 0.32, body * 0.32]) {
+    M.add('metal', new THREE.BoxGeometry(0.34, y - r * 0.55, r * 1.3), { pos: v(x + t, (y - r * 0.55) / 2, z), color: C.G2 });
+    M.add('metal', new THREE.CylinderGeometry(r * 0.98, r * 0.98, 0.32, 24, 1, true, Math.PI * 0.62, Math.PI * 0.76), { pos: v(x + t, y, z), rot: e(0, 0, Math.PI / 2), color: C.G2 });
+    M.box('concrete', x + t, 0.08, z, 0.7, 0.16, r * 1.6, C.CONC2);
+  }
+  M.col(x - len / 2, y - r, z - r, x + len / 2, y + r, z + r);
+}
+
+export function facility(M, cx, cz, w, d, { storeys = 2, fh = 3.3, y0 = 0, color = C.W, bay = 2.2, win = 1.3, door = true, shop = false, parapet = 0.75, plant = true, seed = 1, sides = true, signColor = L.white, canopyW = 3.2, canopyY = 2.95 } = {}) {
+  const levels = Math.min(2, storeys);
+  const R = Math.min(2.1, d / 2 - 0.9);
+  const node = levels > 1 && w > 7;
+  const L = w - (node ? 3.4 : 1.2), mx = cx - (node ? 1.1 : 0);
+  const yc = y0 + R + 0.55;
+  const ports = Math.max(2, Math.round(L / 2.2));
+  habModule(M, mx, yc, cz, L, R, { accent: signColor, ports: shop ? ports + 1 : ports, label: signColor });
+  let top = yc + R;
+  if (levels > 1) {
+    // steel rack carrying the upper module, grated floor between them
+    const yd = yc + R + 0.5, L2 = L - 1.2, yc2 = yd + R + 0.5;
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) M.box('metal', mx + sx * (L2 / 2 - 0.4), yd / 2, cz + sz * (R + 0.25), 0.22, yd, 0.22, C.G2);
+    for (const sz of [-1, 1]) M.box('metal', mx, yd - 0.12, cz + sz * (R + 0.25), L2, 0.24, 0.2, C.G2);
+    M.box('metal', mx, yd, cz, L2, 0.08, 2 * R + 0.5, 0x6f757c);
+    for (let i = 0; i < 4; i++) M.box('metal', mx - L2 / 2 + (i + 0.5) * L2 / 4, yd - 0.16, cz, 0.12, 0.2, 2 * R + 0.5, C.G2);
+    habModule(M, mx + 0.4, yc2, cz, L2, R, { accent: signColor, ports: Math.max(2, ports - 1), saddles: false });
+    for (const t of [-L2 * 0.3, L2 * 0.3]) M.box('metal', mx + 0.4 + t, yd + 0.3, cz, 0.3, 0.6, R * 1.2, C.G2);
+    top = yc2 + R;
+  }
+  if (node) {
+    // vertical node: stairs and lift between the levels, a cupola on top
+    const nx = cx + w / 2 - 1.35, nr = 1.2;
+    M.cyl('mli', nx, 0.3, cz, nr, top - 0.3, C.W, 32);
+    for (let y = 1.5; y < top - 0.5; y += 1.6) M.add('metal', new THREE.TorusGeometry(nr + 0.02, 0.04, 6, 32), { pos: v(nx, y, cz), rot: e(Math.PI / 2, 0, 0), color: C.W2 });
+    for (const y of [2.2, top - 2.0]) porthole(M, nx, y, cz - nr - 0.01, 0.2, '-z');
+    M.add('glass', new THREE.SphereGeometry(nr * 0.8, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), { pos: v(nx, top + 0.1, cz) });
+    M.add('metal', new THREE.TorusGeometry(nr * 0.82, 0.07, 6, 28), { pos: v(nx, top + 0.1, cz), rot: e(Math.PI / 2, 0, 0), color: C.G2 });
+    M.colCyl(nx, cz, nr, 0, top);
+  }
+  // shielding berm of sintered regolith burying the back of the ground level
+  if (y0 === 0) {
+    const bh = Math.min(yc + R * 0.55, 3.6), sh = new THREE.Shape([new THREE.Vector2(0, 0), new THREE.Vector2(2.4, 0), new THREE.Vector2(0.5, bh), new THREE.Vector2(-0.2, bh)]);
+    const berm = new THREE.ExtrudeGeometry(sh, { depth: L * 0.92, bevelEnabled: true, bevelThickness: 0.6, bevelSize: 0.4, bevelSegments: 2, curveSegments: 4 });
+    berm.rotateY(-Math.PI / 2);
+    M.add('regolith', berm, { pos: v(mx + L * 0.46, 0, cz + R * 0.55), color: REGOLITH });
+    M.col(mx - L / 2, 0, cz + R * 0.5, mx + L / 2, bh, Math.min(cz + d / 2, cz + R + 2.2));
+  }
+  // equipment deck on top: grating, rails, radiators, a mast, floodlights
+  const H = top + 0.55;
+  const dw = Math.min(L - 0.6, w - 1.2), dd = Math.min(2 * R - 0.4, d - 1.0);
+  M.box('metal', mx, H - 0.06, cz, dw, 0.1, dd, 0x6f757c);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) M.box('metal', mx + sx * (dw / 2 - 0.3), H - 0.32, cz + sz * (dd / 2 - 0.3), 0.14, 0.5, 0.14, C.G2);
+  railing(M, mx - dw / 2, cz - dd / 2, mx + dw / 2, cz - dd / 2, H, 0.9, C.G);
+  railing(M, mx - dw / 2, cz + dd / 2, mx + dw / 2, cz + dd / 2, H, 0.9, C.G);
+  if (plant) {
+    radiator(M, mx + dw * 0.18, H, cz + dd * 0.15, Math.min(2.6, dw * 0.35), 1.2, 0, C.W2);
+    antenna(M, mx - dw / 2 + 0.5, H, cz + dd / 2 - 0.4, 2.2 + (seed % 3) * 0.7);
+    vent(M, mx - dw * 0.22, H, cz - dd * 0.2, 0.7, 0.55, 0.4);
+  }
+  for (const sx of [-1, 1]) {
+    M.cyl('metal', mx + sx * (dw / 2 - 0.2), H, cz - dd / 2 + 0.2, 0.04, 1.3, C.G2, 6);
+    M.box('emissive', mx + sx * (dw / 2 - 0.2), H + 1.32, cz - dd / 2 + 0.05, 0.3, 0.12, 0.08, L.white);
+    M.light(mx + sx * (dw / 2 - 0.2), H + 1.2, cz - dd / 2 - 0.5, L.white, 1.2, 9);
+  }
+  // utilities at ground level: a cable tray along the front, a pair of tanks
+  if (y0 === 0) {
+    M.box('metal', mx, 0.45, cz - R - 0.35, L * 0.8, 0.12, 0.3, C.G2);
+    for (let i = 0; i < 4; i++) M.box('metal', mx - L * 0.36 + i * L * 0.24, 0.22, cz - R - 0.35, 0.06, 0.45, 0.06, C.G2);
+    if (w - L > 0.9 && !node) {
+      tank(M, cx + w / 2 - 0.45, 0, cz + R * 0.3, 0.38, 1.6, C.W2, C.Y);
+    }
+  }
+  // the door: an airlock tube with a hatch, a lit sign over it
+  if (door && y0 === 0) {
+    const ax = mx - L * 0.12;
+    airlockTube(M, ax, 1.3, cz - R * 0.55, cz - d / 2 + 0.25, 1.12);
+    M.box('emissive', ax, 2.75, cz - d / 2 + 0.35, 1.0, 0.12, 0.04, signColor);
+  }
+  return H;
+}
+
+// Low-rise pressurised pavilion: rounded shell, ribbon glazing, regolith
+// base, airlock porch. Homes and low civic buildings.
+export function pavilion(M, cx, cz, w, d, { storeys = 2, fh = 3.3, y0 = 0, color = C.W, bay = 2.2, win = 1.3, door = true, shop = false, parapet = 0.75, plant = true, seed = 1, sides = true, signColor = L.white, canopyW = 3.2, canopyY = 2.95 } = {}) {
   const H = y0 + storeys * fh;
   const r = Math.min(1.5, Math.min(w, d) * 0.24);
   const T = 0.3;
@@ -899,6 +1025,111 @@ export function block(M, cx, cz, w, d, { storeys = 2, fh = 3.3, y0 = 0, color = 
   }
   M.col(cx - w / 2, y0, cz - d / 2, cx + w / 2, H + parapet, cz + d / 2);
   return H;
+}
+
+export const block = pavilion;
+
+// ---------------------------------------------------------------- future towers
+// Lofted glass towers for the civic skyline (references: NEOM's mirrored
+// facades, twisting diagrid towers that rotate a little each floor, faceted
+// crystalline towers). A section function gives the plan at height t (0..1);
+// the loft is skinned in mirror glass, with dark floor bands, corner mullions
+// that follow the twist, a light line in the building's colour and a crown.
+function loft(section, levels, h, y0, flat = false) {
+  const n = section(0).length, pos = [], uv = [], idx = [];
+  for (let j = 0; j <= levels; j++) {
+    const t = j / levels, pts = section(t), y = y0 + t * h;
+    for (let i = 0; i <= n; i++) { const q = pts[i % n]; pos.push(q[0], y, q[1]); uv.push(i / n, t); }
+  }
+  for (let j = 0; j < levels; j++) for (let i = 0; i < n; i++) {
+    const a = j * (n + 1) + i, b = a + n + 1;
+    idx.push(a, a + 1, b, b, a + 1, b + 1);
+  }
+  let g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  // make sure faces point outward
+  g.computeVertexNormals();
+  const P = g.attributes.position, N = g.attributes.normal, k = Math.floor(n / 2);
+  if (P.getX(k) * N.getX(k) + P.getZ(k) * N.getZ(k) < 0) { const ix = g.index.array; for (let q = 0; q < ix.length; q += 3) { const tmp = ix[q + 1]; ix[q + 1] = ix[q + 2]; ix[q + 2] = tmp; } g.computeVertexNormals(); }
+  if (flat) { g = g.toNonIndexed(); g.computeVertexNormals(); }
+  return g;
+}
+function rrectPts(hw, hd, rr, rot, seg = 6) {
+  const out = [], cs = [[hw - rr, hd - rr, 0], [-hw + rr, hd - rr, 1], [-hw + rr, -hd + rr, 2], [hw - rr, -hd + rr, 3]];
+  for (const [cx, cz, k] of cs) for (let i = 0; i < seg; i++) { const a = (k + i / seg) * Math.PI / 2; out.push([cx + Math.cos(a) * rr, cz + Math.sin(a) * rr]); }
+  const c = Math.cos(rot), s = Math.sin(rot);
+  return out.map(([x, z]) => [x * c - z * s, x * s + z * c]);
+}
+function ellPts(rx, rz, rot, n = 32) {
+  const c = Math.cos(rot), s = Math.sin(rot), out = [];
+  for (let i = 0; i < n; i++) { const a = i / n * Math.PI * 2, x = Math.cos(a) * rx, z = Math.sin(a) * rz; out.push([x * c - z * s, x * s + z * c]); }
+  return out;
+}
+export function futureTower(M, x, z, { y0 = 0, h = 24, w = 5, d = 5, form = 'twist', twist = 1.0, taper = 0.78, crown = 'spire', accent = L.cyan, seed = 1, rot = 0 } = {}) {
+  const lerp = (a, b, t) => a + (b - a) * t;
+  let section, flat = false;
+  if (form === 'twist') section = (t) => rrectPts(w / 2 * lerp(1, taper, t), d / 2 * lerp(1, taper, t), Math.min(w, d) * 0.2 * lerp(1, taper, t), rot + t * twist);
+  else if (form === 'blade') section = (t) => ellPts(w / 2 * lerp(1, taper, t * t), d / 2 * lerp(1, 0.55, t * t), rot);
+  else if (form === 'crystal') {
+    flat = true;
+    section = (t) => { const k = Math.floor(t * 5 + 1e-6), off = (k % 2) * Math.PI / 6, rr = Math.min(w, d) / 2 * lerp(1, taper, t); const out = []; for (let i = 0; i < 6; i++) { const a = rot + off + i * Math.PI / 3; out.push([Math.cos(a) * rr * (i % 2 ? 1.0 : 0.86) * (w / Math.min(w, d)), Math.sin(a) * rr * (d / Math.min(w, d))]); } return out; };
+  }
+  const levels = form === 'crystal' ? 5 : Math.max(10, Math.round(h / 1.2));
+  M.add('mirror', loft(section, levels, h, y0, flat), { pos: v(x, 0, z), color: 0xffffff });
+  // dark floor bands every 3.6 m, standing just proud of the glass
+  if (form !== 'crystal') for (let y = 3.6; y < h - 0.5; y += 3.6) {
+    const t = y / h, sec = section(t).map(([a, b]) => [a * 1.012, b * 1.012]);
+    M.add('metal', loft(() => sec, 1, 0.14, y0 + y - 0.07), { pos: v(x, 0, z), color: C.D });
+  }
+  // corner mullions following the twist, one of them a light line in the building's colour
+  const n0 = section(0).length, step = Math.max(1, Math.round(n0 / 4));
+  for (let i = 0; i < n0; i += step) {
+    const pts = [];
+    for (let j = 0; j <= 8; j++) { const t = j / 8, q = section(t)[i]; pts.push([x + q[0] * 1.02, y0 + t * h, z + q[1] * 1.02]); }
+    M.tube(i === 0 ? 'emissive' : 'metal', pts, i === 0 ? 0.05 : 0.08, i === 0 ? accent : C.G2, 5);
+  }
+  // crown
+  const top = y0 + h, tw = Math.min(w, d) * taper;
+  if (crown === 'spire') {
+    M.cyl('metal', x, top, z, tw * 0.14, h * 0.32, C.W2, 10, 0.02);
+    M.sphere('blink', x, top + h * 0.32, z, 0.16, L.red, 8);
+  } else if (crown === 'ring') {
+    M.add('emissive', new THREE.TorusGeometry(tw * 0.48, 0.07, 6, 40), { pos: v(x, top + 0.9, z), rot: e(Math.PI / 2, 0, 0), color: accent });
+    M.add('glass', new THREE.SphereGeometry(tw * 0.38, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), { pos: v(x, top, z) });
+    M.cyl('metal', x, top + tw * 0.36, z, 0.05, 3.0, C.G2, 6);
+    M.sphere('blink', x, top + tw * 0.36 + 3.0, z, 0.12, L.red, 8);
+  } else if (crown === 'pad') {
+    M.cyl('metal', x, top, z, tw * 0.62, 0.22, C.D, 32);
+    M.add('hull', new THREE.TorusGeometry(tw * 0.45, 0.05, 4, 32), { pos: v(x, top + 0.24, z), rot: e(Math.PI / 2, 0, 0), color: C.Y });
+    for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; M.sphere('blink', x + Math.cos(a) * tw * 0.58, top + 0.26, z + Math.sin(a) * tw * 0.58, 0.06, accent, 6); }
+  }
+  M.colCyl(x, z, Math.min(w, d) * 0.45, y0, top);
+  return top;
+}
+
+// a stack of glass floor plates sliding past each other, with planted terraces
+export function stackTower(M, x, z, { y0 = 0, w = 7, d = 5.5, plates = 4, ph = 3.4, shift = 1.1, accent = L.cyan } = {}) {
+  let y = y0;
+  for (let i = 0; i < plates; i++) {
+    const ox = (i % 2 ? 1 : -1) * shift * 0.5, oz = (i % 3 - 1) * shift * 0.35, pw = w - (i % 2) * 0.8;
+    const g = new THREE.ExtrudeGeometry(roundRect(pw, d, 0.9), { depth: ph - 0.3, bevelEnabled: false, curveSegments: 8 });
+    g.rotateX(-Math.PI / 2);
+    M.add('mirror', g, { pos: v(x + ox, y + 0.15, z + oz), color: 0xffffff });
+    const sl = new THREE.ExtrudeGeometry(roundRect(pw + 0.5, d + 0.5, 1.1), { depth: 0.3, bevelEnabled: false, curveSegments: 8 });
+    sl.rotateX(-Math.PI / 2);
+    M.add('hull', sl, { pos: v(x + ox, y - 0.15, z + oz), color: C.W });
+    // terrace planting along the overhang
+    for (let k = 0; k < 5; k++) M.sphere('plant', x + ox + (k - 2) * pw / 5, y + 0.4, z + oz - d / 2 - 0.05, 0.3, k % 2 ? 0x3d7f3a : 0x4f8a3e, 7, 0.75);
+    M.add('emissive', new THREE.BoxGeometry(pw * 0.8, 0.04, 0.04), { pos: v(x + ox, y + 0.02, z + oz - d / 2 - 0.26), color: accent });
+    y += ph;
+  }
+  const roof = new THREE.ExtrudeGeometry(roundRect(w, d, 0.9), { depth: 0.3, bevelEnabled: false, curveSegments: 8 });
+  roof.rotateX(-Math.PI / 2);
+  M.add('hull', roof, { pos: v(x, y - 0.15, z), color: C.W });
+  M.col(x - w / 2 - shift, y0, z - d / 2 - shift, x + w / 2 + shift, y, z + d / 2 + shift);
+  return y + 0.15;
 }
 
 // Industrial shed: concrete dado, ribbed metal cladding, high window strip,

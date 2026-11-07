@@ -4,6 +4,7 @@
 // exception on purpose: people born on Arke live in open-air houses with no
 // airlocks, because by then the air outside is breathable.
 import * as THREE from 'three';
+import { futureTower } from './modelkit.js';
 import { C, L, v, e, plinth, block, railing, antenna, vent, radiator, pvRack, habDome, gardenDome, linkTube, airlockTube, ribbonTower, ribDome, tank, rooftopPlant } from './modelkit.js';
 
 const PI = Math.PI;
@@ -317,20 +318,22 @@ export function transit(M) {
 }
 
 // university: three-storey teaching block, a library dome and a slender tower
+// university: twin faceted crystal towers joined by a glazed sky bridge over a
+// teaching podium, a ribbed library dome and a lit forecourt
 export function university(M) {
   plinth(M, 12, 12);
-  const H = block(M, -1.0, 2.2, 9.6, 5.6, { storeys: 3, fh: 3.4, bay: 2.0, win: 1.5, plant: false, seed: 151, signColor: L.white, canopyW: 3.6 });
-  pvRack(M, -3.2, 2.2, 3.4, 1.1, 0, 2, H + 0.05);
-  rooftopPlant(M, 1.4, H + 0.04, 2.6, 1.6, 23);
+  const H = block(M, -1.0, 2.4, 9.6, 5.6, { storeys: 2, fh: 3.4, bay: 2.0, win: 1.5, plant: false, seed: 151, signColor: L.white, canopyW: 3.6 });
+  const t1 = futureTower(M, -3.0, 2.6, { y0: H, h: 20, w: 4.2, d: 4.2, form: 'crystal', taper: 0.55, crown: 'spire', accent: L.white, rot: 0.1 });
+  const t2 = futureTower(M, 1.6, 2.6, { y0: H, h: 13, w: 3.8, d: 3.8, form: 'crystal', taper: 0.6, crown: 'none', accent: L.cyan, rot: 0.5 });
+  const by = H + 10.0;
+  M.add('glass', new THREE.BoxGeometry(3.0, 2.0, 1.6), { pos: v(-0.7, by, 2.6) });
+  M.add('hull', new THREE.BoxGeometry(3.2, 0.24, 1.9), { pos: v(-0.7, by - 1.1, 2.6), color: C.W });
+  M.add('hull', new THREE.BoxGeometry(3.2, 0.2, 1.9), { pos: v(-0.7, by + 1.1, 2.6), color: C.W });
   // library: glazed drum under a ribbed dome
   M.cyl('hull', 3.6, 0, -3.2, 2.1, 3.6, C.W, 40);
   for (let i = 0; i < 12; i++) { const a = i / 12 * PI * 2; M.box('glass', 3.6 + Math.sin(a) * 2.12, 1.9, -3.2 + Math.cos(a) * 2.12, 0.8, 2.4, 0.05, undefined, a); }
   ribDome(M, 3.6, 3.6, -3.2, 2.1, { ribs: 10, rib: C.W2 });
   M.colCyl(3.6, -3.2, 2.1, 0, 5.4);
-  // the tower
-  const top = ribbonTower(M, -4.3, -3.6, 1.15, 15, { cap: 'dome', lobby: false, rot: 0.3 });
-  antenna(M, -4.3, top - 0.1, -3.6, 2.0);
-  // forecourt steps and lamps
-  for (let k = 0; k < 3; k++) M.box('concrete', -1.0, 0.12 + k * 0.24, -1.2 - k * 0.32, 4.2 - k * 0.8, 0.24, 0.6, C.CONC2);
+  for (let k = 0; k < 3; k++) M.box('concrete', -1.0, 0.12 + k * 0.24, -1.0 - k * 0.32, 4.2 - k * 0.8, 0.24, 0.6, C.CONC2);
   for (const x of [-5.4, 1.2]) { M.cyl('metal', x, 0, -5.2, 0.06, 3.0, C.G2, 8); M.box('emissive', x, 2.97, -5.05, 0.14, 0.02, 0.5, L.warm); }
 }

@@ -3,6 +3,7 @@
 // trusses, radiators and roof machinery. Same local frame as models.js
 // (origin at footprint centre, y = 0 floor, front = -Z).
 import * as THREE from 'three';
+import { futureTower, stackTower, facility } from './modelkit.js';
 import { C, L, v, e, plinth, rooftopPlant, block, shed, canopy, facade, bays, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, room, podModule, ribDome, truss, radiator, greebleRoof, airlock, porthole, habDome, gardenDome, linkTube, ribbonTower, entryPortal, airlockTube, pvRack } from './modelkit.js';
 
 const PI = Math.PI;
@@ -190,45 +191,43 @@ export function lounge(M) {
   M.col(-2.65, 0, 0.75, 0.45, 1.12, 1.45);
 }
 
+// clinic: an elliptical blade tower with a rooftop helipad and a green cross,
+// standing on a low treatment podium with an ambulance bay
 export function clinic(M) {
   plinth(M, 8, 8);
-  const H = block(M, 0, 0.4, 7.2, 6.4, { storeys: 2, fh: 3.3, seed: 41, plant: false, signColor: L.green });
-  // medical cross on the facade, roof helipad with edge lights
-  M.box('metal', 2.4, 5.2, -2.83, 1.0, 1.0, 0.08, C.D);
-  M.box('emissive', 2.4, 5.2, -2.88, 0.7, 0.22, 0.02, L.green);
-  M.box('emissive', 2.4, 5.2, -2.88, 0.22, 0.7, 0.02, L.green);
-  M.cyl('metal', 0, H + 0.04, 0.4, 2.5, 0.06, C.D, 32);
-  for (const [bx, bz, bw, bd] of [[-0.55, 0.4, 0.18, 1.4], [0.55, 0.4, 0.18, 1.4], [0, 0.4, 0.95, 0.18]]) M.box('hull', bx, H + 0.11, bz, bw, 0.01, bd, C.W);
-  M.add('hull', new THREE.TorusGeometry(2.2, 0.05, 4, 40), { pos: v(0, H + 0.11, 0.4), rot: e(PI / 2, 0, 0), color: C.Y });
-  for (let i = 0; i < 8; i++) { const a = i * PI / 4; M.sphere('blink', Math.cos(a) * 2.45, H + 0.14, 0.4 + Math.sin(a) * 2.45, 0.06, L.green, 6); }
-  vent(M, -3.0, H + 0.06, 3.0, 0.7, 0.5, 0.4);
-  // ambulance bay bollards and a side door canopy
-  for (const z of [-3.6, -2.6]) { M.cyl('metal', -3.7, 0, z, 0.08, 0.9, C.Y, 10); }
+  const H = block(M, 0, 0.4, 7.2, 6.4, { storeys: 1, fh: 3.8, seed: 41, plant: false, signColor: L.green });
+  const top = futureTower(M, 0.4, 1.2, { y0: H, h: 13, w: 5.4, d: 3.8, form: 'blade', taper: 0.82, crown: 'pad', accent: L.green, rot: 0.15 });
+  M.box('metal', 0.4, H + 8.5, 1.2 - 1.95, 1.4, 1.4, 0.08, C.D);
+  M.box('emissive', 0.4, H + 8.5, 1.2 - 2.0, 1.0, 0.3, 0.02, L.green);
+  M.box('emissive', 0.4, H + 8.5, 1.2 - 2.0, 0.3, 1.0, 0.02, L.green);
+  for (const z of [-3.6, -2.6]) M.cyl('metal', -3.7, 0, z, 0.08, 0.9, C.Y, 10);
+  vent(M, -2.6, H + 0.06, 2.4, 0.7, 0.5, 0.4);
 }
 
+// school: classroom plates stacked and sliding past each other, planted
+// terraces on every overhang, solar on the roof, seating on the forecourt
 export function school(M) {
   plinth(M, 10, 8);
-  const H = block(M, 0, 0.9, 9.2, 5.4, { storeys: 2, fh: 3.4, bay: 2.3, win: 1.7, seed: 53, plant: false, signColor: L.white, canopyW: 3.6 });
-  pvRack(M, -1.8, 0.9, 3.2, 1.1, 0, 2, H + 0.05);
-  pvRack(M, 2.0, 0.9, 3.2, 1.1, 0, 2, H + 0.05);
-  vent(M, 3.6, H + 0.06, 2.6, 0.8, 0.6, 0.4);
-  // stepped outdoor seating and lamp posts on the forecourt
-  for (let k = 0; k < 3; k++) M.box('concrete', -2.8, 0.12 + k * 0.24, -3.6 + k * 0.3, 3.0 - k * 0.6, 0.24, 0.6, C.CONC2);
-  for (const x of [-4.6, 4.6]) { M.cyl('metal', x, 0, -3.6, 0.06, 3.0, C.G2, 8); M.box('metal', x, 3.02, -3.45, 0.2, 0.08, 0.6, C.D); M.box('emissive', x, 2.97, -3.4, 0.14, 0.02, 0.5, L.warm); }
+  const top = stackTower(M, 0, 1.0, { w: 8.4, d: 5.0, plates: 4, ph: 3.4, shift: 1.2, accent: L.white });
+  pvRack(M, -1.6, 1.0, 3.0, 1.1, 0, 2, top);
+  pvRack(M, 2.0, 1.0, 3.0, 1.1, 0, 2, top);
+  M.entry(0);
+  for (let k = 0; k < 3; k++) M.box('concrete', -2.8, 0.12 + k * 0.24, -3.4 + k * 0.3, 3.0 - k * 0.6, 0.24, 0.6, C.CONC2);
+  for (const x of [-4.6, 4.6]) { M.cyl('metal', x, 0, -3.6, 0.06, 3.0, C.G2, 8); M.box('emissive', x, 2.97, -3.4, 0.14, 0.02, 0.5, L.warm); }
   M.col(-4.3, 0, -3.9, -1.3, 0.72, -2.7);
 }
 
+// lab: a faceted crystal tower crowned by an observatory, instruments around it
 export function lab(M) {
   plinth(M, 8, 8);
-  const H = block(M, 0, 0.5, 7.0, 6.0, { storeys: 2, fh: 3.3, bay: 1.75, win: 0.95, seed: 61, plant: false, signColor: L.cyan });
-  // rooftop observatory: drum, dome with an open slit, instruments
-  M.cyl('hull', 1.6, H, 1.4, 1.35, 0.9, C.W2, 32);
-  M.add('hull', new THREE.SphereGeometry(1.35, 32, 12, 0, PI * 2, 0, PI / 2), { pos: v(1.6, H + 0.9, 1.4), color: C.W });
-  M.add('metal', new THREE.TorusGeometry(1.36, 0.05, 6, 32), { pos: v(1.6, H + 0.9, 1.4), rot: e(PI / 2, 0, 0), color: C.G2 });
-  M.add('metal', new THREE.TorusGeometry(1.36, 0.22, 6, 20, PI * 0.9), { pos: v(1.6, H + 0.9, 1.4), rot: e(0, 0.6, PI * 0.05), scale: v(1, 1, 0.5), color: C.D });
+  const H = block(M, 0, 0.5, 7.0, 6.0, { storeys: 1, fh: 3.6, bay: 1.75, win: 0.95, plant: false, seed: 61, signColor: L.cyan });
+  const top = futureTower(M, 0.6, 1.0, { y0: H, h: 14, w: 5.0, d: 5.0, form: 'crystal', taper: 0.62, crown: 'none', accent: L.cyan, rot: 0.25 });
+  const r = 1.45;
+  M.cyl('hull', 0.6, top, 1.0, r, 0.7, C.W2, 32);
+  M.add('hull', new THREE.SphereGeometry(r, 32, 12, 0, PI * 2, 0, PI / 2), { pos: v(0.6, top + 0.7, 1.0), color: C.W });
+  M.add('metal', new THREE.TorusGeometry(r + 0.01, 0.22, 6, 20, PI * 0.9), { pos: v(0.6, top + 0.7, 1.0), rot: e(0, 0.6, PI * 0.05), scale: v(1, 1, 0.5), color: C.D });
+  M.colCyl(0.6, 1.0, r, top, top + 2.2);
   for (let i = 0; i < 3; i++) antenna(M, -2.6 + i * 0.7, H + 0.05, -1.6 + i * 0.3, 1.6 + i * 0.6, i % 2 ? L.green : L.red);
-  vent(M, -2.2, H + 0.06, 2.6, 0.8, 0.6, 0.4);
-  M.colCyl(1.6, 1.4, 1.35, H, H + 2.2);
 }
 
 // deep-space comms: equipment building, steerable dish on a pedestal, masts
