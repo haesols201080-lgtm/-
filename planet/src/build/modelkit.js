@@ -26,6 +26,7 @@ export const C = {
   CONC: 0xbdb7ad, CONC2: 0x8f887d, ASPH: 0x2b2b2d, WOOD: 0x8a6a4a, CREAM: 0xefe3c8, TERRA: 0xc0683f,
   IN1: 0xe9e6df, IN2: 0x9aa3a8, FLOOR: 0x6f7378,
 };
+export const REGOLITH = 0x7f5d49;   // sintered regolith, the colony's ground-level material
 export const L = {
   warm: 0xffcc8c, cyan: 0x66e0ff, red: 0xff3322, green: 0x55ff77, orange: 0xff8a2a, white: 0xffffff, violet: 0xb07aff,
 };
@@ -126,12 +127,21 @@ export function plinth(M, w, d, { color = C.CONC, trim = C.G2, collide = true } 
     if (collide) M.col(-w / 2, -2.4, -d / 2, w / 2, 0, d / 2);
     return;
   }
+  // sintered regolith pad: the deck's top in the colour of the ground, a
+  // sloped skirt running down into the terrain so the building sits in the
+  // land rather than on a board, and a structural edge beam under the lip
+  const r = Math.min(1.2, Math.min(w, d) * 0.15);
+  const top = new THREE.ExtrudeGeometry(roundRect(w, d, r), { depth: 0.22, bevelEnabled: false, curveSegments: 8 });
+  top.rotateX(-Math.PI / 2);
+  M.add('regolith', top, { pos: v(0, -0.22, 0), color: 0x75594a });
+  // skirt: a frustum from the deck edge down and out
+  const skirt = new THREE.ExtrudeGeometry(roundRect(w, d, r), { depth: 0.01, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 0.7, bevelSegments: 1, curveSegments: 8 });
+  skirt.rotateX(-Math.PI / 2);
+  M.add('regolith', skirt, { pos: v(0, -1.45, 0), color: 0x6a4e3e });
   const sharp = M.sharp; M.sharp = true;
-  M.bb('metal', -w / 2, -0.2, -d / 2, w / 2, 0, d / 2, 0x9ba1a8);
-  for (const [x0, z0, x1, z1] of [[-w / 2 - 0.06, -d / 2 - 0.06, w / 2 + 0.06, -d / 2 + 0.06], [-w / 2 - 0.06, d / 2 - 0.06, w / 2 + 0.06, d / 2 + 0.06], [-w / 2 - 0.06, -d / 2, -w / 2 + 0.06, d / 2], [w / 2 - 0.06, -d / 2, w / 2 + 0.06, d / 2]]) M.bb('metal', x0, -0.45, z0, x1, -0.02, z1, 0x4a4f55);
   const nb = Math.max(1, Math.round(d / 2.4));
-  for (let i = 1; i < nb; i++) { const z = -d / 2 + i * d / nb; M.bb('metal', -w / 2 + 0.1, -0.42, z - 0.08, w / 2 - 0.1, -0.2, z + 0.08, 0x5b6168); }
-  for (const sx of [-1, 1]) M.bb('metal', sx * (w / 2 - 0.45) - 0.1, -0.45, -d / 2 + 0.1, sx * (w / 2 - 0.45) + 0.1, -0.2, d / 2 - 0.1, 0x5b6168);
+  for (let i = 1; i < nb; i++) { const z = -d / 2 + i * d / nb; M.bb('metal', -w / 2 + 0.3, -0.5, z - 0.08, w / 2 - 0.3, -0.22, z + 0.08, 0x5b6168); }
+  for (const sx of [-1, 1]) M.bb('metal', sx * (w / 2 - 0.45) - 0.1, -0.5, -d / 2 + 0.3, sx * (w / 2 - 0.45) + 0.1, -0.22, d / 2 - 0.3, 0x5b6168);
   M.sharp = sharp;
   if (collide) M.col(-w / 2, -0.45, -d / 2, w / 2, 0, d / 2);
 }
@@ -793,25 +803,100 @@ export function canopy(M, fx, fz, a, w = 3.0, dep = 1.6, y = 2.9, sign = L.white
 
 // Rectilinear block: punched-window facades on four sides, roof slab with
 // parapet and coping, rooftop plant. Front faces -z. Returns roof level.
+// Pressurised civic building, the way a Mars town would build one: a
+// rounded pressure shell (no sharp corners), continuous ribbon glazing that
+// wraps the corners between composite spandrels, a protruding slab line at
+// every floor, a 3D-printed regolith base the walls stand in, a regolith
+// shielding berm on the roof against radiation, and an airlock vestibule
+// at the entrance. Same signature as before; returns the roof height.
+function ringShape(w, d, r, t) {
+  const s = roundRect(w, d, r);
+  s.holes.push(roundRect(w - 2 * t, d - 2 * t, Math.max(0.04, r - t)));
+  return s;
+}
+function band(M, key, cx, y, cz, h, w, d, r, t, color, seg = 10) {
+  if (h <= 0.005) return;
+  const g = new THREE.ExtrudeGeometry(ringShape(w, d, r, t), { depth: h, bevelEnabled: false, curveSegments: seg });
+  g.rotateX(-Math.PI / 2);
+  M.add(key, g, { pos: v(cx, y, cz), color });
+}
+function slab(M, key, cx, y, cz, h, w, d, r, color, bevel = 0) {
+  const g = new THREE.ExtrudeGeometry(roundRect(w, d, r), bevel ? { depth: h, bevelEnabled: true, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 3, curveSegments: 10 } : { depth: h, bevelEnabled: false, curveSegments: 10 });
+  g.rotateX(-Math.PI / 2);
+  M.add(key, g, { pos: v(cx, y, cz), color });
+}
 export function block(M, cx, cz, w, d, { storeys = 2, fh = 3.3, y0 = 0, color = C.W, bay = 2.2, win = 1.3, door = true, shop = false, parapet = 0.75, plant = true, seed = 1, sides = true, signColor = L.white, canopyW = 3.2, canopyY = 2.95 } = {}) {
-  const t = 0.3, H = y0 + storeys * fh;
-  const fr = (st, len) => bays(len, { bay, w: win, door: door && st === 0 && y0 === 0, shop: shop && st === 0 });
-  const plain = (st, len) => bays(len, { bay, w: win });
-  facade(M, cx, cz - d / 2, Math.PI, w, y0, storeys, fh, fr, { color });
-  facade(M, cx, cz + d / 2, 0, w, y0, storeys, fh, plain, { color });
-  facade(M, cx - w / 2, cz, -Math.PI / 2, d - 2 * t, y0, storeys, fh, sides ? plain : () => [], { color });
-  facade(M, cx + w / 2, cz, Math.PI / 2, d - 2 * t, y0, storeys, fh, sides ? plain : () => [], { color });
-  // roof: slab, membrane, parapet with coping
-  M.add('hull', new THREE.BoxGeometry(w - 0.02, 0.24, d - 0.02), { pos: v(cx, H - 0.1, cz), color: C.W2 });
-  M.add('concrete', new THREE.BoxGeometry(w - 0.5, 0.04, d - 0.5), { pos: v(cx, H + 0.04, cz), color: C.CONC2 });
-  if (parapet > 0) {
-    for (const [px, pz, pw, pd] of [[cx, cz - d / 2 + 0.11, w, 0.22], [cx, cz + d / 2 - 0.11, w, 0.22], [cx - w / 2 + 0.11, cz, 0.22, d - 0.44], [cx + w / 2 - 0.11, cz, 0.22, d - 0.44]]) {
-      M.add('hull', new THREE.BoxGeometry(pw, parapet, pd), { pos: v(px, H + parapet / 2, pz), color });
-      M.add('metal', new THREE.BoxGeometry(pw + 0.06, 0.05, pd + 0.06), { pos: v(px, H + parapet + 0.025, pz), color: C.G2 });
-    }
+  const H = y0 + storeys * fh;
+  const r = Math.min(1.5, Math.min(w, d) * 0.24);
+  const T = 0.3;
+  const mullion = Math.max(1.05, Math.min(1.8, bay * 0.62));
+  const ground = y0 === 0;
+  for (let st = 0; st < storeys; st++) {
+    const ys = y0 + st * fh;
+    const big = shop && st === 0;
+    const sill = big ? 0.35 : Math.max(0.8, 1.15 - (win - 1.0) * 0.4), head = fh - (big ? 0.5 : 0.6);
+    band(M, 'hull', cx, ys, cz, sill, w, d, r, T, color);
+    // ribbon glazing, set back from the face, with dark frames top and bottom
+    band(M, 'glass', cx, ys + sill, cz, head - sill, w - 0.22, d - 0.22, r - 0.11, 0.05);
+    band(M, 'metal', cx, ys + sill - 0.02, cz, 0.07, w - 0.16, d - 0.16, r - 0.08, 0.1, C.D);
+    band(M, 'metal', cx, ys + head - 0.05, cz, 0.07, w - 0.16, d - 0.16, r - 0.08, 0.1, C.D);
+    band(M, 'hull', cx, ys + head, cz, fh - head, w, d, r, T, color);
+    // mullions on the straight runs; the corners stay as curved glass
+    const my = ys + (sill + head) / 2, mh = head - sill;
+    const runs = [[w - 2 * r, (x) => [cx + x, cz - d / 2 + 0.14]], [w - 2 * r, (x) => [cx + x, cz + d / 2 - 0.14]], [d - 2 * r, (z) => [cx - w / 2 + 0.14, cz + z]], [d - 2 * r, (z) => [cx + w / 2 - 0.14, cz + z]]];
+    runs.forEach(([len, at], i) => {
+      const n = Math.max(1, Math.round(len / mullion));
+      for (let k = 0; k <= n; k++) {
+        const u = -len / 2 + k * len / n, [x, z] = at(u);
+        if (i < 2) M.box('metal', x, my, z, 0.07, mh, 0.1, C.D); else M.box('metal', x, my, z, 0.1, mh, 0.07, C.D);
+      }
+    });
+    // slab edge standing proud at each floor
+    if (st > 0) band(M, 'hull', cx, ys - 0.07, cz, 0.16, w + 0.26, d + 0.26, r + 0.13, 0.32, C.W2);
   }
-  if (plant) rooftopPlant(M, cx, H + 0.06, cz, Math.min(w, d) * 0.32, seed);
-  if (door && y0 === 0) canopy(M, cx, cz - d / 2, Math.PI, canopyW, 1.6, canopyY, signColor);
+  // two dark fins frame the front run full height; one carries the building's
+  // identity colour as a light line (blue police, green clinic, ...)
+  const fz = cz - d / 2 - 0.18;
+  for (const sx of [-1, 1]) {
+    const fx = cx + sx * (w / 2 - r - 0.1);
+    M.box('metal', fx, (y0 + H) / 2 + 0.2, fz + 0.1, 0.16, H - y0 + 0.6, 0.5, C.D);
+    if (sx < 0) M.box('emissive', fx, (y0 + H) / 2 + 0.2, fz - 0.16, 0.05, H - y0 - 0.4, 0.02, signColor);
+  }
+  // printed regolith base the shell stands in: layered, warm, part of the ground
+  if (ground) {
+    band(M, 'regolith', cx, -0.3, cz, 1.25, w + 0.5, d + 0.5, r + 0.25, 0.42, REGOLITH);
+    slab(M, 'regolith', cx, 0.93, cz, 0.04, w + 0.52, d + 0.52, r + 0.26, 0x8c6a55);
+  }
+  // roof: cap, parapet with coping, and a shielding berm of sintered regolith
+  slab(M, 'hull', cx, H - 0.12, cz, 0.24, w - 0.05, d - 0.05, r - 0.02, C.W2);
+  if (parapet > 0) {
+    band(M, 'hull', cx, H, cz, parapet * 0.7, w, d, r, 0.22, color);
+    band(M, 'metal', cx, H + parapet * 0.7, cz, 0.05, w + 0.04, d + 0.04, r + 0.02, 0.28, C.G2);
+  }
+  const bw = w - 0.9, bd = d - 0.9;
+  // (only on plain roofs; buildings with their own roof kit keep the roof clear)
+  if (plant && bw > 1.2 && bd > 1.2) slab(M, 'regolith', cx, H + 0.12, cz, 0.12, bw - 0.5, bd - 0.5, Math.max(0.1, r - 0.7), REGOLITH, 0.3);
+  if (plant) {
+    rooftopPlant(M, cx, H + 0.5, cz, Math.min(w, d) * 0.28, seed);
+    // heat-rejection panels and a mast give the roof a working silhouette
+    if (w > 5) radiator(M, cx + w / 2 - r - 0.9, H + 0.6, cz + d / 2 - r - 0.4, Math.min(2.4, w * 0.28), 1.1, 0, C.W2);
+    antenna(M, cx - w / 2 + r + 0.2, H + 0.5, cz + d / 2 - r, 1.6 + (seed % 3) * 0.6);
+  }
+  // airlock vestibule at the door: rounded glass porch with a steel frame
+  if (door && ground) {
+    const vw = Math.min(canopyW, w * 0.5, 3.4), vd = 1.8, vz = cz - d / 2 - vd / 2 + 0.25, vh = Math.min(canopyY, 2.9);
+    band(M, 'glass', cx, 0.0, vz, vh, vw, vd, 0.55, 0.05);
+    slab(M, 'hull', cx, vh, vz, 0.28, vw + 0.3, vd + 0.25, 0.68, C.W);
+    band(M, 'metal', cx, vh - 0.04, vz, 0.08, vw + 0.06, vd + 0.06, 0.58, 0.12, C.D);
+    for (const sx of [-1, 1]) M.box('metal', cx + sx * (vw / 2 - 0.05), vh / 2, vz - vd / 2 + 0.05, 0.1, vh, 0.1, C.D);
+    M.box('metal', cx, vh / 2, vz - vd / 2 + 0.02, 0.06, vh, 0.06, C.D);
+    M.box('metal', cx, 2.25, vz - vd / 2 + 0.02, vw - 0.1, 0.06, 0.06, C.D);
+    M.box('emissive', cx, vh + 0.14, vz - vd / 2 - 0.13, Math.min(1.6, vw * 0.6), 0.14, 0.03, signColor);
+    M.box('emissive', cx, vh - 0.06, vz, vw * 0.5, 0.03, 0.4, L.warm);
+    M.box('concrete', cx, 0.03, vz - vd / 2 - 0.45, vw + 0.4, 0.06, 0.9, C.CONC2);
+    M.light(cx, vh - 0.3, vz - vd / 2 - 0.5, L.warm, 1.6, 7);
+    M.col(cx - vw / 2, 0, vz - vd / 2, cx + vw / 2, vh + 0.3, vz + vd / 2);
+  }
   M.col(cx - w / 2, y0, cz - d / 2, cx + w / 2, H + parapet, cz + d / 2);
   return H;
 }

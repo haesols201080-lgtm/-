@@ -163,12 +163,13 @@ export function nursery(M) {
 // city hall: three storeys behind a colonnade, a glazed rotunda, flags, steps
 export function cityhall(M) {
   plinth(M, 14, 12);
-  const H = block(M, 0, 2.0, 12.0, 6.0, { storeys: 3, fh: 3.4, bay: 2.2, win: 1.3, plant: false, seed: 251, signColor: L.white, canopyW: 0.1 });
-  // colonnade and its canopy
-  for (let i = 0; i < 8; i++) M.cyl('hull', -5.25 + i * 1.5, 0.3, -2.0, 0.22, 6.6, C.W, 16);
-  M.box('hull', 0, 7.05, -1.6, 12.2, 0.4, 1.9, C.W);
-  M.box('emissive', 0, 6.83, -2.5, 11.8, 0.05, 0.05, L.warm);
-  M.col(-6.0, 6.85, -2.55, 6.0, 7.25, -0.65);
+  const H = block(M, 0, 2.0, 12.0, 6.0, { storeys: 3, fh: 3.4, bay: 2.2, win: 1.3, plant: false, seed: 251, signColor: 0xffd79a, canopyW: 3.2 });
+  // portico: a deep cantilevered canopy on four slender steel columns
+  for (const x of [-4.2, -1.4, 1.4, 4.2]) M.cyl('metal', x, 0.3, -3.6, 0.12, 6.6, C.G2, 12);
+  M.box('hull', 0, 7.0, -2.5, 11.4, 0.36, 3.6, C.W);
+  M.box('metal', 0, 6.8, -2.5, 11.0, 0.04, 3.2, C.D);
+  for (let i = 0; i < 9; i++) M.box('emissive', -4.8 + i * 1.2, 6.77, -2.5, 0.5, 0.02, 2.6, L.warm);
+  M.col(-5.7, 6.82, -4.3, 5.7, 7.2, -0.7);
   // rotunda: glazed drum and ribbed dome over the council chamber
   M.cyl('hull', 0, H, 2.0, 3.0, 1.6, C.W2, 40);
   for (let i = 0; i < 16; i++) { const a = i / 16 * PI * 2; M.box('glass', Math.sin(a) * 3.02, H + 0.8, 2.0 + Math.cos(a) * 3.02, 0.9, 1.1, 0.04, undefined, a); }

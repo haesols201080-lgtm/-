@@ -315,6 +315,24 @@ export function makeBuildingMaterials() {
       diffuseColor.rgb *= 0.75 + 0.5 * n;`,
     emit: 'totalEmissiveRadiance += diffuseColor.rgb * 0.15 * vData.x;',
   });
+  // sintered regolith, printed in layers: fine horizontal beads a few cm
+  // apart, slight wander between passes, warm iron-oxide colour, dust on top
+  M.regolith = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0.0 }), 'regolith', {
+    map: /* glsl */`
+      vec4 nz = texture2D(tNoise, vOP.xz * 0.17 + vOP.y * 0.05 + vData.z);
+      vec4 nz2 = texture2D(tNoise, vOP.xz * 0.6 + vOP.y * 0.4);
+      float layer = vOP.y / 0.045 + (nz.r - 0.5) * 0.6;
+      float bead = abs(fract(layer) - 0.5) * 2.0;
+      float fade = 1.0 - smoothstep(0.4, 1.2, fwidth(layer));
+      vec3 c = diffuseColor.rgb * (0.86 + 0.16 * nz.g + 0.08 * nz2.a);
+      c *= 1.0 - 0.12 * (1.0 - bead) * fade;
+      float up = smoothstep(0.5, 0.95, normalize(vON).y);
+      c = mix(c, c * vec3(1.08, 0.98, 0.9), up * 0.5);
+      diffuseColor.rgb = c;
+      gH = bead * 0.006 * fade + nz2.a * 0.004 + 1e-6;
+      gR2 = 0.88 + 0.08 * nz.b;`,
+    rough: 'float roughnessFactor = gR2;',
+  });
   M.water = new THREE.MeshStandardMaterial({ color: 0x1b5e6e, roughness: 0.05, metalness: 0.2, envMapIntensity: 1.2 });
   M.water.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 iData;'); };
   return M;
