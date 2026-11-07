@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { ModelBuilder, C, L, v, e, plinth, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, wall, room, airlock, greebleRoof, ribbonTower, facade, bays, block, shed } from './modelkit.js';
 import { houseT1, houseT2, houseT3, houseT4, houseT1b, houseT2b, houseT3b, houseT4b, market, lounge, clinic, school, lab, comms, hqExtras } from './models_colony.js';
+import { lifesupport, sewage, recycling, powerbank, firestation, police, nursery, cityhall, tradepost } from './models_civic.js';
 import { houseS, houseSb, houseA, houseAb, houseR, houseRb, houseC, houseCb, houseP, housePb, houseN, houseNb, gym, textile, orchard, pharma, transit, university } from './models_homes.js';
 
 const PI = Math.PI;
@@ -775,6 +776,7 @@ const BUILDERS = {
   extractor, smelter, assembler, dronehub, depot,
   hq: (M) => { hq(M); hqExtras(M); }, farm, pump, market, lounge, clinic, factory, techplant, school, lab, terminal, park, culture, road, monument, elevator, comms,
   gym, textile, orchard, pharma, transit, university,
+  lifesupport, sewage, recycling, powerbank, firestation, police, nursery, cityhall, tradepost,
   // two home designs per tier, from the first domes to open-air houses
   'house:0': houseT1, 'house:0b': houseT1b, 'house:1': houseS, 'house:1b': houseSb,
   'house:2': houseT2, 'house:2b': houseT2b, 'house:3': houseA, 'house:3b': houseAb,

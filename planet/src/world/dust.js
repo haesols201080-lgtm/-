@@ -4,7 +4,8 @@
 // pass, see engine.js); soft billowing clouds of dust that gusts lift and
 // roll across the land; and dust devils, tapering whirling columns out on
 // the plain. Clouds and devils are soft noise puffs that face the camera.
-// Everything fades as rain wets the ground and grass binds the soil.
+// Everything fades as rain wets the ground and grass binds the soil. The same
+// puffs draw smoke columns and flames over buildings that are on fire.
 import * as THREE from 'three';
 import { U } from '../core/shared.js';
 
@@ -36,7 +37,7 @@ export class Dust {
           vec3 cr = vec3(viewMatrix[0][0], viewMatrix[1][0], viewMatrix[2][0]);
           float c = cos(iA.w), s = sin(iA.w);
           vec2 q = vec2(c * position.x - s * position.y, s * position.x + c * position.y);
-          vec3 w = iP.xyz + (cr * q.x + vec3(0.0, 1.0, 0.0) * q.y * iA.z) * iP.w;
+          vec3 w = iP.xyz + (cr * q.x + vec3(0.0, 1.0, 0.0) * q.y * abs(iA.z)) * iP.w;
           vUv = uv; vA = iA; vH = position.y + 0.5;
           gl_Position = projectionMatrix * viewMatrix * vec4(w, 1.0);
           #include <logdepthbuf_vertex>
@@ -54,7 +55,11 @@ export class Dust {
           // lit from the sun side, darker and denser at the base
           float day = smoothstep(-0.1, 0.3, uSunDir.y);
           vec3 col = vec3(0.64, 0.48, 0.34) * (0.12 + day * (0.62 + 0.45 * uSun)) * (0.85 + 0.25 * vH);
-          gl_FragColor = vec4(col, a * vA.x);
+          // smoke (negative squash): sooty grey, underlit orange by the flames
+          if (vA.z < 0.0) col = vec3(0.13, 0.125, 0.12) * (0.3 + 0.7 * day) + vec3(0.35, 0.12, 0.03) * (1.0 - vH) * 0.35;
+          // flame (negative alpha): hot core, deeper orange at the tips
+          if (vA.x < 0.0) col = mix(vec3(3.2, 1.3, 0.3), vec3(2.0, 0.42, 0.06), vH);
+          gl_FragColor = vec4(col, a * abs(vA.x));
         }`,
       transparent: true, depthWrite: false,
     });
@@ -113,7 +118,7 @@ export class Dust {
     let n = 0;
     const P = this.iP.array, A = this.iA.array;
     const put = (x, y, z, size, alpha, seed, squash, spin) => {
-      if (n >= CAP || alpha < 0.003) return;
+      if (n >= CAP || Math.abs(alpha) < 0.003) return;
       P[n * 4] = x; P[n * 4 + 1] = y; P[n * 4 + 2] = z; P[n * 4 + 3] = size;
       A[n * 4] = alpha; A[n * 4 + 1] = seed; A[n * 4 + 2] = squash; A[n * 4 + 3] = spin;
       n++;
@@ -147,6 +152,19 @@ export class Dust {
       }
       // the skirt of dust it raises at the ground
       put(D.x, gy + 1.8, D.z, 9, fade * 0.35, D.seed + 0.5, 0.35, t * 0.5);
+    }
+    // buildings on fire: flames along the roof and a column of smoke leaning downwind
+    const F = g.colony && g.colony.fires;
+    if (F) for (const b of F) {
+      const top = b.y + (b.model ? b.model.height : 6), k = Math.min(1, b.fire / 6);
+      for (let i = 0; i < 5; i++) {
+        const a = t * 2.6 + i * 1.7 + b.id;
+        put(b.x + Math.cos(a) * b.hw * 0.45, top - 0.6 + (i % 2) * 0.7, b.z + Math.sin(a) * b.hd * 0.45, 2.0 + Math.sin(t * 7 + i) * 0.6, -0.6 * k, b.id * 0.1 + i * 0.3, 1.3, t * 2 + i);
+      }
+      for (let i = 0; i < 16; i++) {
+        const u = (t * 0.22 + i / 16) % 1, h = u * 28;
+        put(b.x + this.wind.x * h * 0.55 + Math.sin(i * 2.3 + t) * 0.9, top + 1 + h, b.z + this.wind.y * h * 0.55 + Math.cos(i * 1.7 + t) * 0.9, 3 + u * 10, (1 - u) * 0.6 * k, b.id * 0.07 + i * 0.13, -0.9, i + t * 0.2);
+      }
     }
     this.mesh.count = n;
     this.iP.needsUpdate = true; this.iA.needsUpdate = true;

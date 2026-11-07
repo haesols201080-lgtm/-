@@ -146,17 +146,17 @@ export const PARAMS = {
 // Population tiers (Anno-style). needs: basic needs add residents; luxury add
 // happiness/income. Each tier adds needs on top of the one below, so a street
 // climbs the ladder as the colony learns to make and serve more.
-const B0 = ['water', 'food', 'power', 'market'];
-const B1 = [...B0, 'clinic'], B2 = [...B1, 'goods'], B3 = [...B2, 'textiles'], B4 = [...B3, 'school', 'electronics'];
-const B5 = [...B4, 'medicine', 'transit'], B6 = [...B5, 'culture'], B7 = [...B6, 'university'], B8 = [...B7, 'delicacy'];
+const B0 = ['air', 'water', 'food', 'power', 'market'];
+const B1 = [...B0, 'clinic', 'sanitation'], B2 = [...B1, 'goods', 'waste'], B3 = [...B2, 'textiles'], B4 = [...B3, 'school', 'electronics'];
+const B5 = [...B4, 'medicine', 'transit'], B6 = [...B5, 'culture', 'security'], B7 = [...B6, 'university'], B8 = [...B7, 'delicacy'];
 export const TIERS = [
   { id: 'pioneer', name: '개척민', color: '#e9b46a', base: 2, max: 10, tax: 0.6, basic: B0, luxury: ['lounge'], upgrade: null,
     desc: '돔 하나에 몇 명이 함께 사는 첫 정착민.' },
-  { id: 'settler', name: '정착민', color: '#d9835a', base: 3, max: 13, tax: 0.9, basic: B1, luxury: ['lounge', 'gym'],
+  { id: 'settler', name: '정착민', color: '#d9835a', base: 3, max: 13, tax: 0.9, basic: B1, luxury: ['lounge', 'gym', 'childcare'],
     upgrade: { cost: { plate: 4, glass: 2, credits: 30 }, research: 'r_medicine' }, desc: '가족을 꾸려 눌러앉은 사람들. 의료소가 가까워야 합니다.' },
-  { id: 'tech', name: '기술자', color: '#7fd6ff', base: 4, max: 18, tax: 1.3, basic: B2, luxury: ['lounge', 'gym', 'park'],
+  { id: 'tech', name: '기술자', color: '#7fd6ff', base: 4, max: 18, tax: 1.3, basic: B2, luxury: ['lounge', 'gym', 'park', 'childcare'],
     upgrade: { cost: { alloy: 2, glass: 4, credits: 60 }, research: 'r_goods' }, desc: '설비를 고치고 돌리는 기술자.' },
-  { id: 'artisan', name: '숙련공', color: '#5fd3a8', base: 5, max: 22, tax: 1.7, basic: B3, luxury: ['lounge', 'gym', 'park'],
+  { id: 'artisan', name: '숙련공', color: '#5fd3a8', base: 5, max: 22, tax: 1.7, basic: B3, luxury: ['lounge', 'gym', 'park', 'childcare'],
     upgrade: { cost: { alloy: 3, wire: 4, credits: 90 }, research: 'r_textile' }, desc: '손재주로 공방을 꾸리는 숙련공. 옷을 지어 입습니다.' },
   { id: 'engineer', name: '공학자', color: '#b39bff', base: 6, max: 26, tax: 2.2, basic: B4, luxury: ['gym', 'park', 'culture'],
     upgrade: { cost: { alloy: 4, circuit: 2, glass: 4, credits: 150, diploma: 2 }, research: 'r_education' }, desc: '학교를 나와 설계를 맡는 공학자.' },
@@ -181,6 +181,7 @@ export const NEED_NAMES = {
   water: '물', food: '식량', power: '전력', market: '배급소', clinic: '의료소', goods: '생활용품',
   school: '학교', electronics: '전자기기', culture: '문화 센터', lounge: '라운지', park: '공원',
   textiles: '의류', medicine: '의약품', delicacy: '온실 과일', gym: '체육관', transit: '트램', university: '대학',
+  air: '공기', sanitation: '하수 처리', waste: '쓰레기 수거', security: '치안', childcare: '보육',
 };
 
 export const ERAS = [
@@ -189,7 +190,7 @@ export const ERAS = [
   { id: 3, name: '마을', desc: '정착민 가족이 자리 잡은 마을', req: { pop: 25, tier: ['settler', 8] } },
   { id: 4, name: '소도시', desc: '기술자들이 공장을 돌리는 소도시', req: { pop: 50, tier: ['tech', 12] } },
   { id: 5, name: '공업 도시', desc: '숙련공의 공방에서 물자가 넘쳐나는 도시', req: { pop: 90, tier: ['artisan', 16] } },
-  { id: 6, name: '도시', desc: '공학자와 산업이 자라나는 도시', req: { pop: 140, tier: ['engineer', 20] } },
+  { id: 6, name: '도시', desc: '시청이 행정을 맡고 공학자와 산업이 자라나는 도시', req: { pop: 140, tier: ['engineer', 20], building: 'cityhall' } },
   { id: 7, name: '학술 도시', desc: '연구원이 모여드는 학술 도시', req: { pop: 200, tier: ['scientist', 24] } },
   { id: 8, name: '대도시', desc: '시민 문화가 꽃피는 대도시', req: { pop: 280, tier: ['citizen', 30] } },
   { id: 9, name: '행성 문명', desc: '행성 문명의 탄생', req: { pop: 380, tier: ['professional', 30], building: 'monument' } },
@@ -250,6 +251,15 @@ export const BUILDINGS = {
   pharma: { name: '제약소', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 4, circuit: 2, credits: 140 }, power: -5, desc: '황·씨앗·물로 의약품을 만듭니다.', workers: ['artisan', 3], recipe: 'medicine', research: 'r_pharma' },
   transit: { name: '트램 정류장', cat: 'colony', size: [10, 6], cost: { plate: 4, lightalloy: 4, wire: 4, credits: 120 }, power: -3, desc: '반경 65m 주거지를 트램망으로 잇습니다. 정류장이 둘 이상이면 트램망 안의 집은 다른 정류장 근처의 시설까지 이용하고, 탐사대원은 정류장 사이를 트램으로 이동합니다. 연구원 이상 계층의 필수 시설.', workers: ['tech', 2], service: 'transit', radius: 65, research: 'r_transit' },
   university: { name: '대학', cat: 'colony', size: [12, 12], apron: 3, cost: { lightalloy: 8, glass: 10, electronics: 4, battery: 4, credits: 400 }, power: -8, desc: '반경 70m 공학자 이상 가정의 청년을 받아 가르칩니다(최대 30명). 90초마다 졸업생을 배출하며, 집을 전문직 이상으로 올리려면 졸업생이 필요합니다. 재학생 1명당 연구 점수 0.012/s.', workers: ['scientist', 4], service: 'university', radius: 70, research: 'r_university' },
+  lifesupport: { name: '생명유지 시설', cat: 'colony', size: [6, 6], cost: { plate: 4, glass: 2, circuit: 1 }, power: -3, desc: '반경 50m 집에 숨 쉴 공기를 공급합니다. 물을 전기분해해 산소를 만들고 이산화탄소를 걸러내며, 물을 계속 씁니다. 숨쉬는 대기 단계 전까지 모든 집의 필수 시설.', service: 'air', radius: 50, research: 'r_colony' },
+  sewage: { name: '하수처리장', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 2, alloy: 1 }, power: -3, desc: '반경 60m 집의 하수를 정화해 쓴 물의 절반을 창고로 돌려보냅니다. 하수 처리가 안 되는 동네는 병이 돕니다. 정착민 이상 계층의 필수 시설.', workers: ['settler', 2], service: 'sanitation', radius: 60, research: 'r_sanitation' },
+  recycling: { name: '재활용 센터', cat: 'colony', size: [8, 8], cost: { plate: 6, alloy: 2 }, power: -4, desc: '반경 60m 집의 쓰레기를 수거해 분류하고, 1분마다 철판·유리·구리선을 되살려 창고에 넣습니다. 수거되지 않는 동네는 행복도가 떨어집니다. 기술자 이상 계층의 필수 시설.', workers: ['tech', 3], service: 'waste', radius: 60, research: 'r_sanitation' },
+  powerbank: { name: '축전소', cat: 'power', size: [5, 4], cost: { battery: 4, plate: 2, wire: 2 }, desc: '같은 전력망의 남는 전기를 저장했다가(최대 12 MJ) 모자랄 때 최대 20 kW로 내보냅니다. 태양광만으로도 밤을 넘길 수 있습니다.', storage_kj: 12000, rate_kw: 20, research: 'r_battery' },
+  firestation: { name: '소방서', cat: 'colony', size: [10, 8], apron: 2, cost: { plate: 6, alloy: 2, glass: 2 }, power: -2, desc: '반경 80m 시설의 화재를 10초 안에 진압하고, 정기 점검으로 화재 위험을 70% 줄입니다. 대기 산소가 2%를 넘으면 불이 날 수 있습니다.', workers: ['settler', 3], service: 'fire', radius: 80, research: 'r_safety' },
+  police: { name: '치안센터', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 2, circuit: 1 }, power: -2, desc: '반경 70m 주거지를 순찰합니다. 인구가 40명을 넘으면 치안이 닿지 않는 집은 행복도와 세금이 떨어집니다. 시민 이상 계층의 필수 시설.', workers: ['tech', 3], service: 'security', radius: 70, research: 'r_safety' },
+  nursery: { name: '보육원', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 4, credits: 80 }, power: -2, desc: '반경 50m 가정의 아이를 돌봅니다. 돌봄을 받는 가정에서는 2분마다 아이가 태어나 빈 방이 있는 집으로 들어갑니다(행복할수록 많이).', workers: ['settler', 2], service: 'childcare', radius: 50, research: 'r_family' },
+  cityhall: { name: '시청', cat: 'colony', size: [14, 12], apron: 3, cost: { plate: 12, glass: 8, alloy: 6, credits: 400 }, power: -4, desc: '식민지의 행정. 세금 징수가 15% 늘고 주민 전체 행복도가 3% 오르며, 인구·소득·교육 통계를 볼 수 있습니다. 도시 시대로 가려면 필요합니다.', workers: ['engineer', 4], unique: true, research: 'r_civics' },
+  tradepost: { name: '교역소', cat: 'colony', size: [10, 10], apron: 2, cost: { plate: 8, alloy: 2, circuit: 2 }, power: -3, desc: '궤도 화물선과 거래합니다. 크레딧으로 물자를 사들이거나 창고의 물자를 팝니다. 근처에서 나지 않는 광석을 구할 때 씁니다.', workers: ['tech', 2], trade: true, research: 'r_trade' },
   road: { name: '도로', cat: 'colony', size: [6, 6], cost: { iron: 1 }, desc: '두 지점을 찍어 소결 레골리스 포장도로를 깝니다. 지형을 따라 경사를 다듬고, 다른 도로에 이으면 교차로가 됩니다. 10m당 철 1.', tool: 'road', research: 'r_colony' },
   monument: { name: '개척자 기념탑', cat: 'colony', size: [10, 10], apron: 3, cost: { alloy: 20, glass: 10, electronics: 6, credits: 800 }, desc: '문명 시대로 나아가기 위한 상징. 주민 전체의 행복도가 오르고, 찾아오는 방문객이 분당 20 크레딧을 남깁니다.', unique: true, research: 'r_monument' },
   elevator: { name: '궤도 엘리베이터', cat: 'colony', size: [16, 16], apron: 4, cost: { alloy: 60, electronics: 20, circuit: 30, glass: 30, credits: 3000 }, power: -40, desc: '하늘과 궤도를 잇는 탑. 창고에서 150개를 넘는 물자를 30초마다 궤도로 수출해 크레딧을 벌고, 이주민이 엘리베이터로 내려와 교신 한 번에 50% 더 많이 옵니다.', unique: true, research: 'r_orbital', wonder: true },
@@ -269,7 +279,7 @@ export const RESEARCH = [
   { id: 'r_refine', name: '정련 공학', era: 1, cost: 40, req: ['r_auto'], desc: '정련소로 부품을 자동 생산합니다.' },
   { id: 'r_logistics', name: '드론 물류', era: 1, cost: 60, req: ['r_refine'], desc: '드론 허브와 물류 창고. 시설 간 자동 운송.' },
   { id: 'r_bio', name: '행성 생물학', era: 1, cost: 50, req: [], desc: '씨앗 배양과 이끼 살포기.' },
-  { id: 'r_colony', name: '정착 프로토콜', era: 1, cost: 90, req: ['r_logistics'], desc: '식민 본부, 주거지, 농장, 정수 펌프, 배급소.' },
+  { id: 'r_colony', name: '정착 프로토콜', era: 1, cost: 90, req: ['r_logistics'], desc: '식민 본부, 주거지, 생명유지 시설, 농장, 정수 펌프, 배급소.' },
   { id: 'r_wind', name: '풍력 발전', era: 2, cost: 60, req: ['r_colony'], desc: '풍력 터빈.' },
   { id: 'r_assembly', name: '조립 자동화', era: 2, cost: 120, req: ['r_colony'], desc: '조립기로 회로·씨앗·연료봉 자동 생산.' },
   { id: 'r_medicine', name: '의료와 여가', era: 2, cost: 110, req: ['r_colony'], desc: '의료소와 라운지. 개척민 → 정착민 업그레이드.' },
@@ -284,12 +294,17 @@ export const RESEARCH = [
   { id: 'r_metallurgy', name: '비철 야금', era: 2, cost: 100, req: ['r_refine'], desc: '정련소에서 구리선과 경합금을 뽑습니다.' },
   { id: 'r_sports', name: '체육', era: 2, cost: 80, req: ['r_colony'], desc: '체육관.' },
   { id: 'r_textile', name: '섬유', era: 2, cost: 130, req: ['r_goods', 'r_metallurgy'], desc: '섬유 공방. 기술자 → 숙련공 업그레이드.' },
-  { id: 'r_battery', name: '전지', era: 3, cost: 180, req: ['r_metallurgy', 'r_assembly'], desc: '조립기에서 니켈·구리 배터리를 만듭니다.' },
+  { id: 'r_battery', name: '전지', era: 3, cost: 180, req: ['r_metallurgy', 'r_assembly'], desc: '조립기에서 니켈·구리 배터리를 만들고, 축전소로 밤에도 전기를 씁니다.' },
   { id: 'r_agri', name: '농화학', era: 3, cost: 200, req: ['r_bio', 'r_assembly'], desc: '비료와 돔 과수원.' },
   { id: 'r_pharma', name: '제약', era: 3, cost: 260, req: ['r_medicine', 'r_education'], desc: '제약소.' },
   { id: 'r_transit', name: '대중교통', era: 3, cost: 280, req: ['r_roads', 'r_metallurgy'], desc: '트램 정류장. 공학자 → 연구원 업그레이드.' },
   { id: 'r_university', name: '고등 교육', era: 4, cost: 480, req: ['r_culture', 'r_battery'], desc: '대학. 시민 → 전문직 업그레이드.' },
   { id: 'r_highrise', name: '초고층 건축', era: 4, cost: 560, req: ['r_university', 'r_agri'], desc: '다이아그리드 타워. 전문직 → 명사 업그레이드.' },
+  { id: 'r_sanitation', name: '위생 공학', era: 2, cost: 110, req: ['r_colony'], desc: '하수처리장과 재활용 센터.' },
+  { id: 'r_family', name: '가족 정착', era: 2, cost: 100, req: ['r_medicine'], desc: '보육원. 식민지에서 아이가 태어납니다.' },
+  { id: 'r_safety', name: '공공 안전', era: 2, cost: 140, req: ['r_colony'], desc: '소방서와 치안센터.' },
+  { id: 'r_trade', name: '궤도 교역', era: 2, cost: 150, req: ['r_logistics'], desc: '교역소. 궤도 화물선과 물자를 사고팝니다.' },
+  { id: 'r_civics', name: '시민 행정', era: 3, cost: 260, req: ['r_roads', 'r_safety'], desc: '시청. 도시 시대의 조건.' },
   { id: 'r_native', name: '요람 프로그램', era: 5, cost: 800, req: ['r_highrise', 'r_monument'], desc: '아르케에서 태어난 첫 세대를 위한 개방형 주거. 숨쉬는 대기 이후 명사 → 아르케인 업그레이드.' },
 ];
 

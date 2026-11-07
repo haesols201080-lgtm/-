@@ -134,7 +134,7 @@ export class Economy {
   rebuildGrid() {
     this.gridDirty = false;
     const list = this.game.buildings.list;
-    const nodes = list.filter((b) => NODE_RANGE[b.type] || (b.def.power > 0));
+    const nodes = list.filter((b) => NODE_RANGE[b.type] || (b.def.power > 0) || b.def.storage_kj);
     const parent = new Map();
     const find = (a) => { while (parent.get(a) !== a) { parent.set(a, parent.get(parent.get(a))); a = parent.get(a); } return a; };
     const union = (a, b) => { parent.set(find(a), find(b)); };
@@ -237,6 +237,21 @@ export class Economy {
       c.supply += this.generatorOutput(b);
       if (b.def.power < 0 && b.enabled !== false) c.demand += -b.def.power * (b.idle ? 0.15 : 1);
     }
+    // storage banks: charge from the surplus, cover the shortfall
+    for (const b of list) {
+      if (!b.def.storage_kj || !b.gridRoot) continue;
+      const c = comps.get(b.gridRoot);
+      const D = b.data;
+      D.charge = D.charge || 0;
+      const surplus = c.supply - c.demand;
+      if (surplus > 0) {
+        const k = Math.min(surplus, b.def.rate_kw, (b.def.storage_kj - D.charge) / Math.max(dt, 1e-3));
+        D.charge += k * dt; c.supply -= k; D.flow = k;
+      } else {
+        const k = Math.min(-surplus, b.def.rate_kw, D.charge / Math.max(dt, 1e-3));
+        D.charge -= k * dt; c.supply += k; D.flow = -k;
+      }
+    }
     let S = 0, D = 0;
     for (const c of comps.values()) { c.ratio = c.demand > 0 ? Math.min(1, c.supply / c.demand) : 1; S += c.supply; D += c.demand; }
     this.power.supply = S; this.power.demand = D;
@@ -265,11 +280,14 @@ export class Economy {
     b.networked = !!net;
     let rate = (d.power < 0 ? b.powerRatio : 1) * this.workFactor(b);
     if (b.enabled === false) rate = 0;
+    if (b.fire > 0) rate = 0;
     b.rate = rate;
     let active = rate > 0.05;
     b.status = '';
     if (d.power < 0 && b.powerRatio < 0.05) b.status = '전력 없음';
     else if (d.workers && this.workFactor(b) < 0.05) b.status = '일손 부족';
+    if (b.fire > 0) b.status = '화재!';
+    if (d.storage_kj) { const f = b.data.flow || 0; b.status = b.gridRoot ? (f > 0.05 ? '충전 중' : f < -0.05 ? '방전 중' : '대기') : '전력망에 연결되지 않음'; }
 
     if (d.deposit) {
       b.data.t = (b.data.t || 0) + dt * rate;

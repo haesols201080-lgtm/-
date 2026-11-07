@@ -478,6 +478,30 @@ export class UI {
     this.panelRefresh = draw;
   }
 
+  // the trade post's price board
+  tradeHTML() {
+    const g = this.game, C = g.colony, st = C.tradeOpen();
+    const ids = Object.keys(ITEMS).filter((id) => id !== 'fuelrod' || g.research.has('r_fission'));
+    return `<p class="sec-t" style="margin-top:14px">궤도 화물선 시세 · 보유 ${Math.floor(C.credits)} 크레딧${st.ok ? '' : ` · <span style="color:var(--warn)">${esc(st.reason)}</span>`}</p>
+      <div class="trade">${ids.map((id) => `<div class="tr"><span class="ti">${itemIcon(id, 22)}</span><span class="tn">${ITEMS[id].name}<small>창고 ${g.eco.store.count(id)}</small></span>
+        <button data-trade="${id}" data-n="10" ${st.ok ? '' : 'disabled'}>10개 사기 · ${C.buyPrice(id) * 10}</button><button data-trade="${id}" data-n="-10" ${st.ok && g.eco.store.count(id) ? '' : 'disabled'}>10개 팔기 · ${C.price(id) * 10}</button></div>`).join('')}</div>`;
+  }
+
+  // the city hall's census
+  censusHTML() {
+    const g = this.game, C = g.colony;
+    const rows = TIERS.map((t, i) => C.pop[i] ? `<tr><td><i style="background:${t.color}"></i>${t.name}</td><td>${C.pop[i]}</td><td>${C.sick[i] || 0}</td><td>${C.workforce[i] || 0}</td><td>${C.unemployed ? C.unemployed[i] : 0}</td></tr>` : '').join('');
+    return `<p class="sec-t" style="margin-top:14px">인구 조사</p>
+      <table class="census"><tr><th>계층</th><th>주민</th><th>환자</th><th>일할 수 있음</th><th>일자리 없음</th></tr>${rows || '<tr><td colspan="5">아직 주민이 없습니다</td></tr>'}</table>
+      <div class="kv" style="margin-top:10px">
+        <div class="k">총인구</div><div>${C.total}명 · 출생 ${C.born}명 · 이주 ${C.arrivals}명</div>
+        <div class="k">행복도</div><div>${Math.round(C.happiness * 100)}% · 작업 효율 ${Math.round((C.productivity || 1) * 100)}%</div>
+        <div class="k">재정</div><div>세금 ${Math.round(C.taxes || 0)}/분 · 순수입 ${C.income >= 0 ? '+' : ''}${Math.round(C.income)}/분 · 보유 ${Math.floor(C.credits)}</div>
+        <div class="k">교육</div><div>학교 수료생 ${C.edu.diploma}명 · 대학 졸업생 ${C.edu.degree}명</div>
+        <div class="k">안전</div><div>불이 난 곳 ${C.fires.length}곳 · 치안 밖의 집 ${g.buildings.list.filter((h) => h.def.house && h.data.unsafe).length}채</div>
+      </div>`;
+  }
+
   // short black fade, for cuts like a tram ride
   flash() {
     const f = h('div', { class: 'cutfade' });
@@ -489,7 +513,7 @@ export class UI {
   activity(b) {
     const g = this.game, C = g.colony, D = b.data, t = b.type;
     if (b.def.service && !b.serviceOk) {
-      const why = b.def.power < 0 && !(b.powerRatio > 0.3) ? '전력이 부족해' : b.def.workers ? `일손이 부족해 (${b.workersHave || 0} / ${b.def.workers[1]}명, ${TIERS.find((x) => x.id === b.def.workers[0]).name} 이상)` : '';
+      const why = b.def.power < 0 && !b.gridRoot ? '전력망에 연결되지 않아' : b.def.power < 0 && !(b.powerRatio > 0.3) ? '전력이 부족해' : b.fire ? '불이 나서' : b.type === 'lifesupport' && b.data.dry ? '물이 떨어져' : b.def.workers ? `일손이 부족해 (${b.workersHave || 0} / ${b.def.workers[1]}명, ${TIERS.find((x) => x.id === b.def.workers[0]).name} 이상)` : '';
       return `<span style="color:var(--warn)">${why} 문을 닫았습니다. 지금은 아무 일도 하지 않습니다.</span>`;
     }
     if (t === 'school' || t === 'university') {
@@ -504,6 +528,15 @@ export class UI {
     if (t === 'transit') { const n = g.buildings.list.filter((x) => x.type === 'transit').length; return n > 1 ? `연결된 정류장 ${n}곳 · 트램 이용 주민 ${D.riders || 0}명` : '정류장이 하나뿐이라 트램이 아직 다니지 않습니다'; }
     if (t === 'elevator') return `궤도 수출 누적 ${Math.round(D.exported || 0)} 크레딧${D.last && D.last.length ? ' · 최근: ' + D.last.map(([id, n]) => `${ITEMS[id]?.name || id} ${n}`).join(', ') : ' · 150개 넘게 쌓인 물자가 없어 대기 중'}`;
     if (t === 'monument') return `방문객이 분당 20 크레딧을 남깁니다 · 주민 전체 행복도 +10%`;
+    if (t === 'lifesupport') return g.terra.breathable ? '바깥 공기로 숨 쉴 수 있어 쉬고 있습니다' : D.dry ? '<span style="color:var(--warn)">물이 떨어져 산소를 만들지 못합니다 — 창고에 물을 채우세요</span>' : `주민 ${D.served || 0}명에게 공기 공급 · 물 ${(0.3 + 0.01 * (D.served || 0)).toFixed(2)}개/분 사용`;
+    if (t === 'sewage') return `하수를 정화해 물을 되돌립니다 · 이 동네 주민의 병 위험 −6%p`;
+    if (t === 'recycling') return `수거 대상 주민 ${D.collected || 0}명 · 되살린 물자: ${Object.entries(D.got || {}).map(([id, n]) => `${ITEMS[id].name} ${n}`).join(', ') || '아직 없음'}`;
+    if (t === 'firestation') return `출동 ${D.calls || 0}회 · 진화 ${D.saved || 0}건 · 지금 불이 난 곳 ${C.fires.length}곳${g.terra.p.oxygen < 15000 ? ' · 대기 산소가 적어 아직 불이 붙지 않습니다' : ''}`;
+    if (t === 'police') return C.total > 40 ? `순찰 중 · 치안이 닿지 않는 집 ${g.buildings.list.filter((h) => h.def.house && h.data.unsafe).length}채` : '인구가 40명을 넘으면 범죄가 생깁니다. 지금은 조용합니다';
+    if (t === 'nursery') return `돌보는 아이 ${D.kids || 0}명 · 이곳에서 태어난 아이 ${D.born || 0}명 · 식민지 출생 누적 ${C.born}명`;
+    if (t === 'cityhall') return `세금 징수 +15% · 행복도 +3% · 아래 통계 참고`;
+    if (t === 'tradepost') return `구입 ${D.bought || 0}개 · 판매 ${D.sold || 0}개`;
+    if (t === 'powerbank') return `저장 ${Math.round((D.charge || 0) / b.def.storage_kj * 100)}% (${((D.charge || 0) / 1000).toFixed(1)} / ${b.def.storage_kj / 1000} MJ) · ${D.flow > 0.05 ? `충전 ${D.flow.toFixed(1)} kW` : D.flow < -0.05 ? `방전 ${(-D.flow).toFixed(1)} kW` : '대기'}`;
     return '';
   }
 
@@ -546,16 +579,24 @@ export class UI {
       if (d.house) extra += `<button data-act="upgrade" ${g.colony.canUpgrade(b).ok ? '' : 'disabled'}>지금 업그레이드</button><button data-act="auto" class="${g.colony.autoUpgrade ? 'on' : ''}">자동 업그레이드 ${g.colony.autoUpgrade ? '켜짐' : '꺼짐'}</button>`;
       if (d.storage || d.craft) extra += `<button data-act="open">보관함·제작 열기</button>`;
       if (b.type === 'clinic') extra += `<button data-act="heal" class="pri" ${b.serviceOk ? '' : 'disabled'}>치료받기 · 산소 보충</button>`;
+
       if (b.type === 'transit') {
         const others = g.buildings.list.filter((x) => x.type === 'transit' && x !== b);
         extra += others.length ? others.map((x) => `<button data-tram="${x.id}" ${b.serviceOk && x.serviceOk ? '' : 'disabled'}>트램 타고 이동 · ${Math.round(Math.hypot(x.x - b.x, x.z - b.z))} m</button>`).join('') : '<span style="color:var(--muted)">정류장을 하나 더 지으면 트램이 다닙니다</span>';
       }
       extra += '</div>';
+      if (b.type === 'tradepost') extra += this.tradeHTML();
+      if (b.type === 'cityhall') extra += this.censusHTML();
       body.innerHTML = `<div class="binfo"><img alt="" src="${g.thumbs.get(b.type === 'house' ? 'house:' + b.tier : b.type)}"><div>
         <p style="color:var(--muted);margin:0 0 12px">${esc(d.desc)}</p>
         <div class="kv">${rows.map(([k, v]) => `<div class="k">${k}</div><div>${v}</div>`).join('')}</div>${extra}</div></div>`;
       body.querySelectorAll('[data-rec]').forEach((x) => x.onclick = () => { b.data.recipe = x.dataset.rec; b.data.busy = false; render(); });
       body.querySelectorAll('[data-tram]').forEach((x) => x.onclick = () => g.rideTram(b, g.buildings.list.find((o) => o.id === +x.dataset.tram)));
+      body.querySelectorAll('[data-trade]').forEach((x) => x.onclick = () => {
+        const r = g.colony.trade(x.dataset.trade, +x.dataset.n);
+        if (!r.ok) this.toast(r.reason, 'bad'); else this.toast(`${ITEMS[x.dataset.trade].name} ${Math.abs(r.n)}개 ${r.n > 0 ? '구입 — 화물선이 내려왔습니다' : '판매'}`, 'good', 2);
+        render();
+      });
       body.querySelectorAll('[data-act]').forEach((x) => x.onclick = () => {
         const a = x.dataset.act;
         if (a === 'toggle') b.enabled = b.enabled === false;

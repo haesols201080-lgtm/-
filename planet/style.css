@@ -541,3 +541,13 @@ select { font-family: var(--font); background: #1a232b; color: var(--ink); borde
 
 .cutfade { position: fixed; inset: 0; background: #000; z-index: 70; pointer-events: none; animation: cutfade .9s ease forwards; }
 @keyframes cutfade { 0% { opacity: 1; } 40% { opacity: 1; } 100% { opacity: 0; } }
+
+.trade { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 5px; max-height: 300px; overflow: auto; padding-right: 4px; }
+.trade .tr { display: flex; align-items: center; gap: 8px; background: rgba(255,255,255,.035); padding: 4px 6px; }
+.trade .tn { flex: 1; font-size: 12.5px; }
+.trade .tn small { display: block; color: var(--muted); font-size: 10.5px; }
+.trade button { font-size: 11px; padding: 4px 7px; }
+.census { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.census th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+.census td { padding: 3px 6px; border-bottom: 1px solid rgba(255,255,255,.04); }
+.census td i { display: inline-block; width: 8px; height: 8px; margin-right: 6px; }
