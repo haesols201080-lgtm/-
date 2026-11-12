@@ -4,6 +4,7 @@ import { ST, PAL, WK, FLAG } from '../render/cityMaterial.js';
 import { M, rectPts, scalePts, ngonPts, rotPts } from './builder.js';
 import * as K from './kit.js';
 import { Vol, facade, blindWall, shopSign, bladeSign, screenWall, FACE_ANG } from './facade.js';
+import { hollow, lobby, shopRoom } from './interiors.js';
 
 let uo = 11;
 const nextU = () => (uo = (uo * 37 + 11) % 877);
@@ -38,7 +39,17 @@ function shopUnit(v, rng, S, s0, s1, gh, o = {}) {
   ctx.main();
   v.box(0, s0, s0 + pil, 0, 0.14, 0, gh, K.conc(0.33), { top: false });
   const a = s0 + pil, b = s1; const wv = b - a;
-  if (rng.chance(o.shutter ?? 0.16)) {
+  let entered = null;
+  if (o.enter && wv > 4.4) { // open doorway + real room behind
+    const nc = Math.max(1, Math.round(wv / 3.4)); const u = nextU(); const dA = b - 2.7, dB = b - 0.35, dH = 2.7; const top = gh - 0.7;
+    const uu = (q) => u + (nc * (q - a)) / wv, vv = (q) => q / top;
+    pen.use(M(ST.WIN_LUX, { color: [0.2, 0.2, 0.22], seed: rng.i(0, 255), A: 0.96, B: rng.pick(S.shopLights || [PAL.WARM, PAL.NEUTRAL, PAL.COOL]), cellW: wv / nc, floorH: top, flags: WK.COMPOSITE }));
+    v.wall(0, a, dA, 0, 0, top, { uv: [uu(a), 0, uu(dA), 1], aoB: 0.6 }); v.wall(0, dB, b, 0, 0, top, { uv: [uu(dB), 0, uu(b), 1], aoB: 0.6 }); v.wall(0, dA, dB, 0, dH, top, { uv: [uu(dA), vv(dH), uu(dB), 1] });
+    const x0 = v.cx - v.w / 2; const zF = v.cz + v.d / 2; const dep = Math.min(v.d - 1.2, rng.f(6, 8.5));
+    entered = shopRoom(ctx, rng, x0 + a, x0 + b, zF, dep, top - 0.05, { a: x0 + dA, b: x0 + dB, h: dH }, { kind: o.kind, sign: o.roomSign });
+    const lp = v.world(0, (dA + dB) / 2, 2.2); ctx.light(lp[0], lp[1], 9, [1, 0.82, 0.6], 0.6, pen.oy + 2.4);
+    ctx.main();
+  } else if (rng.chance(o.shutter ?? 0.16)) {
     pen.use(M(ST.CORRUGATED, { color: [0.3, 0.31, 0.33], seed: rng.i(0, 255) })); v.wall(0, a, b, 0, 0, gh - 0.7, { aoB: 0.6 });
   } else {
     const nc = Math.max(1, Math.round(wv / 3.4)); const u = nextU();
@@ -50,6 +61,7 @@ function shopUnit(v, rng, S, s0, s1, gh, o = {}) {
   if (S.awning && rng.chance(0.55)) { const p = v.P(0, (a + b) / 2, 0); K.awning(ctx, p[0], gh - 0.55, p[1], 0, wv * 0.92, rng.f(1.0, 1.5), rng.pick(S.tarps || [[0.3, 0.3, 0.32]]), rng.i(0, 255)); }
   else { ctx.detail(); v.box(0, a + 0.1, b - 0.1, 0, rng.f(0.7, 1.2), gh - 0.82, gh - 0.7, K.dark(0.1)); ctx.main(); }
   if (!o.noSign) shopSign(v, 0, a, b, gh + 0.5, rng, { maxH: 1.35, maxW: 8.5, intensity: S.signI ?? 4.5 });
+  return entered;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -61,7 +73,7 @@ export function shopHouse(ctx, rng, lot, S, o = {}) {
   const v = new Vol(ctx, 0, cz, w, d, 0, h);
   const wall = wallMat(rng, S, { flags: rng.chance(S.balcony ?? 0.3) ? FLAG.VAR_A : 0, cellW: w / Math.max(1, Math.round(w / (S.cellW ?? 3.1))) });
   const party = M(ST.PLASTER, { color: dim(wall.color, 0.85), seed: wall.seed });
-  shopUnit(v, rng, S, 0, w - 0.36, gh, o);
+  const ent = shopUnit(v, rng, S, 0, w - 0.36, gh, { ...o, enter: o.enter ?? rng.chance(S.enter ?? 0.3) });
   ctx.main(); v.box(0, w - 0.36, w, 0, 0.14, 0, gh, K.conc(0.33), { top: false });
   // upper floors
   facade(v, 0, gh, h, { wall, bayCells: 1, floorH: fh, aoB: 0.9, belts: floors <= 4 ? { every: 1, d: 0.13, h: 0.2, mat: K.conc(0.35), detail: true } : null });
@@ -70,7 +82,9 @@ export function shopHouse(ctx, rng, lot, S, o = {}) {
   facade(v, 2, 0, h, { wall: { ...wall, flags: wall.flags & 7 }, bayCells: 999, floorH: fh, aoB: 0.6 });
   pen.use(party); v.wall(2, 0, w, 0, h, h + par);
   blindWall(v, 1, 0, h + par, party, rng, { mural: rng.chance(0.1), aoB: 0.6 }); blindWall(v, 3, 0, h + par, party, rng, { mural: rng.chance(0.1), aoB: 0.6 });
-  v.roof(K.conc(0.26)); v.solid();
+  v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else v.solid();
+  if (ent && o.home) { const r = ent.room; ctx.poi({ type: 'home', id: 'home', x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), name: '캡슐텔 0번지', doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5), yaw: pen.yaw }); }
+  else if (ent) { const r = ent.room; ctx.poi({ type: 'shop', kind: ent.kind, district: lot.block.district, x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5) }); }
   // projecting sign + downpipe
   if (floors >= 2 && rng.chance(S.blade ?? 0.5)) { const hgt = Math.min(4.6, fh * floors * 0.5); bladeSign(v, 0, 0.55, gh + 1.9 + hgt / 2, hgt, rng, { intensity: S.signI ?? 4.5 }); }
   ctx.detail(); v.box(0, w - 0.52, w - 0.4, 0, 0.13, gh, h, K.MAT_POLE, { bottom: false, top: false }); ctx.main();
@@ -97,14 +111,15 @@ export function tenement(ctx, rng, lot, S, o = {}) {
   const wall = wallMat(rng, S, { flags: rng.chance(0.65) ? FLAG.VAR_A : 0, cellW: w / Math.max(2, Math.round(w / 3.2)) });
   const party = M(ST.CONCRETE, { color: dim(wall.color, 0.8), seed: wall.seed });
   const nShops = Math.max(1, Math.round(w / 7.5)); const sw = (w - 0.36) / nShops;
-  for (let i = 0; i < nShops; i++) shopUnit(v, rng, S, i * sw, (i + 1) * sw, gh, o);
+  const eI = rng.chance(S.enter ?? 0.3) ? rng.i(0, nShops - 1) : -1; let ent = null;
+  for (let i = 0; i < nShops; i++) { const e = shopUnit(v, rng, S, i * sw, (i + 1) * sw, gh, { ...o, enter: i === eI }); if (e) ent = e; }
   ctx.main(); v.box(0, w - 0.36, w, 0, 0.14, 0, gh, K.conc(0.33), { top: false });
   const ribM = K.conc(0.34);
   facade(v, 0, gh, h, { wall, bayCells: 2, floorH: fh, aoB: 0.9, ribs: { d: 0.4, w: 0.34, mat: ribM, detail: true, over: par }, belts: { every: Math.max(2, Math.round(floors / 5)), d: 0.4, h: 0.45, mat: ribM, detail: true } });
   pen.use(party); v.wall(0, 0, w, 0, h, h + par);
   facade(v, 2, 0, h, { wall: { ...wall, flags: wall.flags & 7 }, bayCells: 999, floorH: fh, aoB: 0.6 }); pen.use(party); v.wall(2, 0, w, 0, h, h + par);
   blindWall(v, 1, 0, h + par, party, rng, { mural: rng.chance(0.4), aoB: 0.6 }); blindWall(v, 3, 0, h + par, party, rng, { mural: rng.chance(0.4), aoB: 0.6 });
-  v.roof(K.conc(0.26)); v.solid();
+  v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else v.solid();
   // roof-top service core
   const cw = Math.min(6, w * 0.3), cd = Math.min(5, d * 0.4), cx = rng.f(-0.25, 0.25) * w;
   pen.box(cx, cz, cw, cd, h, h + 4.2, { wall: M(ST.WIN_SLIT, { color: dim(wall.color, 0.8), seed: wall.seed, A: 0.7, B: PAL.COOL, cellW: 2, floorH: 4.2, flags: WK.CONCRETE }), roof: K.conc(0.25) });
@@ -176,14 +191,16 @@ export function haloRing(v, y, rng, acc, k = 0.72) {
 export function techTower(ctx, rng, lot, S, o = {}) {
   const pen = ctx.penAt(lot.x, 0.2, lot.z, lot.yaw);
   const side = lot.corner || o.free ? 0.6 : 0.12; const w = lot.w - side * 2, back = o.backGap ?? 1.2, d = lot.d - back, cz = back / 2;
-  const fh = S.floorH ?? 4.0; const H = o.h ?? 120; const acc = rng.pick(S.accents);
+  const fh = S.floorH ?? 4.0; const H = o.h ?? 120; const acc = o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].color : rng.pick(S.accents);
   const bh = rng.pick([9, 12, 14]); const mh = 3.6;
   const allFaces = lot.corner || o.free || H > 160;
   // --- base with colonnade + portal
   const base = new Vol(ctx, 0, cz, w, d, 0, bh);
   const baseM = M(ST.WIN_LUX, { color: [0.18, 0.19, 0.22], seed: rng.i(0, 255), A: 0.95, B: rng.pick(S.lights), cellW: 4.2, floorH: bh / Math.round(bh / 4.5), flags: WK.COMPOSITE });
   const colM = M(ST.COMPOSITE, { color: dim(rng.pick(S.walls), 0.8), seed: rng.i(0, 255) });
-  const bi = facade(base, 0, 0, bh, { wall: baseM, cellW: 4.2, bayCells: 2, floorH: bh / Math.round(bh / 4.5), aoB: 0.55, ribs: { d: 0.9, w: 1.0, mat: colM } });
+  const cellsB = Math.max(1, Math.round(w / 4.2)), bayWB = (w / cellsB) * Math.min(cellsB, 2), baysB = Math.ceil(cellsB / 2); const sC = (Math.floor(baysB / 2) + 0.5) * bayWB;
+  const hasLobby = w >= 15 && d >= 16 && sC > 5 && w - sC > 5; const doorHW = Math.min(2.4, bayWB / 2 - 1.0);
+  const bi = facade(base, 0, 0, bh, { wall: baseM, cellW: 4.2, bayCells: 2, floorH: bh / Math.round(bh / 4.5), aoB: 0.55, ribs: { d: 0.9, w: 1.0, mat: colM }, door: hasLobby ? { s: sC, hw: doorHW, h: 4.6 } : null });
   for (const f of [1, 2, 3]) { if (f !== 2 && !allFaces) blindWall(base, f, 0, bh, colM, rng, { aoB: 0.55 }); else facade(base, f, 0, bh, { wall: baseM, cellW: 4.2, bayCells: 99, floorH: bh / Math.round(bh / 4.5), aoB: 0.55 }); }
   // entrance portal: glowing frame around the centre bay
   { const s0 = Math.floor(bi.bays / 2) * bi.bayW + 0.6, s1 = s0 + bi.bayW - 1.2; ctx.main(); const em = K.emis(acc, 6, 0, false);
@@ -192,8 +209,8 @@ export function techTower(ctx, rng, lot, S, o = {}) {
     const lp = base.world(0, (s0 + s1) / 2, 3); ctx.light(lp[0], lp[1], 22, acc, 0.7, 4);
     const rect = o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].word : null;
     shopSign(base, 0, s0 - 2, s1 + 2, bh - 1.6, rng, { rect: rect || undefined, maxH: 1.8, maxW: 11, intensity: 4 }); }
-  base.solid();
-  K.neonBand(ctx, 0, cz, w, d, bh - 0.35, acc, { intensity: 6, light: false, nightOnly: true, sides: allFaces ? 15 : 1, h: 0.22 });
+  if (hasLobby) { const lw = Math.min(20, 2 * Math.min(sC - 1.2, w - sC - 1.2)); const lb = lobby(ctx, rng, -w / 2 + sC, cz + d / 2, { w: lw, d: Math.min(d * 0.55, 15), h: bh - 0.8, doorHW, doorH: 4.6, accent: acc, logo: o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].logo : null, brand: o.brand }); hollow(ctx, 0, cz, w, d, bh, lb.room, lb.door); ctx.main(); } else base.solid();
+  if (rng.chance(S.bands ?? 0.25)) K.neonBand(ctx, 0, cz, w, d, bh - 0.35, acc, { intensity: 5, light: false, nightOnly: true, sides: allFaces ? 15 : 1, h: 0.18 });
   // --- plant floor (louvres)
   const lv = { st: ST.LOUVER, color: [0.26, 0.27, 0.29] };
   const plant = new Vol(ctx, 0, cz, w - 1.2, d - 1.2, bh, bh + mh);
@@ -225,14 +242,14 @@ export function techTower(ctx, rng, lot, S, o = {}) {
     drawShaft(up, setY, H, false); up.solid(); top = up; topY = H;
     if (rng.chance(0.5)) { ctx.detail(); pen.use(K.foliage([0.24, 0.44, 0.22])); pen.box(0, cz + d / 2 - inset * 0.5, w - 1, inset * 0.6, setY, setY + 0.9, {}); ctx.main(); }
     else roofProps(ctx, rng, 0, cz + d / 2 - inset / 2, w, inset, setY, ROOF_TECH, 0.6, 4.2);
-    K.neonBand(ctx, 0, cz, w, d, setY - 0.3, acc, { intensity: 5, light: false, nightOnly: true, sides: allFaces ? 15 : 1, h: 0.2 });
+    if (rng.chance(S.bands ?? 0.25)) K.neonBand(ctx, 0, cz, w, d, setY - 0.3, acc, { intensity: 4, light: false, nightOnly: true, sides: allFaces ? 15 : 1, h: 0.16 });
   }
   top.y1 = topY; top.roof(K.conc(0.24));
   // --- crown
   const ck = rng.next();
-  if (ck < 0.3) crownFins(top, topY, rng.f(6, 16), rng, acc);
-  else if (ck < 0.55 && H > 100) crownSpire(top, topY, rng.f(22, 60), rng, acc);
-  else if (ck < 0.7 && (lot.corner || o.free)) { haloRing(top, topY - 3, rng, acc, 0.6); roofProps(ctx, rng, top.cx, top.cz, top.w, top.d, topY, ROOF_TECH, 0.7); }
+  if (ck < 0.18) crownFins(top, topY, rng.f(6, 16), rng, acc);
+  else if (ck < 0.36 && H > 140) crownSpire(top, topY, rng.f(22, 60), rng, acc);
+  else if (ck < 0.42 && (lot.corner || o.free)) { haloRing(top, topY - 3, rng, acc, 0.6); roofProps(ctx, rng, top.cx, top.cz, top.w, top.d, topY, ROOF_TECH, 0.7); }
   else { roofProps(ctx, rng, top.cx, top.cz, top.w, top.d, topY, ROOF_TECH, 1); pen.use(K.emis(acc, 6, 0, true)); const f0 = top.P(0, 0, 0.05); for (const f of allFaces ? [0, 1, 2, 3] : [0]) top.box(f, 0.5, top.len(f) - 0.5, 0, 0.12, topY - 0.9, topY - 0.6, null, { ends: false, top: false, bottom: false }); }
   // --- attachments on the front
   if (H > 60 && rng.chance(S.pads ?? 0.3)) landingPad(shaft, 0, rng.f(0.25, 0.75) * w, bh + mh + Math.round(rng.f(0.25, 0.7) * (shaft.y1 - bh - mh) / fh) * fh, Math.min(11, lot.block.sw * 0.4, w * 0.4), rng, { color: acc });
@@ -249,14 +266,15 @@ export function techTower(ctx, rng, lot, S, o = {}) {
 // megatower on a whole block: cruciform bundle of shafts on a podium, megabraces, sky lobbies, spire
 export function megaTower(ctx, rng, lot, S, o = {}) {
   const pen = ctx.penAt(lot.x, 0.2, lot.z, lot.yaw);
-  const W = Math.min(lot.w, 150) - 6, Dd = Math.min(lot.d, 130) - 6; const H = o.h ?? 500; const fh = 4.2; const acc = rng.pick(S.accents);
+  const W = Math.min(lot.w, 150) - 6, Dd = Math.min(lot.d, 130) - 6; const H = o.h ?? 500; const fh = 4.2; const acc = o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].color : rng.pick(S.accents);
   const ph = rng.f(22, 34);
   // podium
   const pod = new Vol(ctx, 0, 0, W, Dd, 0, ph);
   const podM = M(ST.WIN_LUX, { color: [0.16, 0.17, 0.2], seed: rng.i(0, 255), A: 0.9, B: rng.pick(S.lights), cellW: 5, floorH: ph / Math.round(ph / 5.5), flags: WK.COMPOSITE });
   const frameM = M(ST.COMPOSITE, { color: dim(rng.pick(S.walls), 0.7), seed: rng.i(0, 255) });
-  for (const f of [0, 1, 2, 3]) facade(pod, f, 0, ph, { wall: podM, cellW: 5, bayCells: 2, floorH: ph / Math.round(ph / 5.5), aoB: 0.5, ribs: { d: 1.4, w: 1.4, mat: frameM }, belts: { every: 99, d: 1, h: 1, mat: frameM } });
-  pod.roof(M(ST.TILE, { color: [0.3, 0.31, 0.34] })); pod.solid();
+  for (const f of [0, 1, 2, 3]) facade(pod, f, 0, ph, { wall: podM, cellW: 5, bayCells: 2, floorH: ph / Math.round(ph / 5.5), aoB: 0.5, ribs: { d: 1.4, w: 1.4, mat: frameM }, belts: { every: 99, d: 1, h: 1, mat: frameM }, door: f === 0 ? { s: W / 2, hw: 6.4, h: 12.6 } : null });
+  pod.roof(M(ST.TILE, { color: [0.3, 0.31, 0.34] }));
+  { const lb = lobby(ctx, rng, 0, Dd / 2, { w: Math.min(46, W - 20), d: Math.min(36, Dd * 0.4), h: Math.min(16, ph - 3), doorHW: 6.4, doorH: 12.6, accent: acc, logo: o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].logo : null, brand: o.brand, name: (o.brand ? o.brand.toUpperCase() + ' ' : '') + '타워 로비' }); hollow(ctx, 0, 0, W, Dd, ph, lb.room, lb.door); ctx.main(); }
   K.neonBand(ctx, 0, 0, W, Dd, ph - 0.6, acc, { intensity: 7, radius: 40, power: 0.5, nightOnly: true, h: 0.35, main: true });
   for (const f of [0, 2]) { const L = pod.len(f); const em = K.emis(acc, 7, 0, false); ctx.main(); pod.box(f, L / 2 - 7, L / 2 - 6.5, 0, 1.6, 0, 13, em, { bottom: false }); pod.box(f, L / 2 + 6.5, L / 2 + 7, 0, 1.6, 0, 13, em, { bottom: false }); pod.box(f, L / 2 - 7, L / 2 + 7, 0, 1.6, 13, 13.6, em); const lp = pod.world(f, L / 2, 6); ctx.light(lp[0], lp[1], 46, acc, 1.0, 8); }
   if (o.brand && ctx.atlas.corp[o.brand]) { const r = ctx.atlas.corp[o.brand].word; for (const f of [0, 2]) shopSign(pod, f, pod.len(f) / 2 - 12, pod.len(f) / 2 + 12, ph - 5, rng, { rect: r, maxH: 4.5, maxW: 22, intensity: 5, out: 1.7, radius: 50 }); }
@@ -296,7 +314,7 @@ export function megaTower(ctx, rng, lot, S, o = {}) {
   crownSpire(core, coreY1, Math.min(140, H * rng.f(0.12, 0.22)), rng, acc);
   if (o.brand && ctx.atlas.corp[o.brand]) { const lg = ctx.atlas.corp[o.brand].logo; const sz = Math.min(cw * 0.6, 26); for (const f of [0, 2]) { const p = core.P(f, cw / 2, 1.0); pen.sign(p[0], coreY1 - 18 - sz / 2, p[1], FACE_ANG[f], sz, sz, lg, { intensity: 6, seed: rng.i(0, 255) }); const wp = core.world(f, cw / 2, 4); ctx.spark(wp[0], pen.oy + coreY1 - 20 - sz / 2, wp[1], ctx.atlas.corp[o.brand].color, 9, 2.6); } }
   // vertical light pillar from the crown
-  ctx.glow.cone(pen.wx(0, 0), pen.oy + coreY1 + 4, pen.wz(0, 0), 0, 1, 0, 420, 2.5, 16, acc, 0.22, { segs: 10, seed: rng.i(0, 50) });
+  ctx.glow.cone(pen.wx(0, 0), pen.oy + coreY1 + 4, pen.wz(0, 0), 0, 1, 0, 420, 2, 12, acc, 0.05, { segs: 10, seed: rng.i(0, 50) });
   for (let y = ph + 60; y < coreY1; y += 110) ctx.spark(pen.wx(0, 0), pen.oy + y, pen.wz(0, 0), [1, 0.85, 0.65], 6, 1.0);
   ctx.shade(lot.x, lot.z, Math.max(W, Dd) * 0.8 + 90, 0.82); ctx.footprint(0, 0, W, Dd, 0, H, lot.block.id); ctx.stats.buildings++; lot.h = H;
   ctx.poi({ type: 'tower', x: lot.x, y: 0.2, z: lot.z, h: H, brand: o.brand });

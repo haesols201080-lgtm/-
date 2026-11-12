@@ -142,6 +142,9 @@ export function buildSpire(ctx) {
   for (let y = 100; y < S.TOP; y += 110) { const r = y < ZY ? hullR(y) : 60; for (let i = 0; i < 4; i++) { const a = (i / 4) * TAU + y * 0.01; ctx.spark(Math.cos(a) * r, y, Math.sin(a) * r, [1, 0.85, 0.6], 9, 1.2); } }
   ctx.spark(0, S.TOP + 6, 0, K.NEON.red, 12, 3);
   ctx.shade(0, 0, 600, 0.85);
+  // pedestrian loops: atrium concourse, core plaza, zenith promenade
+  const loop = (r, y, n = 40) => { const pts = []; for (let i = 0; i < n; i++) { const a = (i / n) * TAU; pts.push([Math.cos(a) * r, y, Math.sin(a) * r]); } ctx.walkways.push({ pts, closed: true, district: 'core' }); };
+  loop(95, 0.08); loop(140, 0.08); loop(430, 0.12, 64); loop(560, 0.12, 80); loop(372, S.ZEN_Y, 60); loop(520, S.ZEN_Y, 80);
   ctx.poi({ type: 'landmark', id: 'spire', x: 0, y: 0, z: 0, name: '스파이어' });
   buildZenith(ctx, rng, B);
 }

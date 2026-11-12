@@ -234,6 +234,17 @@ const FRAG_SURFACE = /* glsl */ `
       if (st == 11) { albedo = mix(mix(base, vec3(dot(base, vec3(0.333))), 0.55) * 0.16 + 0.01, vec3(0.55, 0.57, 0.6) * 0.5, mull); rough = mix(0.16 + 0.2 * gr.g, 0.35, mull); metal = mix(0.0, 0.9, mull); slope = slope * 0.2 + vec2(mull * sign(fm.x - cs.x * 0.5) * 0.8, 0.0) * (1.0 - lod); }
     }
 
+    // solid piers and louvred plant floors break the grid the way real towers do
+    float pierN = (office > 0.5 || st == 10) ? floor(4.0 + hb * 5.0) * step(0.35, fract(hb * 7.3)) : 0.0;
+    float pier = pierN > 0.5 ? step(mod(cell.x + floor(seed), pierN), 0.5) : 0.0;
+    float mechN = office > 0.5 ? 16.0 + floor(fract(hb * 3.7) * 14.0) : 0.0;
+    float mech = mechN > 0.5 ? step(mod(cell.y + floor(seed * 0.5), mechN), 1.5) : 0.0;
+    float winFrac = pierN > 0.5 ? 1.0 - 1.0 / pierN : 1.0;
+    hasWin *= (1.0 - pier) * (1.0 - mech);
+    if (pier > 0.5 && st == 11) { albedo = mix(base, vec3(dot(base, vec3(0.333))), 0.5) * 0.4 * (0.8 + 0.3 * gr.g); rough = 0.42; metal = 0.6; }
+    if (mech > 0.5) { float sl = fract(fm.y / 0.24); albedo = mix(base, vec3(dot(base, vec3(0.333))), 0.6) * 0.3 * mix(1.0, 0.25, smoothstep(0.55, 0.7, sl) * (1.0 - lod)); rough = 0.5; metal = 0.7; slope.y += (sl - 0.3) * 1.6 * (1.0 - lod); }
+    wallAlb = albedo; wallRough = rough; wallMetal = metal;
+
     // ---- opening + recess parallax
     float dOut = nsBoxD(fm, o0, o1, rnd);
     float open = smoothstep(-aa, aa, dOut) * hasWin;
@@ -266,19 +277,42 @@ const FRAG_SURFACE = /* glsl */ `
       }
     }
 
-    float litRatio = clamp(pA * mix(0.4, 1.0, night), 0.0, 1.0);
-    float litRnd = office > 0.5 ? mix(h1, hFloor, 0.7) : mix(h1, nsHash(floor(cell / vec2(2.0, 1.0)) + seed), 0.25);
-    float lit = step(litRnd, litRatio);
-    vec3 lc = nsPalette(pB, h2);
-    if (st == 18) { lc = mix(vec3(1.0, 0.12, 0.75), vec3(0.72, 0.2, 1.0), h2); lit = step(h1, 0.9); }
-    if (st == 19 && h3 > 0.75) lc = vec3(1.0, 0.28, 0.05);
-    float tv = step(0.9, h3) * lit * (1.0 - office);
-    float roomB = 0.3 + 0.7 * nsHash(cell * 0.71 + seed * 1.9 + 3.0);
-    float inten = (0.9 + 1.4 * h2) * roomB * litBoost * mix(0.5, 1.0, night);
+    float litRatio = clamp(pA * mix(0.35, 1.0, night), 0.0, 1.0);
+    float lit; vec3 lc; float inten; float floorE = 0.0; float tv = 0.0;
+    if (office > 0.5) {
+      // tenants switch whole floors; a lit floor has dark zones; a dark floor may have one late worker
+      float fOn = step(hFloor, litRatio * 0.75);
+      float zone = floor(cell.x / (5.0 + floor(hb * 6.0)));
+      float zOn = step(0.28, nsHash(vec2(zone, cell.y * 1.37 + seed)));
+      float lone = step(0.97, h1) * (1.0 - fOn);
+      lit = max(fOn * zOn * step(0.04, h3), lone);
+      float tK = nsHash(vec2(cell.y * 0.71, seed + 5.0));
+      lc = mix(vec3(0.74, 0.86, 1.0), vec3(1.0, 0.9, 0.76), smoothstep(0.35, 0.95, tK));
+      inten = (0.5 + 0.25 * nsHash(vec2(cell.y, seed * 2.0))) * (0.9 + 0.2 * h2) * mix(0.5, 1.0, night) * litBoost;
+      floorE = fOn;
+    } else {
+      // dwellings: a unit spans a few bays; its main room is bright, the others dim or off
+      float uw = 2.0 + floor(hb * 2.0);
+      float unit = floor(cell.x / uw); float ub = cell.x - unit * uw;
+      float uOn = step(nsHash(vec2(unit, cell.y) + seed * 1.3), litRatio);
+      float mainBay = floor(nsHash(vec2(unit * 3.1, cell.y * 1.7) + seed) * uw);
+      float isMain = step(abs(ub - mainBay), 0.5);
+      lit = uOn * max(isMain, step(0.62, h1));
+      float tK = nsHash(vec2(unit * 1.7, cell.y * 2.3) + seed);
+      lc = mix(vec3(1.0, 0.72, 0.45), vec3(1.0, 0.88, 0.72), smoothstep(0.2, 0.9, tK));
+      if (tK > 0.94) lc = vec3(0.8, 0.9, 1.0);
+      inten = (isMain > 0.5 ? 1.25 : 0.55) * (0.55 + 0.75 * h2) * mix(0.5, 1.0, night) * litBoost;
+      tv = step(0.88, h3) * lit * (1.0 - isMain);
+      floorE = litRatio * 0.55;
+    }
+    int pal = int(pB + 0.5);
+    if (pal == 4 || pal == 9 || pal == 3 || pal == 8 || pal == 7) lc = mix(lc, nsPalette(pB, h2), 0.5);
+    if (st == 18) { lc = mix(vec3(1.0, 0.12, 0.75), vec3(0.72, 0.2, 1.0), h2); lit = step(h1, 0.9); inten = 1.6 * mix(0.6, 1.0, night); floorE = 0.9; }
+    if (st == 19) { lit = step(nsHash(floor(cell / vec2(3.0, 1.0)) + seed), litRatio); lc = h3 > 0.75 ? vec3(1.0, 0.3, 0.06) : vec3(1.0, 0.8, 0.55); inten = 0.9 * mix(0.5, 1.0, night); floorE = litRatio * 0.6; }
     if (tv > 0.5) { lc = mix(lc, vec3(0.35, 0.6, 1.0), 0.75); inten *= 0.45 + 0.4 * nsHash(vec2(floor(uTime * 6.0 + h2 * 9.0), h1)); }
 
     vec2 area = clamp(o1 - o0, vec2(0.0), cs) / cs;
-    float areaF = area.x * area.y * hasWin * (st == 16 ? 0.5 : 1.0);
+    float areaF = area.x * area.y * winFrac * (st == 16 ? 0.5 : 1.0);
 
     if (open > 0.001 && lod < 0.999) {
       // jamb (reveal) colour: shadowed wall; soffit darker, sill lighter
@@ -342,7 +376,11 @@ const FRAG_SURFACE = /* glsl */ `
       albedo = mix(albedo, oAlb, k); rough = mix(rough, oR, k); metal = mix(metal, oM, k); emis = oEm * k; slope *= 1.0 - k; cav = mix(cav, mix(0.55, 1.0, glassHit), k);
     }
     // far LOD: converge to the statistical look
-    vec3 avgEmis = lc * 0.75 * litBoost * mix(0.5, 1.0, night) * litRatio * areaF * (0.35 + 1.3 * nsHash(floor(cell / 3.0) + seed)) * (office > 0.5 ? 0.8 : 0.55);
+    float fwy = fwidth(uvc.y);
+    vec3 avgEmis;
+    if (office > 0.5) { float e = mix(floorE, litRatio * 0.75, smoothstep(0.45, 1.3, fwy)); avgEmis = lc * e * 0.34 * areaF * (1.0 - mech) * mix(0.5, 1.0, night) * litBoost; }
+    else avgEmis = mix(vec3(1.0, 0.76, 0.5), lc, 0.3) * floorE * 0.42 * areaF * (0.65 + 0.7 * nsHash(floor(cell / 4.0) + seed)) * mix(0.5, 1.0, night) * litBoost;
+    if (st == 18) avgEmis = lc * 0.8 * areaF * mix(0.6, 1.0, night);
     albedo = mix(albedo, mix(wallAlb, glassTint + 0.01, areaF), lod);
     rough = mix(rough, mix(wallRough, 0.15, areaF), lod); metal = mix(metal, wallMetal * (1.0 - areaF), lod);
     emis = mix(emis, avgEmis, lod);
@@ -600,6 +638,7 @@ export function injectNS(material, opts = {}) {
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\n' + vp + (opts.vertexPars || ''))
       .replace('#include <project_vertex>', (opts.vertexTransform || '') + '\n#include <project_vertex>\n' + vm);
+    if (opts.vertexReplace) for (const [a, b] of opts.vertexReplace) shader.vertexShader = shader.vertexShader.replace(a, b);
     const fp = facade ? FRAG_PARS : NS_COMMON + /* glsl */ `
       varying vec3 vWPos; varying vec3 vWNormal; uniform float uInterior;
       float nsOpen = 1.0; vec3 nsSpill = vec3(0.0); float nsAO = 1.0; float nsIndoor = 0.0;`;

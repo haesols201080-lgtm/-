@@ -229,7 +229,7 @@ export class PostFX {
           l += log(max(dot(c, vec3(0.2126, 0.7152, 0.0722)), 1e-4)) * w / 19.4;
         }
         float avg = exp(l);
-        float target = clamp(0.105 / (avg + 0.02), 0.25, 2.8) * uBias;
+        float target = clamp(0.105 / (avg + 0.02), 0.07, 2.8) * uBias;
         float prev = texture2D(tPrev, vec2(0.5)).r;
         if (!(prev > 0.0)) prev = target;
         gl_FragColor = vec4(vec3(mix(prev, target, uRate)), 1.0);

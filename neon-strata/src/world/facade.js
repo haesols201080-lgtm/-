@@ -67,7 +67,12 @@ export function facade(vol, f, y0, y1, spec) {
     main ? ctx.main() : ctx.detail();
     pen.use(wall);
     const uv = win ? [uoff + c0, v0, uoff + c1, v0 + floors] : [s0, pen.oy + y0, s1, pen.oy + y1];
-    vol.wall(f, s0, s1, o, y0, y1, { uv, aoB: spec.aoB ?? 1 });
+    const dr = spec.door;
+    if (dr && s1 > dr.s - dr.hw && s0 < dr.s + dr.hw) { // leave a real doorway
+      const dA = dr.s - dr.hw, dB = dr.s + dr.hw, dH = y0 + dr.h;
+      const piece = (a, b2, ya, yb) => { if (b2 - a < 0.02 || yb - ya < 0.02) return; const uu = (q) => uv[0] + ((uv[2] - uv[0]) * (q - s0)) / (s1 - s0), vv = (q) => uv[1] + ((uv[3] - uv[1]) * (q - y0)) / (y1 - y0); vol.wall(f, a, b2, o, ya, yb, { uv: [uu(a), vv(ya), uu(b2), vv(yb)], aoB: ya === y0 ? (spec.aoB ?? 1) : 1 }); };
+      piece(s0, Math.max(s0, dA), y0, y1); piece(Math.min(s1, dB), s1, y0, y1); piece(Math.max(s0, dA), Math.min(s1, dB), dH, y1);
+    } else vol.wall(f, s0, s1, o, y0, y1, { uv, aoB: spec.aoB ?? 1 });
     const on = b < bays - 1 ? offs[b + 1] : 0;
     if (Math.abs(o - on) > 0.01) { pen.use(jamb); vol.ret(f, s1, o, on, y0, y1); }
     if (b === 0 && Math.abs(o) > 0.01) { pen.use(jamb); vol.ret(f, 0, 0, o, y0, y1); }
@@ -77,7 +82,7 @@ export function facade(vol, f, y0, y1, spec) {
   if (spec.ribs) {
     const r = spec.ribs, every = r.every ?? 1; dt();
     for (let b = 0; b <= bays; b += every) {
-      const s = Math.min(L, b * bayCells * cw); const ob = Math.min(b < bays ? offs[b] : 0, b > 0 ? offs[b - 1] : 0, 0);
+      const s = Math.min(L, b * bayCells * cw); if (spec.door && s > spec.door.s - spec.door.hw - r.w / 2 && s < spec.door.s + spec.door.hw + r.w / 2) continue; const ob = Math.min(b < bays ? offs[b] : 0, b > 0 ? offs[b - 1] : 0, 0);
       vol.box(f, Math.max(0, s - r.w / 2), Math.min(L, s + r.w / 2), ob, r.d, y0, y1 + (r.over ?? 0), r.mat, { bottom: false });
     }
   }

@@ -108,7 +108,7 @@ export function terrace(ctx, rng, lot, S, o = {}) {
   else if (ck < 0.7) { const r = Math.min(top.w, top.d) * 0.38; ctx.main(); pen.use(M(ST.DARKGLASS, { color: dim(acc, 0.9) })); const prof = []; for (let k = 0; k <= 5; k++) { const a = (k / 5) * Math.PI / 2; prof.push([Math.max(0.3, Math.cos(a) * r), y + Math.sin(a) * r * 0.8]); } pen.lathe(top.cx, top.cz, prof, 14, { cap: false }); pen.use(K.emis(acc, 7, 3, true, rng.i(0, 255))); for (let k = 0; k < 7; k++) { const a = (k / 7) * Math.PI * 2; pen.beam(top.cx + Math.cos(a) * r, y, top.cz + Math.sin(a) * r, top.cx + Math.cos(a) * r * 0.3, y + r * 0.76, top.cz + Math.sin(a) * r * 0.3, 0.25, 0.25); } ctx.spark(pen.wx(top.cx, top.cz), 0.2 + y + r * 0.5, pen.wz(top.cx, top.cz), acc, 7, 2); }
   else { haloRing(top, y - 2, rng, acc, 0.6); roofProps(ctx, rng, top.cx, top.cz, top.w, top.d, y, ROOF_TECH, 0.8); }
   // sky beam from show venues
-  if (o.mega || rng.chance(0.25)) ctx.glow.cone(pen.wx(top.cx, top.cz), 0.2 + y + 3, pen.wz(top.cx, top.cz), rng.f(-0.25, 0.25), 0.94, rng.f(-0.25, 0.25), 520, 1.5, 22, acc, 0.2, { segs: 10, seed: rng.i(0, 50) });
+  if (o.mega) ctx.glow.cone(pen.wx(top.cx, top.cz), 0.2 + y + 3, pen.wz(top.cx, top.cz), rng.f(-0.25, 0.25), 0.94, rng.f(-0.25, 0.25), 520, 1.2, 14, acc, 0.035, { segs: 10, seed: rng.i(0, 50) });
   return done(ctx, lot, w, d, y, cz);
 }
 
