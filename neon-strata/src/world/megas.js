@@ -127,7 +127,7 @@ export function buildSpire(ctx) {
   pen.use(hullDark); pen.lathe(0, 0, [[172, ZY - 70], [ZR * 0.6, ZY - 36], [ZR, ZY - 12], [ZR, ZY + 1.4]], 72, { cap: false });
   pen.use(M(ST.TILE, { color: [0.62, 0.6, 0.56] })); pen.lathe(0, 0, [[ZR, ZY], [150, ZY]], 72, { cap: false });
   { const e = K.emis(gold, 6, 0, true); pen.use(e); pen.lathe(0, 0, [[ZR + 0.1, ZY + 0.8], [ZR + 0.1, ZY + 1.2]], 72, { cap: false }); }
-  ctx.phys.addRing(0, 0, 176, ZR, ZY - 12, ZY); ctx.phys.addCyl(0, 0, 150, ZY - 12, ZY);
+  ctx.phys.addRing(0, 0, 168.8, ZR, ZY - 12, ZY); ctx.phys.addCyl(0, 0, 155.2, ZY - 12, ZY); ctx.phys.addRing(0, 0, 155.2, 168.8, ZY - 12, ZY, lifts.map((l) => [l - 0.047, l + 0.047]));
   const crown = M(ST.MEGAHULL, { color: [0.5, 0.48, 0.44], seed: 91, A: 0.5, B: PAL.GOLD });
   pen.use(crown); pen.lathe(0, 0, [[128, ZY], [118, ZY + 60], [96, ZY + 320], [70, ZY + 620], [30, ZY + 900], [12, ZY + 1060], [3, S.TOP]], 40, { cap: false });
   ctx.phys.addCyl(0, 0, 124, ZY, ZY + 60); ctx.phys.addCyl(0, 0, 100, ZY + 60, ZY + 620);
@@ -186,6 +186,11 @@ function buildZenith(ctx, rng, B) {
     }
   };
   ring(290, 14, 44, 0.1); ring(450, 22, 46, 0.22);
+  // reflecting moat + tree rings between the lift pavilions and the villas
+  use(); pen.at(0, ZY, 0, 0); pen.use(M(ST.PLASTER, { color: white })); pen.lathe(0, 0, [[236, 0], [236, 0.5], [234.6, 0.5], [234.6, 0.3]], 72, { cap: false }); pen.lathe(0, 0, [[215.4, 0.3], [215.4, 0.5], [214, 0.5], [214, 0]], 72, { cap: false });
+  pen.use(M(ST.WATER, { color: [0.3, 0.5, 0.56], extra: 14 })); pen.lathe(0, 0, [[234.6, 0.3], [215.4, 0.3]], 72, { cap: false });
+  ctx.phys.addRing(0, 0, 214, 236, ZY, ZY + 0.3);
+  for (let i = 0; i < 40; i++) { const a = (i / 40) * TAU + 0.03; for (const r of [206, 244]) ctx.prop(i % 4 === 3 ? 'bench' : 'tree', Math.cos(a) * r, ZY, Math.sin(a) * r, -a + (r < 220 ? Math.PI / 2 : -Math.PI / 2), i % 4 === 3 ? 1 : rng.f(1.2, 1.9)); }
   // promenade trees + rim light columns + pads
   for (let i = 0; i < 44; i++) { const a = (i / 44) * TAU; ctx.prop(i % 2 ? 'tree' : 'lampC', Math.cos(a) * 372, ZY, Math.sin(a) * 372, 0, i % 2 ? 1.6 : 1.3, i % 2 ? null : [1, 0.85, 0.6]); if (i % 2 === 0) ctx.light(Math.cos(a) * 372, Math.sin(a) * 372, 0, gold, 0, ZY); }
   for (let i = 0; i < 36; i++) { const a = (i / 36) * TAU + 0.04; ctx.prop('lampC', Math.cos(a) * (S.ZEN_R - 6), ZY, Math.sin(a) * (S.ZEN_R - 6), 0, 1.5, [1, 0.85, 0.6]); ctx.spark(Math.cos(a) * (S.ZEN_R - 6), ZY + 10, Math.sin(a) * (S.ZEN_R - 6), gold, 7, 1.5); }

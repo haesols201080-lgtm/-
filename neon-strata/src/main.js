@@ -96,7 +96,7 @@ async function start() {
     look: (x, y, z, tx, ty, tz) => { camera.position.set(x, y, z); camera.lookAt(tx, ty, tz); },
     // render one frame from a free camera (bypasses the player rig)
     free: (dt = 1 / 30) => { env.update(dt, camera.position); city.update(camera.position); traffic.update(engine); crowd.update(dt, camera.position, env.weather.rain); engine.render(dt); },
-    probe: () => { city.update(camera.position); engine.refreshProbe(); },
+    probe: () => { city.update(camera.position); engine.refreshProbe(); engine.render(0); engine.render(0); },
     tp: (x, y, z) => { player.mode = 'foot'; player.pos.set(x, y, z); player.vel.set(0, 0, 0); },
     stats: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, city: city.stats }),
   };

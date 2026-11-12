@@ -42,7 +42,7 @@ export class Player {
       pen.use({ st: 27, color: [0.3, 0.31, 0.34], flags: 8 }); pen.lathe(0, 0, [[l.r, -0.5], [l.r, 0], [0.1, 0]], 16, { cap: false }); pen.use({ st: 4, color: [0.6, 0.9, 1], extra: 30, flags: 0 }); pen.lathe(0, 0, [[l.r - 0.5, 0.02], [l.r - 0.9, 0.02]], 16, { cap: false }); pen.lathe(0, 0, [[l.r - 0.05, 2.9], [l.r - 0.05, 3.1]], 16, { cap: false, inside: true });
       pen.use({ st: 3, color: [0.4, 0.5, 0.56], flags: 8 }); pen.lathe(0, 0, [[l.r - 0.1, 0], [l.r - 0.1, 1.1]], 16, { cap: false, inside: true, a0: 0.5, a1: 5.78 });
       const mesh = new THREE.Mesh(b.build(), city.mat); mesh.frustumCulled = false; grp.add(mesh); grp.position.set(l.x, l.stops[0].y, l.z); grp.rotation.y = -l.ang; engine.scene.add(grp);
-      const col = city.phys.addDynamic({ t: 0, cx: l.x, cz: l.z, hx: l.r * 0.8, hz: l.r * 0.8, cs: 1, sn: 0, y0: l.stops[0].y - 0.5, y1: l.stops[0].y, tag: 9 });
+      const col = city.phys.addDynamic({ t: 0, cx: l.x, cz: l.z, hx: l.r, hz: l.r, cs: 1, sn: 0, y0: l.stops[0].y - 0.5, y1: l.stops[0].y, tag: 9 });
       this.lifts.push({ ...l, grp, col, y: l.stops[0].y, vy: 0, at: 0, to: 0 });
     }
   }
@@ -54,7 +54,7 @@ export class Player {
       if (L.at !== L.to) {
         const ty = L.stops[L.to].y; const dy = ty - L.y; const dir = Math.sign(dy);
         const vmax = Math.min(70, Math.sqrt(2 * 16 * Math.abs(dy)) + 1.5); L.vy += (dir * vmax - L.vy) * Math.min(1, dt * 2.2); L.y += L.vy * dt;
-        if (Math.abs(ty - L.y) < 0.12 || Math.sign(ty - L.y) !== dir) { L.y = ty; L.vy = 0; L.at = L.to; this.g.audio?.blip(660, 0.12); }
+        if (Math.abs(ty - L.y) < 0.12 || Math.sign(ty - L.y) !== dir) { L.y = ty; L.vy = 0; L.at = L.to; this.g.audio?.blip(660, 0.12); if (on) { this.pos.y = ty; this.vel.y = 0; this.onGround = true; } }
       } else if (on) {
         const up = L.at < L.stops.length - 1, dn = L.at > 0;
         this.liftPrompt = `${L.stops[L.at].name}  ·  ${up ? '[E] ▲ ' + L.stops[L.at + 1].name : ''}${up && dn ? '   ' : ''}${dn ? '[Q] ▼ ' + L.stops[L.at - 1].name : ''}`;

@@ -66,7 +66,8 @@ function streetscape(ctx, rng, b, S) {
 }
 
 export function buildDistricts(ctx) {
-  const rng0 = ctx.rng.fork('districts');
+  const rng0 = ctx.rng.fork('districts'); const ls = 1 / Math.sqrt(ctx.density);
+  const sub = (b, rng, o) => subdivide(b, rng, { ...o, wmin: o.wmin * ls, wmax: o.wmax * ls });
   const tally = {}; const countV = () => { let n = 0; for (const c of ctx.chunks.values()) n += c.main.n + c.detail.n; return n; };
   for (const b of ctx.blocks) {
     if (b.reserved) continue;
@@ -78,7 +79,7 @@ export function buildDistricts(ctx) {
     switch (b.district) {
       case 'sump': {
         const dense = b.noise > 0.52 && b.j < 2;
-        const lots = dense ? subdivide(b, rng, { mode: 'rows', wmin: 9, wmax: 17, depth: 13, alley: 3.4 }) : subdivide(b, rng, { mode: 'perimeter', wmin: 18, wmax: 44, alley: 6, minDepth: 12 });
+        const lots = dense ? sub(b, rng, { mode: 'rows', wmin: 9, wmax: 17, depth: 13, alley: 3.4 }) : sub(b, rng, { mode: 'perimeter', wmin: 18, wmax: 44, alley: 6, minDepth: 12 });
         for (const lot of lots) {
           const tall = lot.w > 16 && rng.chance(0.7);
           if (tall) tenement(ctx, rng, lot, S, { floors: Math.round(clamp(H / 3 * rng.f(0.6, 1.5), 5, 26)), shanty: true });
@@ -88,12 +89,12 @@ export function buildDistricts(ctx) {
       }
       case 'oldq': {
         if (b.w > 90 && b.noise2 > 0.62 && rng.chance(0.5)) { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); archiveSpire(ctx, rng, lot, S, { h: 160 + 380 * b.noise }); break; }
-        for (const lot of subdivide(b, rng, { mode: 'perimeter', wmin: 11, wmax: 24, alley: 5, minDepth: 11 })) guildHouse(ctx, rng, lot, S, { floors: Math.round(clamp((H / 3.4) * rng.f(0.6, 1.3), 2, 9)) });
+        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 11, wmax: 24, alley: 5, minDepth: 11 })) guildHouse(ctx, rng, lot, S, { floors: Math.round(clamp((H / 3.4) * rng.f(0.6, 1.3), 2, 9)) });
         break;
       }
       case 'lumina': {
         if (b.noise > 0.6 && rng.chance(0.45)) { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); terrace(ctx, rng, lot, S, { h: clamp(H * 1.3, 60, 320), mega: true }); break; }
-        for (const lot of subdivide(b, rng, { mode: 'perimeter', wmin: 16, wmax: 40, alley: 4, minDepth: 16 })) {
+        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 16, wmax: 40, alley: 4, minDepth: 16 })) {
           const k = rng.next(); const hh = clamp(H * rng.f(0.5, 1.4), 18, 300);
           if (k < 0.4) terrace(ctx, rng, lot, S, { h: Math.min(hh, 110) }); else if (k < 0.75 && lot.w > 22) techTower(ctx, rng, lot, S, { h: hh, brand: rng.chance(0.3) ? 'lumina' : null }); else shopHouse(ctx, rng, lot, S, { floors: Math.round(clamp(hh / 3.6, 3, 9)), gh: 4.6 });
         }
@@ -101,12 +102,12 @@ export function buildDistricts(ctx) {
       }
       case 'meridian': {
         if ((b.noise > 0.5 || prime) && b.w > 100 && rng.chance(0.6)) { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); megaTower(ctx, rng, lot, S, { h: clamp(H * rng.f(0.9, 1.5), 260, 880), brand: rng.chance(0.6) ? 'meridian' : rng.pick(['helion', 'aether', 'archive']) }); break; }
-        for (const lot of subdivide(b, rng, { mode: 'perimeter', wmin: 38, wmax: 72, alley: 8, minDepth: 30 })) techTower(ctx, rng, lot, S, { h: clamp(H * rng.f(0.45, 1.1), 60, 520), brand: rng.chance(0.4) ? rng.pick(['meridian', 'helion', 'aether']) : null });
+        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 38, wmax: 72, alley: 8, minDepth: 30 })) techTower(ctx, rng, lot, S, { h: clamp(H * rng.f(0.45, 1.1), 60, 520), brand: rng.chance(0.4) ? rng.pick(['meridian', 'helion', 'aether']) : null });
         break;
       }
       case 'hive': {
         if (b.w > 150 && rng.chance(0.75)) { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); capsuleBlock(ctx, rng, lot, S, { h: clamp(H * rng.f(0.8, 1.3), 180, 620) }); break; }
-        for (const lot of subdivide(b, rng, { mode: 'perimeter', wmin: 26, wmax: 60, alley: 8, minDepth: 20 })) tenement(ctx, rng, lot, S, { floors: Math.round(clamp(H / 3 * rng.f(0.15, 0.4), 8, 40)) });
+        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 26, wmax: 60, alley: 8, minDepth: 20 })) tenement(ctx, rng, lot, S, { floors: Math.round(clamp(H / 3 * rng.f(0.15, 0.4), 8, 40)) });
         break;
       }
       case 'verdant': { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); farmTower(ctx, rng, lot, S, { h: clamp(H * rng.f(0.7, 1.4), 60, 420) }); break; }

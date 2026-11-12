@@ -21,7 +21,7 @@ const w = Number(args.w || 1280), h = Number(args.h || 720);
 const out = args.out || 'shot.png';
 const frames = Number(args.frames || 3);
 const q = args.q || 'high';
-const url = `http://localhost:${port}/?debug=1&q=${q}${args.query ? '&' + args.query : ''}`;
+const url = `http://localhost:${port}/?${args.nodebug ? '' : 'debug=1&'}q=${q}${args.query ? '&' + args.query : ''}`;
 
 const browser = await chromium.launch({
   args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist',
@@ -57,6 +57,7 @@ async function settle(n) {
   }, n);
 }
 
+if (args.nodebug) { await page.click('#t-start').catch((e) => errors.push('[click] ' + e.message)); await page.waitForTimeout(Number(args.wait || 15000)); }
 const seq = args.seq ? args.seq.split(';;') : [args.eval || ''];
 let idx = 0;
 for (const js of seq) {

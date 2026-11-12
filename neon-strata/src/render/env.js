@@ -211,7 +211,7 @@ export function createSky() {
         sky += (mcol * moon * 2.2 + vec3(0.25, 0.35, 0.6) * pow(md, 120.0) * 0.35) * uNight;
         sky += vec3(0.8, 0.9, 1.0) * stars(d) * uNight * 1.6 * smoothstep(0.02, 0.3, d.y);
         // horizon haze consistent with scene fog
-        vec3 far = cameraPosition + d * 42000.0;
+        vec3 far = cameraPosition + d * (42000.0 / (1.0 + max(d.y, 0.0) * 28.0));
         if (d.y < 0.0) far = cameraPosition + d * min(42000.0, (cameraPosition.y + 30.0) / max(-d.y, 1e-4));
         vec3 c = nsApplyFog(sky, cameraPosition, far);
         gl_FragColor = vec4(c, 1.0);
