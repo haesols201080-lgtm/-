@@ -232,10 +232,11 @@ export class Pen {
         const lx = ca * nr, lz = -sa * nr;
         const nxw = lx * C + lz * S, nzw = -lx * S + lz * C;
         const px0 = cx + ca * r0, pz0 = cz - sa * r0, px1 = cx + ca * r1, pz1 = cz - sa * r1;
-        b.vert(this.wx(px0, pz0), this.oy + y0, this.wz(px0, pz0), nxw, ny, nzw, t * uTot, v0, k === 0 ? (o.aoB ?? 1) : 1);
-        b.vert(this.wx(px1, pz1), this.oy + y1, this.wz(px1, pz1), nxw, ny, nzw, t * uTot, v1, 1);
+        const sg = o.inside ? -1 : 1;
+        b.vert(this.wx(px0, pz0), this.oy + y0, this.wz(px0, pz0), nxw * sg, ny * sg, nzw * sg, t * uTot, v0, k === 0 ? (o.aoB ?? 1) : (o.ao ?? 1));
+        b.vert(this.wx(px1, pz1), this.oy + y1, this.wz(px1, pz1), nxw * sg, ny * sg, nzw * sg, t * uTot, v1, o.ao ?? 1);
       }
-      for (let i = 0; i < segs; i++) { const q = base + i * 2; b.quadI(q, q + 2, q + 3, q + 1); }
+      for (let i = 0; i < segs; i++) { const q = base + i * 2; o.inside ? b.quadI(q, q + 1, q + 3, q + 2) : b.quadI(q, q + 2, q + 3, q + 1); }
     }
     if (o.cap !== false && full) {
       const [r, y] = profile[profile.length - 1];

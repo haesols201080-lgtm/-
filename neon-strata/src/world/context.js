@@ -100,7 +100,7 @@ export class CityContext {
     this.chunks = new Map();
     this.named = new Map(); // big standalone batches (megastructures)
     this.pen = new Pen(null);
-    this.sparks = []; this.pois = []; this.lanes = []; this.spawns = []; this.emitters = []; this.walkways = []; this.steam = [];
+    this.sparks = []; this.props = {}; this.footprints = []; this.pois = []; this.lanes = []; this.spawns = []; this.emitters = []; this.walkways = []; this.steam = [];
     this.stats = { buildings: 0 };
   }
   _chunk(x, z) {
@@ -128,4 +128,10 @@ export class CityContext {
   solid(cx, cz, sx, sz, y0, y1, tag = 0) { const p = this.pen; return this.phys.addBox(p.wx(cx, cz), p.wz(cx, cz), sx / 2, sz / 2, p.yaw, p.oy + y0, p.oy + y1, tag); }
   solidCyl(cx, cz, r, y0, y1) { const p = this.pen; return this.phys.addCyl(p.wx(cx, cz), p.wz(cx, cz), r, p.oy + y0, p.oy + y1); }
   poi(o) { this.pois.push(o); return o; }
+  // instanced prop (world coordinates)
+  prop(name, x, y, z, yaw = 0, scale = 1, tint = null) { (this.props[name] || (this.props[name] = [])).push([x, y, z, yaw, scale, tint]); }
+  // instanced prop in the current pen frame
+  propL(name, lx, ly, lz, yaw = 0, scale = 1, tint = null) { const p = this.pen; this.prop(name, p.wx(lx, lz), p.oy + ly, p.wz(lx, lz), p.yaw + yaw, scale, tint); }
+  // register a building footprint (pen frame) for the overlap audit
+  footprint(cx, cz, w, d, y0, y1, tag) { const p = this.pen; this.footprints.push([p.wx(cx, cz), p.wz(cx, cz), w / 2, d / 2, p.yaw, p.oy + y0, p.oy + y1, tag]); }
 }

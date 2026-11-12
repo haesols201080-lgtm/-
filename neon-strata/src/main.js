@@ -4,6 +4,7 @@ import { Engine } from './core/engine.js';
 import { U, env } from './render/env.js';
 import { buildCity } from './world/city.js';
 import { GENERATORS } from './world/generators.js';
+import { MATU } from './render/cityMaterial.js';
 
 const params = new URLSearchParams(location.search);
 const quality = pickQuality(params);
@@ -22,7 +23,7 @@ async function start() {
   setCam(0, 1.7, 1700, 0, 0.1);
   const step = (dt) => { env.update(dt, camera.position); city.update(camera.position); engine.render(dt); };
   window.__dbg = {
-    engine, env, U, THREE, city,
+    engine, env, U, THREE, city, MATU,
     step, cam: setCam, hour: (h) => env.setHour(h),
     look: (x, y, z, tx, ty, tz) => { camera.position.set(x, y, z); camera.lookAt(tx, ty, tz); },
     probe: () => { city.update(camera.position); engine.refreshProbe(); },

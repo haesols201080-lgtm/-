@@ -8,6 +8,7 @@ import { LightField } from '../render/lightfield.js';
 import { SignAtlas } from '../render/signs.js';
 import { Physics } from '../game/physics.js';
 import { createSparks } from '../render/sparks.js';
+import { instanceProps } from './props.js';
 import { buildRoads } from './roads.js';
 import { R_SPRAWL, COAST_X } from './layout.js';
 
@@ -17,7 +18,8 @@ export async function buildCity(engine, { seed = 2049, quality, onProgress = () 
   const t0 = performance.now();
   const phys = new Physics();
   const lf = new LightField(quality.name === 'low' ? 1024 : 2048);
-  const atlas = new SignAtlas(quality.name === 'low' ? 1024 : 2048, seed);
+  onProgress('간판 인쇄', 0.03);
+  const atlas = await SignAtlas.create(quality.name === 'low' || quality.name === 'medium' ? 2048 : 4096, seed);
   const ctx = new CityContext({ seed, quality, physics: phys, lightField: lf, atlas });
   const signU = { value: atlas.texture };
   const mat = createCityMaterial(quality, signU);
@@ -60,17 +62,30 @@ export async function buildCity(engine, { seed = 2049, quality, onProgress = () 
   const bigs = [];
   for (const [name, b] of ctx.named) {
     const rec = { name, main: add(b.main, mat), glow: null };
+    if (rec.main && name === 'spire') { rec.main.castShadow = true; rec.main.receiveShadow = true; }
     if (!b.glow.empty) { rec.glow = new THREE.Mesh(b.glow.build(), glowMat); rec.glow.matrixAutoUpdate = false; rec.glow.renderOrder = 50; group.add(rec.glow); }
     bigs.push(rec);
   }
   const sparks = createSparks(ctx.sparks); group.add(sparks);
+  const props = instanceProps(ctx, mat, group);
   onProgress('라이트 필드 베이크', 0.94); await tick();
   lf.bake(engine.renderer);
   engine.scene.add(group);
-  console.log(`[NS] city built in ${((performance.now() - t0) / 1000).toFixed(1)}s — ${chunks.length} chunks, ${(verts / 1e6).toFixed(2)}M verts, ${(tris / 1e6).toFixed(2)}M tris, ${lf.count} lights, ${phys.c.length} colliders, ${ctx.stats.buildings} buildings`);
+  console.log(`[NS] city built in ${((performance.now() - t0) / 1000).toFixed(1)}s — ${chunks.length} chunks, ${(verts / 1e6).toFixed(2)}M verts, ${(tris / 1e6).toFixed(2)}M tris, ${lf.count} lights, ${phys.c.length} colliders, ${ctx.stats.buildings} buildings, ${props.total} props, ${ctx.blocks ? ctx.blocks.length : 0} blocks`);
 
+  // audit: count building footprints that intersect (SAT on yaw-oriented boxes with overlapping height ranges)
+  const audit = () => {
+    const F = ctx.footprints; const cell = 120; const grid = new Map(); let bad = 0; const samples = [];
+    const ax = (f) => { const c = Math.cos(f[4]), s = Math.sin(f[4]); return [[c, -s], [s, c]]; };
+    const sep = (a, b) => { const A = ax(a), B = ax(b); const dx = b[0] - a[0], dz = b[1] - a[1]; for (const [n, h] of [[A[0], null], [A[1], null], [B[0], null], [B[1], null]]) { const pa = a[2] * Math.abs(A[0][0] * n[0] + A[0][1] * n[1]) + a[3] * Math.abs(A[1][0] * n[0] + A[1][1] * n[1]); const pb = b[2] * Math.abs(B[0][0] * n[0] + B[0][1] * n[1]) + b[3] * Math.abs(B[1][0] * n[0] + B[1][1] * n[1]); if (Math.abs(dx * n[0] + dz * n[1]) > pa + pb - 0.05) return true; } return false; };
+    F.forEach((f, i) => { const r = Math.hypot(f[2], f[3]); for (let gx = Math.floor((f[0] - r) / cell); gx <= Math.floor((f[0] + r) / cell); gx++) for (let gz = Math.floor((f[1] - r) / cell); gz <= Math.floor((f[1] + r) / cell); gz++) { const k = gx * 10007 + gz; let a = grid.get(k); if (!a) { a = []; grid.set(k, a); } a.push(i); } });
+    const seen = new Set();
+    for (const arr of grid.values()) for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) { const a = F[arr[i]], b = F[arr[j]]; const key = arr[i] * 100000 + arr[j]; if (seen.has(key)) continue; seen.add(key); if (a[6] <= b[5] + 0.05 || b[6] <= a[5] + 0.05) continue; if (!sep(a, b)) { bad++; if (samples.length < 6) samples.push([a[0].toFixed(0), a[1].toFixed(0), a[7], b[7]]); } }
+    return { footprints: F.length, overlaps: bad, samples };
+  };
   const city = {
-    ctx, phys, lf, atlas, group, chunks, bigs, sparks, mat, groundMat, glowMat, pois: ctx.pois, lanes: ctx.lanes, stats: { verts, tris },
+    audit,
+    ctx, phys, lf, atlas, group, chunks, bigs, sparks, props, mat, groundMat, glowMat, pois: ctx.pois, lanes: ctx.lanes, stats: { verts, tris },
     update(cam) {
       sparks.material.uniforms.uScale.value = engine.renderer.getDrawingBufferSize(new THREE.Vector2()).y / (2 * Math.tan((engine.camera.fov * Math.PI) / 360));
       const dd = quality.detailDist, fd = quality.farChunkDist;
@@ -82,6 +97,8 @@ export async function buildCity(engine, { seed = 2049, quality, onProgress = () 
         if (c.detail) c.detail.visible = hd < dd;
         if (c.glow) c.glow.visible = hd < dd * 1.6;
       }
+      const pd = dd * 0.75;
+      for (let i = 0; i < props.cells.length; i++) { const c = props.cells[i]; c.mesh.visible = Math.hypot(c.x - cam.x, c.y - cam.y, c.z - cam.z) - c.r < pd; }
     },
   };
   return city;

@@ -2,6 +2,8 @@
 import * as THREE from 'three';
 import { U, env, createSky, createNoiseTexture } from '../render/env.js';
 import { PostFX } from '../render/post.js';
+import { bakeMaterials } from '../render/materials.js';
+import { MATU } from '../render/cityMaterial.js';
 
 export class Engine {
   constructor(canvas, quality) {
@@ -19,6 +21,10 @@ export class Engine {
     this.camera.position.set(0, 30, 120);
     U.uNoiseTex.value = createNoiseTexture(256);
     this.sky = createSky(); this.scene.add(this.sky);
+    // software GL (headless verification) is extremely slow with anisotropic array sampling
+    const dbgInfo = r.getContext().getExtension('WEBGL_debug_renderer_info');
+    this.software = /SwiftShader|llvmpipe|Software/i.test(dbgInfo ? r.getContext().getParameter(dbgInfo.UNMASKED_RENDERER_WEBGL) : '');
+    const baked = bakeMaterials(r, quality.name === 'low' ? 256 : 512, this.software ? 1 : 8); MATU.uMatA.value = baked.A; MATU.uMatB.value = baked.B;
 
     // key light (sun / moon). Direction + colour are driven by env each frame.
     this.sun = new THREE.DirectionalLight(0xffffff, 1);

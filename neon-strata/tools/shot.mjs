@@ -64,10 +64,11 @@ for (const js of seq) {
     try { const r = await page.evaluate(js); if (r !== undefined && r !== null) console.log('  eval →', typeof r === 'string' ? r : JSON.stringify(r)); }
     catch (e) { errors.push('[eval] ' + e.message); }
   }
+  const ts = Date.now();
   await settle(frames);
   const file = seq.length > 1 ? out.replace(/\.png$/, `_${idx}.png`) : out;
-  await page.screenshot({ path: file });
-  console.log('saved', file);
+  try { await page.screenshot({ path: file, timeout: 120000 }); console.log('saved', file, `(${((Date.now() - ts) / 1000).toFixed(1)}s)`); }
+  catch (e) { errors.push('[screenshot] ' + e.message.split('\n')[0]); }
   idx++;
 }
 if (args.stats) console.log('  stats:', JSON.stringify(await page.evaluate(() => window.__dbg && window.__dbg.stats && window.__dbg.stats())));
