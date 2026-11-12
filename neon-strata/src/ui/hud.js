@@ -51,7 +51,7 @@ export class HUD {
     c.strokeStyle = 'rgba(255,220,160,0.5)'; c.lineWidth = 1.2; c.beginPath(); c.arc(S / 2, S / 2, (352 / (2 * R)) * S, 0, 6.283); c.fillStyle = 'rgba(255,220,150,0.7)'; c.fill();
     this.mapBg = cv; this.mapR = R;
   }
-  toggle(tab) { this.open = tab ? true : !this.open; if (tab) this.tab = tab; this.el.panel.classList.toggle('show', this.open); this.input.enabled = !this.open; if (this.open) { document.exitPointerLock?.(); this.render(); } else if (!this.input.touch) this.g.engine.canvas.requestPointerLock?.(); }
+  toggle(tab) { this.open = tab ? true : !this.open; if (tab) this.tab = tab; this.el.panel.classList.toggle('show', this.open); document.body.classList.toggle('panel-open', this.open); this.input.enabled = !this.open; if (this.open) { document.exitPointerLock?.(); this.render(); } else if (!this.input.touch) this.g.engine.canvas.requestPointerLock?.(); }
 
   _act(act, d) {
     const g = this.g; const dist = g.district().id;

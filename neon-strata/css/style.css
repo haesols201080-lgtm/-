@@ -1,5 +1,5 @@
 :root {
-  --c-bg: #05070c; --c-panel: rgba(8, 12, 20, 0.82); --c-line: rgba(120, 220, 255, 0.22);
+  --c-bg: #05070c; --c-panel: rgba(8, 12, 20, 0.9); --c-line: rgba(120, 220, 255, 0.22);
   --c-cy: #5ff2e6; --c-mg: #ff3fa4; --c-am: #ffb347; --c-tx: #d8e6f2; --c-dim: #7b8ea3; --c-ok: #74f7a4; --c-bad: #ff5a5a;
   --font: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", "Segoe UI", system-ui, sans-serif;
   --mono: "JetBrains Mono", "SF Mono", "Consolas", "D2Coding", monospace;
@@ -86,3 +86,6 @@ body.touch #h-mini { width: 120px; height: 120px; left: auto; right: 12px; top: 
 #title .t-lore { max-width: 640px; text-align: center; color: #b9c8d6; font-size: 14px; line-height: 1.7; padding: 0 20px; margin-bottom: 26px; }
 #t-start { font: inherit; font-size: 17px; letter-spacing: 0.3em; padding: 14px 54px; background: rgba(255, 179, 71, 0.14); color: #ffe2a0; border: 1px solid var(--c-am); cursor: pointer; box-shadow: 0 0 30px rgba(255, 150, 60, 0.3); }
 #t-start:hover { background: rgba(255, 179, 71, 0.3); } #title .t-keys { margin-top: 18px; font-size: 11px; color: var(--c-dim); letter-spacing: 0.06em; text-align: center; padding: 0 16px; }
+
+body.panel-open #hud > *:not(.h-tr) { visibility: hidden; }
+body.panel-open .panel { background: rgba(6, 9, 15, 0.96); }

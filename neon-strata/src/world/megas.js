@@ -255,7 +255,7 @@ export function buildGiants(ctx) {
     if (kind === 'trident') megaTower(ctx, rng, lot, S, { h: rng.f(1250, 1700), brand: rng.pick(['meridian', 'helion', 'aether']) });
     else if (kind === 'archive') archiveSpire(ctx, rng, lot, S, { h: 1180 });
     else if (kind === 'seed') farmTower(ctx, rng, lot, S, { h: 1150 });
-    else if (kind === 'needle') megaTower(ctx, rng, lot, STYLES.lumina, { h: 1400, brand: 'lumina' });
+    else if (kind === 'needle') megaTower(ctx, rng, lot, STYLES.lumina, { h: 1400, brand: 'lumina', kind: 'needle' });
     else if (kind === 'monolith') megaTower(ctx, rng, lot, { ...STYLES.hive, towerWin: [ST.WIN_CAPSULE], accents: [K.NEON.amber, K.NEON.sodium] }, { h: 1300, brand: 'hive' });
     else if (kind === 'stack') {
       const pen = ctx.penAt(b.x, 0.2, b.z, b.yaw); const H = rng.f(1300, 1480), r0 = Math.min(lot.w, lot.d) * 0.3;

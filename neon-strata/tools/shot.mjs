@@ -52,7 +52,7 @@ console.log(`ready in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
 async function settle(n) {
   // render n frames synchronously through the debug hook (deterministic, independent of rAF speed)
   await page.evaluate(async (n) => {
-    if (window.__dbg && window.__dbg.step) { for (let i = 0; i < n; i++) window.__dbg.step(1 / 30); }
+    if (window.__dbg && window.__dbg.step) { for (let i = 0; i < n; i++) (window.__free ? window.__dbg.free : window.__dbg.step)(1 / 30); }
     else await new Promise((r) => setTimeout(r, 500));
   }, n);
 }

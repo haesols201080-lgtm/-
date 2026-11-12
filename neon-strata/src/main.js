@@ -53,7 +53,7 @@ async function start() {
   try { const s = localStorage.getItem('ns.sens'); if (s) player.sens = +s; } catch (e) { /* ignore */ }
   game._objective();
 
-  let started = debug;
+  let started = debug; let noRender = false;
   const step = (dt) => {
     input.frame();
     if (started) {
@@ -71,7 +71,7 @@ async function start() {
     rain.uniforms.uLocal.value = 1 - player.indoor;
     engine.post.mFinal.uniforms.uSpeedFx.value = Math.min(1, player.speed / 110); engine.post.mFinal.uniforms.uFade.value = 1 - (game.fade || 0);
     audio.update(env.weather.rain, player.indoor, player.mode === 'fly', player.speed, player.p.y);
-    engine.render(dt);
+    if (!noRender) engine.render(dt);
     if (started) hud.update(dt);
     input.endFrame();
   };
@@ -92,6 +92,7 @@ async function start() {
   window.__dbg = {
     engine, env, U, THREE, city, MATU, crowd, traffic, game, player, hud, input,
     step, cam: setCam, hour: (h) => env.setHour(h),
+    sim: (n, dt = 1 / 30) => { noRender = true; for (let i = 0; i < n; i++) step(dt); noRender = false; },
     look: (x, y, z, tx, ty, tz) => { camera.position.set(x, y, z); camera.lookAt(tx, ty, tz); },
     // render one frame from a free camera (bypasses the player rig)
     free: (dt = 1 / 30) => { env.update(dt, camera.position); city.update(camera.position); traffic.update(engine); crowd.update(dt, camera.position, env.weather.rain); engine.render(dt); },

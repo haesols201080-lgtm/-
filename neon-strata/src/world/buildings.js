@@ -5,6 +5,7 @@ import { M, rectPts, scalePts, ngonPts, rotPts } from './builder.js';
 import * as K from './kit.js';
 import { Vol, facade, blindWall, shopSign, bladeSign, screenWall, FACE_ANG } from './facade.js';
 import { hollow, lobby, shopRoom } from './interiors.js';
+import { FORMS, MEGA, pickForm, roofForm } from './buildings3.js';
 
 let uo = 11;
 const nextU = () => (uo = (uo * 37 + 11) % 877);
@@ -98,7 +99,8 @@ export function shopHouse(ctx, rng, lot, S, o = {}) {
       pen.use(K.MAT_POLE); pen.beam(a[0], y - 1.4, a[1], b2[0], y, b2[1], 0.08, 0.08); pen.beam(c[0], y - 1.4, c[1], e[0], y, e[1], 0.08, 0.08); ctx.main();
     }
   }
-  roofProps(ctx, rng, 0, cz, w, d, h, S.roof || ROOF_LOW, S.roofDensity ?? 1);
+  const rf = o.roof ?? rng.weighted([[5, 'flat'], [2.2, 'pent'], [1.4, 'vault'], [1.6, 'shed']]);
+  if (rf === 'flat') roofProps(ctx, rng, 0, cz, w, d, h, S.roof || ROOF_LOW, S.roofDensity ?? 1); else roofForm(ctx, rng, v, h, rf, wall);
   return finish(ctx, lot, w, d, h + par, cz);
 }
 
@@ -215,6 +217,12 @@ export function techTower(ctx, rng, lot, S, o = {}) {
   const lv = { st: ST.LOUVER, color: [0.26, 0.27, 0.29] };
   const plant = new Vol(ctx, 0, cz, w - 1.2, d - 1.2, bh, bh + mh);
   pen.use(lv); for (const f of [0, 1, 2, 3]) plant.wall(f, 0, plant.len(f), 0, bh, bh + mh);
+  const form = o.form ?? pickForm(rng, S, w, d, H, lot);
+  if (form !== 'slab' && FORMS[form]) { // a different typology on the same base
+    plant.y1 = bh + mh; plant.roof(K.conc(0.24)); ctx.solid(0, cz, w - 1.2, d - 1.2, bh, bh + mh);
+    FORMS[form](ctx, rng, { w: w - 1.2, d: d - 1.2, cz, y0: bh + mh, H, S, acc, fh, lot, o }); ctx.main();
+    return finish(ctx, lot, w, d, H, cz);
+  }
   // --- shaft (with optional setback)
   const setY = bh + mh + Math.round((H - bh - mh) * rng.f(0.55, 0.8) / fh) * fh; const hasSet = H > 70 && rng.chance(0.7);
   const wallA = wallMat(rng, S, { st: rng.pick(S.towerWin || [ST.WIN_RIBBON, ST.WIN_OFFICE]), floorH: fh, cellW: S.towerCell ?? 3.0 });
@@ -279,6 +287,12 @@ export function megaTower(ctx, rng, lot, S, o = {}) {
   for (const f of [0, 2]) { const L = pod.len(f); const em = K.emis(acc, 7, 0, false); ctx.main(); pod.box(f, L / 2 - 7, L / 2 - 6.5, 0, 1.6, 0, 13, em, { bottom: false }); pod.box(f, L / 2 + 6.5, L / 2 + 7, 0, 1.6, 0, 13, em, { bottom: false }); pod.box(f, L / 2 - 7, L / 2 + 7, 0, 1.6, 13, 13.6, em); const lp = pod.world(f, L / 2, 6); ctx.light(lp[0], lp[1], 46, acc, 1.0, 8); }
   if (o.brand && ctx.atlas.corp[o.brand]) { const r = ctx.atlas.corp[o.brand].word; for (const f of [0, 2]) shopSign(pod, f, pod.len(f) / 2 - 12, pod.len(f) / 2 + 12, ph - 5, rng, { rect: r, maxH: 4.5, maxW: 22, intensity: 5, out: 1.7, radius: 50 }); }
   if (rng.chance(0.6)) screenWall(pod, rng.pick([1, 3]), 8, pod.len(1) - 8, 6, ph - 6, rng, { intensity: 3 });
+  const kind = o.kind ?? rng.weighted([[5, 'bundle'], [2.5, 'needle'], [2.5, 'zigg']]);
+  if (kind !== 'bundle') {
+    MEGA[kind](ctx, rng, { W, Dd, ph, H, S, acc, fh, brand: o.brand }); ctx.main();
+    ctx.shade(lot.x, lot.z, Math.max(W, Dd) * 0.8 + 90, 0.82); ctx.footprint(0, 0, W, Dd, 0, H, lot.block.id); ctx.stats.buildings++; lot.h = H;
+    ctx.poi({ type: 'tower', x: lot.x, y: 0.2, z: lot.z, h: H, brand: o.brand }); return H;
+  }
   // core + wings
   const cw = W * rng.f(0.42, 0.52), cd = Dd * rng.f(0.42, 0.52);
   const wallA = wallMat(rng, S, { st: rng.pick(S.towerWin || [ST.WIN_OFFICE]), floorH: fh, cellW: 3.2 });

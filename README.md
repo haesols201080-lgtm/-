@@ -48,3 +48,9 @@
 | R · 1–9 · 휠 · E · F · V | 회전 · 단축칸 · 가방 · 베리 먹기 · 시점 거리 |
 
 터치 기기에서는 가상 스틱, 부수기/쌓기 모드, 회전, 가방, 시점, 점프 버튼이 나타나요. 진행 상황은 브라우저 localStorage에 60초마다 자동 저장됩니다.
+
+
+---
+
+## 다른 프로젝트: NEON STRATA
+`neon-strata/` 폴더에 별도의 SF 오픈월드 웹 게임이 있습니다. 실행 방법은 [neon-strata/README.md](neon-strata/README.md)를 보세요.
