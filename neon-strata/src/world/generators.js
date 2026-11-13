@@ -1,7 +1,7 @@
 // Ordered list of world generators: [label, fn(ctx), id]
 import { buildPlan } from './plan.js';
 import { buildDistricts } from './districts.js';
-import { buildSpire, buildCorePlaza, buildBulwark, reserveGiants, buildGiants, buildSprawl } from './megas.js';
+import { buildSpire, buildCorePlaza, buildBulwark, reserveGiants, buildGiants, buildSprawl, buildSkyHolos } from './megas.js';
 
 export const GENERATORS = [
   ['도시 계획 — 블록과 필지', buildPlan, 'plan'],
@@ -12,4 +12,5 @@ export const GENERATORS = [
   ['구역 건설', buildDistricts, 'districts'],
   ['구름을 뚫는 거인들', buildGiants, 'giants'],
   ['외곽 지대', buildSprawl, 'sprawl'],
+  ['하늘 광고 투영', buildSkyHolos, 'giants'],
 ];

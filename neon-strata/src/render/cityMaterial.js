@@ -4,6 +4,10 @@
 // frames and per-room lamps. Also: neon light-field irradiance, cloud-deck sun occlusion, height fog.
 import * as THREE from 'three';
 import { U, NS_COMMON } from './env.js';
+import { NS_LOCAL_LIGHTS, emptyLightGrid } from './lightgrid.js';
+
+// engine-wide shading switches (set before materials are created)
+export const NS_OPTS = { localLights: true };
 
 export const ST = {
   CONCRETE: 0, METAL: 1, CORRUGATED: 2, DARKGLASS: 3, EMISSIVE: 4, SIGN: 5, ROAD: 6, PAVE: 7, RUST: 8, MIRROR: 9,
@@ -42,8 +46,8 @@ flat varying vec4 vStyle; flat varying vec4 vStyle2;
 varying vec3 vWPos; varying vec3 vWNormal; varying vec2 vFUv; varying vec4 vCol;
 uniform sampler2D uSignAtlas; uniform float uInterior;
 uniform sampler2DArray uMatA; uniform sampler2DArray uMatB;
-float nsOpen = 1.0; vec3 nsSpill = vec3(0.0); float nsAO = 1.0; float nsIndoor = 0.0;
-
+float nsOpen = 1.0; vec3 nsSpill = vec3(0.0); float nsAO = 1.0; float nsIndoor = 0.0; float nsRefl = 0.0;
+${NS_LOCAL_LIGHTS}
 struct NsM { vec3 alb; float h; vec2 n; float rough; float cav; };
 NsM nsMat(float layer, vec2 uv){
   vec4 a = texture(uMatA, vec3(uv, layer)); vec4 b = texture(uMatB, vec3(uv, layer));
@@ -197,7 +201,12 @@ const FRAG_SURFACE = /* glsl */ `
     float office = 0.0; float roomSpan = 1.0; float litBoost = 1.0; float glassRough = 0.07; vec3 glassTint = vec3(0.018, 0.02, 0.024);
     if (st == 10) {
       float ww = min(cs.x - 0.9, mix(1.25, 1.85, hb)); float wh = min(cs.y - 1.35, mix(1.3, 1.55, hb));
-      o0 = vec2((cs.x - ww) * 0.5, 0.95); o1 = o0 + vec2(ww, wh);
+      // a flat's rooms stack vertically: the same column is always the living room, the bedroom or the bathroom slit
+      float uw0 = 2.0 + floor(hb * 2.0); float colT = nsHash(vec2(mod(cell.x, uw0) + 1.0, seed * 3.3 + 0.7)); float sillY = 0.95;
+      if (colT < 0.28) { ww *= 0.52; }
+      else if (colT < 0.4) { ww *= 0.4; wh *= 0.5; sillY = min(1.75, cs.y - wh - 0.5); }
+      else if (colT > 0.74) { ww = min(cs.x - 0.5, ww * 1.4); wh = min(cs.y - 0.85, wh * 1.3); sillY = 0.45; }
+      o0 = vec2((cs.x - ww) * 0.5, sillY); o1 = o0 + vec2(ww, wh);
       if (varA) { o0 = vec2(0.3, 0.14); o1 = vec2(cs.x - 0.3, cs.y - 0.5); pd = vec2(3.0, 1.0); D = 1.0; }
     } else if (st == 11) { o0 = vec2(0.03, 1.0); o1 = vec2(cs.x - 0.03, cs.y - 0.06); D = 0.07; fw = 0.035; pd = vec2(1.0); office = 1.0; roomSpan = 8.0; glassTint = mix(base, vec3(dot(base, vec3(0.333))), 0.5) * 0.1 + 0.008; glassRough = 0.04; }
     else if (st == 12) { o0 = vec2(-0.3, 1.0); o1 = vec2(cs.x + 0.3, cs.y - 0.8); D = 0.16; pd = vec2(1.0); office = 1.0; roomSpan = 6.0; }
@@ -209,7 +218,7 @@ const FRAG_SURFACE = /* glsl */ `
     else { o0 = vec2(0.4, 1.1); o1 = cs - vec2(0.4, 0.5); D = 0.14; pd = max(vec2(1.0), floor((o1 - o0) / vec2(0.55, 0.62))); fw = 0.028; }
 
     float fwc = max(fwidth(uvc).x, fwidth(uvc).y);
-    float lod = smoothstep(0.22, 0.8, fwc);
+    float lod = smoothstep(0.6, 2.0, fwc);
     float aa = max(px * 0.7, 0.003);
     // wall finish
     nsWall(wk, m, base, px, seed, albedo, rough, metal, slope, cav);
@@ -299,15 +308,21 @@ const FRAG_SURFACE = /* glsl */ `
       float isMain = step(abs(ub - mainBay), 0.5);
       lit = uOn * max(isMain, step(0.62, h1));
       float tK = nsHash(vec2(unit * 1.7, cell.y * 2.3) + seed);
-      lc = mix(vec3(1.0, 0.72, 0.45), vec3(1.0, 0.88, 0.72), smoothstep(0.2, 0.9, tK));
-      if (tK > 0.94) lc = vec3(0.8, 0.9, 1.0);
-      inten = (isMain > 0.5 ? 1.25 : 0.55) * (0.55 + 0.75 * h2) * mix(0.5, 1.0, night) * litBoost;
+      // every household buys its own bulbs: tungsten orange → warm white → cold LED → tired fluorescent → a mood strip
+      lc = mix(vec3(1.0, 0.60, 0.32), vec3(1.0, 0.86, 0.68), smoothstep(0.08, 0.72, tK));
+      if (tK > 0.78) lc = vec3(0.84, 0.93, 1.0);
+      if (tK > 0.90) lc = vec3(0.80, 1.0, 0.84);
+      if (tK > 0.965) lc = mix(vec3(0.80, 0.42, 1.0), vec3(1.0, 0.36, 0.6), h2);
+      inten = (isMain > 0.5 ? 1.0 : 0.4) * (0.35 + 0.85 * h2 * h2 + 0.3 * h2) * mix(0.5, 1.0, night) * litBoost;
       tv = step(0.88, h3) * lit * (1.0 - isMain);
       floorE = litRatio * 0.55;
     }
     int pal = int(pB + 0.5);
     if (pal == 4 || pal == 9 || pal == 3 || pal == 8 || pal == 7) lc = mix(lc, nsPalette(pB, h2), 0.5);
-    if (st == 18) { lc = mix(vec3(1.0, 0.12, 0.75), vec3(0.72, 0.2, 1.0), h2); lit = step(h1, 0.9); inten = 1.6 * mix(0.6, 1.0, night); floorE = 0.9; }
+    float growOn = 1.0;
+    if (st == 18) { float gz = nsHash(vec2(floor(cell.y / 2.0), seed + 3.0)); float gx = nsHash(vec2(floor(cell.x / 7.0), floor(cell.y / 2.0) + seed));
+      lc = gz < 0.62 ? mix(vec3(1.0, 0.62, 0.26), vec3(1.0, 0.78, 0.48), h2) : mix(vec3(1.0, 0.36, 0.62), vec3(0.86, 0.42, 0.9), h2);
+      growOn = step(0.3, gx) * step(gz, 0.86); lit = step(h1, 0.93) * growOn; inten = 0.85 * mix(0.6, 1.0, night); floorE = growOn; }
     if (st == 19) { lit = step(nsHash(floor(cell / vec2(3.0, 1.0)) + seed), litRatio); lc = h3 > 0.75 ? vec3(1.0, 0.3, 0.06) : vec3(1.0, 0.8, 0.55); inten = 0.9 * mix(0.5, 1.0, night); floorE = litRatio * 0.6; }
     if (tv > 0.5) { lc = mix(lc, vec3(0.35, 0.6, 1.0), 0.75); inten *= 0.45 + 0.4 * nsHash(vec2(floor(uTime * 6.0 + h2 * 9.0), h1)); }
 
@@ -378,9 +393,11 @@ const FRAG_SURFACE = /* glsl */ `
     // far LOD: converge to the statistical look
     float fwy = fwidth(uvc.y);
     vec3 avgEmis;
-    if (office > 0.5) { float e = mix(floorE, litRatio * 0.75, smoothstep(0.45, 1.3, fwy)); avgEmis = lc * e * 0.34 * areaF * (1.0 - mech) * mix(0.5, 1.0, night) * litBoost; }
-    else avgEmis = mix(vec3(1.0, 0.76, 0.5), lc, 0.3) * floorE * 0.42 * areaF * (0.65 + 0.7 * nsHash(floor(cell / 4.0) + seed)) * mix(0.5, 1.0, night) * litBoost;
-    if (st == 18) avgEmis = lc * 0.8 * areaF * mix(0.6, 1.0, night);
+    float cl1 = nsHash(floor(cell / vec2(3.0, 2.0)) + seed * 1.7); float cl2 = nsHash(floor(cell / vec2(11.0, 7.0)) + seed * 0.9);
+    float clus = mix(0.2 + 2.4 * cl1 * cl1, 0.45 + 1.65 * cl2 * cl2, smoothstep(1.5, 6.0, fwc));
+    if (office > 0.5) { float e = mix(floorE, litRatio * 0.75, smoothstep(0.45, 1.3, fwy)); avgEmis = lc * e * 0.36 * areaF * (1.0 - mech) * mix(0.5, 1.0, night) * litBoost * mix(1.0, clus, 0.7); }
+    else avgEmis = mix(vec3(1.0, 0.76, 0.5), lc, 0.3) * floorE * 0.44 * areaF * clus * mix(0.5, 1.0, night) * litBoost;
+    if (st == 18) avgEmis = lc * 0.34 * areaF * growOn * mix(0.6, 1.0, night);
     albedo = mix(albedo, mix(wallAlb, glassTint + 0.01, areaF), lod);
     rough = mix(rough, mix(wallRough, 0.15, areaF), lod); metal = mix(metal, wallMetal * (1.0 - areaF), lod);
     emis = mix(emis, avgEmis, lod);
@@ -403,7 +420,8 @@ const FRAG_SURFACE = /* glsl */ `
     vec2 wc = m / vec2(2.4, 3.6); vec2 wcell = floor(wc); vec2 wf = fract(wc);
     float band = step(0.5, nsHash(vec2(floor(wcell.y / 4.0), seed + 3.0))) * step(0.3, nsHash(vec2(floor(wcell.x / 18.0), floor(wcell.y / 12.0)) + seed));
     float wh = nsHash(wcell + seed * 5.1);
-    float litR = clamp(pA * mix(0.45, 1.0, night), 0.0, 1.0);
+    float sector = smoothstep(0.3, 0.62, nsNoise(m * vec2(0.0016, 0.0009) + seed * 0.13).g) * (0.35 + 0.65 * smoothstep(0.35, 0.6, nsNoise(m * vec2(0.006, 0.0042) + 0.31).r));
+    float litR = clamp(pA * mix(0.45, 1.0, night), 0.0, 1.0) * (0.12 + 1.25 * sector);
     float wlit = step(wh, litR) * band;
     vec2 wd = min(wf - vec2(0.22, 0.3), vec2(0.78, 0.72) - wf) * vec2(2.4, 3.6);
     float waa = max(px, 0.003);
@@ -412,7 +430,9 @@ const FRAG_SURFACE = /* glsl */ `
     vec3 wcol = nsPalette(pB, nsHash(wcell * 1.3 + 2.0)) * (0.7 + 1.6 * nsHash(wcell + 9.0)) * mix(0.5, 1.0, night);
     float wm = wmask * band * (1.0 - wl);
     albedo = mix(albedo, vec3(0.015), wm * 0.92); rough = mix(rough, 0.08, wm); metal = mix(metal, 0.0, wm);
-    emis = mix(wcol * wmask * wlit, wcol * litR * band * 0.26 * (0.4 + 1.2 * nsHash(floor(wcell / 2.0))), wl);
+    float wfar = smoothstep(1.0, 5.0, max(fwidth(wc).x, fwidth(wc).y));
+    float wclus = mix(0.25 + 1.5 * nsHash(floor(wcell / 2.0)), 0.6 + 0.8 * nsHash(floor(wcell / vec2(18.0, 12.0)) + 4.0), wfar);
+    emis = mix(wcol * wmask * wlit, wcol * litR * band * 0.34 * wclus, wl);
     float bc = step(0.97, nsHash(c2 * 3.7 + seed)) * smoothstep(0.6, 0.0, length(fract(m / s2) - 0.5) * 9.0 / (1.0 + px * 6.0));
     emis += vec3(1.0, 0.16, 0.05) * bc * (5.0 + 5.0 * sin(uTime * 2.0 + hB * 40.0)) * step(px, 6.0);
     wetAllow *= 0.3;
@@ -450,7 +470,9 @@ const FRAG_SURFACE = /* glsl */ `
     else if (mode == 3) fl = 0.6 + 0.4 * sin(uTime * 1.3 + seed * 0.3 + vWPos.y * 0.02);
     float nf = (flags / 4) % 2 == 1 ? mix(0.12, 1.0, night) : 1.0;
     if ((flags / 8) % 2 == 1) { float dp = fract(vFUv.x * 0.9 + seed * 0.37); fl *= smoothstep(0.32, 0.2, abs(dp - 0.5)) * (0.6 + 0.4 * nsHash(vec2(floor(vFUv.x * 0.9 + seed * 0.37), seed))); nsIndoor = 0.0; }
-    emis = base * inten * fl * nf; albedo = base * 0.08; rough = 0.35; metal = 0.0; wetAllow = 0.0;
+    if (varA) { float lu = vFUv.x / 4.0 + seed * 0.37; float lfw = fwidth(lu); float lon = step(0.3, nsHash(vec2(floor(lu), seed))); float lampM = smoothstep(0.075, 0.04, abs(fract(lu) - 0.5)) * lon; fl *= mix(lampM, 0.05, smoothstep(0.04, 0.16, lfw)); }
+    vec3 hot = base * inten * 2.4; // white-hot core: the tube clips to white, its bloom keeps the hue
+    emis = (hot + vec3(dot(hot, vec3(0.3333))) * 0.3) * fl * nf; albedo = base * 0.08; rough = 0.35; metal = 0.0; wetAllow = 0.0;
   } else if (st == 5 || st == 23) {
     // ================================================================== signage from the atlas
     vec2 suv = vFUv;
@@ -464,23 +486,22 @@ const FRAG_SURFACE = /* glsl */ `
     albedo = tx.rgb * tx.rgb * 0.5 + 0.01; rough = 0.3 + 0.3 * g.g; metal = 0.0;
     // back-lit panel: uneven tube lighting + dirt
     float uneven = 0.8 + 0.2 * sin(vFUv.x * 190.0 + seed) * (1.0 - smoothstep(0.02, 0.2, px));
-    emis = tx.rgb * tx.rgb * inten * fl * mix(0.3, 1.0, night) * (0.72 + 0.28 * g.g) * uneven;
+    vec3 sc = tx.rgb * tx.rgb; sc += vec3(dot(sc, vec3(0.3333))) * 0.18;
+    emis = sc * inten * 1.5 * fl * mix(0.3, 1.0, night) * (0.72 + 0.28 * g.g) * uneven;
     if (st == 23) { float scan = 0.75 + 0.25 * sin(vWPos.y * 9.0 - uTime * 6.0); emis *= scan; }
     wetAllow = 0.0;
   } else if (st == 29) {
-    // ================================================================== LED video wall (procedural programme)
-    vec2 p = vFUv; float res = max(24.0, vStyle2.x * 2.0);
-    vec2 pg = p * vec2(res, res * vStyle2.y / max(vStyle2.x, 1.0));
-    vec2 pq = floor(pg) / res; vec2 pf = fract(pg);
-    float prog = floor(uTime * 0.18 + seed * 0.37); float tt = fract(uTime * 0.18 + seed * 0.37);
-    float k = nsHash(vec2(prog, seed)); vec3 ca = nsPalette(floor(k * 9.99), k), cb = nsPalette(floor(fract(k * 7.3) * 9.99), k);
-    float pat;
-    if (k < 0.33) pat = step(0.5, fract(pq.x * 3.0 - uTime * 0.2 + sin(pq.y * 6.0 + uTime) * 0.1));
-    else if (k < 0.66) pat = smoothstep(0.02, 0.0, abs(length(pq - vec2(0.5, 0.3)) - fract(uTime * 0.25))) + step(0.75, nsHash(floor(pq * vec2(14.0, 8.0)) + prog)) * step(0.5, fract(uTime * 0.8 + pq.x));
-    else pat = step(pq.y * 0.6 + 0.2, nsNoise(vec2(pq.x * 0.7 + uTime * 0.02, prog * 0.1)).r) ;
-    vec3 c = mix(cb * 0.12, ca, pat) * smoothstep(0.0, 0.08, tt);
-    float dot2 = (1.0 - smoothstep(0.02, 0.3, px * res * 0.1)) ; float led = mix(1.0, smoothstep(0.48, 0.3, length(pf - 0.5)), dot2);
-    emis = c * led * vStyle2.w * 0.1 * mix(0.35, 1.0, night); albedo = vec3(0.02); rough = 0.3; wetAllow = 0.0;
+    // ================================================================== LED video wall: cycles the city's ad reel
+    vec2 p = vFUv; float res = max(40.0, vStyle2.x * 2.4);
+    vec2 pg = p * vec2(res, res * vStyle2.y / max(vStyle2.x, 1.0)); vec2 pf = fract(pg); vec2 pq = (floor(pg) + 0.5) / vec2(res, res * vStyle2.y / max(vStyle2.x, 1.0));
+    float tcy = uTime * 0.11 + seed * 0.37; float slot = floor(tcy); float tt = fract(tcy);
+    float idx = floor(nsHash(vec2(slot, seed)) * 13.99);
+    vec2 auv = vec2(mod(idx, 4.0) * 0.25, 1.0 - (1408.0 + floor(idx / 4.0) * 512.0 + 512.0) / 4096.0) + vec2(pq.x, pq.y) * vec2(0.25, 0.125);
+    float wipe = smoothstep(0.0, 0.05, tt) * (1.0 - smoothstep(0.96, 1.0, tt));
+    float tear = step(0.93, nsHash(vec2(floor(pq.y * 40.0), floor(uTime * 12.0)))) * step(tt, 0.08);
+    vec3 ad = texture2D(uSignAtlas, auv + vec2(tear * 0.01, 0.0)).rgb; ad *= ad;
+    float ledK = 1.0 - smoothstep(0.02, 0.3, px * res * 0.1); float led = mix(1.0, smoothstep(0.5, 0.28, length(pf - 0.5)) * 1.5, ledK);
+    emis = (ad + vec3(dot(ad, vec3(0.333))) * 0.12) * wipe * led * vStyle2.w * 0.2 * mix(0.35, 1.0, night); albedo = vec3(0.015); rough = 0.3; wetAllow = 0.0;
   } else if (st == 6) {
     // ================================================================== road (u across in metres, v along)
     vec2 m = vFUv; float width = vStyle2.x;
@@ -568,6 +589,7 @@ const FRAG_SURFACE = /* glsl */ `
   metalnessFactor = clamp(metal, 0.0, 1.0);
   totalEmissiveRadiance += emis;
   nsAO *= mix(1.0, cav, 0.75);
+  nsRefl = up * (1.0 - smoothstep(0.06, 0.62, roughnessFactor)) * ((st == 4 || st == 5 || st == 23 || st == 29) ? 0.0 : 1.0);
 }
 `;
 
@@ -592,12 +614,24 @@ const FRAG_LIGHT_END = /* glsl */ `
   hemi += vec3(0.6, 0.7, 1.0) * fl * (0.5 + 0.5 * wNn.y) * 0.6;
   vec3 skyDir = normalize(vec3(uTrueSunDir.x, 0.45, uTrueSunDir.z));
   hemi += uSunScatter * 0.85 * max(dot(wNn, skyDir), 0.0) * mix(0.3, 1.0, nsOpen) * (1.0 - nsIndoor) * (1.0 - smoothstep(uCloud.x, uCloud.y, vWPos.y));
+  #ifdef NS_LOCAL_LIGHTS
+    nsSpill *= 0.5; // the grid lights carry the near field; the light field is the soft bounce + far field
+  #endif
   vec3 irr = hemi + nsSpill * (0.55 + 0.45 * (1.0 - abs(wNn.y))) + vec3(0.085, 0.075, 0.065) * nsIndoor * (0.6 + 0.4 * wNn.y);
   reflectedLight.indirectDiffuse += irr * material.diffuseColor;
   float gl = (1.0 - material.roughness); gl *= gl;
   reflectedLight.indirectSpecular += nsSpill * gl * 0.35 * mix(vec3(0.04), material.diffuseColor + material.specularColor, 0.5);
   reflectedLight.indirectDiffuse *= nsAO;
   reflectedLight.indirectSpecular *= mix(1.0, nsAO, 0.7) * mix(0.55, 1.0, nsOpen);
+  #ifdef NS_LOCAL_LIGHTS
+  {
+    vec3 nsLd = vec3(0.0); vec3 nsLs = vec3(0.0);
+    nsLocalLights(vWPos, wNn, normalize(cameraPosition - vWPos), material.roughness, material.specularColor, nsIndoor, nsLd, nsLs);
+    float lao = mix(1.0, nsAO, 0.65) * mix(mix(0.22, 1.0, uNight), 1.0, nsIndoor); // street lighting is switched down by day
+    reflectedLight.directDiffuse += nsLd * material.diffuseColor * lao;
+    reflectedLight.directSpecular += nsLs * lao;
+  }
+  #endif
 }
 `;
 
@@ -623,6 +657,8 @@ export function injectNS(material, opts = {}) {
   material.defines = material.defines || {};
   if (opts.interior) material.defines.NS_INTERIOR = 1;
   if (opts.propIndoor) material.defines.NS_PROP_INDOOR = 1;
+  const ll = NS_OPTS.localLights && opts.localLights !== false;
+  if (ll) { material.defines.NS_LOCAL_LIGHTS = 1; if (!U.uLGrid.value) U.uLGrid.value = emptyLightGrid(); }
   material.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, U, MATU);
     shader.uniforms.uSignAtlas = opts.signAtlas || { value: null };
@@ -641,15 +677,22 @@ export function injectNS(material, opts = {}) {
     if (opts.vertexReplace) for (const [a, b] of opts.vertexReplace) shader.vertexShader = shader.vertexShader.replace(a, b);
     const fp = facade ? FRAG_PARS : NS_COMMON + /* glsl */ `
       varying vec3 vWPos; varying vec3 vWNormal; uniform float uInterior;
-      float nsOpen = 1.0; vec3 nsSpill = vec3(0.0); float nsAO = 1.0; float nsIndoor = 0.0;`;
+      float nsOpen = 1.0; vec3 nsSpill = vec3(0.0); float nsAO = 1.0; float nsIndoor = 0.0; float nsRefl = 0.0;
+      ${NS_LOCAL_LIGHTS}`;
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\n' + fp + (opts.fragmentPars || ''))
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\n' + (facade ? FRAG_SURFACE : FRAG_SURFACE_SIMPLE) + (opts.fragmentSurface || ''))
       .replace('#include <lights_fragment_begin>', patchedLightsBegin())
       .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n' + FRAG_LIGHT_END)
-      .replace('#include <fog_fragment>', (opts.fragmentEnd || '') + '\ngl_FragColor.rgb = nsApplyFog(gl_FragColor.rgb, cameraPosition, vWPos);');
+      .replace('#include <fog_fragment>', (opts.fragmentEnd || '') + /* glsl */ `
+{ float nsT = exp(-nsFogOD(cameraPosition, vWPos)); vec3 nsV = vWPos - cameraPosition;
+  gl_FragColor.rgb = mix(nsFogColor(cameraPosition, vWPos, normalize(nsV)), gl_FragColor.rgb, nsT);
+  #ifdef OPAQUE
+    gl_FragColor.a = nsRefl * nsT; // reflectivity mask for the SSR pass
+  #endif
+}`);
   };
-  material.customProgramCacheKey = () => 'ns' + (facade ? 'F' : 'S') + (opts.interior ? 'I' : '') + (opts.key || '');
+  material.customProgramCacheKey = () => 'ns' + (facade ? 'F' : 'S') + (opts.interior ? 'I' : '') + (ll ? 'L' : '') + (opts.key || '');
   return material;
 }
 
@@ -691,17 +734,27 @@ export function createGlowMaterial(opts = {}) {
           float gl = step(0.985, nsHash(vec2(floor(vWPos.y * 0.6), floor(uTime * 9.0))));
           a = vCol.a * scan * (1.0 - gl * 0.6);
         } else if (mode < 2.5) { float d = length(vUv2 - 0.5) * 2.0; a = smoothstep(1.0, 0.0, d); a *= a; }
-        else {
+        else if (mode < 3.5) {
           vec4 tx = texture2D(uSignAtlas, vUv2);
           c *= tx.rgb * tx.rgb;
           float scan = 0.72 + 0.28 * sin(vWPos.y * 3.0 - uTime * 4.0 + vGlow.z);
           float gl = step(0.975, nsHash(vec2(floor(vWPos.y * 0.35 + vGlow.z), floor(uTime * 8.0))));
           a = vCol.a * scan * (1.0 - gl * 0.7);
         }
+        else if (mode < 4.5) { float eu = smoothstep(0.0, 0.14, vUv2.x) * smoothstep(1.0, 0.86, vUv2.x); a = vCol.a * pow(1.0 - clamp(vUv2.y, 0.0, 1.0), 2.4) * eu * (0.85 + 0.3 * nsNoise(vWPos.xy * 0.05 + vWPos.zz * 0.05).r); }
+        else {
+          vec4 tx = texture2D(uSignAtlas, vUv2);
+          vec3 tc = tx.rgb * tx.rgb; c *= tc + vec3(dot(tc, vec3(0.333))) * 0.25 + 0.012;
+          float pw = fwidth(vWPos.y);
+          float scan = mix(0.62 + 0.38 * sin(vWPos.y * 1.4 - uTime * 2.4 + vGlow.z), 0.72, smoothstep(0.5, 2.2, pw));
+          float gl = step(0.988, nsHash(vec2(floor(vWPos.y * 0.07 + vGlow.z), floor(uTime * 7.0))));
+          float drift = 0.85 + 0.15 * sin(uTime * 0.7 + vGlow.z * 3.0);
+          a = vCol.a * scan * (1.0 - gl * 0.55) * drift;
+        }
         float nf = mix(1.0, mix(0.12, 1.0, uNight), vGlow.w);
         vec3 col = c * uColor * a * vGlow.y * uIntensity * nf;
         float T = exp(-nsFogOD(cameraPosition, vWPos));
-        gl_FragColor = vec4(col * T, 1.0);
+        gl_FragColor = vec4(col * T, 0.0);
       }`,
   });
 }

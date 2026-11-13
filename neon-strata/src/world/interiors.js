@@ -48,6 +48,7 @@ export function lobby(ctx, rng, cx, zFront, o) {
   pen.use(glow([1, 0.94, 0.84], 5)); for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) { const x = room.xa + (i + 0.5) * (w / nx), z = room.zb + (j + 0.5) * ((dep - 0.4) / nz); pen.flat(x - 1.3, z - 0.5, x + 1.3, z + 0.5, h - 0.04, false, 1); }
   pen.use(glow(acc, 4)); for (let i = 0; i <= nx; i++) { const x = room.xa + 0.06 + i * ((w - 0.12) / nx); if (i === 0 || i === nx) continue; pen.wall(x - 0.08, room.zb + 0.05, x + 0.08, room.zb + 0.05, 0.4, h - 0.6, {}); }
   for (let j = 1; j < nz; j++) { const z = room.zb + j * ((dep - 0.4) / nz); pen.wall(room.xa + 0.05, z + 0.08, room.xa + 0.05, z - 0.08, 0.4, h - 0.6, {}); pen.wall(room.xb - 0.05, z - 0.08, room.xb - 0.05, z + 0.08, 0.4, h - 0.6, {}); }
+  { const lx = Math.max(1, Math.round(w / 10)), lz = Math.max(1, Math.round(dep / 10)); const rg = Math.min(22, Math.max(9, h * 2.3)); for (let i = 0; i < lx; i++) for (let j = 0; j < lz; j++) { const x = room.xa + (i + 0.5) * (w / lx), z = room.zb + (j + 0.5) * ((dep - 0.4) / lz); ctx.light(pen.wx(x, z), pen.wz(x, z), rg, [1, 0.93, 0.82], 1.0, pen.oy + h - 0.4, { indoor: true, range: rg }); } }
   // floor inlay leading from the door to reception
   pen.use(glow(acc, 2)); pen.flat(cx - 0.07, room.zb + dep * 0.32, cx + 0.07, zi - 0.5, 0.045);
   // reception desk with brand wall behind
@@ -91,6 +92,7 @@ export function shopRoom(ctx, rng, xa, xb, zFront, dep, h, door, o = {}) {
   shell(ctx, room, door, { floor: im(kind === 'tech' ? ST.TILE : ST.CONCRETE, [0.34, 0.33, 0.32]), ceil: im(ST.PLASTER, [0.3, 0.3, 0.3]), wall: im(ST.PLASTER, wallC), trim: K.dark(0.1) });
   const zi = zFront - 0.36;
   pen.use(glow(lc, 6)); pen.flat(cx - Math.min(1.6, w * 0.3), room.zb + dep * 0.35, cx + Math.min(1.6, w * 0.3), room.zb + dep * 0.35 + 0.5, h - 0.04, false, 1); pen.flat(cx - Math.min(1.6, w * 0.3), room.zb + dep * 0.72, cx + Math.min(1.6, w * 0.3), room.zb + dep * 0.72 + 0.5, h - 0.04, false, 1);
+  { const rg = Math.min(13, Math.max(6.5, h * 2.4)); const nl = dep > 9 ? 2 : 1; for (let i = 0; i < nl; i++) { const z = room.zb + dep * (nl === 1 ? 0.5 : 0.3 + 0.42 * i); ctx.light(pen.wx(cx, z), pen.wz(cx, z), rg, lc, 1.0, pen.oy + h - 0.35, { indoor: true, range: rg }); } }
   const left = door.a - xa > xb - door.b; // free side for the counter = the side away from the door
   const sx = left ? -1 : 1; const wallX = left ? xa : xb;
   if (kind === 'bar') {

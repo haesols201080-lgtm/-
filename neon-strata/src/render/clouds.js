@@ -125,7 +125,8 @@ void main(){
       vec3 sun = uSunColor * Ts * phase * (1.0 - exp(-d * 6.0) * 0.45);
       // ambient from the open sky above, city glow + ground haze from below
       vec3 amb = skyAmb * (0.25 + 0.75 * h * h) ;
-      vec3 glow = nsLightField(p, 6.0).rgb * exp(-(p.y - y0) / 110.0) * 0.55;
+      vec3 glow = (nsLightField(p, 7.0).rgb * 0.45 + nsLightField(p, 8.6).rgb * 0.9) * exp(-(p.y - y0) / 150.0);
+      glow = mix(glow, dot(glow, vec3(0.3333)) * vec3(1.2, 0.86, 0.66), 0.72);
       vec3 below = (uFogLow * 1.35 + glow) * (1.0 - h) * (1.0 - h);
       float fl = uFlash.w * exp(-dot(p.xz - uFlash.xy, p.xz - uFlash.xy) / (uFlash.z * uFlash.z));
       vec3 S = sun + amb + below + vec3(0.75, 0.85, 1.0) * fl * 9.0;

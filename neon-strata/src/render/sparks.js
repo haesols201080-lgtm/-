@@ -10,7 +10,7 @@ export function createSparks(data /* [x,y,z,r,g,b,size]... */) {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aCol', new THREE.BufferAttribute(col, 4));
   const mat = new THREE.ShaderMaterial({
     transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false,
-    uniforms: { ...U, uScale: { value: 600 }, uIntensity: { value: 1 } },
+    uniforms: { ...U, uScale: { value: 600 }, uIntensity: { value: 1.7 } },
     vertexShader: /* glsl */ `
       ${NS_COMMON}
       attribute vec4 aCol; uniform float uScale; varying vec3 vC;
@@ -27,7 +27,7 @@ export function createSparks(data /* [x,y,z,r,g,b,size]... */) {
       }`,
     fragmentShader: /* glsl */ `
       varying vec3 vC; uniform float uIntensity;
-      void main(){ float r = length(gl_PointCoord - 0.5) * 2.0; float a = max(0.0, 1.0 - r); gl_FragColor = vec4(vC * a * a * uIntensity, 1.0); }`,
+      void main(){ float r = length(gl_PointCoord - 0.5) * 2.0; float a = max(0.0, 1.0 - r); gl_FragColor = vec4(vC * a * a * uIntensity, 0.0); }`,
   });
   const pts = new THREE.Points(g, mat); pts.frustumCulled = false; pts.renderOrder = 40; pts.matrixAutoUpdate = false;
   return pts;

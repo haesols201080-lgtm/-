@@ -28,7 +28,7 @@ export function createRain(quality) {
         vC = (vec3(0.55, 0.65, 0.8) * (0.02 + uAmbSky * 0.6) + spill * 0.22) * on * smoothstep(30.0, 12.0, d) * smoothstep(0.6, 2.5, d) * (0.5 + 0.5 * end);
         gl_Position = on > 0.5 ? projectionMatrix * viewMatrix * vec4(wp, 1.0) : vec4(2.0, 2.0, 2.0, 1.0);
       }`,
-    fragmentShader: /* glsl */ `varying vec3 vC; void main(){ gl_FragColor = vec4(vC, 1.0); }`,
+    fragmentShader: /* glsl */ `varying vec3 vC; void main(){ gl_FragColor = vec4(vC, 0.0); }`,
   });
   const mesh = new THREE.LineSegments(g, mat); mesh.frustumCulled = false; mesh.renderOrder = 60;
   return { mesh, uniforms };
@@ -43,7 +43,7 @@ export function createParticles(emitters) {
   const ib = new THREE.InstancedInterleavedBuffer(new Float32Array(rows), 8);
   g.setAttribute('aPos', new THREE.InterleavedBufferAttribute(ib, 4, 0)); g.setAttribute('aInfo', new THREE.InterleavedBufferAttribute(ib, 4, 4)); g.instanceCount = count;
   const mat = new THREE.ShaderMaterial({
-    uniforms: { ...U }, transparent: true, depthWrite: false, fog: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    uniforms: { ...U }, transparent: true, depthWrite: false, fog: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor,
     vertexShader: /* glsl */ `
       ${NS_COMMON}
       attribute vec4 aPos; attribute vec4 aInfo; varying vec2 vUv; varying vec4 vCol; varying vec3 vEm; varying float vSeed;

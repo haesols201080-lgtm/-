@@ -162,20 +162,19 @@ export function landingPad(v, f, s, y, size, rng, o = {}) {
 export function liftTube(v, f, s, y0, y1, rng, col = K.NEON.ice) {
   const pen = v.pen; const A = FACE_ANG[f]; const an = Math.atan2(-Math.cos(A), Math.sin(A)); const c = v.P(f, s, 0); const r = 1.7;
   v.ctx.main(); pen.use(K.glassDark([0.3, 0.42, 0.5])); pen.lathe(c[0], c[1], [[r, y0], [r, y1]], 8, { a0: an - Math.PI / 2, a1: an + Math.PI / 2, cap: false });
-  const e = v.P(f, s, r + 0.04); pen.use(K.emis(col, 6, 3, false, rng.i(0, 255))); pen.beam(e[0], y0, e[1], e[0], y1, e[1], 0.22, 0.12);
+  const e = v.P(f, s, r + 0.04); pen.use(K.emis(K.mixW(col, 0.5), 2.2, 3, false, rng.i(0, 255))); pen.beam(e[0], y0, e[1], e[0], y1, e[1], 0.16, 0.1);
   pen.use(K.dark(0.1)); for (let y = y0 + 12; y < y1; y += 24) pen.lathe(c[0], c[1], [[r + 0.12, y], [r + 0.12, y + 0.5]], 8, { a0: an - Math.PI / 2, a1: an + Math.PI / 2, cap: false });
 }
 // crown treatments
 export function crownFins(v, y, hgt, rng, acc) {
   const pen = v.pen; const fm = K.dark(0.12); v.ctx.main();
   for (const f of [0, 2]) { const L = v.len(f); const n = Math.max(3, Math.round(L / 4.5)); for (let i = 0; i < n; i++) { const s = (i + 0.5) * (L / n); const k = 0.55 + 0.45 * Math.sin(((i + 0.5) / n) * Math.PI); v.box(f, s - 0.3, s + 0.3, -v.len(f + 1) * 0.5 + 0.2 > 0 ? 0 : -1.2, 0.4, y, y + hgt * k, fm, { bottom: false }); } }
-  pen.use(K.emis(acc, 7, 0, true)); pen.box(v.cx, v.cz, v.w * 0.8, v.d * 0.8, y + 0.2, y + 0.7, {});
   const wx = pen.wx(v.cx, v.cz), wz = pen.wz(v.cx, v.cz); v.ctx.spark(wx, pen.oy + y + 2, wz, acc, 5, 1.6);
 }
 export function crownSpire(v, y, hgt, rng, acc) {
   const pen = v.pen; v.ctx.main(); const r = Math.min(v.w, v.d) * 0.16;
   pen.use(K.dark(0.14)); pen.lathe(v.cx, v.cz, [[r * 2.2, y], [r * 1.5, y + hgt * 0.12], [r, y + hgt * 0.2], [r * 0.5, y + hgt * 0.62], [0.25, y + hgt]], 8, { cap: false });
-  pen.use(K.emis(acc, 9, 3, true, rng.i(0, 255))); pen.lathe(v.cx, v.cz, [[r * 1.05, y + hgt * 0.24], [r * 0.9, y + hgt * 0.3]], 8, { cap: false }); pen.lathe(v.cx, v.cz, [[r * 0.62, y + hgt * 0.52], [r * 0.56, y + hgt * 0.56]], 8, { cap: false });
+  pen.use(K.lamps(K.mixW(acc, 0.5), 7, rng.i(0, 255))); pen.lathe(v.cx, v.cz, [[r * 1.05, y + hgt * 0.24], [r * 0.9, y + hgt * 0.3]], 8, { cap: false }); pen.lathe(v.cx, v.cz, [[r * 0.62, y + hgt * 0.52], [r * 0.56, y + hgt * 0.56]], 8, { cap: false });
   pen.use(K.emis(K.NEON.red, 22, 2, false, rng.i(0, 255))); pen.lathe(v.cx, v.cz, [[0.4, y + hgt], [0.4, y + hgt + 0.8], [0.05, y + hgt + 1.1]], 6, {});
   const wx = pen.wx(v.cx, v.cz), wz = pen.wz(v.cx, v.cz); v.ctx.spark(wx, pen.oy + y + hgt, wz, K.NEON.red, 5, 2); v.ctx.spark(wx, pen.oy + y + hgt * 0.3, wz, acc, 6, 1.6);
 }
@@ -183,7 +182,7 @@ export function haloRing(v, y, rng, acc, k = 0.72) {
   const pen = v.pen; v.ctx.main(); const r = Math.max(v.w, v.d) * k;
   pen.use(K.dark(0.1)); pen.lathe(v.cx, v.cz, [[r - 0.9, y], [r + 0.7, y + 0.2], [r + 0.7, y + 1.5], [r - 0.9, y + 1.7]], 20, { cap: false });
   pen.lathe(v.cx, v.cz, [[r - 0.9, y + 1.7], [r - 0.9, y]], 20, { cap: false });
-  pen.use(K.emis(acc, 8, 0, true)); pen.lathe(v.cx, v.cz, [[r + 0.74, y + 0.6], [r + 0.74, y + 1.1]], 20, { cap: false });
+  pen.use(K.lamps(K.mixW(acc, 0.5), 7, rng.i(0, 255))); pen.lathe(v.cx, v.cz, [[r + 0.74, y + 0.6], [r + 0.74, y + 1.1]], 20, { cap: false });
   pen.use(K.dark(0.1)); for (let i = 0; i < 4; i++) { const a = i * 1.5708 + 0.785; pen.beam(v.cx + Math.cos(a) * Math.min(v.w, v.d) * 0.45, y + 0.8, v.cz + Math.sin(a) * Math.min(v.w, v.d) * 0.45, v.cx + Math.cos(a) * (r - 0.8), y + 0.8, v.cz + Math.sin(a) * (r - 0.8), 0.5, 0.5); }
   v.ctx.light(pen.wx(v.cx, v.cz), pen.wz(v.cx, v.cz), r * 3, acc, 0.35, pen.oy + y);
 }
@@ -212,7 +211,7 @@ export function techTower(ctx, rng, lot, S, o = {}) {
     const rect = o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].word : null;
     shopSign(base, 0, s0 - 2, s1 + 2, bh - 1.6, rng, { rect: rect || undefined, maxH: 1.8, maxW: 11, intensity: 4 }); }
   if (hasLobby) { const lw = Math.min(20, 2 * Math.min(sC - 1.2, w - sC - 1.2)); const lb = lobby(ctx, rng, -w / 2 + sC, cz + d / 2, { w: lw, d: Math.min(d * 0.55, 15), h: bh - 0.8, doorHW, doorH: 4.6, accent: acc, logo: o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].logo : null, brand: o.brand }); hollow(ctx, 0, cz, w, d, bh, lb.room, lb.door); ctx.main(); } else base.solid();
-  if (rng.chance(S.bands ?? 0.25)) K.neonBand(ctx, 0, cz, w, d, bh - 0.35, acc, { intensity: 5, light: false, nightOnly: true, sides: allFaces ? 15 : 1, h: 0.18 });
+  if (rng.chance(S.bands ?? 0.25)) K.neonBand(ctx, 0, cz, w, d, bh - 0.35, acc, { intensity: 5, light: false, lamps: true, seed: rng.i(0, 255), sides: allFaces ? 15 : 1, h: 0.45 });
   // --- plant floor (louvres)
   const lv = { st: ST.LOUVER, color: [0.26, 0.27, 0.29] };
   const plant = new Vol(ctx, 0, cz, w - 1.2, d - 1.2, bh, bh + mh);
@@ -237,7 +236,7 @@ export function techTower(ctx, rng, lot, S, o = {}) {
         ribs: rich && f !== 2 ? { d: rng.f(0.45, 1.0), w: 0.5, mat: ribM, every: f === 0 ? 1 : 2, detail: f !== 0 } : null,
         belts: rich ? { every: Math.max(4, Math.round(8 * rng.f(0.7, 1.3))), d: 0.5, h: 0.7, mat: ribM, detail: true } : null,
       });
-      if (f === 0 && withSlots && info) for (const b of slots) { const s = (b + 0.5) * info.bayW; const p = vol.P(0, s, -1.45); pen.use(K.emis(acc, 5, 3, true, rng.i(0, 255))); pen.beam(p[0], y0 + 1, p[1], p[0], y1 - 1, p[1], 0.5, 0.1); }
+      if (f === 0 && withSlots && info) for (const b of slots) { const s = (b + 0.5) * info.bayW; const p = vol.P(0, s, -1.45); pen.use(K.emis(K.mixW(acc, 0.65), 1.6, 3, true, rng.i(0, 255))); pen.beam(p[0], y0 + 1, p[1], p[0], y1 - 1, p[1], 0.3, 0.1); }
     }
   };
   const shaft = new Vol(ctx, 0, cz, w, d, bh + mh, hasSet ? setY : H);
@@ -250,7 +249,7 @@ export function techTower(ctx, rng, lot, S, o = {}) {
     drawShaft(up, setY, H, false); up.solid(); top = up; topY = H;
     if (rng.chance(0.5)) { ctx.detail(); pen.use(K.foliage([0.24, 0.44, 0.22])); pen.box(0, cz + d / 2 - inset * 0.5, w - 1, inset * 0.6, setY, setY + 0.9, {}); ctx.main(); }
     else roofProps(ctx, rng, 0, cz + d / 2 - inset / 2, w, inset, setY, ROOF_TECH, 0.6, 4.2);
-    if (rng.chance(S.bands ?? 0.25)) K.neonBand(ctx, 0, cz, w, d, setY - 0.3, acc, { intensity: 4, light: false, nightOnly: true, sides: allFaces ? 15 : 1, h: 0.16 });
+    if (rng.chance(S.bands ?? 0.25)) K.neonBand(ctx, 0, cz, w, d, setY - 0.3, acc, { intensity: 5, light: false, lamps: true, seed: rng.i(0, 255), sides: allFaces ? 15 : 1, h: 0.45 });
   }
   top.y1 = topY; top.roof(K.conc(0.24));
   // --- crown
@@ -258,7 +257,7 @@ export function techTower(ctx, rng, lot, S, o = {}) {
   if (ck < 0.18) crownFins(top, topY, rng.f(6, 16), rng, acc);
   else if (ck < 0.36 && H > 140) crownSpire(top, topY, rng.f(22, 60), rng, acc);
   else if (ck < 0.42 && (lot.corner || o.free)) { haloRing(top, topY - 3, rng, acc, 0.6); roofProps(ctx, rng, top.cx, top.cz, top.w, top.d, topY, ROOF_TECH, 0.7); }
-  else { roofProps(ctx, rng, top.cx, top.cz, top.w, top.d, topY, ROOF_TECH, 1); pen.use(K.emis(acc, 6, 0, true)); const f0 = top.P(0, 0, 0.05); for (const f of allFaces ? [0, 1, 2, 3] : [0]) top.box(f, 0.5, top.len(f) - 0.5, 0, 0.12, topY - 0.9, topY - 0.6, null, { ends: false, top: false, bottom: false }); }
+  else { roofProps(ctx, rng, top.cx, top.cz, top.w, top.d, topY, ROOF_TECH, 1); pen.use(K.lamps(K.mixW(acc, 0.55), 6, rng.i(0, 255))); const f0 = top.P(0, 0, 0.05); for (const f of allFaces ? [0, 1, 2, 3] : [0]) top.box(f, 0.5, top.len(f) - 0.5, 0, 0.12, topY - 0.9, topY - 0.6, null, { ends: false, top: false, bottom: false }); }
   // --- attachments on the front
   if (H > 60 && rng.chance(S.pads ?? 0.3)) landingPad(shaft, 0, rng.f(0.25, 0.75) * w, bh + mh + Math.round(rng.f(0.25, 0.7) * (shaft.y1 - bh - mh) / fh) * fh, Math.min(11, lot.block.sw * 0.4, w * 0.4), rng, { color: acc });
   if (H > 80 && rng.chance(0.3) && !slots.size) liftTube(shaft, 0, w * rng.pick([0.2, 0.8]), bh, shaft.y1, rng, acc);
@@ -283,7 +282,7 @@ export function megaTower(ctx, rng, lot, S, o = {}) {
   for (const f of [0, 1, 2, 3]) facade(pod, f, 0, ph, { wall: podM, cellW: 5, bayCells: 2, floorH: ph / Math.round(ph / 5.5), aoB: 0.5, ribs: { d: 1.4, w: 1.4, mat: frameM }, belts: { every: 99, d: 1, h: 1, mat: frameM }, door: f === 0 ? { s: W / 2, hw: 6.4, h: 12.6 } : null });
   pod.roof(M(ST.TILE, { color: [0.3, 0.31, 0.34] }));
   { const lb = lobby(ctx, rng, 0, Dd / 2, { w: Math.min(46, W - 20), d: Math.min(36, Dd * 0.4), h: Math.min(16, ph - 3), doorHW: 6.4, doorH: 12.6, accent: acc, logo: o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].logo : null, brand: o.brand, name: (o.brand ? o.brand.toUpperCase() + ' ' : '') + '타워 로비' }); hollow(ctx, 0, 0, W, Dd, ph, lb.room, lb.door); ctx.main(); }
-  K.neonBand(ctx, 0, 0, W, Dd, ph - 0.6, acc, { intensity: 7, radius: 40, power: 0.5, nightOnly: true, h: 0.35, main: true });
+  K.neonBand(ctx, 0, 0, W, Dd, ph - 0.6, acc, { intensity: 7, radius: 40, power: 0.5, lamps: true, h: 0.8, main: true });
   for (const f of [0, 2]) { const L = pod.len(f); const em = K.emis(acc, 7, 0, false); ctx.main(); pod.box(f, L / 2 - 7, L / 2 - 6.5, 0, 1.6, 0, 13, em, { bottom: false }); pod.box(f, L / 2 + 6.5, L / 2 + 7, 0, 1.6, 0, 13, em, { bottom: false }); pod.box(f, L / 2 - 7, L / 2 + 7, 0, 1.6, 13, 13.6, em); const lp = pod.world(f, L / 2, 6); ctx.light(lp[0], lp[1], 46, acc, 1.0, 8); }
   if (o.brand && ctx.atlas.corp[o.brand]) { const r = ctx.atlas.corp[o.brand].word; for (const f of [0, 2]) shopSign(pod, f, pod.len(f) / 2 - 12, pod.len(f) / 2 + 12, ph - 5, rng, { rect: r, maxH: 4.5, maxW: 22, intensity: 5, out: 1.7, radius: 50 }); }
   if (rng.chance(0.6)) screenWall(pod, rng.pick([1, 3]), 8, pod.len(1) - 8, 6, ph - 6, rng, { intensity: 3 });
@@ -318,7 +317,7 @@ export function megaTower(ctx, rng, lot, S, o = {}) {
     wv.roof(K.conc(0.24)); wv.solid(); wings.push({ f, wv, wh });
     // megabrace on the outer face + light slots in the re-entrant corners
     { const L = wv.len(f); const n = Math.max(1, Math.round((wh - ph) / 70)); const dh = (wh - ph) / n; pen.use(frameM); for (let i = 0; i < n; i++) { const a = wv.P(f, 0.3, 0.7), b = wv.P(f, L - 0.3, 0.7); pen.beam(a[0], ph + i * dh, a[1], b[0], ph + (i + 1) * dh, b[1], 1.3, 1.3); pen.beam(b[0], ph + i * dh, b[1], a[0], ph + (i + 1) * dh, a[1], 1.3, 1.3); } }
-    { const e = K.emis(acc, 5, 3, true, rng.i(0, 255)); pen.use(e); const p1 = core.P(f, core.len(f) / 2 - along / 2 - 0.5, 0.3), p2 = core.P(f, core.len(f) / 2 + along / 2 + 0.5, 0.3); pen.beam(p1[0], ph + 4, p1[1], p1[0], wh - 4, p1[1], 0.6, 0.6); pen.beam(p2[0], ph + 4, p2[1], p2[0], wh - 4, p2[1], 0.6, 0.6); }
+    { const e = K.emis(acc, 5, 3, true, rng.i(0, 255)); pen.use(e); const p1 = core.P(f, core.len(f) / 2 - along / 2 - 0.5, 0.3), p2 = core.P(f, core.len(f) / 2 + along / 2 + 0.5, 0.3); void e; void p1; void p2; }
     if (rng.chance(0.75)) landingPad(wv, f, wv.len(f) * rng.pick([0.3, 0.7]), ph + Math.round(((wh - ph) * rng.f(0.35, 0.8)) / fh) * fh, 12, rng, { color: acc, car: 0.5 });
     roofProps(ctx, rng, wv.cx, wv.cz, wv.w, wv.d, wh, ROOF_TECH, 0.8, 5.2);
     if (rng.chance(0.5)) { ctx.detail(); pen.use(K.foliage([0.22, 0.42, 0.2])); const q = wv.P(f, wv.len(f) / 2, -1.2); pen.box(q[0], q[1], f % 2 === 0 ? along - 2 : 1.6, f % 2 === 0 ? 1.6 : along - 2, wh, wh + 1.0, {}); ctx.main(); }
@@ -328,7 +327,7 @@ export function megaTower(ctx, rng, lot, S, o = {}) {
   crownSpire(core, coreY1, Math.min(140, H * rng.f(0.12, 0.22)), rng, acc);
   if (o.brand && ctx.atlas.corp[o.brand]) { const lg = ctx.atlas.corp[o.brand].logo; const sz = Math.min(cw * 0.6, 26); for (const f of [0, 2]) { const p = core.P(f, cw / 2, 1.0); pen.sign(p[0], coreY1 - 18 - sz / 2, p[1], FACE_ANG[f], sz, sz, lg, { intensity: 6, seed: rng.i(0, 255) }); const wp = core.world(f, cw / 2, 4); ctx.spark(wp[0], pen.oy + coreY1 - 20 - sz / 2, wp[1], ctx.atlas.corp[o.brand].color, 9, 2.6); } }
   // vertical light pillar from the crown
-  ctx.glow.cone(pen.wx(0, 0), pen.oy + coreY1 + 4, pen.wz(0, 0), 0, 1, 0, 420, 2, 12, acc, 0.05, { segs: 10, seed: rng.i(0, 50) });
+  ctx.glow.cone(pen.wx(0, 0), pen.oy + coreY1 + 4, pen.wz(0, 0), 0, 1, 0, 420, 1.2, 7, [1, 0.95, 0.9], 0.03, { segs: 10, seed: rng.i(0, 50) });
   for (let y = ph + 60; y < coreY1; y += 110) ctx.spark(pen.wx(0, 0), pen.oy + y, pen.wz(0, 0), [1, 0.85, 0.65], 6, 1.0);
   ctx.shade(lot.x, lot.z, Math.max(W, Dd) * 0.8 + 90, 0.82); ctx.footprint(0, 0, W, Dd, 0, H, lot.block.id); ctx.stats.buildings++; lot.h = H;
   ctx.poi({ type: 'tower', x: lot.x, y: 0.2, z: lot.z, h: H, brand: o.brand });

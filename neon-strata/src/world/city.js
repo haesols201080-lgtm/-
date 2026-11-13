@@ -3,7 +3,8 @@ import * as THREE from 'three';
 import { CityContext, CHUNK } from './context.js';
 import { Batch } from './builder.js';
 import { M } from './builder.js';
-import { ST, createCityMaterial, createGlowMaterial } from '../render/cityMaterial.js';
+import { ST, createCityMaterial, createGlowMaterial, NS_OPTS } from '../render/cityMaterial.js';
+import { buildLightGrid } from '../render/lightgrid.js';
 import { LightField } from '../render/lightfield.js';
 import { SignAtlas } from '../render/signs.js';
 import { Physics } from '../game/physics.js';
@@ -22,6 +23,7 @@ export async function buildCity(engine, { seed = 2049, quality, onProgress = () 
   const atlas = await SignAtlas.create(quality.name === 'low' || quality.name === 'medium' ? 2048 : 4096, seed);
   const ctx = new CityContext({ seed, quality, physics: phys, lightField: lf, atlas });
   const signU = { value: atlas.texture };
+  NS_OPTS.localLights = !!quality.localLights;
   const mat = createCityMaterial(quality, signU);
   const groundMat = createCityMaterial(quality, signU);
   groundMat.polygonOffset = true; groundMat.polygonOffsetFactor = 2; groundMat.polygonOffsetUnits = 6;
@@ -66,10 +68,22 @@ export async function buildCity(engine, { seed = 2049, quality, onProgress = () 
     if (!b.glow.empty) { rec.glow = new THREE.Mesh(b.glow.build(), glowMat); rec.glow.matrixAutoUpdate = false; rec.glow.renderOrder = 50; group.add(rec.glow); }
     bigs.push(rec);
   }
+  // aviation obstruction lights: every tall structure carries red lamps on its top corners (and every ~150 m up a supertall)
+  { const seen = new Set();
+    for (const f of ctx.footprints) {
+      const top = f[6]; if (top < 110 || top - f[5] < 50) continue;
+      const key = Math.round(f[0] / 6) * 100003 + Math.round(f[1] / 6) * 31 + Math.round(top / 8); if (seen.has(key)) continue; seen.add(key);
+      const c = Math.cos(f[4]), s = Math.sin(f[4]); const hx = f[2] * 0.92, hz = f[3] * 0.92;
+      const put = (lx, lz, y, sz) => ctx.sparks.push(f[0] + lx * c + lz * s, y, f[1] - lx * s + lz * c, 2.6, 0.07, 0.03, sz);
+      put(hx, hz, top + 1.5, 3.2); put(-hx, -hz, top + 1.5, 3.2);
+      if (top > 260) { put(hx, -hz, top + 1.5, 3.2); put(-hx, hz, top + 1.5, 3.2); for (let y = top - 150; y > 120; y -= 150) { put(hx, hz, y, 2.6); put(-hx, -hz, y, 2.6); } }
+    } }
   const sparks = createSparks(ctx.sparks); group.add(sparks);
   const props = instanceProps(ctx, mat, group);
   onProgress('라이트 필드 베이크', 0.94); await tick();
   lf.bake(engine.renderer);
+  const lg = quality.localLights ? buildLightGrid(ctx.lights, quality.localLights) : null;
+  if (lg) console.log(`[NS] light grid: ${lg.raw} emitters → ${lg.alive}/${lg.lights} lights, ${lg.shrunk} shrunk, ${lg.dropped} dropped, ${lg.slots} slots, max ${lg.maxPerCell}/cell`);
   engine.scene.add(group);
   console.log(`[NS] city built in ${((performance.now() - t0) / 1000).toFixed(1)}s — ${chunks.length} chunks, ${(verts / 1e6).toFixed(2)}M verts, ${(tris / 1e6).toFixed(2)}M tris, ${lf.count} lights, ${phys.c.length} colliders, ${ctx.stats.buildings} buildings, ${props.total} props, ${ctx.blocks ? ctx.blocks.length : 0} blocks`);
 

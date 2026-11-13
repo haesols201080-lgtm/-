@@ -118,7 +118,7 @@ export function createTraffic(ctx, quality) {
         float fr = pow(1.0 - max(dot(N, V), 0.0), 3.0);
         vec3 col = alb * (amb + spill + sun * 0.35) + (uFogLow * 2.0 + spill * 0.5) * fr * 0.6 + sun * pow(max(dot(reflect(-V, N), uSunDir), 0.0), 40.0) * 0.4;
         col += vCol * vEm;
-        gl_FragColor = vec4(nsApplyFog(col, cameraPosition, vWPos), 1.0);
+        gl_FragColor = vec4(nsApplyFog(col, cameraPosition, vWPos), 0.0);
       }`,
   });
   const body = new THREE.Mesh(mkInst(carGeo0, inst, count), bodyMat); body.frustumCulled = false; group.add(body);
@@ -144,7 +144,7 @@ export function createTraffic(ctx, quality) {
         vC = c * k * (0.25 + 0.75 * smoothstep(-0.2, 0.5, facing)) * exp(-nsFogOD(cameraPosition, p)) * smoothstep(20.0, 90.0, d);
         gl_PointSize = sz; gl_Position = projectionMatrix * mv;
       }`,
-    fragmentShader: /* glsl */ `varying vec3 vC; void main(){ float r = length(gl_PointCoord - 0.5) * 2.0; float a = max(0.0, 1.0 - r); gl_FragColor = vec4(vC * a * a, 1.0); }`,
+    fragmentShader: /* glsl */ `varying vec3 vC; void main(){ float r = length(gl_PointCoord - 0.5) * 2.0; float a = max(0.0, 1.0 - r); gl_FragColor = vec4(vC * a * a, 0.0); }`,
   });
   const lights = new THREE.Points(lg, lightMat); lights.frustumCulled = false; lights.renderOrder = 41; group.add(lights);
 

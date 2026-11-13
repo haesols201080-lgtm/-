@@ -68,7 +68,7 @@ async function start() {
       const t = performance.now() * 0.00004; const c = player.pos; camera.position.set(c.x + Math.cos(t) * 150, 90 + Math.sin(t * 2) * 30, c.z + Math.sin(t) * 150); camera.lookAt(0, 420, 0);
     }
     env.update(dt, camera.position); city.update(camera.position); traffic.update(engine); crowd.update(dt, started ? player.p : camera.position, env.weather.rain);
-    rain.uniforms.uLocal.value = 1 - player.indoor;
+    rain.uniforms.uLocal.value = 1 - player.indoor; engine.post.settings.bloom = 1 + env.weather.rain * 0.35;
     engine.post.mFinal.uniforms.uSpeedFx.value = Math.min(1, player.speed / 110); engine.post.mFinal.uniforms.uFade.value = 1 - (game.fade || 0);
     audio.update(env.weather.rain, player.indoor, player.mode === 'fly', player.speed, player.p.y);
     if (!noRender) engine.render(dt);
@@ -97,6 +97,8 @@ async function start() {
     // render one frame from a free camera (bypasses the player rig)
     free: (dt = 1 / 30) => { env.update(dt, camera.position); city.update(camera.position); traffic.update(engine); crowd.update(dt, camera.position, env.weather.rain); engine.render(dt); },
     probe: () => { city.update(camera.position); engine.refreshProbe(); engine.render(0); engine.render(0); },
+    // park the free camera on the pavement in front of a shop / lobby door in the district at `ang` degrees
+    street: (ang, idx = 0, o = {}) => { const A = (ang * Math.PI) / 180; const c = city.pois.filter((p) => p.doorX !== undefined && p.type !== 'home' && (!o.type || p.type === o.type) && Math.hypot(p.x, p.z) > (o.rmin ?? 800) && Math.hypot(p.x, p.z) < (o.rmax ?? 3200) && Math.abs(((Math.atan2(p.z, p.x) - A + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 0.22); const p = c[idx % Math.max(1, c.length)]; if (!p) return null; let nx = p.doorX - p.x, nz = p.doorZ - p.z; const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l; const d = o.dir ?? 1; const tx = -nz * d, tz = nx * d; const b = o.back ?? 6; camera.position.set(p.doorX + nx * b - tx * 3, o.h ?? 1.7, p.doorZ + nz * b - tz * 3); camera.lookAt(p.doorX + nx * (b - (o.turn ?? 1)) + tx * 40, o.ty ?? 5, p.doorZ + nz * (b - (o.turn ?? 1)) + tz * 40); return [p.type, p.name, Math.round(p.doorX), Math.round(p.doorZ), c.length]; },
     tp: (x, y, z) => { player.mode = 'foot'; player.pos.set(x, y, z); player.vel.set(0, 0, 0); },
     stats: () => ({ calls: renderer.info.render.calls, tris: renderer.info.render.triangles, geos: renderer.info.memory.geometries, tex: renderer.info.memory.textures, city: city.stats }),
   };

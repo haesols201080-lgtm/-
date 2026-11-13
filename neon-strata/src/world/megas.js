@@ -3,7 +3,7 @@
 import { ST, PAL, WK, FLAG } from '../render/cityMaterial.js';
 import { M, rectPts, scalePts, ngonPts } from './builder.js';
 import * as K from './kit.js';
-import { boundaryAngle, DISTRICTS, COAST_X, R_CITY, R_CORE, yawFacing } from './layout.js';
+import { boundaryAngle, DISTRICTS, COAST_X, R_CITY, R_CORE, R_SPRAWL, yawFacing } from './layout.js';
 import { reserve, nearestBlock } from './plan.js';
 import { megaTower, techTower, landingPad } from './buildings.js';
 import { archiveSpire, farmTower } from './buildings2.js';
@@ -103,8 +103,9 @@ export function buildSpire(ctx) {
 
   // ---- exterior: exoskeleton fins, belts, branding, sky dock, buttresses
   at();
-  for (let i = 0; i < 16; i++) { const a = (i / 16) * TAU + 0.196; const c = Math.cos(a), s = Math.sin(a); pen.use(frame); const ys = [S.GATE_H + 20, 240, 420, 880, 1250, 1440]; for (let j = 0; j < ys.length - 1; j++) { const r0 = hullR(ys[j]) - 1, r1 = hullR(ys[j + 1]) - 1; pen.beam(c * (r0 + 5), ys[j], s * (r0 + 5), c * (r1 + 5), ys[j + 1], s * (r1 + 5), 5, 12); } if (i % 2 === 0) { pen.use(K.emis(gold, 5, 3, true, i * 5)); pen.beam(c * (hullR(260) + 11.3), 260, s * (hullR(260) + 11.3), c * (hullR(1400) + 11.3), 1400, s * (hullR(1400) + 11.3), 0.8, 0.5); } }
-  for (const y of [236, 640, 876, 1100, 1300]) { const r = hullR(y); pen.use(frame); pen.lathe(0, 0, [[r, y - 4], [r + 15, y], [r + 15, y + 12], [r, y + 18]], 64, { cap: false }); pen.use(K.emis(y === 876 ? K.NEON.red : gold, 7, 0, true)); pen.lathe(0, 0, [[r + 15.1, y + 4], [r + 15.1, y + 5.5]], 64, { cap: false }); for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU; ctx.spark(Math.cos(a) * (r + 16), y + 5, Math.sin(a) * (r + 16), y === 876 ? K.NEON.red : gold, 8, 1.6); } ctx.phys.addRing(0, 0, r - 2, r + 15, y - 2, y + 16); }
+  for (let i = 0; i < 16; i++) { const a = (i / 16) * TAU + 0.196; const c = Math.cos(a), s = Math.sin(a); pen.use(frame); const ys = [S.GATE_H + 20, 240, 420, 880, 1250, 1440]; for (let j = 0; j < ys.length - 1; j++) { const r0 = hullR(ys[j]) - 1, r1 = hullR(ys[j + 1]) - 1; pen.beam(c * (r0 + 5), ys[j], s * (r0 + 5), c * (r1 + 5), ys[j + 1], s * (r1 + 5), 5, 12); } }
+  for (const y of [236, 640, 876, 1100, 1300]) { const r = hullR(y); pen.use(frame); pen.lathe(0, 0, [[r, y - 4], [r + 15, y], [r + 15, y + 12], [r, y + 18]], 64, { cap: false }); pen.use(K.lamps(y === 876 ? [1, 0.2, 0.1] : [1, 0.84, 0.6], 9, y)); pen.lathe(0, 0, [[r + 15.1, y + 3.4], [r + 15.1, y + 6.4]], 64, { cap: false }); for (let i = 0; i < 12; i++) { const a = (i / 12) * TAU; ctx.spark(Math.cos(a) * (r + 16), y + 5, Math.sin(a) * (r + 16), y === 876 ? K.NEON.red : gold, 8, 1.6); } ctx.phys.addRing(0, 0, r - 2, r + 15, y - 2, y + 16); }
+  for (const [y, hgt, k] of [[S.GATE_H + 22, 120, 0.42], [254, 130, 0.34], [658, 150, 0.3], [894, 120, 0.2], [1118, 130, 0.3], [1318, 110, 0.34]]) { const n = 48; for (let i = 0; i < n; i++) { const a0 = (i / n) * TAU, a1 = ((i + 1) / n) * TAU; const r0 = hullR(y) + 0.8, r1 = hullR(y + hgt) + 0.8; const lit = 0.55 + 0.45 * Math.sin(i * 2.4 + y) * Math.sin(i * 0.7 + y * 0.01); B.glow.quad([Math.cos(a0) * r0, y, Math.sin(a0) * r0], [Math.cos(a1) * r0, y, Math.sin(a1) * r0], [Math.cos(a1) * r1, y + hgt, Math.sin(a1) * r1], [Math.cos(a0) * r1, y + hgt, Math.sin(a0) * r1], y === 894 ? [1, 0.5, 0.4] : [1, 0.84, 0.62], 1, 4, k * lit, { uv: [0.5, 0, 0.5, 1], night: 1 }); } }
   for (let i = 0; i < 4; i++) { const a = (i / 4) * TAU + 0.39; at(yawFacing(Math.cos(a), Math.sin(a))); const r = hullR(330) + 1.5; pen.sign(0, 330, r, 0, 150, 37.5, ctx.atlas.corp.helion.word, { intensity: 5, seed: i }); pen.sign(0, 560, hullR(560) + 1.5, 0, 70, 70, ctx.atlas.corp.helion.logo, { intensity: 5, seed: i }); ctx.spark(pen.wx(0, r + 6), 330, pen.wz(0, r + 6), gold, 14, 3); ctx.spark(pen.wx(0, r + 6), 560, pen.wz(0, r + 6), gold, 12, 3); }
   at();
   // sky dock ring
@@ -117,7 +118,6 @@ export function buildSpire(ctx) {
   DISTRICTS.forEach((d, k) => { const a = (d.ang * Math.PI) / 180; at(yawFacing(Math.cos(a), Math.sin(a))); const t = 15, z0 = 344, z1 = 590, zt = hullR(520) - 2, yt = 520;
     pen.use(hull); pen.quad(t, 0, z0, t, 0, z1, t, yt, zt, t, yt, zt, 0, 0, z1 - z0, yt, 0.5, 1); pen.quad(-t, 0, z1, -t, 0, z0, -t, yt, zt, -t, yt, zt, 0, 0, z1 - z0, yt, 0.5, 1);
     pen.use(hullDark); pen.quad(-t, 0, z1, t, 0, z1, t, yt, zt, -t, yt, zt, 0, 0, t * 2, 620, 0.6, 1);
-    pen.use(K.emis(gold, 6, 3, true, k * 11)); pen.beam(0, 8, z1 + 0.6 - 4, 0, yt - 20, zt + 14, 1.2, 0.6);
     for (let i = 0; i < 6; i++) { const f = i / 6; const zc = z0 + (z1 - z0) * (1 - f) * 0.5; const zl = (z1 - z0) * (1 - f); ctx.phys.addBox(pen.wx(0, z0 + zl / 2), pen.wz(0, z0 + zl / 2), t, zl / 2, pen.yaw, f * yt, (f + 1 / 6) * yt); }
     ctx.spark(pen.wx(0, z1), 6, pen.wz(0, z1), K.NEON.red, 6, 1.5); });
 
@@ -290,6 +290,13 @@ export function buildSprawl(ctx) {
       if (rng.chance(0.25)) ctx.spark(x, h + 4, z, K.NEON.red, 4, 1.2);
     }
   }
+  // the outlands at night: ring roads and radials picked out by sodium lamps, then loose constellations to the horizon
+  { const sod = [1, 0.3, 0.045], led = [0.62, 0.8, 1.0], wht = [1, 0.72, 0.42]; const S2 = ctx.sparks;
+    const lamp = (x, z, y, k, sz) => { const c = rng.chance(0.12) ? led : rng.chance(0.3) ? wht : sod; S2.push(x, y, z, c[0] * k, c[1] * k, c[2] * k, sz); };
+    for (let ring = 0; ring < 14; ring++) { const r = R_CITY + 132 + ring * 125; const n = Math.round((TAU * r) / 34);
+      for (let i = 0; i < n; i++) { const a2 = (i / n) * TAU; const x = Math.cos(a2) * r, z = Math.sin(a2) * r; if (x < COAST_X + 60) continue; const nz = fbm2(x * 0.0012, z * 0.0012, 3, 5); if (nz < 0.3 || rng.chance(0.12)) continue; lamp(x, z, 9, 1.5, 3.2); if (i % 10 === 0) ctx.light(x, z, 90, K.NEON.sodium, 0.3, 9, { local: false }); } }
+    for (let k = 0; k < 72; k++) { const a2 = (k / 72) * TAU + 0.02; for (let r = R_CITY + 60; r < R_SPRAWL + 500; r += 36) { const x = Math.cos(a2) * r, z = Math.sin(a2) * r; if (x < COAST_X + 60) continue; if (fbm2(x * 0.0012, z * 0.0012, 3, 5) < 0.28) continue; lamp(x, z, 9, 1.5, 3.2); } }
+    for (let i = 0; i < 26000; i++) { const a2 = rng.f(0, TAU), r = Math.sqrt(rng.f(0, 1)) * 5200 + R_SPRAWL - 300; const x = Math.cos(a2) * r, z = Math.sin(a2) * r; if (x < COAST_X + 60) continue; const nz = fbm2(x * 0.0007, z * 0.0007, 3, 9); if (nz < 0.42 + rng.f(0, 0.2)) continue; lamp(Math.round(x / 46) * 46 + rng.f(-3, 3), Math.round(z / 46) * 46 + rng.f(-3, 3), rng.chance(0.2) ? rng.f(20, 140) : 9, 2.2, 4.5); } }
   // far megastructure silhouettes
   const B = ctx.big('far'); ctx.cur = { main: B.main, detail: B.main, glow: B.glow };
   for (let i = 0; i < 16; i++) {
@@ -303,4 +310,18 @@ export function buildSprawl(ctx) {
     ctx.phys.addCyl(x, z, w * 0.5, 0, H);
     for (let y = 80; y < H; y += 160) ctx.spark(x + rng.f(-w, w) * 0.3, y, z + rng.f(-w, w) * 0.3, rng.pick([[1, 0.8, 0.5], [0.6, 0.8, 1], K.NEON.red]), 16, 1.6);
   }
+}
+
+// colossal advertising holograms projected above the boulevards – the far-view landmarks of the neon districts
+export function buildSkyHolos(ctx) {
+  const rng = ctx.rng.fork('skyholo'); const B = ctx.big('holo'); const ads = ctx.atlas.bb; if (!ads || !ads.length) return;
+  const sites = [[7, 1250, 150, 150], [6, 1900, 190, 190], [0, 1500, 130, 170], [5, 1650, 140, 150], [7, 2450, 120, 230], [1, 2100, 120, 160], [3, 1400, 110, 140]];
+  sites.forEach(([k, r, w, y0], i) => {
+    const a = boundaryAngle(k, r); const x = Math.cos(a) * r, z = Math.sin(a) * r; const ad = ads[(i * 5 + 2) % ads.length]; const h = w / ad.aspect;
+    const tx = -Math.sin(a), tz = Math.cos(a); const hw = w / 2; const col = ad.glow || [1, 0.8, 0.7];
+    for (const s of [1]) B.glow.quad([x - tx * hw * s, y0, z - tz * hw * s], [x + tx * hw * s, y0, z + tz * hw * s], [x + tx * hw * s, y0 + h, z + tz * hw * s], [x - tx * hw * s, y0 + h, z - tz * hw * s], [1, 1, 1], 0.85, 5, 1.25, { uv: [ad.u0, ad.v0, ad.u1, ad.v1], seed: rng.f(0, 9), night: 0.6 });
+    // projector gantries either side of the boulevard, with faint throw cones
+    for (const s of [-1, 1]) { const px = x + tx * hw * s, pz = z + tz * hw * s; B.glow.cone(px, y0 - 6, pz, 0, 1, 0, h + 12, 1.5, 7, K.mixW(col, 0.3), 0.12, { segs: 6, seed: i }); ctx.spark(px, y0 - 4, pz, K.mixW(col, 0.5), 7, 2.4); }
+    ctx.light(x, z, w * 1.6, col, 0.8, y0, { local: false }); ctx.spark(x, y0 + h / 2, z, col, 14, 2.2);
+  });
 }

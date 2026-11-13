@@ -41,7 +41,7 @@ export function capsuleBlock(ctx, rng, lot, S, o = {}) {
       // megacolumns + megabeams (with accent-painted beams = sky streets)
       ctx.main(); const L = v.len(f); const nc = Math.max(2, Math.round(L / 27));
       for (let i = 0; i <= nc; i++) { const s = Math.min(L - 1.4, Math.max(1.4, (i / nc) * L)); v.box(f, s - 1.4, s + 1.4, 0, 2.6, 0, H + 3, frameM, { bottom: false }); }
-      for (let y = 9.5 + fh * 9; y < H - 2; y += fh * 9) { v.box(f, 0, L, 0, 2.6, y - 1.3, y + 1.3, (Math.round(y / (fh * 9)) % 2) ? paint : frameM); const e = K.emis(acc, 4, 0, true); e.flags |= 8; pen.use(e); v.box(f, 1, L - 1, 2.6, 2.72, y + 0.2, y + 0.5, null, { ends: false, top: false, bottom: false }); }
+      for (let y = 9.5 + fh * 9; y < H - 2; y += fh * 9) { v.box(f, 0, L, 0, 2.6, y - 1.3, y + 1.3, (Math.round(y / (fh * 9)) % 2) ? paint : frameM); pen.use(K.lamps(K.mixW(acc, 0.6), 6, Math.round(y))); v.box(f, 1, L - 1, 2.6, 2.72, y + 0.1, y + 0.6, null, { ends: false, top: false, bottom: false }); }
       // extra pulled-out capsule clusters
       if (f === 0 && info) for (let i = 0; i < Math.round(L / 16); i++) { const c0 = rng.i(1, info.cells - 3), fl = rng.i(1, info.floors - 3); const s0 = c0 * info.cw, y0 = 9.5 + fl * info.floorH; const wC = rng.pick([1, 2]), hC = rng.pick([1, 1, 2]); const u = nextU(); ctx.detail(); v.box(0, s0, s0 + wC * info.cw, 1.7, 3.1, y0, y0 + hC * info.floorH, { ...capM, color: dim(rng.pick(S.walls), 1.1), seed: rng.i(0, 255) }, { uv: [u, 0, u + wC, hC], endMat: K.conc(0.3), botMat: K.dark(0.08) }); }
     }
@@ -93,7 +93,7 @@ export function terrace(ctx, rng, lot, S, o = {}) {
     for (const f of [1, 3]) { if (lot.corner || o.mega || i > 0) facade(v, f, y, y + th, { wall: wm, bayCells: 99, floorH: 3.6 }); else blindWall(v, f, y, y + th, M(ST.PLASTER, { color: dim(wm.color, 0.8), seed: wm.seed }), rng, { mural: rng.chance(0.3) }); }
     facade(v, 2, y, y + th, { wall: wm, bayCells: 99, floorH: 3.6 });
     v.roof(M(ST.TILE, { color: [0.24, 0.24, 0.27] })); v.solid(); tiers.push(v);
-    K.neonBand(ctx, 0, cz + zOff, cw, cd, y + th - 0.3, i % 2 ? acc : acc2, { intensity: 8, radius: 26, power: 0.5, nightOnly: true, sides: lot.corner || o.mega ? 15 : 1, h: 0.25, t: 0.2 });
+    K.neonBand(ctx, 0, cz + zOff, cw, cd, y + th - 0.3, i % 2 ? acc : acc2, { intensity: 6, radius: 22, power: 0.35, lamps: true, seed: i * 17, sides: lot.corner || o.mega ? 15 : 1, h: 0.5, t: 0.2 });
     if (rng.chance(0.6)) shopSign(v, 0, 1, cw * 0.45, y + 1.9, rng, { maxH: 1.6, maxW: 9, intensity: S.signI });
     if (rng.chance(0.6)) { const hgt = Math.min(th * 0.8, 9); bladeSign(v, 0, cw - 0.7, y + th / 2, hgt, rng, { intensity: S.signI, radius: 24, power: 0.7 }); }
     y += th;
@@ -108,7 +108,7 @@ export function terrace(ctx, rng, lot, S, o = {}) {
   else if (ck < 0.7) { const r = Math.min(top.w, top.d) * 0.38; ctx.main(); pen.use(M(ST.DARKGLASS, { color: dim(acc, 0.9) })); const prof = []; for (let k = 0; k <= 5; k++) { const a = (k / 5) * Math.PI / 2; prof.push([Math.max(0.3, Math.cos(a) * r), y + Math.sin(a) * r * 0.8]); } pen.lathe(top.cx, top.cz, prof, 14, { cap: false }); pen.use(K.emis(acc, 7, 3, true, rng.i(0, 255))); for (let k = 0; k < 7; k++) { const a = (k / 7) * Math.PI * 2; pen.beam(top.cx + Math.cos(a) * r, y, top.cz + Math.sin(a) * r, top.cx + Math.cos(a) * r * 0.3, y + r * 0.76, top.cz + Math.sin(a) * r * 0.3, 0.25, 0.25); } ctx.spark(pen.wx(top.cx, top.cz), 0.2 + y + r * 0.5, pen.wz(top.cx, top.cz), acc, 7, 2); }
   else { haloRing(top, y - 2, rng, acc, 0.6); roofProps(ctx, rng, top.cx, top.cz, top.w, top.d, y, ROOF_TECH, 0.8); }
   // sky beam from show venues
-  if (o.mega) ctx.glow.cone(pen.wx(top.cx, top.cz), 0.2 + y + 3, pen.wz(top.cx, top.cz), rng.f(-0.25, 0.25), 0.94, rng.f(-0.25, 0.25), 520, 1.2, 14, acc, 0.035, { segs: 10, seed: rng.i(0, 50) });
+  if (o.mega) ctx.glow.cone(pen.wx(top.cx, top.cz), 0.2 + y + 3, pen.wz(top.cx, top.cz), rng.f(-0.25, 0.25), 0.94, rng.f(-0.25, 0.25), 520, 1.0, 8, [1, 0.94, 0.88], 0.03, { segs: 10, seed: rng.i(0, 50) });
   return done(ctx, lot, w, d, y, cz);
 }
 
@@ -185,14 +185,13 @@ export function archiveSpire(ctx, rng, lot, S, o = {}) {
     const fix = (p) => { let ar = 0; for (let i = 0; i < 4; i++) { const q = p[i], r = p[(i + 1) % 4]; ar += q[0] * r[1] - r[0] * q[1]; } return ar > 0 ? [p[3], p[2], p[1], p[0]] : p; };
     pen.loft([{ y: y0, pts: fix(pts0) }, { y: y0 + H * 0.34, pts: fix(pts1).map(([x, z]) => [x * (1 - 0.17), z * (1 - 0.17)]) }], { cap: false, aoB: 0.5 });
   }
-  for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { const e = K.emis(acc, 6, 3, true, rng.i(0, 255)); pen.use(e); const p0 = (W / 2 - ch / 2) * 1.0 + 0.3, p1 = (W / 2 - ch / 2) * 0.5 + 0.3; pen.beam(sx * p0, y0 + 6, sz * p0, sx * p1, y0 + H - 4, sz * p1, 0.7, 0.7); }
+  for (let k = 0; k < 4; k++) rng.i(0, 255);
   // lantern crown
   const top = new Vol(ctx, 0, 0, W * 0.5, W * 0.5, y0 + H, y0 + H);
-  const lr = W * 0.2; pen.use(K.emis(acc, 9, 3, false, rng.i(0, 255))); pen.lathe(0, 0, [[lr, y0 + H + 2], [lr * 1.1, y0 + H + 10], [lr * 0.6, y0 + H + 18]], 10, { cap: false });
+  const lr = W * 0.2; pen.use(M(ST.WIN_LUX, { color: [0.3, 0.28, 0.26], seed: rng.i(0, 255), A: 1, B: PAL.GOLD, cellW: 2.2, floorH: 8, flags: WK.STONE })); pen.lathe(0, 0, [[lr, y0 + H + 2], [lr * 1.1, y0 + H + 10], [lr * 0.6, y0 + H + 18]], 10, { cap: false });
   pen.use(stone); pen.lathe(0, 0, [[lr * 1.3, y0 + H], [lr * 1.3, y0 + H + 2]], 10, {}); pen.lathe(0, 0, [[lr * 0.7, y0 + H + 18], [lr * 0.2, y0 + H + 34], [0.3, y0 + H + 60]], 8, { cap: false });
   haloRing(top, y0 + H - 14, rng, acc, 0.75);
-  ctx.glow.cone(pen.wx(0, 0), 0.2 + y0 + H + 20, pen.wz(0, 0), 0, 1, 0, 600, 3, 20, acc, 0.26, { segs: 10 });
-  ctx.light(lot.x, lot.z, W * 2.2, acc, 0.9, 30); ctx.spark(lot.x, 0.2 + y0 + H + 10, lot.z, acc, 10, 3);
+  ctx.light(lot.x, lot.z, W * 2.2, [1, 0.74, 0.5], 0.6, 30); ctx.spark(lot.x, 0.2 + y0 + H + 10, lot.z, [1, 0.78, 0.5], 6, 2);
   if (ctx.atlas.corp.archive) { const lg = ctx.atlas.corp.archive.logo; for (const f of [0, 2]) { ctx.detail(); pen.sign(0, y0 + 26, (f === 0 ? 1 : -1) * (W / 2 * 0.93 + 0.4), FACE_ANG[f], 14, 14, lg, { intensity: 4, seed: 1 }); ctx.main(); } }
   // braziers + forecourt furniture
   for (const [sx, sz] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) { const bx = sx * (W / 2 + 8), bz = sz * (W / 2 + 8); pen.use(stone); pen.lathe(bx, bz, [[0.9, 3.6], [0.5, 4.2], [0.5, 6.2], [1.1, 6.8]], 8, {}); pen.use(K.emis([1, 0.5, 0.12], 12, 1, false, rng.i(0, 255))); pen.lathe(bx, bz, [[0.9, 6.8], [0.5, 7.6], [0.05, 8.6]], 6, { cap: false }); ctx.light(pen.wx(bx, bz), pen.wz(bx, bz), 20, [1, 0.5, 0.12], 0.9, 8); ctx.steam.push({ x: pen.wx(bx, bz), y: 9, z: pen.wz(bx, bz), s: 0.5, fire: 1 }); }
@@ -304,12 +303,12 @@ export function farmTower(ctx, rng, lot, S, o = {}) {
     pen.use(grow); pen.lathe(cx + ox, cz + oz, [[r, y + 0.5], [r, y + 5.9]], 14, { cap: false });
     pen.use(rim); pen.lathe(cx + ox, cz + oz, [[r + 0.5, y + 5.9], [r + 0.5, y + 6.4], [r * 0.3, y + 6.9]], 14, { cap: false });
     if (i % 2 === 0) { pen.use(fol); pen.lathe(cx + ox, cz + oz, [[r + 0.3, y + 0.5], [r + 1.5, y + 0.7], [r + 1.7, y + 1.5], [r + 0.05, y + 1.4]], 14, { cap: false }); }
-    if (i % 3 === 1) ctx.spark(pen.wx(cx + ox + r, cz + oz), 0.2 + y + 3, pen.wz(cx + ox + r, cz + oz), K.NEON.magenta, 7, 1.8);
+    if (i % 3 === 1) ctx.spark(pen.wx(cx + ox + r, cz + oz), 0.2 + y + 3, pen.wz(cx + ox + r, cz + oz), [1, 0.7, 0.42], 5, 1.2);
   }
   ctx.solidCyl(cx, cz, R * 0.9, 0, H + 6);
   // crown: collector dish + beacon
   { const y = 10 + n * dk; pen.use(rim); pen.lathe(cx, cz, [[R * 0.3, y - 2], [R * 0.8, y + 3], [R * 0.95, y + 9]], 16, { cap: false }); pen.use({ st: ST.MIRROR, color: [1, 1, 1] }); pen.lathe(cx, cz, [[R * 0.93, y + 8.9], [R * 0.78, y + 3.2], [R * 0.3, y - 1.6], [0.3, y - 1.9]], 16, { cap: false }); pen.use(K.MAT_POLE); pen.tube(cx, y - 2, cz, cx, y + 26, cz, 0.5, 6, { r1: 0.15 }); pen.use(K.emis(acc, 16, 2, false, rng.i(0, 255))); pen.lathe(cx, cz, [[0.6, y + 26], [0.6, y + 27], [0.05, y + 27.6]], 6, {}); ctx.spark(pen.wx(cx, cz), 0.2 + y + 27, pen.wz(cx, cz), acc, 7, 2.2); }
-  ctx.light(pen.wx(cx, cz), pen.wz(cx, cz), R * 3.2, K.NEON.magenta, 1.0, 20);
+  ctx.light(pen.wx(cx, cz), pen.wz(cx, cz), R * 3.2, [1, 0.68, 0.42], 0.6, 20);
   ctx.footprint(cx, cz, R * 2, R * 2, 0, H, lot.block.id);
   // greenhouse vaults along the front + algae silos at the back
   const nv = Math.max(1, Math.floor(W / 30)); const vl = Math.min(60, Dp * 0.3);
@@ -320,10 +319,10 @@ export function farmTower(ctx, rng, lot, S, o = {}) {
     for (let k = 0; k < segs; k++) { const a0 = Math.PI * (k / segs), a1 = Math.PI * ((k + 1) / segs); const x0 = gx - Math.cos(a0) * gr, x1 = gx - Math.cos(a1) * gr, y0 = 1.2 + Math.sin(a0) * gr, y1 = 1.2 + Math.sin(a1) * gr; pen.quad(x0, y0, gz + vl / 2, x1, y1, gz + vl / 2, x1, y1, gz - vl / 2, x0, y0, gz - vl / 2, k * 3, 0, k * 3 + 1, Math.round(vl / 3.2)); }
     pen.use(rim); for (let k = 0; k <= 4; k++) { const z = gz - vl / 2 + (vl * k) / 4; for (let s = 0; s < segs; s++) { const a0 = Math.PI * (s / segs), a1 = Math.PI * ((s + 1) / segs); pen.beam(gx - Math.cos(a0) * (gr + 0.1), 1.2 + Math.sin(a0) * (gr + 0.1), z, gx - Math.cos(a1) * (gr + 0.1), 1.2 + Math.sin(a1) * (gr + 0.1), z, 0.3, 0.3); } }
     ctx.solid(gx, gz, gr * 2, vl, 0, gr * 0.9); ctx.footprint(gx, gz, gr * 2 + 1, vl, 0, gr + 1.2, lot.block.id);
-    const lp = [pen.wx(gx, gz), pen.wz(gx, gz)]; ctx.light(lp[0], lp[1], 30, K.NEON.magenta, 0.9, 6);
+    const lp = [pen.wx(gx, gz), pen.wz(gx, gz)]; ctx.light(lp[0], lp[1], 30, i % 3 === 1 ? [1, 0.45, 0.7] : [1, 0.66, 0.36], 0.6, 6);
   }
   const ns = Math.floor(W / 14);
-  for (let i = 0; i < ns; i++) { const sx = -W / 2 + 7 + i * 14, sz = -Dp / 2 + 8; if (Math.hypot(sx - cx, sz - cz) < R + 10) continue; const sh = rng.f(16, 34); ctx.main(); pen.use(M(ST.METAL, { color: [0.42, 0.46, 0.44], seed: i })); pen.lathe(sx, sz, [[4.6, 0], [4.6, sh], [3.6, sh + 2], [0.6, sh + 3]], 12, { cap: false, aoB: 0.55 }); pen.use(K.emis(K.NEON.green, 5, 3, false, i * 13)); for (const yy of [sh * 0.3, sh * 0.6, sh * 0.9]) pen.lathe(sx, sz, [[4.66, yy], [4.66, yy + 0.5]], 12, { cap: false }); ctx.solidCyl(sx, sz, 4.6, 0, sh + 2); if (i % 2 === 0) ctx.light(pen.wx(sx, sz), pen.wz(sx, sz), 18, K.NEON.green, 0.6, 8); }
+  for (let i = 0; i < ns; i++) { const sx = -W / 2 + 7 + i * 14, sz = -Dp / 2 + 8; if (Math.hypot(sx - cx, sz - cz) < R + 10) continue; const sh = rng.f(16, 34); ctx.main(); pen.use(M(ST.METAL, { color: [0.42, 0.46, 0.44], seed: i })); pen.lathe(sx, sz, [[4.6, 0], [4.6, sh], [3.6, sh + 2], [0.6, sh + 3]], 12, { cap: false, aoB: 0.55 }); pen.use(K.lamps([0.62, 1, 0.72], 5, i * 13)); for (const yy of [sh * 0.3, sh * 0.6, sh * 0.9]) pen.lathe(sx, sz, [[4.66, yy], [4.66, yy + 0.5]], 12, { cap: false }); ctx.solidCyl(sx, sz, 4.6, 0, sh + 2); if (i % 4 === 0) ctx.light(pen.wx(sx, sz), pen.wz(sx, sz), 14, [0.6, 1, 0.7], 0.3, 8); }
   for (let i = 0; i < 12; i++) { const lx = rng.f(-0.48, 0.48) * W, lz = rng.f(-0.3, 0.2) * Dp; if (Math.hypot(lx - cx, lz - cz) < R + 6) continue; ctx.propL(rng.pick(['tree', 'planter', 'tree']), lx, 0, lz, rng.f(0, 6.28), rng.f(0.9, 1.6)); }
   ctx.shade(lot.x, lot.z, R * 2.2 + H * 0.2, 0.6); ctx.stats.buildings++; lot.h = H;
   return H;

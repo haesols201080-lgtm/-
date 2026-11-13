@@ -88,7 +88,7 @@ export function buildDistricts(ctx) {
         break;
       }
       case 'oldq': {
-        if (b.w > 90 && b.noise2 > 0.62 && rng.chance(0.5)) { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); archiveSpire(ctx, rng, lot, S, { h: 160 + 380 * b.noise }); break; }
+        if (b.w > 90 && b.noise2 > 0.7 && rng.chance(0.3)) { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); archiveSpire(ctx, rng, lot, S, { h: 160 + 380 * b.noise }); break; }
         for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 11, wmax: 24, alley: 5, minDepth: 11 })) guildHouse(ctx, rng, lot, S, { floors: Math.round(clamp((H / 3.4) * rng.f(0.6, 1.3), 2, 9)) });
         break;
       }

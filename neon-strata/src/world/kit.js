@@ -7,8 +7,12 @@ export const NEON = {
   green: [0.4, 1.0, 0.45], white: [1.0, 0.95, 0.88], blue: [0.25, 0.55, 1.0], gold: [1.0, 0.78, 0.35], sodium: [1.0, 0.55, 0.2], ice: [0.75, 0.9, 1.0], magenta: [1.0, 0.2, 0.85],
 };
 export const NEON_LIST = Object.values(NEON);
+// pull a colour toward warm white (k = 1 → white)
+export const mixW = (c, k = 0.5) => [c[0] + (1.0 - c[0]) * k, c[1] + (0.88 - c[1]) * k, c[2] + (0.7 - c[2]) * k];
 
 export const emis = (col, intensity = 6, mode = 0, nightOnly = false, seed = 0) => M(ST.EMISSIVE, { color: col, extra: Math.min(255, intensity * 5), flags: mode | (nightOnly ? 4 : 0), seed });
+// a row of small warm fittings (soffit / parapet lamps): reads as architecture lighting, not an outline
+export const lamps = (col = [1, 0.86, 0.66], intensity = 5, seed = 0) => M(ST.EMISSIVE, { color: col, extra: Math.min(255, intensity * 5), flags: 4 | 16, seed });
 export const conc = (v = 0.5, tint = [1, 1, 1]) => M(ST.CONCRETE, { color: [v * tint[0], v * tint[1], v * tint[2]] });
 export const metal = (c = [0.5, 0.5, 0.55]) => M(ST.METAL, { color: c });
 export const rust = (c = [0.5, 0.42, 0.36]) => M(ST.RUST, { color: c });
@@ -32,7 +36,7 @@ export function lampPost(ctx, x, z, yaw, o = {}) {
   pen.use(emis(col, o.intensity ?? 14)); pen.flat(-0.2, arm - 0.45, 0.2, arm + 0.45, h + 0.11, false);
   const lx = pen.wx(0, arm), lz = pen.wz(0, arm);
   if (!o.noCone) ctx.glow.cone(lx, y + h + 0.1, lz, 0, -1, 0, h + 0.1, 0.25, h * 0.62, col, o.cone ?? 0.5, { segs: 8, seed: (x * 7 + z * 3) % 50 });
-  ctx.light(lx, lz, o.radius ?? 20, col, o.power ?? 0.9);
+  ctx.light(lx, lz, o.radius ?? 20, col, o.power ?? 0.9, y + h);
 }
 
 // antenna mast with blinking beacon (pen frame)
@@ -91,7 +95,7 @@ export function wallSign(ctx, rng, x, y, z, ang, w, kind = 'h', o = {}) {
   pen.use(dark(0.05));
   const rx = ca, rz = -sa, hw = w / 2 + 0.12, hh = h / 2 + 0.12;
   pen.quad(x + rx * hw, y - hh, z + rz * hw, x - rx * hw, y - hh, z - rz * hw, x - rx * hw, y + hh, z - rz * hw, x + rx * hw, y + hh, z + rz * hw, 0, 0, 1, 1);
-  if (o.light !== false) { const c = o.lightColor || rng.pick(NEON_LIST); ctx.light(pen.wx(x + sa * 2, z + ca * 2), pen.wz(x + sa * 2, z + ca * 2), o.radius ?? Math.max(14, w * 2.2), c, o.power ?? 0.7); }
+  if (o.light !== false) { const c = o.lightColor || rng.pick(NEON_LIST); ctx.light(pen.wx(x + sa * 2, z + ca * 2), pen.wz(x + sa * 2, z + ca * 2), o.radius ?? Math.max(14, w * 2.2), c, o.power ?? 0.7, pen.oy + y); }
   ctx.main();
   return h;
 }
@@ -102,7 +106,7 @@ export function bladeSign(ctx, rng, x, y, z, ang, hgt, o = {}) {
   const cx = x + sa * (w / 2 + 0.4), cz = z + ca * (w / 2 + 0.4);
   pen.sign(cx, y, cz, ang + Math.PI / 2, w, hgt, rect, { seed: rng.i(0, 255), intensity: o.intensity ?? 7, double: true });
   pen.use(MAT_POLE); pen.beam(x, y + hgt * 0.4, z, cx, y + hgt * 0.4, cz, 0.08, 0.08); pen.beam(x, y - hgt * 0.4, z, cx, y - hgt * 0.4, cz, 0.08, 0.08);
-  if (o.light !== false) ctx.light(pen.wx(cx + sa * 1.5, cz + ca * 1.5), pen.wz(cx + sa * 1.5, cz + ca * 1.5), o.radius ?? Math.max(12, hgt * 2.4), o.lightColor || rng.pick(NEON_LIST), o.power ?? 0.6);
+  if (o.light !== false) ctx.light(pen.wx(cx + sa * 1.5, cz + ca * 1.5), pen.wz(cx + sa * 1.5, cz + ca * 1.5), o.radius ?? Math.max(12, hgt * 2.4), o.lightColor || rng.pick(NEON_LIST), o.power ?? 0.6, pen.oy + y);
   ctx.main();
 }
 // free standing / rooftop billboard on a truss frame, facing `ang`
@@ -120,21 +124,27 @@ export function billboard(ctx, rng, x, y, z, ang, w, o = {}) {
     pen.beam(px - sa * 2.2, y, pz - ca * 2.2, px, y + lift + h * 0.7, pz, 0.16, 0.16);
   }
   const c = o.lightColor || rng.pick(NEON_LIST);
-  ctx.light(pen.wx(x + sa * w * 0.4, z + ca * w * 0.4), pen.wz(x + sa * w * 0.4, z + ca * w * 0.4), o.radius ?? Math.max(30, w * 2.6), c, o.power ?? 1.0);
+  ctx.light(pen.wx(x + sa * w * 0.4, z + ca * w * 0.4), pen.wz(x + sa * w * 0.4, z + ca * w * 0.4), o.radius ?? Math.max(30, w * 2.6), c, o.power ?? 1.0, pen.oy + y + lift + h / 2);
   ctx.main();
   return h;
 }
 // neon tube band around a rectangular footprint at height y (pen frame)
 export function neonBand(ctx, cx, cz, sx, sz, y, col, o = {}) {
-  const pen = o.main ? ctx.main() : ctx.detail(); const t = o.t ?? 0.25, h = o.h ?? 0.3, off = o.off ?? 0.12;
-  pen.use(emis(col, o.intensity ?? 10, o.mode ?? 0, o.nightOnly ?? false, o.seed ?? 0));
+  const pen = o.main ? ctx.main() : ctx.detail(); const t = (o.t ?? 0.25) * 0.4, h = (o.h ?? 0.3) * 0.42, off = o.off ?? 0.1;
+  if (o.lamps) pen.use(lamps(mixW(col, 0.6), (o.intensity ?? 10) * 1.2, o.seed ?? 0)); else pen.use(emis(col, (o.intensity ?? 10) * 1.3, o.mode ?? 0, o.nightOnly ?? false, o.seed ?? 0));
   const sides = o.sides ?? 15;
   if (sides & 1) pen.box(cx, cz + sz / 2 + off, sx + 2 * off, t, y, y + h, {});
   if (sides & 4) pen.box(cx, cz - sz / 2 - off, sx + 2 * off, t, y, y + h, {});
   if (sides & 2) pen.box(cx + sx / 2 + off, cz, t, sz, y, y + h, {});
   if (sides & 8) pen.box(cx - sx / 2 - off, cz, t, sz, y, y + h, {});
+  // light washing down (and a little up) the wall behind the tube
+  const W = (x0, z0, x1, z1, nx, nz) => { if (o.lamps || !o.washI) return; const wash = o.wash ?? Math.min(9, 2.5 + Math.hypot(x1 - x0, z1 - z0) * 0.12); const P = (x, z, yy) => [pen.wx(x + nx * 0.16, z + nz * 0.16), pen.oy + yy, pen.wz(x + nx * 0.16, z + nz * 0.16)];
+    ctx.glow.quad(P(x0, z0, y), P(x1, z1, y), P(x1, z1, y - wash), P(x0, z0, y - wash), col, 1, 4, o.washI ?? 0.5, { night: o.nightOnly ? 1 : 0 });
+    ctx.glow.quad(P(x0, z0, y + h), P(x1, z1, y + h), P(x1, z1, y + h + wash * 0.35), P(x0, z0, y + h + wash * 0.35), col, 1, 4, (o.washI ?? 0.5) * 0.6, { night: o.nightOnly ? 1 : 0 }); };
+  if (sides & 1) W(cx - sx / 2, cz + sz / 2, cx + sx / 2, cz + sz / 2, 0, 1); if (sides & 4) W(cx + sx / 2, cz - sz / 2, cx - sx / 2, cz - sz / 2, 0, -1);
+  if (sides & 2) W(cx + sx / 2, cz + sz / 2, cx + sx / 2, cz - sz / 2, 1, 0); if (sides & 8) W(cx - sx / 2, cz - sz / 2, cx - sx / 2, cz + sz / 2, -1, 0);
   if (o.light !== false) {
-    const P = (lx, lz) => ctx.light(pen.wx(lx, lz), pen.wz(lx, lz), o.radius ?? 26, col, o.power ?? 0.6);
+    const P = (lx, lz) => ctx.light(pen.wx(lx, lz), pen.wz(lx, lz), o.radius ?? 26, col, o.power ?? 0.6, pen.oy + y);
     if (sides & 1) P(cx, cz + sz / 2 + 3); if (sides & 4) P(cx, cz - sz / 2 - 3); if (sides & 2) P(cx + sx / 2 + 3, cz); if (sides & 8) P(cx - sx / 2 - 3, cz);
   }
   ctx.main();

@@ -44,7 +44,7 @@ export class PostFX {
     depthTex.minFilter = depthTex.magFilter = THREE.NearestFilter;
     this.sceneRT = this._rt(w, h, { depthBuffer: true, depthTexture: depthTex, samples: q.msaa || 0 });
     this.cloudRT = this._rt(w * q.cloudScale, h * q.cloudScale);
-    this.godRT = this._rt(w / 4, h / 4);
+    this.godRT = this._rt(w / 4, h / 4); this.ssrRT = this._rt(w / 2, h / 2);
     this.aoRT = this._rt(w / 2, h / 2, { type: THREE.UnsignedByteType }); this.aoBlurRT = this._rt(w / 2, h / 2, { type: THREE.UnsignedByteType });
     this.hdrRT = this._rt(w, h);
     this.ldrRT = this._rt(w, h, { type: THREE.UnsignedByteType });
@@ -129,9 +129,42 @@ export class PostFX {
         gl_FragColor = vec4(sum / wsum, c.g, 0.0, 1.0);
       }`, { tSrc: { value: this.aoRT.texture }, uTexel: { value: new THREE.Vector2(2 / w, 2 / h) } });
 
+    this.mSSR = mk(/* glsl */ `
+      precision highp float;
+      uniform sampler2D tScene; uniform sampler2D tDepth; uniform mat4 uProj; uniform mat4 uInvProj; uniform vec3 uUpV; varying vec2 vUv;
+      vec3 vpos(vec2 uv){ float d = texture2D(tDepth, uv).r; vec4 p = uInvProj * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); return p.xyz / p.w; }
+      float ign(vec2 p){ return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
+      void main(){
+        float m = texture2D(tScene, vUv).a; float d0 = texture2D(tDepth, vUv).r;
+        if (m < 0.02 || d0 >= 0.99999) { gl_FragColor = vec4(0.0); return; }
+        vec3 P = vpos(vUv); vec3 V = normalize(P);
+        // wet asphalt is not a mirror: jitter the normal, mostly along the view direction → vertical streaks
+        float j = ign(gl_FragCoord.xy) - 0.5, j2 = ign(gl_FragCoord.yx + 17.0) - 0.5;
+        vec3 fwd = normalize(V - uUpV * dot(V, uUpV)); vec3 side = cross(uUpV, fwd);
+        vec3 N = normalize(uUpV + (fwd * j * 2.2 + side * j2 * 0.22) * (0.012 + 0.06 * (1.0 - m)));
+        vec3 R = reflect(V, N);
+        float fres = 0.035 + 0.965 * pow(1.0 - max(dot(-V, N), 0.0), 5.0);
+        float t = 0.3 * (1.0 + (-P.z) * 0.02); float tPrev = 0.0; float hit = 0.0; vec2 huv = vUv;
+        for (int i = 0; i < 28; i++) {
+          vec3 Q = P + R * t; vec4 c = uProj * vec4(Q, 1.0); if (c.w <= 0.0) break; vec2 uv = c.xy / c.w * 0.5 + 0.5;
+          if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) break;
+          vec3 S = vpos(uv); float dz = S.z - Q.z;
+          if (dz > 0.0 && dz < 0.8 + t * 0.4) { // refine between the last two samples
+            float a = tPrev, b = t;
+            for (int k = 0; k < 4; k++) { float mid = (a + b) * 0.5; vec3 Qm = P + R * mid; vec4 cm = uProj * vec4(Qm, 1.0); vec2 um = cm.xy / cm.w * 0.5 + 0.5; if (vpos(um).z - Qm.z > 0.0) b = mid; else a = mid; }
+            vec3 Qh = P + R * b; vec4 ch = uProj * vec4(Qh, 1.0); huv = ch.xy / ch.w * 0.5 + 0.5; hit = 1.0; break;
+          }
+          tPrev = t; t *= 1.3;
+        }
+        if (hit < 0.5) { gl_FragColor = vec4(0.0); return; }
+        vec3 col = min(texture2D(tScene, huv).rgb, vec3(40.0));
+        float ef = smoothstep(0.0, 0.06, huv.x) * smoothstep(1.0, 0.94, huv.x) * smoothstep(1.0, 0.9, huv.y);
+        gl_FragColor = vec4(col * fres * m * ef, 1.0);
+      }`, { tScene: { value: this.sceneRT.texture }, tDepth: { value: depthTex }, uProj: { value: new THREE.Matrix4() }, uInvProj: { value: new THREE.Matrix4() }, uUpV: { value: new THREE.Vector3(0, 1, 0) } });
+
     this.mCombine = mk(/* glsl */ `
       precision highp float;
-      uniform sampler2D tScene; uniform sampler2D tDepth; uniform sampler2D tCloud; uniform sampler2D tGod; uniform sampler2D tAO; uniform float uAO;
+      uniform sampler2D tScene; uniform sampler2D tDepth; uniform sampler2D tCloud; uniform sampler2D tGod; uniform sampler2D tAO; uniform float uAO; uniform sampler2D tSSR;
       uniform mat4 uInvVP; uniform mat4 uPrevVP; uniform float uBlur; uniform vec3 uGodColor; uniform vec2 uTexel; uniform vec2 uCloudTexel;
       varying vec2 vUv;
       float ign(vec2 p){ return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
@@ -158,6 +191,13 @@ export class PostFX {
           float ao = mix(1.0, aov.r, aoK * (1.0 - smoothstep(0.6, 2.5, lum)));
           col *= ao * mix(1.0, ao, 0.5);
         #endif
+        #ifdef NS_SSR
+          vec2 sv = vec2(0.0, uTexel.y * 3.0); vec2 sh = vec2(uTexel.x * 2.6, 0.0);
+          vec3 rf = vec3(0.0);
+          for (int i = -1; i <= 1; i++) { vec2 o = sh * float(i); float wx = i == 0 ? 0.4 : 0.3;
+            rf += wx * (texture2D(tSSR, vUv + o).rgb * 0.36 + (texture2D(tSSR, vUv + o + sv).rgb + texture2D(tSSR, vUv + o - sv).rgb) * 0.22 + (texture2D(tSSR, vUv + o + sv * 2.3).rgb + texture2D(tSSR, vUv + o - sv * 2.3).rgb) * 0.10); }
+          col += rf;
+        #endif
         // soft 5-tap cloud upsample
         vec4 c = texture2D(tCloud, vUv) * 0.4;
         c += texture2D(tCloud, vUv + uCloudTexel * vec2(0.7, 0.7)) * 0.15; c += texture2D(tCloud, vUv + uCloudTexel * vec2(-0.7, 0.7)) * 0.15;
@@ -168,10 +208,10 @@ export class PostFX {
         #endif
         gl_FragColor = vec4(max(col, vec3(0.0)), 1.0);
       }`, {
-      tScene: { value: this.sceneRT.texture }, tDepth: { value: depthTex }, tCloud: { value: this.cloudRT.texture }, tGod: { value: this.godRT.texture }, tAO: { value: this.aoBlurRT.texture }, uAO: { value: 1 },
+      tScene: { value: this.sceneRT.texture }, tDepth: { value: depthTex }, tCloud: { value: this.cloudRT.texture }, tGod: { value: this.godRT.texture }, tAO: { value: this.aoBlurRT.texture }, uAO: { value: 1 }, tSSR: { value: this.ssrRT.texture },
       uInvVP: { value: new THREE.Matrix4() }, uPrevVP: { value: new THREE.Matrix4() }, uBlur: { value: 0.6 }, uGodColor: { value: new THREE.Color() },
       uTexel: { value: new THREE.Vector2(1 / w, 1 / h) }, uCloudTexel: { value: new THREE.Vector2(1 / this.cloudRT.width, 1 / this.cloudRT.height) },
-    }, { defines: { ...(q.motionBlur ? { NS_MOTION_BLUR: 1 } : {}), ...(q.godrays ? { NS_GODRAYS: 1 } : {}), ...(q.ssao ? { NS_SSAO: 1 } : {}) } });
+    }, { defines: { ...(q.motionBlur ? { NS_MOTION_BLUR: 1 } : {}), ...(q.godrays ? { NS_GODRAYS: 1 } : {}), ...(q.ssao ? { NS_SSAO: 1 } : {}), ...(q.name !== 'low' ? { NS_SSR: 1 } : {}) } });
 
     this.mDown = mk(/* glsl */ `
       precision highp float; uniform sampler2D tSrc; uniform vec2 uTexel; uniform float uFirst; varying vec2 vUv;
@@ -309,9 +349,9 @@ export class PostFX {
   }
 
   resize() {
-    for (const rt of [this.sceneRT, this.cloudRT, this.godRT, this.aoRT, this.aoBlurRT, this.hdrRT, this.ldrRT, this.streakA, this.streakB, ...this.expRT]) rt.dispose();
+    for (const rt of [this.sceneRT, this.cloudRT, this.godRT, this.ssrRT, this.aoRT, this.aoBlurRT, this.hdrRT, this.ldrRT, this.streakA, this.streakB, ...this.expRT]) rt.dispose();
     for (const m of this.mips) { m.down.dispose(); m.up.dispose(); }
-    for (const m of [this.mCloud, this.mGod, this.mAO, this.mAOBlur, this.mCombine, this.mDown, this.mUp, this.mStreak, this.mExposure, this.mFinal, this.mFxaa]) m.dispose();
+    for (const m of [this.mCloud, this.mGod, this.mSSR, this.mAO, this.mAOBlur, this.mCombine, this.mDown, this.mUp, this.mStreak, this.mExposure, this.mFinal, this.mFxaa]) m.dispose();
     this._build();
   }
 
@@ -346,6 +386,7 @@ export class PostFX {
       const sc = U.uSunColor.value;
       this.mCombine.uniforms.uGodColor.value.setRGB(sc.r, sc.g, sc.b).multiplyScalar(0.55 * Math.min(1, Math.max(0, (facing - 0.05) * 3)));
     }
+    if (q.name !== 'low') { const su = this.mSSR.uniforms; su.uProj.value.copy(camera.projectionMatrix); su.uInvProj.value.copy(camera.projectionMatrixInverse); su.uUpV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse); this._pass(this.mSSR, this.ssrRT); }
     if (q.ssao) {
       this.mAO.uniforms.uProj.value.copy(camera.projectionMatrix); this.mAO.uniforms.uInvProj.value.copy(camera.projectionMatrixInverse);
       this._pass(this.mAO, this.aoRT); this._pass(this.mAOBlur, this.aoBlurRT);

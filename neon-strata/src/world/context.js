@@ -100,7 +100,7 @@ export class CityContext {
     this.chunks = new Map();
     this.named = new Map(); // big standalone batches (megastructures)
     this.pen = new Pen(null);
-    this.sparks = []; this.props = {}; this.footprints = []; this.pois = []; this.lanes = []; this.spawns = []; this.emitters = []; this.walkways = []; this.steam = [];
+    this.sparks = []; this.lights = []; this.props = {}; this.footprints = []; this.pois = []; this.lanes = []; this.spawns = []; this.emitters = []; this.walkways = []; this.steam = [];
     this.stats = { buildings: 0 };
   }
   _chunk(x, z) {
@@ -117,8 +117,11 @@ export class CityContext {
   glowAt(x, z) { return this._chunk(x, z).glow; }
   big(name) { let b = this.named.get(name); if (!b) { b = { main: new Batch(16384), glow: new GlowBatch() }; this.named.set(name, b); } return b; }
   // neon / lamp emitter into the light field (colour sRGB-ish 0..1, radius metres)
-  light(x, z, radius, col, intensity = 1, y = 7) {
-    this.lf.add(x, z, radius, col[0] * col[0] * intensity, col[1] * col[1] * intensity, col[2] * col[2] * intensity);
+  light(x, z, radius, col, intensity = 1, y = 7, o = null) {
+    const r = col[0] * col[0] * intensity, g = col[1] * col[1] * intensity, b = col[2] * col[2] * intensity;
+    if (!o || o.local !== false) this.lights.push(x, y, z, o && o.range ? o.range / 0.9 : radius, r * (o && o.gain || 1), g * (o && o.gain || 1), b * (o && o.gain || 1), o && o.indoor ? 1 : 0);
+    if (o && (o.indoor || o.field === false)) return;
+    this.lf.add(x, z, radius, r, g, b);
     const k = 1.6 * Math.min(1.5, 0.5 + intensity); this.sparks.push(x, y, z, col[0] * col[0] * k, col[1] * col[1] * k, col[2] * col[2] * k, Math.min(9, 2.5 + radius * 0.06));
   }
   // far-visible point light only (beacons, crowns, window clusters)

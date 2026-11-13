@@ -29,12 +29,13 @@ export const U = {
   uNight: { value: 1 },
   uWet: { value: 0.85 },
   uRain: { value: 0.7 },
-  uGlowFog: { value: 0.55 },
+  uGlowFog: { value: 0.8 },
   uFlash: { value: new THREE.Vector4(0, 0, 0, 0) }, // lightning: x,z, radius, intensity
   uNoiseTex: { value: null },
   uProbe: { value: null },
   uProbeMix: { value: 0 },
   uInterior: { value: 0 },
+  uLGrid: { value: null },
 };
 
 // GLSL shared by all world shaders (materials + post passes).
@@ -76,9 +77,12 @@ vec3 nsFogColor(vec3 cam, vec3 wp, vec3 dir){
   float sc = pow(sd, uFogParams.w) * 0.85 + pow(sd, 48.0) * 1.4 + 0.12;
   c += uSunScatter * sc * mix(1.0, 0.35, hi);
   // coloured haze above neon districts (low mips of the light field)
-  vec3 gp = cam + dir * min(length(wp - cam) * 0.5, 900.0);
-  vec3 glow = nsLightField(gp, 5.5).rgb;
-  c += glow * uGlowFog * exp(-max(gp.y, 0.0) / 240.0);
+  float Lr = length(wp - cam);
+  vec3 g1p = cam + dir * min(Lr * 0.3, 420.0); vec3 g2p = cam + dir * min(Lr * 0.72, 2400.0);
+  vec3 glow = nsLightField(g1p, 5.0).rgb * exp(-max(g1p.y, 0.0) / 260.0) * 0.5 + nsLightField(g2p, 6.8).rgb * (0.25 + 0.75 * exp(-max(g2p.y, 0.0) / 420.0)) * 0.7;
+  // a city's sky glow is the sum of thousands of lamps: mostly warm, only tinted by the local neon
+  glow = mix(glow, dot(glow, vec3(0.3333)) * vec3(1.22, 0.88, 0.66), 0.6);
+  c += glow * uGlowFog;
   return c;
 }
 vec3 nsApplyFog(vec3 color, vec3 cam, vec3 wp){
@@ -214,7 +218,7 @@ export function createSky() {
         vec3 far = cameraPosition + d * (42000.0 / (1.0 + max(d.y, 0.0) * 28.0));
         if (d.y < 0.0) far = cameraPosition + d * min(42000.0, (cameraPosition.y + 30.0) / max(-d.y, 1e-4));
         vec3 c = nsApplyFog(sky, cameraPosition, far);
-        gl_FragColor = vec4(c, 1.0);
+        gl_FragColor = vec4(c, 0.0);
       }
     `,
   });

@@ -115,6 +115,8 @@ export function shopSign(vol, f, s0, s1, y, rng, o = {}) {
   vol.box(f, (s0 + s1) / 2 - ww / 2 - 0.08, (s0 + s1) / 2 + ww / 2 + 0.08, 0, (o.out ?? 0.22) - 0.02, y - h / 2 - 0.08, y + h / 2 + 0.08, K.dark(0.07));
   vol.pen.sign(p[0], y, p[1], FACE_ANG[f], ww, h, rect, { seed: rng.i(0, 255), intensity: o.intensity ?? 4.5 });
   const lp = vol.world(f, (s0 + s1) / 2, 2.5); ctx.light(lp[0], lp[1], o.radius ?? Math.max(10, ww * 2), rect.glow || [1, 0.8, 0.6], o.power ?? 0.55, vol.pen.oy + y);
+  { const gc = rect.glow || [1, 0.8, 0.6]; const oo = (o.out ?? 0.22) + 0.06; const a = vol.world(f, (s0 + s1) / 2 - ww / 2 - 0.5, oo), b = vol.world(f, (s0 + s1) / 2 + ww / 2 + 0.5, oo); const y0 = vol.pen.oy + y - h / 2, y1 = vol.pen.oy + y + h / 2;
+    void gc; void a; void b; void y0; void y1; }
   ctx.main();
   return h;
 }
