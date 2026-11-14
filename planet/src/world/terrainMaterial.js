@@ -74,8 +74,8 @@ vec4 clastLayer(vec2 p, float cell, float dens, vec2 sunL, out vec2 grad) {
         grad = vec2(ca * gl.x - sa * gl.y, sa * gl.x + ca * gl.y);
       }
     } else {
-      if (ds < rr) sh = min(sh, 0.3 + 0.7 * smoothstep(rr * 0.75, rr, ds));
-      ao = min(ao, mix(0.55, 1.0, smoothstep(rr, rr * 1.5, dp)));
+      if (ds < rr) sh = min(sh, 0.62 + 0.38 * smoothstep(rr * 0.75, rr, ds));
+      ao = min(ao, mix(0.8, 1.0, smoothstep(rr, rr * 1.4, dp)));
     }
   }
   best.w = best.x > 0.0 ? 1.0 : sh * ao;
@@ -139,18 +139,21 @@ void computeTerrain() {
   float soilDetail = mix(soilA.b, soilB.b, 0.35);
 
   // --- base albedo per biome
-  vec3 regolith = mix(s2l(vec3(0.40, 0.29, 0.22)), s2l(vec3(0.63, 0.47, 0.36)), soilDetail * 0.8 + 0.1);
-  regolith = mix(regolith, s2l(vec3(0.52, 0.42, 0.35)), smoothstep(0.35, 0.75, nzB.r) * 0.5);
-  regolith = mix(regolith, s2l(vec3(0.58, 0.37, 0.24)), smoothstep(0.6, 0.92, nzA.g) * 0.4);
+  vec3 regolith = mix(s2l(vec3(0.56, 0.42, 0.32)), s2l(vec3(0.76, 0.6, 0.47)), soilDetail * 0.8 + 0.1);
+  regolith = mix(regolith, s2l(vec3(0.64, 0.54, 0.46)), smoothstep(0.35, 0.75, nzB.r) * 0.5);
+  regolith = mix(regolith, s2l(vec3(0.7, 0.5, 0.35)), smoothstep(0.6, 0.92, nzA.g) * 0.4);
   // dark basaltic sand in drifts and patches, bright dust settled on the flats
-  regolith = mix(regolith, s2l(vec3(0.27, 0.24, 0.22)) * (0.85 + 0.3 * soilA.b), smoothstep(0.55, 0.82, nzA.b * 0.8 + nzC.g * 0.3) * 0.65);
-  regolith = mix(regolith, s2l(vec3(0.71, 0.55, 0.41)), smoothstep(0.62, 0.88, nzB.a * 0.7 + nzA.r * 0.4) * (1.0 - smoothstep(0.05, 0.25, 1.0 - N.y)) * 0.55);
+  regolith = mix(regolith, s2l(vec3(0.42, 0.38, 0.35)) * (0.85 + 0.3 * soilA.b), smoothstep(0.58, 0.85, nzA.b * 0.8 + nzC.g * 0.3) * 0.45);
+  regolith = mix(regolith, s2l(vec3(0.82, 0.66, 0.51)), smoothstep(0.62, 0.88, nzB.a * 0.7 + nzA.r * 0.4) * (1.0 - smoothstep(0.05, 0.25, 1.0 - N.y)) * 0.55);
   vec3 sandC = mix(s2l(vec3(0.62, 0.43, 0.28)), s2l(vec3(0.85, 0.66, 0.47)), sand.b);
-  vec3 basalt = mix(s2l(vec3(0.13, 0.11, 0.10)), s2l(vec3(0.33, 0.27, 0.25)), soilDetail);
+  // basaltic sand and rubble: dark grey, not brown
+  vec3 basalt = mix(s2l(vec3(0.31, 0.3, 0.29)), s2l(vec3(0.5, 0.46, 0.43)), soilDetail);
   vec3 ground = regolith;
   float sandW = smoothstep(0.25, 0.75, bio.r + (nzB.b - 0.5) * 0.4);
   ground = mix(ground, sandC, sandW);
-  ground = mix(ground, basalt, smoothstep(0.2, 0.7, bio.g));
+  // basalt plains are mantled with dust in patches, dark sand showing between
+  float mantle = smoothstep(0.35, 0.7, nzB.g * 0.6 + nzC.b * 0.3 + soilB.b * 0.3);
+  ground = mix(ground, basalt, smoothstep(0.2, 0.7, bio.g) * (1.0 - mantle * 0.6));
   // salt crust with polygon cracks
   vec3 saltC = mix(s2l(vec3(0.72, 0.70, 0.66)), s2l(vec3(0.93, 0.92, 0.88)), smoothstep(0.1, 0.5, sand.b * 0.3 + soilB.a * 0.7));
   float saltCrack = smoothstep(0.08, 0.0, abs(texture2D(tRock, vTW.xz * 0.05).b - 0.5) - 0.02);
@@ -201,7 +204,7 @@ void computeTerrain() {
     nrm = normalize(nrm + vec3(tm.x, 0.0, tm.y));
     // the same relief in the colour: dust in the lows, fresher rock on the highs
     float cav = mix(1.0, m1.a, 0.5) * mix(1.0, m2.a, 0.35 * f2);
-    alb *= 0.82 + 0.26 * cav + (m3.b - 0.5) * 0.12 * f3;
+    alb *= 0.9 + 0.16 * cav + (m3.b - 0.5) * 0.1 * f3;
     ao *= mix(1.0, cav, 0.6);
     // slopes: streaks and shallow gullies running straight downhill
     if (slope > 0.06) {
@@ -213,7 +216,7 @@ void computeTerrain() {
       nrm = normalize(nrm + vec3(-dn.y, 0.0, dn.x) * (texture2D(tNoise, vec2(pr.x * 0.7, pr.y * 0.03) + 0.7).b - 0.5) * 0.5 * sw);
     }
     // mineral ground is less saturated than painted clay
-    alb = mix(vec3(dot(alb, vec3(0.3, 0.59, 0.11))), alb, 0.86);
+    alb = mix(vec3(dot(alb, vec3(0.3, 0.59, 0.11))), alb, 0.94);
   }
 
   // built / packed ground around structures
@@ -337,12 +340,12 @@ void computeTerrain() {
   {
     float fwS = length(fwidth(vTW.xz));
     float day = smoothstep(-0.02, 0.15, uSunDir.y);
-    vec2 sunL = normalize(uSunDir.xz + vec2(1e-4)) * clamp(0.35 / max(uSunDir.y, 0.04), 0.25, 2.6);
+    vec2 sunL = normalize(uSunDir.xz + vec2(1e-4)) * clamp(0.22 / max(uSunDir.y, 0.05), 0.15, 1.6);
     float stony = (1.0 - sandW * 0.85) * (1.0 - packed * 0.85) * (1.0 - paved) * (1.0 - snowCov) * (1.0 - live * 0.85) * (1.0 - cliff)
                 * (0.6 + 0.6 * scree + 0.45 * smoothstep(0.2, 0.7, bio.g) + 0.25 * smoothstep(0.45, 0.8, nzB.g));
     // gravel lies in patches: lag deposits between bare fines
     float patchG = smoothstep(0.28, 0.72, texture2D(tNoise, vTW.xz * 0.31 + 0.2).g * 0.7 + texture2D(tNoise, vTW.xz * 0.07).b * 0.5);
-    vec4 cells = vec4(0.028, 0.075, 0.22, 0.75), dens = vec4(0.75, 0.55, 0.32, 0.1);
+    vec4 cells = vec4(0.028, 0.075, 0.22, 0.75), dens = vec4(0.78, 0.5, 0.24, 0.06);
     for (int k = 0; k < 4; k++) {
       float cell = cells[k];
       float f = 1.0 - smoothstep(cell * 0.05, cell * 0.16, fwS);
@@ -353,17 +356,19 @@ void computeTerrain() {
       if (r.x > 0.0) {
         // stones are the ground's own material, a little darker and greyer,
         // dust-coated on their flatter tops
-        vec3 sc = alb * mix(0.55, 1.05, r.z);
-        sc = mix(sc, stoneCol(r.z) * 0.9, 0.35 + 0.25 * step(0.75, r.z));
+        // mostly grey and brown-grey stone near the ground's brightness, a few darker
+        vec3 grey = s2l(vec3(0.6, 0.57, 0.53)) * (0.8 + 0.4 * fract(r.z * 37.0));
+        vec3 sc = mix(alb * mix(0.85, 1.12, r.z), grey, 0.5);
+        sc = mix(sc, s2l(vec3(0.36, 0.34, 0.33)), step(0.9, r.z) * 0.7);
         float top = 1.0 - smoothstep(0.15, 0.9, length(gg));
-        sc = mix(sc, alb * 1.04, top * 0.55);
+        sc = mix(sc, alb * 1.05, top * 0.5);
         alb = mix(alb, sc, f);
         rough = mix(rough, 0.78 + 0.12 * r.z, f);
-        nrm = normalize(nrm + vec3(-gg.x, 0.0, -gg.y) * 1.6 * f);
+        nrm = normalize(nrm + vec3(-gg.x, 0.0, -gg.y) * 1.05 * f);
         ao = mix(ao, 0.86 + 0.14 * top, f);
       } else {
         float shade = mix(1.0, r.w, f);
-        alb *= mix(1.0, shade, 0.5 + 0.45 * day);
+        alb *= mix(1.0, shade, 0.3 + 0.35 * day);
         ao *= shade;
       }
     }
@@ -436,6 +441,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v24';
+  mat.customProgramCacheKey = () => 'terrain-v26';
   return mat;
 }
