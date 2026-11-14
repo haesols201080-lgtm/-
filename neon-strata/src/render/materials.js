@@ -47,7 +47,7 @@ void mat(int L, vec2 uv, out vec3 alb, out float h, out float rough, out float c
   } else if (L == 1) { // plaster / smooth precast with hairline cracks (4 m)
     float blot = fbm(uv, vec2(2.0), 6); float fine = fbm(uv, vec2(64.0), 4);
     vec2 w = uv + (vec2(fbm(uv, vec2(6.0), 3), fbm(uv + 0.5, vec2(6.0), 3)) - 0.5) * 0.12;
-    vec3 v = voro(w, vec2(5.0)); float crack = smoothstep(0.03, 0.0, v.y - v.x) * smoothstep(0.35, 0.6, fbm(uv + 0.7, vec2(3.0), 3));
+    vec3 v = voro(w, vec2(5.0)); float crack = smoothstep(0.007, 0.0, v.y - v.x) * smoothstep(0.66, 0.8, fbm(uv + 0.7, vec2(3.0), 3)) * 0.5;
     float patchM = smoothstep(0.58, 0.6, fbm(uv + 0.21, vec2(3.0), 3));
     float trowel = fbm(uv, vec2(10.0, 30.0), 3);
     float drip = smoothstep(0.5, 0.8, fbm(uv, vec2(36.0, 2.0), 4));
@@ -80,7 +80,7 @@ void mat(int L, vec2 uv, out vec3 alb, out float h, out float rough, out float c
     vec3 ag = voro(uv, vec2(110.0)); vec3 ag2 = voro(uv + 0.31, vec2(46.0));
     float blot = fbm(uv, vec2(3.0), 6); float fine = fbm(uv, vec2(90.0), 3);
     vec2 w = uv + (vec2(fbm(uv, vec2(8.0), 3), fbm(uv + 0.5, vec2(8.0), 3)) - 0.5) * 0.1;
-    vec3 cr = voro(w, vec2(4.0)); float crack = smoothstep(0.022, 0.0, cr.y - cr.x) * smoothstep(0.4, 0.62, fbm(uv + 0.9, vec2(3.0), 3));
+    vec3 cr = voro(w, vec2(4.0)); float crack = smoothstep(0.009, 0.0, cr.y - cr.x) * smoothstep(0.58, 0.74, fbm(uv + 0.9, vec2(3.0), 3)) * 0.7;
     float tar = smoothstep(0.012, 0.004, abs(fbm(uv + 0.13, vec2(3.0), 2) - 0.5)) ;
     float spk = smoothstep(0.3, 0.05, ag.x) * step(0.55, ag.z); float spk2 = smoothstep(0.25, 0.05, ag2.x) * step(0.8, ag2.z);
     float v0 = 0.85 + 0.35 * (blot - 0.5) + 0.25 * spk * (ag.z - 0.3) + 0.3 * spk2 + 0.1 * (fine - 0.5);

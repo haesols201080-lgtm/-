@@ -48,8 +48,11 @@ export class Crowd {
     if (d > 78 || (!initial && d < 22)) return;
     const variant = rng.i(0, VARIANTS.length - 1); if (this.agents.filter((g) => g.variant === variant).length >= this.per) return;
     const brisk = rng.chance(0.25);
-    this.agents.push({ w, seg, t, dir: rng.sign(), lat: rng.f(-1.1, 1.1), variant, x, y: a[1], z, yaw: rng.f(0, 6.28), state: 0, timer: rng.f(6, 40), clip: brisk ? CLIP.brisk : CLIP.walk, clipB: CLIP.idle, blend: 0, phase: rng.next(), phaseB: rng.next(), sp: (brisk ? 1.25 : 1) * rng.f(0.85, 1.12), h: rng.f(0.93, 1.07),
-      c0: rng.pick(TOPS), c1: rng.pick(BOTS), c2: rng.pick(HAIR), tone: rng.next(), umb: rng.chance(0.62), umbCol: rng.pick([[0.1, 0.1, 0.12], [0.1, 0.1, 0.12], [0.5, 0.52, 0.55], [0.6, 0.15, 0.2], [0.15, 0.4, 0.5]]), fade: 0 });
+    const lead = { w, seg, t, dir: rng.sign(), lat: rng.f(-1.1, 1.1), variant, x, y: a[1], z, yaw: rng.f(0, 6.28), state: 0, timer: rng.f(6, 40), clip: brisk ? CLIP.brisk : CLIP.walk, clipB: CLIP.idle, blend: 0, phase: rng.next(), phaseB: rng.next(), sp: (brisk ? 1.25 : 1) * rng.f(0.85, 1.12), h: rng.f(0.93, 1.07),
+      c0: rng.pick(TOPS), c1: rng.pick(BOTS), c2: rng.pick(HAIR), tone: rng.next(), umb: rng.chance(0.62), umbCol: rng.pick([[0.1, 0.1, 0.12], [0.1, 0.1, 0.12], [0.5, 0.52, 0.55], [0.6, 0.15, 0.2], [0.15, 0.4, 0.5]]), fade: 0 };
+    this.agents.push(lead);
+    // company: friends, couples, colleagues keep step side by side
+    if (rng.chance(0.42)) { const n = rng.chance(0.25) ? 2 : 1; for (let k = 0; k < n && this.agents.length < this.max; k++) { const v2 = rng.i(0, VARIANTS.length - 1); if (this.agents.filter((g) => g.variant === v2).length >= this.per) break; this.agents.push({ ...lead, variant: v2, lat: lead.lat + (k + 1) * 0.62 * (lead.lat > 0 ? -1 : 1), phase: rng.next(), phaseB: rng.next(), h: rng.f(0.93, 1.07), c0: rng.pick(TOPS), c1: rng.pick(BOTS), c2: rng.pick(HAIR), tone: rng.next(), timer: lead.timer, clip: lead.clip }); } }
   }
   _linger(cam, rain) {
     const rng = this.rng; const cx = Math.floor(cam.x / 80), cz = Math.floor(cam.z / 80);

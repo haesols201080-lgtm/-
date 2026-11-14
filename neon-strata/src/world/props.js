@@ -153,6 +153,19 @@ export const PROPS = {
     const fr = M(ST.COMPOSITE, { color: [0.12, 0.12, 0.14], flags: 8 }); pen.box(0, 0, 2.0, 0.6, 0, 2.2, { wall: fr, roof: fr });
     for (let i = 0; i < 7; i++) { pen.use(M(ST.LOUVER, { color: [0.3, 0.3, 0.34], flags: 8 })); pen.quad(-0.9, 0.2 + i * 0.28, 0.305, 0.9, 0.2 + i * 0.28, 0.305, 0.9, 0.42 + i * 0.28, 0.305, -0.9, 0.42 + i * 0.28, 0.305, 0, i, 1.8, i + 0.22); pen.use(K.emis(i % 3 === 0 ? [0.2, 1, 0.5] : [0.2, 0.8, 1], 6, i % 2 ? 2 : 0, false, i * 13)); pen.box(0.78, 0.31, 0.12, 0.02, 0.28 + i * 0.28, 0.32 + i * 0.28, {}); }
   },
+  signal(pen) { // traffic signal: mast arm over the carriageway (+z), vehicle heads, pedestrian box, push-button
+    pen.use(steel); pen.tube(0, 0, 0, 0, 6.2, 0, 0.11, 6, { r1: 0.09 }); pen.tube(0, 5.9, 0, 0, 6.3, 4.6, 0.07, 5); pen.lathe(0, 0, [[0.2, 0], [0.16, 0.35]], 6, { cap: false });
+    for (const z of [1.9, 4.3]) { pen.box(0, z, 0.34, 0.26, 5.35, 6.25, { wall: dk, roof: dk, bottom: dk }); pen.use(K.emis([1, 0.12, 0.06], 12, 2, false, 40)); pen.box(0, z + 0.14, 0.2, 0.02, 5.98, 6.18, {}); pen.use(K.emis([0.15, 1, 0.5], 9, 2, false, 168)); pen.box(0, z + 0.14, 0.2, 0.02, 5.42, 5.62, {}); pen.use(K.emis([1, 0.6, 0.1], 1.2)); pen.box(0, z + 0.14, 0.2, 0.02, 5.7, 5.9, {}); }
+    pen.box(0.2, 0, 0.2, 0.3, 2.5, 3.1, { wall: dk, roof: dk, bottom: dk }); pen.use(K.emis([0.15, 1, 0.5], 7, 2, false, 168)); pen.box(0.31, 0, 0.02, 0.22, 2.56, 2.78, {}); pen.use(K.emis([1, 0.12, 0.06], 7, 2, false, 40)); pen.box(0.31, 0, 0.02, 0.22, 2.82, 3.04, {});
+    pen.box(0, 0.13, 0.12, 0.06, 1.05, 1.25, { wall: K.metal([0.7, 0.6, 0.1]), roof: dk }); pen.box(0, -0.2, 0.5, 0.05, 3.4, 3.75, { wall: K.metal([0.15, 0.3, 0.5]), roof: dk });
+  },
+  shelter(pen) { // transit stop: canopy, glazed back, bench, lit ad panel and a route display (open towards +z)
+    pen.use(steel); for (const x of [-2.0, 2.0]) pen.box(x, -0.55, 0.09, 0.09, 0, 2.6, {}); pen.box(0, -0.1, 4.5, 1.5, 2.6, 2.7, { wall: steel, roof: K.metal([0.3, 0.32, 0.36]), bottom: white(3) });
+    pen.use(K.glassDark([0.35, 0.45, 0.5])); pen.quad(-2.0, 0.3, -0.55, 0.6, 0.3, -0.55, 0.6, 2.3, -0.55, -2.0, 2.3, -0.55, 0, 0, 1, 1);
+    pen.box(1.35, -0.55, 1.3, 0.16, 0.25, 2.35, { wall: dk, roof: dk }); pen.use({ st: ST.SCREEN, color: [1, 1, 1], seed: 63, cellW: 10, floorH: 16, extra: 22 }); pen.quad(0.78, 0.4, -0.46, 1.92, 0.4, -0.46, 1.92, 2.2, -0.46, 0.78, 2.2, -0.46, 0, 0, 1, 1);
+    pen.box(-0.7, -0.3, 2.2, 0.36, 0.42, 0.5, { wall: K.rust([0.36, 0.3, 0.26]), roof: K.rust([0.38, 0.32, 0.28]), bottom: dk }); pen.use(steel); for (const x of [-1.6, 0.2]) pen.box(x, -0.3, 0.06, 0.3, 0, 0.42, {});
+    pen.use(steel); pen.tube(2.45, 0, 0.3, 2.45, 3.0, 0.3, 0.05, 5); pen.box(2.45, 0.3, 0.5, 0.08, 2.5, 3.2, { wall: K.emis([1, 0.75, 0.3], 3), roof: dk });
+  },
   // --- shopfront clutter + street tech ------------------------------------------------------
   table(pen) { // plastic table with three stools: the pavement extension of every eatery
     pen.use(M2(ST.PLASTER, [0.62, 0.2, 0.16])); pen.lathe(0, 0, [[0.42, 0.7], [0.44, 0.72], [0.42, 0.74]], 10, {}); pen.use(steel); pen.tube(0, 0, 0, 0, 0.7, 0, 0.04, 5); pen.lathe(0, 0, [[0.26, 0], [0.24, 0.03]], 8, {});

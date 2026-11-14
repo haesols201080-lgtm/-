@@ -71,9 +71,9 @@ export class HUD {
     let h = ''; const row = (a, b, c = '') => `<div class="row"><div class="r-a">${a}</div><div class="r-b">${b}</div><div class="r-c">${c}</div></div>`;
     const btn = (label, act, data = '', dis = false) => `<button class="btn" data-act="${act}" ${data} ${dis ? 'disabled' : ''}>${label}</button>`;
     if (this.tab === 'jobs') {
-      h += `<h3>배달 의뢰</h3>`;
-      if (g.job) h += row(`<b>진행 중</b> — ${g.job.item}`, `${g.job.stage === 0 ? '수령지' : '배송지'}로 이동 · 보수 ${fmt(g.job.pay)} ℓ`, btn('포기', 'cancel'));
-      else { h += g.offers.map((o, i) => row(`<b>${o.item}</b> 운송`, `${Math.round(o.d)} m · 제한 ${o.time}초`, `<span class="pay">${fmt(o.pay)} ℓ</span>${btn('수락', 'accept', `data-i="${i}"`)}`)).join('') || '<p class="dim">주변에 의뢰가 없습니다. 다른 곳으로 이동해 보세요.</p>'; h += btn('의뢰 새로 고침', 'reroll'); }
+      h += `<h3>주변 일자리 <small>가게·로비로 직접 출근</small></h3>`;
+      if (g.job) h += row(`<b>진행 중</b> — ${g.job.item}`, `${g.jobLabel()} · 급여 ${fmt(g.job.pay)} ℓ`, btn('포기', 'cancel'));
+      else { h += g.offers.map((o, i) => row(`<b>${o.name}</b> 근무`, `${o.item} 배달 ${o.stops.length}건 · 동선 ${Math.round(o.d)} m · ${o.time}초`, `<span class="pay">${fmt(o.pay)} ℓ</span>${btn('수락', 'accept', `data-i="${i}"`)}`)).join('') || '<p class="dim">근처에 사람을 구하는 가게가 없습니다. 상점가로 이동해 보세요.</p>'; h += btn('구인 새로 고침', 'reroll'); }
       h += `<h3>현재 목표</h3><p>${g.objective ? g.objective.text : ''}</p><p class="dim">${g.objective ? g.objective.sub : ''}</p>`;
       h += `<h3>적재 화물 <small>${g.cargoUsed()} / ${g.cargoCap()}</small></h3>` + (Object.keys(s.cargo).map((k) => row(COMMODITIES.find((c) => c.id === k).name, `${s.cargo[k].n}개 · 평단 ${fmt(s.cargo[k].avg)} ℓ`)).join('') || '<p class="dim">비어 있음</p>');
     } else if (this.tab === 'trade') {
@@ -118,7 +118,7 @@ export class HUD {
     if (!pr && pl.mode === 'foot' && pl.hasCar && pl.pos.distanceTo(pl.vpos) < 7) pr = '[F] 스키머 탑승';
     e.prompt.textContent = pr; e.prompt.classList.toggle('show', !!pr);
     if (this.bDown) { this.bDown.style.display = pl.mode === 'fly' ? '' : 'none'; this.bE.style.display = pr.includes('[E]') ? '' : 'none'; this.bQ.style.display = pr.includes('[Q]') ? '' : 'none'; this.bF.style.display = pl.hasCar ? '' : 'none'; }
-    const J = g.job; if (J) { const t = J.stage === 0 ? J.a : J.b; e.job.innerHTML = `<b>${J.stage === 0 ? '수령' : '배송'}</b> ${J.item} · ${Math.round(Math.hypot(t.x - p.x, t.z - p.z))} m · <span class="${J.left < 15 ? 'lo' : ''}">${Math.max(0, Math.round(J.left))}초</span>`; e.job.classList.add('show'); } else e.job.classList.remove('show');
+    const J = g.job; if (J) { const t = J.route[J.stage]; e.job.innerHTML = `<b>${J.stage === 0 ? '출근' : J.stage === J.route.length - 1 ? '복귀' : '배달'}</b> ${J.item} · ${Math.round(Math.hypot(t.x - p.x, t.z - p.z))} m · <span class="${J.left < 15 ? 'lo' : ''}">${Math.max(0, Math.round(J.left))}초</span>`; e.job.classList.add('show'); } else e.job.classList.remove('show');
     e.toasts.innerHTML = g.toasts.map((t) => `<div class="toast ${t.kind}" style="opacity:${Math.min(1, t.t)}">${t.text}</div>`).join('');
     if (e.news.textContent !== g.news) e.news.textContent = g.news;
     e.fade.style.opacity = g.fade || 0;
@@ -133,7 +133,7 @@ export class HUD {
     const dot = (x, z, col, r = 3.2) => { const q = clampR(P(x, z)); c.fillStyle = col; c.beginPath(); c.arc(q[0], q[1], r, 0, 6.283); c.fill(); };
     for (const o of this.g.pois) if (o.type === 'station' || o.type === 'home' || o.type === 'exchange' || o.type === 'license') { if (Math.hypot(o.x - p.x, o.z - p.z) < view * 1.2) dot(o.x, o.z, o.type === 'home' ? '#7df9d0' : o.type === 'station' ? '#58d6ff' : '#ffc45a', 2.6); }
     for (const q of this.g.pickups) if (Math.hypot(q.x - p.x, q.z - p.z) < view) dot(q.x, q.z, '#ffd866', 1.6);
-    const J = this.g.job; if (J) { const t = J.stage === 0 ? J.a : J.b; dot(t.x, t.z, J.stage === 0 ? '#5ff2e6' : '#ffb347', 5); }
+    const J = this.g.job; if (J) { const t = J.route[J.stage]; dot(t.x, t.z, J.stage === 0 ? '#5ff2e6' : '#ffb347', 5); }
     if (pl.hasCar && pl.mode === 'foot') dot(pl.vpos.x, pl.vpos.z, '#ffffff', 3);
     c.translate(S / 2, S / 2); c.rotate(-pl.camYaw); c.fillStyle = '#fff'; c.beginPath(); c.moveTo(0, -8); c.lineTo(5.5, 6); c.lineTo(0, 3); c.lineTo(-5.5, 6); c.closePath(); c.fill(); c.restore();
     c.strokeStyle = 'rgba(120,220,255,0.5)'; c.lineWidth = 1.5; c.beginPath(); c.arc(S / 2, S / 2, S / 2 - 2, 0, 6.283); c.stroke();

@@ -21,6 +21,10 @@ export const STYLES = {
   port: { walls: [[0.34, 0.36, 0.38], [0.3, 0.33, 0.36], [0.38, 0.38, 0.36]], wk: [WK.RIBBED, WK.METAL, WK.CONCRETE], win: ST.WIN_INDUSTRIAL, towerWin: [ST.WIN_RIBBON, ST.WIN_INDUSTRIAL], lights: [PAL.COOL, PAL.NEUTRAL, PAL.AMBER], lit: [0.25, 0.5], accents: [NE.cyan, NE.blue, NE.amber], floorH: 4.5, cellW: 4, pads: 0.6, roof: ROOF_TECH, lamp: 'lampA', lampTint: [0.7, 0.9, 1], lampCol: NE.ice, furniture: [[3, 'crates'], [2, 'barrier'], [2, 'barrels'], [2, 'utilBox'], [1, 'droneDock']] },
 };
 
+// real masonry is far lighter than charcoal: lift the wall palettes into the measured range of concrete, tile and render,
+// and say how much of each district is clad in small-format tile or brick
+{ const lift = { sump: 1.45, oldq: 1.35, hive: 1.4, lumina: 1.25, meridian: 1.15, verdant: 1.25, foundry: 1.2, port: 1.25 }, clad = { sump: 0.5, oldq: 0.55, hive: 0.45, lumina: 0.3, meridian: 0.05, verdant: 0.1, foundry: 0.15, port: 0.1 };
+  for (const k in STYLES) { STYLES[k].walls = STYLES[k].walls.map((c) => c.map((v) => Math.min(0.8, v * (lift[k] || 1.2)))); STYLES[k].clad = clad[k] ?? 0.2; } }
 // skyline: metres of height for a lot in a block
 function skyline(b, rng) {
   const t = clamp((b.r - 700) / 2600, 0, 1); const n = b.noise, n2 = b.noise2;
@@ -72,6 +76,15 @@ function streetscape(ctx, rng, b, S) {
       for (let s = 1; s < ps - 1; s++) { const t = (s + 0.5) / ps; const bx = x0 + (x1 - x0) * t, bz = z0 + (z1 - z0) * t;
         if (rng.chance(pk)) { const [wx, wz] = b.at(bx + Math.sin(ang) * 2.35, bz + Math.cos(ang) * 2.35); const yaw = b.yaw + ang + (rng.chance(0.5) ? 1.5708 : -1.5708) + rng.f(-0.04, 0.04); ctx.prop('hovercar', wx, 0.0, wz, yaw, rng.f(0.92, 1.08), [rng.f(0.5, 1.5), rng.f(0.5, 1.4), rng.f(0.5, 1.5)]); ctx.phys.addBox(wx, wz, 1.0, 2.3, yaw, 0, 1.4); }
         else if (b.walk >= 3 && rng.chance(pk * 0.45)) { const nS = rng.i(2, 4); for (let q = 0; q < nS; q++) { const [wx, wz] = b.at(bx + Math.cos(ang) * q * 0.62 - Math.sin(ang) * 0.5, bz - Math.sin(ang) * q * 0.62 - Math.cos(ang) * 0.5); ctx.prop('scooter', wx, 0.2, wz, b.yaw + ang + 0.25 + rng.f(-0.12, 0.12), 1, [rng.f(0.6, 1.6), rng.f(0.6, 1.4), rng.f(0.6, 1.5)]); } } } }
+    { const busy = { sump: 1, oldq: 0.8, lumina: 1, hive: 0.8, meridian: 0.6 }[b.district] || 0; const ox = Math.sin(ang), oz = Math.cos(ang), ax = (x1 - x0) / L, az = (z1 - z0) / L;
+      const W2 = (bx, bz) => b.at(bx, bz); const spot = (bx, bz, yaw, o = {}) => { const [wx, wz] = W2(bx, bz); ctx.spots.push({ x: wx, y: 0.2, z: wz, yaw: b.yaw + yaw, ...o }); };
+      if (busy && L > 30) { const [wx, wz] = W2(x0 + ax * 2.4 + ox * 0.35, z0 + az * 2.4 + oz * 0.35); ctx.prop('signal', wx, 0.2, wz, b.yaw + ang); ctx.phys.addCyl(wx, wz, 0.15, 0.2, 6);
+        for (let k = 0; k < 3; k++) if (rng.chance(0.55 * busy)) spot(x0 + ax * (3.6 + k * 0.8) - ox * rng.f(0.1, 0.9), z0 + az * (3.6 + k * 0.8) - oz * rng.f(0.1, 0.9), ang + rng.f(-0.4, 0.4), { clip: rng.pick(['idle', 'phone', 'idle']) }); }
+      if (busy && L > 70 && b.walk >= 2.7 && rng.chance(0.4 * busy)) { const t = rng.f(0.35, 0.65); const bx = x0 + (x1 - x0) * t - ox * 0.5, bz = z0 + (z1 - z0) * t - oz * 0.5; const [wx, wz] = W2(bx, bz); ctx.prop('shelter', wx, 0.2, wz, b.yaw + ang); ctx.phys.addBox(wx, wz, 2.2, 0.3, b.yaw + ang, 0.2, 2.6); ctx.light(wx, wz, 9, [0.9, 0.95, 1], 0.6, 2.7);
+        for (let k = 0; k < 4; k++) if (rng.chance(0.65)) spot(bx + ax * rng.f(-1.8, 2.6) + ox * rng.f(0.3, 0.9), bz + az * rng.f(-1.8, 2.6) + oz * rng.f(0.3, 0.9), ang + rng.f(-0.5, 0.5), { clip: rng.pick(['idle', 'phone', 'phone', 'talk']) }); }
+      if (busy && b.walk >= 2.7) { const nV = Math.floor((L / 42) * busy + rng.f(0, 1)); for (let q = 0; q < nV; q++) { const t = rng.f(0.12, 0.88); const bx = x0 + (x1 - x0) * t - ox * 0.2, bz = z0 + (z1 - z0) * t - oz * 0.2; const [wx, wz] = W2(bx, bz); const cart = rng.chance(0.5);
+          ctx.prop(cart ? 'cart' : 'stall', wx, 0.2, wz, b.yaw + ang + Math.PI, 1, [rng.f(0.7, 1.4), rng.f(0.7, 1.3), rng.f(0.7, 1.3)]); ctx.phys.addCyl(wx, wz, 1.0, 0.2, 2.2); ctx.light(wx, wz, 8, rng.pick([NE.sodium, NE.amber, NE.white]), 0.8, 2.3); if (rng.chance(0.6)) ctx.steam.push({ x: wx, y: 1.8, z: wz, s: 0.5 });
+          for (let k = 0; k < 3; k++) if (rng.chance(0.7)) spot(bx - ox * (1.3 + k * 0.75) + ax * rng.f(-0.3, 0.3), bz - oz * (1.3 + k * 0.75) + az * rng.f(-0.3, 0.3), ang + rng.f(-0.25, 0.25), { clip: k === 0 ? 'talk' : rng.pick(['idle', 'phone']) }); } } }
     if (b.walk < 3.4) continue; // too narrow for furniture
     for (let s = 1; s < slots - 1; s++) {
       if (lampSlots.has(s) || !rng.chance(0.2 * ctx.density)) continue;
@@ -105,9 +118,40 @@ function gantries(ctx, rng) {
   }
 }
 
+// Real lots are used edge to edge. Whatever a building leaves free of its lot becomes a planted forecourt on the
+// street side, marked parking courts down the sides and a service yard (plant, stores, a low annex) at the back.
+function finishLot(ctx, rng, lot, f0, S) {
+  const F = ctx.footprints; const c = Math.cos(lot.yaw), s = Math.sin(lot.yaw); const hw = lot.w / 2, hd = lot.d / 2;
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+  for (let i = f0; i < F.length; i++) { const f = F[i]; const dx = f[0] - lot.x, dz = f[1] - lot.z; const lx = dx * c - dz * s, lz = dx * s + dz * c; if (Math.abs(lx) > hw || Math.abs(lz) > hd) continue;
+    const r = f[4] - lot.yaw; const ex = Math.abs(f[2] * Math.cos(r)) + Math.abs(f[3] * Math.sin(r)), ez = Math.abs(f[2] * Math.sin(r)) + Math.abs(f[3] * Math.cos(r)); x0 = Math.min(x0, lx - ex); x1 = Math.max(x1, lx + ex); z0 = Math.min(z0, lz - ez); z1 = Math.max(z1, lz + ez); }
+  if (x0 > x1) return; x0 = Math.max(x0, -hw); x1 = Math.min(x1, hw); z0 = Math.max(z0, -hd); z1 = Math.min(z1, hd);
+  const front = hd - z1, back = z0 + hd; const pen = ctx.penAt(lot.x, 0.2, lot.z, lot.yaw);
+  const P = (name, lx, lz, yaw = 0, sc = 1, tint = null, y = 0) => ctx.propL(name, lx, y, lz, yaw, sc, tint);
+  if (front > 4.5) { // forecourt: an avenue of trees and planters either side of the way in, benches, light columns at the kerb
+    const n = Math.max(2, Math.floor(lot.w / 7.5)); for (let i = 0; i < n; i++) { const x = -hw + (i + 0.5) * (lot.w / n); if (Math.abs(x) < 5.5) continue; const z = z1 + front * 0.58; const tree = i % 3 !== 1; P(tree ? 'tree' : 'planter', x, z, rng.f(0, 6.28), rng.f(0.9, 1.35)); if (tree) ctx.solidCyl(x, z, 0.3, 0, 3); if (front > 9 && i % 2 === 0) { P('bench', x, z1 + front * 0.25, Math.PI); ctx.solid(x, z1 + front * 0.25, 1.9, 0.5, 0, 0.5); } }
+    for (const sx of [-1, 1]) { const lx = sx * Math.min(hw - 1.5, 6.5), lz = hd - 1.3; P('lampC', lx, lz); ctx.solidCyl(lx, lz, 0.2, 0, 7); ctx.light(pen.wx(lx, lz), pen.wz(lx, lz), 13, [1, 0.9, 0.75], 0.6, 6.8); }
+  }
+  for (const [gap, sx] of [[x0 + hw, -1], [hw - x1, 1]]) { // side courts: painted bays, parked cars, bollards at the street
+    if (gap < 6.8) continue; const xc = sx * (hw - gap / 2); const zA = Math.max(-hd + 2.5, z0), zB = Math.min(hd - 4, z1); if (zB - zA < 6) continue;
+    ctx.detail(); pen.use(ZEBRA); const bl = Math.min(2.6, gap / 2 - 0.7);
+    for (let z = zA; z <= zB + 0.01; z += 2.9) { pen.flat(xc - bl, z - 0.05, xc + bl, z + 0.05, 0.025); if (z + 2.9 <= zB + 0.01 && rng.chance(0.55)) { const yaw = rng.chance(0.5) ? 1.5708 : -1.5708; P('hovercar', xc + rng.f(-0.2, 0.2), z + 1.45, yaw, rng.f(0.92, 1.06), [rng.f(0.5, 1.5), rng.f(0.5, 1.4), rng.f(0.5, 1.5)]); ctx.solid(xc, z + 1.45, 4.6, 2.0, 0, 1.4); } }
+    ctx.main(); for (let x = xc - gap / 2 + 0.8; x < xc + gap / 2 - 0.5; x += 1.7) { if (Math.abs(x - xc) < 1.8) continue; P('bollard', x, hd - 0.6); }
+  }
+  if (back > 7) { // service yard
+    const zc = -hd + back / 2; let ax0 = -hw + 1.5;
+    if (back > 11 && lot.w > 26) { const aw = Math.min(lot.w * 0.45, 28), ad = Math.min(back - 3.5, 12), ah = rng.pick([4.4, 7.8]); const ax = -hw + aw / 2 + 1.5, az = -hd + ad / 2 + 1.2; ctx.main();
+      pen.box(ax, az, aw, ad, 0, ah, { wall: M(ST.WIN_INDUSTRIAL, { color: rng.pick(S.walls), seed: rng.i(0, 255), A: 0.5, B: PAL.NEUTRAL, cellW: 3.2, floorH: ah > 5 ? 3.9 : 4.4, flags: WK.CONCRETE }), roof: K.conc(0.26), aoB: 0.6 });
+      ctx.solid(ax, az, aw, ad, 0, ah); ctx.footprint(ax, az, aw, ad, 0, ah, lot.block.id); for (let i = 0; i < Math.floor(aw / 7); i++) P(rng.pick(['chiller', 'ventCap', 'cooler', 'acSmall']), ax - aw / 2 + 3 + i * 6.5, az + rng.f(-0.25, 0.25) * ad, rng.pick([0, 1.5708]), 1, null, ah); ax0 = -hw + aw + 3.5; }
+    for (let x = ax0 + 1.5; x < hw - 2; x += rng.f(5, 9)) { const k = rng.next(); const name = k < 0.3 ? 'chiller' : k < 0.5 ? 'tank' : k < 0.7 ? 'crates' : k < 0.85 ? 'utilBox' : 'barrels'; const z = zc + rng.f(-0.25, 0.25) * back; P(name, x, z, rng.pick([0, 1.5708]), 1); ctx.solid(x, z, 1.6, 1.6, 0, 1.4); }
+  }
+  ctx.main();
+}
+
 export function buildDistricts(ctx) {
   const rng0 = ctx.rng.fork('districts'); const ls = 1 / Math.sqrt(ctx.density);
-  const sub = (b, rng, o) => subdivide(b, rng, { ...o, wmin: o.wmin * ls, wmax: o.wmax * ls });
+  let cur = []; const subdivideT = (b, rng, o) => { const l = subdivide(b, rng, o); cur.push(...l); return l; };
+  const sub = (b, rng, o) => subdivideT(b, rng, { ...o, wmin: o.wmin * ls, wmax: o.wmax * ls });
   const tally = {}; const countV = () => { let n = 0; for (const c of ctx.chunks.values()) n += c.main.n + c.detail.n; return n; };
   for (const b of ctx.blocks) {
     if (b.reserved) continue;
@@ -116,6 +160,7 @@ export function buildDistricts(ctx) {
     const prime = b.edge.inner || b.edge.outer || b.edge.left || b.edge.right; // faces an arterial
     streetscape(ctx, rng, b, S);
     if (b.plaza) { plaza(ctx, rng, b, S); continue; }
+    cur = []; const fB = ctx.footprints.length;
     switch (b.district) {
       case 'sump': {
         const dense = b.noise > 0.52 && b.j < 2;
@@ -128,12 +173,12 @@ export function buildDistricts(ctx) {
         break;
       }
       case 'oldq': {
-        if (b.w > 90 && b.noise2 > 0.7 && rng.chance(0.3)) { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); archiveSpire(ctx, rng, lot, S, { h: 160 + 380 * b.noise }); break; }
+        if (b.w > 90 && b.noise2 > 0.7 && rng.chance(0.3)) { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); archiveSpire(ctx, rng, lot, S, { h: 160 + 380 * b.noise }); break; }
         for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 11, wmax: 24, alley: 5, minDepth: 11 })) guildHouse(ctx, rng, lot, S, { floors: Math.round(clamp((H / 3.4) * rng.f(0.6, 1.3), 2, 9)) });
         break;
       }
       case 'lumina': {
-        if (b.noise > 0.6 && rng.chance(0.45)) { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); terrace(ctx, rng, lot, S, { h: clamp(H * 1.3, 60, 320), mega: true }); break; }
+        if (b.noise > 0.6 && rng.chance(0.45)) { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); terrace(ctx, rng, lot, S, { h: clamp(H * 1.3, 60, 320), mega: true }); break; }
         for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 16, wmax: 40, alley: 4, minDepth: 16 })) {
           const k = rng.next(); const hh = clamp(H * rng.f(0.5, 1.4), 18, 300);
           if (k < 0.4) terrace(ctx, rng, lot, S, { h: Math.min(hh, 110) }); else if (k < 0.75 && lot.w > 22) techTower(ctx, rng, lot, S, { h: hh, brand: rng.chance(0.3) ? 'lumina' : null }); else shopHouse(ctx, rng, lot, S, { floors: Math.round(clamp(hh / 3.6, 3, 9)), gh: 4.6 });
@@ -141,19 +186,20 @@ export function buildDistricts(ctx) {
         break;
       }
       case 'meridian': {
-        if ((b.noise > 0.5 || prime) && b.w > 100 && rng.chance(0.6)) { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); megaTower(ctx, rng, lot, S, { h: clamp(H * rng.f(0.9, 1.5), 260, 880), brand: rng.chance(0.6) ? 'meridian' : rng.pick(['helion', 'aether', 'archive']) }); break; }
+        if ((b.noise > 0.5 || prime) && b.w > 100 && rng.chance(0.6)) { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); megaTower(ctx, rng, lot, S, { h: clamp(H * rng.f(0.9, 1.5), 260, 880), brand: rng.chance(0.6) ? 'meridian' : rng.pick(['helion', 'aether', 'archive']) }); break; }
         for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 38, wmax: 72, alley: 8, minDepth: 30 })) techTower(ctx, rng, lot, S, { h: clamp(H * rng.f(0.45, 1.1), 60, 520), brand: rng.chance(0.4) ? rng.pick(['meridian', 'helion', 'aether']) : null });
         break;
       }
       case 'hive': {
-        if (b.w > 150 && rng.chance(0.75)) { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); capsuleBlock(ctx, rng, lot, S, { h: clamp(H * rng.f(0.8, 1.3), 180, 620) }); break; }
+        if (b.w > 150 && rng.chance(0.75)) { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); capsuleBlock(ctx, rng, lot, S, { h: clamp(H * rng.f(0.8, 1.3), 180, 620) }); break; }
         for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 26, wmax: 60, alley: 8, minDepth: 20 })) tenement(ctx, rng, lot, S, { floors: Math.round(clamp(H / 3 * rng.f(0.15, 0.4), 8, 40)) });
         break;
       }
-      case 'verdant': { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); farmTower(ctx, rng, lot, S, { h: clamp(H * rng.f(0.7, 1.4), 60, 420) }); break; }
-      case 'foundry': { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); factory(ctx, rng, lot, S, { h: H }); break; }
-      case 'port': { const [lot] = subdivide(b, rng, { mode: 'mega', wmin: 999 }); depot(ctx, rng, lot, S, { h: H }); break; }
+      case 'verdant': { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); farmTower(ctx, rng, lot, S, { h: clamp(H * rng.f(0.7, 1.4), 60, 420) }); break; }
+      case 'foundry': { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); factory(ctx, rng, lot, S, { h: H }); break; }
+      case 'port': { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); depot(ctx, rng, lot, S, { h: H }); break; }
     }
+    if (b.district === 'lumina' || b.district === 'meridian' || b.district === 'hive') { const fr = rng.fork(977); for (const lot of cur) finishLot(ctx, fr, lot, fB, S); }
     const t = tally[b.district] || (tally[b.district] = { blocks: 0, bld: 0, verts: 0 }); t.blocks++; t.bld += ctx.stats.buildings - b0; t.verts += countV() - v0;
   }
   gantries(ctx, rng0.fork('gantry'));

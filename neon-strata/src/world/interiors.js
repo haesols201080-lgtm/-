@@ -86,7 +86,9 @@ export function lobby(ctx, rng, cx, zFront, o) {
 // small shop behind an open shopfront. kind: 'bar' | 'store' | 'tech' | 'home'
 export function shopRoom(ctx, rng, xa, xb, zFront, dep, h, door, o = {}) {
   const pen = ctx.pen; ctx.detail();
-  const room = { xa, xb, zb: zFront - dep, zf: zFront, h }; const w = xb - xa; const cx = (xa + xb) / 2; const kind = o.kind || rng.weighted([[4, 'bar'], [4, 'store'], [2, 'tech']]);
+  const w = xb - xa; const cx = (xa + xb) / 2; const kind = o.kind || rng.weighted([[4, 'bar'], [4, 'store'], [2, 'tech']]);
+  const up = o.upper && kind !== 'home' && w >= 4.6 && dep >= 6.4 ? o.upper : 0; // a real second storey reached by a real stair
+  const room = { xa, xb, zb: zFront - dep, zf: zFront, h: h + up };
   const warm = [1, 0.78, 0.5], cool = [0.7, 0.9, 1.0]; const lc = kind === 'tech' ? cool : kind === 'home' ? [1, 0.7, 0.45] : rng.pick([warm, warm, [1, 0.9, 0.75]]);
   const wallC = kind === 'tech' ? [0.3, 0.32, 0.36] : rng.pick([[0.44, 0.4, 0.34], [0.36, 0.38, 0.36], [0.46, 0.36, 0.3]]);
   shell(ctx, room, door, { floor: im(kind === 'tech' ? ST.TILE : ST.CONCRETE, [0.34, 0.33, 0.32]), ceil: im(ST.PLASTER, [0.3, 0.3, 0.3]), wall: im(ST.PLASTER, wallC), trim: K.dark(0.1) });
@@ -111,7 +113,25 @@ export function shopRoom(ctx, rng, xa, xb, zFront, dep, h, door, o = {}) {
     ctx.solid(wallX - sx * 0.62, room.zb + dep / 2, 1.2, dep - 1.2, 0, 2.5);
     ctx.propL('kiosk', cx - sx * (w / 2 - 0.9), 0.03, room.zb + 0.8, 0, 0.9);
   }
+  if (up) {
+    const zb = room.zb, run = Math.min(dep - 1.7, 5.4), sx0 = xb - 1.12, z0 = zb + 0.25, zo = z0 + run * 0.72; const flr = im(kind === 'tech' ? ST.TILE : ST.CONCRETE, [0.36, 0.35, 0.34]), und = im(ST.PLASTER, [0.3, 0.3, 0.3]);
+    // intermediate floor: everything except the stair opening along the door-side wall
+    pen.use(flr); pen.flat(xa, zb, sx0, zi, h + 0.02); pen.flat(sx0, zo, xb, zi, h + 0.02); pen.use(und); pen.flat(xa, zb, sx0, zi, h - 0.02, false, 0.9); pen.flat(sx0, zo, xb, zi, h - 0.02, false, 0.9);
+    ctx.solid((xa + sx0) / 2, (zb + zi) / 2, sx0 - xa, zi - zb, h - 0.22, h); ctx.solid((sx0 + xb) / 2, (zo + zi) / 2, xb - sx0, zi - zo, h - 0.22, h);
+    // stair flight: low end near the shopfront, climbing towards the back wall
+    const n = 15; pen.use(im(ST.METAL, [0.3, 0.3, 0.33])); for (let i = 0; i < n; i++) { const zc = z0 + run - (i + 0.5) * (run / n); pen.box((sx0 + xb) / 2 + 0.03, zc, 1.0, run / n, Math.max(0, (i - 0.4) * (h / n)), (i + 1) * (h / n), {}); }
+    ctx.phys.addRamp(pen.wx((sx0 + xb) / 2, z0 + run / 2), pen.wz((sx0 + xb) / 2, z0 + run / 2), run / 2, 0.52, pen.yaw + Math.PI / 2, pen.oy + 0.03, pen.oy + h, 0.6);
+    // balustrade along the opening (gap at the head of the stair) and at the stair foot side
+    pen.use(K.dark(0.1)); pen.box(sx0 - 0.03, (z0 + 1.0 + zo) / 2, 0.06, zo - z0 - 1.0, h, h + 1.0, {}); ctx.solid(sx0 - 0.03, (z0 + 1.0 + zo) / 2, 0.1, zo - z0 - 1.0, h, h + 1.0); pen.box((sx0 + xb) / 2, zo + 0.03, xb - sx0, 0.06, h, h + 1.0, {}); ctx.solid((sx0 + xb) / 2, zo + 0.03, xb - sx0, 0.1, h, h + 1.0);
+    // upstairs: a second room with its own light and furniture
+    pen.use(glow(lc, 6)); pen.flat(cx - Math.min(1.6, w * 0.3), zb + dep * 0.5, cx + Math.min(1.6, w * 0.3), zb + dep * 0.5 + 0.5, h + up - 0.04, false, 1);
+    ctx.light(pen.wx(cx, zb + dep * 0.5), pen.wz(cx, zb + dep * 0.5), 8, lc, 1.0, pen.oy + h + up - 0.35, { indoor: true, range: 8, gain: 5 });
+    const ux = (xa + sx0) / 2;
+    if (kind === 'bar') { for (const z of [zb + dep * 0.3, zb + dep * 0.68]) { ctx.propL('table', ux, h + 0.02, z, 0, 1, [rng.f(0.7, 1.4), rng.f(0.7, 1.3), rng.f(0.7, 1.3)]); ctx.solidCyl(ux, z, 0.42, h, h + 0.75); for (let k = 0; k < 3; k++) if (rng.chance(0.6)) { const an = k * 2.094 + 0.5; const lx = Math.cos(an) * 0.74, lz = Math.sin(an) * 0.74; ctx.spots.push({ x: pen.wx(ux + lx, z + lz), y: pen.oy + h + 0.02, z: pen.wz(ux + lx, z + lz), yaw: pen.yaw + Math.atan2(-lx, -lz), sit: true }); } } }
+    else { for (let z = zb + 0.9; z < zi - 1.5; z += 2.3) ctx.propL(kind === 'tech' ? 'rack' : 'shelf', xa + 0.32, h + 0.02, z, Math.PI / 2); ctx.propL('sofa', ux + 0.4, h + 0.02, zi - 1.2, Math.PI); ctx.solid(ux + 0.4, zi - 1.2, 2.2, 1.0, h, h + 0.8); ctx.propL('planterIn', xa + 0.6, h + 0.02, zi - 0.7, 0); }
+  }
   if (o.sign) { const sz = Math.min(1.1, h * 0.3); pen.sign(cx, h - 0.8, room.zb + 0.06, 0, sz * o.sign.aspect > w - 1 ? w - 1 : sz * o.sign.aspect, sz, o.sign, { intensity: 2.5, seed: rng.i(0, 255) }); }
   ctx.main();
-  return { room, door, kind };
+  const st = up ? { foot: [pen.wx(xb - 0.56, room.zb + 0.25 + Math.min(dep - 1.7, 5.4) - 0.3), pen.wz(xb - 0.56, room.zb + 0.25 + Math.min(dep - 1.7, 5.4) - 0.3)], top: [pen.wx(xb - 0.56, room.zb + 0.5), pen.wz(xb - 0.56, room.zb + 0.5)], y: pen.oy + h } : null;
+  return { room, door, kind, up, stair: st };
 }

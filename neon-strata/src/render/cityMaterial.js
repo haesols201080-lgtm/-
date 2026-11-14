@@ -309,6 +309,14 @@ const FRAG_SURFACE = /* glsl */ `
     float aa = max(px * 0.7, 0.003);
     // wall finish
     nsWall(wk, m, base, px, seed, albedo, rough, metal, slope, cav);
+    if (varB && lod < 0.98 && metal < 0.3) { // small-format cladding: glazed ceramic tile or brick in running bond
+      bool brick = hb > 0.55; vec2 ts = brick ? vec2(0.22, 0.075) : vec2(0.108, 0.108); float row = floor(m.y / ts.y);
+      vec2 tp = vec2(m.x + (brick ? mod(row, 2.0) * ts.x * 0.5 : 0.0), m.y); vec2 tc = floor(tp / ts); float th = nsHash(tc + seed);
+      vec3 sm = nsSeams(tp, ts, brick ? 0.009 : 0.004, px); float fade = 1.0 - smoothstep(0.02, 0.09, px);
+      vec3 tint = brick ? mix(vec3(0.42, 0.2, 0.14), vec3(0.56, 0.3, 0.2), th) * (0.8 + 0.4 * nsHash(tc * 1.7)) : base * (0.92 + 0.16 * th);
+      albedo = mix(albedo, mix(tint * (albedo / max(base, vec3(0.02))) , vec3(0.5, 0.49, 0.46) * 0.75, sm.x * fade), mix(0.75, 1.0, fade));
+      rough = mix(rough, brick ? 0.82 : 0.2 + 0.25 * th, fade * (1.0 - sm.x)); slope += sm.yz * (brick ? 0.9 : 0.5) * fade;
+    }
     vec3 wallAlb = albedo; float wallRough = rough; float wallMetal = metal;
     vec3 gr = nsGrunge(m * 0.11 + seed * 0.07);
 
@@ -575,7 +583,7 @@ const FRAG_SURFACE = /* glsl */ `
     else if (mode == 3) fl = 0.6 + 0.4 * sin(uTime * 1.3 + seed * 0.3 + vWPos.y * 0.02);
     float nf = (flags / 4) % 2 == 1 ? mix(0.12, 1.0, night) : 1.0;
     if ((flags / 8) % 2 == 1) { float dp = fract(vFUv.x * 0.9 + seed * 0.37); fl *= smoothstep(0.32, 0.2, abs(dp - 0.5)) * (0.6 + 0.4 * nsHash(vec2(floor(vFUv.x * 0.9 + seed * 0.37), seed))); nsIndoor = 0.0; }
-    if (varA) { float lu = vFUv.x / 4.0 + seed * 0.37; float lfw = fwidth(lu); float lon = step(0.3, nsHash(vec2(floor(lu), seed))); float lampM = smoothstep(0.075, 0.04, abs(fract(lu) - 0.5)) * lon; fl *= mix(lampM, 0.05, smoothstep(0.04, 0.16, lfw)); }
+    if (varA) { float lu = vFUv.x / 4.0 + seed * 0.37; float lfw = fwidth(lu); float lon = step(0.3, nsHash(vec2(floor(lu), seed))); float lampM = smoothstep(0.075, 0.04, abs(fract(lu) - 0.5)) * lon; fl *= mix(lampM, 0.022, smoothstep(0.04, 0.16, lfw)); }
     vec3 hot = base * inten * 2.4; // white-hot core: the tube clips to white, its bloom keeps the hue
     emis = (hot + vec3(dot(hot, vec3(0.3333))) * 0.3) * fl * nf; albedo = base * 0.08; rough = 0.35; metal = 0.0; wetAllow = 0.0;
   } else if (st == 5 || st == 23) {
@@ -617,6 +625,11 @@ const FRAG_SURFACE = /* glsl */ `
     float patchM = smoothstep(0.62, 0.64, nsNoise(floor(vWPos.xz / vec2(3.4, 8.0)) * 0.173).b);
     albedo *= 1.0 - 0.28 * patchM;
     float fadeM = 1.0 - smoothstep(0.08, 0.5, px);
+    { vec2 mc = floor(vWPos.xz / 23.0); vec2 mo = (nsHash22(mc) - 0.5) * 14.0; vec2 mp = vWPos.xz - (mc + 0.5) * 23.0 - mo; float md = length(mp); float mk = step(0.45, nsHash(mc + 7.0));
+      float disc = (1.0 - smoothstep(0.36, 0.38, md)) * mk * fadeM; float ring = (1.0 - smoothstep(0.02, 0.035, abs(md - 0.4))) * mk * fadeM;
+      float grid = step(0.5, fract(mp.x * 7.0)) * step(0.5, fract(mp.y * 7.0));
+      albedo = mix(albedo, vec3(0.05, 0.048, 0.045) * (0.7 + 0.5 * grid), disc); albedo = mix(albedo, vec3(0.02), ring); rough = mix(rough, 0.45, disc); metal = mix(metal, 0.8, disc); slope += normalize(mp + 1e-4) * ring * 0.8;
+      float oil = smoothstep(0.62, 0.8, nsNoise(vWPos.xz * 0.045 + 0.2).b) * smoothstep(0.4, 0.7, g.r); albedo *= 1.0 - 0.3 * oil; rough = mix(rough, 0.3, oil * 0.5); }
     if (width > 0.5) {
       float lanes = max(2.0, floor(width / 3.6));
       float lu = m.x / width * lanes;
@@ -662,6 +675,13 @@ const FRAG_SURFACE = /* glsl */ `
   // ---------------------------------------------------------------------- weathering common to all
   float up = smoothstep(0.55, 0.95, wN.y);
   if (st != 4 && st != 5 && st != 23 && st != 20 && st != 29) {
+    { float vert = (1.0 - abs(wN.y)) * (1.0 - nsIndoor); vec2 su = vec2(dot(vWPos.xz, T.xz), vWPos.y);
+      float s1 = smoothstep(0.5, 0.8, nsNoise(vec2(su.x * 0.5, su.y * 0.026)).g) * 0.6 + smoothstep(0.58, 0.85, nsNoise(vec2(su.x * 2.1, su.y * 0.055) + 0.4).r) * 0.4;
+      bool winS = (st >= 10 && st <= 19) || st == 30; float nearK = 1.0 - smoothstep(0.03, 0.4, px);
+      albedo *= 1.0 - vert * s1 * (winS ? 0.16 : 0.3); rough = clamp(rough + vert * s1 * 0.1, 0.02, 1.0);
+      vec3 gd = nsGrunge(hm * 0.83 + 0.3); albedo *= 1.0 + (gd.g - 0.5) * 0.28 * nearK; rough = clamp(rough + (gd.r - 0.5) * 0.2 * nearK, 0.02, 1.0);
+      if (!winS) slope += (vec2(gd.r, gd.b) - 0.5) * 0.3 * nearK;
+      float blot = smoothstep(0.56, 0.82, nsNoise(vWPos.xz * 0.06 + 0.7).b); albedo *= 1.0 - up * blot * 0.22; }
     float low = (1.0 - up) * exp(-max(vWPos.y, 0.0) / 9.0) * (1.0 - nsIndoor);
     albedo *= 1.0 - 0.4 * low * (0.5 + nsNoise(vWPos.xz * 0.13 + vWPos.y * 0.21).r);
     float dirtAO = clamp(1.0 - vCol.a, 0.0, 1.0);
@@ -673,7 +693,7 @@ const FRAG_SURFACE = /* glsl */ `
     float pud = smoothstep(0.50, 0.60, pn.r * 0.62 + pn2.g * 0.38) * up * step(vWPos.y, uCloud.x) * wet;
     float film = wet * mix(0.35, 0.8, up);
     albedo *= mix(1.0, 0.55, film * (1.0 - metal));
-    rough = mix(rough, mix(0.3, 0.12, up), film * 0.8);
+    rough = mix(rough, mix(0.3, 0.2, up), film * 0.8);
     rough = mix(rough, 0.025, pud);
     albedo *= mix(1.0, 0.5, pud);
     slope *= 1.0 - pud;
@@ -712,7 +732,7 @@ const FRAG_SURFACE_SIMPLE = /* glsl */ `
 
 const FRAG_LIGHT_END = /* glsl */ `
 {
-  float hiAmb = mix(1.0, 3.2, smoothstep(uCloud.x, uCloud.y, vWPos.y)) * (1.0 - nsIndoor);
+  float hiAmb = mix(mix(1.0, 1.9, 1.0 - uNight), 3.2, smoothstep(uCloud.x, uCloud.y, vWPos.y)) * (1.0 - nsIndoor); // an overcast day is bright and flat
   vec3 wNn = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
   vec3 hemi = mix(uAmbGround, uAmbSky, wNn.y * 0.5 + 0.5) * hiAmb * mix(0.35, 1.0, nsOpen);
   float fl = uFlash.w * exp(-dot(vWPos.xz - uFlash.xy, vWPos.xz - uFlash.xy) / (uFlash.z * uFlash.z * 2.0)) * (1.0 - nsIndoor);
