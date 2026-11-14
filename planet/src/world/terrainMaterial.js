@@ -79,12 +79,27 @@ vec4 clastLayer(vec2 p, float cell, float dens, vec2 sunL, out vec2 grad) {
         grad = vec2(ca * gl.x - sa * gl.y, sa * gl.x + ca * gl.y);
       }
     } else {
-      if (ds < rr) sh = min(sh, 0.62 + 0.38 * smoothstep(rr * 0.75, rr, ds));
-      ao = min(ao, mix(0.8, 1.0, smoothstep(rr, rr * 1.4, dp)));
+      if (ds < rr) sh = min(sh, 0.66 + 0.34 * smoothstep(rr * 0.75, rr, ds));
+      ao = min(ao, mix(0.9, 1.0, smoothstep(rr, rr * 1.35, dp)));
     }
   }
   best.w = best.x > 0.0 ? 1.0 : sh * ao;
   return best;
+}
+// polygonal crack network (salt crusts, mud): distance to the nearest
+// boundary between Voronoi cells, as a soft dark line
+float polyCrack(vec2 p) {
+  vec2 ip = floor(p), fp = fract(p);
+  float d1 = 8.0, d2 = 8.0;
+  for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+    vec2 o = vec2(float(i), float(j));
+    vec2 c = o + h22(ip + o) * 0.85 + 0.075 - fp;
+    float d = dot(c, c);
+    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) d2 = d;
+  }
+  float e = sqrt(d2) - sqrt(d1);
+  float w = fwidth(p.x) * 1.5;
+  return 1.0 - smoothstep(0.02, 0.06 + w, e);
 }
 vec3 stoneCol(float id) {
   vec3 c = mix(s2l(vec3(0.27, 0.24, 0.22)), s2l(vec3(0.44, 0.31, 0.23)), step(0.45, id));
@@ -95,10 +110,10 @@ vec3 stoneCol(float id) {
 
 vec3 strataColor(float y, float n) {
   float b = fract(y * 0.115 + n * 0.9);
-  vec3 c0 = s2l(vec3(0.80, 0.62, 0.46));
-  vec3 c1 = s2l(vec3(0.62, 0.33, 0.20));
-  vec3 c2 = s2l(vec3(0.44, 0.24, 0.16));
-  vec3 c3 = s2l(vec3(0.86, 0.72, 0.56));
+  vec3 c0 = s2l(vec3(0.78, 0.64, 0.5));
+  vec3 c1 = s2l(vec3(0.68, 0.48, 0.35));
+  vec3 c2 = s2l(vec3(0.56, 0.46, 0.39));
+  vec3 c3 = s2l(vec3(0.84, 0.74, 0.6));
   vec3 c = mix(c0, c1, smoothstep(0.15, 0.25, b));
   c = mix(c, c2, smoothstep(0.42, 0.5, b));
   c = mix(c, c3, smoothstep(0.62, 0.68, b));
@@ -123,7 +138,9 @@ void computeTerrain() {
   vec2 rp = vec2(vTW.x * 0.82 - vTW.z * 0.57, vTW.x * 0.57 + vTW.z * 0.82);
   vec4 soilA = mix(texture2D(tSoil, vTW.xz * 0.21), texture2D(tSoil, rp * 0.17 + 0.37), smoothstep(0.35, 0.65, texture2D(tNoise, vTW.xz * 0.006).g));
   vec4 soilB = texture2D(tSoil, vTW.xz * 0.043 + 0.5);
-  vec4 sand = texture2D(tSand, vec2(vTW.x * 0.07 + vTW.z * 0.05, vTW.z * 0.08 - vTW.x * 0.03));
+  vec2 sw2 = vec2(texture2D(tNoise, vTW.xz * 0.013).r, texture2D(tNoise, vTW.xz * 0.013 + 0.5).g) - 0.5;
+  vec2 suv = vTW.xz + sw2 * 3.5;
+  vec4 sand = texture2D(tSand, vec2(suv.x * 0.07 + suv.y * 0.05, suv.y * 0.08 - suv.x * 0.03));
   vec4 mossT = texture2D(tMoss, vTW.xz * 0.19);
   // rock layer (triplanar)
   vec3 bw = pow(abs(N), vec3(5.0)); bw /= (bw.x + bw.y + bw.z);
@@ -144,13 +161,15 @@ void computeTerrain() {
   float soilDetail = mix(soilA.b, soilB.b, 0.35);
 
   // --- base albedo per biome
-  vec3 regolith = mix(s2l(vec3(0.56, 0.42, 0.32)), s2l(vec3(0.76, 0.6, 0.47)), soilDetail * 0.8 + 0.1);
+  vec3 regolith = mix(s2l(vec3(0.62, 0.48, 0.37)), s2l(vec3(0.72, 0.57, 0.45)), soilDetail * 0.5 + 0.25);
   regolith = mix(regolith, s2l(vec3(0.64, 0.54, 0.46)), smoothstep(0.35, 0.75, nzB.r) * 0.5);
   regolith = mix(regolith, s2l(vec3(0.7, 0.5, 0.35)), smoothstep(0.6, 0.92, nzA.g) * 0.4);
   // dark basaltic sand in drifts and patches, bright dust settled on the flats
   regolith = mix(regolith, s2l(vec3(0.42, 0.38, 0.35)) * (0.85 + 0.3 * soilA.b), smoothstep(0.58, 0.85, nzA.b * 0.8 + nzC.g * 0.3) * 0.45);
   regolith = mix(regolith, s2l(vec3(0.82, 0.66, 0.51)), smoothstep(0.62, 0.88, nzB.a * 0.7 + nzA.r * 0.4) * (1.0 - smoothstep(0.05, 0.25, 1.0 - N.y)) * 0.55);
-  vec3 sandC = mix(s2l(vec3(0.62, 0.43, 0.28)), s2l(vec3(0.85, 0.66, 0.47)), sand.b);
+  vec3 sandC = mix(s2l(vec3(0.38, 0.34, 0.31)), s2l(vec3(0.52, 0.45, 0.39)), smoothstep(0.2, 0.8, nzC.r * 0.6 + nzA.b * 0.4));
+  sandC = mix(sandC, s2l(vec3(0.7, 0.55, 0.42)), smoothstep(0.55, 0.85, nzB.b * 0.7 + N.x * 0.15 + 0.15) * 0.55);
+  sandC *= 0.95 + 0.08 * sand.b;
   // basaltic sand and rubble: dark grey, not brown
   vec3 basalt = mix(s2l(vec3(0.31, 0.3, 0.29)), s2l(vec3(0.5, 0.46, 0.43)), soilDetail);
   vec3 ground = regolith;
@@ -160,22 +179,22 @@ void computeTerrain() {
   float mantle = smoothstep(0.35, 0.7, nzB.g * 0.6 + nzC.b * 0.3 + soilB.b * 0.3);
   ground = mix(ground, basalt, smoothstep(0.2, 0.7, bio.g) * (1.0 - mantle * 0.6));
   // salt crust with polygon cracks
-  vec3 saltC = mix(s2l(vec3(0.72, 0.70, 0.66)), s2l(vec3(0.93, 0.92, 0.88)), smoothstep(0.1, 0.5, sand.b * 0.3 + soilB.a * 0.7));
-  float saltCrack = smoothstep(0.08, 0.0, abs(texture2D(tRock, vTW.xz * 0.05).b - 0.5) - 0.02);
-  saltC *= 1.0 - saltCrack * 0.35;
+  vec3 saltC = mix(s2l(vec3(0.7, 0.66, 0.6)), s2l(vec3(0.86, 0.83, 0.77)), smoothstep(0.1, 0.5, sand.b * 0.3 + soilB.a * 0.7));
+  float saltCrack = polyCrack(vTW.xz / 1.7 + sw2 * 0.6) * 0.8 + polyCrack(vTW.xz / 0.45 + 3.1) * 0.35 * (1.0 - smoothstep(0.02, 0.08, length(fwidth(vTW.xz))));
+  saltC = mix(saltC, saltC * vec3(0.72, 0.64, 0.56), saltCrack);
   ground = mix(ground, saltC, smoothstep(0.25, 0.7, saltW));
   // crystal plains: lavender-grey glassy grit
-  vec3 crysC = mix(s2l(vec3(0.30, 0.27, 0.31)), s2l(vec3(0.56, 0.51, 0.56)), soilDetail);
+  vec3 crysC = mix(s2l(vec3(0.5, 0.47, 0.5)), s2l(vec3(0.7, 0.66, 0.68)), soilDetail);
   ground = mix(ground, crysC, smoothstep(0.25, 0.7, crysW));
 
   vec3 rockC = mix(s2l(vec3(0.44, 0.36, 0.3)), s2l(vec3(0.7, 0.57, 0.46)), rock.b);
   // sandstone bedding: irregular, low-contrast layers (no candy stripes)
   vec3 strataC = strataColor(vTW.y * 0.45 + rock.b * 3.0 + nzC.r * 4.0 + nzB.g * 6.0, nzB.r);
-  strataC = mix(s2l(vec3(0.55, 0.31, 0.19)) * (0.85 + 0.3 * nzC.g), strataC, 0.22) * (0.8 + 0.35 * rock.b);
+  strataC = mix(s2l(vec3(0.66, 0.51, 0.4)) * (0.85 + 0.3 * nzC.g), strataC, 0.5) * (0.82 + 0.3 * rock.b);
   rockC = mix(rockC, strataC, smoothstep(0.15, 0.6, bio.b) * smoothstep(0.5, 0.85, slope));
   rockC = mix(rockC, basalt * 1.25, smoothstep(0.2, 0.7, bio.g));
-  rockC = mix(rockC, s2l(vec3(0.45, 0.47, 0.52)) * (0.7 + 0.5 * rock.b), smoothstep(0.3, 0.8, snowW));
-  rockC = mix(rockC, crysC * 1.1, smoothstep(0.3, 0.8, crysW) * 0.6);
+  rockC = mix(rockC, s2l(vec3(0.66, 0.6, 0.56)) * (0.8 + 0.4 * rock.b), smoothstep(0.3, 0.8, snowW));
+  rockC = mix(rockC, crysC * 1.05, smoothstep(0.3, 0.8, crysW) * 0.9);
 
   // scree / exposed rock on eroded crests and steeper hillsides (before cliffs)
   float scree = smoothstep(0.14, 0.42, slope + (nzC.r - 0.5) * 0.12) * (0.35 + 0.55 * smoothstep(0.2, 0.5, bio.b)) * (1.0 - cliff);
@@ -187,7 +206,7 @@ void computeTerrain() {
 
   // detail normal
   vec2 tGround = mix(soilA.rg, sand.rg, sandW) * 2.0 - 1.0;
-  vec3 nGround = normalize(N + vec3(tGround.x, 0.0, tGround.y) * 0.55);
+  vec3 nGround = normalize(N + vec3(tGround.x, 0.0, tGround.y) * mix(0.22, 0.09, sandW));
   vec2 tx = rx.rg * 2.0 - 1.0, ty = ry.rg * 2.0 - 1.0, tz = rz.rg * 2.0 - 1.0;
   vec3 nRock = normalize(N + (vec3(0.0, tx.y, tx.x) * bw.x + vec3(ty.x, 0.0, ty.y) * bw.y + vec3(tz.x, tz.y, 0.0) * bw.z) * 0.9);
   vec3 nrm = normalize(mix(nGround, nRock, cliff));
@@ -198,7 +217,7 @@ void computeTerrain() {
   // rock, gentle on sand, each fading before it gets too small to resolve
   {
     float fwR = length(fwidth(vTW.xz));
-    float rug = mix(0.6, 1.15, smoothstep(0.06, 0.4, slope)) * (1.0 - sandW * 0.55);
+    float rug = mix(0.6, 1.15, smoothstep(0.06, 0.4, slope)) * (1.0 - sandW * 0.85);
     vec2 r1 = vec2(vTW.x * 0.8 - vTW.z * 0.6, vTW.x * 0.6 + vTW.z * 0.8);
     vec4 m1 = texture2D(tRock, r1 * 0.017 + 0.11);
     vec4 m2 = texture2D(tSoil, vec2(r1.y, -r1.x) * 0.055 + 0.29);
@@ -216,8 +235,8 @@ void computeTerrain() {
       vec2 dn = normalize(N.xz + vec2(1e-4));
       vec2 pr = vec2(dot(vTW.xz, vec2(-dn.y, dn.x)), dot(vTW.xz, dn));
       float st = texture2D(tNoise, vec2(pr.x * 0.33, pr.y * 0.022)).r * 0.6 + texture2D(tNoise, vec2(pr.x * 1.05, pr.y * 0.055) + 0.4).g * 0.4;
-      float sw = smoothstep(0.06, 0.32, slope) * (1.0 - cliff * 0.4);
-      alb *= 1.0 + (st - 0.5) * 0.42 * sw;
+      float sw = smoothstep(0.06, 0.32, slope) * (1.0 - cliff * 0.4) * smoothstep(0.012, 0.06, fwR);
+      alb *= 1.0 + (st - 0.5) * 0.3 * sw;
       nrm = normalize(nrm + vec3(-dn.y, 0.0, dn.x) * (texture2D(tNoise, vec2(pr.x * 0.7, pr.y * 0.03) + 0.7).b - 0.5) * 0.5 * sw);
     }
     // mineral ground is less saturated than painted clay
@@ -251,7 +270,7 @@ void computeTerrain() {
   float hollow = smoothstep(0.55, 0.85, bio.a) * (1.0 - smoothstep(-25.0, 60.0, vTW.y));
   float frostMask = smoothstep(0.55, 0.95, nzB.g * 0.45 + hollow * 0.4 - N.z * 0.12 + nzA.b * 0.25 + nzC.r * 0.1 - sandW * 0.4);
   float frost = uFrost * frostMask * (1.0 - cliff * 0.85) * 0.38;
-  alb = mix(alb, s2l(vec3(0.72, 0.74, 0.78)) * (0.85 + 0.15 * soilA.b), frost * (0.6 + 0.4 * soilA.b));
+  alb = mix(alb, s2l(vec3(0.74, 0.74, 0.76)), frost * (0.7 + 0.3 * nzC.a));
   rough = mix(rough, 0.55, frost);
 
   // polar snow & glacier ice
@@ -346,7 +365,7 @@ void computeTerrain() {
     float fwS = length(fwidth(vTW.xz));
     float day = smoothstep(-0.02, 0.15, uSunDir.y);
     vec2 sunL = normalize(uSunDir.xz + vec2(1e-4)) * clamp(0.22 / max(uSunDir.y, 0.05), 0.15, 1.6);
-    float stony = (1.0 - sandW * 0.85) * (1.0 - packed * 0.85) * (1.0 - paved) * (1.0 - snowCov) * (1.0 - live * 0.85) * (1.0 - cliff)
+    float stony = (1.0 - sandW * 0.85) * (1.0 - smoothstep(0.3, 0.8, crysW) * 0.55) * (1.0 - packed * 0.85) * (1.0 - paved) * (1.0 - snowCov) * (1.0 - live * 0.85) * (1.0 - cliff)
                 * (0.6 + 0.6 * scree + 0.45 * smoothstep(0.2, 0.7, bio.g) + 0.25 * smoothstep(0.45, 0.8, nzB.g));
     // gravel lies in patches: lag deposits between bare fines
     float patchG = smoothstep(0.28, 0.72, texture2D(tNoise, vTW.xz * 0.31 + 0.2).g * 0.7 + texture2D(tNoise, vTW.xz * 0.07).b * 0.5);
@@ -363,26 +382,33 @@ void computeTerrain() {
         // dust-coated on their flatter tops
         // mostly grey and brown-grey stone near the ground's brightness, a few darker
         vec3 grey = s2l(vec3(0.6, 0.57, 0.53)) * (0.8 + 0.4 * fract(r.z * 37.0));
-        vec3 sc = mix(alb * mix(0.8, 1.05, r.z), grey * 0.88, 0.35);
+        vec3 sc = mix(alb * mix(0.82, 0.96, r.z), grey * 0.8, 0.3);
         sc = mix(sc, s2l(vec3(0.36, 0.34, 0.33)), step(0.9, r.z) * 0.7);
         float top = 1.0 - smoothstep(0.15, 0.9, length(gg));
-        sc = mix(sc, alb * 1.05, top * 0.5);
+        sc = mix(sc, alb * 1.05, top * 0.28);
         alb = mix(alb, sc, f);
         rough = mix(rough, 0.78 + 0.12 * r.z, f);
-        nrm = normalize(nrm + vec3(-gg.x, 0.0, -gg.y) * 1.05 * f);
-        ao = mix(ao, 0.86 + 0.14 * top, f);
+        nrm = normalize(nrm + vec3(-gg.x, 0.0, -gg.y) * 2.1 * f);
+        ao = mix(ao, 0.8 + 0.12 * top, f);
       } else {
         float shade = mix(1.0, r.w, f);
         alb *= mix(1.0, shade, 0.3 + 0.35 * day);
-        ao *= shade;
+        ao *= mix(1.0, shade, 0.35);
       }
     }
     // sand-grain relief and speckle at boot distance
-    float fg = 1.0 - smoothstep(0.003, 0.016, fwS);
+    float fg = 1.0 - smoothstep(0.004, 0.03, fwS);
     if (fg > 0.01) {
       vec4 g1 = texture2D(tNoise, vTW.xz * 23.0), g2 = texture2D(tNoise, vTW.xz * 53.0 + 0.3);
       nrm = normalize(nrm + vec3(g1.r - 0.5 + (g2.g - 0.5) * 0.7, 0.0, g1.g - 0.5 + (g2.b - 0.5) * 0.7) * 0.32 * fg * (1.0 - live));
       alb *= 1.0 + ((g1.b - 0.5) * 0.22 + (g2.a - 0.5) * 0.16) * fg * (1.0 - live * 0.7);
+    }
+    // speckle and grain at a few metres, where the stones have faded out
+    float fm = 1.0 - smoothstep(0.02, 0.12, fwS);
+    if (fm > 0.01) {
+      vec4 g3 = texture2D(tNoise, vTW.xz * 6.1 + 0.71), g4 = texture2D(tNoise, vTW.xz * 2.3 + 0.17);
+      alb *= 1.0 + ((g3.r - 0.5) * 0.16 + (g4.g - 0.5) * 0.1) * fm * (1.0 - live * 0.7);
+      nrm = normalize(nrm + vec3(g3.g - 0.5, 0.0, g3.b - 0.5) * 0.22 * fm * (1.0 - live));
     }
   }
 
@@ -446,6 +472,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v28';
+  mat.customProgramCacheKey = () => 'terrain-v34';
   return mat;
 }

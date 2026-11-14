@@ -602,9 +602,11 @@ export class Sky {
     this.sun.position.z = this.sun.target.position.z + (this.sun.position.z - camPos.z);
 
     // sky fill: by day the air, by night a blue starlit dome
-    this.hemi.intensity = lerp(0.6 + 0.18 * this.shine, 0.22 + 0.04 * day, dayV);
-    this.hemi.color.setRGB(lerp(0.42, lerp(0.55, 0.45, atmo), dayV), lerp(0.5, lerp(0.4, 0.6, atmo), dayV), lerp(0.78, lerp(0.3, 0.85, atmo), dayV));
-    this.hemi.groundColor.setRGB(lerp(0.2, 0.3, dayV), lerp(0.17, 0.18, dayV), lerp(0.16, 0.1, dayV));
+    // a dusty sky scatters a lot of light into the shade: shadows on Mars are
+    // soft and fairly bright, lit by the butterscotch sky and the tan ground
+    this.hemi.intensity = lerp(0.6 + 0.18 * this.shine, 0.74 + 0.12 * day, dayV);
+    this.hemi.color.setRGB(lerp(0.42, lerp(0.64, 0.47, atmo), dayV), lerp(0.5, lerp(0.54, 0.62, atmo), dayV), lerp(0.78, lerp(0.46, 0.86, atmo), dayV));
+    this.hemi.groundColor.setRGB(lerp(0.2, 0.44, dayV), lerp(0.17, 0.35, dayV), lerp(0.16, 0.28, dayV));
     // eyes adapt to the dark
     this.adapt = lerp(this.adapt, 1 + 0.7 * (1 - dayV), Math.min(1, dt * 0.6));
 
