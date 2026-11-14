@@ -53,7 +53,7 @@ const HEAD_F = /* glsl */`
 varying vec3 vOP; varying vec3 vON; varying vec3 vWP2; varying vec3 vData; varying vec3 vPan;
 uniform sampler2D tPanel, tNoise;
 uniform float uNight, uDustAmt, uTime, uRime;
-float gRime = 0.0;
+float gRime = 0.0; float gGrime = 0.0;
 float hash1(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 vec3 gN2; float gR2; float gH = 0.0; float gBumpK = 1.0; float gStagger = 0.5;
 `;
@@ -134,6 +134,34 @@ const RIME_F = /* glsl */`
   }
 #endif
 `;
+// weathering shared by every opaque building surface: tone variation at
+// three scales, Mars dust settled on up-facing surfaces in blotches, a
+// splash band near the ground, runoff streaks down walls, and a little
+// micro relief; dust is matte, so it also kills gloss and metalness
+const GRIME_F = /* glsl */`
+#ifdef GRIME
+  {
+    vec3 gn = normalize(vON);
+    vec2 gq = vOP.xz + vOP.zy * 0.7;
+    float m1 = texture2D(tNoise, vOP.xz * 0.045 + vOP.y * 0.03 + vData.z * 3.0).r;
+    float m2 = texture2D(tNoise, vOP.xz * 0.23 + vOP.zy * 0.19 + 0.31).g;
+    float m3 = texture2D(tNoise, gq * 1.9 + 0.77).b;
+    float m4 = texture2D(tNoise, gq * 7.3 + 0.13).a;
+    float ff = 1.0 - smoothstep(0.25, 1.0, length(fwidth(gq)) * 5.0);
+    float upf = smoothstep(0.2, 0.85, gn.y);
+    float settled = upf * smoothstep(0.3, 0.72, m1 * 0.55 + m2 * 0.45 + uDustAmt * 0.2);
+    float splash = smoothstep(1.2, 0.0, vOP.y) * (0.45 + 0.55 * m2);
+    float streak = smoothstep(0.58, 0.86, texture2D(tNoise, vec2((vOP.x + vOP.z) * 0.55, vOP.y * 0.045 + 0.5)).r) * (1.0 - abs(gn.y));
+    diffuseColor.rgb *= 0.9 + 0.13 * m1 + (0.07 * (m3 - 0.5) + 0.05 * (m4 - 0.5)) * ff;
+    vec3 dustCol = vec3(0.55, 0.37, 0.25) * (0.85 + 0.3 * m3);
+    float dk = clamp(settled * 0.8 + splash * 0.42 + streak * 0.2, 0.0, 0.88) * uDustAmt / 0.6;
+    diffuseColor.rgb = mix(diffuseColor.rgb, dustCol, dk);
+    gGrime = clamp(dk * 1.2, 0.0, 1.0);
+    gH += ((m4 - 0.5) * 0.0012 + (m3 - 0.5) * 0.0008) * ff + settled * m4 * 0.0015;
+  }
+#endif
+`;
+const NO_GRIME = new Set(['glass', 'window', 'emissive', 'blink', 'mirror', 'solar', 'plant', 'foil', 'water']);
 const NO_RIME = new Set(['glass', 'window', 'emissive', 'blink', 'mirror', 'solar']);
 
 const SHARED_UNIFORMS = () => ({ tPanel: { value: TEX.panel }, tNoise: U.tNoise, uNight: U.uNight, uDustAmt: { value: 0 }, uTime: U.uTime, uRime: U.uRime });
@@ -144,6 +172,7 @@ function patch(mat, key, fragBody, { anim = null, slide = null, extraUniforms = 
     Object.assign(sh.uniforms, SHARED_UNIFORMS(), extraUniforms);
     sh.uniforms.uDustAmt = BUILD_U.uDustAmt;
     if (!NO_RIME.has(String(key).split(':')[0]) && !String(key).startsWith('asset')) { sh.defines = sh.defines || {}; sh.defines.RIME = 1; }
+    if (!NO_GRIME.has(String(key).split(':')[0]) && !String(key).startsWith('asset')) { sh.defines = sh.defines || {}; sh.defines.GRIME = 1; }
     if (anim) {
       sh.defines = sh.defines || {};
       sh.defines.ANIM = 1;
@@ -164,10 +193,10 @@ function patch(mat, key, fragBody, { anim = null, slide = null, extraUniforms = 
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + HEAD_F + (fragBody.fhead || '') + PANEL_FN + BUMP_FN)
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nif (gH != 0.0) normal = bumpN(normal, -vViewPosition, gH, gBumpK);')
-      .replace('#include <map_fragment>', (mat.vertexColors ? '#ifdef USE_COLOR\n  diffuseColor.rgb *= vColor;\n#endif\n' : '') + (fragBody.map || '') + RIME_F)
-      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.0, gRime);')
+      .replace('#include <map_fragment>', (mat.vertexColors ? '#ifdef USE_COLOR\n  diffuseColor.rgb *= vColor;\n#endif\n' : '') + (fragBody.map || '') + GRIME_F + RIME_F)
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.0, max(gRime, gGrime * 0.8));')
       .replace('#include <color_fragment>', mat.vertexColors ? '' : '#include <color_fragment>')
-      .replace('#include <roughnessmap_fragment>', (fragBody.rough || '#include <roughnessmap_fragment>') + '\nroughnessFactor = mix(roughnessFactor, 0.85, gRime);')
+      .replace('#include <roughnessmap_fragment>', (fragBody.rough || '#include <roughnessmap_fragment>') + '\nroughnessFactor = mix(mix(roughnessFactor, 0.93, gGrime), 0.85, gRime);')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + (fragBody.emit || ''));
   };
   mat.customProgramCacheKey = () => key + (anim ? JSON.stringify(anim) : '') + (slide ? JSON.stringify(slide) : '');
@@ -203,14 +232,14 @@ export function makeBuildingMaterials() {
   });
   // painted composite / beta-cloth module skin: matte white panels with fine
   // seams, slight panel-to-panel tone, scuffs and dust low down
-  M.shell = patch(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.0, clearcoat: 0.25, clearcoatRoughness: 0.5, envMapIntensity: 0.9 }), 'shell', {
+  M.shell = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.0, envMapIntensity: 0.85 }), 'shell', {
     map: /* glsl */`
       gStagger = 0.0;
       vec3 pin = panelInfo(vOP, normalize(vON), vec2(1.2, 1.0));
       vec4 nz = texture2D(tNoise, vOP.xz * 0.19 + vOP.y * 0.11 + vData.z);
       vec4 nz2 = texture2D(tNoise, vOP.xz * 0.9 + vOP.zy * 0.7);
-      vec3 c = diffuseColor.rgb * (0.95 + 0.06 * pin.y + 0.03 * (nz.r - 0.5));
-      c *= 1.0 - pin.x * 0.32;
+      vec3 c = diffuseColor.rgb * 0.86 * (0.95 + 0.06 * pin.y + 0.03 * (nz.r - 0.5));
+      c *= 1.0 - pin.x * 0.38;
       float low = smoothstep(1.0, 0.0, vOP.y) * (0.5 + 0.5 * nz.g);
       c = mix(c, c * vec3(0.8, 0.72, 0.64), low * 0.35);
       float scuff = smoothstep(0.78, 0.92, nz2.b) * 0.12;
@@ -219,7 +248,7 @@ export function makeBuildingMaterials() {
       c = mix(c, vec3(0.62, 0.46, 0.34), up * uDustAmt * 0.3 * smoothstep(0.35, 0.7, nz.a));
       gH = cladHeight(vOP, normalize(vON), vec2(1.2, 1.0), 0.003) + 1e-6;
       diffuseColor.rgb = c;
-      gR2 = clamp(0.48 + 0.08 * pin.y + scuff + low * 0.2, 0.0, 1.0);`,
+      gR2 = clamp(0.55 + 0.1 * pin.y + scuff + low * 0.2, 0.0, 1.0);`,
     rough: 'float roughnessFactor = gR2;',
   });
   // trapezoidal ribbed metal cladding (industrial sheds, roofs)

@@ -115,21 +115,34 @@ export class Effects {
           this.stepAcc = 0;
           const yaw = Math.atan2(P.vel.x, P.vel.z), side = this.foot ? 1 : -1;
           const ox = Math.cos(yaw) * 0.13 * side, oz = -Math.sin(yaw) * 0.13 * side;
-          this.print(P.pos.x + ox, P.pos.z + oz, yaw, 0.13, 0.31, this.foot);
-          this.foot ^= 1;
-          if (D && dry > 0.5 && sp > 3.5 && Math.random() < 0.35) D.puff(P.pos.x, P.pos.y + 0.1, P.pos.z, { s: 0.4, grow: 1.6, max: 1.4, a: 0.22 * dry, vy: 0.3, kind: 'dust', drift: 0.5 });
+          const gx = P.pos.x + ox, gz = P.pos.z + oz;
+          const water = U.uIce.value < 0.5 && P.pos.y < U.uWaterLevel.value + 0.35;
+          const G = g.grains;
+          if (water) {
+            G.spray(gx, U.uWaterLevel.value + 0.02, gz, 10 + Math.round(sp * 3), { dx: Math.sin(yaw), dz: Math.cos(yaw), hs: 0.6 + sp * 0.2, up: 1.6 + sp * 0.2, spread: 1.6, size: [0.006, 0.022], kind: 1, life: 1.6, ground: U.uWaterLevel.value });
+          } else {
+            this.print(gx, gz, yaw, 0.13, 0.31, this.foot);
+            // the boot flicks grains back and up, a few fine motes hang a moment
+            const k = (0.45 + 0.55 * dry);
+            G.spray(gx, P.pos.y + 0.04, gz, Math.round((9 + sp * 5) * k), { dx: -Math.sin(yaw), dz: -Math.cos(yaw), hs: 0.35 + sp * 0.18, up: 0.7 + sp * 0.16, spread: 0.9, size: [0.005, 0.024], life: 2.2 });
+            G.spray(gx, P.pos.y + 0.04, gz, Math.round((3 + sp) * k), { dx: Math.sin(yaw), dz: Math.cos(yaw), hs: 0.25 + sp * 0.1, up: 0.5, spread: 1.0, size: [0.003, 0.01], life: 1.6 });
+            if (dry > 0.4) G.spray(gx, P.pos.y + 0.08, gz, 2 + Math.round(sp * 0.6), { hs: 0.15, up: 0.25, size: [0.003, 0.008], kind: 2, life: 3.5 });
+            if (D && dry > 0.6 && sp > 4 && Math.random() < 0.25) D.puff(gx, P.pos.y + 0.05, gz, { s: 0.35, grow: 1.2, max: 1.8, a: 0.06 * dry, vy: 0.1, kind: 'dust', drift: 0.6 });
+          }
         }
       }
     }
-    // ---- jetpack landing dust
-    if (P.onGround && !this.prevGround && this.prevVy < -3.5 && D && dry > 0.3) {
-      for (let i = 0; i < 10; i++) {
-        const a = i / 10 * 6.283 + Math.random() * 0.3;
-        D.puff(P.pos.x + Math.cos(a) * 0.5, P.pos.y + 0.15, P.pos.z + Math.sin(a) * 0.5, { vx: Math.cos(a) * 3, vz: Math.sin(a) * 3, vy: 0.2, s: 0.7, grow: 2.2, max: 2.2, a: 0.32 * dry, kind: 'dust', drift: 0.4 });
-      }
+    // ---- jetpack landing: a radial spray of grains, a faint skirt of haze
+    if (P.onGround && !this.prevGround && this.prevVy < -3.5) {
+      const water = U.uIce.value < 0.5 && P.pos.y < U.uWaterLevel.value + 0.35;
+      const k = Math.min(1, -this.prevVy / 9);
+      g.grains.spray(P.pos.x, (water ? U.uWaterLevel.value : P.pos.y) + 0.05, P.pos.z, Math.round(30 + 50 * k), { hs: 1.2 + 2 * k, up: 0.8 + 1.4 * k, size: [0.004, 0.02], kind: water ? 1 : 0, life: 2.4, ground: water ? U.uWaterLevel.value : null });
+      if (D && dry > 0.4 && !water) for (let i = 0; i < 5; i++) { const a = i / 5 * 6.283; D.puff(P.pos.x + Math.cos(a) * 0.6, P.pos.y + 0.1, P.pos.z + Math.sin(a) * 0.6, { vx: Math.cos(a) * 1.6, vz: Math.sin(a) * 1.6, s: 0.7, grow: 1.8, max: 2.6, a: 0.07 * dry * k, kind: 'dust', drift: 0.5 }); }
     }
-    if (P.jetting && D && dry > 0.3 && P.pos.y - T.height(P.pos.x, P.pos.z) < 3.5 && Math.random() < dt * 8) {
-      D.puff(P.pos.x + (Math.random() - 0.5), T.height(P.pos.x, P.pos.z) + 0.2, P.pos.z + (Math.random() - 0.5), { vx: (Math.random() - 0.5) * 4, vz: (Math.random() - 0.5) * 4, s: 0.6, grow: 2, max: 1.6, a: 0.25 * dry, kind: 'dust' });
+    // jet blast near the ground strips grains out from under the boots
+    if (P.jetting && P.pos.y - T.height(P.pos.x, P.pos.z) < 3.0 && Math.random() < dt * 14) {
+      const gy = T.height(P.pos.x, P.pos.z), h = P.pos.y - gy;
+      g.grains.spray(P.pos.x, gy + 0.03, P.pos.z, 6, { hs: 3.2 * (1 - h / 3.2), up: 0.6, size: [0.003, 0.012], life: 1.8 });
     }
     this.prevGround = P.onGround; this.prevVy = P.vel.y;
 
@@ -143,12 +156,19 @@ export class Effects {
         for (const lx of [-1.48, 1.48]) { const [x, z] = at(lx, 1.9); this.print(x, z, R.yaw, 0.42, 0.56, 2); }
       }
       this.dustT -= dt;
-      if (D && dry > 0.3 && Math.abs(R.speed) > 2.5 && this.dustT <= 0) {
-        this.dustT = 0.1;
-        const k = Math.min(1, Math.abs(R.speed) / 12) * dry;
-        for (const lx of [-1.5, 1.5]) {
-          const [x, z] = at(lx, 2.3);
-          D.puff(x, R.pos.y + 0.4, z, { vx: s * R.speed * 0.15, vz: c * R.speed * 0.15, vy: 0.5, s: 0.9, grow: 3.0, max: 2.8 + k, a: 0.32 * k, kind: 'dust', drift: 0.7 });
+      if (Math.abs(R.speed) > 1.2 && this.dustT <= 0) {
+        this.dustT = 0.05;
+        const sp = Math.abs(R.speed), k = Math.min(1, sp / 14);
+        const bx = s * Math.sign(R.speed), bz = c * Math.sign(R.speed);
+        for (const lx of [-1.48, 1.48]) {
+          const [x, z] = at(lx, R.speed > 0 ? 2.0 : -2.0);
+          // rooster tail off each wheel: grains thrown back and up on clean arcs
+          g.grains.spray(x, R.pos.y + 0.15, z, Math.round(8 + 22 * k * (0.4 + 0.6 * dry)), { dx: bx, dz: bz, hs: 1.0 + sp * 0.3, up: 1.0 + sp * 0.2, spread: 0.38, size: [0.008, 0.045], life: 3.2 });
+          if (dry > 0.4) g.grains.spray(x, R.pos.y + 0.2, z, 2, { dx: bx, dz: bz, hs: 0.5 + sp * 0.1, up: 0.6, spread: 0.6, size: [0.003, 0.008], kind: 2, life: 4 });
+        }
+        if (D && dry > 0.5 && sp > 5 && Math.random() < 0.3) {
+          const [x, z] = at(0, 2.6);
+          D.puff(x, R.pos.y + 0.3, z, { vx: bx * sp * 0.1, vz: bz * sp * 0.1, vy: 0.1, s: 1.2, grow: 2.2, max: 4 + 2 * k, a: 0.07 * k * dry, kind: 'dust', drift: 0.8 });
         }
       }
     }
@@ -174,7 +194,7 @@ export class Effects {
           if (v.kind === 'heat') {
             D.puff(wx + (Math.random() - 0.5) * 0.6, b.y + v.y, wz + (Math.random() - 0.5) * 0.6, { vy: 1.4, s: 0.6 * v.size, grow: 2.5, max: 2.2, a: 0.08, kind: 'steam', drift: 0.5 });
           } else {
-            D.puff(wx, b.y + v.y, wz, { vy: 1.6 + Math.random() * 0.8, vx: (Math.random() - 0.5) * 0.3, vz: (Math.random() - 0.5) * 0.3, s: 0.55 * v.size, grow: 3.2, max: 3.2 + v.size, a: (v.kind === 'exhaust' ? 0.26 : 0.34) * vis, kind: v.kind === 'exhaust' ? 'exhaust' : 'steam', drift: 0.75 });
+            D.puff(wx, b.y + v.y, wz, { vy: 1.6 + Math.random() * 0.8, vx: (Math.random() - 0.5) * 0.3, vz: (Math.random() - 0.5) * 0.3, s: 0.45 * v.size, grow: 2.6, max: 2.6 + v.size, a: (v.kind === 'exhaust' ? 0.16 : 0.22) * vis, kind: v.kind === 'exhaust' ? 'exhaust' : 'steam', drift: 0.75 });
           }
         }
       }
@@ -188,8 +208,8 @@ export class Effects {
         if (prev < 0.02 && b.door >= 0.02) {
           for (const d of b.model.doors) {
             const [wx, wz] = g.buildings.toWorld(b, d.x, d.z);
-            for (let i = 0; i < 5; i++) D.puff(wx + (Math.random() - 0.5) * 0.8, b.y + 0.6 + Math.random() * 1.4, wz + (Math.random() - 0.5) * 0.8, { vx: (Math.random() - 0.5) * 1.5, vy: 0.6, vz: (Math.random() - 0.5) * 1.5, s: 0.5, grow: 2.6, max: 2.0, a: 0.35, kind: 'steam', drift: 0.5 });
-            for (let i = 0; i < 3; i++) D.puff(wx + (Math.random() - 0.5), b.y + 0.15, wz + (Math.random() - 0.5), { vx: (Math.random() - 0.5) * 2.5, vz: (Math.random() - 0.5) * 2.5, s: 0.5, grow: 2, max: 1.6, a: 0.25 * dry, kind: 'dust' });
+            for (let i = 0; i < 5; i++) D.puff(wx + (Math.random() - 0.5) * 0.8, b.y + 0.6 + Math.random() * 1.4, wz + (Math.random() - 0.5) * 0.8, { vx: (Math.random() - 0.5) * 1.5, vy: 0.6, vz: (Math.random() - 0.5) * 1.5, s: 0.4, grow: 2.2, max: 1.6, a: 0.2, kind: 'steam', drift: 0.5 });
+            g.grains.spray(wx, b.y + 0.2, wz, 14, { hs: 1.4, up: 0.8, size: [0.003, 0.01], life: 1.8, ground: b.y });
           }
         }
         b._doorPrev = b.door;

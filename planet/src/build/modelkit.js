@@ -64,7 +64,7 @@ export class ModelBuilder {
 
   // centred box
   box(key, x, y, z, w, h, d, color, rot) {
-    const soft = (key === 'hull' || key === 'metal' || key === 'interior' || key === 'concrete') && Math.min(w, h, d) >= 0.12 && !this.sharp;
+    const soft = (key === 'hull' || key === 'shell' || key === 'metal' || key === 'interior' || key === 'concrete' || key === 'stone' || key === 'brick') && Math.min(w, h, d) >= 0.12 && !this.sharp;
     return this.add(key, soft ? roundedBox(w, h, d) : new THREE.BoxGeometry(w, h, d), { pos: v(x, y, z), rot: rot ? e(0, rot, 0) : undefined, color });
   }
   // box from bounds

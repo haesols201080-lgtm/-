@@ -186,7 +186,7 @@ export class Dust {
       const k = Q.life / Q.max;
       const fade = Math.min(1, Q.life / 0.25) * (1 - k) * (1 - k * 0.3);
       const seed = Q.kind === 'steam' ? -(0.05 + Q.seed) : Q.kind === 'exhaust' ? -(10.5 + Q.seed) : Q.seed;
-      put(Q.x, Q.y, Q.z, Q.s * (1 + Q.grow * Math.sqrt(k)), Q.a * fade, seed, Q.kind === 'dust' ? 0.6 : 1.0, Q.spin + Q.life * 0.15);
+      put(Q.x, Q.y, Q.z, Q.s * (1 + Q.grow * Math.sqrt(k)), Q.a * fade, seed, Q.kind === 'dust' ? 0.32 : 0.8, Q.spin + Q.life * 0.15);
     }
     this.mesh.count = n;
     this.iP.needsUpdate = true; this.iA.needsUpdate = true;
