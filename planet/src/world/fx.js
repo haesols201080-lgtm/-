@@ -109,8 +109,8 @@ export class FX {
     const n = 10 + Math.round(size);
     for (let i = 0; i < n; i++) {
       const a = i / n * 6.283 + Math.random() * 0.5, r = size * (0.45 + Math.random() * 0.2);
-      if (G) G.spray(x + Math.cos(a) * r, y + 0.2, z + Math.sin(a) * r, 10, { dx: Math.cos(a), dz: Math.sin(a), hs: 1.6, up: 1.5, spread: 0.6, size: [0.005, 0.03], life: 2.6 });
-      if (D && i % 2 === 0) D.puff(x + Math.cos(a) * r, y + 0.3, z + Math.sin(a) * r, { vx: Math.cos(a) * 1.2, vy: 0.15, vz: Math.sin(a) * 1.2, s: 1.0 + size * 0.08, grow: 2.0, max: 5 + Math.random() * 3, a: 0.09, kind: 'dust', drift: 0.6 });
+      if (G) G.spray(x + Math.cos(a) * r, y + 0.2, z + Math.sin(a) * r, 5, { dx: Math.cos(a), dz: Math.sin(a), hs: 1.2, up: 1.1, spread: 0.6, size: [0.005, 0.03], life: 2.4 });
+      if (D && i % 2 === 0) D.puff(x + Math.cos(a) * r, y + 0.3, z + Math.sin(a) * r, { vx: Math.cos(a) * 1.2, vy: 0.15, vz: Math.sin(a) * 1.2, s: 1.0 + size * 0.08, grow: 2.0, max: 5 + Math.random() * 3, a: 0.06, kind: 'dust', drift: 0.6 });
     }
     this.welds.push({ x, y, z, size, t: 3.0 + Math.random(), next: 0 });
     if (this.welds.length > 4) this.welds.shift();

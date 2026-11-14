@@ -153,7 +153,7 @@ const GRIME_F = /* glsl */`
     float splash = smoothstep(1.2, 0.0, vOP.y) * (0.45 + 0.55 * m2);
     float streak = smoothstep(0.58, 0.86, texture2D(tNoise, vec2((vOP.x + vOP.z) * 0.55, vOP.y * 0.045 + 0.5)).r) * (1.0 - abs(gn.y));
     diffuseColor.rgb *= 0.9 + 0.13 * m1 + (0.07 * (m3 - 0.5) + 0.05 * (m4 - 0.5)) * ff;
-    vec3 dustCol = vec3(0.55, 0.37, 0.25) * (0.85 + 0.3 * m3);
+    vec3 dustCol = pow(vec3(0.6, 0.42, 0.29), vec3(2.2)) * (0.85 + 0.3 * m3);
     float dk = clamp(settled * 0.8 + splash * 0.42 + streak * 0.2, 0.0, 0.88) * uDustAmt / 0.6;
     diffuseColor.rgb = mix(diffuseColor.rgb, dustCol, dk);
     gGrime = clamp(dk * 1.2, 0.0, 1.0);
@@ -245,7 +245,7 @@ export function makeBuildingMaterials() {
       float scuff = smoothstep(0.78, 0.92, nz2.b) * 0.12;
       c *= 1.0 - scuff;
       float up = smoothstep(0.55, 0.95, normalize(vON).y);
-      c = mix(c, vec3(0.62, 0.46, 0.34), up * uDustAmt * 0.3 * smoothstep(0.35, 0.7, nz.a));
+      c = mix(c, pow(vec3(0.62, 0.45, 0.32), vec3(2.2)), up * uDustAmt * 0.3 * smoothstep(0.35, 0.7, nz.a));
       gH = cladHeight(vOP, normalize(vON), vec2(1.2, 1.0), 0.003) + 1e-6;
       diffuseColor.rgb = c;
       gR2 = clamp(0.55 + 0.1 * pin.y + scuff + low * 0.2, 0.0, 1.0);`,
@@ -286,7 +286,7 @@ export function makeBuildingMaterials() {
       vec3 c = diffuseColor.rgb * (0.86 + 0.18 * nz.a + 0.08 * pin.y) * (1.0 - smoothstep(0.55, 0.85, nz2.b) * 0.25);
       c *= 1.0 - pin.x * 0.35;
       float top = smoothstep(0.6, 0.95, normalize(vON).y);
-      c = mix(c, vec3(0.4, 0.27, 0.18), top * uDustAmt * smoothstep(0.4, 0.75, nz2.r) * 0.5);
+      c = mix(c, pow(vec3(0.6, 0.42, 0.29), vec3(2.2)), top * uDustAmt * smoothstep(0.4, 0.75, nz2.r) * 0.5);
       gH = panelHeight(vOP, normalize(vON), vec2(2.0, 2.0), 0.016) + nz.a * 0.006 + 1e-6;
       diffuseColor.rgb = c;`,
   });
@@ -679,7 +679,7 @@ const ASSET_MAP = /* glsl */`
   float lowA = smoothstep(1.6, 0.0, vOP.y) * (0.45 + 0.55 * nzA.g);
   float dustA = clamp((upA * upA * 0.42 * (0.45 + 0.9 * nzA.r) + lowA * 0.55) * (0.75 + 0.5 * nzB.b) * uDustAmt / 0.6, 0.0, 0.85);
   vec3 paintA = diffuseColor.rgb * vec3(0.95, 0.93, 0.9) * (0.94 + 0.08 * nzB.g);
-  diffuseColor.rgb = mix(paintA, vec3(0.6, 0.43, 0.31) * (0.82 + 0.3 * nzA.b), dustA);
+  diffuseColor.rgb = mix(paintA, pow(vec3(0.6, 0.43, 0.31), vec3(2.2)) * (0.82 + 0.3 * nzA.b), dustA);
   gR2 = clamp(roughness + dustA * 0.35, 0.0, 1.0);
 `;
 const assetCache = new Map();

@@ -51,12 +51,13 @@ export class Grains {
           float r = length(vec2(p.x * 0.85, p.y));
           float a = smoothstep(1.0, 0.55, r) * vInf.y;
           if (a < 0.01) discard;
+          // same light and colour space as the ground they came from
           float day = clamp(uSunDir.y * 2.2 + 0.1, 0.0, 1.0);
-          vec3 lit = uSunColor * (0.18 + 0.82 * day) + vec3(0.05, 0.05, 0.06);
+          vec3 lit = uSunColor * (0.12 + 0.95 * day) + vec3(0.03, 0.03, 0.035);
           vec3 col;
-          if (vInf.w < 0.5) col = mix(vec3(0.2, 0.11, 0.07), vec3(0.5, 0.33, 0.22), vInf.z) * lit;
-          else if (vInf.w < 1.5) col = mix(vec3(0.55, 0.62, 0.68), vec3(0.95, 0.97, 1.0), smoothstep(0.2, -0.6, p.y)) * lit, a *= 0.75;
-          else col = mix(vec3(0.42, 0.3, 0.21), vec3(0.62, 0.47, 0.35), vInf.z) * lit, a *= 0.55;
+          if (vInf.w < 0.5) col = pow(mix(vec3(0.3, 0.19, 0.13), vec3(0.56, 0.4, 0.29), vInf.z), vec3(2.2)) * lit;
+          else if (vInf.w < 1.5) col = pow(mix(vec3(0.5, 0.56, 0.6), vec3(0.85, 0.88, 0.92), smoothstep(0.2, -0.6, p.y)), vec3(2.2)) * lit, a *= 0.7;
+          else col = pow(mix(vec3(0.5, 0.36, 0.26), vec3(0.66, 0.5, 0.37), vInf.z), vec3(2.2)) * lit * 1.15, a *= 0.45;
           gl_FragColor = vec4(col, a);
         }`,
     });

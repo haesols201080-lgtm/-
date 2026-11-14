@@ -124,9 +124,10 @@ export class Effects {
             this.print(gx, gz, yaw, 0.13, 0.31, this.foot);
             // the boot flicks grains back and up, a few fine motes hang a moment
             const k = (0.45 + 0.55 * dry);
-            G.spray(gx, P.pos.y + 0.04, gz, Math.round((9 + sp * 5) * k), { dx: -Math.sin(yaw), dz: -Math.cos(yaw), hs: 0.35 + sp * 0.18, up: 0.7 + sp * 0.16, spread: 0.9, size: [0.005, 0.024], life: 2.2 });
-            G.spray(gx, P.pos.y + 0.04, gz, Math.round((3 + sp) * k), { dx: Math.sin(yaw), dz: Math.cos(yaw), hs: 0.25 + sp * 0.1, up: 0.5, spread: 1.0, size: [0.003, 0.01], life: 1.6 });
-            if (dry > 0.4) G.spray(gx, P.pos.y + 0.08, gz, 2 + Math.round(sp * 0.6), { hs: 0.15, up: 0.25, size: [0.003, 0.008], kind: 2, life: 3.5 });
+            // a boot only throws a few grains, more when running; most steps barely any
+            const nk = Math.max(0, Math.round((Math.random() * 3 + Math.max(0, sp - 2.5) * 2.2) * k));
+            if (nk) G.spray(gx, P.pos.y + 0.03, gz, nk, { dx: -Math.sin(yaw), dz: -Math.cos(yaw), hs: 0.3 + sp * 0.15, up: 0.5 + sp * 0.12, spread: 0.7, size: [0.004, 0.02], life: 2.0 });
+            if (dry > 0.5 && sp > 3 && Math.random() < 0.4) G.spray(gx, P.pos.y + 0.06, gz, 1 + Math.round(sp * 0.3), { hs: 0.12, up: 0.2, size: [0.002, 0.006], kind: 2, life: 2.5 });
             if (D && dry > 0.6 && sp > 4 && Math.random() < 0.25) D.puff(gx, P.pos.y + 0.05, gz, { s: 0.35, grow: 1.2, max: 1.8, a: 0.06 * dry, vy: 0.1, kind: 'dust', drift: 0.6 });
           }
         }

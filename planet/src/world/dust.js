@@ -55,9 +55,10 @@ export class Dust {
           float a = smoothstep(0.5, 0.05, r) * smoothstep(0.3, 0.75, n + 0.25 - r * 0.6);
           // lit from the sun side, darker and denser at the base
           float day = smoothstep(-0.1, 0.3, uSunDir.y);
-          vec3 col = vec3(0.64, 0.48, 0.34) * (0.12 + day * (0.62 + 0.45 * uSun)) * (0.85 + 0.25 * vH);
+          // linear colour, lit like the ground (airborne dust scatters a little brighter)
+          vec3 col = pow(vec3(0.64, 0.48, 0.34), vec3(2.2)) * (0.2 + day * (1.05 + 0.35 * uSun)) * (0.85 + 0.25 * vH);
           // vapour (negative seed): white condensation; exhaust (seed below -10): pale grey
-          if (vA.y < 0.0) col = (vA.y < -10.0 ? vec3(0.62, 0.61, 0.6) : vec3(0.93, 0.94, 0.96)) * (0.22 + day * (0.62 + 0.42 * uSun));
+          if (vA.y < 0.0) col = pow(vA.y < -10.0 ? vec3(0.66, 0.65, 0.64) : vec3(0.92, 0.93, 0.95), vec3(2.2)) * (0.18 + day * (0.75 + 0.3 * uSun));
           // smoke (negative squash): sooty grey, underlit orange by the flames
           if (vA.z < 0.0) col = vec3(0.13, 0.125, 0.12) * (0.3 + 0.7 * day) + vec3(0.35, 0.12, 0.03) * (1.0 - vH) * 0.35;
           // flame (negative alpha): hot core, deeper orange at the tips
