@@ -20,7 +20,12 @@ const EDU_NAMES = { diploma: '학교 수료생', degree: '대학 졸업생' };
 const PRICE = {
   iron: 1, silicon: 1, ice: 1, sulfur: 1, titanium: 2, aluminium: 2, copper: 2, nickel: 2, phosphate: 2, magnesium: 2, cobalt: 3, uranium: 4,
   plate: 2, glass: 2, wire: 2, water: 1, food: 2, seeds: 2, alloy: 4, lightalloy: 4, circuit: 4, fertilizer: 3, textiles: 4, goods: 5, electronics: 7, battery: 6, medicine: 7, delicacy: 6, fuelrod: 8,
+  methane: 3, polymer: 4,
 };
+// happiness each kind of place adds for the homes it reaches
+const PLACE_JOY = { wildlife: 0.05, library: 0.02, shops: 0.03, stadium: 0.06, spa: 0.04 };
+// what a tourist comes to see
+const SIGHTS = ['park', 'monument', 'stadium', 'faunareserve', 'spa', 'observatory', 'culture'];
 const BUY_MARKUP = 2.5;
 
 export class Colony {
@@ -67,7 +72,8 @@ export class Colony {
     const B = this.game.buildings.list;
     const culture = B.filter((b) => b.type === 'culture' && b.serviceOk).length;
     const lift = B.some((b) => b.type === 'elevator' && b.powerRatio > 0.3);
-    return Math.round(n * (1 + 0.25 * Math.min(2, culture)) * (lift ? 1.5 : 1));
+    const port = B.some((b) => b.def.launch && b.serviceOk !== false && b.powerRatio > 0.3 && (b.staff ?? 0) > 0.45);
+    return Math.round(n * (1 + 0.25 * Math.min(2, culture)) * (lift ? 1.5 : 1) * (port ? 1.2 : 1));
   }
 
   callStatus() {
@@ -137,9 +143,10 @@ export class Colony {
 
     // service coverage
     const services = {};
+    for (const b of B) b.openOk = (b.def.power < 0 ? b.powerRatio > 0.3 : true) && (!b.def.workers || this.staffing(b) > 0.45) && !b.fire && b.enabled !== false;
     for (const b of B) {
       if (!b.def.service) continue;
-      const ok = (b.def.power < 0 ? b.powerRatio > 0.3 : true) && (!b.def.workers || this.staffing(b) > 0.45) && !b.fire && !(b.type === 'lifesupport' && b.data.dry);
+      const ok = (b.def.power < 0 ? b.powerRatio > 0.3 : true) && (!b.def.workers || this.staffing(b) > 0.45) && !b.fire && !((b.type === 'lifesupport' || b.type === 'spa') && b.data.dry);
       b.serviceOk = ok;
       if (!ok) continue;
       (services[b.def.service] = services[b.def.service] || []).push(b);
@@ -182,11 +189,16 @@ export class Colony {
       h.data.unsafe = crowd && !covered(h, 'security');
       if (h.data.unsafe) h.data.happy -= 0.12;
       if (h.fire) h.data.happy -= 0.2;
+      // libraries, shops, the spa, the stadium and the wildlife reserve nearby
+      for (const [svc, joy] of Object.entries(PLACE_JOY)) if (covered(h, svc)) h.data.happy += joy;
+      h.data.shops = covered(h, 'shops');
+      h.data.happy = Math.min(1.15, h.data.happy);
       if (san) sanRes += h.data.res;
       if (h.data.res > h.data.target) h.data.res = Math.max(h.data.target, h.data.res - 1);
       // illness: without a clinic many residents are laid up; a gym halves the risk
       const fit = covered(h, 'gym');
-      h.data.sick = Math.round(h.data.res * ((covered(h, 'clinic') ? 0.03 : 0.16) + (san ? 0 : 0.06)) * (fit ? 0.5 : 1));
+      const hosp = (services.clinic || []).some((s) => s.def.hospital && reach(h, s));
+      h.data.sick = Math.round(h.data.res * ((hosp ? 0.01 : covered(h, 'clinic') ? 0.03 : 0.16) + (san ? 0 : 0.06)) * (fit ? 0.5 : 1));
       pop[h.tier] += h.data.res;
       sick[h.tier] += h.data.sick;
       if (fit) fitRes += h.data.res;
@@ -260,7 +272,7 @@ export class Colony {
           if (n > 0) { this.edu[E.yields] += n; D.grads = (D.grads || 0) + n; }
         }
         if (t === 'university' && g.research && D.students) g.research.addPoints(D.students * 0.012 * step);
-      } else if (t === 'clinic') D.patients = b.serviceOk ? Math.round(around(b, (h) => h.data.res * 0.13)) : 0;
+      } else if (t === 'clinic' || t === 'hospital') D.patients = b.serviceOk ? Math.round(around(b, (h) => h.data.res * (t === 'hospital' ? 0.18 : 0.13))) : 0;
       else if (t === 'gym') D.users = b.serviceOk ? Math.round(around(b, (h) => h.data.res * 0.3)) : 0;
       else if (t === 'lounge' || t === 'park' || t === 'culture') D.visitors = b.serviceOk ? Math.round(around(b, (h) => h.data.res * 0.2)) : 0;
       else if (t === 'market') D.served = b.serviceOk ? around(b, () => 1) : 0;
@@ -292,6 +304,18 @@ export class Colony {
         }
       }
       else if (t === 'transit') D.riders = b.serviceOk && stops.length > 1 ? Math.round(around(b, (h) => h.data.res * 0.25)) : 0;
+      else if (t === 'library') {
+        // residents from technician homes up read and study here
+        D.readers = b.serviceOk ? Math.round(around(b, (h) => (h.tier >= 2 ? (h.data.res - (h.data.sick || 0)) * 0.3 : 0))) : 0;
+        if (D.readers && g.research) g.research.addPoints(D.readers * 0.002 * step);
+      } else if (t === 'spa') {
+        // the spa's pools are topped up from the depot: 2 water a minute
+        D.visitors = b.serviceOk ? Math.round(around(b, (h) => h.data.res * 0.15)) : 0;
+        if ((b.powerRatio ?? 0) > 0.3) {
+          D.wacc = (D.wacc || 0) + 2 * step / 60;
+          if (D.wacc >= 1) { const n = Math.floor(D.wacc); const got = eco.store.remove('water', n); D.wacc -= n; D.dry = got < n; }
+        }
+      } else if (t === 'stadium' || t === 'mall' || t === 'faunareserve') D.visitors = b.serviceOk ? Math.round(around(b, (h) => h.data.res * (t === 'stadium' ? 0.35 : 0.2))) : 0;
     }
 
     // fire: once the air holds 2% oxygen (Ti param ≥ 15000), a spark can catch.
@@ -321,12 +345,28 @@ export class Colony {
 
     // credits: taxes minus upkeep, plus visitors to the monument
     let income = 0;
-    for (const h of houses) income += h.data.res * TIERS[h.tier].tax * (0.6 + 0.8 * h.data.happy) * (h.data.unsafe ? 0.85 : 1);
+    for (const h of houses) income += h.data.res * TIERS[h.tier].tax * (0.6 + 0.8 * h.data.happy) * (h.data.unsafe ? 0.85 : 1) * (h.data.shops ? 1.12 : 1);
     if (hall) income *= 1.15;
     this.taxes = income;
     let upkeep = 0;
-    for (const b of B) if (b.def.cat === 'colony' && !b.def.house && b.type !== 'road') upkeep += b.type === 'hq' ? 0 : 1.2;
+    for (const b of B) if ((b.def.cat === 'colony' || b.def.cat === 'civic') && !b.def.house && b.type !== 'road') upkeep += b.type === 'hq' ? 0 : 1.2;
     if (g.buildings.count('monument')) income += 20;
+    // visitors: matches at the stadium, tourists at the reserve and the hotel
+    const open = (b) => b.openOk;
+    for (const b of B) {
+      if (b.type === 'stadium' && b.serviceOk) income += 15;
+      else if (b.type === 'faunareserve' && b.serviceOk) income += 10;
+      else if (b.def.hotel && open(b)) {
+        const sights = B.filter((x) => SIGHTS.includes(x.type) && (x.x - b.x) ** 2 + (x.z - b.z) ** 2 < b.def.hotel * b.def.hotel).length;
+        const guests = 4 * sights * (1 + g.terra.stage / 20);
+        b.data.sights = sights; b.data.guests = guests;
+        income += guests;
+      }
+    }
+    // the bank: 1% interest a minute on the colony's money, up to 40
+    const bank = B.find((b) => b.def.bank && open(b));
+    this.interest = bank ? Math.min(40, this.credits * 0.01) : 0;
+    income += this.interest;
     this.income = income - upkeep;
     if (hq) this.credits = Math.max(0, this.credits + this.income * step / 60);
 
@@ -347,6 +387,32 @@ export class Colony {
       lift.data.exported = (lift.data.exported || 0) + earned;
       lift.data.last = sent;
     } else if (!lift) this.exportT = 0;
+
+    // the spaceport: a methane rocket takes surplus to orbit every two minutes
+    for (const b of B) {
+      const L = b.def.launch;
+      if (!L) continue;
+      const ok = b.openOk && eco.inNetwork(b.x, b.z);
+      b.data.lt = ok ? (b.data.lt || 0) + step : (b.data.lt || 0);
+      if (!ok || b.data.lt < L.every) continue;
+      if (eco.store.count('methane') < L.methane) { b.data.wait = true; continue; }
+      const cargo = [];
+      let room = L.cap, earned = 0;
+      for (const [id, have] of [...eco.store.items].sort((a, c) => c[1] - a[1])) {
+        if (['methane', 'water', 'food', 'fuelrod', 'ice'].includes(id) || room <= 0) continue;
+        const n = Math.min(room, Math.floor(have - L.keep));
+        if (n <= 0) continue;
+        eco.store.remove(id, n); room -= n;
+        earned += Math.round(n * (PRICE[id] || 2) * 1.2);
+        cargo.push([id, n]);
+      }
+      if (!cargo.length) { b.data.wait = false; b.data.lt = L.every * 0.75; continue; }
+      eco.store.remove('methane', L.methane);
+      this.credits += earned;
+      b.data.lt = 0; b.data.wait = false; b.data.launches = (b.data.launches || 0) + 1; b.data.earned = (b.data.earned || 0) + earned; b.data.last = cargo;
+      g.onLaunch && g.onLaunch(b);
+      g.ui && g.ui.toast(`<b>화물선 발사</b> ${cargo.map(([id, n]) => `${ITEMS[id]?.name || id} ${n}`).join(', ')} → +${earned} 크레딧`, 'good', 4, true);
+    }
 
     // house upgrades
     if (this.autoUpgrade) for (const h of houses) this.tryUpgrade(h);

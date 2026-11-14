@@ -13,6 +13,7 @@ import * as AG from './models_agency.js';
 import * as AG2 from './models_agency2.js';
 import * as AG3 from './models_agency3.js';
 import * as HOMES from './models_houses.js';
+import * as AG5 from './models_agency5.js';
 
 const PI = Math.PI;
 
@@ -140,6 +141,8 @@ for (const t of ['lounge', 'gym', 'textile', 'orchard', 'pharma', 'transit', 'un
 // base, power, terraforming and industry hardware in the agency kit
 for (const t of ['habitat', 'storage', 'fabricator', 'terminal', 'solar', 'wind', 'reactor', 'powerbank', 'vegetube', 'seeder', 'algae', 'treespreader', 'insectdome', 'mirror', 'extractor', 'smelter', 'assembler', 'dronehub', 'depot', 'comms']) BUILDERS[t] = AG3[t];
 Object.assign(BUILDERS, { heater: (M) => AG3.heater(M, false), heater2: (M) => AG3.heater(M, true), drill: (M) => AG3.drill(M, false), drill2: (M) => AG3.drill(M, true) });
+// the newer working parts: field gear, science, power, atmosphere, methane
+for (const t of ['o2station', 'shelter', 'analyzer', 'radar', 'observatory', 'weather', 'rtg', 'geothermal', 'gasturbine', 'solarthermal', 'ghgplant', 'microbevat', 'fishery', 'faunareserve', 'magshield', 'comet', 'sabatier', 'crusher', 'chemplant', 'spaceport', 'hospital', 'library', 'mall', 'bank', 'spa', 'stadium', 'hotel']) BUILDERS[t] = AG5[t];
 // homes, two designs per tier, in the same hardware language
 for (let t = 0; t < 10; t++) { BUILDERS['house:' + t] = HOMES['house' + t]; BUILDERS['house:' + t + 'b'] = HOMES['house' + t + 'b']; }
 

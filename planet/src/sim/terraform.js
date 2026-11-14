@@ -103,14 +103,29 @@ export class Terraform {
     const W = this.weather;
     // ---- weather events: eleven kinds, the mix changes as the planet does
     W.t += dt;
-    if (W.kind === 'clear' && W.t > W.next) {
+    // the next spell of weather is decided as the sky clears, so a weather
+    // station can forecast it a minute ahead
+    if (W.kind === 'clear' && !W.upcoming) {
       const pool = s < 2.5 ? { devils: 3, dust: 2, haze: 2, gale: 1 }
         : s < 3 ? { haze: 2, devils: 2, gale: 1, overcast: 1 }
           : s < 6 ? { snow: 3, overcast: 2, fog: 2, drizzle: 1, gale: 1, fair: 1 }
             : s < 10 ? { rain: 3, drizzle: 2, overcast: 2, fog: 2, thunder: 1, snow: 1, gale: 1, fair: 2 }
               : { rain: 2, drizzle: 2, thunder: 1.5, fog: 1.5, fair: 3, overcast: 2, gale: 1, snow: 0.5 };
       let r = Math.random() * Object.values(pool).reduce((a, b) => a + b, 0);
-      for (const [k, w] of Object.entries(pool)) { r -= w; if (r <= 0) { W.kind = k; break; } }
+      W.upcoming = 'fair';
+      for (const [k, w] of Object.entries(pool)) { r -= w; if (r <= 0) { W.upcoming = k; break; } }
+      W.warned = false;
+    }
+    if (W.kind === 'clear' && W.upcoming && !W.warned && W.next - W.t < 60 && ['dust', 'thunder', 'gale', 'snow'].includes(W.upcoming)) {
+      const g = this.game;
+      if (g.eco && g.eco.weatherStation) {
+        W.warned = true;
+        g.ui && g.ui.toast(`<b>기상 관측소 예보</b> 1분 뒤 ${WEATHER[W.upcoming].name} — 태양광 패널을 덮고 닦아 둡니다`, 'info', 5, true);
+      }
+    }
+    if (W.kind === 'clear' && W.t > W.next) {
+      W.kind = W.upcoming || 'fair';
+      W.upcoming = null;
       W.dur = 60 + Math.random() * 100;
       W.t = 0;
     } else if (W.kind !== 'clear' && W.t > (W.dur || 90)) {

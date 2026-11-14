@@ -181,7 +181,9 @@ export function university(M, open = false) {
   M.cyl('metal', dx, 0.5, dz, 0.3, 1.6, N.FRAME, 12);
   const prof = []; for (let i = 0; i <= 12; i++) { const t = i / 12; prof.push(new THREE.Vector2(0.05 + t * 1.5, t * t * 0.55)); }
   const dg = new THREE.LatheGeometry(prof, 32); dg.rotateX(-0.6); dg.translate(dx, 2.4, dz);
-  M.add('shell', dg, { color: 0xe8e6e0 });
+  M.add('shell', dg, { color: 0xd8d6d0 });
+  const df = new THREE.LatheGeometry(prof.slice().reverse(), 32); df.rotateX(-0.6); df.translate(dx, 2.4, dz);
+  M.add('shell', df, { color: 0xeeece6 });
   M.add('metal', new THREE.CylinderGeometry(0.03, 0.03, 1.4, 6).rotateX(-0.6).translate(dx, 2.9, dz - 0.4), { color: N.DARK });
   M.colCyl(dx, dz, 0.9, 0, 2.4);
   instrumentMast(M, -5.2, -5.0, 4.4);

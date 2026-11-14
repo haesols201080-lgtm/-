@@ -31,6 +31,8 @@ export const ITEMS = {
   medicine: { name: '의약품', desc: '배양 씨앗에서 추출한 항생제와 방사선 차단제.', color: '#ff6b7a', shape: 'vial' },
   textiles: { name: '의류', desc: '식물 섬유로 짠 실내복과 작업복.', color: '#7a8cff', shape: 'cloth' },
   delicacy: { name: '온실 과일', desc: '돔 과수원에서 기른 신선한 과일.', color: '#ff9a3c', shape: 'fruit' },
+  methane: { name: '메탄', desc: '사바티에 반응기에서 대기의 이산화탄소와 물로 만든 액화 메탄. 발전소와 로켓의 연료.', color: '#7fc4ff', shape: 'canister' },
+  polymer: { name: '폴리머', desc: '메탄에서 뽑은 플라스틱 펠릿. 큰 건물의 내장재와 막 구조에 쓴다.', color: '#e8e0c8', shape: 'pellets' },
 };
 
 export const RECIPES = [
@@ -50,6 +52,8 @@ export const RECIPES = [
   { id: 'textiles', out: { textiles: 2 }, in: { seeds: 2, water: 1 }, time: 8, name: '의류', research: 'r_textile', factoryOnly: true },
   { id: 'medicine', out: { medicine: 2 }, in: { sulfur: 1, seeds: 1, water: 1 }, time: 10, name: '의약품', research: 'r_pharma', factoryOnly: true },
   { id: 'delicacy', out: { delicacy: 2 }, in: { fertilizer: 1, water: 2 }, time: 12, name: '온실 과일', research: 'r_agri', factoryOnly: true },
+  { id: 'methane', out: { methane: 1 }, in: { water: 2 }, time: 24, name: '메탄', research: 'r_isru', factoryOnly: true },
+  { id: 'polymer', out: { polymer: 2 }, in: { methane: 1, water: 1 }, time: 10, name: '폴리머', research: 'r_chem', factoryOnly: true },
 ];
 
 // Terraforming stages (Ti thresholds). Structure follows The Planet Crafter's
@@ -236,16 +240,16 @@ export const BUILDINGS = {
   farm: { name: '수경 농장', cat: 'colony', size: [8, 12], cost: { plate: 6, glass: 6, ice: 4 }, power: -4, desc: '물 1개로 식량 3개를 기릅니다.', workers: ['pioneer', 4], produce: { food: 3 }, consume: { water: 1 }, cycle: 20, research: 'r_colony' },
   pump: { name: '정수 펌프', cat: 'colony', size: [4, 4], cost: { plate: 3, glass: 1 }, power: -2, desc: '얼음을 녹이거나(물 2) 호숫가에서는 물을 직접 퍼 올립니다(물 3).', workers: ['pioneer', 2], produce: { water: 2 }, consume: { ice: 1 }, cycle: 12, pump: true, research: 'r_colony' },
   market: { name: '배급소', cat: 'colony', size: [8, 8], apron: 2.5, cost: { plate: 6, glass: 2, credits: 40 }, desc: '반경 45m 주거지에 물·식량·생활용품 같은 물자를 배급합니다. 배급소가 없으면 창고에 물자가 있어도 집에 닿지 않습니다.', workers: ['pioneer', 2], service: 'market', radius: 45, research: 'r_colony' },
-  lounge: { name: '라운지', cat: 'colony', size: [7, 7], cost: { plate: 4, glass: 4, credits: 60 }, power: -2, desc: '반경 40m 주민이 저녁에 모여 쉬는 곳. 행복한 식민지는 세금을 더 내고, 모든 일터가 더 빨리 일합니다.', workers: ['pioneer', 2], service: 'lounge', radius: 40, research: 'r_medicine' },
+  lounge: { name: '라운지', cat: 'civic', size: [7, 7], cost: { plate: 4, glass: 4, credits: 60 }, power: -2, desc: '반경 40m 주민이 저녁에 모여 쉬는 곳. 행복한 식민지는 세금을 더 내고, 모든 일터가 더 빨리 일합니다.', workers: ['pioneer', 2], service: 'lounge', radius: 40, research: 'r_medicine' },
   clinic: { name: '의료소', cat: 'colony', size: [8, 8], apron: 2, cost: { plate: 6, glass: 4, alloy: 2, credits: 80 }, power: -3, desc: '반경 50m 주민을 진료합니다. 의료소가 없으면 주민의 15%가 앓아누워 일하지 못합니다. 탐사대원도 여기서 치료받고 산소를 채울 수 있습니다. 정착민 이상 계층의 필수 시설.', workers: ['tech', 2], service: 'clinic', radius: 50, research: 'r_medicine' },
   factory: { name: '생활용품 공장', cat: 'colony', size: [10, 8], cost: { plate: 8, alloy: 2, circuit: 1, credits: 100 }, power: -6, desc: '철판·유리·물로 생활용품을 만듭니다.', workers: ['tech', 4], recipe: 'goods', research: 'r_goods' },
   techplant: { name: '전자 공장', cat: 'colony', size: [10, 10], cost: { alloy: 6, circuit: 4, glass: 4, credits: 180 }, power: -10, desc: '회로·합금·알루미늄으로 전자기기를 만듭니다.', workers: ['engineer', 4], recipe: 'electronics', research: 'r_electronics' },
   school: { name: '학교', cat: 'colony', size: [10, 8], apron: 2, cost: { plate: 8, glass: 6, credits: 150 }, power: -3, desc: '반경 55m 정착민 이상 가정의 아이들을 가르칩니다(최대 40명). 60초마다 수료생이 나오고, 집을 공학자·연구원으로 올리려면 수료생이 필요합니다. 공학자 이상 계층의 필수 시설.', workers: ['tech', 3], service: 'school', radius: 55, research: 'r_education' },
-  lab: { name: '연구소', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 4, circuit: 3, credits: 120 }, power: -5, desc: '연구 점수를 만듭니다 (공학자 4명).', workers: ['engineer', 4], research_rp: 0.6, research: 'r_education' },
-  terminal: { name: '연구 단말기', cat: 'base', size: [2, 2], cost: { iron: 3, silicon: 3, cobalt: 1 }, power: -2, desc: '혼자서도 쓸 수 있는 소형 연구 장비. 연구 점수를 천천히 만듭니다.', research_rp: 0.12 },
-  park: { name: '공원', cat: 'colony', size: [10, 10], cost: { plate: 2, seeds: 4, credits: 50 }, desc: '반경 45m 주민 행복도 상승. 나무와 잔디가 산소와 바이오매스도 조금 만듭니다. 꽃 단계부터 지을 수 있습니다.', terra: { oxygen: 2, biomass: 4 }, service: 'park', radius: 45, unlockStage: 'flowers', research: 'r_roads' },
-  culture: { name: '문화 센터', cat: 'colony', size: [12, 12], apron: 3, cost: { alloy: 8, glass: 8, electronics: 2, credits: 300 }, power: -6, desc: '반경 60m 시민 계층의 필수 시설. 공연과 축제로 행복도를 올리고, 문화 센터 하나마다 교신에 응답하는 이주민이 25% 늘어납니다(최대 50%).', workers: ['engineer', 3], service: 'culture', radius: 60, research: 'r_culture' },
-  gym: { name: '체육관', cat: 'colony', size: [10, 8], apron: 2, cost: { plate: 8, glass: 4, credits: 90 }, power: -3, desc: '반경 50m 주민의 질병 위험을 절반으로 줄입니다. 운동하는 주민이 많을수록 식민지 전체의 작업 효율이 오릅니다(최대 +8%).', workers: ['settler', 2], service: 'gym', radius: 50, research: 'r_sports' },
+  lab: { name: '연구소', cat: 'science', size: [8, 8], cost: { plate: 6, glass: 4, circuit: 3, credits: 120 }, power: -5, desc: '연구 점수를 만듭니다 (공학자 4명).', workers: ['engineer', 4], research_rp: 0.6, research: 'r_education' },
+  terminal: { name: '연구 단말기', cat: 'science', size: [2, 2], cost: { iron: 3, silicon: 3, cobalt: 1 }, power: -2, desc: '혼자서도 쓸 수 있는 소형 연구 장비. 연구 점수를 천천히 만듭니다.', research_rp: 0.12 },
+  park: { name: '공원', cat: 'civic', size: [10, 10], cost: { plate: 2, seeds: 4, credits: 50 }, desc: '반경 45m 주민 행복도 상승. 나무와 잔디가 산소와 바이오매스도 조금 만듭니다. 꽃 단계부터 지을 수 있습니다.', terra: { oxygen: 2, biomass: 4 }, service: 'park', radius: 45, unlockStage: 'flowers', research: 'r_roads' },
+  culture: { name: '문화 센터', cat: 'civic', size: [12, 12], apron: 3, cost: { alloy: 8, glass: 8, electronics: 2, credits: 300 }, power: -6, desc: '반경 60m 시민 계층의 필수 시설. 공연과 축제로 행복도를 올리고, 문화 센터 하나마다 교신에 응답하는 이주민이 25% 늘어납니다(최대 50%).', workers: ['engineer', 3], service: 'culture', radius: 60, research: 'r_culture' },
+  gym: { name: '체육관', cat: 'civic', size: [10, 8], apron: 2, cost: { plate: 8, glass: 4, credits: 90 }, power: -3, desc: '반경 50m 주민의 질병 위험을 절반으로 줄입니다. 운동하는 주민이 많을수록 식민지 전체의 작업 효율이 오릅니다(최대 +8%).', workers: ['settler', 2], service: 'gym', radius: 50, research: 'r_sports' },
   textile: { name: '섬유 공방', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 2, wire: 2, credits: 80 }, power: -4, desc: '씨앗과 물로 식물 섬유 의류를 짭니다.', workers: ['settler', 4], recipe: 'textiles', research: 'r_textile' },
   orchard: { name: '돔 과수원', cat: 'colony', size: [10, 10], cost: { glass: 10, plate: 4, fertilizer: 4, credits: 160 }, power: -4, desc: '비료와 물로 온실 과일을 기릅니다.', workers: ['tech', 4], recipe: 'delicacy', research: 'r_agri' },
   pharma: { name: '제약소', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 4, circuit: 2, credits: 140 }, power: -5, desc: '황·씨앗·물로 의약품을 만듭니다.', workers: ['artisan', 3], recipe: 'medicine', research: 'r_pharma' },
@@ -258,11 +262,43 @@ export const BUILDINGS = {
   firestation: { name: '소방서', cat: 'colony', size: [10, 8], apron: 2, cost: { plate: 6, alloy: 2, glass: 2 }, power: -2, desc: '반경 80m 시설의 화재를 10초 안에 진압하고, 정기 점검으로 화재 위험을 70% 줄입니다. 대기 산소가 2%를 넘으면 불이 날 수 있습니다.', workers: ['settler', 3], service: 'fire', radius: 80, research: 'r_safety' },
   police: { name: '치안센터', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 2, circuit: 1 }, power: -2, desc: '반경 70m 주거지를 순찰합니다. 인구가 40명을 넘으면 치안이 닿지 않는 집은 행복도와 세금이 떨어집니다. 시민 이상 계층의 필수 시설.', workers: ['tech', 3], service: 'security', radius: 70, research: 'r_safety' },
   nursery: { name: '보육원', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 4, credits: 80 }, power: -2, desc: '반경 50m 가정의 아이를 돌봅니다. 돌봄을 받는 가정에서는 2분마다 아이가 태어나 빈 방이 있는 집으로 들어갑니다(행복할수록 많이).', workers: ['settler', 2], service: 'childcare', radius: 50, research: 'r_family' },
-  cityhall: { name: '시청', cat: 'colony', size: [14, 12], apron: 3, cost: { plate: 12, glass: 8, alloy: 6, credits: 400 }, power: -4, desc: '식민지의 행정. 세금 징수가 15% 늘고 주민 전체 행복도가 3% 오르며, 인구·소득·교육 통계를 볼 수 있습니다. 도시 시대로 가려면 필요합니다.', workers: ['engineer', 4], unique: true, research: 'r_civics' },
-  tradepost: { name: '교역소', cat: 'colony', size: [10, 10], apron: 2, cost: { plate: 8, alloy: 2, circuit: 2 }, power: -3, desc: '궤도 화물선과 거래합니다. 크레딧으로 물자를 사들이거나 창고의 물자를 팝니다. 근처에서 나지 않는 광석을 구할 때 씁니다.', workers: ['tech', 2], trade: true, research: 'r_trade' },
+  cityhall: { name: '시청', cat: 'civic', size: [14, 12], apron: 3, cost: { plate: 12, glass: 8, alloy: 6, credits: 400 }, power: -4, desc: '식민지의 행정. 세금 징수가 15% 늘고 주민 전체 행복도가 3% 오르며, 인구·소득·교육 통계를 볼 수 있습니다. 도시 시대로 가려면 필요합니다.', workers: ['engineer', 4], unique: true, research: 'r_civics' },
+  tradepost: { name: '교역소', cat: 'civic', size: [10, 10], apron: 2, cost: { plate: 8, alloy: 2, circuit: 2 }, power: -3, desc: '궤도 화물선과 거래합니다. 크레딧으로 물자를 사들이거나 창고의 물자를 팝니다. 근처에서 나지 않는 광석을 구할 때 씁니다.', workers: ['tech', 2], trade: true, research: 'r_trade' },
   road: { name: '도로', cat: 'colony', size: [6, 6], cost: { iron: 1 }, desc: '두 지점을 찍어 소결 레골리스 포장도로를 깝니다. 지형을 따라 경사를 다듬고, 다른 도로에 이으면 교차로가 됩니다. 10m당 철 1.', tool: 'road', research: 'r_colony' },
-  monument: { name: '개척자 기념탑', cat: 'colony', size: [10, 10], apron: 3, cost: { alloy: 20, glass: 10, electronics: 6, credits: 800 }, desc: '문명 시대로 나아가기 위한 상징. 주민 전체의 행복도가 오르고, 찾아오는 방문객이 분당 20 크레딧을 남깁니다.', unique: true, research: 'r_monument' },
-  elevator: { name: '궤도 엘리베이터', cat: 'colony', size: [16, 16], apron: 4, cost: { alloy: 60, electronics: 20, circuit: 30, glass: 30, credits: 3000 }, power: -40, desc: '하늘과 궤도를 잇는 탑. 창고에서 150개를 넘는 물자를 30초마다 궤도로 수출해 크레딧을 벌고, 이주민이 엘리베이터로 내려와 교신 한 번에 50% 더 많이 옵니다.', unique: true, research: 'r_orbital', wonder: true },
+  monument: { name: '개척자 기념탑', cat: 'civic', size: [10, 10], apron: 3, cost: { alloy: 20, glass: 10, electronics: 6, credits: 800 }, desc: '문명 시대로 나아가기 위한 상징. 주민 전체의 행복도가 오르고, 찾아오는 방문객이 분당 20 크레딧을 남깁니다.', unique: true, research: 'r_monument' },
+  elevator: { name: '궤도 엘리베이터', cat: 'civic', size: [16, 16], apron: 4, cost: { alloy: 60, electronics: 20, circuit: 30, glass: 30, credits: 3000 }, power: -40, desc: '하늘과 궤도를 잇는 탑. 창고에서 150개를 넘는 물자를 30초마다 궤도로 수출해 크레딧을 벌고, 이주민이 엘리베이터로 내려와 교신 한 번에 50% 더 많이 옵니다.', unique: true, research: 'r_orbital', wonder: true },
+  // ---- more of the colony's working parts, each with its own job
+  o2station: { name: '산소 보급소', cat: 'base', size: [2, 2], cost: { plate: 2, glass: 1, ice: 2 }, desc: '자체 태양전지로 돌아가는 산소 충전대. 반경 6m 안의 탐사대원에게 산소를 채워 줍니다. 기지에서 먼 채굴지와 탐사 경로에 세우세요.', o2r: 6 },
+  shelter: { name: '야외 대피소', cat: 'base', size: [5, 5], cost: { plate: 4, glass: 2 }, desc: '여압된 1인용 대피소. 안에서 산소가 채워지고 간이침대에서 밤을 넘길 수 있습니다. 거주 모듈보다 작고 싸서 먼 곳의 전초기지로 씁니다.', o2: true, sleep: true, enter: true },
+  analyzer: { name: '지질 분석기', cat: 'science', size: [3, 3], cost: { plate: 3, glass: 2, circuit: 1 }, power: -2, desc: '물류망 창고의 광석 시료를 분석해 연구 점수를 만듭니다. 20초마다 가장 귀한 광석 1개를 쓰며, 희귀할수록 점수가 큽니다(철 1점 ~ 우라늄 8점).', analyzer: true, research: 'r_geology' },
+  radar: { name: '탐사 레이더', cat: 'science', size: [3, 3], cost: { plate: 3, circuit: 2, wire: 2 }, power: -2, desc: '반경 600m의 난파선·자료 캐시·동굴 같은 지점을 찾아 지도와 나침반에 표시합니다.', radar: 600, research: 'r_survey' },
+  observatory: { name: '천문대', cat: 'science', size: [6, 6], cost: { plate: 4, glass: 4, circuit: 2 }, power: -3, desc: '밤하늘을 관측해 연구 점수를 만듭니다. 맑은 밤에는 0.5점/s, 낮이나 흐린 날에는 0.1점/s.', night_rp: 0.5, research: 'r_astronomy' },
+  weather: { name: '기상 관측소', cat: 'science', size: [4, 4], cost: { plate: 3, glass: 1, circuit: 1 }, power: -1, desc: '먼지 폭풍을 1분 앞서 예보하고 태양광 패널을 미리 덮고 닦습니다. 관측소가 있으면 먼지 폭풍과 궂은 날씨의 태양광 손실이 절반으로 줄어듭니다.', weather: true, research: 'r_climate' },
+
+  rtg: { name: '방사성 동위원소 발전기', cat: 'power', size: [2, 2], cost: { alloy: 2, uranium: 3, plate: 1 }, power: 1.5, desc: '방사성 동위원소의 붕괴열로 밤낮·날씨와 상관없이 1.5 kW를 꾸준히 냅니다. 연료를 넣을 필요가 없습니다.', research: 'r_isotope' },
+  geothermal: { name: '지열 발전소', cat: 'power', size: [6, 6], cost: { plate: 6, alloy: 3, wire: 4 }, power: 18, desc: '깊은 시추공으로 땅속 열을 끌어올려 발전합니다. 현무암 화산대에서는 18 kW, 다른 곳에서는 6 kW만 나옵니다.', geo: true, research: 'r_geo' },
+  gasturbine: { name: '메탄 발전소', cat: 'power', size: [6, 5], cost: { plate: 6, alloy: 2, wire: 2 }, power: 22, desc: '메탄을 태워 22 kW를 냅니다(10초에 메탄 1개). 낮에 남는 전기로 만든 메탄을 밤에 태우는, 연료로 저장하는 발전소입니다.', fuel: 'methane', fuelTime: 10, research: 'r_isru' },
+  solarthermal: { name: '태양열 발전탑', cat: 'power', size: [8, 8], cost: { plate: 6, glass: 8, alloy: 2 }, power: 14, desc: '거울들이 탑 꼭대기 수신기에 햇빛을 모아 낮에 최대 14 kW를 냅니다. 녹인 소금에 열을 저장해 해가 진 뒤에도 4분 동안 발전합니다.', solar: true, thermal: 240, research: 'r_solarthermal' },
+
+  ghgplant: { name: '온실가스 공장', cat: 'terra', size: [6, 6], cost: { plate: 6, glass: 2, circuit: 2 }, power: -6, terra: { heat: 60, pressure: 8 }, desc: '황으로 육불화황 같은 강력한 온실가스를 만들어 대기에 풉니다. 황 1개로 20초 동안 열을 히터 T2의 일곱 배 가까이 올립니다.', fuel: 'sulfur', fuelTime: 20, research: 'r_climate' },
+  microbevat: { name: '미생물 배양조', cat: 'terra', size: [5, 5], cost: { plate: 4, glass: 4, seeds: 2 }, power: -3, terra: { biomass: 40, oxygen: 12 }, desc: '극한 환경 미생물을 길러 흙과 물가에 뿌립니다. 물 1개로 30초 동안 바이오매스와 산소를 만듭니다.', fuel: 'water', fuelTime: 30, unlockStage: 'microbes', research: 'r_microbio' },
+  fishery: { name: '어류 양식장', cat: 'terra', size: [6, 6], cost: { plate: 4, glass: 2, seeds: 4 }, power: -2, terra: { biomass: 220, oxygen: 20 }, desc: '호수(수심 0.5~8m)에 띄운 가두리에서 물고기를 길러 방류합니다. 바이오매스를 크게 올리고, 물류망 안이면 30초마다 식량 2개를 보냅니다.', water: true, produce: { food: 2 }, consume: {}, cycle: 30, unlockStage: 'fish', research: 'r_aqua' },
+  faunareserve: { name: '야생동물 보호구역', cat: 'terra', size: [12, 12], cost: { plate: 6, glass: 4, seeds: 8, credits: 150 }, power: -2, terra: { biomass: 900 }, desc: '새와 초식동물을 길러 들판에 풀어놓습니다. 바이오매스를 크게 늘리고, 반경 90m 주민 행복도가 5% 오르며, 찾아오는 관광객이 분당 10 크레딧을 남깁니다.', workers: ['settler', 3], service: 'wildlife', radius: 90, unlockStage: 'birds', research: 'r_ecology' },
+  magshield: { name: '자기권 발생기', cat: 'terra', size: [10, 10], cost: { alloy: 12, circuit: 8, electronics: 6, wire: 10 }, power: -30, desc: '초전도 코일로 행성 자기장을 만들어 태양풍이 대기를 벗겨 가지 못하게 막습니다. 켜져 있는 동안 모든 시설이 올리는 기압과 산소가 30% 늘어납니다.', magshield: 1.3, research: 'r_magneto' },
+  comet: { name: '혜성 유도 관제소', cat: 'terra', size: [10, 10], cost: { alloy: 15, electronics: 8, circuit: 10, glass: 6 }, power: -12, desc: '외행성계의 얼음 혜성에 추진기를 보내 궤도를 틉니다. 10분마다 메탄 20개를 써서 혜성 하나를 대기에 떨어뜨려 기압 8만과 열 2만을 한꺼번에 올립니다.', comet: { every: 600, methane: 20, pressure: 80000, heat: 20000 }, research: 'r_comet' },
+
+  sabatier: { name: '사바티에 반응기', cat: 'industry', size: [5, 4], cost: { plate: 4, alloy: 1, circuit: 1 }, power: -8, desc: '대기의 이산화탄소와 물을 전기분해한 수소로 메탄을 만듭니다(24초에 물 2 → 메탄 1). 전기를 많이 먹지만, 메탄은 쌓아 두었다가 발전소·로켓·혜성 추진기에 씁니다.', recipe: 'methane', research: 'r_isru' },
+  crusher: { name: '선광소', cat: 'industry', size: [6, 6], cost: { plate: 6, iron: 6, alloy: 1 }, power: -4, desc: '캐낸 광석을 부수고 골라내는 설비. 반경 45m 안의 자동 채굴기가 50% 더 빨리 캡니다.', crusher: 45, research: 'r_mineral' },
+  chemplant: { name: '화학 공장', cat: 'industry', size: [8, 8], cost: { plate: 8, glass: 4, circuit: 2 }, power: -6, desc: '메탄과 물로 폴리머를 만듭니다(메탄 1 + 물 1 → 폴리머 2). 폴리머는 병원·쇼핑 아케이드·경기장·우주 발사장의 자재입니다.', recipe: 'polymer', research: 'r_chem' },
+  spaceport: { name: '우주 발사장', cat: 'industry', size: [12, 12], apron: 3, cost: { plate: 12, alloy: 8, circuit: 6, polymer: 6, credits: 300 }, power: -6, desc: '메탄 로켓으로 궤도를 오갑니다. 2분마다 메탄 8개로 화물선을 쏘아 창고에 80개 넘게 쌓인 물자(물·식량·연료 제외)를 최대 40개 팔고, 교신에 응답한 이주민을 20% 더 데려옵니다.', workers: ['tech', 4], launch: { every: 120, methane: 8, cap: 40, keep: 80 }, research: 'r_space' },
+
+  hospital: { name: '종합병원', cat: 'colony', size: [12, 10], apron: 2, cost: { plate: 10, glass: 6, alloy: 4, polymer: 4, credits: 250 }, power: -6, desc: '반경 75m를 맡는 큰 병원으로 의료소 역할을 합니다. 이 병원이 돌보는 집은 앓아누운 주민이 의료소일 때의 3분의 1로 줄어듭니다. 탐사대원도 치료받을 수 있습니다.', workers: ['scientist', 4], service: 'clinic', hospital: true, radius: 75, research: 'r_health' },
+  library: { name: '도서관', cat: 'civic', size: [8, 8], cost: { plate: 4, glass: 6, credits: 100 }, power: -2, desc: '반경 60m 기술자 이상 주민이 책을 읽고 공부해 연구 점수를 만듭니다(독자 1명당 0.002점/s). 주민 행복도도 2% 오릅니다.', workers: ['tech', 2], service: 'library', radius: 60, research: 'r_library' },
+  mall: { name: '쇼핑 아케이드', cat: 'civic', size: [12, 10], apron: 2, cost: { plate: 10, glass: 8, polymer: 4, credits: 200 }, power: -5, desc: '상점과 식당이 모인 아케이드. 반경 60m 주거지가 세금을 12% 더 내고 행복도가 3% 오릅니다.', workers: ['artisan', 4], service: 'shops', radius: 60, research: 'r_commerce' },
+  bank: { name: '식민 은행', cat: 'civic', size: [8, 8], cost: { plate: 6, glass: 4, alloy: 2, credits: 300 }, power: -2, desc: '식민지 자금을 굴려 보유 크레딧의 1%를 분마다 이자로 붙입니다(분당 최대 40).', workers: ['engineer', 3], bank: true, research: 'r_commerce' },
+  spa: { name: '온천 스파', cat: 'civic', size: [8, 8], cost: { plate: 4, glass: 6, credits: 120 }, power: -3, desc: '데운 물에 몸을 담그는 스파. 반경 50m 주민 행복도가 4% 오르고, 물을 분당 2개 씁니다.', workers: ['settler', 2], service: 'spa', radius: 50, unlockStage: 'water', research: 'r_leisure' },
+  stadium: { name: '경기장', cat: 'civic', size: [16, 16], apron: 3, cost: { plate: 16, glass: 8, polymer: 8, lightalloy: 6, credits: 500 }, power: -8, desc: '경기와 공연이 열리는 경기장. 반경 120m 주민 행복도가 6% 오르고, 관중이 분당 15 크레딧을 남깁니다.', workers: ['citizen', 6], service: 'stadium', radius: 120, research: 'r_arena' },
+  hotel: { name: '관광 호텔', cat: 'civic', size: [10, 8], cost: { plate: 8, glass: 8, polymer: 2, credits: 250 }, power: -4, desc: '행성을 보러 온 관광객을 받습니다. 반경 150m 안의 볼거리(공원·기념탑·경기장·보호구역·스파·천문대·문화 센터)마다 분당 4 크레딧, 테라포밍이 진행될수록 손님이 늘어납니다.', workers: ['artisan', 3], hotel: 150, research: 'r_tourism' },
 };
 
 export const CATEGORIES = [
@@ -270,7 +306,9 @@ export const CATEGORIES = [
   { id: 'power', name: '에너지' },
   { id: 'terra', name: '테라포밍' },
   { id: 'industry', name: '산업' },
+  { id: 'science', name: '과학' },
   { id: 'colony', name: '식민지' },
+  { id: 'civic', name: '문화·경제' },
 ];
 
 // Research tree (Civilization-style eras). eureka: exploration finds that boost a tech by 50%.
@@ -306,6 +344,28 @@ export const RESEARCH = [
   { id: 'r_trade', name: '궤도 교역', era: 2, cost: 150, req: ['r_logistics'], desc: '교역소. 궤도 화물선과 물자를 사고팝니다.' },
   { id: 'r_civics', name: '시민 행정', era: 3, cost: 260, req: ['r_roads', 'r_safety'], desc: '시청. 도시 시대의 조건.' },
   { id: 'r_native', name: '요람 프로그램', era: 5, cost: 800, req: ['r_highrise', 'r_monument'], desc: '아르케에서 태어난 첫 세대를 위한 개방형 주거. 숨쉬는 대기 이후 명사 → 아르케인 업그레이드.' },
+  { id: 'r_geology', name: '지질학', era: 1, cost: 30, req: ['r_auto'], desc: '지질 분석기. 광석 시료로 연구 점수를 얻습니다.' },
+  { id: 'r_survey', name: '탐사 레이더', era: 1, cost: 40, req: ['r_geology'], desc: '반경 600m의 지점을 찾아내는 탐사 레이더.' },
+  { id: 'r_isotope', name: '동위원소 전지', era: 2, cost: 90, req: ['r_refine'], desc: '연료 없이 꾸준히 도는 방사성 동위원소 발전기.' },
+  { id: 'r_mineral', name: '선광', era: 2, cost: 80, req: ['r_auto', 'r_refine'], desc: '선광소. 근처 자동 채굴기가 더 빨리 캡니다.' },
+  { id: 'r_isru', name: '현지 자원 활용', era: 2, cost: 120, req: ['r_refine', 'r_bio'], desc: '사바티에 반응기로 메탄을 만들고 메탄 발전소를 돌립니다.' },
+  { id: 'r_geo', name: '지열 공학', era: 2, cost: 140, req: ['r_isru'], desc: '지열 발전소. 화산대에서 특히 강합니다.' },
+  { id: 'r_solarthermal', name: '태양열 집광', era: 2, cost: 110, req: ['r_wind'], desc: '열을 저장해 밤에도 도는 태양열 발전탑.' },
+  { id: 'r_climate', name: '기후 공학', era: 2, cost: 100, req: ['r_bio'], desc: '온실가스 공장과 기상 관측소.' },
+  { id: 'r_microbio', name: '미생물학', era: 2, cost: 120, req: ['r_bio'], desc: '미생물 배양조. 미생물 단계부터 지을 수 있습니다.' },
+  { id: 'r_chem', name: '화학 공학', era: 3, cost: 220, req: ['r_isru', 'r_assembly'], desc: '메탄으로 폴리머를 만드는 화학 공장.' },
+  { id: 'r_library', name: '공공 도서관', era: 3, cost: 180, req: ['r_education'], desc: '주민이 공부해 연구 점수를 만드는 도서관.' },
+  { id: 'r_astronomy', name: '천문학', era: 3, cost: 200, req: ['r_education'], desc: '밤하늘을 관측하는 천문대.' },
+  { id: 'r_leisure', name: '휴양', era: 3, cost: 160, req: ['r_sanitation'], desc: '온천 스파. 액체 물 단계부터 지을 수 있습니다.' },
+  { id: 'r_aqua', name: '양식', era: 3, cost: 200, req: ['r_agri'], desc: '호수에 띄우는 어류 양식장. 물고기 단계부터 지을 수 있습니다.' },
+  { id: 'r_health', name: '종합 의료', era: 3, cost: 300, req: ['r_pharma', 'r_chem'], desc: '앓아누운 주민을 크게 줄이는 종합병원.' },
+  { id: 'r_commerce', name: '상업', era: 3, cost: 260, req: ['r_goods', 'r_trade', 'r_chem'], desc: '쇼핑 아케이드와 식민 은행.' },
+  { id: 'r_space', name: '우주 수송', era: 4, cost: 420, req: ['r_chem', 'r_trade'], desc: '메탄 로켓이 오가는 우주 발사장.' },
+  { id: 'r_ecology', name: '생태 보전', era: 4, cost: 380, req: ['r_aqua', 'r_culture'], desc: '야생동물 보호구역. 새 단계부터 지을 수 있습니다.' },
+  { id: 'r_arena', name: '경기장', era: 4, cost: 400, req: ['r_sports', 'r_culture', 'r_chem'], desc: '경기와 공연이 열리는 경기장.' },
+  { id: 'r_tourism', name: '관광', era: 4, cost: 380, req: ['r_commerce', 'r_culture'], desc: '볼거리를 찾아온 손님을 받는 관광 호텔.' },
+  { id: 'r_magneto', name: '자기권 공학', era: 5, cost: 750, req: ['r_orbital'], desc: '대기를 붙잡아 두는 자기권 발생기.' },
+  { id: 'r_comet', name: '혜성 포획', era: 5, cost: 820, req: ['r_space', 'r_orbital'], desc: '얼음 혜성을 대기에 떨어뜨리는 혜성 유도 관제소.' },
 ];
 
 export function fmtTi(v) {

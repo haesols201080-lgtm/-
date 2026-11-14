@@ -7,6 +7,7 @@ import { itemIcon, CREDIT_ICON, paramIcon } from './icons.js';
 import { techTreePanel } from './techtree.js';
 import { U, WORLD } from '../core/shared.js';
 import { QUALITY } from '../core/engine.js';
+import { WEATHER } from '../sim/terraform.js';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const h = (tag, attrs = {}, html = '') => { const e = document.createElement(tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); e.innerHTML = html; return e; };
@@ -565,6 +566,31 @@ export class UI {
     if (t === 'cityhall') return `세금 징수 +15% · 행복도 +3% · 아래 통계 참고`;
     if (t === 'tradepost') return `구입 ${D.bought || 0}개 · 판매 ${D.sold || 0}개`;
     if (t === 'powerbank') return `저장 ${Math.round((D.charge || 0) / b.def.storage_kj * 100)}% (${((D.charge || 0) / 1000).toFixed(1)} / ${b.def.storage_kj / 1000} MJ) · ${D.flow > 0.05 ? `충전 ${D.flow.toFixed(1)} kW` : D.flow < -0.05 ? `방전 ${(-D.flow).toFixed(1)} kW` : '대기'}`;
+    const S = g.eco.store, dd = b.def;
+    if (t === 'o2station') return `반경 ${dd.o2r}m 안에 서면 산소가 채워집니다 · 자체 태양전지로 돌아갑니다`;
+    if (t === 'shelter') return '안에 들어가면 산소가 채워지고, 밤에는 간이침대에서 쉴 수 있습니다';
+    if (t === 'analyzer') return `분석한 시료 ${D.samples || 0}개${D.last ? ` · 최근 시료: ${ITEMS[D.last].name}` : ''} · 다음 분석까지 ${Math.max(0, Math.ceil(20 - (D.t || 0)))}초`;
+    if (t === 'radar') return `지금까지 찾은 지점 ${D.found || 0}곳 · 20초마다 반경 ${dd.radar}m를 훑습니다`;
+    if (t === 'observatory') return `관측 ${(D.rp || 0).toFixed(2)}점/s · ${U.uSunDir.value.y < -0.05 ? '밤하늘 관측 중' : '낮에는 태양 관측만 — 밤이 되면 다섯 배'}`;
+    if (t === 'weather') { const W = g.terra.weather; return `${g.eco.weatherStation ? '예보 중' : '운영 안 됨'} · 지금 ${WEATHER[W.kind]?.name || W.kind}${W.kind === 'clear' && W.upcoming ? ` · 다음: ${WEATHER[W.upcoming]?.name} (${Math.max(0, Math.ceil((W.next - W.t) / 60))}분 뒤)` : ''} · 태양광 날씨 손실 절반`; }
+    if (t === 'geothermal') { const k = D.geoK ?? g.eco.geoFactor(b); return `이 땅의 지열 ${Math.round(k * 100)}% — ${k >= 1 ? '현무암 화산대의 뜨거운 지하' : '화산대 밖이라 깊이 뚫어도 열이 적습니다'}`; }
+    if (t === 'solarthermal') return `녹인 소금 축열 ${Math.round((D.salt || 0) / dd.thermal * 100)}% · 해가 지면 ${Math.round((D.salt || 0) / 60 * 10) / 10}분 더 발전`;
+    if (t === 'rtg') return '동위원소 붕괴열로 밤낮 없이 발전 중';
+    if (t === 'magshield') return g.eco.terraMult && g.eco.terraMult.pressure ? '자기장 형성 중 · 모든 시설의 기압·산소 생산 +30%' : '전력이 부족해 자기장이 꺼졌습니다';
+    if (t === 'comet') { const C2 = dd.comet; return `다음 혜성까지 ${Math.max(0, Math.ceil(C2.every - (D.t || 0)))}초 · 메탄 창고 ${S.count('methane')}/${C2.methane}개 · 떨어뜨린 혜성 ${D.impacts || 0}개`; }
+    if (t === 'crusher') return `가속 중인 자동 채굴기 ${g.buildings.list.filter((x) => x.def.deposit && (x.x - b.x) ** 2 + (x.z - b.z) ** 2 < dd.crusher * dd.crusher).length}대 · 채굴 속도 ×1.5`;
+    if (t === 'extractor' && D.boost > 1) return '선광소 덕분에 50% 더 빨리 캐는 중';
+    if (t === 'spaceport') { const L = dd.launch; return `발사 ${D.launches || 0}회 · 판매 수익 ${D.earned || 0} 크레딧 · 다음 발사까지 ${Math.max(0, Math.ceil(L.every - (D.lt || 0)))}초${D.wait ? ` · 메탄 ${L.methane}개 대기 (창고 ${S.count('methane')}개)` : ''}${D.last ? ` · 최근 화물: ${D.last.map(([id, n]) => `${ITEMS[id]?.name || id} ${n}`).join(', ')}` : ''}`; }
+    if (t === 'hospital') return `진료 중인 환자 ${D.patients || 0}명 · 돌보는 집의 앓아누운 주민 1% 수준 · 식민지 전체 환자 ${C.sick.reduce((a, c) => a + c, 0)}명`;
+    if (t === 'library') return `읽고 공부하는 주민 ${D.readers || 0}명 · 연구 ${((D.readers || 0) * 0.002).toFixed(3)}점/s · 행복도 +2%`;
+    if (t === 'mall') return `손님 ${D.visitors || 0}명 · 반경 ${dd.radius}m 집 세금 +12% · 행복도 +3%`;
+    if (t === 'bank') return `이자 분당 ${Math.round(C.interest || 0)} 크레딧 (보유 ${Math.floor(C.credits)})`;
+    if (t === 'spa') return D.dry ? '<span style="color:var(--warn)">창고에 물이 없어 탕을 채우지 못합니다</span>' : `손님 ${D.visitors || 0}명 · 물 분당 2개 · 행복도 +4%`;
+    if (t === 'stadium') return `관중 ${D.visitors || 0}명 · 입장 수입 분당 15 크레딧 · 행복도 +6%`;
+    if (t === 'hotel') return `반경 ${dd.hotel}m 볼거리 ${D.sights || 0}곳 · 관광 수입 분당 ${Math.round(D.guests || 0)} 크레딧`;
+    if (t === 'faunareserve') return `관람객 ${D.visitors || 0}명 · 관광 수입 분당 10 크레딧 · 주민 행복도 +5%`;
+    if (t === 'fishery') return `물고기를 길러 호수에 풀어 줍니다${b.networked ? ' · 30초마다 식량 2개를 물류망 창고로' : ' · 물류망 밖이라 식량은 보내지 못합니다'}`;
+    if (dd.fuel) return `연료 ${ITEMS[dd.fuel].name}: 남은 시간 ${Math.max(0, Math.ceil(D.fuelLeft || 0))}초 · 창고 ${S.count(dd.fuel)}개 (${dd.fuelTime}초에 1개)`;
     return '';
   }
 
@@ -606,7 +632,7 @@ export class UI {
       if (d.deposit && b.data.buf) extra += `<button data-act="collect" class="pri">광석 ${b.data.buf}개 가져가기</button>`;
       if (d.house) extra += `<button data-act="upgrade" ${g.colony.canUpgrade(b).ok ? '' : 'disabled'}>지금 업그레이드</button><button data-act="auto" class="${g.colony.autoUpgrade ? 'on' : ''}">자동 업그레이드 ${g.colony.autoUpgrade ? '켜짐' : '꺼짐'}</button>`;
       if (d.storage || d.craft) extra += `<button data-act="open">보관함·제작 열기</button>`;
-      if (b.type === 'clinic') extra += `<button data-act="heal" class="pri" ${b.serviceOk ? '' : 'disabled'}>치료받기 · 산소 보충</button>`;
+      if (d.service === 'clinic') extra += `<button data-act="heal" class="pri" ${b.serviceOk ? '' : 'disabled'}>치료받기 · 산소 보충</button>`;
 
       if (b.type === 'transit') {
         const others = g.buildings.list.filter((x) => x.type === 'transit' && x !== b);

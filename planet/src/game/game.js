@@ -547,7 +547,7 @@ export class Game {
       } else if (b) {
         const d = b.def;
         let sub = b.status ? `<span class="sub">${b.status}</span>` : '';
-        if (b.type === 'habitat' && P.inside === b) {
+        if (b.def.sleep && P.inside === b) {
           prompt = `<span class="key">E</span>침대에서 쉬기 ${this.sky.isNight() ? '(아침까지)' : ''}`;
           if (input.hit('KeyE')) this.sleep();
         } else {
@@ -601,11 +601,23 @@ export class Game {
     this.ui.toast('푹 쉬었습니다. 아침입니다.', 'good');
   }
 
+  // a rocket leaves the spaceport: a column of exhaust and dust off the pad
+  onLaunch(b) {
+    const D = this.dust;
+    if (D) for (let i = 0; i < 40; i++) {
+      const a = Math.random() * Math.PI * 2, r = Math.random() * 3;
+      D.puff(b.x + Math.cos(a) * r, b.y + 0.5 + Math.random() * 6, b.z + Math.sin(a) * r, { vx: Math.cos(a) * 4, vy: 2 + Math.random() * 6, vz: Math.sin(a) * 4, s: 1.2, grow: 3, max: 6, a: 0.25, kind: i % 3 ? 'exhaust' : 'dust', drift: 1 });
+    }
+    this.audio && this.audio.play('build');
+  }
+
   survival(dt) {
     const P = this.player;
     P.inside = this.buildings.inside(P.pos);
     let refill = null;
     if (P.inside && P.inside.def.o2) refill = P.inside.def.name;
+    // oxygen stations top up anyone standing next to them
+    if (!refill) { const st = this.buildings.near(P.pos.x, P.pos.z, 7, (b) => b.def.o2r && Math.hypot(b.x - P.pos.x, b.z - P.pos.z) < b.def.o2r + 1); if (st.length) refill = st[0].def.name; }
     const ex = this.expedition.b;
     if (ex && Math.hypot(ex.x - P.pos.x, ex.z - P.pos.z) < 14) refill = '탐사선';
     if (this.rover.driving) refill = '탐사 로버';

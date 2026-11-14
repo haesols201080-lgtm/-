@@ -248,7 +248,9 @@ button:disabled { opacity: .4; cursor: default; }
 .panel header .sp { flex: 1; }
 .panel header .x { padding: 4px 10px; }
 .panel .body { padding: 14px 18px; overflow: auto; }
-.tabs { display: flex; gap: 6px; }
+.tabs { display: flex; gap: 6px; flex-wrap: nowrap; overflow-x: auto; min-width: 0; max-width: 100%; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button { flex: none; white-space: nowrap; }
 .tabs button { padding: 6px 12px; background: transparent; border-color: transparent; color: var(--muted); }
 .tabs button.on { color: var(--ink); border-color: var(--line2); background: rgba(255,255,255,.06); }
 

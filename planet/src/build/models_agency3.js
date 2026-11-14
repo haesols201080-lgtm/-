@@ -158,7 +158,9 @@ export function terminal(M) {
   const dish = M.animGroup('shell', { pivot: [0.62, 0, 0.62], axis: [0, 1, 0], speed: 0.5 });
   const prof = []; for (let i = 0; i <= 8; i++) { const t = i / 8; prof.push(new THREE.Vector2(0.03 + t * 0.42, t * t * 0.16)); }
   const dg = new THREE.LatheGeometry(prof, 20); dg.rotateX(-0.75); dg.translate(0.62, 2.12, 0.62);
-  dish.add(dg, { color: 0xe8e6e0 });
+  dish.add(dg, { color: 0xd8d6d0 });
+  const df = new THREE.LatheGeometry(prof.slice().reverse(), 20); df.rotateX(-0.75); df.translate(0.62, 2.12, 0.62);
+  dish.add(df, { color: 0xeeece6 });
   dish.add(new THREE.CylinderGeometry(0.02, 0.02, 0.34, 5), { pos: v(0.62, 2.24, 0.5), rot: e(-0.75, 0, 0), color: N.FRAME });
   dish.add(new THREE.BoxGeometry(0.06, 0.06, 0.06), { pos: v(0.62, 2.36, 0.39), color: N.DARK });
   M.cyl('metal', -0.5, 1.8, 0.5, 0.012, 1.2, N.FRAME, 4);

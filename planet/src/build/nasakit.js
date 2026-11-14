@@ -577,7 +577,10 @@ export function dishAntenna(M, x, z, { s = 1, tilt = 0.8, speed = 0.1 } = {}) {
   const T = (lx, ly, lz) => v(lx, ly * Math.cos(tilt) + lz * Math.sin(tilt), -ly * Math.sin(tilt) + lz * Math.cos(tilt)).add(C0);
   const prof = []; for (let i = 0; i <= 12; i++) { const r = 0.25 * s + (R - 0.25 * s) * i / 12; prof.push(new THREE.Vector2(r, r * r / (4 * f))); }
   const dg = new THREE.LatheGeometry(prof, 40); dg.rotateX(-tilt);
-  g.add(dg, { pos: C0, color: 0xeeece6 });
+  g.add(dg, { pos: C0, color: 0xdcdad4 });
+  // the reflecting (concave) face: the same surface with its faces turned
+  const df = new THREE.LatheGeometry(prof.slice().reverse(), 40); df.rotateX(-tilt);
+  g.add(df, { pos: C0, color: 0xf2f0ea });
   const rim = new THREE.TorusGeometry(R, 0.05 * s, 6, 48); rim.rotateX(PI / 2); rim.translate(0, R * R / (4 * f), 0); rim.rotateX(-tilt);
   g.add(rim, { pos: C0, color: N.FRAME });
   const hub = new THREE.CylinderGeometry(0.5 * s, 0.75 * s, 0.5 * s, 16); hub.translate(0, -0.2 * s, 0); hub.rotateX(-tilt);

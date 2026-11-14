@@ -44,7 +44,9 @@ export class Store {
   load(o) { this.items = new Map(Object.entries(o || {}).map(([k, v]) => [k, +v])); }
 }
 
-const NODE_RANGE = { pylon: 30, hq: 36, solar: 16, wind: 18, reactor: 24, dronehub: 20 };
+const NODE_RANGE = { pylon: 30, hq: 36, solar: 16, wind: 18, reactor: 24, dronehub: 20, rtg: 12, geothermal: 22, gasturbine: 22, solarthermal: 22 };
+// research points a sample of each ore gives the geology analyser (rarest first)
+const ORE_RP = { uranium: 8, cobalt: 6, nickel: 4, titanium: 3, aluminium: 3, copper: 3, phosphate: 3, magnesium: 3, sulfur: 2, iron: 1, silicon: 1, ice: 1 };
 const CONSUMER_RANGE = 16;
 
 export class Economy {
@@ -199,14 +201,27 @@ export class Economy {
   }
 
   // ---------------------------------------------------------------- tick
+  // share of full sun on a panel now; a weather station's forecasts (panels
+  // stowed and cleaned ahead of storms) halve what dust and storms cost
+  sunFactor() {
+    const e = U.uSunDir.value.y;
+    const sky = this.game.sky;
+    const wk = this.weatherStation ? 0.5 : 1;
+    return Math.max(0, Math.min(1, e * 1.8 + 0.1)) * sky.sunVis * (1 - sky.uniforms.uStorm.value * 0.6 * wk) * (1 - sky.uniforms.uDust.value * 0.25 * wk);
+  }
+  // how much heat the ground gives a geothermal well here
+  geoFactor(b) {
+    const gen = this.game.terrain.gen;
+    const prov = gen && gen.provinceAt ? gen.provinceAt(b.x, b.z) : null;
+    return prov && prov.id === 'volcanic' ? 1 : 1 / 3;
+  }
+
   generatorOutput(b) {
     const d = b.def;
     if (!(d.power > 0)) return 0;
-    if (d.solar) {
-      const e = U.uSunDir.value.y;
-      const sky = this.game.sky;
-      return d.power * Math.max(0, Math.min(1, e * 1.8 + 0.1)) * sky.sunVis * (1 - sky.uniforms.uStorm.value * 0.6) * (1 - sky.uniforms.uDust.value * 0.25);
-    }
+    if (d.thermal) return b.data.out || 0;
+    if (d.solar) return d.power * this.sunFactor();
+    if (d.geo) return d.power * (b.data.geoK ?? (b.data.geoK = this.geoFactor(b)));
     if (d.wind) return d.power * (0.25 + 0.75 * this.game.sky.uniforms.uAtmo.value) * (0.75 + 0.25 * Math.sin(U.uTime.value * 0.1 + b.seed * 10));
     if (d.fuel) return b.data.fuelLeft > 0 ? d.power : 0;
     return d.power;
@@ -221,11 +236,28 @@ export class Economy {
     for (const b of list) if (b.def.depot) cap += b.def.depot;
     this.store.cap = cap;
 
-    // fuel for reactors
+    // colony-wide helpers: a weather station, the magnetosphere generator,
+    // ore dressing plants
+    this.weatherStation = list.some((b) => b.def.weather && b.powerRatio > 0.3);
+    const shield = list.find((b) => b.def.magshield && b.powerRatio > 0.5 && b.enabled !== false);
+    this.terraMult = shield ? { pressure: shield.def.magshield, oxygen: shield.def.magshield } : {};
+    this.crushers = list.filter((b) => b.def.crusher && b.powerRatio > 0.3 && b.enabled !== false);
+    // fuel: reactors and gas turbines burn on regardless; the plants that feed
+    // the atmosphere only use it while they have power
     for (const b of list) {
       if (!b.def.fuel) continue;
-      b.data.fuelLeft = (b.data.fuelLeft || 0) - dt;
+      const burn = b.def.power > 0 || ((b.powerRatio || 0) > 0.05 && b.enabled !== false) ? 1 : 0;
+      b.data.fuelLeft = (b.data.fuelLeft || 0) - dt * burn;
       if (b.data.fuelLeft <= 0 && this.inNetwork(b.x, b.z) && this.store.remove(b.def.fuel, 1)) b.data.fuelLeft = b.def.fuelTime;
+    }
+    // solar towers: heat stored in molten salt carries them past sunset
+    for (const b of list) {
+      if (!b.def.thermal) continue;
+      const D = b.data, sun = this.sunFactor();
+      D.salt = D.salt || 0;
+      if (sun > 0.25) { D.out = b.def.power * sun; D.salt = Math.min(b.def.thermal, D.salt + dt * sun * 1.2); }
+      else if (D.salt > 0) { D.salt = Math.max(0, D.salt - dt); D.out = b.def.power * 0.75; }
+      else D.out = b.def.power * sun;
     }
     // power per grid component
     const comps = new Map();
@@ -289,8 +321,12 @@ export class Economy {
     if (b.fire > 0) b.status = '화재!';
     if (d.storage_kj) { const f = b.data.flow || 0; b.status = b.gridRoot ? (f > 0.05 ? '충전 중' : f < -0.05 ? '방전 중' : '대기') : '전력망에 연결되지 않음'; }
 
+    if (d.fuel && !(d.power > 0) && !(b.data.fuelLeft > 0)) { rate = 0; b.rate = 0; active = false; b.status = b.status || `연료 없음: ${ITEMS[d.fuel].name} (물류망 창고)`; }
     if (d.deposit) {
-      b.data.t = (b.data.t || 0) + dt * rate;
+      // a dressing plant nearby lets the mine run half again as fast
+      const boost = (this.crushers || []).some((c) => (c.x - b.x) ** 2 + (c.z - b.z) ** 2 < c.def.crusher * c.def.crusher) ? 1.5 : 1;
+      b.data.boost = boost;
+      b.data.t = (b.data.t || 0) + dt * rate * boost;
       b.data.buf = b.data.buf || 0;
       if (b.data.t >= 6) {
         b.data.t -= 6;
@@ -330,12 +366,68 @@ export class Economy {
       }
     }
     if (d.research_rp && g.research) g.research.addPoints(d.research_rp * rate * dt, b);
-    if (d.terra && g.terra) for (const [k, v] of Object.entries(d.terra)) g.terra.add(k, v * rate * dt);
+    // the observatory sees most on clear nights
+    if (d.night_rp && g.research) {
+      const night = U.uSunDir.value.y < -0.05;
+      const clear = 1 - Math.min(1, (g.sky.uniforms.uStorm.value || 0) + (g.sky.uniforms.uDust.value || 0) * 0.8);
+      b.data.rp = d.night_rp * (night ? Math.max(0.2, clear) : 0.2) * rate;
+      g.research.addPoints(b.data.rp * dt, b);
+    }
+    // geology analyser: one sample of the rarest ore in the depot every 20 s
+    if (d.analyzer && g.research) {
+      if (!net) { active = false; b.status = b.status || '물류망 밖 (드론 허브 필요)'; }
+      else {
+        b.data.t = (b.data.t || 0) + dt * rate;
+        if (b.data.t >= 20) {
+          const ore = Object.keys(ORE_RP).find((id) => this.store.count(id) > 0);
+          if (ore) { this.store.remove(ore, 1); g.research.addPoints(ORE_RP[ore], b); b.data.last = ore; b.data.samples = (b.data.samples || 0) + 1; b.data.t -= 20; }
+          else { b.data.t = 20; active = false; b.status = b.status || '분석할 광석이 창고에 없습니다'; }
+        }
+      }
+    }
+    // survey radar: sweeps the loaded country for sites every 20 s
+    if (d.radar && rate > 0.05) {
+      b.data.t = (b.data.t || 0) + dt * rate;
+      if (b.data.t >= 20) { b.data.t = 0; this.sweep(b); }
+    }
+    // comet redirection: every ten minutes, when the methane is in the depot
+    if (d.comet && g.terra) {
+      const C = d.comet;
+      b.data.t = Math.min(C.every, (b.data.t || 0) + dt * rate);
+      if (b.data.t >= C.every) {
+        if (net && this.store.count('methane') >= C.methane) {
+          this.store.remove('methane', C.methane);
+          g.terra.add('pressure', C.pressure); g.terra.add('heat', C.heat);
+          b.data.t = 0; b.data.impacts = (b.data.impacts || 0) + 1;
+          g.ui && g.ui.toast(`<b>혜성 충돌</b> 얼음 혜성이 대기에 부딪혀 증발했습니다 — 기압 +${C.pressure / 1000}k, 열 +${C.heat / 1000}k`, 'good', 6, true);
+          g.audio && g.audio.play('done');
+        } else { active = false; b.status = b.status || `메탄 ${C.methane}개를 기다리는 중 (창고 ${this.store.count('methane')}개)`; }
+      }
+    }
+    if (d.terra && g.terra) for (const [k, v] of Object.entries(d.terra)) g.terra.add(k, v * rate * dt * (this.terraMult?.[k] || 1));
     if (d.power > 0) active = this.generatorOutput(b) > 0.05;
     if (d.house) active = true;
     b.idle = !active;
     const lit = (d.power < 0 ? (b.powerRatio > 0.05 ? 1 : 0) : 1) * (d.workers && this.workFactor(b) < 0.05 ? 0.2 : 1);
     g.buildings.setState(b, lit, active ? Math.max(0.2, rate) : 0);
+  }
+
+  // the radar marks every site in the loaded country within its range
+  sweep(b) {
+    const g = this.game, R = b.def.radar;
+    if (!g.props || !g.pois) return 0;
+    let n = 0;
+    for (const c of g.props.cells.values()) {
+      if (!c.ready || !c.pois) continue;
+      for (const p of c.pois) {
+        if (g.pois.discovered.has(p.id) || (p.x - b.x) ** 2 + (p.z - b.z) ** 2 > R * R) continue;
+        g.pois.discovered.set(p.id, { kind: p.kind, x: p.x, z: p.z, name: g.pois.name(p.kind) });
+        n++;
+      }
+    }
+    b.data.found = (b.data.found || 0) + n;
+    if (n) g.ui && g.ui.toast(`탐사 레이더: 새 지점 ${n}곳을 찾았습니다`, 'info', 3);
+    return n;
   }
 
   nearWater(b) {

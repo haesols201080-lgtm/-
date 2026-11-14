@@ -24,6 +24,8 @@ const SHAPES = {
   vial: (c) => `<rect x="12" y="3" width="8" height="4" rx="1" fill="#d6dbe0"/><path d="M12 7 L20 7 L20 12 L25 22 Q26 28 16 28 Q6 28 7 22 L12 12 Z" fill="#e8eef2" fill-opacity=".5" stroke="#cfd6dc" stroke-width="1.2"/><path d="M9 21 L23 21 Q24 27 16 27 Q8 27 9 21 Z" fill="${c}"/>`,
   cloth: (c) => `<path d="M11 5 L16 8 L21 5 L28 10 L25 15 L22 13 L22 27 L10 27 L10 13 L7 15 L4 10 Z" fill="${c}"/><path d="M16 8 L16 27" stroke="${shade(c, 0.7)}" stroke-width="1.1"/><path d="M11 5 L16 8 L21 5" stroke="${shade(c, 1.3)}" stroke-width="1.4" fill="none"/>`,
   fruit: (c) => `<circle cx="12" cy="19" r="7" fill="${c}"/><circle cx="21" cy="18" r="6.5" fill="${shade(c, 0.82)}"/><path d="M16 11 C16 8 18 6 20 5" stroke="#6a4a2a" stroke-width="1.6" fill="none"/><path d="M17 9 C20 6 24 7 25 9 C22 11 19 11 17 9 Z" fill="#5aa04a"/><circle cx="10" cy="17" r="2" fill="#fff" fill-opacity=".35"/>`,
+  canister: (c) => `<rect x="10" y="6" width="12" height="21" rx="5" fill="${shade(c, 0.85)}"/><rect x="10" y="12" width="12" height="4" fill="${shade(c, 0.55)}"/><rect x="14" y="3" width="4" height="4" rx="1" fill="#9aa3ab"/><rect x="12.5" y="8" width="2" height="16" rx="1" fill="#fff" fill-opacity=".35"/>`,
+  pellets: (c) => `${[[10, 20, 5], [19, 22, 4.5], [15, 13, 4.5], [22, 14, 3.5], [8, 12, 3.5]].map(([x, y, r], i) => `<ellipse cx="${x}" cy="${y}" rx="${r}" ry="${r * 0.8}" fill="${shade(c, 0.75 + i * 0.1)}"/>`).join('')}`,
   seed: (c) => `<ellipse cx="12" cy="18" rx="5" ry="7" transform="rotate(-25 12 18)" fill="${c}"/><ellipse cx="20" cy="15" rx="4.5" ry="6.5" transform="rotate(20 20 15)" fill="${shade(c, 0.8)}"/>`,
 };
 
