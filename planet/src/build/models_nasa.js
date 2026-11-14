@@ -6,9 +6,9 @@
 // tanks, comm masts, a tracking dish, vertical solar masts, flags.
 // Every building says what it is for by what is bolted to it.
 import * as THREE from 'three';
-import { C, L, v, e, plinth, railing, antenna, radiator, airlockTube, habModule, tank, pvRack } from './modelkit.js';
-import { strut, lattice, symbol, floodMast, pipeRack } from './starkit.js';
-import { N, vessel, tubeModule, radiatorWing, deployFrame, grating, ramp, avionics, bottleRack } from './nasakit.js';
+import { C, L, v, e, plinth, railing } from './modelkit.js';
+import { lattice, floodMast } from './starkit.js';
+import { N, vessel, tubeModule, radiatorWing, deployFrame, grating, ramp, avionics, bottleRack, dishAntenna } from './nasakit.js';
 
 const PI = Math.PI;
 const PRINT = 0x9a8878;          // printed lavacrete, grey-brown
@@ -167,8 +167,7 @@ export function cityhall(M, open = false) {
   for (const x of [-5.3, -3.8, -2.3]) radiatorWing(M, x, 4.7, 0, { w: 1.4, h: 3.0, y0: 0.6 });
   for (const x of [1.0, 2.6]) radiatorWing(M, x, 3.2, 0, { w: 1.4, h: 2.6, y0: 0.6 });
   // local tracking antenna (the deep-space station's design, ~1:10)
-  M.asset('dsn34', 5.4, 0, 4.6, { scale: 0.1, anim: { pivot: [5.4, 0, 4.6], axis: [0, 1, 0], speed: 0.06 }, fixed: /base/ });
-  M.colCyl(5.4, 4.6, 1.0, 0, 1.8);
+  dishAntenna(M, 5.4, 4.6, { s: 0.5, speed: 0.06 });
   // comm tower, solar mast, floodlights, flags
   lattice(M, -6.1, 5.0, 1.3, 14, { mast: true, stairs: false });
   solarMast(M, 6.2, -1.6, 12);

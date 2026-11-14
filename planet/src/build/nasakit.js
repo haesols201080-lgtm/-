@@ -7,7 +7,7 @@
 // grated porches and ramps with yellow handrails, gold-foil avionics.
 // Every part is something that would be bolted on for a reason.
 import * as THREE from 'three';
-import { C, L, v, e, railing } from './modelkit.js';
+import { L, v, e, railing } from './modelkit.js';
 import { strut } from './starkit.js';
 
 const PI = Math.PI;
@@ -66,11 +66,11 @@ export function viewport(M, x, y, z, yaw, r = 0.2) {
 // hatch ring when loft = 0). hatches: angles of the doors (local yaw).
 export function vessel(M, x, z, { r = 2.4, h = 3.0, y0 = 0.7, loft = 1.6, hatches = [PI], ports = [], segs = 8, rot = 0, label = true } = {}) {
   const top = y0 + h;
-  M.add('shell', new THREE.CylinderGeometry(r, r, h, 56, 1), { pos: v(x, y0 + h / 2, z), color: N.SHELL });
+  M.add('shell', new THREE.CylinderGeometry(r, r, h, 44, 1), { pos: v(x, y0 + h / 2, z), color: N.SHELL });
   // skirt down to the deck/frame
-  M.add('metal', new THREE.CylinderGeometry(r * 0.93, r * 0.9, y0, 40, 1, true), { pos: v(x, y0 / 2, z), color: N.STEEL });
+  M.add('metal', new THREE.CylinderGeometry(r * 0.93, r * 0.9, y0, 32, 1, true), { pos: v(x, y0 / 2, z), color: N.STEEL });
   // ring frames
-  for (const yy of [y0, y0 + h * 0.5, top]) M.add('metal', new THREE.TorusGeometry(r + 0.02, 0.055, 6, 64), { pos: v(x, yy, z), rot: e(PI / 2, 0, 0), color: N.FRAME });
+  for (const yy of [y0, y0 + h * 0.5, top]) M.add('metal', new THREE.TorusGeometry(r + 0.02, 0.055, 5, 44), { pos: v(x, yy, z), rot: e(PI / 2, 0, 0), color: N.FRAME });
   // segment seams and their stencilled names
   for (let i = 0; i < segs; i++) {
     const a = rot + (i + 0.5) / segs * PI * 2;
@@ -95,17 +95,17 @@ export function vessel(M, x, z, { r = 2.4, h = 3.0, y0 = 0.7, loft = 1.6, hatche
       prof.push(new THREE.Vector2(Math.max(0.001, r * 0.985 * bulge * (t < 0.5 ? 1 : Math.pow(k, 0.55))), yy));
     }
     prof.push(new THREE.Vector2(0.001, loft));
-    M.add('mli', new THREE.LatheGeometry(prof, 48), { pos: v(x, top, z), color: 0xf1efe9 });
+    M.add('mli', new THREE.LatheGeometry(prof, 36), { pos: v(x, top, z), color: 0xf1efe9 });
     // gore straps
-    for (let i = 0; i < 12; i++) {
-      const a = i / 12 * PI * 2;
+    for (let i = 0; i < 10; i++) {
+      const a = i / 10 * PI * 2;
       const pts = prof.filter((_, j) => j % 3 === 0 || j === prof.length - 2).map((p) => [x + Math.sin(a) * (p.x + 0.02), top + p.y + 0.005, z + Math.cos(a) * (p.x + 0.02)]);
       M.tube('metal', pts, 0.022, N.FRAME, 4);
     }
-    M.add('metal', new THREE.TorusGeometry(r * 0.99, 0.07, 6, 64), { pos: v(x, top + 0.04, z), rot: e(PI / 2, 0, 0), color: N.DARK });
+    M.add('metal', new THREE.TorusGeometry(r * 0.99, 0.07, 5, 44), { pos: v(x, top + 0.04, z), rot: e(PI / 2, 0, 0), color: N.DARK });
     cap = top + loft;
   } else {
-    M.add('shell', new THREE.CylinderGeometry(r * 0.98, r, 0.25, 56), { pos: v(x, top + 0.12, z), color: N.SHELL2 });
+    M.add('shell', new THREE.CylinderGeometry(r * 0.98, r, 0.25, 44), { pos: v(x, top + 0.12, z), color: N.SHELL2 });
     M.add('metal', new THREE.TorusGeometry(0.55, 0.08, 8, 28), { pos: v(x, top + 0.27, z), rot: e(PI / 2, 0, 0), color: N.FRAME });
     cap = top + 0.3;
   }
@@ -395,7 +395,7 @@ export function hangar(M, x, z, w, d, h, yaw = 0, { color = N.SHELL, door = true
 // of plants under magenta grow light inside
 export function growTube(M, x, y, z, len, r, yaw = 0) {
   const W = frame(x, z, yaw);
-  M.add('glass', new THREE.CylinderGeometry(r, r, len, 32, 1, true), { pos: v(x, y, z), rot: eo(0, yaw, PI / 2, 'YXZ') });
+  M.add('window', new THREE.CylinderGeometry(r, r, len, 32, 1, true), { pos: v(x, y, z), rot: eo(0, yaw, PI / 2, 'YXZ') });
   for (let i = 0; i <= 4; i++) { const p = W(-len / 2 + i * len / 4, 0, 0); M.add('metal', new THREE.TorusGeometry(r + 0.02, 0.05, 6, 32), { pos: v(p.x, y, p.z), rot: e(0, yaw + PI / 2, 0), color: N.FRAME }); }
   for (const sx of [-1, 1]) { const p = W(sx * len / 2, 0, 0); M.add('shell', new THREE.CylinderGeometry(r, r, 0.2, 32), { pos: v(p.x, y, p.z), rot: eo(0, yaw, PI / 2, 'YXZ'), color: N.SHELL2 }); }
   for (const ly of [-r * 0.45, 0, r * 0.45]) {
@@ -501,4 +501,128 @@ export function derrick(M, x, z, h, w = 1.4) {
   M.box('metal', x, h * 0.55, z, 0.4, 0.5, 0.4, N.YELLOW);
   M.sphere('blink', x, h + 0.5, z, 0.08, L.red, 6);
   M.colCyl(x, z, w * 0.45, 0, h);
+}
+
+// EVA suit docked to a suitport on a hab wall: the wall face is at (x, z)
+// with outward normal yaw. Port ring and plate, the suit's hard upper torso
+// (its backpack is the hatch), helmet with a gold visor, arms, lower torso,
+// legs, boots, chest display; red bands mark the commander's suit
+export function suitport(M, x, z, yaw, { stripe = false } = {}) {
+  const W = frame(x, z, yaw), R = e(0, yaw, 0);
+  const S = 0xf1efe9, S2 = 0xdcd9d1;
+  const p = W(0, 0, 0.03);
+  M.box('shell', p.x, 1.42, p.z, 1.0, 1.25, 0.06, N.SHELL2, yaw);
+  M.add('metal', new THREE.TorusGeometry(0.4, 0.05, 8, 28), { pos: W(0, 1.5, 0.08), rot: R, color: N.FRAME });
+  const t = W(0, 0, 0.3);
+  M.box('shell', t.x, 1.5, t.z, 0.6, 0.6, 0.42, S, yaw);
+  const b = W(0, 0, 0.3);
+  M.box('shell', b.x, 1.06, b.z, 0.46, 0.3, 0.34, S2, yaw);
+  M.add('metal', new THREE.TorusGeometry(0.2, 0.035, 6, 18), { pos: W(0, 1.2, 0.3), rot: e(PI / 2, yaw, 0), color: N.FRAME });
+  const c = W(0, 0, 0.55);
+  M.box('metal', c.x, 1.36, c.z, 0.3, 0.16, 0.1, 0x8f959b, yaw);
+  M.box('emissive', c.x, 1.39, c.z, 0.12, 0.04, 0.11, L.green, yaw);
+  const h = W(0, 0, 0.36);
+  M.sphere('shell', h.x, 1.98, h.z, 0.2, S, 18);
+  M.add('metal', new THREE.SphereGeometry(0.205, 18, 10, PI / 2 - 0.85, 1.7, 0.95, 0.85), { pos: v(h.x, 1.98, h.z), rot: R, color: 0x9a7a34 });
+  M.add('metal', new THREE.TorusGeometry(0.17, 0.035, 6, 20), { pos: v(h.x, 1.8, h.z), rot: e(PI / 2, 0, 0), color: N.FRAME });
+  for (const sx of [-1, 1]) {
+    const s0 = W(sx * 0.36, 1.66, 0.3), el = W(sx * 0.42, 1.24, 0.38), wr = W(sx * 0.38, 0.9, 0.4);
+    strut(M, [s0.x, 1.66, s0.z], [el.x, 1.24, el.z], 0.17, S, 'shell');
+    strut(M, [el.x, 1.24, el.z], [wr.x, 0.92, wr.z], 0.15, S, 'shell');
+    M.sphere('shell', s0.x, 1.68, s0.z, 0.12, S2, 10);
+    M.sphere('metal', wr.x, 0.86, wr.z, 0.075, 0x6f757b, 10);
+    const hp = W(sx * 0.13, 0.98, 0.3), kn = W(sx * 0.15, 0.55, 0.34), an = W(sx * 0.15, 0.14, 0.32);
+    strut(M, [hp.x, 0.98, hp.z], [kn.x, 0.55, kn.z], 0.19, S, 'shell');
+    strut(M, [kn.x, 0.55, kn.z], [an.x, 0.16, an.z], 0.17, S, 'shell');
+    const bt = W(sx * 0.15, 0, 0.38);
+    M.box('shell', bt.x, 0.08, bt.z, 0.17, 0.16, 0.3, S2, yaw);
+    if (stripe) {
+      M.add('shell', new THREE.CylinderGeometry(0.105, 0.105, 0.09, 12), { pos: v((hp.x + kn.x) / 2, 0.76, (hp.z + kn.z) / 2), color: 0xb3261e });
+      M.add('shell', new THREE.CylinderGeometry(0.095, 0.095, 0.08, 12), { pos: v((s0.x + el.x) / 2, 1.45, (s0.z + el.z) / 2), color: 0xb3261e });
+    }
+  }
+  const a = W(-0.5, 0, 0), q = W(0.5, 0, 0.62);
+  M.col(Math.min(a.x, q.x), 0, Math.min(a.z, q.z), Math.max(a.x, q.x), 2.2, Math.max(a.z, q.z));
+}
+
+// a strut added to an animated group
+function gStrut(g, a, b, t, color) {
+  const A = v(...a), B = v(...b), d = B.clone().sub(A), len = d.length();
+  const q = new THREE.Quaternion().setFromUnitVectors(v(0, 1, 0), d.normalize());
+  g.add(new THREE.BoxGeometry(t, len, t), { pos: A.clone().add(B).multiplyScalar(0.5), rot: new THREE.Euler().setFromQuaternion(q), color });
+}
+// steerable dish antenna on an alt-az pedestal, in the deep-space station
+// manner: concrete footing, drum pedestal with a door, the alidade yoke on
+// the azimuth bearing (turns slowly), elevation axle and counterweight, a
+// paraboloid reflector with its rim and back-structure ribs, the feed cone
+// and a subreflector on a quadrupod. s scales it (1: a 6 m dish).
+export function dishAntenna(M, x, z, { s = 1, tilt = 0.8, speed = 0.1 } = {}) {
+  const ped = 2.6 * s;
+  M.cyl('concrete', x, 0, z, 1.7 * s, 0.6 * s, 0x8f8a84, 28);
+  M.cyl('shell', x, 0.6 * s, z, 1.05 * s, 2.0 * s, N.SHELL, 24);
+  for (const y of [0.8, 2.4]) M.add('metal', new THREE.TorusGeometry(1.06 * s, 0.035 + 0.01 * s, 4, 28), { pos: v(x, y * s, z), rot: e(PI / 2, 0, 0), color: N.FRAME });
+  if (s >= 0.7) hatch(M, x, 0.62 * s, z - 1.04 * s, PI, { w: 0.6, h: 1.4 * s, depth: 0.12, label: false });
+  M.cyl('metal', x, ped, z, 1.1 * s, 0.12 * s, N.DARK, 28);
+  M.colCyl(x, z, 1.7 * s, 0, ped + 0.12 * s);
+  const g = M.animGroup('shell', { pivot: [x, 0, z], axis: [0, 1, 0], speed });
+  const P = (lx, ly, lz) => v(x + lx * s, ly * s, z + lz * s);
+  for (const sx of [-1, 1]) {
+    g.add(new THREE.BoxGeometry(0.22 * s, 1.7 * s, 0.6 * s), { pos: P(sx * 1.15, 3.55, 0.35), color: N.SHELL2 });
+    g.add(new THREE.CylinderGeometry(0.2 * s, 0.2 * s, 0.3 * s, 14), { pos: P(sx * 1.15, 4.35, 0.4), rot: e(0, 0, PI / 2), color: N.DARK });
+  }
+  g.add(new THREE.BoxGeometry(2.5 * s, 0.25 * s, 0.8 * s), { pos: P(0, 2.82, 0.3), color: N.SHELL2 });
+  g.add(new THREE.CylinderGeometry(0.1 * s, 0.1 * s, 2.5 * s, 10), { pos: P(0, 4.35, 0.4), rot: e(0, 0, PI / 2), color: N.FRAME });
+  g.add(new THREE.BoxGeometry(1.0 * s, 0.7 * s, 0.6 * s), { pos: P(0, 3.7, 1.35), color: N.STEEL });
+  const R = 3.1 * s, f = 2.6 * s, C0 = P(0, 4.55, 0);
+  const T = (lx, ly, lz) => v(lx, ly * Math.cos(tilt) + lz * Math.sin(tilt), -ly * Math.sin(tilt) + lz * Math.cos(tilt)).add(C0);
+  const prof = []; for (let i = 0; i <= 12; i++) { const r = 0.25 * s + (R - 0.25 * s) * i / 12; prof.push(new THREE.Vector2(r, r * r / (4 * f))); }
+  const dg = new THREE.LatheGeometry(prof, 40); dg.rotateX(-tilt);
+  g.add(dg, { pos: C0, color: 0xeeece6 });
+  const rim = new THREE.TorusGeometry(R, 0.05 * s, 6, 48); rim.rotateX(PI / 2); rim.translate(0, R * R / (4 * f), 0); rim.rotateX(-tilt);
+  g.add(rim, { pos: C0, color: N.FRAME });
+  const hub = new THREE.CylinderGeometry(0.5 * s, 0.75 * s, 0.5 * s, 16); hub.translate(0, -0.2 * s, 0); hub.rotateX(-tilt);
+  g.add(hub, { pos: C0, color: N.STEEL });
+  const feed = new THREE.ConeGeometry(0.22 * s, 0.7 * s, 14); feed.translate(0, 0.35 * s, 0); feed.rotateX(-tilt);
+  g.add(feed, { pos: C0, color: N.SHELL2 });
+  const sub = new THREE.CylinderGeometry(0.42 * s, 0.2 * s, 0.12 * s, 18); sub.translate(0, 2.1 * s, 0); sub.rotateX(-tilt);
+  g.add(sub, { pos: C0, color: N.SHELL });
+  for (let k = 0; k < 4; k++) {
+    const a = k / 4 * PI * 2 + PI / 4, rr = R * 0.92;
+    const p0 = T(Math.cos(a) * rr, rr * rr / (4 * f), Math.sin(a) * rr), p1 = T(0, 2.05 * s, 0);
+    gStrut(g, [p0.x, p0.y, p0.z], [p1.x, p1.y, p1.z], 0.06 * s, N.FRAME);
+  }
+  for (let k = 0; k < 8; k++) {
+    const a = k / 8 * PI * 2, p0 = T(Math.cos(a) * 0.6 * s, -0.35 * s, Math.sin(a) * 0.6 * s), p1 = T(Math.cos(a) * R * 0.85, R * R * 0.72 / (4 * f) - 0.12 * s, Math.sin(a) * R * 0.85);
+    gStrut(g, [p0.x, p0.y, p0.z], [p1.x, p1.y, p1.z], 0.07 * s, N.STEEL);
+  }
+}
+
+// flat phased-array beam director on the same alt-az pedestal: a tiled panel
+// in a frame on the yoke, its electronics box behind, turning slowly
+export function phasedArray(M, x, z, { s = 1, tilt = 0.95, speed = 0.08 } = {}) {
+  const ped = 2.6 * s;
+  M.cyl('concrete', x, 0, z, 1.7 * s, 0.6 * s, 0x8f8a84, 28);
+  M.cyl('shell', x, 0.6 * s, z, 1.05 * s, 2.0 * s, N.SHELL, 24);
+  for (const y of [0.8, 2.4]) M.add('metal', new THREE.TorusGeometry(1.06 * s, 0.045, 4, 28), { pos: v(x, y * s, z), rot: e(PI / 2, 0, 0), color: N.FRAME });
+  hatch(M, x, 0.62 * s, z - 1.04 * s, PI, { w: 0.6, h: 1.4 * s, depth: 0.12, label: false });
+  M.cyl('metal', x, ped, z, 1.1 * s, 0.12 * s, N.DARK, 28);
+  M.colCyl(x, z, 1.7 * s, 0, ped + 0.12 * s);
+  const g = M.animGroup('shell', { pivot: [x, 0, z], axis: [0, 1, 0], speed });
+  const P = (lx, ly, lz) => v(x + lx * s, ly * s, z + lz * s);
+  for (const sx of [-1, 1]) {
+    g.add(new THREE.BoxGeometry(0.22 * s, 1.5 * s, 0.6 * s), { pos: P(sx * 1.25, 3.45, 0.2), color: N.SHELL2 });
+    g.add(new THREE.CylinderGeometry(0.2 * s, 0.2 * s, 0.3 * s, 14), { pos: P(sx * 1.25, 4.15, 0.2), rot: e(0, 0, PI / 2), color: N.DARK });
+  }
+  g.add(new THREE.BoxGeometry(2.7 * s, 0.25 * s, 0.8 * s), { pos: P(0, 2.82, 0.2), color: N.SHELL2 });
+  const C0 = P(0, 4.15, 0.2), W = 4.6 * s, H = 3.4 * s;
+  const panel = (geo, ly, lz) => { geo.translate(0, ly, lz); geo.rotateX(-tilt); return geo; };
+  g.add(panel(new THREE.BoxGeometry(W, 0.16 * s, H), 0, 0), { pos: C0, color: N.SHELL });
+  const nx = 10, nz = 7;
+  for (let i = 0; i < nx; i++) for (let k = 0; k < nz; k++) {
+    const tx = -W / 2 + (i + 0.5) * W / nx, tz = -H / 2 + (k + 0.5) * H / nz;
+    const t = new THREE.BoxGeometry(W / nx - 0.05 * s, 0.03 * s, H / nz - 0.05 * s); t.translate(tx, 0, 0);
+    g.add(panel(t, 0.095 * s, tz), { pos: C0, color: (i + k) % 3 ? 0x2c3a4c : 0x34465c });
+  }
+  g.add(panel(new THREE.BoxGeometry(1.6 * s, 0.6 * s, 1.0 * s), -0.4 * s, 0), { pos: C0, color: 0xd8a640 });
+  for (const sx of [-1, 1]) g.add(panel(new THREE.BoxGeometry(0.08 * s, 0.1 * s, H + 0.1 * s), 0.12 * s, 0).translate(sx * W / 2, 0, 0), { pos: C0, color: N.FRAME });
 }

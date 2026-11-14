@@ -325,7 +325,7 @@ export function room(M, w, d, h, { t = 0.24, door = 1.8, doorH = 2.5, winFront =
   wall(M, 'z', -hw, -hd + t / 2, d - t, h, t, wins(winSide, d - t), { color, key });
   wall(M, 'z', hw, -hd + t / 2, d - t, h, t, wins(winSide, d - t), { color, key });
   if (roof) {
-    M.bb('hull', -hw - 0.15, h, -hd - 0.15, hw + 0.15, h + 0.3, hd + 0.15, roofColor);
+    M.bb(key, -hw - 0.15, h, -hd - 0.15, hw + 0.15, h + 0.3, hd + 0.15, roofColor);
     M.col(-hw, h, -hd, hw, h + 0.3, hd);
     M.bb('metal', -hw - 0.2, h + 0.3, -hd - 0.2, hw + 0.2, h + 0.38, hd + 0.2, C.G2);
   }
