@@ -4,6 +4,7 @@
 // the ring just beyond is sealed ("미확인 기술"), and everything further is
 // still in the dark. Picking a tech shows what it unlocks; aiming at a sealed
 // one queues its missing path, which then runs in order on its own.
+import { isTouchHints } from './hint.js';
 import { RESEARCH, BUILDINGS, RECIPES, TIERS, ITEMS } from '../sim/data.js';
 import { itemIcon } from './icons.js';
 
@@ -73,7 +74,7 @@ export function techTreePanel(ui, panel) {
   const body = ui.header(panel, '연구', '<span class="tt-stat"></span>');
   body.innerHTML = `<div class="tt-main">
       <div class="tt-legend"><span class="tt-eras"></span>
-        <span class="tt-key"><em class="k-done"></em>완료 <em class="k-av"></em>연구 가능 <em class="k-seal"></em>미확인</span><span class="tt-hint">드래그·휠로 이동 · 기술을 누르면 자세히</span></div>
+        <span class="tt-key"><em class="k-done"></em>완료 <em class="k-av"></em>연구 가능 <em class="k-seal"></em>미확인</span><span class="tt-hint">${isTouchHints() ? '드래그로 이동' : '드래그·휠로 이동'} · 기술을 누르면 자세히</span></div>
       <div class="tt-wrap"><div class="tt-canvas">
         <div class="tt-cols"></div><svg class="tt-edges"></svg><div class="tt-fog"><span>미탐사</span></div><div class="tt-nodes"></div></div></div>
     </div>

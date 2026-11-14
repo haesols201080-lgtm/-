@@ -1,5 +1,6 @@
 // HUD and menus. Plain DOM, updated a few times per second (compass and
 // prompt every frame). Menus release the pointer lock.
+import { touchify, isTouchHints } from './hint.js';
 import * as THREE from 'three';
 import { ITEMS, BUILDINGS, CATEGORIES, RECIPES, STAGES, PARAMS, TIERS, ERAS, RESEARCH, MILESTONES, fmtTi } from '../sim/data.js';
 import { itemIcon, CREDIT_ICON, paramIcon } from './icons.js';
@@ -88,13 +89,13 @@ export class UI {
 
   toast(msg, kind = 'info', dur = 2.5, big = false) {
     const box = $('#toasts');
-    const t = h('div', { class: 'toast ' + kind + (big ? ' big' : '') }, msg);
+    const t = h('div', { class: 'toast ' + kind + (big ? ' big' : '') }, touchify(msg));
     box.appendChild(t);
     while (box.children.length > 5) box.firstChild.remove();
     setTimeout(() => t.remove(), dur * 1000);
   }
 
-  setPrompt(html) { if (this._prompt !== html) { $('#prompt').innerHTML = html; this._prompt = html; } }
+  setPrompt(html) { if (this._prompt !== html) { $('#prompt').innerHTML = touchify(html); this._prompt = html; } }
   setProgress(f) { $('#crossprog').setAttribute('stroke-dasharray', `${(f * 82).toFixed(1)} 82`); }
 
   update(dt) {
@@ -269,8 +270,8 @@ export class UI {
     if (o.index !== this._objIdx) { this._objIdx = o.index; this._objShow = performance.now(); }
     const fresh = performance.now() - (this._objShow || 0) < 14000;
     this._wpT = o.target;
-    const html = `<div class="in"><div class="lbl">OBJECTIVE <b class="num">${String(o.index + 1).padStart(2, '0')}</b><span>/ ${o.total}</span></div><div class="t">${esc(o.title)}</div>${fresh ? `<div class="d">${o.desc}</div>` : ''}
-      ${o.step ? `<div class="s">${o.step}</div>` : ''}
+    const html = `<div class="in"><div class="lbl">OBJECTIVE <b class="num">${String(o.index + 1).padStart(2, '0')}</b><span>/ ${o.total}</span></div><div class="t">${esc(o.title)}</div>${fresh ? `<div class="d">${touchify(o.desc)}</div>` : ''}
+      ${o.step ? `<div class="s">${touchify(o.step)}</div>` : ''}
       <div class="p">${o.items.map((it) => `<div class="${it.ok ? 'ok' : ''}"><i></i>${esc(it.text)}</div>`).join('')}</div></div>`;
     if (html !== this._obj) { el.innerHTML = html; this._obj = html; }
   }
@@ -278,7 +279,7 @@ export class UI {
   setMode(text) {
     const m = $('#mode');
     if (!text) { m.hidden = true; return; }
-    m.hidden = false; m.innerHTML = text;
+    m.hidden = false; m.innerHTML = touchify(text);
   }
 
   // ---------------------------------------------------------------- panels
@@ -309,7 +310,7 @@ export class UI {
   }
 
   header(panel, title, extra = '') {
-    const hd = h('header', {}, `<h2>${title}</h2>${extra}<div class="sp"></div><button class="x" aria-label="닫기">닫기 · Esc</button>`);
+    const hd = h('header', {}, `<h2>${title}</h2>${extra}<div class="sp"></div><button class="x" aria-label="닫기">${isTouchHints() ? '닫기' : '닫기 · Esc'}</button>`);
     hd.querySelector('.x').onclick = () => this.close();
     panel.appendChild(hd);
     const body = h('div', { class: 'body' });
@@ -349,7 +350,7 @@ export class UI {
       grid.appendChild(card);
     }
     body.appendChild(grid);
-    const desc = h('div', { class: 'bdesc' }, '건물을 고르세요. 설치 중에는 마우스 휠로 회전, R로 90° 회전, 우클릭으로 취소합니다.');
+    const desc = h('div', { class: 'bdesc' }, isTouchHints() ? '건물을 고르세요. 설치 중에는 ↺ ↻ 버튼으로 15°, 90° 회전 버튼으로 돌리고, 취소 버튼으로 그만둡니다.' : '건물을 고르세요. 설치 중에는 마우스 휠로 회전, R로 90° 회전, 우클릭으로 취소합니다.');
     body.appendChild(desc);
     this.panelKey = (e) => {
       const n = parseInt(e.key, 10);
@@ -369,7 +370,7 @@ export class UI {
     const render = () => {
       const inv = g.eco.inv;
       const net = g.eco.netAccess(g.player.pos) && g.eco.store.cap > 0;
-      let html = `<p class="sec-t">가방 (${inv.usedSlots()}/${inv.slots}칸)${storage ? ' · 클릭하면 보관함으로 옮깁니다' : net ? ' · 클릭하면 공용 창고로 보냅니다 (Shift: 1개)' : ''}</p><div class="igrid">`;
+      let html = `<p class="sec-t">가방 (${inv.usedSlots()}/${inv.slots}칸)${storage ? ' · 클릭하면 보관함으로 옮깁니다' : net ? (isTouchHints() ? ' · 누르면 공용 창고로 보냅니다' : ' · 클릭하면 공용 창고로 보냅니다 (Shift: 1개)') : ''}</p><div class="igrid">`;
       const ents = [...inv.items.entries()];
       for (let i = 0; i < inv.slots; i++) {
         const e = ents[i];
@@ -430,10 +431,10 @@ export class UI {
 
   mapPanel(panel) {
     const g = this.game;
-    const body = this.header(panel, '행성 지도', '<span style="color:var(--muted)">휠: 확대 · 드래그: 이동</span>');
+    const body = this.header(panel, '행성 지도', `<span style="color:var(--muted)">${isTouchHints() ? '두 손가락 벌리기: 확대 · 드래그: 이동' : '휠: 확대 · 드래그: 이동'}</span>`);
     const cv = h('canvas', { id: 'mapcv' });
     body.appendChild(cv);
-    body.appendChild(h('div', { class: 'legend' }, '<span><i style="background:#ff9d4d"></i>나</span><span><i style="background:#66e0ff"></i>건물</span><span><i style="background:#ffd35a"></i>잔해·보급</span><span><i style="background:#b07aff"></i>유적</span><span><i style="background:#79e08a"></i>광맥</span><span><i style="background:#fff"></i>비콘</span>'));
+    body.appendChild(h('div', { class: 'legend' }, '<span><i style="background:#ff9d4d"></i>나</span><span><i style="background:#66e0ff"></i>건물</span><span><i style="background:#ffd35a"></i>잔해·보급</span><span><i style="background:#b07aff"></i>유적</span><span><i style="background:#79e08a"></i>광맥</span><span><i style="background:#fff"></i>비콘</span><span class="sp" style="flex:1"></span><button data-z="1" aria-label="확대">＋</button><button data-z="-1" aria-label="축소">－</button><button data-z="0">내 위치</button>'));
     const V = this.mapView;
     V.cx = g.player.pos.x; V.cz = g.player.pos.z;
     const draw = () => {
@@ -465,15 +466,42 @@ export class UI {
       c.font = `${12 * devicePixelRatio}px Pretendard, sans-serif`; c.fillStyle = 'rgba(255,255,255,.75)';
       for (const [, L] of Object.entries(g.landmarks)) { const [sx, sy] = toS(L.x, L.z); c.fillText(L.name, sx + 6, sy); }
     };
-    let drag = null;
-    cv.onmousedown = (e) => { drag = [e.clientX, e.clientY, V.cx, V.cz]; };
-    window.onmouseup = () => { drag = null; };
-    cv.onmousemove = (e) => {
-      if (!drag) return;
-      const span = WORLD.SIZE / V.scale, k = cv.clientWidth / span;
-      V.cx = drag[2] - (e.clientX - drag[0]) / k; V.cz = drag[3] - (e.clientY - drag[1]) / k; draw();
+    // one finger / mouse drags, two fingers pinch, the wheel and the buttons zoom
+    const pts = new Map();
+    let drag = null, pinch = null;
+    const kOf = () => cv.clientWidth / (WORLD.SIZE / V.scale);
+    const clampS = (x) => Math.min(40, Math.max(1, x));
+    const begin = () => {
+      const P = [...pts.values()];
+      drag = pinch = null;
+      if (P.length === 1) drag = [P[0][0], P[0][1], V.cx, V.cz];
+      else if (P.length >= 2) pinch = { d: Math.hypot(P[0][0] - P[1][0], P[0][1] - P[1][1]) || 1, s: V.scale, mx: (P[0][0] + P[1][0]) / 2, my: (P[0][1] + P[1][1]) / 2, cx: V.cx, cz: V.cz };
     };
-    cv.onwheel = (e) => { e.preventDefault(); V.scale = Math.min(40, Math.max(1, V.scale * (e.deltaY < 0 ? 1.25 : 0.8))); draw(); };
+    cv.style.touchAction = 'none';
+    cv.onpointerdown = (e) => { try { cv.setPointerCapture(e.pointerId); } catch (err) { /* optional */ } pts.set(e.pointerId, [e.clientX, e.clientY]); begin(); };
+    cv.onpointermove = (e) => {
+      if (!pts.has(e.pointerId)) return;
+      pts.set(e.pointerId, [e.clientX, e.clientY]);
+      if (pinch && pts.size >= 2) {
+        const P = [...pts.values()];
+        V.scale = clampS(pinch.s * Math.hypot(P[0][0] - P[1][0], P[0][1] - P[1][1]) / pinch.d);
+        const k = kOf();
+        V.cx = pinch.cx - ((P[0][0] + P[1][0]) / 2 - pinch.mx) / k; V.cz = pinch.cz - ((P[0][1] + P[1][1]) / 2 - pinch.my) / k;
+        draw();
+      } else if (drag) {
+        const k = kOf();
+        V.cx = drag[2] - (e.clientX - drag[0]) / k; V.cz = drag[3] - (e.clientY - drag[1]) / k; draw();
+      }
+    };
+    const lift = (e) => { pts.delete(e.pointerId); begin(); };
+    cv.onpointerup = lift; cv.onpointercancel = lift;
+    cv.onwheel = (e) => { e.preventDefault(); V.scale = clampS(V.scale * (e.deltaY < 0 ? 1.25 : 0.8)); draw(); };
+    for (const b of body.querySelectorAll('.legend button')) b.onclick = () => {
+      const z = +b.dataset.z;
+      if (z) V.scale = clampS(V.scale * (z > 0 ? 1.5 : 1 / 1.5));
+      else { V.cx = g.player.pos.x; V.cz = g.player.pos.z; }
+      draw();
+    };
     requestAnimationFrame(draw);
     this.panelRefresh = draw;
   }

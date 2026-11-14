@@ -3,6 +3,7 @@
 // around, and a thumb cluster carries the actions. Build-mode buttons appear
 // only while building. Everything feeds the same Input the keyboard does.
 import { BUILDINGS } from '../sim/data.js';
+import { setTouchHints } from './hint.js';
 
 export function isTouchDevice() {
   try { return matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && 'ontouchstart' in window); } catch (e) { return false; }
@@ -19,6 +20,7 @@ export class TouchControls {
     this.game = game;
     const I = game.input;
     I.touch = true;
+    setTouchHints(true);
     document.documentElement.classList.add('touch');
     const el = document.createElement('div');
     el.id = 'touch';

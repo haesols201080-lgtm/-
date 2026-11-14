@@ -283,7 +283,7 @@ export class Intro {
       <div class="cap"><span class="c-k"></span><span class="c-t"></span></div>
       <div class="tags">${TAGS.map(([k, n, d]) => `<div class="tag" data-k="${k}"><i></i><b>${n}</b><span>${d}</span></div>`).join('')}</div>
       <div class="fade"></div>
-      <button class="skip">건너뛰기 <kbd>Space</kbd></button>`;
+      <button class="skip">건너뛰기${g.input.touch ? '' : ' <kbd>Space</kbd>'}</button>`;
     document.getElementById('ui').appendChild(el);
     this.$ = (s) => el.querySelector(s);
     this.$('.skip').onclick = () => this.finish();

@@ -359,7 +359,8 @@ button:disabled { opacity: .4; cursor: default; }
 .tt-side .foot { margin-top: 16px; font-size: 11.5px; color: var(--muted); line-height: 1.5; }
 
 #mapcv { width: 100%; height: min(68vh, 760px); display: block; border-radius: 8px; background: #0a0d10; cursor: grab; }
-.legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; color: var(--muted); font-size: 11.5px; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; color: var(--muted); font-size: 11.5px; align-items: center; }
+.legend button { padding: 5px 12px; min-width: 40px; font-size: 13px; }
 .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; }
 
 .binfo { display: grid; grid-template-columns: 220px 1fr; gap: 18px; }
