@@ -398,6 +398,14 @@ export class Game {
       // terraform machines produce scaled by the speed option
       if (sp !== 1) for (const b of this.buildings.list) if (b.def.terra) for (const [k, v] of Object.entries(b.def.terra)) this.terra.add(k, v * (b.rate || 0) * dt * (sp - 1));
       this.terra.tick(dt);
+      // once the air is breathable, sealed civic buildings are rebuilt in their open form
+      const open = this.buildings.isOpen();
+      if (open !== this._openForms) {
+        const first = this._openForms === undefined;
+        this._openForms = open;
+        const n = this.buildings.refreshForms();
+        if (n && !first && open) this.ui.toast(`<b>숨 쉴 수 있는 공기</b>밀폐 시설 ${n}곳이 개방형 도시 건물로 다시 지어집니다`, 'good', 6, true);
+      }
       this.colony.tick(dt);
       this.research.tick(dt);
       this.autosaveT -= dt;

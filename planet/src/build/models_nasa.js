@@ -8,6 +8,8 @@
 import * as THREE from 'three';
 import { C, L, v, e, plinth, railing, antenna, radiator, airlockTube, habModule, tank, pvRack } from './modelkit.js';
 import { strut, lattice, symbol, floodMast, pipeRack } from './starkit.js';
+import { facade, bays } from './modelkit.js';
+import { N, vessel, tubeModule, radiatorWing, deployFrame, grating, ramp, avionics, bottleRack } from './nasakit.js';
 
 const PI = Math.PI;
 const PRINT = 0x9a8878;          // printed lavacrete, grey-brown
@@ -108,158 +110,268 @@ function flag(M, x, z, h, kind = 'colony') {
 }
 
 // ---------------------------------------------------------------- clinic
-// Medical habitat: a printed ward hall, a rigid medical module with the red
-// cross on its flank and a red band, an airlock with a dust-off porch, the
-// ambulance rover docked at the side port, oxygen bottles, avionics in gold
-// foil, a radiator and a comm mast
+// Medical habitat before the air is breathable, in the agency's own design
+// language: a pressure vessel with a strapped fabric loft on a steel
+// deployment frame, the front hatch on a grated porch with a ramp, a berthed
+// medical module with a red band and the red cross, oxygen bottles in a
+// rack, radiator wings behind, avionics in gold foil, a whip antenna.
 export function clinic(M) {
   plinth(M, 8, 8);
-  printedHall(M, -0.9, 1.6, 5.8, 4.4, 2.9, { slots: 3 });
-  habModule(M, 0.3, 1.75, -1.75, 5.6, 1.3, { accent: 0xd23a2a, ports: 3, label: 0xff4040 });
-  symbol(M, 'cross', 1.6, 1.85, -1.75 - 1.36, 1.1, PI, 0xff3b3b);
-  // tunnel from module into the hall
-  M.add('hull', new THREE.CylinderGeometry(0.7, 0.7, 1.2, 20), { pos: v(-1.0, 1.4, -0.3), rot: e(PI / 2, 0, 0), color: C.W2 });
-  // airlock and dust-off porch at the west end
-  airlockTube(M, -2.9, 1.25, -1.75, -3.7, 1.05);
-  M.box('metal', -2.9, 0.06, -4.2, 2.0, 0.12, 1.2, 0x6f757c);
-  railing(M, -3.9, -4.8, -1.9, -4.8, 0.1, 1.0, C.Y);
-  // ambulance rover docked on the east port
-  rover(M, 2.6, 2.4, PI / 2, 0xd23a2a);
-  // oxygen bottles, avionics, radiator, mast, emblem
-  for (let i = 0; i < 3; i++) tank(M, 3.5, 0, -3.3 + i * 0.8, 0.3, 1.8, C.W, C.GREEN);
-  foilBox(M, -3.4, 0, 3.3, 1.0, 0.9, 0.7);
-  foilBox(M, -2.2, 0, 3.4, 0.7, 0.6, 0.6);
-  radiator(M, -0.9, 3.75, 1.6, 2.4, 1.0, 0, C.W2);
-  antenna(M, 1.6, 3.6, 2.6, 2.6);
-  emblem(M, -0.9, 2.1, 1.6 - 2.21, 0.5, PI);
-  M.entry(-2.9);
+  const hx = -0.9, hz = 1.0;
+  deployFrame(M, hx, hz, 4.6, 4.4, 0.6);
+  const cap = vessel(M, hx, hz, { r: 2.0, h: 2.7, y0: 0.6, loft: 1.3, hatches: [PI], ports: [{ a: -PI / 2 }, { a: PI * 0.72 }, { a: PI * 1.28 }], segs: 8 });
+  // front porch and ramp
+  grating(M, hx, 0.6, hz - 2.75, 1.8, 1.5);
+  for (const sx of [-1, 1]) railing(M, hx + sx * 0.9, hz - 3.45, hx + sx * 0.9, hz - 2.05, 0.6, 1.0, N.YELLOW);
+  ramp(M, hx, hz - 3.5, 0, 0.6, { w: 1.2, run: 1.3 });
+  // berthed medical module: red band, red cross on its flank, end hatch
+  tubeModule(M, 2.25, 1.55, hz, 2.7, 0.95, 0, { ports: 1, ribs: 2 });
+  M.add('hull', new THREE.CylinderGeometry(0.975, 0.975, 0.34, 40, 1, true), { pos: v(1.6, 1.55, hz), rot: e(0, 0, PI / 2), color: 0xc8302a });
+  M.box('hull', 2.55, 1.6, hz - 0.96, 0.9, 0.9, 0.04, 0xf2f2f2);
+  M.box('concrete', 2.55, 1.6, hz - 0.99, 0.62, 0.18, 0.02, 0xc8262a);
+  M.box('concrete', 2.55, 1.6, hz - 0.99, 0.18, 0.62, 0.02, 0xc8262a);
+  // oxygen, radiators, avionics, antenna
+  bottleRack(M, 2.6, -2.9, 0, 4);
+  radiatorWing(M, -3.6, 3.55, 0, { w: 1.3, h: 2.4, y0: 0.5 });
+  radiatorWing(M, -0.6, 3.55, 0, { w: 1.3, h: 2.4, y0: 0.5 });
+  avionics(M, 3.0, 0, 3.0, 0.8, 0.7, 0.6);
+  avionics(M, -3.3, 0, -2.6, 0.7, 0.6, 0.6);
+  M.cyl('metal', hx + 0.6, cap - 0.25, hz + 0.4, 0.025, 1.6, N.FRAME, 6);
+  M.sphere('blink', hx + 0.6, cap + 1.4, hz + 0.4, 0.05, L.red, 6);
+  M.light(hx, 2.2, hz - 3.0, L.warm, 1.2, 6);
+  M.entry(hx);
 }
 
 // ---------------------------------------------------------------- city hall
-// Colony operations centre (Mars mission control): printed halls stepping up
-// to a raised control room with a clerestory window band, a deep-space
-// tracking dish that turns, a comm tower, a vertical solar mast, the airlock
-// entrance with a porch, flags and the agency emblem, a rover at its charger
+// Colony operations centre before the air is breathable: the main pressure
+// vessel with its fabric loft on a deployment frame, a long control module
+// berthed to it with the console windows, a logistics pod on the other side,
+// a grated porch and ramp at the hatch, a bank of radiator wings, and the
+// base's working kit: tracking antenna, comm tower, solar mast, floodlights,
+// flags, the rover at its charger.
 export function cityhall(M) {
   plinth(M, 14, 12);
-  printedHall(M, -1.4, 1.4, 8.2, 5.6, 3.0, { slots: 4 });
-  // the control room: a higher printed drum with a window band on the vault
-  const cx = 0.6, cz = 1.2;
-  const ring = rr(4.6, 4.6, 2.2); ring.holes.push(rr(3.7, 3.7, 1.75));
-  const g = new THREE.ExtrudeGeometry(ring, { depth: 5.2, bevelEnabled: false, curveSegments: 18 }); g.rotateX(-PI / 2);
-  M.add('regolith', g, { pos: v(cx, 0, cz), color: PRINT });
-  M.add('glass', new THREE.CylinderGeometry(2.25, 2.25, 0.9, 40, 1, true, PI * 0.6, PI * 0.8), { pos: v(cx, 5.65, cz) });
-  for (let i = 0; i < 7; i++) { const a = PI * 0.6 + i * PI * 0.8 / 6; M.box('metal', cx + Math.sin(a) * 2.27, 5.65, cz + Math.cos(a) * 2.27, 0.08, 0.95, 0.08, 0x3a3f45); }
-  M.add('regolith', new THREE.SphereGeometry(2.4, 32, 12, 0, PI * 2, 0, PI / 2), { pos: v(cx, 6.1, cz), scale: v(1, 0.45, 1), color: PRINT });
-  M.colCyl(cx, cz, 2.3, 0, 7.2);
-  // airlock entrance with porch and steps
-  airlockTube(M, -3.2, 1.25, 1.4 - 2.6, -3.9, 1.1);
-  M.box('metal', -3.2, 0.06, -4.4, 2.4, 0.12, 1.4, 0x6f757c);
-  // local tracking antenna: the same beam-waveguide design as the deep-space
-  // station, at about a ninth of its size, slowly slewing in azimuth
-  M.asset('dsn34', 5.2, 0, 3.8, { scale: 0.11, anim: { pivot: [5.2, 0, 3.8], axis: [0, 1, 0], speed: 0.06 }, fixed: /base/ });
-  M.colCyl(5.2, 3.8, 1.1, 0, 2.0);
-  // comm tower and a vertical solar mast
-  lattice(M, -5.2, 4.2, 1.6, 16, { mast: true, stairs: false });
-  solarMast(M, 5.6, -1.2, 13);
-  // flags, emblem, floodlights, charger and rover
-  flag(M, -1.2, -5.0, 6, 'colony');
-  flag(M, 0.4, -5.0, 6, 'agency');
-  emblem(M, cx, 3.2, cz - 2.32, 0.7, PI);
-  floodMast(M, -6.2, -4.6, 7, PI * 0.85);
-  M.box('metal', 1.5, 0.7, -4.6, 0.5, 1.4, 0.4, 0x3a3f45);
-  M.box('emissive', 1.5, 1.2, -4.82, 0.3, 0.1, 0.02, L.green);
-  rover(M, 4.6, -4.2, 0, ORANGE);
-  for (let i = 0; i < 2; i++) foilBox(M, -5.6 + i * 1.1, 0, -0.6, 0.9, 0.8, 0.7);
-  pipeRack(M, 2.8, 3.6, 2.8, 5.4, 1.4, 2);
-  M.entry(-3.2);
+  const hx = -2.2, hz = 1.2;
+  deployFrame(M, hx, hz, 5.8, 5.4, 0.7);
+  const cap = vessel(M, hx, hz, { r: 2.6, h: 3.0, y0: 0.7, loft: 1.8, hatches: [PI], ports: [{ a: -PI / 2 }, { a: PI * 0.74 }, { a: PI * 1.26 }, { a: 0.3 }], segs: 10 });
+  // control module berthed on the east, console windows facing the front
+  tubeModule(M, 2.5, 2.05, hz, 4.4, 1.25, 0, { ports: 3, ribs: 3 });
+  // logistics pod on the west
+  tubeModule(M, -5.95, 1.55, hz, 1.6, 0.85, 0, { endHatch: false, startHatch: true, ribs: 1 });
+  // porch and ramp at the front hatch
+  grating(M, hx, 0.7, hz - 3.4, 2.2, 1.6);
+  for (const sx of [-1, 1]) railing(M, hx + sx * 1.1, hz - 4.2, hx + sx * 1.1, hz - 2.6, 0.7, 1.0, N.YELLOW);
+  ramp(M, hx, hz - 4.2, 0, 0.7, { w: 1.4, run: 1.5 });
+  // radiator wings: a bank behind the vessel and two behind the module
+  for (const x of [-5.3, -3.8, -2.3]) radiatorWing(M, x, 4.7, 0, { w: 1.4, h: 3.0, y0: 0.6 });
+  for (const x of [1.0, 2.6]) radiatorWing(M, x, 3.2, 0, { w: 1.4, h: 2.6, y0: 0.6 });
+  // local tracking antenna (the deep-space station's design, ~1:10)
+  M.asset('dsn34', 5.4, 0, 4.6, { scale: 0.1, anim: { pivot: [5.4, 0, 4.6], axis: [0, 1, 0], speed: 0.06 }, fixed: /base/ });
+  M.colCyl(5.4, 4.6, 1.0, 0, 1.8);
+  // comm tower, solar mast, floodlights, flags
+  lattice(M, -6.1, 5.0, 1.3, 14, { mast: true, stairs: false });
+  solarMast(M, 6.2, -1.6, 12);
+  floodMast(M, -6.3, -2.0, 7, -PI * 0.75);
+  floodMast(M, 6.4, -5.2, 7, PI * 0.8);
+  flag(M, -4.4, -5.2, 6, 'colony');
+  flag(M, -3.2, -5.2, 6, 'agency');
+  // rover at its charger, avionics
+  rover(M, 3.4, -3.8, 0, ORANGE);
+  M.box('metal', 0.6, 0.7, -4.4, 0.5, 1.4, 0.4, N.DARK);
+  M.box('emissive', 0.6, 1.2, -4.62, 0.3, 0.1, 0.02, L.green);
+  avionics(M, 5.9, 0, -0.2, 0.9, 0.8, 0.7);
+  avionics(M, 5.9, 0, 0.8, 0.9, 0.8, 0.7);
+  M.cyl('metal', hx + 0.8, cap - 0.3, hz + 0.6, 0.03, 2.0, N.FRAME, 6);
+  M.sphere('blink', hx + 0.8, cap + 1.75, hz + 0.6, 0.06, L.red, 6);
+  M.light(hx, 2.4, hz - 3.6, L.warm, 1.4, 7);
+  M.entry(hx);
 }
 
 // ---------------------------------------------------------------- after the air is breathable
-// Once people can breathe outside, the shielding and airlocks are no longer
-// the point: the printed walls stay, fronts open up in glass, doors are just
-// doors, and there are gardens, benches and shade outside.
-function openHall(M, x, z, w, d, h, { rise = 0.5, door = 0 } = {}) {
-  const t = 0.5;
-  M.box('regolith', x, h / 2, z + d / 2 - t / 2, w, h, t, PRINT);
-  for (const s of [-1, 1]) M.box('regolith', x + s * (w / 2 - t / 2), h / 2, z, t, h, d - 0.02, PRINT);
-  M.box('glass', x, h / 2, z - d / 2 + 0.2, w - 2 * t, h - 0.25, 0.06);
-  const n = Math.max(3, Math.round((w - 2 * t) / 1.3));
-  for (let i = 0; i <= n; i++) M.box('metal', x - (w / 2 - t) + i * (w - 2 * t) / n, h / 2, z - d / 2 + 0.16, 0.08, h - 0.2, 0.12, 0x3a3f45);
-  M.box('metal', x, h - 0.12, z - d / 2 + 0.16, w - 2 * t, 0.16, 0.14, 0x3a3f45);
-  M.box('metal', x, 2.3, z - d / 2 + 0.16, w - 2 * t, 0.06, 0.1, 0x3a3f45);
-  M.box('metal', x + door, 1.15, z - d / 2 + 0.13, 0.05, 2.3, 0.06, 0x3a3f45);
-  M.add('regolith', new THREE.CylinderGeometry(d / 2, d / 2, w - 0.3, 36, 1, false, 0, PI), { pos: v(x, h, z), rot: e(0, 0, PI / 2), scale: v(rise, 1, 1), color: PRINT });
-  // a shade canopy over the glass front on slim posts
-  M.box('hull', x, h + 0.1, z - d / 2 - 0.9, w + 0.4, 0.14, 2.0, C.W);
-  for (const s of [-1, 1]) M.cyl('metal', x + s * (w / 2 - 0.2), 0, z - d / 2 - 1.7, 0.06, h + 0.05, 0x3a3f45, 8);
-  M.box('emissive', x, h + 0.02, z - d / 2 - 0.9, w * 0.8, 0.02, 0.08, L.warm);
-  M.light(x, h - 0.4, z - d / 2 - 1.2, L.warm, 1.6, 9);
-  M.col(x - w / 2, 0, z - d / 2 + 0.1, x + w / 2, h + d / 2 * rise, z + d / 2);
-  M.col(x - w / 2 - 0.2, h, z - d / 2 - 1.9, x + w / 2 + 0.2, h + 0.2, z - d / 2);
+// Once people can breathe outside, the base becomes a town, built the way
+// contemporary American civic buildings are: white precast panels, dark
+// bronze aluminium mullions, glass curtain walls and ribbon windows, flat
+// cantilevered roof plates, granite bases, plazas with street trees, pole
+// lights, benches and flagpoles. Each building keeps the pressure vessel it
+// grew from as its round chamber, so the town visibly grows out of the base.
+const PRECAST = 0xe4e1d9, PRECAST2 = 0xd3cfc5, GRANITE = 0x8f8b85, BRONZE = 0x2f2b27, WHITE = 0xf2f1ee;
+
+function frameAt(fx, fz, a) {
+  const R = e(0, a, 0);
+  return { R, W: (lx, ly, lz) => v(lx, ly, lz).applyEuler(R).add(v(fx, 0, fz)) };
 }
-function tree(M, x, z, h = 3, r = 1.1, k = 0) {
-  M.cyl('plant', x, 0, z, 0.1, h, 0x5a3b26, 6);
-  M.sphere('plant', x, h + r * 0.5, z, r, k % 2 ? 0x3d7f3a : 0x2f6b34, 10, 0.85);
+// precast spandrels and continuous glass ribbons, storey by storey, on a
+// face whose outward normal is local +z (a = PI faces -z, as facade())
+function ribbon(M, fx, fz, a, len, y0, storeys, fh, { gh = 1.6, sill = 0.85, mull = 1.5, t = 0.3, skip = null } = {}) {
+  const { R, W } = frameAt(fx, fz, a);
+  const box = (k, lx, ly, lz, bw, bh, bd, col) => M.add(k, new THREE.BoxGeometry(bw, bh, bd), { pos: W(lx, ly, lz), rot: R, color: col });
+  for (let st = 0; st < storeys; st++) {
+    const y = y0 + st * fh;
+    box('concrete', 0, y + sill / 2, -t / 2, len, sill, t, PRECAST);
+    box('concrete', 0, y + sill + gh + (fh - sill - gh) / 2, -t / 2, len, fh - sill - gh, t, PRECAST);
+    const gy = y + sill + gh / 2;
+    if (skip && skip(st)) { box('concrete', 0, gy, -t / 2, len, gh, t, PRECAST); continue; }
+    box('glass', 0, gy, -t + 0.12, len - 0.1, gh, 0.05);
+    const n = Math.max(1, Math.round(len / mull));
+    for (let i = 0; i <= n; i++) box('metal', -len / 2 + i * len / n, gy, -t + 0.17, 0.07, gh, 0.1, BRONZE);
+    box('metal', 0, y + sill + 0.03, -t + 0.17, len, 0.06, 0.12, BRONZE);
+    box('metal', 0, y + sill + gh - 0.03, -t + 0.17, len, 0.06, 0.12, BRONZE);
+    box('concrete', 0, y + sill - 0.02, 0.03, len, 0.05, 0.08, PRECAST2);
+  }
+}
+// full-height storefront curtain wall on a face (outward local +z)
+function curtain(M, fx, fz, a, len, y0, h, { mull = 1.4, doors = [] } = {}) {
+  const { R, W } = frameAt(fx, fz, a);
+  const box = (k, lx, ly, lz, bw, bh, bd, col) => M.add(k, new THREE.BoxGeometry(bw, bh, bd), { pos: W(lx, ly, lz), rot: R, color: col });
+  box('glass', 0, y0 + h / 2, 0, len, h, 0.05);
+  const n = Math.max(1, Math.round(len / mull));
+  for (let i = 0; i <= n; i++) box('metal', -len / 2 + i * len / n, y0 + h / 2, 0.06, 0.08, h, 0.14, BRONZE);
+  for (const y of [y0 + 0.05, y0 + 2.6, y0 + h - 0.05]) if (y <= y0 + h) box('metal', 0, y, 0.06, len, 0.08, 0.14, BRONZE);
+  for (const c of doors) { box('metal', c, y0 + 1.25, 0.08, 0.05, 2.5, 0.08, BRONZE); box('metal', c, y0 + 1.1, 0.12, 0.6, 0.04, 0.04, 0xb8bcc0); }
+}
+// the old pressure vessel as a round civic chamber: podium, clerestory, roof disc
+function chamber(M, x, z, r, h, { y0 = 0.6, ports = [] } = {}) {
+  M.add('stone', new THREE.CylinderGeometry(r + 0.25, r + 0.35, y0, 40), { pos: v(x, y0 / 2, z), color: GRANITE });
+  vessel(M, x, z, { r, h, y0, loft: 0, hatches: [], ports, segs: 10 });
+  const cy = y0 + h + 0.3;
+  M.add('glass', new THREE.CylinderGeometry(r - 0.15, r - 0.15, 1.3, 40, 1, true), { pos: v(x, cy + 0.65, z) });
+  for (let i = 0; i < 20; i++) { const a = i / 20 * PI * 2; M.box('metal', x + Math.sin(a) * (r - 0.12), cy + 0.65, z + Math.cos(a) * (r - 0.12), 0.06, 1.3, 0.06, BRONZE, a); }
+  M.add('hull', new THREE.CylinderGeometry(r + 0.45, r + 0.45, 0.28, 48), { pos: v(x, cy + 1.44, z), color: WHITE });
+  M.add('metal', new THREE.CylinderGeometry(r + 0.47, r + 0.47, 0.1, 48, 1, true), { pos: v(x, cy + 1.36, z), color: BRONZE });
+  M.add('emissive', new THREE.TorusGeometry(r + 0.3, 0.025, 4, 48), { pos: v(x, cy + 1.29, z), rot: e(PI / 2, 0, 0), color: L.warm });
+  M.colCyl(x, z, r + 0.45, 0, cy + 1.6);
+}
+function tree(M, x, z, h = 3.2, r = 1.2, k = 0) {
+  M.cyl('plant', x, 0, z, 0.11, h, 0x5a3b26, 6);
+  M.sphere('plant', x, h + r * 0.45, z, r, k % 2 ? 0x3d7f3a : 0x2f6b34, 10, 0.85);
   M.sphere('plant', x + r * 0.45, h + r * 0.1, z - r * 0.2, r * 0.65, 0x47843d, 8, 0.85);
-  M.cyl('concrete', x, 0, z, 0.55, 0.12, 0x6d5a48, 14);
+  M.sphere('plant', x - r * 0.4, h + r * 0.2, z + r * 0.25, r * 0.6, 0x35753a, 8, 0.85);
+  M.box('metal', x, 0.02, z, 1.2, 0.04, 1.2, 0x2a2b2c);
+  M.colCyl(x, z, 0.15, 0, h);
 }
 function bench(M, x, z, yaw = 0) {
-  M.box('hull', x, 0.45, z, 1.6, 0.08, 0.45, C.W2, yaw);
-  for (const s of [-0.6, 0.6]) M.box('metal', x + Math.cos(yaw) * s, 0.22, z - Math.sin(yaw) * s, 0.08, 0.44, 0.4, 0x3a3f45, yaw);
+  for (let i = 0; i < 4; i++) M.box('hull', x, 0.45, z - 0.15 + i * 0.1, 1.8, 0.04, 0.08, 0x8a6a48, yaw);
+  M.box('stone', x, 0.2, z, 1.9, 0.4, 0.5, GRANITE, yaw);
+}
+// slim LED area light
+function poleLight(M, x, z, h = 5) {
+  M.cyl('metal', x, 0, z, 0.08, h, 0x3a3d41, 8);
+  M.box('metal', x, h + 0.05, z - 0.25, 0.22, 0.08, 0.7, 0x3a3d41);
+  M.box('emissive', x, h, z - 0.25, 0.16, 0.02, 0.6, L.white);
+  M.light(x, h - 0.2, z - 0.3, L.white, 1.0, 10);
+  M.colCyl(x, z, 0.1, 0, h);
+}
+function flagpole(M, x, z, h, kind) {
+  M.cyl('stone', x, 0, z, 0.3, 0.25, GRANITE, 12);
+  flag(M, x, z, h, kind);
+}
+// louvered rooftop mechanical screen
+function mechScreen(M, x, y, z, w, d, h = 1.4) {
+  M.box('metal', x, y + h / 2, z, w, h, d, 0x9a9ea2);
+  const n = Math.round(w / 0.25);
+  for (let i = 0; i <= n; i++) for (const sz of [-1, 1]) M.box('metal', x - w / 2 + i * w / n, y + h / 2, z + sz * (d / 2 + 0.02), 0.04, h - 0.1, 0.04, 0x6e7276);
 }
 
 export function clinicOpen(M) {
-  plinth(M, 8, 8);
-  openHall(M, -0.4, 1.4, 6.8, 4.6, 3.3);
-  // first floor in glass over part of the hall: consulting rooms
-  M.box('glass', 0.6, 4.35, 2.0, 3.6, 1.7, 2.6);
-  M.box('hull', 0.6, 5.3, 2.0, 3.9, 0.2, 2.9, C.W);
-  M.box('hull', 0.6, 3.45, 2.0, 3.9, 0.16, 2.9, C.W);
-  M.col(-1.3, 3.4, 0.7, 2.5, 5.4, 3.3);
-  pvRack(M, -2.2, 2.2, 2.0, 1.0, 0, 2, 3.9);
-  // ambulance bay and the ambulance
-  M.box('hull', 2.7, 3.0, -2.6, 2.4, 0.14, 3.0, C.W);
-  for (const [x, z] of [[1.6, -3.9], [3.8, -3.9]]) M.cyl('metal', x, 0, z, 0.06, 2.95, 0x3a3f45, 8);
-  rover(M, 2.7, -2.4, PI / 2, 0xd23a2a);
-  // red cross on a pylon, garden, benches
-  M.box('hull', -3.4, 1.6, -3.6, 0.2, 3.2, 0.2, 0x3a3f45);
-  symbol(M, 'cross', -3.4, 2.9, -3.66, 0.9, PI, 0xff3b3b);
-  tree(M, -2.0, -3.4, 2.6, 0.9, 0);
-  tree(M, 0.4, -3.6, 2.2, 0.8, 1);
-  bench(M, -0.8, -3.9);
-  for (let i = 0; i < 5; i++) M.sphere('plant', -3.6 + i * 0.4, 0.3, 3.7, 0.32, 0x3d7f3a, 7, 0.75);
-  M.entry(-0.4);
+  plinth(M, 8, 8, { color: GRANITE });
+  // sidewalk and curb
+  M.box('stone', 0, 0.04, -3.2, 8, 0.08, 1.6, 0xc4c0b8);
+  M.box('stone', 0, 0.07, -3.95, 8, 0.14, 0.15, 0xa5a19a);
+  // two-storey medical office bar: precast spandrels and ribbon windows
+  const x0 = -0.6, x1 = 3.8, z0 = -0.8, z1 = 3.8, fh = 3.4, H = 2 * fh, t = 0.3;
+  const w = x1 - x0, d = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+  ribbon(M, cx, z0, PI, w, 0, 2, fh, { t });
+  ribbon(M, cx, z1, 0, w, 0, 2, fh, { t });
+  ribbon(M, x1, cz, PI / 2, d - 2 * t, 0, 2, fh, { t, skip: (st) => st === 0 });
+  ribbon(M, x0, cz, -PI / 2, d - 2 * t, 0, 2, fh, { t });
+  // ambulance bay door on the east side
+  M.box('metal', x1 + 0.02, 1.35, cz + 0.6, 0.06, 2.7, 2.6, 0xc9ccd0);
+  for (let k = 0; k < 8; k++) M.box('metal', x1 + 0.06, 0.2 + k * 0.33, cz + 0.6, 0.03, 0.03, 2.5, 0x9a9ea2);
+  M.box('concrete', x1 + 0.02, 2.85, cz + 0.6, 0.08, 0.3, 3.0, PRECAST2);
+  M.bb('stone', x0 - 0.04, 0, z0 - 0.04, x1 + 0.04, 0.4, z1 + 0.04, GRANITE);
+  // roof plate with a thin bronze fascia, mechanical screen
+  M.bb('hull', x0 - 0.5, H, z0 - 0.7, x1 + 0.4, H + 0.3, z1 + 0.4, WHITE);
+  M.bb('metal', x0 - 0.52, H - 0.05, z0 - 0.72, x1 + 0.42, H + 0.02, z1 + 0.42, BRONZE);
+  mechScreen(M, cx + 0.6, H + 0.3, cz + 0.8, 2.2, 1.6, 1.2);
+  M.col(x0, 0, z0, x1, H + 0.3, z1);
+  // the old pressure vessel is the round waiting room, with a glass vestibule
+  chamber(M, -2.0, 0.6, 1.8, 2.6, { y0: 0.45, ports: [{ a: -PI / 2, y: 1.6, r: 0.35 }, { a: PI * 0.75, y: 1.6, r: 0.35 }] });
+  M.box('glass', -2.0, 1.3, -1.55, 1.9, 2.5, 0.05);
+  for (const sx of [-1, 0, 1]) M.box('metal', -2.0 + sx * 0.93, 1.3, -1.6, 0.07, 2.5, 0.1, BRONZE);
+  M.box('metal', -2.0, 2.6, -1.6, 1.95, 0.1, 0.1, BRONZE);
+  M.box('hull', -2.0, 2.7, -1.0, 2.2, 0.12, 1.4, WHITE);
+  for (const sx of [-1, 1]) M.box('glass', -2.0 + sx * 0.97, 1.3, -1.0, 0.05, 2.5, 1.1);
+  // cantilevered drop-off canopy with the red cross on its edge
+  M.box('hull', -1.6, 3.3, -2.5, 4.4, 0.24, 2.2, WHITE);
+  M.box('metal', -1.6, 3.18, -2.5, 4.42, 0.03, 2.22, BRONZE);
+  M.box('emissive', -1.6, 3.165, -2.5, 3.6, 0.02, 0.06, L.white);
+  for (const sx of [-1, 1]) M.cyl('metal', -1.6 + sx * 1.9, 0, -3.35, 0.08, 3.2, 0x3a3d41, 10);
+  M.box('concrete', -0.3, 3.3, -3.62, 0.36, 0.11, 0.03, 0xc8262a);
+  M.box('concrete', -0.3, 3.3, -3.62, 0.11, 0.36, 0.03, 0xc8262a);
+  M.col(-3.8, 3.15, -3.6, 0.6, 3.45, -1.4);
+  // blade sign at the corner: white fin with the red cross
+  M.box('hull', 3.55, 2.6, -1.45, 0.16, 5.2, 0.9, WHITE);
+  for (const sx of [-1, 1]) {
+    M.box('concrete', 3.55 + sx * 0.085, 4.4, -1.45, 0.02, 0.56, 0.17, 0xc8262a);
+    M.box('concrete', 3.55 + sx * 0.085, 4.4, -1.45, 0.02, 0.17, 0.56, 0xc8262a);
+  }
+  M.col(3.45, 0, -1.9, 3.65, 5.2, -1.0);
+  // street furniture
+  tree(M, 1.2, -3.3, 2.8, 1.0, 0);
+  bench(M, 2.7, -2.4, 0);
+  poleLight(M, -3.6, -3.6, 4.6);
+  M.entry(-2.0);
 }
 
 export function cityhallOpen(M) {
-  plinth(M, 14, 12);
-  // the old control drum is now the council chamber, its window band opened all round
-  const cx = 0.6, cz = 1.2;
-  const ring = rr(4.6, 4.6, 2.2); ring.holes.push(rr(3.7, 3.7, 1.75));
-  const g = new THREE.ExtrudeGeometry(ring, { depth: 4.6, bevelEnabled: false, curveSegments: 18 }); g.rotateX(-PI / 2);
-  M.add('regolith', g, { pos: v(cx, 0, cz), color: PRINT });
-  M.add('glass', new THREE.CylinderGeometry(2.25, 2.25, 1.6, 40, 1, true), { pos: v(cx, 5.4, cz) });
-  for (let i = 0; i < 16; i++) { const a = i / 16 * PI * 2; M.box('metal', cx + Math.sin(a) * 2.27, 5.4, cz + Math.cos(a) * 2.27, 0.08, 1.65, 0.08, 0x3a3f45); }
-  M.add('regolith', new THREE.SphereGeometry(2.45, 32, 12, 0, PI * 2, 0, PI / 2), { pos: v(cx, 6.2, cz), scale: v(1, 0.45, 1), color: PRINT });
-  M.colCyl(cx, cz, 2.3, 0, 7.3);
-  // assembly hall with a glass front
-  openHall(M, -2.8, 2.4, 7.0, 5.0, 3.6);
-  // the plaza: paving, trees, a fountain, benches, flags, the emblem
-  M.box('concrete', 0, 0.03, -3.6, 13, 0.06, 4.2, 0xa89a88);
-  for (const [x, k] of [[-5.6, 0], [-3.0, 1], [3.0, 0], [5.6, 1]]) tree(M, x, -4.6, 3.2, 1.2, k);
-  M.cyl('concrete', 0.6, 0, -3.6, 1.3, 0.45, C.CONC, 28);
-  M.cyl('hull', 0.6, 0.38, -3.6, 1.15, 0.04, 0x2c6a7a, 28);
-  M.cyl('concrete', 0.6, 0.4, -3.6, 0.15, 0.8, C.CONC2, 10);
-  M.colCyl(0.6, -3.6, 1.3, 0, 0.45);
-  bench(M, -1.6, -2.4); bench(M, 2.8, -2.4);
-  flag(M, -1.2, -5.4, 6.5, 'colony');
-  flag(M, 2.4, -5.4, 6.5, 'agency');
-  emblem(M, cx, 3.0, cz - 2.32, 0.7, PI);
-  // the tracking antenna and the comm tower stay at work behind it
-  M.asset('dsn34', 5.2, 0, 3.8, { scale: 0.11, anim: { pivot: [5.2, 0, 3.8], axis: [0, 1, 0], speed: 0.06 }, fixed: /base/ });
-  M.colCyl(5.2, 3.8, 1.1, 0, 2.0);
-  lattice(M, -5.6, 4.6, 1.6, 16, { mast: true, stairs: false });
-  floodMast(M, -6.3, -2.0, 7, PI * 0.85);
-  M.entry(-2.8);
+  plinth(M, 14, 12, { color: GRANITE });
+  // civic plaza: light paving with granite bands
+  M.box('stone', 0, 0.03, -3.6, 14, 0.06, 4.8, 0xcdc8be);
+  for (const x of [-4.5, -1.5, 1.5, 4.5]) M.box('stone', x, 0.065, -3.6, 0.25, 0.02, 4.8, 0x9c978f);
+  // three-storey office bar: a glazed ground floor recessed behind square
+  // piers, two upper storeys of precast with vertical slot windows
+  const x0 = -6.4, x1 = 2.6, z0 = 0.2, z1 = 5.6, fh = 3.7, H = 3 * fh;
+  const w = x1 - x0, d = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, t = 0.34;
+  const slots = (st, len) => bays(len, { bay: 1.5, w: 0.75, sill: 0.25, head: 3.35 });
+  const opt = { key: 'concrete', color: PRECAST, trim: PRECAST2, t, lines: false };
+  facade(M, cx, z0, PI, w, fh, 2, fh, slots, opt);
+  facade(M, cx, z1, 0, w, fh, 2, fh, slots, opt);
+  facade(M, x0, cz, -PI / 2, d - 2 * t, fh, 2, fh, slots, opt);
+  facade(M, x1, cz, PI / 2, d - 2 * t, fh, 2, fh, slots, opt);
+  for (let st = 1; st < 3; st++) M.bb('concrete', x0 - 0.04, st * fh - 0.06, z0 - 0.06, x1 + 0.04, st * fh + 0.06, z1 + 0.04, PRECAST2);
+  // ground floor: curtain wall set back 1.2 m behind the piers
+  const gz = z0 + 1.2;
+  curtain(M, cx, gz, PI, w - 0.8, 0, fh, { doors: [-2.7, -0.9].map((X) => cx - X) });
+  curtain(M, x0 + 0.4, (gz + z1) / 2, -PI / 2, z1 - gz - 0.3, 0, fh);
+  M.bb('concrete', x0, 0, z1 - 0.34, x1, fh, z1, PRECAST);
+  M.bb('hull', x0, fh - 0.3, z0, x1, fh, gz, WHITE);
+  for (let i = 0; i < 6; i++) M.box('emissive', x0 + 0.8 + i * (w - 1.6) / 5, fh - 0.31, (z0 + gz) / 2, 0.3, 0.02, 0.3, L.warm);
+  for (let i = 0; i <= 5; i++) { const px = x0 + 0.25 + i * (w - 0.5) / 5; M.box('concrete', px, fh / 2, z0 + 0.25, 0.5, fh, 0.5, PRECAST); M.colCyl(px, z0 + 0.25, 0.28, 0, fh); }
+  M.bb('stone', x0 - 0.04, 0, gz - 0.02, x1 + 0.04, 0.35, z1 + 0.04, GRANITE);
+  // cantilevered roof plate, bronze fascia, rooftop screen
+  M.bb('hull', x0 - 0.6, H, z0 - 1.1, x1 + 0.3, H + 0.35, z1 + 0.5, WHITE);
+  M.bb('metal', x0 - 0.62, H - 0.06, z0 - 1.12, x1 + 0.32, H + 0.02, z1 + 0.52, BRONZE);
+  mechScreen(M, cx - 1.0, H + 0.35, cz + 1.0, 3.6, 2.0, 1.6);
+  M.col(x0, fh, z0, x1, H + 0.4, z1);
+  M.col(x0, 0, gz, x1, fh, z1);
+  // council chamber: the colony's first pressure vessel, kept as the round
+  // chamber under a clerestory and a roof disc
+  chamber(M, 4.5, 2.3, 2.3, 3.1, { y0: 0.6, ports: [{ a: -PI / 2, y: 2.0, r: 0.42 }, { a: PI * 0.8, y: 2.0, r: 0.42 }, { a: PI * 0.55, y: 2.0, r: 0.42 }, { a: PI / 2 + 0.2, y: 2.0, r: 0.42 }] });
+  // glass link between the bar and the chamber
+  M.bb('glass', x1, 0.4, 1.6, x1 + 0.35, 3.4, 3.0);
+  M.bb('hull', x1 - 0.1, 3.4, 1.5, x1 + 0.45, 3.6, 3.1, WHITE);
+  // entrance canopy: a glass plate on steel fins
+  M.box('glass', -1.8, 3.2, -0.9, 4.0, 0.05, 2.2);
+  for (const sx of [-1, 0, 1]) M.box('metal', -1.8 + sx * 1.8, 3.28, -0.9, 0.06, 0.18, 2.2, BRONZE);
+  // the plaza: name monolith, flagpoles, street trees, benches, pole lights
+  M.box('stone', -1.8, 0.55, -4.9, 3.4, 1.1, 0.5, GRANITE);
+  M.box('metal', -1.8, 0.7, -5.16, 2.6, 0.22, 0.02, 0xc9b27a);
+  M.box('emissive', -1.8, 0.12, -5.17, 3.2, 0.03, 0.02, L.warm);
+  M.col(-3.5, 0, -5.15, -0.1, 1.1, -4.65);
+  flagpole(M, -5.6, -4.8, 9, 'colony');
+  flagpole(M, -4.6, -4.8, 9, 'agency');
+  for (const [x, k] of [[1.4, 0], [3.4, 1], [5.4, 0]]) tree(M, x, -4.6, 3.2, 1.2, k);
+  bench(M, 2.4, -2.6, 0); bench(M, 4.6, -2.6, 0);
+  poleLight(M, -6.2, -2.6); poleLight(M, 6.3, -2.6);
+  M.entry(-1.8);
 }

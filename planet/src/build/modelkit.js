@@ -743,12 +743,12 @@ export function facade(M, fx, fz, a, len, y0, storeys, fh, openFn, { t = 0.3, ke
       piece(x0, x1, ys, ys + o.y);
       piece(x0, x1, ys + o.y + o.h, ys + fh);
     }
-    for (const o of ops) opening(M, W, R, o, ys, t, trim);
+    for (const o of ops) opening(M, W, R, o, ys, t, trim, key === 'brick' || key === 'stone' ? 'stone' : 'hull');
     if (lines && st > 0) box('hull', 0, ys + 0.02, 0.03, len + 0.08, 0.14, 0.06, trim);
   }
 }
 
-function opening(M, W, R, o, ys, t, trim) {
+function opening(M, W, R, o, ys, t, trim, sillKey = 'hull') {
   const add = (key, geo, lx, ly, lz, color) => M.add(key, geo, { pos: W(lx, ly, lz), rot: R, color });
   const y = ys + o.y, h = o.h, w = o.w, c = o.c;
   if (o.kind === 'shutter') {
@@ -768,7 +768,7 @@ function opening(M, W, R, o, ys, t, trim) {
   for (const sx of [-1, 1]) add('metal', new THREE.BoxGeometry(f, h, 0.06), c + sx * (w / 2 - f / 2), y + h / 2, fz, C.D);
   if (o.kind === 'win') {
     if (w > 1.0) add('metal', new THREE.BoxGeometry(0.04, h, 0.05), c, y + h / 2, fz, C.D);
-    add('hull', new THREE.BoxGeometry(w + 0.16, 0.06, 0.3), c, y - 0.03, 0.04, trim);
+    add(sillKey, new THREE.BoxGeometry(w + 0.16, 0.06, 0.3), c, y - 0.03, 0.04, trim);
   } else if (o.kind === 'shop') {
     const n = Math.max(1, Math.round(w / 1.3));
     for (let k = 1; k < n; k++) add('metal', new THREE.BoxGeometry(0.06, h, 0.06), c - w / 2 + k * w / n, y + h / 2, fz, C.D);

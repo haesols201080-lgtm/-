@@ -437,6 +437,61 @@ export function makeBuildingMaterials() {
       gR2 = 0.88 + 0.08 * nz.b;`,
     rough: 'float roughnessFactor = gR2;',
   });
+  // Masonry for the towns built after the air is breathable. Both work in
+  // object space on the face's own axes (panelUV), fade to the average colour
+  // when the pattern is too fine to resolve, and carry their joints as bump.
+  // brick: modular US brick in running bond (203 x 57 mm + 10 mm joints),
+  // per-brick tone, a few flashed headers, recessed light mortar
+  M.brick = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0.0 }), 'brick', {
+    map: /* glsl */`
+      vec2 buv = panelUV(vOP, normalize(vON));
+      vec2 bm = vec2(0.213, 0.067);
+      float brow = floor(buv.y / bm.y);
+      vec2 bq = vec2(buv.x / bm.x + mod(brow, 2.0) * 0.5, buv.y / bm.y);
+      vec2 bf = fract(bq), bid = floor(bq), bfw = fwidth(bq);
+      float bjx = 1.0 - smoothstep(0.047, 0.047 + bfw.x * 1.5, bf.x);
+      float bjy = 1.0 - smoothstep(0.15, 0.15 + bfw.y * 1.5, bf.y);
+      float bj = max(bjx, bjy);
+      float bfar = smoothstep(0.22, 0.55, max(bfw.x, bfw.y));
+      float bh = hash1(bid + floor(vData.z * 31.0));
+      vec3 bc = diffuseColor.rgb * (0.8 + 0.34 * bh);
+      bc = mix(bc, bc * vec3(0.62, 0.6, 0.66), step(0.93, bh));
+      vec3 mortar = vec3(0.66, 0.63, 0.58);
+      vec4 bnz = texture2D(tNoise, vOP.xz * 0.13 + vOP.y * 0.09 + vData.z);
+      vec3 c = mix(mix(bc, mortar, bj * 0.92), diffuseColor.rgb * 0.95 + mortar * 0.05, bfar);
+      c *= 0.9 + 0.14 * bnz.g;
+      float blow = smoothstep(0.8, 0.0, vOP.y) * (0.5 + 0.5 * bnz.r);
+      c = mix(c, c * vec3(0.8, 0.76, 0.72), blow * 0.35);
+      diffuseColor.rgb = c;
+      gH = (1.0 - bj) * 0.005 * (1.0 - bfar) + 1e-6;
+      gR2 = 0.82 + 0.12 * bh;`,
+    rough: 'float roughnessFactor = gR2;',
+  });
+  // stone: coursed limestone ashlar (1.2 x 0.45 m blocks, thin joints),
+  // gentle block-to-block tone and soft weathering streaks
+  M.stone = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82, metalness: 0.0 }), 'stone', {
+    map: /* glsl */`
+      vec2 suv = panelUV(vOP, normalize(vON));
+      vec2 sm = vec2(1.2, 0.45);
+      float srow = floor(suv.y / sm.y);
+      vec2 sq = vec2(suv.x / sm.x + mod(srow, 2.0) * 0.5, suv.y / sm.y);
+      vec2 sf = fract(sq), sid = floor(sq), sfw = fwidth(sq);
+      float sjx = 1.0 - smoothstep(0.006, 0.006 + sfw.x * 1.5, min(sf.x, 1.0 - sf.x));
+      float sjy = 1.0 - smoothstep(0.016, 0.016 + sfw.y * 1.5, min(sf.y, 1.0 - sf.y));
+      float sj = max(sjx, sjy);
+      float sfar = smoothstep(0.08, 0.25, max(sfw.x, sfw.y));
+      float sh = hash1(sid + floor(vData.z * 13.0));
+      vec4 snz = texture2D(tNoise, vOP.xz * 0.3 + vOP.y * 0.21);
+      vec4 snz2 = texture2D(tNoise, vec2(suv.x * 0.35, suv.y * 0.04));
+      vec3 c = diffuseColor.rgb * (0.93 + 0.1 * sh + 0.06 * snz.a);
+      c *= 1.0 - sj * 0.28 * (1.0 - sfar);
+      float streak = smoothstep(0.6, 0.9, snz2.g) * (1.0 - abs(normalize(vON).y));
+      c *= 1.0 - streak * 0.12;
+      diffuseColor.rgb = c;
+      gH = (1.0 - sj) * 0.004 * (1.0 - sfar) + snz.a * 0.002 + 1e-6;
+      gR2 = 0.78 + 0.1 * snz.b;`,
+    rough: 'float roughnessFactor = gR2;',
+  });
   M.water = new THREE.MeshStandardMaterial({ color: 0x1b5e6e, roughness: 0.05, metalness: 0.2, envMapIntensity: 1.2 });
   M.water.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 iData;'); };
   return M;
