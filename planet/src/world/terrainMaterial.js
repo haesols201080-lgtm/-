@@ -245,25 +245,29 @@ void computeTerrain() {
 
   // built / packed ground around structures
   // irregular, soft-edged footprint of construction: darker trampled ground, not a painted rectangle
+  vec3 soil0 = alb;
   float packed = smoothstep(0.2 + 0.45 * nzC.r, 0.95, modv) * (1.0 - cliff * 0.6);
   vec3 packedC = alb * mix(0.62, 0.85, soilA.b) * vec3(0.95, 0.93, 0.92);
   alb = mix(alb, packedC, packed * 0.8);
   nrm = normalize(mix(nrm, N, packed * 0.35));
-  // paved roads and aprons (mod ~ 1): sintered hex pavers with dust in the joints
-  float paved = smoothstep(0.93, 0.985, modv) * (1.0 - cliff);
+  // paved roads and aprons (mod ~ 1): pavers sintered out of the regolith
+  // itself, so they keep the ground's own hue, only darker and glassier;
+  // soil packed into the joints, loose dust drifting over them in patches
+  // and thickening toward the edge, where the paving gives out raggedly
+  vec4 nzP = texture2D(tNoise, vTW.xz * 0.17 + 0.41);
+  float paved = smoothstep(0.93, 0.985, modv + (nzP.r - 0.5) * 0.07) * (1.0 - cliff);
   if (paved > 0.0) {
-    vec2 hp = hexPave(vTW.xz / 0.36);
-    // sintered pavers: close tonal range, fine aggregate speckle, dust-filled
-    // joints and broad wear/staining so it reads as a used surface, not a tile print
-    vec3 paveC = mix(s2l(vec3(0.53, 0.51, 0.49)), s2l(vec3(0.58, 0.56, 0.53)), hp.y) * (0.92 + 0.12 * soilA.b);
-    paveC *= 0.94 + 0.08 * th21(floor(vTW.xz * 40.0));
-    paveC = mix(paveC, s2l(vec3(0.46, 0.38, 0.32)), hp.x * 0.45);
-    paveC = mix(paveC, s2l(vec3(0.52, 0.41, 0.33)), smoothstep(0.55, 0.9, nzC.g) * 0.3);
-    paveC *= 1.0 - smoothstep(0.6, 0.95, nzC.b) * 0.12;
+    vec2 hp = hexPave(vTW.xz / 0.62);
+    float lum = dot(soil0, vec3(0.3, 0.59, 0.11));
+    vec3 paveC = mix(vec3(lum), soil0, 0.8) * (0.6 + 0.1 * hp.y) * (0.95 + 0.08 * soilA.b);
+    paveC *= 0.95 + 0.07 * th21(floor(vTW.xz * 40.0));
+    paveC = mix(paveC, soil0 * 0.96, hp.x * 0.75);
+    float drift = clamp(smoothstep(0.55, 0.88, nzP.g * 0.65 + nzC.g * 0.35) * 0.42 + (1.0 - smoothstep(0.955, 0.996, modv)) * 0.7, 0.0, 0.9);
+    paveC = mix(paveC, soil0 * 0.94, drift);
     alb = mix(alb, paveC, paved);
-    rough = mix(rough, 0.74 + hp.x * 0.15, paved);
-    nrm = normalize(mix(nrm, N, paved * 0.85));
-    ao = mix(ao, 1.0 - hp.x * 0.25, paved);
+    rough = mix(rough, 0.8 + hp.x * 0.12, paved);
+    nrm = normalize(mix(nrm, N, paved * (0.75 - drift * 0.4)));
+    ao = mix(ao, 1.0 - hp.x * 0.16 * (1.0 - drift), paved);
   }
 
   // frost in cold hollows and shaded north slopes
@@ -472,6 +476,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v34';
+  mat.customProgramCacheKey = () => 'terrain-v35';
   return mat;
 }

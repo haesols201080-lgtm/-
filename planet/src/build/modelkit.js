@@ -143,32 +143,11 @@ export class ModelBuilder {
 }
 
 // ---------------------------------------------------------------- details
-// Base of every building. Small ones sit on a concrete pad (skirt buried);
-// anything 3 m or more stands on a steel deck carried by legs (supports.js):
-// plated deck, edge channel and a beam grid underneath. Floor at y = 0.
-export function plinth(M, w, d, { color = C.CONC, trim = C.G2, collide = true } = {}) {
-  if (Math.min(w, d) < 3) {
-    M.bb('concrete', -w / 2, -2.4, -d / 2, w / 2, 0, d / 2, color);
-    M.bb('metal', -w / 2 - 0.04, -0.12, -d / 2 - 0.04, w / 2 + 0.04, -0.02, d / 2 + 0.04, trim);
-    if (collide) M.col(-w / 2, -2.4, -d / 2, w / 2, 0, d / 2);
-    return;
-  }
-  // sintered regolith pad: the deck's top in the colour of the ground, a
-  // sloped skirt running down into the terrain so the building sits in the
-  // land rather than on a board, and a structural edge beam under the lip
-  const r = Math.min(1.2, Math.min(w, d) * 0.15);
-  const top = new THREE.ExtrudeGeometry(roundRect(w, d, r), { depth: 0.22, bevelEnabled: false, curveSegments: 8 });
-  top.rotateX(-Math.PI / 2);
-  M.add('regolith', top, { pos: v(0, -0.22, 0), color: 0x75594a });
-  // skirt: a frustum from the deck edge down and out
-  const skirt = new THREE.ExtrudeGeometry(roundRect(w, d, r), { depth: 0.01, bevelEnabled: true, bevelThickness: 1.2, bevelSize: 0.7, bevelSegments: 1, curveSegments: 8 });
-  skirt.rotateX(-Math.PI / 2);
-  M.add('regolith', skirt, { pos: v(0, -1.45, 0), color: 0x6a4e3e });
-  const sharp = M.sharp; M.sharp = true;
-  const nb = Math.max(1, Math.round(d / 2.4));
-  for (let i = 1; i < nb; i++) { const z = -d / 2 + i * d / nb; M.bb('metal', -w / 2 + 0.3, -0.5, z - 0.08, w / 2 - 0.3, -0.22, z + 0.08, 0x5b6168); }
-  for (const sx of [-1, 1]) M.bb('metal', sx * (w / 2 - 0.45) - 0.1, -0.5, -d / 2 + 0.3, sx * (w / 2 - 0.45) + 0.1, -0.22, d / 2 - 0.3, 0x5b6168);
-  M.sharp = sharp;
+// Base of every building: there is no pad to see. A building stands on its
+// own feet, frames and skids on ground graded flat for it (the terrain shows
+// it compacted); on a real slope supports.js carries the floor on a steel
+// deck and legs instead. What stays is the walkable floor at y = 0.
+export function plinth(M, w, d, { collide = true } = {}) {
   if (collide) M.col(-w / 2, -0.45, -d / 2, w / 2, 0, d / 2);
 }
 
@@ -459,7 +438,7 @@ export function airlock(M, x, zf, w = 2.4, h = 2.9, depth = 1.6, color = C.W2) {
   M.add('metal', new THREE.BoxGeometry(w + 0.82, 0.05, depth + 0.64), { pos: v(x, h + 0.245, z - 0.3), color: C.G2 });
   for (const sx of [-1, 1]) M.add('metal', new THREE.BoxGeometry(0.08, h, 0.1), { pos: v(x + sx * (w / 2 + 0.02), h / 2, zf - depth + 0.05), color: C.D });
   M.add('emissive', new THREE.BoxGeometry(0.5, 0.02, 0.2), { pos: v(x, h - 0.005, zf - depth - 0.25), color: L.warm });
-  M.add('concrete', new THREE.BoxGeometry(w, 0.03, depth + 0.8), { pos: v(x, 0.015, z - 0.4), color: C.CONC2 });
+  M.add('metal', new THREE.BoxGeometry(w, 0.03, depth + 0.8), { pos: v(x, 0.015, z - 0.4), color: 0x6b7178 });
   M.col(x - w / 2 - 0.24, 0, z - depth / 2, x - w / 2, h, z + depth / 2);
   M.col(x + w / 2, 0, z - depth / 2, x + w / 2 + 0.24, h, z + depth / 2);
   M.col(x - w / 2 - 0.24, h, z - depth / 2, x + w / 2 + 0.24, h + 0.4, z + depth / 2);

@@ -35,7 +35,12 @@ export function applyEdit(e, x, z, h, res) {
     const m = Math.max(e.margin, Math.abs(h - e.h) * 1.8);
     if (d > m) return h;
     const t = d <= 0 ? 0 : smoothstep(0, m, d);
-    if (e.pack !== false) res.mod = e.pave && d < e.pave ? 1 : (1 - smoothstep(0, e.margin, d)) * 0.9;
+    if (e.pack !== false) {
+      // packed ground fading out over the margin; a paved apron ends in a
+      // short ramp so the shader can fray its edge instead of cutting it
+      const pk = (1 - smoothstep(0, e.margin, d)) * 0.9;
+      res.mod = e.pave ? Math.max(pk, 1 - 0.1 * smoothstep(Math.max(0, e.pave - 1.0), e.pave + 0.3, d)) : pk;
+    }
     return lerp(e.h, h, t);
   }
   if (e.k === 'p') {
@@ -45,7 +50,7 @@ export function applyEdit(e, x, z, h, res) {
     const m = Math.max(e.margin, Math.abs(h - r.y) * 2.0);
     if (r.d > hw + m) return h;
     const t = r.d <= hw ? 0 : smoothstep(0, m, r.d - hw);
-    res.mod = r.d <= hw ? 1 : 0.9 * (1 - t);
+    res.mod = r.d <= hw ? 1 - 0.065 * smoothstep(hw - 1.0, hw, r.d) : 0.9 * (1 - t);
     return lerp(r.y, h, t);
   }
   if (e.k === 'l') {

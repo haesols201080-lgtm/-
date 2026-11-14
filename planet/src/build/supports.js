@@ -18,6 +18,7 @@ export function onStilts(type, def) {
 }
 
 const COL_STEEL = 0x6f757c, COL_BRACE = 0x8a9097, COL_PLATE = 0x3d4248, COL_TREAD = 0x9aa0a6, COL_RAIL = 0x5b6168;
+const COL_DECK = 0x7c8289;
 
 export class Supports {
   constructor(game) {
@@ -92,6 +93,19 @@ export class Supports {
     for (const b of B.list) {
       if (!b.data.stilts || b.removed) continue;
       const top = b.y - DECK;
+      // the deck the floor stands on: a plate, an edge channel round it and
+      // the beam grid the columns carry
+      {
+        const P = (lx, lz) => B.toWorld(b, lx, lz), hw = b.hw, hd = b.hd;
+        const [cx, cz] = P(0, 0);
+        box(cx, b.y - 0.05, cz, hw * 2, 0.1, hd * 2, b.rot, COL_DECK);
+        for (const [lx, lz, w, d] of [[0, -hd + 0.06, hw * 2, 0.12], [0, hd - 0.06, hw * 2, 0.12], [-hw + 0.06, 0, 0.12, hd * 2 - 0.24], [hw - 0.06, 0, 0.12, hd * 2 - 0.24]]) {
+          const [x, z] = P(lx, lz); box(x, b.y - 0.27, z, w, 0.36, d, b.rot, COL_STEEL);
+        }
+        const nb = Math.max(1, Math.round(hd * 2 / 2.4));
+        for (let i = 1; i < nb; i++) { const [x, z] = P(0, -hd + i * hd * 2 / nb); box(x, b.y - 0.27, z, hw * 2 - 0.3, 0.32, 0.16, b.rot, COL_PLATE); }
+        for (const sx of [-1, 1]) { const [x, z] = P(sx * (hw - 0.45), 0); box(x, b.y - 0.27, z, 0.2, 0.32, hd * 2 - 0.3, b.rot, COL_PLATE); }
+      }
       const W = (lx, lz) => { const [wx, wz] = B.toWorld(b, lx, lz); return [wx, wz, T.height(wx, wz)]; };
       const { loop, inner } = this.points(b);
       const legs = loop.map(([lx, lz]) => W(lx, lz));
