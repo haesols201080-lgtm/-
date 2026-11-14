@@ -51,14 +51,14 @@ export function printedHall(M, x, z, w, d, h, { rise = 0.55, slots = 3, door = 0
 }
 
 // a box of avionics wrapped in gold foil, on a frame
-function foilBox(M, x, y, z, w, h, d) {
+export function foilBox(M, x, y, z, w, h, d) {
   M.box('foil', x, y + h / 2, z, w, h, d, 0xd8a640);
   M.box('metal', x, y + 0.03, z, w + 0.1, 0.06, d + 0.1, 0x3a3f45);
   for (const sx of [-1, 1]) M.box('metal', x + sx * (w / 2 + 0.03), y + h / 2, z, 0.04, h, d + 0.06, 0x3a3f45);
 }
 
 // vertical solar mast: a tall boom with two blanket wings that track the sun
-function solarMast(M, x, z, h = 14) {
+export function solarMast(M, x, z, h = 14) {
   M.cyl('metal', x, 0, z, 0.16, h, 0xb8bec4, 10);
   M.cyl('concrete', x, 0, z, 0.6, 0.3, 0xa09080, 16);
   for (const s of [-1, 1]) {
@@ -71,7 +71,7 @@ function solarMast(M, x, z, h = 14) {
 }
 
 // pressurised rover parked at a docking port
-function rover(M, x, z, yaw = 0, stripe = ORANGE) {
+export function rover(M, x, z, yaw = 0, stripe = ORANGE) {
   const c = Math.cos(yaw), s = Math.sin(yaw), P = (lx, lz) => [x + lx * c + lz * s, z - lx * s + lz * c];
   const body = new THREE.ExtrudeGeometry(rr(4.2, 2.2, 0.7), { depth: 1.9, bevelEnabled: true, bevelSize: 0.08, bevelThickness: 0.08, bevelSegments: 2 });
   body.rotateX(-PI / 2); body.rotateY(yaw);
@@ -87,7 +87,7 @@ function rover(M, x, z, yaw = 0, stripe = ORANGE) {
 }
 
 // emblem of the colony agency: a blue disc with a white orbit and a red arc
-function emblem(M, x, y, z, s, face) {
+export function emblem(M, x, y, z, s, face) {
   M.add('hull', new THREE.CylinderGeometry(s, s, 0.06, 32), { pos: v(x, y, z), rot: e(PI / 2, face, 0), color: 0x1f4a9a });
   M.add('hull', new THREE.TorusGeometry(s * 0.7, s * 0.06, 6, 32), { pos: v(x - Math.sin(face) * 0.04, y, z - Math.cos(face) * 0.04), rot: e(0.5, face, 0.3), color: 0xf2f2f2 });
   M.add('hull', new THREE.TorusGeometry(s * 0.82, s * 0.05, 6, 24, PI * 0.9), { pos: v(x - Math.sin(face) * 0.05, y, z - Math.cos(face) * 0.05), rot: e(0, face, 0.6), color: 0xd23a2a });
@@ -95,7 +95,7 @@ function emblem(M, x, y, z, s, face) {
 
 // flags: the colony's (deep blue, the orange disc of Arke, a white orbit
 // line) and the migration agency's (white with the blue emblem)
-function flag(M, x, z, h, kind = 'colony') {
+export function flag(M, x, z, h, kind = 'colony') {
   M.cyl('metal', x, 0, z, 0.045, h, 0xc8ccd0, 8);
   const fx = x + 0.6, fy = h - 0.42;
   if (kind === 'colony') {
@@ -125,7 +125,7 @@ export function clinic(M, open = false) {
   ramp(M, hx, hz - 3.5, 0, 0.6, { w: 1.2, run: 1.3 });
   // berthed medical module: red band, red cross on its flank, end hatch
   tubeModule(M, 2.25, 1.55, hz, 2.7, 0.95, 0, { ports: 1, ribs: 2 });
-  M.add('hull', new THREE.CylinderGeometry(0.975, 0.975, 0.34, 40, 1, true), { pos: v(1.6, 1.55, hz), rot: e(0, 0, PI / 2), color: 0xc8302a });
+  M.add('shell', new THREE.CylinderGeometry(0.975, 0.975, 0.34, 40, 1, true), { pos: v(1.6, 1.55, hz), rot: e(0, 0, PI / 2), color: 0xc8302a });
   M.box('hull', 2.55, 1.6, hz - 0.96, 0.9, 0.9, 0.04, 0xf2f2f2);
   M.box('concrete', 2.55, 1.6, hz - 0.99, 0.62, 0.18, 0.02, 0xc8262a);
   M.box('concrete', 2.55, 1.6, hz - 0.99, 0.18, 0.62, 0.02, 0xc8262a);
@@ -193,7 +193,7 @@ export function cityhall(M, open = false) {
 // The base stays the base: the same agency hardware, but the airlock porch
 // is closed in with glass as a plain vestibule, and the deck gets planters,
 // young trees and benches. Same complex, visibly lived in.
-function glazedPorch(M, x, z, w, d, y) {
+export function glazedPorch(M, x, z, w, d, y) {
   const h = 2.5;
   M.box('glass', x, y + h / 2, z - d / 2 + 0.03, w - 0.1, h, 0.05);
   for (const sx of [-1, 1]) M.box('glass', x + sx * (w / 2 - 0.03), y + h / 2, z, 0.05, h, d - 0.1);
@@ -203,7 +203,7 @@ function glazedPorch(M, x, z, w, d, y) {
   M.box('metal', x, y + 1.15, z - d / 2 + 0.01, 0.05, 2.3, 0.08, N.FRAME);
   M.light(x, y + h - 0.3, z, L.warm, 1.0, 5);
 }
-function lifeAround(M, trees, benches) {
+export function lifeAround(M, trees, benches) {
   for (const [x, z] of trees) {
     M.box('metal', x, 0.25, z, 1.1, 0.5, 1.1, N.STEEL);
     M.box('plant', x, 0.52, z, 1.0, 0.06, 1.0, 0x3b2a1e);

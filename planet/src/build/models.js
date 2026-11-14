@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { ModelBuilder, C, L, v, e, plinth, hazard, railing, stairs, antenna, vent, tank, pipe, lightBar, wall, room, airlock, greebleRoof, ribbonTower, facade, bays, block, shed } from './modelkit.js';
 import { houseT1, houseT2, houseT3, houseT4, houseT1b, houseT2b, houseT3b, houseT4b, market, lounge, clinic, school, lab, comms, hqExtras } from './models_colony.js';
 import * as NASA from './models_nasa.js';
+import * as AG from './models_agency.js';
 import { lifesupport, sewage, recycling, powerbank, firestation, police, nursery, cityhall, tradepost } from './models_civic.js';
 import { houseS, houseSb, houseA, houseAb, houseR, houseRb, houseC, houseCb, houseP, housePb, houseN, houseNb, gym, textile, orchard, pharma, transit, university } from './models_homes.js';
 
@@ -788,6 +789,11 @@ const BUILDERS = {
 
 // agency-built base: printed halls, rigid modules and their working kit
 Object.assign(BUILDERS, { cityhall: NASA.cityhall, clinic: NASA.clinic, 'cityhall@open': NASA.cityhallOpen, 'clinic@open': NASA.clinicOpen });
+// service buildings of the agency base, each with its open-air form
+for (const t of ['lifesupport', 'sewage', 'recycling', 'firestation', 'police', 'nursery', 'tradepost', 'school', 'lab', 'market']) {
+  BUILDERS[t] = (M) => AG[t](M, false);
+  BUILDERS[t + '@open'] = (M) => AG[t](M, true);
+}
 // a building type that has an open-air form for after the air is breathable
 export function hasOpenForm(type) { return !!BUILDERS[type + '@open']; }
 

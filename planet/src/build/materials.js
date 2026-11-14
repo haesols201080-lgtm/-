@@ -179,6 +179,27 @@ export function makeBuildingMaterials() {
   M.hull = patch(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.82, envMapIntensity: 1.35 }), 'hull', {
     map: HULL_MAP, rough: 'float roughnessFactor = gR2;',
   });
+  // painted composite / beta-cloth module skin: matte white panels with fine
+  // seams, slight panel-to-panel tone, scuffs and dust low down
+  M.shell = patch(new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.0, clearcoat: 0.25, clearcoatRoughness: 0.5, envMapIntensity: 0.9 }), 'shell', {
+    map: /* glsl */`
+      gStagger = 0.0;
+      vec3 pin = panelInfo(vOP, normalize(vON), vec2(1.2, 1.0));
+      vec4 nz = texture2D(tNoise, vOP.xz * 0.19 + vOP.y * 0.11 + vData.z);
+      vec4 nz2 = texture2D(tNoise, vOP.xz * 0.9 + vOP.zy * 0.7);
+      vec3 c = diffuseColor.rgb * (0.95 + 0.06 * pin.y + 0.03 * (nz.r - 0.5));
+      c *= 1.0 - pin.x * 0.32;
+      float low = smoothstep(1.0, 0.0, vOP.y) * (0.5 + 0.5 * nz.g);
+      c = mix(c, c * vec3(0.8, 0.72, 0.64), low * 0.35);
+      float scuff = smoothstep(0.78, 0.92, nz2.b) * 0.12;
+      c *= 1.0 - scuff;
+      float up = smoothstep(0.55, 0.95, normalize(vON).y);
+      c = mix(c, vec3(0.62, 0.46, 0.34), up * uDustAmt * 0.3 * smoothstep(0.35, 0.7, nz.a));
+      gH = cladHeight(vOP, normalize(vON), vec2(1.2, 1.0), 0.003) + 1e-6;
+      diffuseColor.rgb = c;
+      gR2 = clamp(0.48 + 0.08 * pin.y + scuff + low * 0.2, 0.0, 1.0);`,
+    rough: 'float roughnessFactor = gR2;',
+  });
   // trapezoidal ribbed metal cladding (industrial sheds, roofs)
   // standing-seam metal cladding: wide smooth pans with thin raised seams,
   // metallic and glossy (sheds, roofs)
