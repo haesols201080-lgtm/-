@@ -10,8 +10,8 @@ const B = { pelvis: 0, spine: 1, chest: 2, neck: 3, head: 4, lArm: 5, lFore: 6, 
 const BIND = [[0, 0.94, 0], [0, 1.08, 0], [0, 1.26, 0], [0, 1.48, 0], [0, 1.56, 0.01], [0.19, 1.43, 0], [0.222, 1.15, 0], [0.24, 0.9, 0.01], [-0.19, 1.43, 0], [-0.222, 1.15, 0], [-0.24, 0.9, 0.01], [0.09, 0.92, 0], [0.09, 0.5, 0], [0.09, 0.08, -0.02], [-0.09, 0.92, 0], [-0.09, 0.5, 0], [-0.09, 0.08, -0.02]];
 const PARENT = [-1, 0, 1, 2, 3, 2, 5, 6, 2, 8, 9, 0, 11, 12, 0, 14, 15];
 export const NB = 17, FRAMES = 32;
-export const CLIP = { walk: 0, walkU: 1, brisk: 2, idle: 3, talk: 4, phone: 5, run: 6, air: 7 };
-const NCLIP = 8;
+export const CLIP = { walk: 0, walkU: 1, brisk: 2, idle: 3, talk: 4, phone: 5, run: 6, air: 7, sit: 8 };
+const NCLIP = 9;
 const D = Math.PI / 180;
 const bump = (p, c, w) => { let d = p - c; d -= Math.round(d); return Math.exp(-(d * d) / (2 * w * w)); };
 
@@ -41,6 +41,11 @@ function pose(clip, ph) {
   } else if (clip === CLIP.air) {
     r[B.pelvis] = [6, 0, 0]; r[B.lThigh] = [-38, 0, -3]; r[B.lShin] = [52, 0, 0]; r[B.rThigh] = [-14, 0, 3]; r[B.rShin] = [34, 0, 0]; r[B.lFoot] = [18, 0, 0]; r[B.rFoot] = [22, 0, 0];
     r[B.lArm] = [-20, 0, -28]; r[B.rArm] = [14, 0, 30]; r[B.lFore] = [-40, 0, 0]; r[B.rFore] = [-30, 0, 0]; solve = false; rootY = 0.02;
+  } else if (clip === CLIP.sit) { // on a stool: thighs level, elbows towards the table, head following the talk
+    const slow = Math.sin(ph * 6.2832), s2 = Math.sin(ph * 12.566 + 1.0), g = Math.sin(ph * 6.2832 * 3);
+    r[B.pelvis] = [-3, 2 * slow, 0]; r[B.lThigh] = [-84, 0, -7]; r[B.rThigh] = [-83, 0, 7]; r[B.lShin] = [86, 0, 0]; r[B.rShin] = [90 + 4 * slow, 0, 0]; r[B.lFoot] = [-3, 0, 0]; r[B.rFoot] = [-7, 0, 0];
+    r[B.spine] = [9 + s2, -2 * slow, 0]; r[B.chest] = [7, -2 * slow, 0]; r[B.neck] = [-5, 8 * slow, 0]; r[B.head] = [-5 + 3 * s2, 14 * slow, 0];
+    r[B.lArm] = [-36, 0, -10]; r[B.lFore] = [-72 - 6 * s2, 0, 0]; r[B.rArm] = [-30 + 7 * g, 0, 10]; r[B.rFore] = [-84 + 16 * Math.max(0, g), 0, 0]; r[B.rHand] = [8 * g, 0, 0];
   } else { // standing clips: weight shift, breathing, look-around; talk / phone overlays
     const slow = Math.sin(ph * 6.2832), slow2 = Math.sin(ph * 12.566 + 1.0);
     r[B.pelvis] = [1, 4 * slow, 2.2 * slow]; rootX = 0.02 * slow;

@@ -25,9 +25,9 @@ export function capsuleBlock(ctx, rng, lot, S, o = {}) {
     const ns = Math.max(2, Math.round(W / 9)); const sw = W / ns;
     for (let i = 0; i < ns; i++) {
       ctx.main(); v.box(0, i * sw, i * sw + 0.6, 0, 0.3, 0, 9, frameM, { top: false });
-      const u = nextU(); pen.use(M(ST.WIN_LUX, { color: [0.2, 0.2, 0.22], seed: rng.i(0, 255), A: 0.95, B: rng.pick([PAL.WARM, PAL.NEUTRAL, PAL.MIXED]), cellW: (sw - 0.6) / 2, floorH: 4.2, flags: WK.CONCRETE })); v.wall(0, i * sw + 0.6, (i + 1) * sw, 0, 0, 4.2, { uv: [u, 0, u + 2, 1], aoB: 0.55 });
+      const sk = rng.weighted([[4, 1], [4, 0], [2, 2], [1.5, 3]]); const u = (nextU() % 50) * 16; pen.use(M(ST.WIN_SHOP, { color: [0.2, 0.2, 0.22], seed: rng.i(0, 255), A: 1, B: 2 + 16 * sk, cellW: (sw - 0.6) / 2, floorH: 4.2, flags: WK.CONCRETE })); v.wall(0, i * sw + 0.6, (i + 1) * sw, 0, 0, 4.2, { uv: [u, 0, u + 2, 1], aoB: 0.55 });
       pen.use(frameM); v.wall(0, i * sw + 0.6, (i + 1) * sw, 0, 4.2, 9);
-      shopSign(v, 0, i * sw + 0.7, (i + 1) * sw - 0.1, 5.2, rng, { maxH: 1.5, maxW: 8, intensity: S.signI });
+      shopSign(v, 0, i * sw + 0.7, (i + 1) * sw - 0.1, 5.2, rng, { maxH: 1.5, maxW: 8, intensity: S.signI, rect: ctx.atlas.pickHKind(rng, sk) });
       if (rng.chance(0.5)) shopSign(v, 0, i * sw + 0.7, (i + 1) * sw - 0.1, 7.4, rng, { maxH: 1.2, maxW: 6.5, intensity: S.signI });
       if (i % 2 === 0) { const lp = v.world(0, (i + 0.5) * sw, 3); ctx.light(lp[0], lp[1], 14, [1, 0.8, 0.55], 0.5, 3); }
     }

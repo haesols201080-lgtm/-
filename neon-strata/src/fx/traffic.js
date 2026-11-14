@@ -35,15 +35,18 @@ export function buildLanes(ctx) {
       else lanes.push({ ...resample(loopOf(r.pts, 7, y), true), speed: 32 + li * 9, kind: 'air', w: 1 });
     });
     // ground hover traffic
-    if (r.closed) { for (const s of [1, -1]) { const pts = r.pts.map((p, i) => [p[0] + r.fr[i][2] * r.w * 0.2 * s, 1.0, p[1] + r.fr[i][3] * r.w * 0.2 * s]); lanes.push({ ...resample(s > 0 ? pts : pts.reverse(), true), speed: 17, kind: 'ground', w: 0.7 }); } }
-    else lanes.push({ ...resample(loopOf(r.pts, r.w * 0.2, 1.0), true), speed: 16, kind: 'ground', w: 0.7 });
+    if (r.closed) { for (const s of [1, -1]) { const pts = r.pts.map((p, i) => [p[0] + r.fr[i][2] * r.w * 0.2 * s, 1.0, p[1] + r.fr[i][3] * r.w * 0.2 * s]); lanes.push({ ...resample(s > 0 ? pts : pts.reverse(), true), speed: 17, kind: 'ground', w: 1.3 }); } }
+    else lanes.push({ ...resample(loopOf(r.pts, r.w * 0.2, 1.0), true), speed: 16, kind: 'ground', w: 1.3 });
   }
   // low corridors above a selection of wide local streets
   const wide = ctx.streets.filter((s) => s.w >= 18); rng.shuffle(wide);
-  for (const s of wide.slice(0, 46)) { const y = rng.pick([34, 48, 62]); lanes.push({ ...resample(loopOf(s.pts, 4.5, y), true), speed: 22, kind: 'air', w: 0.5 }); if (rng.chance(0.6)) lanes.push({ ...resample(loopOf(s.pts, s.w * 0.2, 1.0), true), speed: 12, kind: 'ground', w: 0.4 }); }
+  for (const s of wide.slice(0, 46)) { const y = rng.pick([34, 48, 62]); lanes.push({ ...resample(loopOf(s.pts, 4.5, y), true), speed: 22, kind: 'air', w: 0.5 }); if (rng.chance(0.6)) lanes.push({ ...resample(loopOf(s.pts, s.w * 0.2, 1.0), true), speed: 12, kind: 'ground', w: 0.8 }); }
   // helix around the Spire + luxury ring above the clouds
   { const pts = []; const turns = 5; const n = 160; for (let i = 0; i < n; i++) { const t = i / n; const up = t < 0.5 ? t * 2 : 2 - t * 2; const a = t * turns * TAU * (t < 0.5 ? 1 : 1); const r = t < 0.5 ? 430 : 520; pts.push([Math.cos(a) * r, 110 + up * 720, Math.sin(a) * r]); } lanes.push({ ...resample(pts, true), speed: 46, kind: 'air', w: 1.2 }); }
   for (const [r, y] of [[840, 1590], [700, 1640]]) { const pts = []; for (let i = 0; i < 96; i++) { const a = (i / 96) * TAU; pts.push([Math.cos(a) * r, y, Math.sin(a) * r]); } lanes.push({ ...resample(pts, true), speed: 60, kind: 'air', w: 0.35, high: true }); }
+  // courier drones thread the local streets just above the awnings
+  { const loc = (ctx.streets || []).filter((s) => s.w >= 7 && ['sump', 'lumina', 'oldq', 'hive', 'meridian'].includes(s.district)); rng.shuffle(loc);
+    for (const s of loc.slice(0, 170)) lanes.push({ ...resample(loopOf(s.pts, 1.7, rng.f(5.5, 13)), true), speed: rng.f(6, 10), kind: 'drone', w: 0 }); }
   // maglev
   if (ctx.maglev) lanes.push({ ...resample(ctx.maglev.pts, true), speed: 58, kind: 'train', w: 0 });
   return lanes;
@@ -74,7 +77,7 @@ export function createTraffic(ctx, quality) {
   // distribute vehicles by lane length × weight
   const N = quality.traffic; let tw = 0; for (const l of lanes) tw += l.len * l.w;
   const inst = []; // lane, phase, speed, lateral, vertical, seed
-  lanes.forEach((l, r) => { if (l.kind === 'train') return; const n = Math.round((N * l.len * l.w) / tw); for (let i = 0; i < n; i++) inst.push(r, rng.next(), l.speed * rng.f(0.8, 1.25), rng.f(-2.2, 2.2) * (l.kind === 'ground' ? 0.5 : 1), l.kind === 'ground' ? 0 : rng.f(-3, 3), rng.next()); });
+  lanes.forEach((l, r) => { if (l.kind === 'train' || l.kind === 'drone') return; const n = Math.round((N * l.len * l.w) / tw); for (let i = 0; i < n; i++) inst.push(r, rng.next(), l.speed * rng.f(0.8, 1.25), rng.f(-2.2, 2.2) * (l.kind === 'ground' ? 0.5 : 1), l.kind === 'ground' ? 0 : rng.f(-3, 3), rng.next()); });
   const count = inst.length / 6;
   const group = new THREE.Group(); group.name = 'traffic';
   const uniforms = { ...U, uPaths: { value: tex }, uSamples: { value: SAMPLES }, uScale: { value: 600 } };
@@ -122,6 +125,9 @@ export function createTraffic(ctx, quality) {
       }`,
   });
   const body = new THREE.Mesh(mkInst(carGeo0, inst, count), bodyMat); body.frustumCulled = false; group.add(body);
+  { const dinst = []; let dl = 0; for (const l of lanes) if (l.kind === 'drone') dl += l.len; const ND = Math.round(N * 0.2);
+    lanes.forEach((l, r) => { if (l.kind !== 'drone') return; const n = Math.max(1, Math.round((ND * l.len) / Math.max(1, dl))); for (let i = 0; i < n; i++) dinst.push(r, rng.next(), l.speed * rng.f(0.8, 1.2), rng.f(-0.7, 0.7), rng.f(-1.4, 1.4), rng.next()); });
+    if (dinst.length) { const dB = new Batch(256); const dpn = new Pen(dB); dpn.at(0, 0, 0, 0); PROPS.drone(dpn); const drones = new THREE.Mesh(mkInst(dB.build(), dinst, dinst.length / 6), bodyMat); drones.frustumCulled = false; group.add(drones); } }
 
   // --- far lights: two points per vehicle (white ahead, red behind)
   const lg = new THREE.BufferGeometry(); const lp = new Float32Array(count * 2 * 3); const la = new Float32Array(count * 2 * 4), lb = new Float32Array(count * 2 * 3);

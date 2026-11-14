@@ -153,6 +153,33 @@ export const PROPS = {
     const fr = M(ST.COMPOSITE, { color: [0.12, 0.12, 0.14], flags: 8 }); pen.box(0, 0, 2.0, 0.6, 0, 2.2, { wall: fr, roof: fr });
     for (let i = 0; i < 7; i++) { pen.use(M(ST.LOUVER, { color: [0.3, 0.3, 0.34], flags: 8 })); pen.quad(-0.9, 0.2 + i * 0.28, 0.305, 0.9, 0.2 + i * 0.28, 0.305, 0.9, 0.42 + i * 0.28, 0.305, -0.9, 0.42 + i * 0.28, 0.305, 0, i, 1.8, i + 0.22); pen.use(K.emis(i % 3 === 0 ? [0.2, 1, 0.5] : [0.2, 0.8, 1], 6, i % 2 ? 2 : 0, false, i * 13)); pen.box(0.78, 0.31, 0.12, 0.02, 0.28 + i * 0.28, 0.32 + i * 0.28, {}); }
   },
+  // --- shopfront clutter + street tech ------------------------------------------------------
+  table(pen) { // plastic table with three stools: the pavement extension of every eatery
+    pen.use(M2(ST.PLASTER, [0.62, 0.2, 0.16])); pen.lathe(0, 0, [[0.42, 0.7], [0.44, 0.72], [0.42, 0.74]], 10, {}); pen.use(steel); pen.tube(0, 0, 0, 0, 0.7, 0, 0.04, 5); pen.lathe(0, 0, [[0.26, 0], [0.24, 0.03]], 8, {});
+    for (let i = 0; i < 3; i++) { const a = i * 2.094 + 0.5; pen.use(M2(ST.PLASTER, [0.2, 0.3, 0.46])); pen.lathe(Math.cos(a) * 0.74, Math.sin(a) * 0.74, [[0.15, 0], [0.13, 0.42], [0.17, 0.45], [0.15, 0.47]], 7, {}); }
+    pen.use(M2(ST.METAL, [0.5, 0.5, 0.52])); pen.lathe(0.12, 0.08, [[0.05, 0.74], [0.05, 0.86]], 5, {}); pen.use(white(2)); pen.lathe(-0.14, -0.06, [[0.04, 0.74], [0.035, 0.84]], 5, {});
+  },
+  aboard(pen) { // A-frame pavement sign with a lit, cycling face
+    pen.use(dk); pen.quad(-0.32, 0, 0.26, 0.32, 0, 0.26, 0.32, 1.05, 0.03, -0.32, 1.05, 0.03, 0, 0, 1, 1); pen.quad(0.32, 0, -0.26, -0.32, 0, -0.26, -0.32, 1.05, -0.03, 0.32, 1.05, -0.03, 0, 0, 1, 1);
+    pen.use({ st: ST.SCREEN, color: [1, 1, 1], seed: 31, cellW: 6, floorH: 9, extra: 12 }); pen.quad(-0.27, 0.12, 0.248, 0.27, 0.12, 0.248, 0.27, 0.98, 0.058, -0.27, 0.98, 0.058, 0, 0, 1, 1);
+  },
+  rackOut(pen) { // tiered display stand of crated goods
+    const fr = K.rust([0.3, 0.26, 0.22]); const cs = [[0.6, 0.2, 0.12], [0.62, 0.5, 0.14], [0.24, 0.42, 0.2], [0.5, 0.3, 0.4], [0.7, 0.62, 0.5]];
+    for (let i = 0; i < 3; i++) { const y = 0.35 + i * 0.36, z = 0.2 - i * 0.2; pen.box(0, z, 1.7, 0.42, y - 0.05, y, { wall: fr, roof: fr, bottom: fr });
+      for (let k = 0; k < 4; k++) { const c = cs[(i * 2 + k) % 5]; pen.box(-0.62 + k * 0.41, z, 0.36, 0.34, y, y + 0.2, { wall: M2(ST.PLASTER, c), roof: M2(ST.FABRIC, c) }); } }
+    pen.use(steel); for (const x of [-0.84, 0.84]) { pen.beam(x, 0, 0.4, x, 1.15, -0.25, 0.04, 0.04); pen.beam(x, 0, -0.3, x, 1.15, -0.25, 0.04, 0.04); }
+  },
+  bot(pen) { // pavement delivery robot
+    pen.use(K.metal([0.62, 0.64, 0.66])); pen.loft([{ y: 0.2, pts: rectPts(0.5, 0.74, 0, 0, 0.12) }, { y: 0.62, pts: rectPts(0.52, 0.76, 0, 0, 0.14) }, { y: 0.74, pts: rectPts(0.42, 0.62, 0, 0, 0.14) }], { roof: K.metal([0.3, 0.32, 0.36]), capBottom: true });
+    pen.use(dk); for (const [x, z] of [[-0.28, 0.26], [0.28, 0.26], [-0.28, 0], [0.28, 0], [-0.28, -0.26], [0.28, -0.26]]) pen.box(x, z, 0.07, 0.2, 0.0, 0.2, {});
+    pen.use(K.emis([0.3, 0.95, 1.0], 6)); pen.box(0, 0.385, 0.34, 0.02, 0.44, 0.52, {}); pen.use(steel); pen.tube(0.18, 0.72, -0.26, 0.18, 1.3, -0.26, 0.012, 3); pen.use(K.emis([1, 0.5, 0.1], 10, 2, false, 5)); pen.box(0.18, -0.26, 0.05, 0.05, 1.3, 1.36, {});
+  },
+  drone(pen) { // courier quad-rotor (flies the low lanes; see fx/traffic)
+    pen.use(K.metal([0.26, 0.28, 0.32])); pen.loft([{ y: -0.08, pts: rectPts(0.34, 0.5, 0, 0, 0.1) }, { y: 0.1, pts: rectPts(0.3, 0.44, 0, 0, 0.1) }], { roof: dk, capBottom: true });
+    for (const [x, z] of [[-0.5, 0.5], [0.5, 0.5], [-0.5, -0.5], [0.5, -0.5]]) { pen.use(steel); pen.beam(0, 0.04, 0, x, 0.1, z, 0.05, 0.04); pen.use(M2(ST.DARKGLASS, [0.3, 0.3, 0.34])); pen.lathe(x, z, [[0.3, 0.13], [0.02, 0.15]], 8, { cap: false }); pen.use(dk); pen.lathe(x, z, [[0.31, 0.09], [0.31, 0.15]], 8, { cap: false }); }
+    const bx = M2(ST.PLASTER, [0.5, 0.4, 0.26]); pen.box(0, 0, 0.36, 0.42, -0.4, -0.1, { wall: bx, roof: bx, bottom: bx });
+    pen.use(K.emis([0.2, 1, 0.4], 14, 2, false, 3)); pen.box(0, 0.27, 0.08, 0.04, 0.0, 0.06, {}); pen.use(K.emis([1, 0.1, 0.05], 14)); pen.box(0, -0.27, 0.08, 0.04, 0.0, 0.06, {});
+  },
   trash(pen) { for (const [x, z, r, c] of [[0, 0, 0.42, [0.1, 0.1, 0.12]], [0.6, 0.2, 0.36, [0.14, 0.14, 0.14]], [0.2, 0.55, 0.3, [0.3, 0.3, 0.32]], [-0.5, 0.3, 0.33, [0.1, 0.12, 0.1]]]) sphere(pen, x, r * 0.7, z, r, r * 0.75, 6, M2(ST.FABRIC, c), 3); pen.box(-0.2, -0.5, 0.6, 0.4, 0, 0.35, { wall: K.rust([0.36, 0.3, 0.22]), roof: K.rust([0.36, 0.3, 0.22]) }); },
 };
 

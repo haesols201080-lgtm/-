@@ -8,12 +8,12 @@ export const PRESETS = {
   medium: {
     name: 'medium', pixelRatio: 1, maxPixels: 1280 * 720, msaa: 0, density: 0.75, detailDist: 700, farChunkDist: 5200,
     cloudScale: 0.33, cloudSteps: 18, bloomMips: 5, probe: 1, probeSize: 96, shadows: 0, motionBlur: 0, ssao: 0,
-    traffic: 2200, crowd: 140, rain: 6000, godrays: 1, interiorMap: 1, far: 20000, localLights: 6,
+    traffic: 2200, crowd: 180, rain: 6000, godrays: 1, interiorMap: 1, far: 20000, localLights: 6,
   },
   high: {
     name: 'high', pixelRatio: 1, maxPixels: 1920 * 1080, msaa: 4, density: 1, detailDist: 1000, farChunkDist: 7000,
     cloudScale: 0.5, cloudSteps: 28, bloomMips: 6, probe: 1, probeSize: 128, shadows: 1, motionBlur: 1, ssao: 1,
-    traffic: 4200, crowd: 260, rain: 12000, godrays: 1, interiorMap: 1, far: 26000, localLights: 8,
+    traffic: 4200, crowd: 320, rain: 12000, godrays: 1, interiorMap: 1, far: 26000, localLights: 8,
   },
   ultra: {
     name: 'ultra', pixelRatio: 1.5, maxPixels: 2560 * 1440, msaa: 4, density: 1, detailDist: 1500, farChunkDist: 9000,

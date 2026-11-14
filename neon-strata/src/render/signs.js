@@ -313,6 +313,8 @@ export class SignAtlas {
   }
 
   pickH(rng) { return rng.pick(this.h); }
+  // kind: 0 store, 1 eatery, 2 tech, 3 clinic / salon
+  pickHKind(rng, kind) { if (!this._hk) { this._hk = [[], [], [], []]; for (const r of this.h) { const n = r.name || ''; const k = /국수|국밥|포차|분식|구이|치킨|만두|해장|꼬치|주점|다방|김밥|호프|식당|횟집|반찬/.test(n) ? 1 : /약국|의원|치과|세탁|이발|헤어|사우나|클리닉|안과|장기/.test(n) ? 3 : /정비|드론|기억|배터리|홀로|칩|전파|다이브|태양광|조명|환전|노래방/.test(n) ? 2 : 0; r.kind = k; this._hk[k].push(r); } } const a = this._hk[kind]; return a && a.length ? rng.pick(a) : rng.pick(this.h); }
   pickV(rng) { return rng.pick(this.v); }
   pickBB(rng) { return rng.pick(this.bb); }
   pickLogo(rng) { return rng.pick(this.sq); }

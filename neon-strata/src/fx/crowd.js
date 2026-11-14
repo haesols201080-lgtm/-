@@ -31,6 +31,8 @@ export class Crowd {
     // spatial index of walkways
     this.grid = new Map(); const cell = 160;
     city.ctx.walkways.forEach((w, i) => { let cx = 0, cz = 0; for (const p of w.pts) { cx += p[0]; cz += p[2]; } cx /= w.pts.length; cz /= w.pts.length; w.cx = cx; w.cz = cz; w.y = w.pts[0][1]; const k = Math.floor(cx / cell) * 1000 + Math.floor(cz / cell); (this.grid.get(k) || this.grid.set(k, []).get(k)).push(w); });
+    // lingering spots registered by the world (pavement tables, shopfronts, groups): spatial index
+    this.sgrid = new Map(); for (const s of city.ctx.spots || []) { const k = Math.floor(s.x / 80) * 1000 + Math.floor(s.z / 80); (this.sgrid.get(k) || this.sgrid.set(k, []).get(k)).push(s); } this.nStatic = 0;
     this.cell = cell; this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._p = new THREE.Vector3(); this._s = new THREE.Vector3(); this._up = new THREE.Vector3(0, 1, 0); this._c = new THREE.Color();
   }
   _near(x, y, z, R) {
@@ -43,23 +45,36 @@ export class Crowd {
     const w = rng.pick(near); if (rng.next() > (DENSITY[w.district] ?? 0.8) / 1.4) return;
     const n = w.pts.length; const seg = rng.i(0, w.closed ? n - 1 : n - 2); const t = rng.next();
     const a = w.pts[seg], b = w.pts[(seg + 1) % n]; const x = a[0] + (b[0] - a[0]) * t, z = a[2] + (b[2] - a[2]) * t; const d = Math.hypot(x - cam.x, z - cam.z);
-    if (d > 125 || (!initial && d < 26)) return;
+    if (d > 78 || (!initial && d < 22)) return;
     const variant = rng.i(0, VARIANTS.length - 1); if (this.agents.filter((g) => g.variant === variant).length >= this.per) return;
     const brisk = rng.chance(0.25);
     this.agents.push({ w, seg, t, dir: rng.sign(), lat: rng.f(-1.1, 1.1), variant, x, y: a[1], z, yaw: rng.f(0, 6.28), state: 0, timer: rng.f(6, 40), clip: brisk ? CLIP.brisk : CLIP.walk, clipB: CLIP.idle, blend: 0, phase: rng.next(), phaseB: rng.next(), sp: (brisk ? 1.25 : 1) * rng.f(0.85, 1.12), h: rng.f(0.93, 1.07),
       c0: rng.pick(TOPS), c1: rng.pick(BOTS), c2: rng.pick(HAIR), tone: rng.next(), umb: rng.chance(0.62), umbCol: rng.pick([[0.1, 0.1, 0.12], [0.1, 0.1, 0.12], [0.5, 0.52, 0.55], [0.6, 0.15, 0.2], [0.15, 0.4, 0.5]]), fade: 0 });
   }
+  _linger(cam, rain) {
+    const rng = this.rng; const cx = Math.floor(cam.x / 80), cz = Math.floor(cam.z / 80);
+    const a = this.sgrid.get((cx + rng.i(-1, 1)) * 1000 + cz + rng.i(-1, 1)); if (!a || !a.length) return;
+    const s = rng.pick(a); if (s.used || Math.abs(s.y - cam.y) > 30 || Math.hypot(s.x - cam.x, s.z - cam.z) > 105) return;
+    if (rain > 0.6 && s.sit && rng.chance(0.6)) return; // heavy rain empties the pavement tables
+    const variant = rng.i(0, VARIANTS.length - 1); if (this.agents.filter((g) => g.variant === variant).length >= this.per) return;
+    s.used = true; this.nStatic++;
+    const clip = s.sit ? CLIP.sit : s.clip === 'talk' ? CLIP.talk : s.clip === 'phone' ? CLIP.phone : s.clip === 'idle' ? CLIP.idle : rng.pick([CLIP.idle, CLIP.phone, CLIP.talk]);
+    this.agents.push({ spot: s, w: { pts: [[s.x, s.y, s.z]], indoor: false }, seg: 0, t: 0, dir: 1, lat: 0, variant, x: s.x, y: s.y, z: s.z, yaw: s.yaw, state: 2, timer: 1e9, clip, clipB: clip, blend: 0, phase: rng.next(), phaseB: rng.next(), sp: 1, h: rng.f(0.93, 1.07),
+      c0: rng.pick(TOPS), c1: rng.pick(BOTS), c2: rng.pick(HAIR), tone: rng.next(), umb: false, umbCol: [0.1, 0.1, 0.12], fade: 0 });
+  }
   update(dt, cam, rain = 0) {
     const A = this.agents; const stride = this.anim.stride;
-    const near = this._near(cam.x, cam.y, cam.z, 120);
-    for (let i = 0; i < 6 && A.length < this.max; i++) this._spawn(cam, near, this._init !== true);
+    for (let i = 0; i < 4 && A.length < this.max && this.nStatic < this.max * 0.42; i++) this._linger(cam, rain);
+    const near = this._near(cam.x, cam.y, cam.z, 70);
+    for (let i = 0; i < 8 && A.length < this.max; i++) this._spawn(cam, near, this._init !== true);
     this._init = true;
     const counts = this.meshes.map(() => 0); let nu = 0; const rainy = rain > 0.25;
     for (let i = A.length - 1; i >= 0; i--) {
       const g = A[i]; const d = Math.hypot(g.x - cam.x, g.z - cam.z);
-      if (d > 150 || Math.abs(g.y - cam.y) > 60) { A.splice(i, 1); continue; }
+      if (d > 108 || Math.abs(g.y - cam.y) > 60) { if (g.spot) { g.spot.used = false; this.nStatic--; } A.splice(i, 1); continue; }
       const pts = g.w.pts, n = pts.length;
-      if (g.state === 0) {
+      if (g.state === 2) { g.phase += dt / (g.clip === CLIP.talk ? 5 : g.clip === CLIP.sit ? 9 : 7.5); }
+      else if (g.state === 0) {
         const a = pts[g.seg], b = pts[(g.seg + 1) % n]; const L = Math.hypot(b[0] - a[0], b[2] - a[2]) || 1;
         const base = g.clip === CLIP.brisk ? stride[CLIP.brisk] : stride[CLIP.walk]; const v = (base / 1.05) * g.sp * g.h; // cycle = 1.05 s
         g.t += (g.dir * v * dt) / L; g.phase += (dt / 1.05) * g.sp;
@@ -74,7 +89,7 @@ export class Crowd {
         g.timer -= dt; if (g.timer <= 0) { g.state = 0; g.timer = this.rng.f(10, 50); }
       }
       // keep clear of the player
-      if (d < 0.9 && d > 1e-3) { g.x += ((g.x - cam.x) / d) * (0.9 - d); g.z += ((g.z - cam.z) / d) * (0.9 - d); }
+      if (g.state !== 2 && d < 0.9 && d > 1e-3) { g.x += ((g.x - cam.x) / d) * (0.9 - d); g.z += ((g.z - cam.z) / d) * (0.9 - d); }
       g.fade = Math.min(1, g.fade + dt * 2);
       const m = this.meshes[g.variant]; const k = counts[g.variant]++;
       this._q.setFromAxisAngle(this._up, g.yaw); this._s.set(g.h, g.h * g.fade, g.h); this._m.compose(this._p.set(g.x, g.y, g.z), this._q, this._s); m.setMatrixAt(k, this._m);

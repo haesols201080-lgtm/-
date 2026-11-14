@@ -68,7 +68,7 @@ export class Batch {
   }
 }
 
-export const isWindowStyle = (st) => st >= 10 && st <= 19 && st !== ST.MEGAHULL;
+export const isWindowStyle = (st) => (st >= 10 && st <= 19 && st !== ST.MEGAHULL) || st === ST.WIN_SHOP;
 export const M = (st, o = {}) => ({ st, ...o });
 
 let faceCounter = 1;

@@ -100,7 +100,7 @@ export class CityContext {
     this.chunks = new Map();
     this.named = new Map(); // big standalone batches (megastructures)
     this.pen = new Pen(null);
-    this.sparks = []; this.lights = []; this.props = {}; this.footprints = []; this.pois = []; this.lanes = []; this.spawns = []; this.emitters = []; this.walkways = []; this.steam = [];
+    this.sparks = []; this.lights = []; this.spots = []; this.marks = []; this.props = {}; this.footprints = []; this.pois = []; this.lanes = []; this.spawns = []; this.emitters = []; this.walkways = []; this.steam = [];
     this.stats = { buildings: 0 };
   }
   _chunk(x, z) {

@@ -13,7 +13,7 @@ export const ST = {
   CONCRETE: 0, METAL: 1, CORRUGATED: 2, DARKGLASS: 3, EMISSIVE: 4, SIGN: 5, ROAD: 6, PAVE: 7, RUST: 8, MIRROR: 9,
   WIN_RES: 10, WIN_OFFICE: 11, WIN_RIBBON: 12, WIN_SLIT: 13, WIN_CAPSULE: 14, MEGAHULL: 15, WIN_SHANTY: 16, WIN_LUX: 17,
   WIN_GROW: 18, WIN_INDUSTRIAL: 19, WATER: 20, FOLIAGE: 21, STONE: 22, HOLO: 23, TILE: 24, FABRIC: 25, PLASTER: 26,
-  COMPOSITE: 27, LOUVER: 28, SCREEN: 29,
+  COMPOSITE: 27, LOUVER: 28, SCREEN: 29, WIN_SHOP: 30,
   // legacy aliases
   WIN_PUNCH: 10, WIN_CURTAIN: 11, WIN_HIVE: 14, SHANTY: 16, LUXURY: 17, GROW: 18,
 };
@@ -156,6 +156,92 @@ vec3 nsRoom(vec2 p, vec3 vt, vec2 rs, float dep, float h1, float h2, float offic
   return col * I + vec3(em);
 }
 #endif
+#ifdef NS_INTERIOR
+// A trading shop seen through its glazing: shelving / kitchen pass / screen wall at the back, a counter or gondola
+// mid-room, lit ceiling, glossy floor and customers standing or seated at different depths (parallax correct).
+// kind: 0 store, 1 eatery, 2 tech, 3 clinic / salon. p in metres on the glass, rs = room width/height, dep = depth.
+float nsFigure(vec2 q, float hy){ // q: x from the body centre, y from the floor. returns coverage
+  float body = nsBoxD(q, vec2(-0.2, hy - 0.8), vec2(0.2, hy - 0.15), 0.09);
+  float legs = nsBoxD(q, vec2(-0.15, 0.0), vec2(0.15, hy - 0.72), 0.03);
+  float head = 0.115 - length((q - vec2(0.0, hy)) * vec2(1.0, 0.9));
+  return smoothstep(-0.012, 0.012, max(max(body, legs), head));
+}
+vec3 nsGoods(vec2 q, float h1, float sat){ // rows of products on shelves; q in metres
+  float sy = q.y / 0.42; float row = floor(sy); float fy = fract(sy);
+  float ix = floor(q.x / 0.23 + row * 0.37); float ih = nsHash(vec2(ix, row + h1 * 31.0)); float ih2 = nsHash(vec2(ix * 1.7 + 3.0, row));
+  vec3 item = mix(vec3(0.82), nsPalette(floor(ih * 9.99), ih2) * 0.6 + 0.22, sat);
+  float m = step(0.14, fy) * step(fy, 0.2 + 0.7 * ih2) * step(0.08, fract(q.x / 0.23 + row * 0.37)) * step(0.12, ih);
+  vec3 c = mix(vec3(0.07, 0.07, 0.08), item, m);
+  c = mix(c, vec3(0.9, 0.9, 0.85), step(fy, 0.1) * step(0.03, fy)); // lit price rail on the shelf edge
+  return c;
+}
+vec3 nsShop(vec2 p, vec3 vt, vec2 rs, float dep, float kind, float h1, float h2){
+  vec3 rd = vec3(vt.x, vt.y, max(-vt.z, 0.03));
+  rd.x = abs(rd.x) < 1e-4 ? 1e-4 : rd.x; rd.y = abs(rd.y) < 1e-4 ? 1e-4 : rd.y;
+  vec3 ro = vec3(clamp(p, vec2(0.01), rs - 0.01), 0.0);
+  vec3 inv = 1.0 / rd;
+  vec3 tm = max(-ro * inv, (vec3(rs, dep) - ro) * inv);
+  float t = min(tm.x, min(tm.y, tm.z));
+  vec3 hit = ro + rd * t;
+  bool food = kind > 0.5 && kind < 1.5; bool tech = kind > 1.5 && kind < 2.5; bool clin = kind > 2.5;
+  float sat = clin ? 0.3 : 1.0;
+  vec3 wallC = food ? vec3(0.42, 0.3, 0.2) : (tech ? vec3(0.16, 0.19, 0.24) : (clin ? vec3(0.7, 0.75, 0.73) : vec3(0.62, 0.6, 0.56)));
+  vec3 col; float em = 0.0;
+  if (tm.z <= tm.x && tm.z <= tm.y) {
+    col = wallC;
+    if (food) { // counter front, bright kitchen pass with a cook moving about, lit menu boards above
+      float passM = step(1.02, hit.y) * step(hit.y, 1.95) * step(0.5, hit.x) * step(hit.x, rs.x - 0.5);
+      float cook = nsFigure(vec2(hit.x - rs.x * (0.35 + 0.25 * sin(uTime * 0.31 + h1 * 9.0)), hit.y + 0.05), 1.6);
+      col = mix(col, mix(vec3(0.95, 0.8, 0.6), vec3(0.1, 0.08, 0.07), cook), passM); em += passM * (1.0 - cook) * 1.1;
+      float mx = fract(hit.x / 1.05); float menu = step(2.12, hit.y) * step(hit.y, 2.72) * step(0.06, mx) * step(mx, 0.94);
+      float txt = step(0.45, fract(hit.y * 11.0)) * step(nsHash(vec2(floor(hit.x / 1.05), floor(hit.y * 11.0))), 0.75) * step(0.14, mx) * step(mx, 0.86 - 0.4 * nsHash(vec2(floor(hit.y * 11.0), h1)));
+      col = mix(col, mix(vec3(0.95, 0.88, 0.7), vec3(0.2, 0.08, 0.05), txt), menu); em += menu * (1.0 - txt) * 0.9;
+      col = mix(col, vec3(0.2, 0.13, 0.09), step(hit.y, 1.0));
+    } else if (tech) { // wall of live screens
+      vec2 g = vec2(hit.x / 0.74, hit.y / 0.48); vec2 gi = floor(g); vec2 gf = fract(g);
+      float on = step(0.3, hit.y) * step(hit.y, 2.6) * step(0.07, gf.x) * step(gf.x, 0.93) * step(0.09, gf.y) * step(gf.y, 0.91);
+      float sh = nsHash(gi + h1 * 13.0); vec3 sc = nsPalette(sh < 0.5 ? 3.0 : (sh < 0.75 ? 2.0 : (sh < 0.9 ? 9.0 : 4.0)), sh);
+      float pic = 0.45 + 0.55 * nsHash(floor(gf * vec2(7.0, 5.0)) + gi * 3.0 + floor(uTime * (0.4 + sh)));
+      col = mix(col, sc * pic * 0.6, on * step(0.15, sh)); em += on * step(0.15, sh) * pic * 0.9;
+    } else {
+      float sh = step(0.2, hit.y) * step(hit.y, 2.32);
+      col = mix(col, nsGoods(hit.xy - vec2(0.0, 0.2), h1, sat), sh);
+      float band = step(2.42, hit.y) * step(hit.y, 2.8); col = mix(col, clin ? vec3(0.75, 1.0, 0.85) : vec3(1.0, 0.95, 0.85), band); em += band * 0.8;
+    }
+  } else if (tm.y < tm.x) {
+    if (rd.y > 0.0) { col = vec3(0.5); vec2 g = fract(vec2(hit.x / 1.7, hit.z / 1.5)); float pan = step(0.2, g.x) * step(g.x, 0.8) * step(0.38, g.y) * step(g.y, 0.62); em += pan * (food ? 2.0 : 3.2); }
+    else { col = food ? vec3(0.2, 0.15, 0.11) : (tech ? vec3(0.12, 0.13, 0.15) : vec3(0.4, 0.4, 0.42)); vec2 tl = fract(hit.xz / 0.6); col *= 0.82 + 0.18 * step(0.04, tl.x) * step(0.04, tl.y);
+      vec2 g = fract(vec2(hit.x / 1.7, hit.z / 1.5)); em += step(0.2, g.x) * step(g.x, 0.8) * step(0.3, g.y) * step(g.y, 0.7) * 0.22; }
+  } else {
+    col = wallC * 0.85;
+    if (!food) { float sh = step(0.2, hit.y) * step(hit.y, 2.32); col = mix(col, tech ? vec3(0.07, 0.08, 0.1) + nsPalette(3.0, 0.0) * 0.35 * step(0.86, nsHash(floor(vec2(hit.z / 0.3, hit.y / 0.3)) + h1)) : nsGoods(vec2(hit.z, hit.y - 0.2), h1 + 0.5, sat), sh); }
+    else { vec2 pq = (vec2(hit.z, hit.y) - vec2(dep * 0.3, 1.2)) / vec2(0.9, 1.2); float po = step(0.0, pq.x) * step(pq.x, 1.0) * step(0.0, pq.y) * step(pq.y, 1.0); col = mix(col, nsPalette(floor(h2 * 9.99), h1) * 0.4 + 0.3, po * 0.8); }
+  }
+  float I = 0.5 + 0.5 * clamp(hit.y / rs.y, 0.0, 1.0);
+  col = col * I + vec3(em);
+  // free-standing layers, far to near
+  float tk = dep * 0.62 / rd.z;
+  if (tk < t) { vec2 q = ro.xy + rd.xy * tk; float x0 = rs.x * 0.14, x1 = rs.x * (food ? 0.9 : 0.6); float hh = food ? 1.06 : (tech ? 0.92 : 1.42);
+    float m = step(x0, q.x) * step(q.x, x1) * step(q.y, hh);
+    vec3 c = food ? mix(vec3(0.16, 0.1, 0.07), vec3(0.5, 0.36, 0.24), step(hh - 0.07, q.y)) : (tech ? mix(vec3(0.1, 0.11, 0.13), vec3(0.3, 0.95, 1.0) * (0.5 + 0.5 * step(0.7, nsHash(vec2(floor(q.x / 0.4), h1)))), step(hh - 0.12, q.y) * step(0.3, fract(q.x / 0.4))) : nsGoods(q, h2, sat));
+    col = mix(col, c * 0.9, m); t = mix(t, tk, m); }
+  for (int i = 0; i < 3; i++) {
+    float fi = float(i); float ph = nsHash(vec2(fi * 3.1 + h1 * 17.0, h2 * 5.0));
+    if (ph < 0.38) continue;
+    float zk = dep * (food ? 0.5 : (0.44 - 0.12 * fi)); float tp = zk / rd.z;
+    if (tp >= t) continue;
+    vec2 q = ro.xy + rd.xy * tp;
+    float px = rs.x * (0.2 + 0.27 * fi + 0.1 * ph) + 0.1 * sin(uTime * (0.5 + ph) + fi * 2.1) + (food ? 0.0 : 0.5 * sin(uTime * 0.07 * (1.0 + ph) + ph * 30.0));
+    float hy = food ? 1.24 : 1.5 + 0.14 * ph;
+    float f = nsFigure(vec2(q.x - px, q.y), hy);
+    vec3 cloth = mix(vec3(0.035, 0.035, 0.045), nsPalette(floor(ph * 9.99), ph) * 0.09 + 0.03, 0.5) * (0.6 + 0.7 * clamp(q.y / hy, 0.0, 1.0));
+    cloth = mix(cloth, vec3(0.2, 0.15, 0.12), smoothstep(0.012, 0.0, abs(length((q - vec2(px, hy)) * vec2(1.0, 0.9)) - 0.06)) * 0.0);
+    cloth = mix(cloth, vec3(0.04, 0.03, 0.03), step(hy - 0.02, q.y)); // hair
+    col = mix(col, cloth, f);
+  }
+  return col;
+}
+#endif
 float nsRipple(vec2 p, float t){
   vec2 c = floor(p); vec2 f = fract(p) - 0.5;
   float h = nsHash(c);
@@ -189,7 +275,7 @@ const FRAG_SURFACE = /* glsl */ `
   float night = uNight;
   vec2 hm = abs(wN.y) > 0.7 ? vWPos.xz : vFUv; // metres on the surface
 
-  if (st >= 10 && st <= 19 && st != 15) {
+  if ((st >= 10 && st <= 19 && st != 15) || st == 30) {
     // ================================================================== windowed facades
     vec2 cs = max(vStyle2.xy * 0.1, vec2(0.6));
     vec2 uvc = vFUv; vec2 cell = floor(uvc); vec2 f = fract(uvc);
@@ -215,6 +301,7 @@ const FRAG_SURFACE = /* glsl */ `
     else if (st == 16) { hasWin = step(h3, 0.5); float ww = mix(0.7, 1.4, h1); float wh = mix(0.6, 1.15, h2); o0 = vec2(mix(0.3, max(0.3, cs.x - ww - 0.3), h2), mix(0.95, max(0.95, cs.y - wh - 0.45), h1)); o1 = o0 + vec2(ww, wh); D = 0.1; pd = vec2(1.0 + step(0.5, h2), 1.0); }
     else if (st == 17) { o0 = vec2(0.12, 0.1); o1 = vec2(cs.x - 0.12, cs.y - 0.42); D = 0.3; fw = 0.04; pd = vec2(2.0, 1.0); glassRough = 0.03; }
     else if (st == 18) { o0 = vec2(0.08, 0.2); o1 = cs - vec2(0.08, 0.15); D = 0.1; pd = vec2(3.0, 2.0); fw = 0.04; litBoost = 1.6; }
+    else if (st == 30) { o0 = vec2(-0.3, 0.3); o1 = vec2(cs.x + 0.3, cs.y - 0.07); D = 0.09; fw = 0.04; pd = vec2(1.0); glassRough = 0.035; }
     else { o0 = vec2(0.4, 1.1); o1 = cs - vec2(0.4, 0.5); D = 0.14; pd = max(vec2(1.0), floor((o1 - o0) / vec2(0.55, 0.62))); fw = 0.028; }
 
     float fwc = max(fwidth(uvc).x, fwidth(uvc).y);
@@ -323,6 +410,8 @@ const FRAG_SURFACE = /* glsl */ `
     if (st == 18) { float gz = nsHash(vec2(floor(cell.y / 2.0), seed + 3.0)); float gx = nsHash(vec2(floor(cell.x / 7.0), floor(cell.y / 2.0) + seed));
       lc = gz < 0.62 ? mix(vec3(1.0, 0.62, 0.26), vec3(1.0, 0.78, 0.48), h2) : mix(vec3(1.0, 0.36, 0.62), vec3(0.86, 0.42, 0.9), h2);
       growOn = step(0.3, gx) * step(gz, 0.86); lit = step(h1, 0.93) * growOn; inten = 0.85 * mix(0.6, 1.0, night); floorE = growOn; }
+    float shopK = floor(pB / 16.0 + 0.01);
+    if (st == 30) { lc = shopK < 0.5 ? vec3(1.0, 0.96, 0.88) : (shopK < 1.5 ? vec3(1.0, 0.78, 0.52) : (shopK < 2.5 ? vec3(0.76, 0.9, 1.0) : vec3(0.9, 1.0, 0.95))); lit = 1.0; inten = 1.05 * mix(0.8, 1.0, night); floorE = 1.0; tv = 0.0; }
     if (st == 19) { lit = step(nsHash(floor(cell / vec2(3.0, 1.0)) + seed), litRatio); lc = h3 > 0.75 ? vec3(1.0, 0.3, 0.06) : vec3(1.0, 0.8, 0.55); inten = 0.9 * mix(0.5, 1.0, night); floorE = litRatio * 0.6; }
     if (tv > 0.5) { lc = mix(lc, vec3(0.35, 0.6, 1.0), 0.75); inten *= 0.45 + 0.4 * nsHash(vec2(floor(uTime * 6.0 + h2 * 9.0), h1)); }
 
@@ -340,6 +429,17 @@ const FRAG_SURFACE = /* glsl */ `
       float frame = 1.0 - smoothstep(fw * 0.5, fw * 0.5 + aa, min(pdist.x, pdist.y));
       frame = max(frame, 1.0 - smoothstep(fw, fw + aa, dIn));
       if (st == 12) { float bx = fract(fg.x / cs.x); frame = max(frame, 1.0 - smoothstep(0.03, 0.03 + aa, min(bx, 1.0 - bx) * cs.x)); }
+      float poster = 0.0; vec3 posterC = vec3(0.0);
+      if (st == 30) { // shopfront: mullions, transom, a door leaf in the last bay, posters stuck to the glass
+        float bx = fract(fg.x / cs.x) * cs.x; float mull = 1.0 - smoothstep(0.035, 0.035 + aa, min(bx, cs.x - bx));
+        float trans = (1.0 - smoothstep(0.03, 0.03 + aa, abs(fg.y - 2.5))) * step(3.1, cs.y);
+        frame = max(frame, max(mull, trans));
+        float nb = max(1.0, mod(pB, 16.0)); float bay = cell.x - floor(cell.x / 16.0) * 16.0; float dx = abs(bx - cs.x * 0.5); float dwid = min(0.95, cs.x * 0.5 - 0.3);
+        if (bay > nb - 1.5) { float leaf = 1.0 - smoothstep(0.03, 0.03 + aa, abs(dx - dwid)); float bar = (1.0 - smoothstep(0.022, 0.022 + aa, abs(fg.y - 1.06))) * step(dx, dwid) * step(0.1, dx); frame = max(frame, max(leaf, bar) * step(fg.y, 2.5)); }
+        else if (h1 > 0.42) { vec2 pq = (vec2(bx, fg.y) - vec2(0.3 + 0.5 * h2, 0.5 + 0.7 * h3)) / vec2(0.5 + 0.3 * h3, 0.72); float pm = step(0.0, pq.x) * step(pq.x, 1.0) * step(0.0, pq.y) * step(pq.y, 1.0);
+          float ln = step(0.5, fract(pq.y * 8.0)) * step(0.12, pq.x) * step(pq.x, 0.5 + 0.4 * nsHash(vec2(floor(pq.y * 8.0), h1))) * step(pq.y, 0.62); float hd = step(0.68, pq.y) * step(pq.y, 0.92) * step(0.1, pq.x) * step(pq.x, 0.9);
+          poster = pm; posterC = mix(mix(vec3(0.92, 0.9, 0.82), nsPalette(floor(h3 * 9.99), h1) * 0.7 + 0.2, step(0.6, h2)), vec3(0.1), max(ln, hd * step(h2, 0.6))); posterC = mix(posterC, vec3(0.95, 0.2, 0.12), hd * step(0.6, h2) * 0.0); }
+      }
       vec3 frameCol = st == 17 ? vec3(0.5, 0.36, 0.18) : mix(vec3(0.05), vec3(0.55), step(0.6, hb) * (1.0 - office));
       // curtains / blinds state for this room
       float cst = nsHash(cell * 0.37 + seed * 0.61 + 1.7);
@@ -347,20 +447,23 @@ const FRAG_SURFACE = /* glsl */ `
       float sheer = (cst >= 0.56 && cst < 0.74) ? 1.0 : 0.0;
       float blind = (cst >= 0.74 && cst < 0.9) ? step(gu.y, 1.0) * step(1.0 - (0.35 + 0.65 * h3), gu.y) : 0.0;
       float black = cst >= 0.9 ? 1.0 : 0.0;
-      if (office > 0.5 || st == 18 || st == 19 || st == 13) { side = 0.0; sheer = 0.0; black = 0.0; blind *= step(0.8, cst) * office; }
+      if (office > 0.5 || st == 18 || st == 19 || st == 13 || st == 30) { side = 0.0; sheer = 0.0; black = 0.0; blind *= step(0.8, cst) * office; }
       float folds = 0.75 + 0.25 * sin(gu.x * (o1.x - o0.x) * 34.0 + h1 * 6.0);
       float slats = 0.55 + 0.45 * step(0.35, fract(gu.y * (o1.y - o0.y) * 22.0));
       vec3 cloth = mix(vec3(0.75, 0.7, 0.62), nsPalette(floor(h3 * 9.99), h1) * 0.45 + 0.3, step(0.6, h2) * 0.6);
       // interior
       vec3 room = vec3(0.0); vec3 inner = vec3(0.012, 0.013, 0.016);
       #ifdef NS_INTERIOR
-        float rs = roomSpan; float ri = floor(cell.x / rs);
-        vec2 rp = vec2((cell.x - ri * rs) * cs.x + fg.x, fg.y - 0.02);
+        float rs = roomSpan; float ri = floor(cell.x / rs); float rw = rs;
+        if (st == 30) { rs = max(1.0, mod(pB, 16.0)); ri = floor(cell.x / 16.0); rw = 16.0; }
+        vec2 rp = vec2((cell.x - ri * rw) * cs.x + fg.x, fg.y - 0.02);
         float rh1 = nsHash(vec2(ri, cell.y) + seed * 7.31), rh2 = nsHash(vec2(ri, cell.y) * 1.73 + seed * 3.17 + 11.0);
-        vec3 rc = nsRoom(rp, vt, vec2(cs.x * rs, cs.y - 0.3), mix(3.2, 5.5, rh2) * (1.0 + office * 2.0), rh1, rh2, office);
+        vec3 rc;
+        if (st == 30) rc = nsShop(rp, vt, vec2(cs.x * rs, cs.y - 0.14), mix(5.0, 7.5, rh2), shopK, rh1, rh2);
+        else rc = nsRoom(rp, vt, vec2(cs.x * rs, cs.y - 0.3), mix(3.2, 5.5, rh2) * (1.0 + office * 2.0), rh1, rh2, office);
         if (st == 18) { float rack = smoothstep(0.12, 0.0, abs(fract(fg.y * 2.2 + rc.r) - 0.5) - 0.28); rc = mix(vec3(0.08, 0.4, 0.1), vec3(1.4), rack); }
         // occasional silhouette of someone at the window
-        float person = step(0.93, h1) * (1.0 - office);
+        float person = step(0.93, h1) * (1.0 - office) * (st == 30 ? 0.0 : 1.0);
         vec2 pp = (fg - vec2(mix(o0.x, o1.x, 0.3 + 0.4 * h3), o0.y)) / vec2(0.26, 0.95);
         float sil = person * smoothstep(1.0, 0.85, length(vec2(pp.x, max(pp.y - 0.55, 0.0) * 1.9)) + step(pp.y, 0.0) * 9.0) ;
         rc *= 1.0 - 0.9 * sil;
@@ -376,6 +479,7 @@ const FRAG_SURFACE = /* glsl */ `
       vec3 gEm = mix(room, coverEm, cover);
       float dirt = gr.g * 0.5 + gr.b * 0.5;
       float gR = glassRough + 0.22 * dirt * dirt;
+      gAlb = mix(gAlb, posterC * 0.5, poster); gEm = mix(gEm, posterC * lc * inten * 0.32, poster); gR = mix(gR, 0.5, poster);
       // frames on top
       gAlb = mix(gAlb, frameCol, frame); gEm *= 1.0 - frame; gR = mix(gR, 0.4, frame); float gM = frame * 0.7;
       // balcony rail in front of the recess (wall plane)
@@ -398,6 +502,7 @@ const FRAG_SURFACE = /* glsl */ `
     if (office > 0.5) { float e = mix(floorE, litRatio * 0.75, smoothstep(0.45, 1.3, fwy)); avgEmis = lc * e * 0.36 * areaF * (1.0 - mech) * mix(0.5, 1.0, night) * litBoost * mix(1.0, clus, 0.7); }
     else avgEmis = mix(vec3(1.0, 0.76, 0.5), lc, 0.3) * floorE * 0.44 * areaF * clus * mix(0.5, 1.0, night) * litBoost;
     if (st == 18) avgEmis = lc * 0.34 * areaF * growOn * mix(0.6, 1.0, night);
+    if (st == 30) avgEmis = lc * 0.5 * areaF * mix(0.7, 1.0, night);
     albedo = mix(albedo, mix(wallAlb, glassTint + 0.01, areaF), lod);
     rough = mix(rough, mix(wallRough, 0.15, areaF), lod); metal = mix(metal, wallMetal * (1.0 - areaF), lod);
     emis = mix(emis, avgEmis, lod);

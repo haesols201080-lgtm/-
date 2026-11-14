@@ -3,7 +3,7 @@
 import { ST, PAL, WK } from '../render/cityMaterial.js';
 import { M } from './builder.js';
 import * as K from './kit.js';
-import { subdivide } from './plan.js';
+import { subdivide, DPLAN } from './plan.js';
 import { shopHouse, tenement, techTower, megaTower, ROOF_LOW, ROOF_TECH } from './buildings.js';
 import { capsuleBlock, terrace, guildHouse, archiveSpire, factory, depot, farmTower, plaza } from './buildings2.js';
 import { clamp } from '../core/rng.js';
@@ -37,13 +37,20 @@ function skyline(b, rng) {
   return 40;
 }
 
+const ZEBRA = M(ST.PLASTER, { color: [0.6, 0.6, 0.58], seed: 3 });
 function streetscape(ctx, rng, b, S) {
   // lamps on the kerb line, arms over the carriageway; furniture in between on a slot grid along each side
   const hw = b.w / 2, hd = b.d / 2; const inset = 0.9;
   const sides = [[-hw, hd - inset, hw, hd - inset, 0], [hw - inset, hd, hw - inset, -hd, Math.PI / 2], [hw, -hd + inset, -hw, -hd + inset, Math.PI], [-hw + inset, -hd, -hw + inset, hd, -Math.PI / 2]];
+  const prime0 = b.edge && (b.edge.inner || b.edge.outer || b.edge.left || b.edge.right); const stW = (DPLAN[b.district] || {}).sw || 12; let si = -1;
   for (const [x0, z0, x1, z1, ang] of sides) {
-    const L = Math.hypot(x1 - x0, z1 - z0); const n = Math.max(1, Math.round(L / 34)); const slots = Math.floor(L / 5.5);
-    const lampSlots = new Set();
+    const L = Math.hypot(x1 - x0, z1 - z0); si++;
+    // zebra crossings at the block corners (two of the four sides, so neighbouring blocks never double up)
+    if (si < 2 && !prime0 && L > 34 && stW <= 22) for (const tt of [5.5 / L, 1 - 5.5 / L]) {
+      const [zx, zz] = b.at(x0 + (x1 - x0) * tt + Math.sin(ang) * inset, z0 + (z1 - z0) * tt + Math.cos(ang) * inset);
+      const zp = ctx.penAt(zx, 0, zz, b.yaw + ang); ctx.detail(); zp.use(ZEBRA); for (let q = 0.7; q < stW - 0.9; q += 1.0) zp.flat(-1.7, q, 1.7, q + 0.5, 0.03); ctx.main();
+    } const n = Math.max(1, Math.round(L / 34)); const slots = Math.floor(L / 5.5);
+    const lampSlots = new Set(); const poles = [];
     for (let i = 0; i < n; i++) {
       const t = (i + 0.5) / n; const lx = x0 + (x1 - x0) * t, lz = z0 + (z1 - z0) * t; const [wx, wz] = b.at(lx, lz);
       ctx.prop(S.lamp, wx, 0.2, wz, b.yaw + ang, 1, S.lampTint);
@@ -51,8 +58,20 @@ function streetscape(ctx, rng, b, S) {
       const [gx, gz] = b.at(lx + Math.sin(ang) * reach, lz + Math.cos(ang) * reach);
       ctx.glowAt(gx, gz).cone(gx, 0.2 + hgt, gz, 0, -1, 0, hgt, 0.3, hgt * 0.62, S.lampCol, 0.13, { segs: 8, seed: (i * 7 + b.id) % 50 });
       ctx.light(gx, gz, S.lamp === 'lampA' ? 26 : 17, S.lampCol, 0.8, hgt);
-      lampSlots.add(Math.floor(t * slots));
+      lampSlots.add(Math.floor(t * slots)); poles.push([wx, wz]);
     }
+    // utility poles carry the district's wiring: sagging runs from pole to pole
+    if (S.lamp === 'lampB') for (let i = 0; i + 1 < poles.length; i++) {
+      const A = poles[i], Bp = poles[i + 1]; const dx = Bp[0] - A[0], dz = Bp[1] - A[1]; const L = Math.hypot(dx, dz); if (L < 6 || L > 60) continue;
+      const pen = ctx.penAt(A[0], 0.2, A[1], 0); ctx.detail(); pen.use(K.dark(0.05));
+      for (const [off, y0] of [[-0.95, 8.25], [0.95, 8.25], [0.1, 7.45]]) { const nx = (-dz / L) * off, nz = (dx / L) * off; const sag = 0.35 + L * 0.03 + Math.abs(off) * 0.1; let px = nx, py = y0, pz = nz; for (let k = 1; k <= 4; k++) { const t = k / 4; const x = dx * t + nx, z = dz * t + nz, y = y0 - sag * 4 * t * (1 - t); pen.tube(px, py, pz, x, y, z, 0.022, 3); px = x; py = y; pz = z; } }
+      ctx.main();
+    }
+    // kerbside: parked hover cars on the carriageway, scooters lined up on the pavement edge
+    { const pk = { sump: 0.1, oldq: 0.13, lumina: 0.17, hive: 0.11, meridian: 0.09, foundry: 0.04, port: 0.04 }[b.district] || 0; const ps = Math.floor(L / 6.4);
+      for (let s = 1; s < ps - 1; s++) { const t = (s + 0.5) / ps; const bx = x0 + (x1 - x0) * t, bz = z0 + (z1 - z0) * t;
+        if (rng.chance(pk)) { const [wx, wz] = b.at(bx + Math.sin(ang) * 2.35, bz + Math.cos(ang) * 2.35); const yaw = b.yaw + ang + (rng.chance(0.5) ? 1.5708 : -1.5708) + rng.f(-0.04, 0.04); ctx.prop('hovercar', wx, 0.0, wz, yaw, rng.f(0.92, 1.08), [rng.f(0.5, 1.5), rng.f(0.5, 1.4), rng.f(0.5, 1.5)]); ctx.phys.addBox(wx, wz, 1.0, 2.3, yaw, 0, 1.4); }
+        else if (b.walk >= 3 && rng.chance(pk * 0.45)) { const nS = rng.i(2, 4); for (let q = 0; q < nS; q++) { const [wx, wz] = b.at(bx + Math.cos(ang) * q * 0.62 - Math.sin(ang) * 0.5, bz - Math.sin(ang) * q * 0.62 - Math.cos(ang) * 0.5); ctx.prop('scooter', wx, 0.2, wz, b.yaw + ang + 0.25 + rng.f(-0.12, 0.12), 1, [rng.f(0.6, 1.6), rng.f(0.6, 1.4), rng.f(0.6, 1.5)]); } } } }
     if (b.walk < 3.4) continue; // too narrow for furniture
     for (let s = 1; s < slots - 1; s++) {
       if (lampSlots.has(s) || !rng.chance(0.2 * ctx.density)) continue;
@@ -62,6 +81,27 @@ function streetscape(ctx, rng, b, S) {
       if (name === 'vending' || name === 'kiosk') ctx.light(wx, wz, 7, name === 'kiosk' ? NE.cyan : NE.white, 0.4, 1.5);
       if (name !== 'bollard' && name !== 'bin') ctx.phys.addCyl(wx, wz, name === 'tree' ? 0.3 : 0.55, 0.2, name === 'tree' ? 3 : 1.2);
     }
+  }
+}
+
+
+// smart-street gantries: a truss across the carriageway carrying a ticker board, downlights and signal lamps.
+// They put structure over the player's head and tell you the street is managed by something.
+function gantries(ctx, rng) {
+  for (const s of ctx.streets || []) {
+    if (!['sump', 'lumina', 'oldq', 'hive', 'meridian'].includes(s.district) || s.w < 8 || !rng.chance(0.6)) continue;
+    const n = s.pts.length; const i = Math.min(n - 2, Math.floor((n - 1) * rng.f(0.25, 0.7))); const a = s.pts[i], b = s.pts[i + 1]; const t = n === 2 ? rng.f(0.25, 0.75) : 0.5;
+    const x = a[0] + (b[0] - a[0]) * t, z = a[1] + (b[1] - a[1]) * t; const dx = b[0] - a[0], dz = b[1] - a[1]; if (Math.hypot(dx, dz) < 1) continue;
+    const hw = s.w / 2 + 0.7, H = s.w > 16 ? 8.2 : 6.6; const pen = ctx.penAt(x, 0.2, z, Math.atan2(dx, dz)); ctx.detail();
+    { const l = Math.hypot(dx, dz); ctx.marks.push({ type: 'gantry', x: x + (dz / l) * 3, z: z - (dx / l) * 3, doorX: x, doorZ: z }); }
+    pen.use(K.MAT_POLE); for (const sx of [-1, 1]) { pen.box(sx * hw, 0, 0.34, 0.34, 0, H + 0.9, {}); pen.box(sx * hw, 0, 0.62, 0.62, 0, 0.5, {}); pen.beam(sx * hw, H - 1.7, 0, sx * (hw - 1.7), H, 0, 0.12, 0.12); ctx.solidCyl(sx * hw, 0, 0.3, 0, H); }
+    pen.box(0, 0, hw * 2, 0.3, H, H + 0.16, {}); pen.box(0, 0, hw * 2, 0.3, H + 0.74, H + 0.9, {}); for (let q = -hw + 0.6; q < hw - 0.6; q += 1.2) pen.beam(q, H + 0.16, 0, q + 0.6, H + 0.74, 0, 0.06, 0.06);
+    const tk = ctx.atlas.tick; const bw = Math.min(hw * 1.1, 9);
+    if (tk && tk.length) { const r = rng.pick(tk); const frac = Math.min(1, bw / 0.62 / (r.aspect || 40)); const u0 = r.u0 + (r.u1 - r.u0) * rng.f(0, 1 - frac); const part = { u0, v0: r.v0, u1: u0 + (r.u1 - r.u0) * frac, v1: r.v1 };
+      pen.use(K.dark(0.05)); pen.box(0, 0, bw + 0.3, 0.2, H - 0.82, H - 0.04, {}); pen.sign(0, H - 0.43, 0.115, 0, bw, 0.62, part, { intensity: 3.6, seed: rng.i(0, 255) }); pen.sign(0, H - 0.43, -0.115, Math.PI, bw, 0.62, part, { intensity: 3.6, seed: rng.i(0, 255) }); }
+    pen.use(K.emis([0.85, 0.95, 1], 10)); for (const q of [-hw * 0.82, hw * 0.82]) { pen.box(q, 0, 0.6, 0.24, H - 0.07, H, {}); ctx.light(pen.wx(q, 0), pen.wz(q, 0), 15, [0.85, 0.95, 1], 0.7, 0.2 + H - 0.2); }
+    for (const sx of [-1, 1]) { pen.use(K.emis(sx > 0 ? [0.2, 1, 0.45] : [1, 0.25, 0.1], 9, 2, false, rng.i(0, 255))); pen.box(sx * hw, 0.2, 0.16, 0.08, 3.0, 3.16, {}); pen.box(sx * hw, -0.2, 0.16, 0.08, 3.0, 3.16, {}); }
+    ctx.main();
   }
 }
 
@@ -116,5 +156,6 @@ export function buildDistricts(ctx) {
     }
     const t = tally[b.district] || (tally[b.district] = { blocks: 0, bld: 0, verts: 0 }); t.blocks++; t.bld += ctx.stats.buildings - b0; t.verts += countV() - v0;
   }
+  gantries(ctx, rng0.fork('gantry'));
   console.log('[NS] tally ' + Object.entries(tally).map(([k, t]) => `${k}: ${t.blocks}blk ${t.bld}bld ${(t.verts / 1e6).toFixed(2)}Mv`).join(' | '));
 }
