@@ -33,6 +33,8 @@ export const ITEMS = {
   delicacy: { name: '온실 과일', desc: '돔 과수원에서 기른 신선한 과일.', color: '#ff9a3c', shape: 'fruit' },
   methane: { name: '메탄', desc: '사바티에 반응기에서 대기의 이산화탄소와 물로 만든 액화 메탄. 발전소와 로켓의 연료.', color: '#7fc4ff', shape: 'canister' },
   polymer: { name: '폴리머', desc: '메탄에서 뽑은 플라스틱 펠릿. 큰 건물의 내장재와 막 구조에 쓴다.', color: '#e8e0c8', shape: 'pellets' },
+  steel: { name: '강철', desc: '메탄으로 철광석을 직접 환원해 만든 고강도 강재. 거대 설비의 뼈대.', color: '#7d8a99', shape: 'ingot' },
+  robot: { name: '작업 로봇', desc: '창고에 있는 로봇 하나가 일손이 모자란 시설의 일자리 하나를 채웁니다.', color: '#ffb347', shape: 'bot' },
 };
 
 export const RECIPES = [
@@ -54,6 +56,8 @@ export const RECIPES = [
   { id: 'delicacy', out: { delicacy: 2 }, in: { fertilizer: 1, water: 2 }, time: 12, name: '온실 과일', research: 'r_agri', factoryOnly: true },
   { id: 'methane', out: { methane: 1 }, in: { water: 2 }, time: 24, name: '메탄', research: 'r_isru', factoryOnly: true },
   { id: 'polymer', out: { polymer: 2 }, in: { methane: 1, water: 1 }, time: 10, name: '폴리머', research: 'r_chem', factoryOnly: true },
+  { id: 'steel', out: { steel: 2 }, in: { iron: 3, methane: 1 }, time: 12, name: '강철', research: 'r_steel', factoryOnly: true },
+  { id: 'robot', out: { robot: 1 }, in: { electronics: 1, steel: 1, battery: 1 }, time: 30, name: '작업 로봇', research: 'r_robotics', factoryOnly: true },
 ];
 
 // Terraforming stages (Ti thresholds). Structure follows The Planet Crafter's
@@ -299,6 +303,47 @@ export const BUILDINGS = {
   spa: { name: '온천 스파', cat: 'civic', size: [8, 8], cost: { plate: 4, glass: 6, credits: 120 }, power: -3, desc: '데운 물에 몸을 담그는 스파. 반경 50m 주민 행복도가 4% 오르고, 물을 분당 2개 씁니다.', workers: ['settler', 2], service: 'spa', radius: 50, unlockStage: 'water', research: 'r_leisure' },
   stadium: { name: '경기장', cat: 'civic', size: [16, 16], apron: 3, cost: { plate: 16, glass: 8, polymer: 8, lightalloy: 6, credits: 500 }, power: -8, desc: '경기와 공연이 열리는 경기장. 반경 120m 주민 행복도가 6% 오르고, 관중이 분당 15 크레딧을 남깁니다.', workers: ['citizen', 6], service: 'stadium', radius: 120, research: 'r_arena' },
   hotel: { name: '관광 호텔', cat: 'civic', size: [10, 8], cost: { plate: 8, glass: 8, polymer: 2, credits: 250 }, power: -4, desc: '행성을 보러 온 관광객을 받습니다. 반경 150m 안의 볼거리(공원·기념탑·경기장·보호구역·스파·천문대·문화 센터)마다 분당 4 크레딧, 테라포밍이 진행될수록 손님이 늘어납니다.', workers: ['artisan', 3], hotel: 150, research: 'r_tourism' },
+  // ---- third wave: regional harvesters, automation, big power, weather work
+  garage: { name: '로버 정비고', cat: 'base', size: [6, 6], cost: { plate: 6, alloy: 2, wire: 2 }, power: -2, desc: '탐사 로버를 정비하고 개조합니다. 정비고가 돌아가는 동안 로버의 최고 속도가 30% 오릅니다.', garage: 1.3, research: 'r_rover' },
+  hydro: { name: '소수력 발전소', cat: 'power', size: [6, 6], cost: { plate: 8, alloy: 4, wire: 6 }, power: 30, desc: '호수(수심 0.5~8m)에 세우는 소수력 발전소. 물이 흐르는 한 밤낮 없이 30 kW를 냅니다. 호수 단계부터 지을 수 있습니다.', water: true, unlockStage: 'lakes', research: 'r_hydro' },
+  fusion: { name: '핵융합로', cat: 'power', size: [10, 10], cost: { steel: 20, electronics: 10, circuit: 12, alloy: 10 }, power: 150, desc: '물에서 뽑은 중수소로 핵융합을 일으켜 150 kW를 냅니다(30초에 물 1개). 자기권 발생기와 궤도 엘리베이터를 함께 돌릴 수 있는 힘.', fuel: 'water', fuelTime: 30, research: 'r_fusion' },
+  rectenna: { name: '궤도 태양광 수신소', cat: 'power', size: [12, 12], cost: { steel: 10, circuit: 8, wire: 12, glass: 4 }, power: 45, desc: '궤도의 태양광 위성이 쏘는 마이크로파를 받아 밤낮 없이 45 kW를 냅니다. 우주 발사장이나 궤도 엘리베이터가 돌아가야 위성이 올라갑니다.', orbit: true, research: 'r_spacesolar' },
+  substation: { name: '고압 변전소', cat: 'power', size: [4, 4], cost: { plate: 4, wire: 8, circuit: 1 }, desc: '전력망을 70m 거리까지 잇는 고압 변전소. 멀리 떨어진 기지와 발전소를 한 전력망으로 묶습니다.', research: 'r_grid' },
+
+  polarmelter: { name: '극관 승화 기지', cat: 'terra', size: [6, 6], cost: { plate: 6, alloy: 3, circuit: 2 }, power: -8, terra: { pressure: 140, heat: 30 }, desc: '극관에 검은 먼지를 뿌리고 반사판으로 햇빛을 모아 얼어 있던 이산화탄소를 승화시킵니다. 극지 빙원에서는 기압을 크게 올리지만, 다른 곳에서는 4분의 1만 냅니다.', region: 'glacier', research: 'r_polar' },
+  cloudseeder: { name: '인공 강우 기지', cat: 'terra', size: [5, 5], cost: { plate: 4, alloy: 2, silicon: 4 }, power: -4, desc: '요오드화은 로켓을 구름 속에 쏘아 비를 부릅니다. 켜져 있으면 비 오는 날이 세 배 잦아지고, 비가 내리는 동안 바이오매스가 초당 50씩 늘어납니다.', rainmaker: 50, unlockStage: 'clouds', research: 'r_weather' },
+  dunefixer: { name: '모래 고정 기지', cat: 'terra', size: [5, 5], cost: { plate: 3, seeds: 4, silicon: 2 }, power: -2, terra: { biomass: 10 }, desc: '모래 언덕에 풀과 그물을 심어 모래를 붙잡습니다. 켜져 있으면 먼지 폭풍과 먼지 회오리가 절반으로 줄어듭니다.', dunefix: true, unlockStage: 'moss', research: 'r_weather' },
+  soilfactory: { name: '토양 공장', cat: 'terra', size: [6, 6], cost: { plate: 6, glass: 2, seeds: 2 }, power: -4, terra: { biomass: 120, oxygen: 10 }, desc: '레골리스에 비료와 미생물을 섞어 기름진 흙을 만들어 뿌립니다. 비료 1개로 30초 동안 바이오매스를 크게 올립니다.', fuel: 'fertilizer', fuelTime: 30, unlockStage: 'moss', research: 'r_soil' },
+  apiary: { name: '양봉장', cat: 'terra', size: [5, 5], cost: { plate: 3, glass: 2, seeds: 4 }, power: -1, terra: { biomass: 300 }, desc: '꿀벌을 길러 꽃가루받이를 돕습니다. 바이오매스를 크게 올리고, 물류망 안이면 40초마다 꿀 1통(온실 과일과 같은 사치품)을 보냅니다.', produce: { delicacy: 1 }, consume: {}, cycle: 40, unlockStage: 'insects', research: 'r_ecology' },
+
+  relay: { name: '물류 중계탑', cat: 'industry', size: [3, 3], cost: { plate: 3, circuit: 2 }, power: -1, desc: '물류망을 반경 45m 더 넓혀 줍니다. 창고는 없지만 그 안의 시설도 드론이 물자를 나릅니다.', network: 45, research: 'r_logistics' },
+  condenser: { name: '대기 수분 응결기', cat: 'industry', size: [3, 3], cost: { plate: 3, glass: 2, silicon: 2 }, power: -3, desc: '짙어진 대기의 수증기를 차가운 판에 맺히게 해 물을 모읍니다(15초마다 물 1개). 얼음이나 호수가 없는 곳의 물줄기.', produce: { water: 1 }, consume: {}, cycle: 15, unlockStage: 'haze', research: 'r_isru' },
+  steelmill: { name: '제철소', cat: 'industry', size: [8, 6], cost: { plate: 8, alloy: 2, circuit: 2 }, power: -8, desc: '메탄으로 철광석을 직접 환원해 강철을 만듭니다(철 3 + 메탄 1 → 강철 2). 강철은 핵융합로·질량 투사기·로봇의 재료입니다.', recipe: 'steel', research: 'r_steel' },
+  robotics: { name: '로봇 공장', cat: 'industry', size: [8, 8], cost: { steel: 6, circuit: 6, glass: 4 }, power: -10, desc: '전자기기·강철·배터리로 작업 로봇을 조립합니다(30초에 1대). 창고의 로봇은 일손이 모자란 시설의 빈 일자리를 하나씩 채웁니다.', recipe: 'robot', research: 'r_robotics' },
+  massdriver: { name: '질량 투사기', cat: 'industry', size: [14, 6], cost: { steel: 16, circuit: 8, wire: 16 }, power: -25, desc: '전자기 레일로 광석 화물을 궤도에 쏘아 올립니다. 연료 없이 1분마다 창고에 100개 넘게 쌓인 광석을 최대 30개 팔아 크레딧을 법니다.', workers: ['engineer', 3], driver: { every: 60, cap: 30, keep: 100 }, research: 'r_massdriver' },
+  constructionyard: { name: '건설 야드', cat: 'industry', size: [8, 8], cost: { plate: 8, alloy: 4, circuit: 2 }, power: -4, desc: '프린팅 드론과 자재 야적장. 반경 80m 안에 짓는 건물의 자재가 20% 덜 듭니다.', yard: 80, research: 'r_construction' },
+  maintenance: { name: '정비 드론 기지', cat: 'industry', size: [6, 6], cost: { plate: 6, circuit: 3, battery: 2 }, power: -3, desc: '정비 드론이 순찰하며 시설을 고칩니다. 반경 100m 안의 식민지 시설 유지비가 절반으로 줄고, 불이 날 위험도 절반이 됩니다.', upkeepCut: 100, research: 'r_construction' },
+  icemine: { name: '빙하 채굴기', cat: 'industry', size: [5, 5], cost: { plate: 4, iron: 4, alloy: 1 }, power: -3, desc: '빙하를 녹여 퍼 올립니다. 극지 빙원에서는 8초마다 얼음 1개, 다른 곳에서는 땅속 얼음이 적어 다섯 배 느립니다.', produce: { ice: 1 }, consume: {}, cycle: 8, region: 'glacier', research: 'r_harvest' },
+  saltworks: { name: '증발 염전', cat: 'industry', size: [8, 8], cost: { plate: 4, glass: 4 }, power: -2, desc: '소금 평원의 염수를 증발시켜 마그네슘을 거둡니다. 소금 평원에서는 12초마다 마그네슘 1개, 다른 곳에서는 다섯 배 느립니다.', produce: { magnesium: 1 }, consume: {}, cycle: 12, region: 'salt', research: 'r_harvest' },
+  sandglass: { name: '모래 유리 가마', cat: 'industry', size: [6, 6], cost: { plate: 4, iron: 4, silicon: 2 }, power: -5, desc: '규사를 그대로 녹여 유리를 뽑습니다. 모래 바다에서는 10초마다 유리 1장, 다른 곳에서는 고운 모래가 적어 다섯 배 느립니다.', produce: { glass: 1 }, consume: {}, cycle: 10, region: 'dunes', research: 'r_harvest' },
+  sulfurvent: { name: '분기공 황 채취기', cat: 'industry', size: [5, 5], cost: { plate: 4, alloy: 1, glass: 1 }, power: -2, desc: '화산 분기공 위에 덮개를 씌워 황을 거둡니다. 현무암 화산대에서는 10초마다 황 1개, 다른 곳에서는 다섯 배 느립니다.', produce: { sulfur: 1 }, consume: {}, cycle: 10, region: 'volcanic', research: 'r_harvest' },
+  meteorite: { name: '운석 채굴장', cat: 'industry', size: [6, 6], cost: { plate: 5, iron: 4, wire: 2 }, power: -4, desc: '크레이터에 박힌 철니켈 운석 조각을 자석 갈퀴로 긁어모읍니다. 크레이터 지대에서는 12초마다 니켈 1개, 다른 곳에서는 다섯 배 느립니다.', produce: { nickel: 1 }, consume: {}, cycle: 12, region: 'craters', research: 'r_harvest' },
+  crystalmine: { name: '결정 수확기', cat: 'industry', size: [5, 5], cost: { plate: 4, glass: 2, circuit: 1 }, power: -4, desc: '결정 평원의 코발트 결정을 레이저로 잘라 냅니다. 결정 평원에서는 20초마다 코발트 1개, 다른 곳에서는 다섯 배 느립니다.', produce: { cobalt: 1 }, consume: {}, cycle: 20, region: 'crystal', research: 'r_harvest' },
+
+  genelab: { name: '유전자 연구소', cat: 'science', size: [8, 8], cost: { plate: 6, glass: 6, circuit: 4, electronics: 2 }, power: -6, desc: '행성에 맞게 유전자를 고친 식물과 미생물을 설계합니다. 돌아가는 동안 모든 시설의 바이오매스 생산이 25% 늘고, 연구 점수도 만듭니다.', workers: ['scientist', 3], research_rp: 0.25, biomult: 1.25, research: 'r_genetics' },
+  datacenter: { name: '데이터 센터', cat: 'science', size: [8, 8], cost: { plate: 6, circuit: 10, electronics: 4, wire: 6 }, power: -15, desc: '연구 데이터를 모아 시뮬레이션을 돌립니다. 켜져 있는 동안 식민지의 모든 연구 점수가 20% 늘어납니다.', rpmult: 1.2, research: 'r_computing' },
+
+  supermarket: { name: '대형 배급소', cat: 'colony', size: [12, 10], apron: 2, cost: { plate: 10, glass: 6, polymer: 2, credits: 160 }, power: -4, desc: '냉장 창고와 계산대를 갖춘 대형 배급소. 반경 75m 집에 배급하고(배급소 역할), 버려지는 것이 줄어 이곳이 맡는 집은 생활 물자를 15% 덜 씁니다.', workers: ['tech', 3], service: 'market', supermarket: true, radius: 75, research: 'r_commerce' },
+  verticalfarm: { name: '수직 농장', cat: 'colony', size: [8, 8], cost: { plate: 6, glass: 8, circuit: 2, credits: 100 }, power: -6, desc: 'LED 아래 층층이 기르는 실내 농장. 물 1·비료 1로 20초마다 식량 5개를 거둬, 수경 농장보다 좁은 땅에서 훨씬 많이 기릅니다.', workers: ['tech', 3], produce: { food: 5 }, consume: { water: 1, fertilizer: 1 }, cycle: 20, research: 'r_vfarm' },
+  securitybase: { name: '경비 드론 기지', cat: 'colony', size: [6, 6], cost: { plate: 4, circuit: 4, battery: 2 }, power: -6, desc: '무인 경비 드론이 반경 110m를 순찰합니다. 일손 없이 치안센터 역할을 합니다.', service: 'security', radius: 110, research: 'r_security' },
+
+  canteen: { name: '식당', cat: 'civic', size: [8, 6], cost: { plate: 4, glass: 2, credits: 60 }, power: -2, desc: '주민이 함께 밥을 먹는 식당. 반경 50m 주민 행복도가 4% 오르고 식량을 분당 2개 씁니다. 창고에 온실 과일이 있으면 분당 1개를 더 써서 행복도가 2% 더 오릅니다.', workers: ['settler', 2], service: 'dining', radius: 50, research: 'r_cuisine' },
+  playground: { name: '어린이 놀이터', cat: 'civic', size: [6, 6], cost: { plate: 2, glass: 1, credits: 30 }, desc: '여압 돔 안의 놀이터. 반경 45m 가정의 행복도가 3% 오릅니다.', service: 'playground', radius: 45, research: 'r_family' },
+  theatre: { name: '극장', cat: 'civic', size: [10, 8], cost: { plate: 6, glass: 6, polymer: 2, credits: 180 }, power: -3, desc: '연극과 음악회가 열리는 극장. 반경 70m 주민 행복도가 5% 오르고, 공연 수입이 분당 8 크레딧입니다. 관광 호텔의 볼거리이기도 합니다.', workers: ['artisan', 3], service: 'theatre', radius: 70, research: 'r_arts' },
+  broadcast: { name: '방송국', cat: 'civic', size: [6, 6], cost: { plate: 4, circuit: 4, wire: 6, credits: 120 }, power: -4, desc: '행성 소식을 방송합니다. 식민지 전체 주민 행복도가 2% 오르고, 방송을 본 이주 희망자가 늘어 교신 응답이 15% 늘어납니다.', workers: ['tech', 2], broadcast: true, research: 'r_media' },
+  botanical: { name: '식물원', cat: 'civic', size: [12, 12], cost: { glass: 12, plate: 4, seeds: 10, credits: 120 }, power: -3, terra: { oxygen: 10, biomass: 30 }, desc: '행성의 식물을 모아 기르는 식물원. 반경 60m 주민 행복도 3%, 산소·바이오매스와 연구 점수를 조금 만들고, 관광 호텔의 볼거리입니다.', workers: ['tech', 2], service: 'garden', radius: 60, research_rp: 0.1, unlockStage: 'flowers', research: 'r_botany' },
+  museum: { name: '행성 박물관', cat: 'civic', size: [10, 8], cost: { plate: 6, glass: 6, credits: 150 }, power: -2, desc: '탐사에서 찾은 유물과 표본을 전시합니다. 지금까지 발견한 지점 하나마다 연구 점수 0.01/s(최대 0.8)를 만들고, 관광 호텔의 볼거리가 됩니다.', workers: ['artisan', 2], museum: true, research: 'r_museum' },
+  ark: { name: '생물권 아크', cat: 'civic', size: [16, 16], apron: 3, cost: { glass: 30, steel: 20, polymer: 10, seeds: 30, credits: 2000 }, power: -10, terra: { biomass: 400, oxygen: 60 }, desc: '행성의 모든 생물 종을 보관하고 기르는 거대한 생물권 돔. 주민 전체 행복도 +8%, 모든 바이오매스 생산 +15%(유전자 연구소와 함께 쌓임), 관광 수입 분당 30 크레딧.', unique: true, wonder: true, biomult: 1.15, unlockStage: 'trees', research: 'r_ark' },
 };
 
 export const CATEGORIES = [
@@ -366,6 +411,29 @@ export const RESEARCH = [
   { id: 'r_tourism', name: '관광', era: 4, cost: 380, req: ['r_commerce', 'r_culture'], desc: '볼거리를 찾아온 손님을 받는 관광 호텔.' },
   { id: 'r_magneto', name: '자기권 공학', era: 5, cost: 750, req: ['r_orbital'], desc: '대기를 붙잡아 두는 자기권 발생기.' },
   { id: 'r_comet', name: '혜성 포획', era: 5, cost: 820, req: ['r_space', 'r_orbital'], desc: '얼음 혜성을 대기에 떨어뜨리는 혜성 유도 관제소.' },
+  { id: 'r_grid', name: '전력망 공학', era: 2, cost: 90, req: ['r_metallurgy'], desc: '전력망을 70m까지 잇는 고압 변전소.' },
+  { id: 'r_rover', name: '로버 개조', era: 2, cost: 70, req: ['r_refine'], desc: '로버를 더 빠르게 만드는 로버 정비고.' },
+  { id: 'r_cuisine', name: '급식', era: 2, cost: 80, req: ['r_colony'], desc: '주민이 함께 밥을 먹는 식당.' },
+  { id: 'r_harvest', name: '지역 자원 채취', era: 2, cost: 110, req: ['r_auto', 'r_geology'], desc: '지역마다 다른 자원을 거두는 빙하 채굴기·염전·모래 유리 가마·황 채취기·운석 채굴장·결정 수확기.' },
+  { id: 'r_construction', name: '건설 자동화', era: 2, cost: 150, req: ['r_logistics', 'r_assembly'], desc: '자재를 아끼는 건설 야드와 유지비를 줄이는 정비 드론 기지.' },
+  { id: 'r_hydro', name: '소수력', era: 3, cost: 180, req: ['r_geo'], desc: '호수에 세우는 소수력 발전소.' },
+  { id: 'r_steel', name: '직접 환원 제철', era: 3, cost: 240, req: ['r_chem', 'r_metallurgy'], desc: '메탄으로 강철을 만드는 제철소.' },
+  { id: 'r_polar', name: '극관 승화', era: 3, cost: 200, req: ['r_climate'], desc: '극관의 이산화탄소를 승화시키는 기지.' },
+  { id: 'r_weather', name: '기상 조절', era: 3, cost: 220, req: ['r_climate'], desc: '비를 부르는 인공 강우 기지와 모래를 붙잡는 모래 고정 기지.' },
+  { id: 'r_soil', name: '토양 공학', era: 3, cost: 210, req: ['r_agri', 'r_microbio'], desc: '비료로 흙을 만드는 토양 공장.' },
+  { id: 'r_museum', name: '박물관학', era: 3, cost: 190, req: ['r_library', 'r_survey'], desc: '탐사 성과로 연구 점수를 만드는 행성 박물관.' },
+  { id: 'r_media', name: '방송', era: 3, cost: 230, req: ['r_electronics'], desc: '행복도와 이주를 늘리는 방송국.' },
+  { id: 'r_botany', name: '식물학', era: 3, cost: 190, req: ['r_agri'], desc: '식물원. 꽃 단계부터 지을 수 있습니다.' },
+  { id: 'r_vfarm', name: '수직 농업', era: 3, cost: 210, req: ['r_agri'], desc: '좁은 땅에서 많이 거두는 수직 농장.' },
+  { id: 'r_security', name: '경비 드론', era: 3, cost: 220, req: ['r_safety', 'r_electronics'], desc: '일손 없이 순찰하는 경비 드론 기지.' },
+  { id: 'r_robotics', name: '로봇 공학', era: 4, cost: 450, req: ['r_steel', 'r_electronics'], desc: '빈 일자리를 채우는 작업 로봇과 로봇 공장.' },
+  { id: 'r_spacesolar', name: '우주 태양광', era: 4, cost: 460, req: ['r_space'], desc: '궤도 태양광 위성의 전력을 받는 수신소.' },
+  { id: 'r_massdriver', name: '질량 투사기', era: 4, cost: 480, req: ['r_steel', 'r_space'], desc: '연료 없이 광석을 궤도로 쏘아 파는 질량 투사기.' },
+  { id: 'r_genetics', name: '유전공학', era: 4, cost: 420, req: ['r_microbio', 'r_education'], desc: '바이오매스 생산을 늘리는 유전자 연구소.' },
+  { id: 'r_computing', name: '계산 과학', era: 4, cost: 500, req: ['r_electronics', 'r_university'], desc: '모든 연구를 빠르게 하는 데이터 센터.' },
+  { id: 'r_arts', name: '공연 예술', era: 4, cost: 360, req: ['r_culture'], desc: '극장.' },
+  { id: 'r_fusion', name: '핵융합', era: 5, cost: 900, req: ['r_orbital', 'r_steel'], desc: '물로 150 kW를 내는 핵융합로.' },
+  { id: 'r_ark', name: '생물권 아크', era: 5, cost: 950, req: ['r_genetics', 'r_ecology'], desc: '행성의 모든 생물을 품는 생물권 아크.' },
 ];
 
 export function fmtTi(v) {

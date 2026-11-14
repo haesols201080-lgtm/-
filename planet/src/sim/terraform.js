@@ -111,6 +111,10 @@ export class Terraform {
           : s < 6 ? { snow: 3, overcast: 2, fog: 2, drizzle: 1, gale: 1, fair: 1 }
             : s < 10 ? { rain: 3, drizzle: 2, overcast: 2, fog: 2, thunder: 1, snow: 1, gale: 1, fair: 2 }
               : { rain: 2, drizzle: 2, thunder: 1.5, fog: 1.5, fair: 3, overcast: 2, gale: 1, snow: 0.5 };
+      // cloud seeding brings rain three times as often; dune fixing halves dust
+      const eco = this.game.eco;
+      if (eco && eco.rainmaker) for (const k of ['rain', 'drizzle', 'thunder']) if (pool[k]) pool[k] *= 3;
+      if (eco && eco.dunefix) for (const k of ['dust', 'devils']) if (pool[k]) pool[k] *= 0.5;
       let r = Math.random() * Object.values(pool).reduce((a, b) => a + b, 0);
       W.upcoming = 'fair';
       for (const [k, w] of Object.entries(pool)) { r -= w; if (r <= 0) { W.upcoming = k; break; } }

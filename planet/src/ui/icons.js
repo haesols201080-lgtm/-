@@ -26,6 +26,7 @@ const SHAPES = {
   fruit: (c) => `<circle cx="12" cy="19" r="7" fill="${c}"/><circle cx="21" cy="18" r="6.5" fill="${shade(c, 0.82)}"/><path d="M16 11 C16 8 18 6 20 5" stroke="#6a4a2a" stroke-width="1.6" fill="none"/><path d="M17 9 C20 6 24 7 25 9 C22 11 19 11 17 9 Z" fill="#5aa04a"/><circle cx="10" cy="17" r="2" fill="#fff" fill-opacity=".35"/>`,
   canister: (c) => `<rect x="10" y="6" width="12" height="21" rx="5" fill="${shade(c, 0.85)}"/><rect x="10" y="12" width="12" height="4" fill="${shade(c, 0.55)}"/><rect x="14" y="3" width="4" height="4" rx="1" fill="#9aa3ab"/><rect x="12.5" y="8" width="2" height="16" rx="1" fill="#fff" fill-opacity=".35"/>`,
   pellets: (c) => `${[[10, 20, 5], [19, 22, 4.5], [15, 13, 4.5], [22, 14, 3.5], [8, 12, 3.5]].map(([x, y, r], i) => `<ellipse cx="${x}" cy="${y}" rx="${r}" ry="${r * 0.8}" fill="${shade(c, 0.75 + i * 0.1)}"/>`).join('')}`,
+  bot: (c) => `<rect x="9" y="5" width="14" height="10" rx="3" fill="${shade(c, 1.1)}"/><circle cx="13" cy="10" r="1.8" fill="#1a1a1a"/><circle cx="19" cy="10" r="1.8" fill="#1a1a1a"/><rect x="8" y="16" width="16" height="10" rx="2" fill="${shade(c, 0.8)}"/><rect x="5" y="17" width="3" height="7" rx="1.5" fill="${shade(c, 0.65)}"/><rect x="24" y="17" width="3" height="7" rx="1.5" fill="${shade(c, 0.65)}"/><rect x="15" y="2" width="2" height="3" fill="#8d959c"/>`,
   seed: (c) => `<ellipse cx="12" cy="18" rx="5" ry="7" transform="rotate(-25 12 18)" fill="${c}"/><ellipse cx="20" cy="15" rx="4.5" ry="6.5" transform="rotate(20 20 15)" fill="${shade(c, 0.8)}"/>`,
 };
 

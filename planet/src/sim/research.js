@@ -60,6 +60,7 @@ export class Research {
   }
 
   addPoints(p) {
+    p *= this.game.eco?.researchMult || 1;
     this._acc += p;
     if (!this.current) {
       // next step of the planned path, else the cheapest available tech so points are never wasted

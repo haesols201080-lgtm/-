@@ -44,7 +44,7 @@ export class Store {
   load(o) { this.items = new Map(Object.entries(o || {}).map(([k, v]) => [k, +v])); }
 }
 
-const NODE_RANGE = { pylon: 30, hq: 36, solar: 16, wind: 18, reactor: 24, dronehub: 20, rtg: 12, geothermal: 22, gasturbine: 22, solarthermal: 22 };
+const NODE_RANGE = { pylon: 30, hq: 36, solar: 16, wind: 18, reactor: 24, dronehub: 20, rtg: 12, geothermal: 22, gasturbine: 22, solarthermal: 22, hydro: 22, fusion: 30, rectenna: 26, substation: 70 };
 // research points a sample of each ore gives the geology analyser (rarest first)
 const ORE_RP = { uranium: 8, cobalt: 6, nickel: 4, titanium: 3, aluminium: 3, copper: 3, phosphate: 3, magnesium: 3, sulfur: 2, iron: 1, silicon: 1, ice: 1 };
 const CONSUMER_RANGE = 16;
@@ -63,8 +63,12 @@ export class Economy {
   }
 
   // ---------------------------------------------------------------- costs
-  costOf(type) {
+  // a construction yard within reach prints 20% of the materials
+  costOf(type, pos) {
     const c = { ...BUILDINGS[type].cost };
+    if (pos && this.game.buildings && this.game.buildings.list.some((y) => y.def.yard && y.powerRatio > 0.3 && (y.x - pos.x) ** 2 + (y.z - pos.z) ** 2 < y.def.yard * y.def.yard)) {
+      for (const k of Object.keys(c)) if (k !== 'credits') c[k] = Math.max(1, Math.ceil(c[k] * 0.8));
+    }
     return c;
   }
 
@@ -126,7 +130,7 @@ export class Economy {
   inNetwork(x, z) {
     for (const h of this.game.buildings.list) {
       if (!h.def.network) continue;
-      if (h.type === 'dronehub' && h.powered === false) continue;
+      if (h.def.power < 0 && h.powered === false) continue;
       if ((h.x - x) ** 2 + (h.z - z) ** 2 < h.def.network * h.def.network) return h;
     }
     return null;
@@ -215,11 +219,19 @@ export class Economy {
     const prov = gen && gen.provinceAt ? gen.provinceAt(b.x, b.z) : null;
     return prov && prov.id === 'volcanic' ? 1 : 1 / 3;
   }
+  // regional plants work fully only in their province
+  regionFactor(b) {
+    if (b.data.regK !== undefined) return b.data.regK;
+    const gen = this.game.terrain.gen;
+    const prov = gen && gen.provinceAt ? gen.provinceAt(b.x, b.z) : null;
+    return (b.data.regK = prov && prov.id === b.def.region ? 1 : (b.def.terra ? 0.25 : 0.2));
+  }
 
   generatorOutput(b) {
     const d = b.def;
     if (!(d.power > 0)) return 0;
     if (d.thermal) return b.data.out || 0;
+    if (d.orbit) return this.orbitOk ? d.power : 0;
     if (d.solar) return d.power * this.sunFactor();
     if (d.geo) return d.power * (b.data.geoK ?? (b.data.geoK = this.geoFactor(b)));
     if (d.wind) return d.power * (0.25 + 0.75 * this.game.sky.uniforms.uAtmo.value) * (0.75 + 0.25 * Math.sin(U.uTime.value * 0.1 + b.seed * 10));
@@ -241,6 +253,18 @@ export class Economy {
     this.weatherStation = list.some((b) => b.def.weather && b.powerRatio > 0.3);
     const shield = list.find((b) => b.def.magshield && b.powerRatio > 0.5 && b.enabled !== false);
     this.terraMult = shield ? { pressure: shield.def.magshield, oxygen: shield.def.magshield } : {};
+    // gene lab and the biosphere ark both push biomass (they stack)
+    let bio = 1;
+    for (const b of list) if (b.def.biomult && b.powerRatio > 0.3 && b.openOk !== false && b.enabled !== false) bio *= b.def.biomult;
+    if (bio > 1) this.terraMult.biomass = bio;
+    const dc = list.find((b) => b.def.rpmult && b.powerRatio > 0.5 && b.enabled !== false);
+    this.researchMult = dc ? dc.def.rpmult : 1;
+    // satellites need a way up; weather work; the rover garage
+    this.orbitOk = list.some((b) => (b.def.launch && b.openOk) || (b.type === 'elevator' && b.powerRatio > 0.3));
+    this.rainmaker = list.some((b) => b.def.rainmaker && b.powerRatio > 0.3);
+    this.dunefix = list.some((b) => b.def.dunefix && b.powerRatio > 0.3);
+    const gar = list.find((b) => b.def.garage && b.powerRatio > 0.3);
+    this.game.roverBoost = gar ? gar.def.garage : 1;
     this.crushers = list.filter((b) => b.def.crusher && b.powerRatio > 0.3 && b.enabled !== false);
     // fuel: reactors and gas turbines burn on regardless; the plants that feed
     // the atmosphere only use it while they have power
@@ -322,6 +346,8 @@ export class Economy {
     if (d.storage_kj) { const f = b.data.flow || 0; b.status = b.gridRoot ? (f > 0.05 ? '충전 중' : f < -0.05 ? '방전 중' : '대기') : '전력망에 연결되지 않음'; }
 
     if (d.fuel && !(d.power > 0) && !(b.data.fuelLeft > 0)) { rate = 0; b.rate = 0; active = false; b.status = b.status || `연료 없음: ${ITEMS[d.fuel].name} (물류망 창고)`; }
+    // regional plants run at a fifth (a quarter for the atmosphere ones) away from their province
+    if (d.region) { const k = this.regionFactor(b); rate *= k; b.rate = rate; if (k < 1 && !b.status) b.status = '지역이 맞지 않아 느리게 돕니다'; }
     if (d.deposit) {
       // a dressing plant nearby lets the mine run half again as fast
       const boost = (this.crushers || []).some((c) => (c.x - b.x) ** 2 + (c.z - b.z) ** 2 < c.def.crusher * c.def.crusher) ? 1.5 : 1;
@@ -373,6 +399,13 @@ export class Economy {
       b.data.rp = d.night_rp * (night ? Math.max(0.2, clear) : 0.2) * rate;
       g.research.addPoints(b.data.rp * dt, b);
     }
+    // the museum turns what the expedition has found into research
+    if (d.museum && g.research && g.pois) {
+      b.data.rp = Math.min(0.8, g.pois.discovered.size * 0.01) * rate;
+      g.research.addPoints(b.data.rp * dt, b);
+    }
+    // cloud seeding: while it rains, the wet ground greens
+    if (d.rainmaker && g.terra && ['rain', 'drizzle', 'thunder'].includes(g.terra.weather.kind)) g.terra.add('biomass', d.rainmaker * rate * dt * (this.terraMult?.biomass || 1));
     // geology analyser: one sample of the rarest ore in the depot every 20 s
     if (d.analyzer && g.research) {
       if (!net) { active = false; b.status = b.status || '물류망 밖 (드론 허브 필요)'; }

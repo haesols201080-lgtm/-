@@ -590,6 +590,34 @@ export class UI {
     if (t === 'hotel') return `반경 ${dd.hotel}m 볼거리 ${D.sights || 0}곳 · 관광 수입 분당 ${Math.round(D.guests || 0)} 크레딧`;
     if (t === 'faunareserve') return `관람객 ${D.visitors || 0}명 · 관광 수입 분당 10 크레딧 · 주민 행복도 +5%`;
     if (t === 'fishery') return `물고기를 길러 호수에 풀어 줍니다${b.networked ? ' · 30초마다 식량 2개를 물류망 창고로' : ' · 물류망 밖이라 식량은 보내지 못합니다'}`;
+    const PROV = { glacier: '극지 빙원', salt: '소금 평원', dunes: '모래 바다', volcanic: '현무암 화산대', craters: '크레이터 지대', crystal: '결정 평원' };
+    if (dd.region) { const k = g.eco.regionFactor(b); const out = dd.produce ? ` · ${Object.keys(dd.produce).map((id) => ITEMS[id].name).join('')} ${dd.cycle}초마다 ${Object.values(dd.produce)[0]}개${k < 1 ? ` (지금은 ${Math.round(dd.cycle / k)}초)` : ''}` : ''; return `${k >= 1 ? `${PROV[dd.region]}에서 제대로 돌아갑니다` : `<span style="color:var(--warn)">${PROV[dd.region]}이 아니라 ${Math.round(k * 100)}%만 냅니다</span>`}${out}`; }
+    if (t === 'garage') return g.roverBoost > 1 ? '로버 정비 완료 · 최고 속도 +30%' : '전력이 없어 정비를 못 합니다';
+    if (t === 'hydro') return '호숫물이 흐르는 한 밤낮 없이 발전합니다';
+    if (t === 'rectenna') return g.eco.orbitOk ? '궤도 태양광 위성에서 전력을 받는 중' : '<span style="color:var(--warn)">위성을 올릴 우주 발사장이나 궤도 엘리베이터가 돌아가지 않습니다</span>';
+    if (t === 'substation') return '전력망을 70m 거리까지 잇습니다';
+    if (t === 'cloudseeder') { const W = g.terra.weather; return `${g.eco.rainmaker ? '구름 씨뿌리기 중 · 비가 세 배 잦아집니다' : '전력이 부족합니다'} · 지금 ${WEATHER[W.kind]?.name || W.kind}${['rain', 'drizzle', 'thunder'].includes(W.kind) ? ` · 바이오매스 +${dd.rainmaker}/s` : ''}`; }
+    if (t === 'dunefixer') return g.eco.dunefix ? '모래를 붙잡는 중 · 먼지 폭풍과 회오리가 절반으로' : '전력이 부족합니다';
+    if (t === 'relay') return `물류망 반경 ${dd.network}m · ${b.powered === false ? '전력이 없어 끊겼습니다' : '연결됨'}`;
+    if (t === 'massdriver') return `발사 ${D.shots || 0}회 · 수익 ${D.earned || 0} 크레딧 · 다음까지 ${Math.max(0, Math.ceil(dd.driver.every - (D.lt || 0)))}초${D.last ? ` · 최근: ${D.last.map(([id, n]) => `${ITEMS[id]?.name || id} ${n}`).join(', ')}` : ' · 100개 넘게 쌓인 광석이 없으면 기다립니다'}`;
+    if (t === 'constructionyard') return `반경 ${dd.yard}m 안의 건설 자재 20% 절약`;
+    if (t === 'maintenance') return `반경 ${dd.upkeepCut}m 시설 유지비 절반 · 화재 위험 절반`;
+    if (t === 'robotics') return `창고의 로봇 ${S.count('robot')}대 · 일하는 로봇 ${C.robotsWorking || 0}대`;
+    if (t === 'genelab') return `${g.eco.terraMult && g.eco.terraMult.biomass > 1 ? `바이오매스 생산 ×${g.eco.terraMult.biomass.toFixed(2)}` : '돌아가지 않습니다'}`;
+    if (t === 'datacenter') return g.eco.researchMult > 1 ? '모든 연구 점수 +20%' : '전력이 부족합니다';
+    if (t === 'museum') return `발견한 지점 ${g.pois ? g.pois.discovered.size : 0}곳 · 연구 ${(D.rp || 0).toFixed(2)}점/s`;
+    if (t === 'canteen') return D.dry ? '<span style="color:var(--warn)">창고에 식량이 없어 문을 닫았습니다</span>' : `손님 ${D.visitors || 0}명 · 식량 분당 2개${D.fruit ? ' · 온실 과일 디저트 (+2%)' : ''}`;
+    if (t === 'theatre') return `관객 ${D.visitors || 0}명 · 공연 수입 분당 8 크레딧 · 행복도 +5%`;
+    if (t === 'playground') return `노는 아이들 ${D.visitors || 0}명 · 행복도 +3%`;
+    if (t === 'broadcast') return '식민지 전체 행복도 +2% · 교신 응답 +15%';
+    if (t === 'botanical') return `관람객 ${D.visitors || 0}명 · 행복도 +3% · 연구 0.1점/s`;
+    if (t === 'supermarket') return `배급받는 집의 생활 물자 소비 −15%`;
+    if (t === 'verticalfarm') return '물 1·비료 1 → 20초마다 식량 5개';
+    if (t === 'securitybase') return C.total > 40 ? `드론 순찰 중 · 치안이 닿지 않는 집 ${g.buildings.list.filter((h) => h.def.house && h.data.unsafe).length}채` : '인구가 40명을 넘으면 순찰이 필요해집니다';
+    if (t === 'ark') return '주민 전체 행복도 +8% · 바이오매스 생산 +15% · 관광 수입 분당 30';
+    if (t === 'apiary') return `꿀벌을 기르는 중${b.networked ? ' · 40초마다 꿀 1통' : ' · 물류망 밖이라 꿀은 보내지 못합니다'}`;
+    if (t === 'condenser') return '대기의 수증기를 모아 15초마다 물 1개';
+    if (b.robots) return `로봇 ${b.robots}대가 일손을 채우는 중`;
     if (dd.fuel) return `연료 ${ITEMS[dd.fuel].name}: 남은 시간 ${Math.max(0, Math.ceil(D.fuelLeft || 0))}초 · 창고 ${S.count(dd.fuel)}개 (${dd.fuelTime}초에 1개)`;
     return '';
   }

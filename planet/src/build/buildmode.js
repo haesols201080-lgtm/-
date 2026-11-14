@@ -258,14 +258,14 @@ export class BuildMode {
     }
     const lock = g.isUnlocked ? g.isUnlocked(this.type) : { ok: true };
     if (!lock.ok) return { ok: false, reason: lock.reason };
-    const cost = g.eco.costOf(this.type);
+    const cost = g.eco.costOf(this.type, p);
     if (!g.eco.canAfford(cost, p)) return { ok: false, reason: '자원이 부족합니다: ' + g.eco.missingText(cost, p) };
     return { ok: true, reason: '' };
   }
 
   place(p, def) {
     const g = this.game;
-    const cost = g.eco.costOf(this.type);
+    const cost = g.eco.costOf(this.type, p);
     g.eco.pay(cost, p);
     if (!def.foundation && !p.onFoundation && !def.water && !p.stilts) {
       // grade the ground flush with the floor and keep it level a terrain

@@ -161,7 +161,7 @@ export class Rover {
       const thr = active ? (input.down('KeyW') ? 1 : 0) - (input.down('KeyS') ? 1 : 0) : 0;
       const steer = active ? (input.down('KeyA') ? 1 : 0) - (input.down('KeyD') ? 1 : 0) : 0;
       const boost = active && input.down('ShiftLeft') ? 1.5 : 1;
-      const maxV = 18 * boost;
+      const maxV = 18 * boost * (g.roverBoost || 1);
       this.speed += thr * 9 * dt;
       if (!thr) this.speed *= 1 - Math.min(1, dt * 0.8);
       if (active && input.down('Space')) this.speed *= 1 - Math.min(1, dt * 4);

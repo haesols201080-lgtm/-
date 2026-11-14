@@ -14,6 +14,7 @@ import * as AG2 from './models_agency2.js';
 import * as AG3 from './models_agency3.js';
 import * as HOMES from './models_houses.js';
 import * as AG5 from './models_agency5.js';
+import * as AG6 from './models_agency6.js';
 
 const PI = Math.PI;
 
@@ -143,6 +144,8 @@ for (const t of ['habitat', 'storage', 'fabricator', 'terminal', 'solar', 'wind'
 Object.assign(BUILDERS, { heater: (M) => AG3.heater(M, false), heater2: (M) => AG3.heater(M, true), drill: (M) => AG3.drill(M, false), drill2: (M) => AG3.drill(M, true) });
 // the newer working parts: field gear, science, power, atmosphere, methane
 for (const t of ['o2station', 'shelter', 'analyzer', 'radar', 'observatory', 'weather', 'rtg', 'geothermal', 'gasturbine', 'solarthermal', 'ghgplant', 'microbevat', 'fishery', 'faunareserve', 'magshield', 'comet', 'sabatier', 'crusher', 'chemplant', 'spaceport', 'hospital', 'library', 'mall', 'bank', 'spa', 'stadium', 'hotel']) BUILDERS[t] = AG5[t];
+// third wave: regional harvesters, automation, heavy power, weather work, town life
+for (const t of ['garage', 'hydro', 'fusion', 'rectenna', 'substation', 'polarmelter', 'cloudseeder', 'dunefixer', 'soilfactory', 'apiary', 'relay', 'condenser', 'steelmill', 'robotics', 'massdriver', 'constructionyard', 'maintenance', 'icemine', 'saltworks', 'sandglass', 'sulfurvent', 'meteorite', 'crystalmine', 'genelab', 'datacenter', 'supermarket', 'verticalfarm', 'securitybase', 'canteen', 'playground', 'theatre', 'broadcast', 'botanical', 'museum', 'ark']) BUILDERS[t] = AG6[t];
 // homes, two designs per tier, in the same hardware language
 for (let t = 0; t < 10; t++) { BUILDERS['house:' + t] = HOMES['house' + t]; BUILDERS['house:' + t + 'b'] = HOMES['house' + t + 'b']; }
 
