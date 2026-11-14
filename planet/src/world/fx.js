@@ -1,5 +1,5 @@
-// Effects: rain streaks and dust around the camera, construction sparkle
-// bursts, the multitool mining beam.
+// Effects: rain streaks and dust around the camera, construction (ground
+// dust and welding sparks with arc flashes), the multitool mining beam.
 import * as THREE from 'three';
 import { U } from '../core/shared.js';
 
@@ -69,7 +69,7 @@ export class FX {
           vL = aLife;
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
           gl_Position = projectionMatrix * mv;
-          gl_PointSize = aLife > 0.0 ? clamp(120.0 / -mv.z, 1.5, 10.0) : 0.0;
+          gl_PointSize = aLife > 0.0 ? clamp(55.0 / -mv.z, 1.2, 4.5) : 0.0;
           #include <logdepthbuf_vertex>
         }`,
       fragmentShader: LOGF + /* glsl */`
@@ -79,13 +79,19 @@ export class FX {
           if (vL <= 0.0) discard;
           float d = length(gl_PointCoord - 0.5);
           if (d > 0.5) discard;
-          gl_FragColor = vec4(vec3(0.5, 0.9, 1.4) * 2.0 * vL, smoothstep(0.5, 0.1, d) * vL);
+          // hot metal: white when fresh, cooling through yellow to dull orange
+          vec3 hot = mix(vec3(1.4, 0.38, 0.06), vec3(2.6, 2.1, 1.5), smoothstep(0.35, 0.95, vL));
+          gl_FragColor = vec4(hot * 1.6, smoothstep(0.5, 0.05, d) * smoothstep(0.0, 0.25, vL));
         }`,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
     }));
     this.points.frustumCulled = false;
     scene.add(this.points);
     this.pNext = 0;
+    // welding on new structures: a burst of sparks now and then, and the arc's flicker
+    this.welds = [];
+    this.arc = new THREE.PointLight(0xcfe4ff, 0, 9, 1.6);
+    scene.add(this.arc);
 
     // mining beam
     const bg = new THREE.BufferGeometry();
@@ -96,14 +102,19 @@ export class FX {
     scene.add(this.beam);
   }
 
+  // a structure goes up: dust kicked out from under it, then a few seconds
+  // of welding at random points on its frame
   build(x, y, z, size) {
-    for (let i = 0; i < 90; i++) {
-      const k = this.pNext; this.pNext = (this.pNext + 1) % this.pLife.length;
-      const a = Math.random() * 6.28, r = Math.random() * size * 0.6;
-      this.pPos.set([x + Math.cos(a) * r, y + Math.random() * size * 0.5, z + Math.sin(a) * r], k * 3);
-      this.pVel.set([(Math.random() - 0.5) * 2, 1 + Math.random() * 3, (Math.random() - 0.5) * 2], k * 3);
-      this.pLife[k] = 1;
+    const D = this.game.dust;
+    if (D) {
+      const n = 10 + Math.round(size);
+      for (let i = 0; i < n; i++) {
+        const a = i / n * 6.283 + Math.random() * 0.5, r = size * (0.45 + Math.random() * 0.25);
+        D.puff(x + Math.cos(a) * r, y + 0.5, z + Math.sin(a) * r, { vx: Math.cos(a) * (1.5 + Math.random() * 2), vy: 0.3 + Math.random() * 0.4, vz: Math.sin(a) * (1.5 + Math.random() * 2), s: 1.4 + size * 0.12, grow: 2.4, max: 3.5 + Math.random() * 2.5, a: 0.5, kind: 'dust', drift: 0.4 });
+      }
     }
+    this.welds.push({ x, y, z, size, t: 3.0 + Math.random(), next: 0 });
+    if (this.welds.length > 4) this.welds.shift();
   }
 
   sparks(p, n = 3) {
@@ -113,6 +124,10 @@ export class FX {
       this.pVel.set([(Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4], k * 3);
       this.pLife[k] = 0.6;
     }
+  }
+  spark(x, y, z, vx, vy, vz, life) {
+    const k = this.pNext; this.pNext = (this.pNext + 1) % this.pLife.length;
+    this.pPos.set([x, y, z], k * 3); this.pVel.set([vx, vy, vz], k * 3); this.pLife[k] = life;
   }
 
   // transmission beam from the comms dish into the sky
@@ -149,10 +164,24 @@ export class FX {
     this.rainU.uAmt.value = Math.min(1, fall);
     this.rainU.uSnow.value = snow > storm ? 1 : 0;
     this.rain.visible = (storm > 0.05 && U.uWaterLevel.value > -1000) || snow > 0.05;
+    // welding: bursts of sparks at points on the frame, the arc flickering
+    this.arc.intensity *= Math.max(0, 1 - dt * 25);
+    for (let i = this.welds.length - 1; i >= 0; i--) {
+      const W = this.welds[i];
+      W.t -= dt; W.next -= dt;
+      if (W.t <= 0) { this.welds.splice(i, 1); continue; }
+      if (W.next <= 0) {
+        W.next = 0.06 + Math.random() * 0.22;
+        const px = W.x + (Math.random() - 0.5) * W.size * 0.8, py = W.y + 0.4 + Math.random() * W.size * 0.45, pz = W.z + (Math.random() - 0.5) * W.size * 0.8;
+        for (let k = 0; k < 7; k++) this.spark(px, py, pz, (Math.random() - 0.5) * 3.5, Math.random() * 2.5, (Math.random() - 0.5) * 3.5, 0.6 + Math.random() * 0.5);
+        this.arc.position.set(px, py, pz);
+        this.arc.intensity = 3 + Math.random() * 5;
+      }
+    }
     for (let i = 0; i < this.pLife.length; i++) {
       if (this.pLife[i] <= 0) continue;
-      this.pLife[i] -= dt * 0.8;
-      this.pVel[i * 3 + 1] -= dt * 2;
+      this.pLife[i] -= dt * 1.1;
+      this.pVel[i * 3 + 1] -= dt * 5;
       this.pPos[i * 3] += this.pVel[i * 3] * dt; this.pPos[i * 3 + 1] += this.pVel[i * 3 + 1] * dt; this.pPos[i * 3 + 2] += this.pVel[i * 3 + 2] * dt;
     }
     this.points.geometry.attributes.position.needsUpdate = true;

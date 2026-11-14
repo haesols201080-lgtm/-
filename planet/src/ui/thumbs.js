@@ -38,6 +38,7 @@ export class Thumbs {
     const grp = new THREE.Group();
     const box = new THREE.Box3();
     for (const p of model.parts) {
+      if (p.key === 'beam') continue;
       const m = new THREE.Mesh(p.geo, p.material ? assetMaterial(p.material) : (g.buildings.mats[p.key] || g.buildings.mats.hull));
       grp.add(m);
       p.geo.computeBoundingBox();

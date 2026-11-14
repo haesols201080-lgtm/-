@@ -52,7 +52,8 @@ const BODY_N = /* glsl */`
 const HEAD_F = /* glsl */`
 varying vec3 vOP; varying vec3 vON; varying vec3 vWP2; varying vec3 vData; varying vec3 vPan;
 uniform sampler2D tPanel, tNoise;
-uniform float uNight, uDustAmt, uTime;
+uniform float uNight, uDustAmt, uTime, uRime;
+float gRime = 0.0;
 float hash1(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 vec3 gN2; float gR2; float gH = 0.0; float gBumpK = 1.0; float gStagger = 0.5;
 `;
@@ -116,13 +117,33 @@ vec3 bumpN(vec3 n, vec3 pos, float h, float k) {
 }
 `;
 
-const SHARED_UNIFORMS = () => ({ tPanel: { value: TEX.panel }, tNoise: U.tNoise, uNight: U.uNight, uDustAmt: { value: 0 }, uTime: U.uTime });
+// hoar frost after a cold night: on up-facing surfaces first, a dusting on
+// walls, matte and white; it sublimates as the morning warms (uRime)
+const RIME_F = /* glsl */`
+#ifdef RIME
+  {
+    vec3 rn = normalize(vON);
+    float r1 = texture2D(tNoise, vOP.xz * 0.9 + 0.17).g;
+    float r2 = texture2D(tNoise, vOP.xy * 0.8 + vOP.zy * 0.6 + 0.41).b;
+    float r3 = texture2D(tNoise, vOP.xz * 3.1 + vOP.y * 2.3).a;
+    float up = smoothstep(0.35, 0.9, rn.y);
+    float rime = up * smoothstep(0.42, 0.7, r1 * 0.7 + r3 * 0.3 + uRime * 0.25) * 0.6;
+    rime += (1.0 - abs(rn.y)) * 0.14 * smoothstep(0.62, 0.85, r2 * 0.7 + r3 * 0.3);
+    gRime = clamp(rime * uRime, 0.0, 0.6);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.84, 0.87, 0.91) * (0.95 + 0.1 * r3), gRime);
+  }
+#endif
+`;
+const NO_RIME = new Set(['glass', 'window', 'emissive', 'blink', 'mirror', 'solar']);
+
+const SHARED_UNIFORMS = () => ({ tPanel: { value: TEX.panel }, tNoise: U.tNoise, uNight: U.uNight, uDustAmt: { value: 0 }, uTime: U.uTime, uRime: U.uRime });
 export const BUILD_U = { uDustAmt: { value: 0.6 } };
 
 function patch(mat, key, fragBody, { anim = null, slide = null, extraUniforms = {} } = {}) {
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, SHARED_UNIFORMS(), extraUniforms);
     sh.uniforms.uDustAmt = BUILD_U.uDustAmt;
+    if (!NO_RIME.has(String(key).split(':')[0]) && !String(key).startsWith('asset')) { sh.defines = sh.defines || {}; sh.defines.RIME = 1; }
     if (anim) {
       sh.defines = sh.defines || {};
       sh.defines.ANIM = 1;
@@ -143,9 +164,10 @@ function patch(mat, key, fragBody, { anim = null, slide = null, extraUniforms = 
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + HEAD_F + (fragBody.fhead || '') + PANEL_FN + BUMP_FN)
       .replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>\nif (gH != 0.0) normal = bumpN(normal, -vViewPosition, gH, gBumpK);')
-      .replace('#include <map_fragment>', (mat.vertexColors ? '#ifdef USE_COLOR\n  diffuseColor.rgb *= vColor;\n#endif\n' : '') + (fragBody.map || ''))
+      .replace('#include <map_fragment>', (mat.vertexColors ? '#ifdef USE_COLOR\n  diffuseColor.rgb *= vColor;\n#endif\n' : '') + (fragBody.map || '') + RIME_F)
+      .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor = mix(metalnessFactor, 0.0, gRime);')
       .replace('#include <color_fragment>', mat.vertexColors ? '' : '#include <color_fragment>')
-      .replace('#include <roughnessmap_fragment>', fragBody.rough || '#include <roughnessmap_fragment>')
+      .replace('#include <roughnessmap_fragment>', (fragBody.rough || '#include <roughnessmap_fragment>') + '\nroughnessFactor = mix(roughnessFactor, 0.85, gRime);')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + (fragBody.emit || ''));
   };
   mat.customProgramCacheKey = () => key + (anim ? JSON.stringify(anim) : '') + (slide ? JSON.stringify(slide) : '');
@@ -512,6 +534,42 @@ export function makeBuildingMaterials() {
       gH = (1.0 - sj) * 0.004 * (1.0 - sfar) + snz.a * 0.002 + 1e-6;
       gR2 = 0.78 + 0.1 * snz.b;`,
     rough: 'float roughnessFactor = gR2;',
+  });
+  // light shafts from floodlights, seen in dusty night air: additive cones,
+  // brightest at the lamp and fading along the beam and toward the edges;
+  // only when the building is powered and it is dark (uHaze from the dust)
+  M.beam = new THREE.ShaderMaterial({
+    uniforms: { uNight: U.uNight, uHaze: { value: 0.6 } },
+    vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    vertexShader: '#include <common>\n#include <logdepthbuf_pars_vertex>\n' + /* glsl */`
+      attribute vec3 iData;
+      varying float vPow, vAlong; varying vec3 vN, vV, vCol;
+      void main() {
+        mat4 im = mat4(1.0);
+        vPow = 1.0;
+#ifdef USE_INSTANCING
+        im = instanceMatrix; vPow = iData.x;
+#endif
+        vec4 mv = modelViewMatrix * im * vec4(position, 1.0);
+        vN = normalize(mat3(modelViewMatrix) * mat3(im) * normal);
+        vV = -mv.xyz; vAlong = uv.y;
+#ifdef USE_COLOR
+        vCol = color;
+#else
+        vCol = vec3(1.0);
+#endif
+        gl_Position = projectionMatrix * mv;
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: '#include <common>\n#include <logdepthbuf_pars_fragment>\n' + /* glsl */`
+      uniform float uNight, uHaze;
+      varying float vPow, vAlong; varying vec3 vN, vV, vCol;
+      void main() {
+        #include <logdepthbuf_fragment>
+        float edge = abs(dot(normalize(vN), normalize(vV)));
+        float a = pow(clamp(vAlong, 0.0, 1.0), 2.2) * pow(edge, 2.6) * smoothstep(0.2, 0.7, uNight) * vPow * 0.11 * uHaze;
+        gl_FragColor = vec4(vCol, a);
+      }`,
   });
   M.water = new THREE.MeshStandardMaterial({ color: 0x1b5e6e, roughness: 0.05, metalness: 0.2, envMapIntensity: 1.2 });
   M.water.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 iData;'); };

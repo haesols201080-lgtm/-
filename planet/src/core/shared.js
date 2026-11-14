@@ -20,6 +20,7 @@ export const U = {
   uWB: { value: new THREE.Vector3(1, 1, 1) },   // camera white balance gains
   uNight: { value: 0 },          // 0 day .. 1 deep night
   uFrost: { value: 1 },          // terraform: frost cover on cold ground
+  uRime: { value: 0 },           // overnight hoar frost on structures, burns off after sunrise
   uWet: { value: 0 },            // rain wetness
   uMoss: { value: 0 },           // moss coverage 0..1
   uMicrobe: { value: 0 },        // microbial mats on wet shores 0..1

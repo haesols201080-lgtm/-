@@ -222,6 +222,7 @@ function reactor(M) {
   for (let i = 0; i <= 14; i++) { const t = i / 14; prof.push(new THREE.Vector2(1.9 - Math.sin(t * PI) * 0.65 + t * 0.15, t * 9)); }
   M.add('concrete', new THREE.LatheGeometry(prof, 32), { pos: v(1.6, 0, 1.4), color: C.CONC });
   M.cyl('concrete', 1.6, 8.6, 1.4, 1.95, 0.4, C.CONC2, 32);
+  M.vent(1.6, 9.2, 1.4, { rate: 3, size: 2.6 });
   M.cyl('hull', 1.6, 6.5, 1.4, 1.62, 0.6, C.O, 32);
   // containment dome
   M.cyl('hull', -1.8, 0, -1.6, 1.9, 2.5, C.W, 28);
@@ -264,7 +265,9 @@ function heater(M, big = false) {
     M.cyl('hull', -1.0 * s, 2.4 * s, 1.0 * s, 0.35, 2.0, C.W, 14);
     M.cyl('metal', -1.0 * s, 4.4 * s, 1.0 * s, 0.4, 0.2, C.D, 14);
     tank(M, 1.6 * s, 0, 1.4 * s, 0.45, 1.6);
+    M.vent(-1.0 * s, 4.7 * s, 1.0 * s, { rate: 1.2, size: 1.1 });
   }
+  M.vent(0, 2.6 * s, 0, { rate: 0.5, size: 0.8, kind: 'heat' });
   M.light(0, 2.6 * s, 0, L.orange, big ? 10 : 6, big ? 12 : 8);
   M.col(-1.25 * s, 0, -1.25 * s, 1.25 * s, 2.4 * s, 1.25 * s);
 }
@@ -282,6 +285,7 @@ function drill(M, big = false) {
     const x = Math.cos(a) * 1.15 * s, z = Math.sin(a) * 1.15 * s;
     pipe(M, [[x, 0.4, z], [0, H, 0]], 0.08, C.O);
   }
+  M.vent(0, H + 0.3, 0, { rate: big ? 1.6 : 1.0, size: big ? 1.2 : 0.9, kind: 'exhaust' });
   M.cyl('metal', 0, H - 0.3, 0, 0.35, 0.5, C.D, 12);
   M.sphere('blink', 0, H + 0.4, 0, 0.1, L.red, 8);
   // rotating drill string
@@ -452,6 +456,8 @@ function smelter(M) {
   // chimneys
   M.cyl('hull', -2.0, 3.8, 1.3, 0.4, 3.4, C.W, 14);
   M.cyl('metal', -2.0, 7.2, 1.3, 0.45, 0.25, C.D, 14);
+  M.vent(-2.0, 7.5, 1.3, { rate: 1.6, size: 1.3, kind: 'exhaust' });
+  M.vent(-0.8, 6.1, 1.5, { rate: 0.8, size: 0.9, kind: 'exhaust' });
   M.cyl('hull', -2.0, 6.2, 1.3, 0.42, 0.3, C.O, 14);
   M.cyl('hull', -0.8, 3.8, 1.5, 0.3, 2.2, C.W, 12);
   // intake hoppers
@@ -647,6 +653,7 @@ function factory(M) {
     M.cyl('hull', x, 5.0, 2.9, r, hh, C.W, 16);
     M.cyl('metal', x, 5.0 + hh * 0.7, 2.9, r + 0.04, 0.16, C.D, 16);
     M.cyl('metal', x, 5.0 + hh, 2.9, r + 0.06, 0.1, C.G2, 16);
+    M.vent(x, 5.2 + hh, 2.9, { rate: 1.1, size: 1.0, kind: 'exhaust' });
   }
   for (const z of [-2.6, 0.2, 3.0]) M.box('metal', 4.95, 1.4, z, 0.12, 2.8, 0.12, C.G2);
   M.box('metal', 4.95, 2.8, 0.2, 0.5, 0.1, 5.8, C.G2);
@@ -822,6 +829,7 @@ function mirrorModel(src) {
     interiors: src.interiors.map((r) => ({ ...r, x0: -r.x1, x1: -r.x0 })),
     lights: src.lights.map((l) => ({ ...l, x: -l.x })),
     doors: src.doors.map((d) => ({ ...d, x: -d.x })),
+    vents: (src.vents || []).map((q) => ({ ...q, x: -q.x })),
     entries: src.entries ? src.entries.map((x) => -x) : src.entries,
     height: src.height,
   };

@@ -55,6 +55,7 @@ export class BuildMode {
     const model = getModel(type === 'house' ? 'house:0' : type);
     const g = new THREE.Group();
     for (const p of model.parts) {
+      if (p.key === 'beam') continue;
       const m = new THREE.Mesh(p.geo, this.holoMat);
       m.frustumCulled = false;
       m.renderOrder = 30;
@@ -369,7 +370,7 @@ export class BuildMode {
       this.clearHighlight();
       if (this.target) {
         const grp = new THREE.Group();
-        for (const p of this.target.model.parts) { const m = new THREE.Mesh(p.geo, this.dismantleMat); m.frustumCulled = false; m.renderOrder = 30; grp.add(m); }
+        for (const p of this.target.model.parts) { if (p.key === 'beam') continue; const m = new THREE.Mesh(p.geo, this.dismantleMat); m.frustumCulled = false; m.renderOrder = 30; grp.add(m); }
         grp.position.set(this.target.x, this.target.y, this.target.z);
         grp.rotation.y = this.target.rot;
         grp.scale.setScalar(1.01);

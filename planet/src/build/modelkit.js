@@ -45,11 +45,12 @@ export class ModelBuilder {
     this.doors = [];           // {key, gb, slide:[x,y,z], x,z (door center)}
     this.entries = null;       // local x of front entrances (stairs land here)
     this.assets = [];          // real hardware models: {geo, material, anim}
+    this.vents = [];           // exhaust / vapour vents {x, y, z, rate, size, kind}
     this.top = 0;
   }
 
   gb(key) {
-    if (!this.groups.has(key)) this.groups.set(key, new GeoBuilder([], { pan: true }));
+    if (!this.groups.has(key)) this.groups.set(key, new GeoBuilder([], { pan: true, uv: key === 'beam' }));
     return this.groups.get(key);
   }
 
@@ -120,6 +121,9 @@ export class ModelBuilder {
     return this;
   }
 
+  // a vent that breathes vapour or exhaust while the building runs
+  vent(x, y, z, { rate = 1, size = 1, kind = 'steam' } = {}) { this.vents.push({ x, y, z, rate, size, kind }); return this; }
+
   col(x0, y0, z0, x1, y1, z1, flags = {}) {
     this.colliders.push({ x: (x0 + x1) / 2, z: (z0 + z1) / 2, hx: Math.abs(x1 - x0) / 2, hz: Math.abs(z1 - z0) / 2, y0: Math.min(y0, y1), y1: Math.max(y0, y1), ...flags });
   }
@@ -134,7 +138,7 @@ export class ModelBuilder {
     for (const a of this.anims) if (!a.gb.empty) parts.push({ key: a.key, geo: a.gb.build(), anim: a.anim });
     for (const d of this.doors) if (!d.gb.empty) parts.push({ key: d.key, geo: d.gb.build(), anim: { slide: d.slide }, door: true });
     for (const a of this.assets) parts.push(a.anim ? { key: 'asset', geo: a.geo, material: a.material, anim: a.anim } : { key: 'asset', geo: a.geo, material: a.material });
-    return { parts, colliders: this.colliders, interiors: this.interiors, lights: this.lights, doors: this.doors.map((d) => ({ x: d.x, z: d.z })), entries: this.entries, height: this.top };
+    return { parts, colliders: this.colliders, interiors: this.interiors, lights: this.lights, doors: this.doors.map((d) => ({ x: d.x, z: d.z })), entries: this.entries, vents: this.vents, height: this.top };
   }
 }
 

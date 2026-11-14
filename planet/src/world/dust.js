@@ -11,7 +11,7 @@ import { U } from '../core/shared.js';
 
 const LOGV = '#include <common>\n#include <logdepthbuf_pars_vertex>\n';
 const LOGF = '#include <common>\n#include <logdepthbuf_pars_fragment>\n';
-const CAP = 200;
+const CAP = 460;
 
 export class Dust {
   constructor(game) {
@@ -23,6 +23,7 @@ export class Dust {
     this.gusts = [];
     this.devils = [];
     this.gustT = 4;
+    this.puffs = [];      // short-lived puffs from effects: dust kicked up, vapour, exhaust
 
     // soft puffs: camera-facing quads, flattened, with drifting noise inside
     const g = new THREE.PlaneGeometry(1, 1);
@@ -55,6 +56,8 @@ export class Dust {
           // lit from the sun side, darker and denser at the base
           float day = smoothstep(-0.1, 0.3, uSunDir.y);
           vec3 col = vec3(0.64, 0.48, 0.34) * (0.12 + day * (0.62 + 0.45 * uSun)) * (0.85 + 0.25 * vH);
+          // vapour (negative seed): white condensation; exhaust (seed below -10): pale grey
+          if (vA.y < 0.0) col = (vA.y < -10.0 ? vec3(0.62, 0.61, 0.6) : vec3(0.93, 0.94, 0.96)) * (0.22 + day * (0.62 + 0.42 * uSun));
           // smoke (negative squash): sooty grey, underlit orange by the flames
           if (vA.z < 0.0) col = vec3(0.13, 0.125, 0.12) * (0.3 + 0.7 * day) + vec3(0.35, 0.12, 0.03) * (1.0 - vH) * 0.35;
           // flame (negative alpha): hot core, deeper orange at the tips
@@ -66,6 +69,12 @@ export class Dust {
     this.mesh = new THREE.InstancedMesh(g, this.mat, CAP);
     this.mesh.count = 0; this.mesh.frustumCulled = false;
     scene.add(this.mesh);
+  }
+
+  // a short-lived puff: o = { vx, vy, vz, s (size), grow, max (life s), a (alpha), kind: 'dust'|'steam'|'exhaust', drift }
+  puff(x, y, z, o = {}) {
+    if (this.puffs.length > 300) this.puffs.shift();
+    this.puffs.push({ x, y, z, vx: o.vx || 0, vy: o.vy || 0, vz: o.vz || 0, s: o.s || 1, grow: o.grow ?? 1.5, life: 0, max: o.max || 3, a: o.a ?? 0.4, kind: o.kind || 'dust', drift: o.drift ?? 0.6, seed: Math.random(), spin: Math.random() * 6.28 });
   }
 
   // how dusty the air is: dry, bare, windy ground lifts the most
@@ -165,6 +174,19 @@ export class Dust {
         const u = (t * 0.22 + i / 16) % 1, h = u * 28;
         put(b.x + this.wind.x * h * 0.55 + Math.sin(i * 2.3 + t) * 0.9, top + 1 + h, b.z + this.wind.y * h * 0.55 + Math.cos(i * 1.7 + t) * 0.9, 3 + u * 10, (1 - u) * 0.6 * k, b.id * 0.07 + i * 0.13, -0.9, i + t * 0.2);
       }
+    }
+    // effect puffs: drift with the wind, slow down, swell and thin out
+    for (let i = this.puffs.length - 1; i >= 0; i--) {
+      const Q = this.puffs[i];
+      Q.life += dt;
+      if (Q.life > Q.max) { this.puffs.splice(i, 1); continue; }
+      const damp = Math.max(0, 1 - dt * 1.4);
+      Q.vx *= damp; Q.vz *= damp; Q.vy *= Q.kind === 'dust' ? Math.max(0, 1 - dt * 2.0) : Math.max(0, 1 - dt * 0.35);
+      Q.x += (Q.vx + this.wind.x * ws * Q.drift) * dt; Q.y += Q.vy * dt; Q.z += (Q.vz + this.wind.y * ws * Q.drift) * dt;
+      const k = Q.life / Q.max;
+      const fade = Math.min(1, Q.life / 0.25) * (1 - k) * (1 - k * 0.3);
+      const seed = Q.kind === 'steam' ? -(0.05 + Q.seed) : Q.kind === 'exhaust' ? -(10.5 + Q.seed) : Q.seed;
+      put(Q.x, Q.y, Q.z, Q.s * (1 + Q.grow * Math.sqrt(k)), Q.a * fade, seed, Q.kind === 'dust' ? 0.6 : 1.0, Q.spin + Q.life * 0.15);
     }
     this.mesh.count = n;
     this.iP.needsUpdate = true; this.iA.needsUpdate = true;

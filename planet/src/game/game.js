@@ -9,6 +9,7 @@ import { Player } from '../player/player.js';
 import { Rover } from '../player/rover.js';
 import { Expedition } from './expedition.js';
 import { Dust } from '../world/dust.js';
+import { Effects } from '../world/effects.js';
 import { Buildings } from '../build/buildings.js';
 import { BuildMode } from '../build/buildmode.js';
 import { Supports } from '../build/supports.js';
@@ -59,6 +60,7 @@ export class Game {
     this.rover = new Rover(this);
     this.expedition = new Expedition(this);
     this.dust = new Dust(this);
+    this.effects = new Effects(this);
     this.build = new BuildMode(this);
     this.roads = new Roads(this);
     this.supports = new Supports(this);
@@ -434,7 +436,7 @@ export class Game {
     this.expedition.update(dt);
     this.pois.update(P.pos);
     this.fx.update(dt, cam.position, this.terra.weather.storm, this.terra.weather.snow || 0);
-    if (!this.engine.spaceScene) this.dust.update(dt, cam.position);
+    if (!this.engine.spaceScene) { this.effects.update(dt, cam.position); this.dust.update(dt, cam.position); }
     this.engine.underwater = cam.position.y < U.uWaterLevel.value && U.uIce.value < 0.5 ? 1 : 0;
     this.engine.hurt = Math.max(0, this.engine.hurt - dt * 0.6, P.oxygen <= 0 ? 0.6 : P.oxygen < 0.2 ? 0.25 : 0);
     this.audio.ambient(this.sky.uniforms.uAtmo.value, this.terra.weather.storm, this.sky.uniforms.uDust.value, !!P.inside);

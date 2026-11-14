@@ -41,7 +41,8 @@ class ModelBatch {
       }
       const mesh = new THREE.InstancedMesh(g, P.mat, cap);
       mesh.count = 0;
-      mesh.castShadow = P.part.key !== 'window' && P.part.key !== 'emissive' && P.part.key !== 'blink';
+      mesh.castShadow = P.part.key !== 'window' && P.part.key !== 'emissive' && P.part.key !== 'blink' && P.part.key !== 'beam';
+      if (P.part.key === 'beam') { mesh.receiveShadow = false; mesh.renderOrder = 8; }
       mesh.receiveShadow = true;
       mesh.frustumCulled = false;
       if (P.part.key === 'window') mesh.renderOrder = 5;

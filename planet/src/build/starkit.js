@@ -135,6 +135,13 @@ export function floodMast(M, x, z, h = 7, face = PI) {
     M.box('emissive', px + Math.sin(face) * 0.12, h + 0.25, pz + Math.cos(face) * 0.12, 0.28, 0.22, 0.02, L.white, face);
   }
   M.light(x + Math.sin(face) * 1.2, h - 0.5, z + Math.cos(face) * 1.2, L.white, 2.2, 14);
+  // the light shaft in the dusty night air, aimed down and out
+  const tilt = 0.62, len = (h + 0.25) / Math.sin(tilt) * 0.95;
+  const g = new THREE.CylinderGeometry(0.16, len * 0.3, len, 20, 1, true);
+  g.translate(0, -len / 2, 0);
+  const d = new THREE.Vector3(Math.sin(face) * Math.cos(tilt), -Math.sin(tilt), Math.cos(face) * Math.cos(tilt));
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), d);
+  M.add('beam', g, { pos: v(x + Math.sin(face) * 0.15, h + 0.25, z + Math.cos(face) * 0.15), rot: new THREE.Euler().setFromQuaternion(q), color: 0xfff4e0, uvRect: [0, 0, 1, 1] });
 }
 
 // lit symbols that say what a building is for, on a dark plate facing `face`

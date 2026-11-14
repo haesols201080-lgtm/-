@@ -352,6 +352,7 @@ export function processColumn(M, x, z, r, h, { y0 = 0.3, yaw = 0 } = {}) {
   M.cyl('metal', x, y0 + h - 0.1, z, r + 0.55, 0.06, N.GRATE, 20);
   M.add('metal', new THREE.TorusGeometry(r + 0.55, 0.025, 4, 24), { pos: v(x, y0 + h + 0.9, z), rot: e(PI / 2, 0, 0), color: N.YELLOW });
   for (let k = 0; k < 6; k++) { const a = k / 6 * PI * 2; M.cyl('metal', x + Math.sin(a) * (r + 0.55), y0 + h - 0.05, z + Math.cos(a) * (r + 0.55), 0.02, 0.95, N.YELLOW, 4); }
+  M.vent(x, y0 + h + 0.4, z, { rate: 1.2, size: 0.9 + r });
   M.colCyl(x, z, r, 0, y0 + h);
 }
 
