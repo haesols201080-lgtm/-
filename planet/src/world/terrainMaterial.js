@@ -139,9 +139,12 @@ void computeTerrain() {
   float soilDetail = mix(soilA.b, soilB.b, 0.35);
 
   // --- base albedo per biome
-  vec3 regolith = mix(s2l(vec3(0.36, 0.22, 0.15)), s2l(vec3(0.64, 0.44, 0.32)), soilDetail * 0.8 + 0.1);
-  regolith = mix(regolith, s2l(vec3(0.52, 0.40, 0.33)), smoothstep(0.35, 0.75, nzB.r) * 0.55);
-  regolith = mix(regolith, s2l(vec3(0.60, 0.34, 0.20)), smoothstep(0.55, 0.9, nzA.g) * 0.5);
+  vec3 regolith = mix(s2l(vec3(0.40, 0.29, 0.22)), s2l(vec3(0.63, 0.47, 0.36)), soilDetail * 0.8 + 0.1);
+  regolith = mix(regolith, s2l(vec3(0.52, 0.42, 0.35)), smoothstep(0.35, 0.75, nzB.r) * 0.5);
+  regolith = mix(regolith, s2l(vec3(0.58, 0.37, 0.24)), smoothstep(0.6, 0.92, nzA.g) * 0.4);
+  // dark basaltic sand in drifts and patches, bright dust settled on the flats
+  regolith = mix(regolith, s2l(vec3(0.27, 0.24, 0.22)) * (0.85 + 0.3 * soilA.b), smoothstep(0.55, 0.82, nzA.b * 0.8 + nzC.g * 0.3) * 0.65);
+  regolith = mix(regolith, s2l(vec3(0.71, 0.55, 0.41)), smoothstep(0.62, 0.88, nzB.a * 0.7 + nzA.r * 0.4) * (1.0 - smoothstep(0.05, 0.25, 1.0 - N.y)) * 0.55);
   vec3 sandC = mix(s2l(vec3(0.62, 0.43, 0.28)), s2l(vec3(0.85, 0.66, 0.47)), sand.b);
   vec3 basalt = mix(s2l(vec3(0.13, 0.11, 0.10)), s2l(vec3(0.33, 0.27, 0.25)), soilDetail);
   vec3 ground = regolith;
@@ -180,6 +183,38 @@ void computeTerrain() {
   vec2 tx = rx.rg * 2.0 - 1.0, ty = ry.rg * 2.0 - 1.0, tz = rz.rg * 2.0 - 1.0;
   vec3 nRock = normalize(N + (vec3(0.0, tx.y, tx.x) * bw.x + vec3(ty.x, 0.0, ty.y) * bw.y + vec3(tz.x, tz.y, 0.0) * bw.z) * 0.9);
   vec3 nrm = normalize(mix(nGround, nRock, cliff));
+
+  // relief at the scales between the mesh and the stones, so slopes and
+  // flats never shade like a smooth sculpted surface: fractured bumps of tens
+  // of metres, hummocks of metres, rubble of a metre; rugged on slopes and
+  // rock, gentle on sand, each fading before it gets too small to resolve
+  {
+    float fwR = length(fwidth(vTW.xz));
+    float rug = mix(0.6, 1.15, smoothstep(0.06, 0.4, slope)) * (1.0 - sandW * 0.55);
+    vec2 r1 = vec2(vTW.x * 0.8 - vTW.z * 0.6, vTW.x * 0.6 + vTW.z * 0.8);
+    vec4 m1 = texture2D(tRock, r1 * 0.017 + 0.11);
+    vec4 m2 = texture2D(tSoil, vec2(r1.y, -r1.x) * 0.055 + 0.29);
+    vec4 m3 = texture2D(tRock, r1.yx * 0.16 + 0.53);
+    float f2 = 1.0 - smoothstep(0.2, 0.8, fwR), f3 = 1.0 - smoothstep(0.06, 0.3, fwR);
+    vec2 t1 = m1.rg * 2.0 - 1.0, t2 = m2.rg * 2.0 - 1.0, t3 = m3.rg * 2.0 - 1.0;
+    vec2 tm = (t1 * 0.5 + t2 * 0.38 * f2 + t3 * 0.3 * f3) * rug;
+    nrm = normalize(nrm + vec3(tm.x, 0.0, tm.y));
+    // the same relief in the colour: dust in the lows, fresher rock on the highs
+    float cav = mix(1.0, m1.a, 0.5) * mix(1.0, m2.a, 0.35 * f2);
+    alb *= 0.82 + 0.26 * cav + (m3.b - 0.5) * 0.12 * f3;
+    ao *= mix(1.0, cav, 0.6);
+    // slopes: streaks and shallow gullies running straight downhill
+    if (slope > 0.06) {
+      vec2 dn = normalize(N.xz + vec2(1e-4));
+      vec2 pr = vec2(dot(vTW.xz, vec2(-dn.y, dn.x)), dot(vTW.xz, dn));
+      float st = texture2D(tNoise, vec2(pr.x * 0.33, pr.y * 0.022)).r * 0.6 + texture2D(tNoise, vec2(pr.x * 1.05, pr.y * 0.055) + 0.4).g * 0.4;
+      float sw = smoothstep(0.06, 0.32, slope) * (1.0 - cliff * 0.4);
+      alb *= 1.0 + (st - 0.5) * 0.42 * sw;
+      nrm = normalize(nrm + vec3(-dn.y, 0.0, dn.x) * (texture2D(tNoise, vec2(pr.x * 0.7, pr.y * 0.03) + 0.7).b - 0.5) * 0.5 * sw);
+    }
+    // mineral ground is less saturated than painted clay
+    alb = mix(vec3(dot(alb, vec3(0.3, 0.59, 0.11))), alb, 0.86);
+  }
 
   // built / packed ground around structures
   // irregular, soft-edged footprint of construction: darker trampled ground, not a painted rectangle
@@ -360,6 +395,28 @@ void computeTerrain() {
 }
 `;
 
+// Soil is not a Lambertian surface: its micro-roughness flattens the shading
+// across a slope and brightens it when the sun is behind the viewer. This
+// is the Oren-Nayar form (Fujii's qualitative variant), used for the direct
+// sunlight on terrain instead of Lambert, which is what makes smooth
+// shapes read as sculpted clay.
+const ROUGH_DIFFUSE = /* glsl */`
+void RE_Direct_Soil( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
+  vec3 N = geometryNormal, L = directLight.direction, V = geometryViewDir;
+  float NdotL = saturate(dot(N, L)), NdotV = saturate(dot(N, V));
+  float sOn = dot(L, V) - NdotL * NdotV;
+  float tOn = sOn > 0.0 ? max(max(NdotL, NdotV), 1e-3) : 1.0;
+  const float sig2 = 0.42;
+  float A = 1.0 - 0.5 * sig2 / (sig2 + 0.33), B = 0.45 * sig2 / (sig2 + 0.09);
+  float on = max(0.0, A + B * sOn / tOn);
+  vec3 irradiance = NdotL * directLight.color;
+  reflectedLight.directSpecular += irradiance * BRDF_GGX( L, V, N, material );
+  reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor ) * on * 1.15;
+}
+#undef RE_Direct
+#define RE_Direct RE_Direct_Soil
+`;
+
 export function makeTerrainMaterial() {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0, side: THREE.DoubleSide });
   mat.onBeforeCompile = (shader) => {
@@ -374,10 +431,11 @@ export function makeTerrainMaterial() {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\n' + TERRAIN_GLSL_COMMON)
       .replace('#include <map_fragment>', 'computeTerrain();\ndiffuseColor.rgb = gAlb;')
+      .replace('#include <lights_physical_pars_fragment>', '#include <lights_physical_pars_fragment>\n' + ROUGH_DIFFUSE)
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = gRough;')
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v23';
+  mat.customProgramCacheKey = () => 'terrain-v24';
   return mat;
 }

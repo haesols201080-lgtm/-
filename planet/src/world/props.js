@@ -4,7 +4,7 @@
 // set (shadows + colliders) and a far set, rebuilt when cells load or the
 // player moves.
 import * as THREE from 'three';
-import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { mergeVertices, toCreasedNormals } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Simplex, mulberry32 } from '../core/noise.js';
 import { PROP_CELL } from './chunkgen.js';
 import { makeRockMaterial, makeCrystalMaterial } from './materials.js';
@@ -36,18 +36,23 @@ export function rockGeometry(seed, detail, { sx = 1, sy = 0.8, sz = 1, cuts = 7,
   const S = new Simplex(seed);
   const rnd = mulberry32(seed * 7 + 1);
   const planes = [];
-  for (let i = 0; i < cuts; i++) planes.push({ n: new THREE.Vector3(rnd() * 2 - 1, rnd() * 1.6 - 0.4, rnd() * 2 - 1).normalize(), d: 0.55 + rnd() * 0.3 });
+  // fracture planes: rock breaks along joints, so most of its shape is flat
+  // faces meeting at edges, with rough weathered surface between
+  const nc = cuts + 4;
+  for (let i = 0; i < nc; i++) planes.push({ n: new THREE.Vector3(rnd() * 2 - 1, rnd() * 1.6 - 0.4, rnd() * 2 - 1).normalize(), d: 0.42 + rnd() * 0.38 });
   const p = g.attributes.position;
   const v = new THREE.Vector3();
   for (let i = 0; i < p.count; i++) {
     v.fromBufferAttribute(p, i);
-    v.multiplyScalar(1 + rough * S.fbm3(v.x * 1.3, v.y * 1.3, v.z * 1.3, 3) + 0.1 * S.noise3(v.x * 4, v.y * 4, v.z * 4) + 0.04 * S.noise3(v.x * 11, v.y * 11, v.z * 11));
-    // soft fracture planes (weathered, not faceted)
-    for (const pl of planes) { const d = v.dot(pl.n); if (d > pl.d) v.addScaledVector(pl.n, -(d - pl.d) * 0.55); }
+    v.multiplyScalar(1 + rough * 0.6 * S.fbm3(v.x * 1.3, v.y * 1.3, v.z * 1.3, 3) + 0.06 * S.noise3(v.x * 4, v.y * 4, v.z * 4));
+    for (const pl of planes) { const d = v.dot(pl.n); if (d > pl.d) v.addScaledVector(pl.n, -(d - pl.d) * 0.96); }
+    // pitted, granular faces (small amplitude, so the joints stay crisp)
+    v.multiplyScalar(1 + 0.025 * S.noise3(v.x * 9, v.y * 9, v.z * 9) + 0.012 * S.noise3(v.x * 23, v.y * 23, v.z * 23));
     if (v.y < -0.35) v.y = -0.35 + (v.y + 0.35) * 0.3;
     p.setXYZ(i, v.x * sx, v.y * sy, v.z * sz);
   }
-  g.computeVertexNormals();
+  // sharp where faces meet at an angle, smooth across a weathered face
+  g = toCreasedNormals(g, 0.55);
   g.computeBoundingSphere();
   return g;
 }
