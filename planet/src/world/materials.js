@@ -43,9 +43,11 @@ export function makeRockMaterial({ emissive = 0x000000 } = {}) {
         vec3 alb = pow(vTint, vec3(2.2)) * (0.55 + 0.75 * rk.b) * (0.85 + 0.3 * nz.r);
         vec2 tx = rx.rg * 2.0 - 1.0, ty = ry.rg * 2.0 - 1.0, tz = rz.rg * 2.0 - 1.0;
         gN = normalize(N0 + (vec3(0.0, tx.y, tx.x) * bw.x + vec3(ty.x, 0.0, ty.y) * bw.y + vec3(tz.x, tz.y, 0.0) * bw.z) * 1.1);
-        float top = smoothstep(0.55, 0.9, gN.y + (nz.g - 0.5) * 0.4);
-        vec3 dust = vec3(0.17, 0.08, 0.045) * (0.8 + 0.4 * nz.b);
-        alb = mix(alb, dust, top * 0.4);
+        // Mars rocks wear the same dust as the ground on every face that
+        // looks up, thinning down the sides; fresh rock shows on the steep faces
+        float top = smoothstep(0.15, 0.85, gN.y + (nz.g - 0.5) * 0.35);
+        vec3 dust = pow(vec3(0.66, 0.52, 0.41), vec3(2.2)) * (0.85 + 0.3 * nz.b);
+        alb = mix(alb, dust, top * 0.62);
         // crustose lichen: crisp round rosettes, pale sage and orange, on
         // faces that catch light and damp (not under overhangs)
         if (uLichen > 0.001) {
@@ -69,7 +71,7 @@ export function makeRockMaterial({ emissive = 0x000000 } = {}) {
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = gR;')
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz);');
   };
-  mat.customProgramCacheKey = () => 'rock-v6-' + emissive;
+  mat.customProgramCacheKey = () => 'rock-v7-' + emissive;
   return mat;
 }
 

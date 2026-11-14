@@ -55,14 +55,19 @@ vec4 clastLayer(vec2 p, float cell, float dens, vec2 sunL, out vec2 grad) {
     vec2 d0 = fp - c, d1 = d0 + sunL * rad;
     vec2 l = vec2(ca * d0.x + sa * d0.y, -sa * d0.x + ca * d0.y); l.y *= asp;
     vec2 ls = vec2(ca * d1.x + sa * d1.y, -sa * d1.x + ca * d1.y); ls.y *= asp;
+    // irregular outline: six faces at jittered angles and uneven distances,
+    // corners worn round
     float dp = -1e9, ds = -1e9; vec2 fnB = vec2(1.0, 0.0);
-    for (int k = 0; k < 5; k++) {
-      float th = float(k) * 1.2566 + fract(h.x * 17.0 + float(k) * 0.37) * 0.6;
+    for (int k = 0; k < 6; k++) {
+      float jk = fract(h.x * 17.0 + float(k) * 0.37);
+      float th = float(k) * 1.0472 + jk * 0.85;
       vec2 fn = vec2(cos(th), sin(th));
-      float t = dot(l, fn);
+      float off = (fract(h2.x * 23.0 + float(k) * 0.61) - 0.5) * 0.3 * rad;
+      float t = dot(l, fn) - off;
       if (t > dp) { dp = t; fnB = fn; }
-      ds = max(ds, dot(ls, fn));
+      ds = max(ds, dot(ls, fn) - off);
     }
+    dp = mix(dp, length(l) * 0.92, 0.3); ds = mix(ds, length(ls) * 0.92, 0.3);
     float rr = rad * 0.82, tall = 0.5 + 0.45 * h2.y;
     if (dp < rr) {
       float u = dp / rr, s1 = sqrt(max(0.0, 1.0 - u * u));
@@ -163,7 +168,7 @@ void computeTerrain() {
   vec3 crysC = mix(s2l(vec3(0.30, 0.27, 0.31)), s2l(vec3(0.56, 0.51, 0.56)), soilDetail);
   ground = mix(ground, crysC, smoothstep(0.25, 0.7, crysW));
 
-  vec3 rockC = mix(s2l(vec3(0.36, 0.21, 0.14)), s2l(vec3(0.66, 0.45, 0.32)), rock.b);
+  vec3 rockC = mix(s2l(vec3(0.44, 0.36, 0.3)), s2l(vec3(0.7, 0.57, 0.46)), rock.b);
   // sandstone bedding: irregular, low-contrast layers (no candy stripes)
   vec3 strataC = strataColor(vTW.y * 0.45 + rock.b * 3.0 + nzC.r * 4.0 + nzB.g * 6.0, nzB.r);
   strataC = mix(s2l(vec3(0.55, 0.31, 0.19)) * (0.85 + 0.3 * nzC.g), strataC, 0.22) * (0.8 + 0.35 * rock.b);
@@ -358,7 +363,7 @@ void computeTerrain() {
         // dust-coated on their flatter tops
         // mostly grey and brown-grey stone near the ground's brightness, a few darker
         vec3 grey = s2l(vec3(0.6, 0.57, 0.53)) * (0.8 + 0.4 * fract(r.z * 37.0));
-        vec3 sc = mix(alb * mix(0.85, 1.12, r.z), grey, 0.5);
+        vec3 sc = mix(alb * mix(0.8, 1.05, r.z), grey * 0.88, 0.35);
         sc = mix(sc, s2l(vec3(0.36, 0.34, 0.33)), step(0.9, r.z) * 0.7);
         float top = 1.0 - smoothstep(0.15, 0.9, length(gg));
         sc = mix(sc, alb * 1.05, top * 0.5);
@@ -441,6 +446,6 @@ export function makeTerrainMaterial() {
       .replace('#include <normal_fragment_maps>', 'normal = normalize((viewMatrix * vec4(gN, 0.0)).xyz) * faceDirection;')
       .replace('#include <aomap_fragment>', 'float ambientOcclusion = mix(1.0, gAO, 0.75);\nreflectedLight.indirectDiffuse *= ambientOcclusion;\nreflectedLight.indirectSpecular *= ambientOcclusion;');
   };
-  mat.customProgramCacheKey = () => 'terrain-v26';
+  mat.customProgramCacheKey = () => 'terrain-v28';
   return mat;
 }

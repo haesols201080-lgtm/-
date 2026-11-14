@@ -14,7 +14,7 @@ import { treeThreshold } from './treespecies.js';
 import { U } from '../core/shared.js';
 
 export const ORE_TYPES = {
-  iron: { name: '철', tint: [0.34, 0.24, 0.22], glow: false },
+  iron: { name: '철', tint: [0.5, 0.33, 0.27], glow: false },
   silicon: { name: '규소', tint: [0.52, 0.6, 0.7], glow: false },
   titanium: { name: '티타늄', tint: [0.78, 0.8, 0.84], glow: false },
   aluminium: { name: '알루미늄', tint: [0.86, 0.84, 0.78], glow: false },
@@ -310,7 +310,7 @@ export class Props {
       cell.crystals.push({ x, y, z, s, m: mat(x, y, z, 0, Cr[i + 4], 0, s, s, s), iTint: [Cr[i + 5], Cr[i + 6], Cr[i + 7]] });
     }
     cell.ores = r.ores.filter((o) => !this.collected.has(o.id));
-    for (const o of cell.ores) { o.m = mat(o.x, o.y, o.z, 0, o.rot, 0, o.s, o.s, o.s); o.iTint = ORE_TYPES[o.type].tint; o.baseTint = [0.36, 0.3, 0.26]; }
+    for (const o of cell.ores) { o.m = mat(o.x, o.y, o.z, 0, o.rot, 0, o.s, o.s, o.s); o.iTint = ORE_TYPES[o.type].tint; o.baseTint = [0.54, 0.47, 0.41]; }
     cell.deposits = r.deposits;
     cell.depCrystals = [];
     const rnd = mulberry32((cell.ci * 7919 + cell.cj * 104729) >>> 0);

@@ -134,15 +134,17 @@ function pickOre(rnd, s, h, z) {
   return 'iron';
 }
 
+// rock colour by province: weathered grey-tan stone, dark grey (never
+// black) basalt, buff sandstone, pale salt-crusted and frosted rock
 function rockTint(s, v) {
-  let c = [0.46, 0.33, 0.26];
+  let c = [0.56, 0.49, 0.43];
   const mix = (b, t) => { c = c.map((k, i) => k + (b[i] - k) * t); };
-  mix([0.58, 0.46, 0.36], s[0] * 0.6);
-  mix([0.64, 0.43, 0.3], s[2]);
-  mix([0.16, 0.14, 0.14], s[1]);
-  mix([0.62, 0.64, 0.68], s[4] * 0.7);
-  mix([0.7, 0.68, 0.64], s[5] * 0.6);
-  mix([0.38, 0.33, 0.42], s[6] * 0.7);
+  mix([0.62, 0.53, 0.45], s[0] * 0.6);
+  mix([0.66, 0.52, 0.4], s[2] * 0.8);
+  mix([0.4, 0.39, 0.38], s[1] * 0.85);
+  mix([0.64, 0.65, 0.68], s[4] * 0.7);
+  mix([0.72, 0.7, 0.66], s[5] * 0.6);
+  mix([0.46, 0.43, 0.48], s[6] * 0.7);
   return c.map((k) => k * v);
 }
 
