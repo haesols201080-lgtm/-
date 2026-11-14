@@ -161,8 +161,8 @@ const GRIME_F = /* glsl */`
   }
 #endif
 `;
-const NO_GRIME = new Set(['glass', 'window', 'emissive', 'blink', 'mirror', 'solar', 'plant', 'foil', 'water']);
-const NO_RIME = new Set(['glass', 'window', 'emissive', 'blink', 'mirror', 'solar']);
+const NO_GRIME = new Set(['glass', 'window', 'emissive', 'blink', 'mirror', 'solar', 'plant', 'foil', 'water', 'crystal']);
+const NO_RIME = new Set(['glass', 'window', 'emissive', 'blink', 'mirror', 'solar', 'crystal']);
 
 const SHARED_UNIFORMS = () => ({ tPanel: { value: TEX.panel }, tNoise: U.tNoise, uNight: U.uNight, uDustAmt: { value: 0 }, uTime: U.uTime, uRime: U.uRime });
 export const BUILD_U = { uDustAmt: { value: 0.6 } };
@@ -365,6 +365,16 @@ export function makeBuildingMaterials() {
     emit: /* glsl */`
       float b = step(0.82, fract(uTime * 0.7 + vData.z * 3.0));
       totalEmissiveRadiance += ec * (0.4 + b * 8.0);`,
+  });
+  // mineral crystal (the crystal plains' cobalt glass): a dark glossy body
+  // lit from inside, brightest along the edges it is seen through
+  M.crystal = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.06, metalness: 0.2, envMapIntensity: 1.8 }), 'crystal', {
+    map: 'diffuseColor.rgb *= 0.28;',
+    emit: /* glsl */`
+      float frC = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 2.4);
+      float coreC = smoothstep(0.0, 1.0, fract(vOP.y * 0.9 + 0.15));
+      float pulseC = 0.82 + 0.18 * sin(uTime * 1.3 + vOP.x * 2.1 + vOP.z * 1.7);
+      totalEmissiveRadiance += vColor * (0.32 + frC * 2.2 + coreC * 0.25) * pulseC * (0.6 + 1.5 * uNight);`,
   });
   M.solar = patch(new THREE.MeshStandardMaterial({ color: 0x0a1a3a, roughness: 0.18, metalness: 0.6, envMapIntensity: 1.3 }), 'solar', {
     map: /* glsl */`

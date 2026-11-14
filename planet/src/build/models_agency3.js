@@ -8,7 +8,7 @@ import { C, L, v, e, plinth, room, airlock } from './modelkit.js';
 import { strut, tankH, floodMast } from './starkit.js';
 import {
   N, hatch, radiatorWing, grating, avionics, tankV, processColumn, hangar, growTube,
-  instrumentMast, cargoBags, geodesicDome, derrick, suitport, dishAntenna, phasedArray,
+  instrumentMast, cargoBags, geodesicDome, derrick, suitport, dishAntenna, phasedArray, heap,
 } from './nasakit.js';
 import { pipe, band, beacon } from './models_agency.js';
 
@@ -222,8 +222,7 @@ export function wind(M) {
 export function reactor(M) {
   plinth(M, 8, 8);
   const rx = 0.6, rz = 1.0;
-  M.add('regolith', new THREE.CylinderGeometry(2.0, 2.9, 1.3, 36, 1, true), { pos: v(rx, 0.65, rz), color: 0x7a5d4a });
-  M.cyl('regolith', rx, 0, rz, 2.0, 1.25, 0x6f5444, 36);
+  heap(M, rx, rz, 3.05, 2.75, 1.25, 0x7a5d4a, { seed: 3, yaw: 0.4, profile: 'plateau', flat: 0.58, clods: 10 });
   M.cyl('steel', rx, 1.2, rz, 0.95, 0.6, 0xd5d8db, 28);
   M.add('steel', new THREE.SphereGeometry(0.95, 28, 8, 0, PI * 2, 0, PI / 2), { pos: v(rx, 1.8, rz), scale: v(1, 0.4, 1), color: 0xd5d8db });
   for (let k = 0; k < 8; k++) { const a = k / 8 * PI * 2; M.box('metal', rx + Math.sin(a) * 0.96, 1.5, rz + Math.cos(a) * 0.96, 0.06, 0.6, 0.12, N.FRAME, a); }

@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import { L, v, e, railing } from './modelkit.js';
 import { strut } from './starkit.js';
+import { mulberry32 } from '../core/noise.js';
 
 const PI = Math.PI;
 const eo = (x, y, z, o) => new THREE.Euler(x, y, z, o);
@@ -628,4 +629,60 @@ export function phasedArray(M, x, z, { s = 1, tilt = 0.95, speed = 0.08 } = {}) 
   }
   g.add(panel(new THREE.BoxGeometry(1.6 * s, 0.6 * s, 1.0 * s), -0.4 * s, 0), { pos: C0, color: 0xd8a640 });
   for (const sx of [-1, 1]) g.add(panel(new THREE.BoxGeometry(0.08 * s, 0.1 * s, H + 0.1 * s), 0.12 * s, 0).translate(sx * W / 2, 0, 0), { pos: C0, color: N.FRAME });
+}
+
+// A natural heap of loose material, never a turned cone: the outline wanders
+// (elongated, lobed, the crest off-centre where the conveyor dropped it), the
+// flanks carry lumps and slumps, the toe feathers into the ground, a few
+// clods have rolled off, the dry crest is paler than the compacted toe.
+// profile 'pile' (stockpile), 'plateau' (berm with a flat top of radius
+// flat, 0..1), 'rim' (a crater rim: a ring of ejecta round a low floor).
+export function heap(M, x, z, rx, rz, h, color, { seed = 1, yaw = 0, crest = [0.12, -0.08], profile = 'pile', flat = 0.55, clods = 7, key = 'regolith' } = {}) {
+  const rnd = mulberry32(seed * 977 + 13);
+  const ph = [0, 0, 0, 0, 0].map(() => rnd() * PI * 2);
+  const NS = 48, NR = 12;
+  const c = Math.cos(yaw), s = Math.sin(yaw);
+  const cx = profile === 'pile' ? crest[0] * rx : 0, cz = profile === 'pile' ? crest[1] * rz : 0;
+  const R = (a) => 1 + 0.15 * Math.sin(2 * a + ph[0]) + 0.08 * Math.sin(3 * a + ph[1]) + 0.05 * Math.sin(5 * a + ph[2]) + 0.025 * Math.sin(9 * a + ph[3]);
+  const lump = (px, pz) => Math.sin(px * 3.1 / Math.max(rx, 0.5) * 2 + ph[3]) * Math.cos(pz * 2.7 / Math.max(rz, 0.5) * 2 + ph[0]) + 0.5 * Math.sin(px * 7.3 - pz * 6.1 + ph[4]);
+  const prof = (t) => {
+    if (profile === 'plateau') { const u = Math.max(0, (t - flat) / (1 - flat)); return 1 - Math.pow(u, 1.25); }
+    if (profile === 'rim') { if (t >= 0.66) return Math.pow(1 - (t - 0.66) / 0.34, 1.5); const u = Math.min(1, Math.max(0, (t - 0.3) / 0.36)); return 0.04 + 0.96 * u * u * (3 - 2 * u); }
+    return 1 - Math.pow(t, 1.3);
+  };
+  const pos = [cx, h * prof(0), cz], idx = [];
+  for (let i = 1; i <= NR + 1; i++) {
+    const t = Math.min(i / NR, 1.0), over = i > NR;
+    for (let j = 0; j < NS; j++) {
+      const a = j / NS * PI * 2, rr = R(a) * (over ? 1.06 : t);
+      const lx = cx * (1 - Math.min(1, t)) + Math.cos(a) * rx * rr, lz = cz * (1 - Math.min(1, t)) + Math.sin(a) * rz * rr;
+      let y = over ? -0.06 : h * prof(t);
+      if (!over && t > 0.05 && t < 0.98) y += h * 0.07 * lump(lx, lz) * Math.sin(Math.min(1, t) * PI);
+      pos.push(lx, Math.max(over ? -0.06 : 0, y), lz);
+    }
+  }
+  const ring = (i) => 1 + (i - 1) * NS;
+  for (let j = 0; j < NS; j++) idx.push(0, ring(1) + (j + 1) % NS, ring(1) + j);
+  for (let i = 1; i <= NR; i++) for (let j = 0; j < NS; j++) {
+    const a0 = ring(i) + j, a1 = ring(i) + (j + 1) % NS, b0 = ring(i + 1) + j, b1 = ring(i + 1) + (j + 1) % NS;
+    idx.push(a0, a1, b1, a0, b1, b0);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.rotateY(yaw);
+  g.computeVertexNormals();
+  const base = new THREE.Color(color), lo = base.clone().multiplyScalar(0.78), hi = base.clone().lerp(new THREE.Color(0xffffff), 0.12);
+  const tint = (lx, ly, lz) => {
+    const k = Math.min(1, Math.max(0, ly / Math.max(h, 0.01))), n = 0.5 + 0.5 * Math.sin(lx * 9.1 + lz * 7.7 + ph[2]) * Math.cos(lz * 5.3 - lx * 3.1);
+    const q = lo.clone().lerp(hi, k * 0.8 + n * 0.2);
+    return [q.r, q.g, q.b];
+  };
+  M.add(key, g, { pos: v(x, 0, z), color: (lx, ly, lz) => tint(lx, ly, lz) });
+  for (let i = 0; i < clods; i++) {
+    const a = rnd() * PI * 2, rr = R(a) * (1.0 + rnd() * 0.25), r = 0.035 + rnd() * 0.07 * Math.min(1, h);
+    const lx = Math.cos(a) * rx * rr, lz = Math.sin(a) * rz * rr;
+    M.add(key, new THREE.IcosahedronGeometry(r, 0), { pos: v(x + lx * c + lz * s, r * 0.35, z - lx * s + lz * c), rot: e(rnd() * 3, rnd() * 3, rnd() * 3), color: lo.getHex() });
+  }
+  if (profile !== 'rim') M.colCyl(x, z, Math.min(rx, rz) * 0.85, 0, h * 0.9);
 }

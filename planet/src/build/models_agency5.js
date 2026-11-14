@@ -8,7 +8,7 @@ import { L, v, e, plinth, room, airlock } from './modelkit.js';
 import { strut, lattice, tankH, floodMast, pipeRack } from './starkit.js';
 import {
   N, hatch, vessel, tubeModule, radiatorWing, deployFrame, grating, avionics, bottleRack, cupola,
-  tankV, sphereTank, processColumn, hangar, instrumentMast, geodesicDome, viewBand, landingPad, dishAntenna,
+  tankV, sphereTank, processColumn, hangar, instrumentMast, geodesicDome, viewBand, landingPad, dishAntenna, heap,
 } from './nasakit.js';
 import { porch, pipe, band, beacon } from './models_agency.js';
 
@@ -19,13 +19,6 @@ function gStrut(g, a, b, t, color) {
   const A = v(...a), B = v(...b), d = B.clone().sub(A), len = d.length();
   const q = new THREE.Quaternion().setFromUnitVectors(v(0, 1, 0), d.normalize());
   g.add(new THREE.BoxGeometry(t, len, t), { pos: A.clone().add(B).multiplyScalar(0.5), rot: new THREE.Euler().setFromQuaternion(q), color });
-}
-function tub(M, x, z, h = 2.0, r = 0.8, k = 0) {
-  M.cyl('metal', x, 0, z, 0.45, 0.5, N.STEEL, 12);
-  M.cyl('plant', x, 0.5, z, 0.42, 0.04, 0x3b2a1e, 12);
-  M.cyl('plant', x, 0.5, z, 0.06, h - 0.3, 0x5a3b26, 6);
-  M.sphere('plant', x, 0.5 + h, z, r, k % 2 ? 0x3d7f3a : 0x2f6b34, 10, 0.85);
-  M.colCyl(x, z, 0.45, 0, 0.5);
 }
 
 // ---------------------------------------------------------------- field gear
@@ -390,9 +383,8 @@ export function crusher(M) {
   M.add('metal', new THREE.CylinderGeometry(1.0, 0.4, 1.0, 4, 1, true), { pos: v(-1.0, 2.8, 0.6), rot: e(0, PI / 4, 0), color: 0x9aa0a6 });
   M.box('metal', -1.0, 0.9, -0.52, 1.4, 1.4, 0.04, 0xc9ccd0);
   M.col(-2.2, 0, -0.5, 0.2, 2.3, 1.7);
-  M.add('regolith', new THREE.ConeGeometry(1.2, 1.1, 14), { pos: v(1.6, 0.55, -1.8), color: 0x6f4a3a });
-  M.add('regolith', new THREE.ConeGeometry(0.8, 0.7, 12), { pos: v(2.5, 0.35, -0.7), color: 0x5a5a5a });
-  M.colCyl(1.6, -1.8, 1.0, 0, 1.0);
+  heap(M, 1.55, -1.8, 1.3, 0.95, 1.05, 0x6f4a3a, { seed: 21, yaw: 0.5, crest: [-0.25, 0.2] });
+  heap(M, 2.45, -0.55, 0.75, 0.55, 0.6, 0x5f5a56, { seed: 22, yaw: -0.3, clods: 4 });
   strut(M, [0.4, 0.3, -1.4], [-0.3, 2.9, 0.2], 0.45, 0x3a3f45);
   strut(M, [0.4, 0.55, -1.4], [-0.3, 3.15, 0.2], 0.05, N.YELLOW);
   M.box('metal', 1.6, 1.0, 1.6, 1.8, 0.12, 1.2, N.STEEL);
