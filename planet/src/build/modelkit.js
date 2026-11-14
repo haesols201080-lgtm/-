@@ -312,18 +312,18 @@ export function wall(M, axis, x, z, len, h, t, openings = [], { key = 'hull', co
 }
 
 // Simple 4-wall room: front wall (z = -d/2) has the door at centre.
-export function room(M, w, d, h, { t = 0.24, door = 1.8, doorH = 2.5, winFront = [], winSide = 2, winBack = 2, color = C.W, roof = true, roofColor = C.W2, inner = true } = {}) {
+export function room(M, w, d, h, { t = 0.24, door = 1.8, doorH = 2.5, winFront = [], winSide = 2, winBack = 2, color = C.W, roof = true, roofColor = C.W2, inner = true, key = 'hull' } = {}) {
   const hw = w / 2, hd = d / 2;
   const fo = [{ a: hw - door / 2, b: hw + door / 2, y0: 0, y1: doorH, kind: 'door' }, ...winFront];
-  wall(M, 'x', -hw, -hd, w, h, t, fo, { color });
+  wall(M, 'x', -hw, -hd, w, h, t, fo, { color, key });
   const wins = (n, len) => {
     const out = [];
     for (let i = 0; i < n; i++) { const c = len * (i + 1) / (n + 1); out.push({ a: c - 0.7, b: c + 0.7, y0: 0.95, y1: 2.15, kind: 'window' }); }
     return out;
   };
-  wall(M, 'x', -hw, hd, w, h, t, wins(winBack, w), { color });
-  wall(M, 'z', -hw, -hd + t / 2, d - t, h, t, wins(winSide, d - t), { color });
-  wall(M, 'z', hw, -hd + t / 2, d - t, h, t, wins(winSide, d - t), { color });
+  wall(M, 'x', -hw, hd, w, h, t, wins(winBack, w), { color, key });
+  wall(M, 'z', -hw, -hd + t / 2, d - t, h, t, wins(winSide, d - t), { color, key });
+  wall(M, 'z', hw, -hd + t / 2, d - t, h, t, wins(winSide, d - t), { color, key });
   if (roof) {
     M.bb('hull', -hw - 0.15, h, -hd - 0.15, hw + 0.15, h + 0.3, hd + 0.15, roofColor);
     M.col(-hw, h, -hd, hw, h + 0.3, hd);

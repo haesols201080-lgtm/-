@@ -7,6 +7,7 @@ import { ModelBuilder, C, L, v, e, plinth, hazard, railing, stairs, antenna, ven
 import { houseT1, houseT2, houseT3, houseT4, houseT1b, houseT2b, houseT3b, houseT4b, market, lounge, clinic, school, lab, comms, hqExtras } from './models_colony.js';
 import * as NASA from './models_nasa.js';
 import * as AG from './models_agency.js';
+import * as AG2 from './models_agency2.js';
 import { lifesupport, sewage, recycling, powerbank, firestation, police, nursery, cityhall, tradepost } from './models_civic.js';
 import { houseS, houseSb, houseA, houseAb, houseR, houseRb, houseC, houseCb, houseP, housePb, houseN, houseNb, gym, textile, orchard, pharma, transit, university } from './models_homes.js';
 
@@ -800,6 +801,11 @@ Object.assign(BUILDERS, { cityhall: NASA.cityhall, clinic: NASA.clinic, 'cityhal
 for (const t of ['lifesupport', 'sewage', 'recycling', 'firestation', 'police', 'nursery', 'tradepost', 'school', 'lab', 'market']) {
   BUILDERS[t] = (M) => AG[t](M, false);
   BUILDERS[t + '@open'] = (M) => AG[t](M, true);
+}
+// colony buildings, second batch
+for (const t of ['lounge', 'gym', 'textile', 'orchard', 'pharma', 'transit', 'university', 'factory', 'techplant', 'hq', 'farm', 'pump', 'park', 'culture', 'monument']) {
+  BUILDERS[t] = (M) => AG2[t](M, false);
+  BUILDERS[t + '@open'] = (M) => AG2[t](M, true);
 }
 // a building type that has an open-air form for after the air is breathable
 export function hasOpenForm(type) { return !!BUILDERS[type + '@open']; }

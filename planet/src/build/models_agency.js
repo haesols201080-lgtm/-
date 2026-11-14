@@ -17,20 +17,20 @@ const PI = Math.PI;
 const BLUE = 0x2a5db0, RED = 0xc8302a, GREEN = 0x2f8f4a, AMBER = 0xe2b42a;
 
 // porch + ramp in front of a hatch at (x, zFront) whose sill is at y
-function porch(M, x, zFront, y, { w = 1.6, d = 1.3, run = 0 } = {}) {
+export function porch(M, x, zFront, y, { w = 1.6, d = 1.3, run = 0 } = {}) {
   grating(M, x, y, zFront - d / 2, w, d);
   for (const sx of [-1, 1]) railing(M, x + sx * w / 2, zFront - d, x + sx * w / 2, zFront, y, 1.0, N.YELLOW);
   ramp(M, x, zFront - d, 0, y, { w: Math.min(1.3, w - 0.2), run: run || Math.max(1.1, y * 2.4) });
 }
 // a pipe from a to b with a bend at height y
-function pipe(M, a, b, y, r = 0.07, color = 0xb8bec4) {
+export function pipe(M, a, b, y, r = 0.07, color = 0xb8bec4) {
   M.tube('metal', [[a[0], a[1], a[2]], [a[0], y, a[2]], [b[0], y, b[2]], [b[0], b[1], b[2]]], r, color, 6);
 }
 // colour band around a vertical vessel
-function band(M, x, z, r, y, h, color) {
+export function band(M, x, z, r, y, h, color) {
   M.add('shell', new THREE.CylinderGeometry(r + 0.012, r + 0.012, h, 48, 1, true), { pos: v(x, y, z), color });
 }
-function beacon(M, x, y, z, color) {
+export function beacon(M, x, y, z, color) {
   M.cyl('metal', x, y, z, 0.07, 0.12, N.DARK, 8);
   M.sphere('blink', x, y + 0.2, z, 0.09, color, 8);
 }

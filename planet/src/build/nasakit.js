@@ -446,3 +446,59 @@ export function cargoBags(M, x, z, n = 4, yaw = 0) {
     M.box('metal', p.x, y + 0.21, p.z, 0.6, 0.04, 0.47, 0x7f8a96, yaw);
   }
 }
+
+// geodesic greenhouse dome: faceted glazing on a strut frame (not a smooth
+// bubble), on a low shell skirt with a ring beam
+export function geodesicDome(M, x, z, r, { y0 = 0, detail = 2, skirt = 0.5 } = {}) {
+  const g = new THREE.IcosahedronGeometry(r, detail);
+  const P = g.attributes.position;
+  const pos = [], edges = new Map();
+  const key = (p, q) => { const a = p.map((k) => Math.round(k * 100)).join(','), b = q.map((k) => Math.round(k * 100)).join(','); return a < b ? a + '|' + b : b + '|' + a; };
+  for (let i = 0; i < P.count; i += 3) {
+    const t = [0, 1, 2].map((k) => [P.getX(i + k), P.getY(i + k), P.getZ(i + k)]);
+    if ((t[0][1] + t[1][1] + t[2][1]) / 3 < 0.02 * r) continue;
+    for (const p of t) pos.push(x + p[0], y0 + skirt + Math.max(0, p[1]), z + p[2]);
+    for (const [p, q] of [[t[0], t[1]], [t[1], t[2]], [t[2], t[0]]]) edges.set(key(p, q), [p, q]);
+  }
+  const dg = new THREE.BufferGeometry();
+  dg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  dg.computeVertexNormals();
+  M.add('window', dg);
+  for (const [p, q] of edges.values()) strut(M, [x + p[0], y0 + skirt + Math.max(0, p[1]), z + p[2]], [x + q[0], y0 + skirt + Math.max(0, q[1]), z + q[2]], 0.06 + r * 0.004, N.FRAME);
+  M.add('shell', new THREE.CylinderGeometry(r * 1.01, r * 1.04, skirt, 40, 1, true), { pos: v(x, y0 + skirt / 2, z), color: N.SHELL2 });
+  M.add('metal', new THREE.TorusGeometry(r * 1.01, 0.1, 6, 48), { pos: v(x, y0 + skirt, z), rot: e(PI / 2, 0, 0), color: N.STEEL });
+  M.colCyl(x, z, r, 0, y0 + skirt + r);
+}
+
+// panoramic window band around a vessel (lounges, control rooms)
+export function viewBand(M, x, z, r, y, h, { from = 0, to = PI * 2, n = 14 } = {}) {
+  M.add('glass', new THREE.CylinderGeometry(r + 0.02, r + 0.02, h, 48, 1, true, from, to - from), { pos: v(x, y + h / 2, z) });
+  for (let i = 0; i <= n; i++) {
+    const a = from + (to - from) * i / n;
+    M.box('metal', x + Math.sin(a) * (r + 0.05), y + h / 2, z + Math.cos(a) * (r + 0.05), 0.08, h + 0.1, 0.08, N.FRAME, a);
+  }
+  for (const yy of [y, y + h]) M.add('metal', new THREE.TorusGeometry(r + 0.05, 0.05, 6, 48, to - from), { pos: v(x, yy, z), rot: e(PI / 2, 0, -from + PI / 2), color: N.FRAME });
+}
+
+// landing pad: sintered disc, painted ring and cross, edge lights
+export function landingPad(M, x, z, r) {
+  M.cyl('concrete', x, -0.05, z, r, 0.2, 0x8f8a84, 40);
+  M.add('concrete', new THREE.RingGeometry(r * 0.72, r * 0.78, 48), { pos: v(x, 0.16, z), rot: e(-PI / 2, 0, 0), color: 0xd9b23a });
+  M.box('concrete', x, 0.155, z, r * 0.9, 0.01, 0.22, 0xe9e5dd);
+  M.box('concrete', x, 0.155, z, 0.22, 0.01, r * 0.9, 0xe9e5dd);
+  for (let i = 0; i < 12; i++) { const a = i / 12 * PI * 2; M.sphere('blink', x + Math.cos(a) * (r - 0.2), 0.2, z + Math.sin(a) * (r - 0.2), 0.07, N.ORANGE, 6); }
+}
+
+// small drilling derrick with a drill string and a top drive
+export function derrick(M, x, z, h, w = 1.4) {
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) strut(M, [x + sx * w / 2, 0, z + sz * w / 2], [x + sx * w * 0.18, h, z + sz * w * 0.18], 0.1, N.ORANGE);
+  for (let k = 1; k < 4; k++) {
+    const t = k / 4, hw = w / 2 * (1 - t) + w * 0.18 * t, y = h * t;
+    for (const [a, b] of [[[-1, -1], [1, -1]], [[1, -1], [1, 1]], [[1, 1], [-1, 1]], [[-1, 1], [-1, -1]]]) strut(M, [x + a[0] * hw, y, z + a[1] * hw], [x + b[0] * hw, y, z + b[1] * hw], 0.06, N.ORANGE);
+  }
+  M.box('metal', x, h + 0.2, z, w * 0.5, 0.4, w * 0.5, N.DARK);
+  M.cyl('metal', x, 0, z, 0.07, h, 0x9aa0a6, 8);
+  M.box('metal', x, h * 0.55, z, 0.4, 0.5, 0.4, N.YELLOW);
+  M.sphere('blink', x, h + 0.5, z, 0.08, L.red, 6);
+  M.colCyl(x, z, w * 0.45, 0, h);
+}
