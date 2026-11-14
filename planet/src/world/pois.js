@@ -1,0 +1,384 @@
+// Points of interest scattered across the planet: crashed ship wrecks,
+// supply caches and alien ruins. Searching them yields materials, research
+// data and "eureka" boosts — the reason to explore the far reaches of the map.
+import * as THREE from 'three';
+import { ModelBuilder, C, L, v, e, pipe, hazard, antenna } from '../build/modelkit.js';
+import { mulberry32 } from '../core/noise.js';
+import { RESEARCH } from '../sim/data.js';
+import { makeRockMaterial } from './materials.js';
+import { rockGeometry } from './props.js';
+import { U } from '../core/shared.js';
+
+function wreck(M, rnd) {
+  // broken fuselage halves, scattered panels, scorched cargo
+  M.add('hull', new THREE.CylinderGeometry(2.2, 2.4, 9, 18, 1, true, 0, Math.PI * 1.4), { pos: v(-3, 1.4, 0), rot: e(Math.PI / 2, 0.3, 0.5), color: C.W2 });
+  M.add('hull', new THREE.CylinderGeometry(2.3, 2.3, 0.4, 18), { pos: v(-6.8, 2.2, -1.2), rot: e(Math.PI / 2, 0.3, 0.5), color: C.G2 });
+  M.add('hull', new THREE.ConeGeometry(2.2, 4, 18, 1, true), { pos: v(5, 1.0, 2), rot: e(-Math.PI / 2 + 0.3, 0.8, 0.2), color: C.W });
+  M.add('glass', new THREE.SphereGeometry(1.4, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), { pos: v(5.8, 1.2, 3.4), rot: e(-1.0, 0.8, 0) });
+  for (let i = 0; i < 9; i++) {
+    const a = rnd() * 6.28, r = 3 + rnd() * 7;
+    M.add('hull', new THREE.BoxGeometry(0.8 + rnd() * 2, 0.06, 0.6 + rnd() * 1.4), { pos: v(Math.cos(a) * r, 0.1 + rnd() * 0.3, Math.sin(a) * r), rot: e(rnd() - 0.5, rnd() * 6, rnd() - 0.5), color: rnd() < 0.3 ? C.O : C.W2 });
+  }
+  M.add('metal', new THREE.BoxGeometry(3.4, 0.5, 0.6), { pos: v(1.5, 0.6, -2.4), rot: e(0.2, 0.4, 0.6), color: C.G2 });
+  pipe(M, [[-1, 0.2, 1.8], [0.5, 1.6, 2.2], [2.0, 0.4, 3.0]], 0.12, C.D);
+  // cargo container (searchable)
+  M.bb('hull', -1.0, 0, -0.7, 1.0, 1.3, 0.7, C.O);
+  M.bb('metal', -1.05, 1.2, -0.75, 1.05, 1.35, 0.75, C.D);
+  hazard(M, 0, 0.65, -0.72, 1.6, 0.18, 0.04);
+  M.box('blink', 0, 1.42, 0, 0.12, 0.08, 0.12, L.orange);
+  M.colCyl(-3, 0, 2.6, 0, 3.2);
+  M.colCyl(5, 2, 2.0, 0, 2.6);
+  M.col(-1.0, 0, -0.7, 1.0, 1.35, 0.7);
+}
+
+function cache(M) {
+  M.bb('concrete', -1.6, -1.0, -1.6, 1.6, 0, 1.6, C.CONC2);
+  M.cyl('hull', 0, 0, 0, 1.0, 1.8, C.W, 16);
+  M.dome('hull', 0, 1.8, 0, 1.0, C.O, 16);
+  M.box('metal', 0, 0.9, -0.98, 0.7, 1.1, 0.1, C.G2);
+  M.box('emissive', 0, 1.6, -1.0, 0.5, 0.06, 0.04, L.cyan);
+  for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; M.add('metal', new THREE.CylinderGeometry(0.05, 0.06, 1.6, 6), { pos: v(Math.cos(a) * 1.15, 0.6, Math.sin(a) * 1.15), rot: e(Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35), color: C.G2 }); }
+  antenna(M, 0.4, 2.6, 0.2, 1.4, L.orange);
+  M.colCyl(0, 0, 1.0, 0, 2.6);
+}
+
+function ruin(M, rnd) {
+  // ring of dark monoliths with glowing glyph bands around a central altar
+  const n = 7;
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2, r = 7.5;
+    const h = 5 + rnd() * 5;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    M.add('metal', new THREE.BoxGeometry(1.3, h, 0.8), { pos: v(x, h / 2 - 0.3, z), rot: e((rnd() - 0.5) * 0.12, -a, (rnd() - 0.5) * 0.12), color: 0x1b1a22 });
+    for (let k = 0; k < 3; k++) M.add('emissive', new THREE.BoxGeometry(1.32, 0.06, 0.82), { pos: v(x, 1.2 + k * h * 0.28, z), rot: e(0, -a, 0), color: 0x8a5cff });
+    M.colCyl(x, z, 0.8, 0, h);
+  }
+  M.cyl('metal', 0, 0, 0, 2.4, 0.6, 0x24222c, 8);
+  M.cyl('metal', 0, 0.6, 0, 1.4, 0.9, 0x1b1a22, 8);
+  M.add('emissive', new THREE.OctahedronGeometry(0.6, 0), { pos: v(0, 2.4, 0), color: 0xa070ff });
+  M.add('emissive', new THREE.TorusGeometry(1.6, 0.05, 6, 32), { pos: v(0, 1.52, 0), rot: e(Math.PI / 2, 0, 0), color: 0x8a5cff });
+  M.colCyl(0, 0, 2.4, 0, 1.5);
+}
+
+// an old robotic lander from the first survey: leg pads, drill arm, dish
+function probe(M, rnd) {
+  M.cyl('hull', 0, 1.0, 0, 1.0, 0.9, C.W2, 6);
+  M.cyl('metal', 0, 1.9, 0, 1.05, 0.12, C.G2, 6);
+  for (let i = 0; i < 3; i++) {
+    const a = i / 3 * Math.PI * 2 + 0.3;
+    M.add('metal', new THREE.CylinderGeometry(0.05, 0.06, 1.5, 6), { pos: v(Math.cos(a) * 1.2, 0.65, Math.sin(a) * 1.2), rot: e(Math.sin(a) * 0.5, 0, -Math.cos(a) * 0.5), color: C.G2 });
+    M.cyl('metal', Math.cos(a) * 1.6, 0, Math.sin(a) * 1.6, 0.28, 0.06, C.D, 10);
+  }
+  // tilted dish on a mast, one solar wing snapped and lying in the dust
+  M.cyl('metal', 0.4, 2.0, 0.2, 0.05, 1.2, C.G, 6);
+  M.add('hull', new THREE.SphereGeometry(0.7, 14, 6, 0, Math.PI * 2, 0, 0.6), { pos: v(0.4, 3.3, 0.2), rot: e(2.2, 0.4, 0), color: C.W });
+  M.add('solar', new THREE.BoxGeometry(2.2, 0.05, 1.0), { pos: v(-1.9, 1.5, 0), rot: e(0, 0, 0.1) });
+  M.add('solar', new THREE.BoxGeometry(2.2, 0.05, 1.0), { pos: v(2.6, 0.12, 1.4), rot: e(0.15, 0.9, 0.2) });
+  // sample drill arm reaching into the ground
+  pipe(M, [[0.8, 1.2, -0.6], [1.6, 0.9, -1.2], [1.9, 0.0, -1.5]], 0.07, C.G2);
+  M.box('blink', 0, 2.05, 0, 0.1, 0.06, 0.1, L.red);
+  M.colCyl(0, 0, 1.1, 0, 2.0);
+}
+
+// a geode: a rough boulder split in two, the halves fallen apart so the
+// crystal-lined cut faces look at each other across the gap
+function geode(M, rnd) {
+  const R = 2.0;
+  for (const sd of [-1, 1]) {
+    const cx = sd * 0.9;
+    const half = new THREE.SphereGeometry(R, 20, 14, 0, Math.PI);       // z >= 0 half...
+    half.rotateY(sd * Math.PI / 2);                                       // ...turned to face away from the gap
+    const P = half.attributes.position, q = new THREE.Vector3();
+    for (let i = 0; i < P.count; i++) { q.fromBufferAttribute(P, i); const n = 1 + 0.12 * Math.sin(q.x * 3.1 + q.y * 2.3) * Math.cos(q.z * 2.7); P.setXYZ(i, q.x * n, q.y * n, q.z * n); }
+    half.computeVertexNormals();
+    M.add('rock', half, { pos: v(cx, 0.9, 0), rot: e(0, 0, sd * 0.12), scale: v(1, 0.78, 1) });
+    // cut face: dark agate rim around a hollow lined with crystals
+    const face = new THREE.CircleGeometry(R * 0.96, 28); face.rotateY(-sd * Math.PI / 2);
+    M.add('rock', face, { pos: v(cx - sd * 0.01, 0.9, 0), rot: e(0, 0, sd * 0.12), scale: v(1, 0.78, 1) });
+    const ring = new THREE.TorusGeometry(R * 0.72, 0.1, 6, 28); ring.rotateY(-sd * Math.PI / 2);
+    M.add('concrete', ring, { pos: v(cx - sd * 0.03, 0.9, 0), rot: e(0, 0, sd * 0.12), scale: v(1, 0.78, 1), color: 0xb9a7c4 });
+    for (let k = 0; k < 26; k++) {
+      const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * R * 0.62;
+      const cr = new THREE.ConeGeometry(0.07 + rnd() * 0.07, 0.3 + rnd() * 0.35, 6); cr.rotateZ(sd * Math.PI / 2);
+      M.add('emissive', cr, { pos: v(cx - sd * 0.15, 0.9 + Math.sin(a) * r * 0.78, Math.cos(a) * r), rot: e((rnd() - 0.5) * 0.6, (rnd() - 0.5) * 0.6, 0), color: rnd() < 0.55 ? 0x7ad8ff : 0xb48cff });
+    }
+  }
+  M.colCyl(-1.4, 0, 1.4, 0, 2.4);
+  M.colCyl(1.4, 0, 1.4, 0, 2.4);
+}
+
+// a meteorite impact: the terrain itself is dug into a bowl with a raised
+// rim (landform edit); the iron-nickel meteorite lies half buried at the
+// centre, ejecta thrown out mostly downrange, small fragments in the bowl
+function meteor(M, rnd, hAt) {
+  const m = new THREE.IcosahedronGeometry(1.1, 3), P = m.attributes.position, q = new THREE.Vector3();
+  for (let i = 0; i < P.count; i++) { q.fromBufferAttribute(P, i); const k = 1 + 0.18 * Math.sin(q.x * 5 + 1) * Math.sin(q.y * 4.5) * Math.sin(q.z * 5.5 + 2) - 0.08 * Math.abs(Math.sin(q.x * 13) * Math.sin(q.z * 12)); P.setXYZ(i, q.x * k, q.y * k * 0.8, q.z * k * 1.2); }
+  m.computeVertexNormals();
+  M.add('metal', m, { pos: v(0, hAt(0, 0) - 0.35, 0), rot: e(0.3, 0.7, 0.2), color: 0x3a3632 });
+  const down = rnd() * 6.28;
+  for (let k = 0; k < 18; k++) {
+    const a = down + (rnd() - 0.5) * (rnd() < 0.7 ? 1.8 : 6.28), r = 6.8 + Math.pow(rnd(), 1.7) * 13, sz = 0.22 + Math.pow(rnd(), 2.4) * 1.5;
+    const x = Math.cos(a) * r, z = Math.sin(a) * r;
+    M.add('rock', rockGeometry(200 + k, 2, { sx: 0.8 + rnd() * 0.6, sy: 0.5 + rnd() * 0.5, sz: 0.8 + rnd() * 0.5, cuts: 4 + Math.floor(rnd() * 8), rough: 0.15 + rnd() * 0.2 }), { pos: v(x, hAt(x, z) - sz * 0.3, z), rot: e(rnd() * 0.5, rnd() * 6.28, rnd() * 0.5), scale: v(sz, sz, sz) });
+    if (sz > 1.0) M.colCyl(x, z, sz * 0.75, hAt(x, z) - 0.5, hAt(x, z) + sz * 0.6);
+  }
+  for (let k = 0; k < 12; k++) {
+    const a = rnd() * 6.28, r = 1.3 + rnd() * 4.5, sz = 0.07 + rnd() * 0.16, x = Math.cos(a) * r, z = Math.sin(a) * r;
+    M.add('metal', new THREE.DodecahedronGeometry(sz, 0), { pos: v(x, hAt(x, z) - sz * 0.3, z), rot: e(rnd(), rnd() * 6, rnd()), color: 0x3a3632 });
+  }
+  M.colCyl(0, 0, 1.2, hAt(0, 0) - 0.6, hAt(0, 0) + 0.9);
+}
+
+// an automated weather station left by an earlier robotic mission
+function station(M, rnd) {
+  M.cyl('metal', 0, 0, 0, 0.07, 4.2, C.G, 8);
+  for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2; pipe(M, [[0, 3.2, 0], [Math.cos(a) * 1.9, 0.02, Math.sin(a) * 1.9]], 0.015, C.D); }
+  M.box('hull', 0.25, 1.1, 0, 0.6, 0.8, 0.45, C.W);
+  M.box('metal', 0.25, 1.1, -0.24, 0.45, 0.5, 0.03, C.G2);
+  M.add('solar', new THREE.BoxGeometry(1.2, 0.04, 0.8), { pos: v(0, 2.3, 0.4), rot: e(-0.6, 0, 0) });
+  // cup anemometer and wind vane on the mast top
+  M.cyl('metal', 0, 4.2, 0, 0.03, 0.25, C.G, 6);
+  for (let k = 0; k < 3; k++) { const a = k / 3 * Math.PI * 2; M.add('metal', new THREE.CylinderGeometry(0.01, 0.01, 0.35, 4).rotateZ(Math.PI / 2), { pos: v(Math.cos(a) * 0.17, 4.42, Math.sin(a) * 0.17), rot: e(0, -a, 0), color: C.G }); M.sphere('hull', Math.cos(a) * 0.34, 4.42, Math.sin(a) * 0.34, 0.06, C.W, 8); }
+  M.box('metal', 0, 3.85, 0.3, 0.04, 0.2, 0.6, C.G2);
+  M.box('blink', 0, 4.25, 0, 0.06, 0.05, 0.06, L.red);
+  // a sensor box knocked over in the dust
+  M.box('hull', 1.6, 0.18, 1.1, 0.5, 0.36, 0.35, C.W2, 0.6);
+  M.colCyl(0, 0, 0.5, 0, 4.4);
+}
+
+// a crashed relay satellite: bus half buried, one wing torn off
+function satellite(M, rnd) {
+  M.add('hull', new THREE.BoxGeometry(2.0, 1.6, 1.6), { pos: v(0, 0.55, 0), rot: e(0.35, 0.4, 0.25), color: C.W2 });
+  M.add('metal', new THREE.BoxGeometry(2.04, 0.7, 1.64), { pos: v(0, 0.45, 0), rot: e(0.35, 0.4, 0.25), color: 0xc9953a });
+  M.add('hull', new THREE.SphereGeometry(0.9, 18, 6, 0, Math.PI * 2, 0, 0.55), { pos: v(-0.8, 1.6, 0.4), rot: e(1.9, 0.4, 0.3), color: C.W });
+  M.add('solar', new THREE.BoxGeometry(3.4, 0.05, 1.3), { pos: v(2.9, 0.5, 0.3), rot: e(0.1, 0.35, -0.25) });
+  M.add('solar', new THREE.BoxGeometry(2.2, 0.05, 1.3), { pos: v(-3.6, 0.08, -1.8), rot: e(0.05, 1.2, 0.08) });
+  M.add('metal', new THREE.BoxGeometry(1.4, 0.06, 0.06), { pos: v(1.2, 0.6, 0.2), rot: e(0.1, 0.35, -0.2), color: C.G });
+  for (let i = 0; i < 6; i++) { const a = rnd() * 6.28, r = 2 + rnd() * 4; M.add('metal', new THREE.BoxGeometry(0.3 + rnd() * 0.6, 0.04, 0.2 + rnd() * 0.4), { pos: v(Math.cos(a) * r, 0.05, Math.sin(a) * r), rot: e(rnd() - 0.5, rnd() * 6, rnd() - 0.5), color: rnd() < 0.5 ? 0xc9953a : C.G2 }); }
+  M.colCyl(0, 0, 1.3, 0, 1.6);
+}
+
+// a fumarole field on a low mound: rough mineral chimneys, sulphur and
+// salt crust on the ground, steam rising from the vents
+function vent(M, rnd, hAt) {
+  M.steam = [];
+  for (let k = 0; k < 5; k++) {
+    const a = rnd() * 6.28, r = k ? 1.4 + rnd() * 3.2 : 0.3, x = Math.cos(a) * r, z = Math.sin(a) * r, hgt = k ? 0.35 + rnd() * 0.7 : 1.1;
+    const ch = rockGeometry(300 + k, 2, { sx: 0.55, sy: 1.3, sz: 0.55, cuts: 6, rough: 0.35 });
+    M.add('rock', ch, { pos: v(x, hAt(x, z) - 0.1, z), rot: e(rnd() * 0.3, rnd() * 6.28, rnd() * 0.3), scale: v(hgt * 0.7, hgt, hgt * 0.7) });
+    M.steam.push([x, hAt(x, z) + hgt * 1.1, z, k ? 0.6 : 1]);
+    // crust: thin sulphur and salt flakes lying on the ground round the vent
+    for (let j = 0; j < 3; j++) {
+      const aa = rnd() * 6.28, rr = 0.4 + rnd() * 1.2, fx = x + Math.cos(aa) * rr, fz = z + Math.sin(aa) * rr, fs = 0.15 + rnd() * 0.35;
+      const fl = new THREE.CircleGeometry(fs, 7); fl.rotateX(-Math.PI / 2);
+      const P = fl.attributes.position; for (let i = 1; i < P.count; i++) P.setXYZ(i, P.getX(i) * (0.6 + rnd() * 0.6), 0, P.getZ(i) * (0.6 + rnd() * 0.6));
+      M.add('concrete', fl, { pos: v(fx, hAt(fx, fz) + 0.03, fz), rot: e(0, rnd() * 6, 0), color: rnd() < 0.5 ? 0x5e5020 : 0x6c6860 });
+    }
+  }
+  M.colCyl(0.3, 0, 0.7, hAt(0, 0), hAt(0, 0) + 1.3);
+}
+
+// a lava-tube skylight: the ground collapsed into the tube below (landform
+// edit), roof slabs leaning over the edge, talus and old ice at the bottom,
+// the dark mouth of the tube running off under one wall
+function cave(M, rnd, hAt) {
+  const R = 7.5, bot = hAt(0, 0);
+  for (let k = 0; k < 5; k++) {
+    const a = k / 5 * 6.28 + rnd() * 0.8, r = R * (0.92 + rnd() * 0.15), x = Math.cos(a) * r, z = Math.sin(a) * r, sz = 1.2 + rnd() * 1.3;
+    const slab = rockGeometry(400 + k, 2, { sx: 1.6, sy: 0.32, sz: 1.0, cuts: 8, rough: 0.14 });
+    M.add('rock', slab, { pos: v(x, hAt(x * 1.08, z * 1.08) - 0.1, z), rot: new THREE.Euler(0.25 + rnd() * 0.25, -a + Math.PI / 2, 0, 'YXZ'), scale: v(sz, sz, sz) });
+    M.colCyl(x, z, sz * 0.8, hAt(x, z) - 1, hAt(x, z) + 0.6);
+  }
+  for (let k = 0; k < 9; k++) {
+    const a = rnd() * 6.28, r = rnd() * R * 0.45, x = Math.cos(a) * r, z = Math.sin(a) * r, sz = 0.3 + rnd() * 0.9;
+    M.add('rock', rockGeometry(420 + k, 2, { sx: 1, sy: 0.7, sz: 0.9, cuts: 6, rough: 0.25 }), { pos: v(x, hAt(x, z) - sz * 0.2, z), rot: e(rnd(), rnd() * 6, rnd()), scale: v(sz, sz, sz) });
+  }
+  const ta = rnd() * 6.28, tx = Math.cos(ta) * R * 0.6, tz = Math.sin(ta) * R * 0.6;
+  const mouth = new THREE.CircleGeometry(1, 20); mouth.scale(2.4, 1.5, 1);
+  M.add('interior', mouth, { pos: v(tx, bot + 1.4, tz), rot: e(0, -ta - Math.PI / 2, 0), color: 0x050505 });
+  const ix = Math.cos(ta + 0.6) * R * 0.35, iz = Math.sin(ta + 0.6) * R * 0.35;
+  M.add('concrete', new THREE.DodecahedronGeometry(0.6, 1), { pos: v(ix, hAt(ix, iz) + 0.1, iz), scale: v(1.6, 0.35, 1.0), color: 0xc8dde6 });
+}
+
+// ground shapes for sites that are landforms
+const LANDFORMS = {
+  meteor: { form: 'crater', radius: 6.5, depth: 1.9, rim: 0.9 },
+  cave: { form: 'pit', radius: 7.5, depth: 6.5 },
+  vent: { form: 'mound', radius: 7, height: 1.3, vent: 0.5 },
+};
+
+// steam: soft sprites rising, spreading and fading above each vent
+let steamMat = null;
+function steamPoints(src) {
+  const N = 26, pos = [], seed = [];
+  for (const [x, y, z, k] of src) for (let i = 0; i < Math.round(N * k); i++) { pos.push(x, y, z); seed.push(Math.random()); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.Float32BufferAttribute(seed, 1));
+  steamMat = steamMat || new THREE.ShaderMaterial({
+    uniforms: { uTime: U.uTime, uSun: U.uSunColor },
+    vertexShader: `#include <common>
+      #include <logdepthbuf_pars_vertex>
+      uniform float uTime; attribute float aSeed; varying float vA;
+      void main() {
+        float t = fract(uTime * 0.11 + aSeed);
+        vec3 p = position + vec3(sin(aSeed * 40.0 + uTime * 0.6) * 0.5 * t + t * 1.6, t * 5.5, cos(aSeed * 33.0 + uTime * 0.5) * 0.5 * t);
+        vec4 mv = modelViewMatrix * vec4(p, 1.0);
+        gl_PointSize = (0.8 + 3.4 * t) * 520.0 / max(1.0, -mv.z);
+        vA = (1.0 - t) * smoothstep(0.0, 0.12, t);
+        gl_Position = projectionMatrix * mv;
+        #include <logdepthbuf_vertex>
+      }`,
+    fragmentShader: `#include <common>
+      #include <logdepthbuf_pars_fragment>
+      uniform vec3 uSun; varying float vA;
+      void main() {
+        #include <logdepthbuf_fragment>
+        float d = length(gl_PointCoord - 0.5);
+        float a = smoothstep(0.5, 0.0, d) * smoothstep(0.5, 0.2, d) * vA * 0.16;
+        gl_FragColor = vec4(vec3(0.9, 0.9, 0.88) * (0.45 + 0.55 * uSun), a);
+      }`,
+    transparent: true, depthWrite: false,
+  });
+  const pts = new THREE.Points(g, steamMat);
+  pts.frustumCulled = false;
+  return pts;
+}
+
+const KINDS = {
+  wreck: { name: '추락한 수송선 잔해', fn: wreck },
+  cache: { name: '보급 캡슐', fn: cache },
+  ruin: { name: '고대 유적', fn: ruin },
+  probe: { name: '옛 탐사 착륙선', fn: probe },
+  geode: { name: '결정 정동', fn: geode },
+  meteor: { name: '운석 충돌구', fn: meteor },
+  station: { name: '무인 기상 관측소', fn: station },
+  satellite: { name: '추락한 중계 위성', fn: satellite },
+  vent: { name: '분기공', fn: vent },
+  cave: { name: '용암 동굴 천창', fn: cave },
+};
+
+export class POIs {
+  constructor(game) {
+    this.game = game;
+    this.active = new Map();     // id -> {poi, group, cols}
+    this.discovered = new Map(); // id -> {kind, x, z, name}
+    this.models = {};
+    this.formed = new Set();   // landform edits made this session
+  }
+
+  model(kind, seed, hAt = () => 0) {
+    const M = new ModelBuilder();
+    KINDS[kind].fn(M, mulberry32(seed), hAt);
+    const out = M.finish();
+    out.steam = M.steam;
+    return out;
+  }
+
+  spawn(p) {
+    if (this.active.has(p.id)) return;
+    const g = this.game;
+    const seed = p.id.split('').reduce((a, c) => a * 31 + c.charCodeAt(0), 7) >>> 0;
+    // sites that are landforms shape the ground itself first
+    const LF = LANDFORMS[p.kind];
+    if (LF && !this.formed.has(p.id)) { this.formed.add(p.id); g.terrain.addEdit({ k: 'l', poi: true, cx: p.x, cz: p.z, seed: seed % 97, ...LF }); }
+    const y = g.terrain.height(p.x, p.z) - (p.kind === 'wreck' ? 0.6 : 0);
+    const c = Math.cos(p.rot), s = Math.sin(p.rot);
+    const hAt = (lx, lz) => g.terrain.height(p.x + lx * c + lz * s, p.z - lx * s + lz * c) - y;
+    const model = this.model(p.kind, seed, hAt);
+    const group = new THREE.Group();
+    const mats = g.buildings.mats;
+    for (const part of model.parts) {
+      const m = new THREE.Mesh(part.geo, part.material ? part.material : part.key === 'rock' ? (this._rockMat || (this._rockMat = makeRockMaterial())) : (mats[part.key] || mats.hull));
+      m.castShadow = part.key !== 'emissive' && part.key !== 'blink';
+      m.receiveShadow = true;
+      group.add(m);
+    }
+    if (model.steam) group.add(steamPoints(model.steam));
+    group.position.set(p.x, y, p.z);
+    group.rotation.y = p.rot;
+    g.engine.scene.add(group);
+    const cols = model.colliders.map((k) => {
+      const wx = p.x + k.x * c + k.z * s, wz = p.z - k.x * s + k.z * c;
+      return k.cyl ? g.colliders.addCyl(wx, wz, k.r, y + k.y0, y + k.y1, null, { poi: p }) : g.colliders.addBox(wx, wz, k.hx, k.hz, p.rot, y + k.y0, y + k.y1, null, { poi: p });
+    });
+    this.active.set(p.id, { poi: p, group, cols, y });
+  }
+
+  despawn(p) {
+    const a = this.active.get(p.id);
+    if (!a) return;
+    this.game.engine.scene.remove(a.group);
+    for (const c of a.cols) this.game.colliders.remove(c);
+    this.active.delete(p.id);
+  }
+
+  nearest(pos, r = 5) {
+    let best = null, bd = r;
+    for (const a of this.active.values()) {
+      const d = Math.hypot(a.poi.x - pos.x, a.poi.z - pos.z);
+      if (d < bd) { bd = d; best = a; }
+    }
+    return best;
+  }
+
+  name(kind) { return KINDS[kind].name; }
+
+  update(pos) {
+    for (const a of this.active.values()) {
+      const p = a.poi;
+      if (!this.discovered.has(p.id) && Math.hypot(p.x - pos.x, p.z - pos.z) < 160) {
+        this.discovered.set(p.id, { kind: p.kind, x: p.x, z: p.z, name: KINDS[p.kind].name });
+        this.game.ui && this.game.ui.toast('발견: ' + KINDS[p.kind].name, 'info', 3);
+      }
+    }
+  }
+
+  search(a) {
+    const g = this.game;
+    const p = a.poi;
+    if (g.props.searched.has(p.id)) return { already: true };
+    g.props.searched.add(p.id);
+    const rnd = mulberry32((p.id.length * 7919 + Math.floor(p.x * 13 + p.z * 7)) >>> 0);
+    const loot = [];
+    const give = (id, n) => { const k = g.eco.give(id, n); if (k) loot.push([id, k]); };
+    let rp = 0, eureka = null;
+    if (p.kind === 'wreck') {
+      give('plate', 4 + Math.floor(rnd() * 5)); give('circuit', 1 + Math.floor(rnd() * 3)); if (rnd() < 0.6) give('alloy', 2 + Math.floor(rnd() * 3)); give('glass', 2 + Math.floor(rnd() * 3));
+      rp = 25;
+    } else if (p.kind === 'cache') {
+      give('plate', 3); give('glass', 3); give('water', 4); if (rnd() < 0.5) give('cobalt', 3); if (rnd() < 0.4) give('seeds', 3);
+      rp = 12;
+    } else if (p.kind === 'probe') {
+      give('circuit', 2 + Math.floor(rnd() * 2)); give('electronics', 1 + Math.floor(rnd() * 2)); give('alloy', 2);
+      rp = 40;
+    } else if (p.kind === 'geode') {
+      give('cobalt', 4 + Math.floor(rnd() * 4)); give('silicon', 6 + Math.floor(rnd() * 6)); if (rnd() < 0.4) give('uranium', 2);
+      rp = 20;
+    } else if (p.kind === 'meteor') {
+      give('iron', 8 + Math.floor(rnd() * 6)); give('nickel', 4 + Math.floor(rnd() * 4)); give('titanium', 3 + Math.floor(rnd() * 3)); if (rnd() < 0.5) give('cobalt', 2);
+      rp = 22;
+    } else if (p.kind === 'station') {
+      give('circuit', 2 + Math.floor(rnd() * 2)); give('electronics', 1); give('glass', 2);
+      rp = 35;
+    } else if (p.kind === 'satellite') {
+      give('alloy', 3 + Math.floor(rnd() * 2)); give('circuit', 2); give('glass', 3); if (rnd() < 0.5) give('electronics', 1);
+      rp = 30;
+    } else if (p.kind === 'vent') {
+      give('water', 3); give('sulfur', 5 + Math.floor(rnd() * 4)); give('silicon', 4 + Math.floor(rnd() * 4)); if (rnd() < 0.5) give('copper', 3);
+      rp = 18;
+    } else if (p.kind === 'cave') {
+      give('ice', 8 + Math.floor(rnd() * 6)); give('cobalt', 2 + Math.floor(rnd() * 3)); if (rnd() < 0.6) give('phosphate', 3 + Math.floor(rnd() * 3));
+      rp = 26;
+    } else {
+      rp = 60;
+      const av = RESEARCH.filter((r) => !g.research.has(r.id) && !g.research.eureka.has(r.id));
+      if (av.length) { eureka = av[Math.floor(rnd() * Math.min(av.length, 5))]; g.research.grantEureka(eureka.id); }
+    }
+    g.research.addPoints(rp);
+    return { loot, rp, eureka };
+  }
+
+  serialize() { return [...this.discovered.entries()]; }
+  load(arr) { this.discovered = new Map(arr || []); }
+}
