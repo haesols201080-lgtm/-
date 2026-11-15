@@ -82,7 +82,8 @@ export class Game {
     // real jobs: you are hired by a shop or an office, clock in inside the building and do the work of that trade
     const emp = this.employers.filter((e) => { const d = Math.hypot(e.x - p.x, e.z - p.z); return e.work && d < Math.min(maxD, 900) && Math.abs(e.y - p.y) < 8; });
     const lm = [1, 2.2, 6, 20, 80][this.state.license] || 1;
-    for (let i = 0; i < 5 && emp.length; i++) {
+    this._gigs(p, lm, tier);
+    for (let i = 0; i < 4 && emp.length; i++) {
       const a = this.rng.pick(emp); if (this.offers.some((o) => o.a === a)) continue;
       const T = TRADES[a.type === 'shop' ? a.kind : a.type] || TRADES.store; const rk = this.rankOf(T.id); const hr = this.env.hour; const open = T.hours[0] <= T.hours[1] ? hr >= T.hours[0] && hr < T.hours[1] : hr >= T.hours[0] || hr < T.hours[1]; if (!open) continue;
       const tasks = T.tasks.filter((t) => a.work[t[0]]); if (tasks.length < 3) continue;
@@ -91,13 +92,29 @@ export class Game {
     }
     for (let i = 0; i < 0 && cand.length > 2; i++) { const a = this.rng.pick(cand); let b = this.rng.pick(cand), tries = 0; while ((b === a || Math.hypot(a.x - b.x, a.z - b.z) < 60) && tries++ < 20) b = this.rng.pick(cand); const d = Math.hypot(a.x - b.x, a.z - b.z, a.y - b.y); const c = this.rng.pick(COMMODITIES); this.offers.push({ a, b, d, item: c.name, pay: Math.round((16 + d * 0.11) * mult * this.rng.f(0.85, 1.3)), time: Math.round(d / [3.6, 22, 36, 48, 70][tier] + 45) }); }
   }
+  // work that happens out in the city: each gig is one order whose steps are real places
+  _gigs(p, lm, tier) {
+    const r = this.rng, hr = this.env.hour, ctx = this.city.ctx; const P = (x, z, y = 0.2) => ({ x, y, z }); const near = (arr, R) => arr.filter((q) => Math.hypot(q.x - p.x, q.z - p.z) < R);
+    const mk = (id, name, item, base, steps, o = {}) => { if (steps.length < 2) return; let d = 0, c = p; for (const t of steps) { d += Math.hypot(t.x - c.x, t.z - c.z); c = t; } const rk = this.rankOf(id); const pat = Math.round(d / (o.fly ? 20 : 2.6) + steps.reduce((n, t) => n + t.hold, 0) + 50);
+      this.offers.push({ gig: true, fly: !!o.fly, a: steps[0], trade: { id, name, hours: [0, 24] }, tasks: steps, name, item, rankName: RANKS[rk][0], d, pay: Math.round((base + d * 0.03) * (1 + 0.5 * rk) * lm * (o.mult || 1)), queue: [{ who: o.who || name, steps, i: 0, prog: 0, left: pat, patience: pat }] }); };
+    const ws = this.crowd._near(p.x, p.y, p.z, 90).filter((w) => w.closed && !w.indoor && w.pts.length >= 4 && Math.abs(w.y - p.y) < 6); const cand = [];
+    if (ws.length) { const w = r.pick(ws); const n = w.pts.length; const along = (k) => { const a = w.pts[k % n], b = w.pts[(k + 1) % n], t = r.f(0.15, 0.85); return P(a[0] + (b[0] - a[0]) * t, a[2] + (b[2] - a[2]) * t, a[1]); };
+      cand.push(() => { const st = []; for (let k = 0; k < 6; k++) st.push({ ...along(k), hold: 1.8, label: r.pick(['버려진 포장 수거', '빗물받이 낙엽 치우기', '담배꽁초 쓸기', '전단지 떼기', '쓰레기봉투 내놓기']) }); mk('clean', '거리 청소', '환경미화', 30, st, { who: '구청 미화반' }); });
+      if (hr >= 19 || hr < 6) cand.push(() => { const st = []; for (let k = 0; k < n * 2; k++) { const a = w.pts[(k >> 1) % n], b = w.pts[((k >> 1) + 1) % n]; const t = k % 2 ? 0.5 : 0.05; st.push({ ...P(a[0] + (b[0] - a[0]) * t, a[2] + (b[2] - a[2]) * t, a[1]), hold: 1.2, label: k % 2 ? '골목 순찰 — 이상 유무 확인' : '모퉁이 점검 지점 태그' }); } mk('guard', '야간 순찰', '경비', 46, st, { who: '블록 경비대', mult: 1.25 }); }); }
+    const eat = near(this.employers.filter((e) => e.type === 'shop' && e.kind === 'bar' && e.work), 260), doors = near(this.doors, 320);
+    if (eat.length && doors.length >= 2) cand.push(() => { const e = r.pick(eat); const st = [{ ...e.work.back, hold: 2.2, label: '가게 주방에서 음식 받기' }]; const used = new Set(); for (let k = 0; k < 3; k++) { const q = r.pick(doors); if (used.has(q)) continue; used.add(q); st.push({ ...q, hold: 1.6, label: `현관 앞 배달 ${st.length}` }); } mk('courier', '음식 배달', '배달', 26, st, { who: '배달 주문' }); });
+    const gan = near((ctx.marks || []).filter((m) => m.type === 'gantry').map((m) => P(m.x, m.z)), 420); if (gan.length >= 2) cand.push(() => { const st = r.shuffle(gan.slice()).slice(0, 4).map((q, k) => ({ ...q, hold: 3.2, label: ['갠트리 제어함 점검', '전광판 케이블 조임', '신호 센서 청소', '가로 조명 안정기 교체'][k % 4] })); mk('maint', '가로 설비 점검', '설비', 40, st, { who: '시설관리 지시서' }); });
+    const pk = near((ctx.marks || []).filter((m) => m.type === 'parking' || m.type === 'charge').map((m) => ({ x: m.doorX, y: 0.2, z: m.doorZ, ix: m.x, iz: m.z, t: m.type })), 420); if (pk.length) cand.push(() => { const q = r.pick(pk); const st = []; for (let k = 0; k < 3; k++) { st.push({ x: q.x, y: 0.2, z: q.z, hold: 1.8, label: q.t === 'charge' ? '진입 차량 유도' : '입구에서 차량 받기' }); st.push({ x: (q.x + q.ix) / 2, y: 0.2, z: (q.z + q.iz) / 2, hold: 2.4, label: q.t === 'charge' ? '충전 케이블 연결 · 결제' : '주차 구획 안내 · 확인' }); } mk('park', q.t === 'charge' ? '충전소 근무' : '주차 관리', '차량', 34, st, { who: q.t === 'charge' ? '충전 고객' : '입차 차량' }); });
+    if (tier > 0) { const pads = this.spots.filter((q) => q.type === 'pad' && Math.hypot(q.x - p.x, q.z - p.z) < 2600); if (pads.length >= 2) cand.push(() => { const a = r.pick(pads); let b = r.pick(pads), k = 0; while (b === a && k++ < 8) b = r.pick(pads); if (b === a) return; mk('pilot', '승객 운송', '운송', 60, [{ x: a.x, y: a.y, z: a.z, hold: 2.5, label: `${a.name || '승강장'}에서 승객 태우기` }, { x: b.x, y: b.y, z: b.z, hold: 2.5, label: `${b.name || '승강장'}에 승객 내려주기` }], { fly: true, who: '예약 승객', mult: [1, 1.6, 3, 6, 12][tier] }); }); }
+    r.shuffle(cand); for (const f of cand.slice(0, 3)) f();
+  }
   rankOf(id) { const xp = (this.state.career || {})[id] || 0; let r = 0; for (let k = 0; k < RANKS.length; k++) if (xp >= RANKS[k][1]) r = k; return r; }
   accept(i) {
     const o = this.offers[i]; if (!o || this.job) return;
     if ((this.state.energy ?? 100) < 20) { this.toast('너무 지쳤습니다 — 식사하거나 숙소에서 쉬고 오세요', 'bad'); return; }
-    const total = 4 + Math.min(3, this.rankOf(o.trade.id));
-    this.job = { ...o, stage: 0, prog: 0, orders: [], spawned: 0, total, nextT: 1.5, done: 0, missed: 0, tips: 0, left: (total * 60 + 120) * 1.3, time: total * 60 + 120 };
-    this.offers = []; this.toast(`${o.name} ${o.rankName}(으)로 채용 — 안으로 들어가 출근 기록을 하세요`, 'good'); this.audio?.blip(700, 0.1);
+    const total = o.gig ? 1 : 4 + Math.min(3, this.rankOf(o.trade.id));
+    this.job = { ...o, stage: o.gig ? 1 : 0, prog: 0, orders: [], spawned: 0, total, nextT: 1.5, done: 0, missed: 0, tips: 0, left: (total * 60 + 120) * 1.3, time: total * 60 + 120 };
+    this.offers = []; this.toast(o.gig ? `${o.name} 시작 — 표시된 곳으로 가서 [E]를 눌러 작업하세요` : `${o.name} ${o.rankName}(으)로 채용 — 안으로 들어가 출근 기록을 하세요`, 'good'); this.audio?.blip(700, 0.1);
   }
   // one customer / one piece of work: a chain of things to do at real places in the building, with someone waiting on it
   _order(J) {
@@ -115,8 +132,9 @@ export class Game {
     const J = this.job; if (!J) return ''; const en = ` · 체력 ${Math.round(this.state.energy ?? 100)}`;
     if (J.stage === 0) return `${J.name} 안으로 들어가 출근 기록${en}`;
     if (J.stage === 2) return `퇴근 기록 — 처리 ${J.done}/${J.total}${J.missed ? ` · 놓침 ${J.missed}` : ''}${en}`;
+    if (J.atStation && !(this.autoWork)) { /* hint appended below */ }
     if (!J.orders.length) return `손님을 기다리는 중 (${J.done + J.missed}/${J.total})${en}`;
-    return J.orders.map((o) => `${o.who}: ${o.steps[o.i].label}${o.prog > 0.05 ? ` ${Math.round((o.prog / o.steps[o.i].hold) * 100)}%` : ''} (${Math.max(0, Math.ceil(o.left))}초)`).join(' / ') + en;
+    return J.orders.map((o) => `${o.who}: ${o.steps[o.i].label}${o.prog > 0.05 ? ` ${Math.round((o.prog / o.steps[o.i].hold) * 100)}%` : ''} (${Math.max(0, Math.ceil(o.left))}초)`).join(' / ') + (J.atStation ? ' · [E] 길게 눌러 작업' : '') + (J.carry ? ' · 물건 운반 중' : '') + en;
   }
   // buildings do what they are for: treatment, a bed, courses, study, a meal
   service(poi) {
@@ -185,26 +203,29 @@ export class Game {
     // courier job
     const J = this.job;
     if (J) {
-      J.left -= dt; const near = (t, r) => pl.mode === 'foot' && Math.hypot(t.x - p.x, t.z - p.z) < r && Math.abs(t.y - p.y) < 1.5; const tgt = this.jobTarget(); J.item = this.jobLabel();
+      J.left -= dt; const near = (t, r) => (pl.mode === 'foot' || J.fly) && Math.hypot(t.x - p.x, t.z - p.z) < (J.fly ? Math.max(r, 9) : r) && Math.abs(t.y - p.y) < (J.fly ? 7 : 1.5); const doing = this.autoWork || !input || input.touch || (input.down && input.down('KeyE', 'BtnE')); const tgt = this.jobTarget(); J.item = this.jobLabel();
       if (J.stage === 0) { if (near(J.a, J.a.big ? 9 : 4)) { J.prog += dt; if (J.prog > 1.2) { J.stage = 1; J.prog = 0; this.toast('출근 완료 — 손님이 오면 주문을 받으세요', 'good'); this.audio?.blip(880, 0.08); } } else J.prog = 0; }
       else if (J.stage === 1) {
-        J.nextT -= dt; if (J.spawned < J.total && J.orders.length < 2 && J.nextT <= 0) { const o = this._order(J); J.orders.push(o); J.spawned++; J.nextT = this.rng.f(9, 17); this.toast(`${o.who} — ${o.steps[0].label}`); this.audio?.blip(620, 0.06); }
+        J.nextT -= dt; if (J.spawned < J.total && J.orders.length < 2 && J.nextT <= 0) { const o = J.queue ? J.queue.shift() : this._order(J); if (!J.gig && this.crowd.guest) { const t0 = o.steps[0]; o.guest = this.crowd.guest(t0.x + 0.9, t0.y, t0.z + 0.4, Math.atan2(-0.9, -0.4)); } J.orders.push(o); J.spawned++; J.nextT = this.rng.f(9, 17); this.toast(`${o.who} — ${o.steps[0].label}`); this.audio?.blip(620, 0.06); }
         let act = null; for (const o of J.orders) { o.left -= dt; if (near(o.steps[o.i], 2.0) && (!act || o.left < act.left)) act = o; }
         for (const o of J.orders) if (o !== act) o.prog = Math.max(0, o.prog - dt * 2);
-        if (act) { act.prog += dt; if (act.prog >= act.steps[act.i].hold) { act.prog = 0; act.i++; this.audio?.blip(880, 0.06); s.energy = Math.max(0, (s.energy ?? 100) - 2.5);
-            if (act.i >= act.steps.length) { J.orders.splice(J.orders.indexOf(act), 1); J.done++; this.env.hour = (this.env.hour + 0.4) % 24; const quick = act.left > act.patience * 0.4; if (quick) J.tips += Math.round(J.pay * 0.07); this.toast(`${act.who} 처리 완료${quick ? ' — 빠른 응대에 팁' : ''}`, 'good'); }
+        J.atStation = !!act; if (act && !doing) { act.prog = Math.max(0, act.prog - dt); act = null; }
+        if (act) { act.prog += dt; if (act.prog >= act.steps[act.i].hold) { J.carry = /받기|꺼내기|찾기|태우기/.test(act.steps[act.i].label); act.prog = 0; act.i++; this.audio?.blip(880, 0.06); s.energy = Math.max(0, (s.energy ?? 100) - 2.5);
+            if (act.i >= act.steps.length) { if (act.guest) act.guest.dead = true; J.carry = false; J.orders.splice(J.orders.indexOf(act), 1); J.done++; this.env.hour = (this.env.hour + 0.4) % 24; const quick = act.left > act.patience * 0.4; if (quick) J.tips += Math.round(J.pay * 0.07); this.toast(`${act.who} 처리 완료${quick ? ' — 빠른 응대에 팁' : ''}`, 'good'); }
             else this.toast(`${act.who} — 다음: ${act.steps[act.i].label}`); } }
-        for (let k = J.orders.length - 1; k >= 0; k--) if (J.orders[k].left <= 0) { this.toast(`${J.orders[k].who} — 기다리다 그냥 갔습니다`, 'bad'); J.orders.splice(k, 1); J.missed++; }
+        for (let k = J.orders.length - 1; k >= 0; k--) if (J.orders[k].left <= 0) { if (J.orders[k].guest) J.orders[k].guest.dead = true; J.carry = false; this.toast(J.gig ? `${J.orders[k].who} — 시간 초과` : `${J.orders[k].who} — 기다리다 그냥 갔습니다`, 'bad'); J.orders.splice(k, 1); J.missed++; }
         if (s.energy <= 0) { this.toast('탈진 — 근무 중단. 병원이나 숙소에서 회복하세요', 'bad'); this.job = null; }
         else if (J.spawned >= J.total && !J.orders.length) { J.stage = 2; J.prog = 0; this.toast('오늘 손님 끝 — 출근했던 자리에서 퇴근 기록을 하세요', 'good'); }
-      } else if (near(J.a, J.a.big ? 9 : 4)) { J.prog += dt; if (J.prog > 1.2) { const T = J.trade; const c = s.career || (s.career = {}); const r0 = this.rankOf(T.id); const good = J.done >= J.total * 0.5; if (good) c[T.id] = (c[T.id] || 0) + 1; const r1 = this.rankOf(T.id);
+      } else if (J.gig || near(J.a, J.a.big ? 9 : 4)) { J.prog += J.gig ? 9 : dt; if (J.prog > 1.2) { const T = J.trade; const c = s.career || (s.career = {}); const r0 = this.rankOf(T.id); const good = J.done >= J.total * 0.5; if (good) c[T.id] = (c[T.id] || 0) + 1; const r1 = this.rankOf(T.id);
           const rest = s.rested > 0 ? 1.15 : 1; if (s.rested > 0) s.rested--; const wage = Math.round(J.pay * rest * (J.done / J.total)); this.earn(wage + J.tips, `${J.name} 근무 — 처리 ${J.done}/${J.total}${J.tips ? `, 팁 ${fmt(J.tips)} ℓ` : ''}`); s.deliveries++;
           if (!good) this.toast('손님을 너무 많이 놓쳤습니다 — 경력 인정 없음', 'bad'); else if (r1 > r0) this.toast(`승진 — ${T.name} ${RANKS[r1][0]} (급여 인상)`, 'good'); this.job = null; } }
       const last = 0;
       if (this.job && J.left < -J.time) { this.toast('근무 시간 초과 — 무단 이탈로 해고', 'bad'); this.job = null; }
+      if (!this._carry) { this._carry = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.26, 0.32), new THREE.MeshStandardMaterial({ color: 0x9a7b4f, roughness: 0.8 })); this._carry.visible = false; this.engine.scene.add(this._carry); }
+      this._carry.visible = !!(this.job && J.carry && pl.mode === 'foot'); if (this._carry.visible) { const yw = pl.yaw || 0; this._carry.position.set(p.x - Math.sin(yw) * 0.42, p.y + 1.08, p.z - Math.cos(yw) * 0.42); this._carry.rotation.y = yw; }
       const atEmp = J.stage !== 1 || !J.orders.length; this.mkA.visible = !!this.job && atEmp; this.mkB.visible = !!this.job && !atEmp;
       if (this.job) { const mk = atEmp ? this.mkA : this.mkB; mk.position.set(tgt.x, tgt.y, tgt.z); mk.children[1].rotation.z = this.t; }
-    } else { this.mkA.visible = this.mkB.visible = false; }
+    } else { this.mkA.visible = this.mkB.visible = false; if (this._carry) this._carry.visible = false; }
     // nearest interactable
     this.near = null; let best = 1e9;
     if (pl.mode === 'foot') for (const o of this.pois) { if (!INTERACT[o.type]) continue; const dd = Math.hypot(o.x - p.x, o.z - p.z); const r = o.type === 'lobby' && o.big ? 9 : SERVICE_TYPES.includes(o.type) ? 6 : o.type === 'market' || o.type === 'plaza' ? 22 : o.type === 'station' ? 5 : 3.6; if (dd < r && Math.abs(o.y - p.y) < 4 && dd < best) { best = dd; this.near = o; } }

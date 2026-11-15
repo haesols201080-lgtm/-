@@ -65,6 +65,8 @@ export class Crowd {
     this.agents.push({ spot: s, w: { pts: [[s.x, s.y, s.z]], indoor: false }, seg: 0, t: 0, dir: 1, lat: 0, variant, x: s.x, y: s.y, z: s.z, yaw: s.yaw, state: 2, timer: 1e9, clip, clipB: clip, blend: 0, phase: rng.next(), phaseB: rng.next(), sp: 1, h: rng.f(0.93, 1.07),
       c0: rng.pick(TOPS), c1: rng.pick(BOTS), c2: rng.pick(HAIR), tone: rng.next(), umb: false, umbCol: [0.1, 0.1, 0.12], fade: 0 });
   }
+  // someone who is really there for the player: a customer waiting where the order has to be taken
+  guest(x, y, z, yaw) { const rng = this.rng; const variant = rng.i(0, VARIANTS.length - 1); const g = { guest: true, w: { pts: [[x, y, z]], indoor: true }, seg: 0, t: 0, dir: 1, lat: 0, variant, x, y, z, yaw, state: 2, timer: 1e9, clip: CLIP.idle, clipB: CLIP.idle, blend: 0, phase: rng.next(), phaseB: rng.next(), sp: 1, h: rng.f(0.93, 1.07), c0: rng.pick(TOPS), c1: rng.pick(BOTS), c2: rng.pick(HAIR), tone: rng.next(), umb: false, umbCol: [0.1, 0.1, 0.12], fade: 0 }; this.agents.push(g); return g; }
   update(dt, cam, rain = 0) {
     const A = this.agents; const stride = this.anim.stride;
     for (let i = 0; i < 4 && A.length < this.max && this.nStatic < this.max * 0.42; i++) this._linger(cam, rain);
@@ -74,7 +76,8 @@ export class Crowd {
     const counts = this.meshes.map(() => 0); let nu = 0; const rainy = rain > 0.25;
     for (let i = A.length - 1; i >= 0; i--) {
       const g = A[i]; const d = Math.hypot(g.x - cam.x, g.z - cam.z);
-      if (d > 108 || Math.abs(g.y - cam.y) > 60) { if (g.spot) { g.spot.used = false; this.nStatic--; } A.splice(i, 1); continue; }
+      if (g.dead) { A.splice(i, 1); continue; }
+      if (!g.guest && (d > 108 || Math.abs(g.y - cam.y) > 60)) { if (g.spot) { g.spot.used = false; this.nStatic--; } A.splice(i, 1); continue; }
       const pts = g.w.pts, n = pts.length;
       if (g.state === 2) { g.phase += dt / (g.clip === CLIP.talk ? 5 : g.clip === CLIP.sit ? 9 : 7.5); }
       else if (g.state === 0) {

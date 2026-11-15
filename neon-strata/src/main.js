@@ -58,7 +58,7 @@ async function start() {
     input.frame();
     if (started) {
       if (input.hit('Tab', 'KeyM', 'Escape') && (hud.open || !input.hit('Escape'))) hud.toggle();
-      if (input.hit('KeyE', 'BtnE') && game.near && !player.liftPrompt && !hud.open) {
+      if (input.hit('KeyE', 'BtnE') && game.near && !player.liftPrompt && !hud.open && !(game.job && game.job.stage === 1)) {
         const t = game.near.type;
         if (game.service(game.near)) { /* the building did its job */ } else if (t === 'shop' && game.near.kind === 'bar' && !game.job && game.meal()) { /* ate */ } else if (t === 'home') { game.state.energy = 100; game.sleep(); } else if (t === 'license') hud.toggle('garage'); else if (t === 'exchange') hud.toggle('stock'); else if (t === 'bank') hud.toggle('rank'); else if (t === 'station') hud.toggle('sys'); else if (t === 'crown') hud.toggle('biz'); else if (t === 'lobby') hud.toggle('biz'); else hud.toggle('trade');
       }
