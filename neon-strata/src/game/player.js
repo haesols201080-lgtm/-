@@ -125,7 +125,7 @@ export class Player {
       }
       const sh = Math.hypot(this.vel.x, this.vel.z); this.speed = sh;
       if (sh > 0.4) this.yaw += wrap(Math.atan2(this.vel.x, this.vel.z) - this.yaw) * Math.min(1, dt * 11);
-      const st = g.crowd.anim.stride; let clip = !this.onGround ? CLIP.air : sh < 0.25 ? CLIP.idle : sh < 2.6 ? CLIP.walk : CLIP.run;
+      const st = g.crowd.anim.stride; let clip = !this.onGround ? CLIP.air : sh < 0.25 ? (g.phone && g.phone.open ? CLIP.phone : CLIP.idle) : sh < 2.6 ? CLIP.walk : CLIP.run;
       if (clip !== this.clip) { this.clipPrev = this.clip; this.phasePrev = this.phase; this.clip = clip; this.blend = 1; if (clip === CLIP.idle || clip === CLIP.air) this.phase = 0; }
       this.blend = Math.max(0, this.blend - dt * 5.5);
       this.phase += clip === CLIP.walk ? (dt * sh) / Math.max(0.3, st[CLIP.walk]) : clip === CLIP.run ? (dt * sh) / Math.max(0.6, st[CLIP.run]) : dt / 7;

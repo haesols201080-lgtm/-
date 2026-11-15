@@ -62,7 +62,7 @@ async function start() {
   const step = (dt) => {
     input.frame();
     if (started) {
-      if (input.hit('KeyP', 'BtnP') && !hud.open) phone.toggle(); else if (phone.open && input.hit('Escape')) phone.toggle(false);
+      if (input.hit('KeyP', 'BtnP') && !hud.open) phone.toggle(); else if (phone.open && input.hit('Escape', 'Backspace')) phone.back();
       else if (input.hit('Tab', 'KeyM', 'Escape') && (hud.open || !input.hit('Escape'))) { if (phone.open) phone.toggle(false); hud.toggle(); }
       if (input.hit('KeyE', 'BtnE') && game.near && !player.liftPrompt && !hud.open && !phone.open && !(game.job && game.job.stage === 1)) {
         const t = game.near.type;

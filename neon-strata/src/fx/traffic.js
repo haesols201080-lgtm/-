@@ -44,6 +44,8 @@ export function buildLanes(ctx) {
   // helix around the Spire + luxury ring above the clouds
   { const pts = []; const turns = 5; const n = 160; for (let i = 0; i < n; i++) { const t = i / n; const up = t < 0.5 ? t * 2 : 2 - t * 2; const a = t * turns * TAU * (t < 0.5 ? 1 : 1); const r = t < 0.5 ? 430 : 520; pts.push([Math.cos(a) * r, 110 + up * 720, Math.sin(a) * r]); } lanes.push({ ...resample(pts, true), speed: 46, kind: 'air', w: 1.2 }); }
   for (const [r, y] of [[840, 1590], [700, 1640]]) { const pts = []; for (let i = 0; i < 96; i++) { const a = (i / 96) * TAU; pts.push([Math.cos(a) * r, y, Math.sin(a) * r]); } lanes.push({ ...resample(pts, true), speed: 60, kind: 'air', w: 0.35, high: true }); }
+  // local traffic: every street carries cars both ways, slower than the arterials
+  for (const s of ctx.streets || []) { if (s.w < 7 || s.pts.length < 2) continue; let L = 0; for (let i = 1; i < s.pts.length; i++) L += Math.hypot(s.pts[i][0] - s.pts[i - 1][0], s.pts[i][1] - s.pts[i - 1][1]); if (L < 40) continue; lanes.push({ ...resample(loopOf(s.pts, Math.min(s.w * 0.22, 2.6), 0.9), true), speed: rng.f(8, 12), kind: 'ground', w: 0.85 }); }
   // courier drones thread the local streets just above the awnings
   { const loc = (ctx.streets || []).filter((s) => s.w >= 7 && ['sump', 'lumina', 'oldq', 'hive', 'meridian'].includes(s.district)); rng.shuffle(loc);
     for (const s of loc.slice(0, 170)) lanes.push({ ...resample(loopOf(s.pts, 1.7, rng.f(5.5, 13)), true), speed: rng.f(6, 10), kind: 'drone', w: 0 }); }

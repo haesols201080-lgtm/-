@@ -24,16 +24,23 @@ const APPS = [
 ];
 const icon = (id, grad) => { const [a, b] = grad.split(','); return `<span class="ph-ic" style="background:linear-gradient(160deg,${a},${b})"><svg viewBox="0 0 24 24">${ICON[id]}</svg></span>`; };
 const DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+// people you know answer you back
+const REPLY = { '민지': { '좋아, 끝나고 갈게': '오케이 ㅎㅎ 루미나 3번 출구 앞에서 봐', '이번 주는 일이 많아': '에이 그래도 밥은 먹고 다녀라', '거기 비 많이 와?': '여기도 산성비 장난 아님 우산 챙겨' }, '집주인 박씨': { '네, 이번 주 안에 드릴게요': '그래요. 수도관 공사 있으니 참고하고', '보일러가 고장났어요': '기사 불러 둘게요. 오후에 들를 겁니다' }, '집주인': { '잘 부탁드립니다': '네네 이웃들이랑 사이좋게 지내요', '언제 정산하나요?': '매주 첫날 아침에 계좌에서 빠져나갑니다' } };
 
 export class Phone {
   constructor(game, input, hud, engine) {
-    Object.assign(this, { g: game, input, hud, engine }); this.open = false; this.app = 'home'; this.day = 0; this.lastHour = game.env.hour; this.photos = []; this.inbox = []; this.ledger = []; this.lastLux = game.state.lux; this.mapZoom = 1;
+    Object.assign(this, { g: game, input, hud, engine }); this.open = false; this.app = 'home'; this.day = 0; this.lastHour = game.env.hour; this.photos = []; this.inbox = []; this.ledger = []; this.lastLux = game.state.lux; this.mapZoom = 1; this.mapOff = { x: 0, z: 0 }; this.replies = {};
     const el = document.createElement('div'); el.id = 'phone'; el.innerHTML = `<div class="ph-body"><i class="ph-k k1"></i><i class="ph-k k2"></i><i class="ph-k k3"></i><i class="ph-k k4"></i>
       <div class="ph-screen"><div class="ph-status"><span class="ph-time"></span><span class="ph-island"><i></i></span><span class="ph-sys"><svg viewBox="0 0 18 12" class="ph-sig"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg><b class="ph-net">6G</b><span class="ph-bat"><i></i></span></span></div>
       <div class="ph-view"></div><div class="ph-homebar"></div><div class="ph-flash"></div></div><div class="ph-glare"></div></div>`;
     document.body.appendChild(el); this.el = el; this.view = el.querySelector('.ph-view');
     el.addEventListener('click', (e) => { const t = e.target.closest('[data-a]'); if (t) { e.stopPropagation(); this._act(t.dataset.a, t.dataset); } });
     el.querySelector('.ph-homebar').addEventListener('click', () => this.go('home'));
+    el.addEventListener('pointerdown', (e) => { this._down = true; const m = e.target.closest('.pa-map'); if (m) { this._drag = { x: e.clientX, y: e.clientY }; m.setPointerCapture?.(e.pointerId); } });
+    window.addEventListener('pointerup', () => { this._down = false; this._drag = null; });
+    el.addEventListener('pointermove', (e) => { if (!this._drag) return; const cv = this.view.querySelector('.pa-map'); if (!cv) return; const k = (cv.width / cv.clientWidth) / (0.45 * this.mapZoom); this.mapOff.x -= (e.clientX - this._drag.x) * k; this.mapOff.z -= (e.clientY - this._drag.y) * k; this._drag = { x: e.clientX, y: e.clientY }; this.drawMap(); });
+    el.addEventListener('wheel', (e) => { if (this.app === 'map') { e.preventDefault(); this.mapZoom = Math.max(0.25, Math.min(8, this.mapZoom * (e.deltaY < 0 ? 1.15 : 0.87))); this.drawMap(); } }, { passive: false });
+    for (const ev of ['mousedown', 'touchstart', 'touchmove', 'keydown']) el.addEventListener(ev, (e) => e.stopPropagation(), { passive: true });
     // capture what happens to the player as messages and bank entries
     const toast = game.toast.bind(game); game.toast = (text, kind = '') => { toast(text, kind); this._msg(kind === 'bad' ? '카이로스 경보' : kind === 'good' ? '카이로스 알림' : '시스템', text); };
     const earn = game.earn.bind(game); game.earn = (n, why) => { earn(n, why); this.ledger.unshift({ t: this.clock(), d: n, why: why || '입금' }); this.lastLux = game.state.lux; };
@@ -47,11 +54,15 @@ export class Phone {
     this.open = force ?? !this.open; this.el.classList.toggle('show', this.open); document.body.classList.toggle('phone-open', this.open); this.input.enabled = !this.open && !this.hud.open;
     if (this.open) { document.exitPointerLock?.(); this.app = 'home'; this.render(); this.g.audio?.blip(990, 0.04); }
   }
-  go(app) { this.app = app; if (app === 'msg' || app.startsWith('th:')) { const th = this.inbox.find((t) => 'th:' + t.from === app); if (th) th.unread = 0; } if (app === 'jobs' && !this.g.job && !this.g.offers.length) this.g.rollOffers(); this.render(); }
+  back() { if (this.app === 'home') return this.toggle(false); if (this.app.startsWith('th:')) return this.go('msg'); if (this.app === 'photo' && this.viewing != null) { this.viewing = null; return this.render(true); } this.go('home'); }
+  go(app) { const prev = this.app; this.app = app; this._last = null; this.view.classList.remove('enter', 'exit'); void this.view.offsetWidth; this.view.classList.add(app === 'home' && prev !== 'home' ? 'exit' : 'enter'); this.g.audio?.blip(app === 'home' ? 520 : 760, 0.02); if (app === 'map') this.mapOff = { x: 0, z: 0 }; if (app === 'msg' || app.startsWith('th:')) { const th = this.inbox.find((t) => 'th:' + t.from === app); if (th) th.unread = 0; } if (app === 'jobs' && !this.g.job && !this.g.offers.length) this.g.rollOffers(); this.render(); }
   _act(a, d) {
     const g = this.g;
-    if (a === 'app') { const id = d.id; if (id === 'trade' || id === 'biz' || id === 'rank') { this.toggle(false); this.hud.toggle(id === 'rank' ? 'rank' : id); return; } if (id === 'car') { this.toggle(false); this.hud.toggle('garage'); return; } if (id === 'cam') return this.shoot(); this.go(id); return; }
-    if (a === 'home') return this.go('home');
+    if (a === 'app') { const id = d.id; if (id === 'trade' || id === 'biz' || id === 'rank') { this.toggle(false); this.hud.toggle(id === 'rank' ? 'rank' : id); return; } if (id === 'car') { this.toggle(false); this.hud.toggle('garage'); return; } this.go(id); return; }
+    if (a === 'home') return this.back();
+    if (a === 'snap') return this.shoot();
+    if (a === 'center') { this.mapOff = { x: 0, z: 0 }; return this.drawMap(); }
+    if (a === 'reply') { const th = this.inbox.find((t) => t.from === d.f); if (th) { th.items.push({ t: this.clock(), text: d.t, me: true }); this.replies[d.f] = (this.replies[d.f] || 0) + 1; const ans = REPLY[d.f] && REPLY[d.f][d.t]; if (ans) setTimeout(() => { this._msg(d.f, ans); }, 1600 + Math.random() * 1800); } this._last = null; return this.render(); }
     if (a === 'thread') return this.go('th:' + d.f);
     if (a === 'accept') { g.accept(+d.i); this.toggle(false); return; }
     if (a === 'reroll') { g.offers = []; g.rollOffers(); }
@@ -68,7 +79,7 @@ export class Phone {
   shoot() {
     const r = this.engine.renderer; this.el.classList.add('snap'); document.body.classList.add('photo');
     requestAnimationFrame(() => { try { this.engine.render(0); const c = r.domElement; const t = document.createElement('canvas'); t.width = 360; t.height = Math.round(360 * c.height / c.width); t.getContext('2d').drawImage(c, 0, 0, t.width, t.height); this.photos.unshift({ src: t.toDataURL('image/jpeg', 0.82), t: this.clock(), where: this.g.district().name }); if (this.photos.length > 24) this.photos.pop(); } catch (e) { /* ignore */ }
-      document.body.classList.remove('photo'); this.el.classList.remove('snap'); const f = this.el.querySelector('.ph-flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); this.g.audio?.blip(1500, 0.03); this.go('photo'); });
+      document.body.classList.remove('photo'); this.el.classList.remove('snap'); const f = this.el.querySelector('.ph-flash'); f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); this.g.audio?.blip(1500, 0.03); this._last = null; this.render(true); });
   }
   update(dt) {
     const g = this.g, s = g.state; const h = g.env.hour; if (h < this.lastHour - 12) this.day++; this.lastHour = h;
@@ -77,10 +88,11 @@ export class Phone {
     if (!this.open) return;
     this.el.querySelector('.ph-time').textContent = this.clock();
     const bat = Math.max(9, 100 - ((s.playtime || 0) / 45) % 92); const b = this.el.querySelector('.ph-bat i'); b.style.width = bat + '%'; b.classList.toggle('lo', bat < 20);
-    this._t = (this._t || 0) + dt; if (this._t > 0.5) { this._t = 0; if (this.app === 'home' || this.app === 'jobs' || this.app === 'bank' || this.app === 'stock') this.render(); if (this.app === 'map') this.drawMap(); }
+    this._t = (this._t || 0) + dt; if (this._t > 1.0 && !this._down) { this._t = 0; if (this.app === 'home' || this.app === 'jobs' || this.app === 'bank' || this.app === 'stock' || this.app === 'msg' || this.app.startsWith('th:')) this.render(); }
     if (this.app === 'map') this.drawMap();
+    if (this.app === 'cam') { const vf = this.view.querySelector('.pa-vf'); if (vf) { const c = this.engine.renderer.domElement; const x = vf.getContext('2d'); const sw = c.height * (vf.width / vf.height); try { x.drawImage(c, (c.width - sw) / 2, 0, sw, c.height, 0, 0, vf.width, vf.height); } catch (e) { /* ignore */ } } }
   }
-  render() {
+  render(force) {
     const g = this.g, s = g.state; const unread = this.inbox.reduce((n, t) => n + t.unread, 0); let h = '';
     const bar = (title, right = '') => `<div class="pa-bar"><button class="pa-back" data-a="home">‹</button><b>${title}</b><span>${right}</span></div>`;
     const rain = g.env.weather.rain; const temp = Math.round(9 + 7 * Math.sin(((g.env.hour - 9) / 24) * 6.283) - rain * 3);
@@ -93,9 +105,9 @@ export class Phone {
     } else if (this.app === 'msg') {
       h = bar('메시지') + `<div class="pa-list">${this.inbox.map((t) => `<button class="pa-row" data-a="thread" data-f="${t.from}"><span class="av">${t.from[0]}</span><span class="tx"><b>${t.from}</b><small>${t.items[t.items.length - 1].text}</small></span><span class="mt">${t.items[t.items.length - 1].t}${t.unread ? `<i class="dot">${t.unread}</i>` : ''}</span></button>`).join('')}</div>`;
     } else if (this.app.startsWith('th:')) {
-      const th = this.inbox.find((t) => 'th:' + t.from === this.app); h = `<div class="pa-bar"><button class="pa-back" data-a="app" data-id="msg">‹</button><b>${th ? th.from : ''}</b><span></span></div><div class="pa-chat">${th ? th.items.map((m) => `<div class="bub"><p>${m.text}</p><small>${m.t}</small></div>`).join('') : ''}</div>`;
+      const th = this.inbox.find((t) => 'th:' + t.from === this.app); h = `<div class="pa-bar"><button class="pa-back" data-a="app" data-id="msg">‹</button><b>${th ? th.from : ''}</b><span></span></div><div class="pa-chat">${th ? th.items.map((m) => `<div class="bub${m.me ? ' me' : ''}"><p>${m.text}</p><small>${m.t}</small></div>`).join('') : ''}</div>${th && REPLY[th.from] ? `<div class="pa-qr">${Object.keys(REPLY[th.from]).map((t) => `<button data-a="reply" data-f="${th.from}" data-t="${t}">${t}</button>`).join('')}</div>` : ''}`;
     } else if (this.app === 'map') {
-      h = bar('지도', g.district().name) + `<canvas class="pa-map" width="560" height="820"></canvas><div class="pa-zoom"><button data-a="zoom" data-k="1.6">+</button><button data-a="zoom" data-k="0.625">−</button></div>`;
+      h = bar('지도', g.district().name) + `<canvas class="pa-map" width="560" height="820"></canvas><div class="pa-zoom"><button data-a="zoom" data-k="1.6">+</button><button data-a="zoom" data-k="0.625">−</button><button data-a="center">◎</button></div>`;
     } else if (this.app === 'jobs') {
       const J = g.job;
       h = bar('일자리', `체력 ${Math.round(s.energy ?? 100)}`) + `<div class="pa-list">${J ? `<div class="pa-card on"><small>근무 중</small><b>${J.name} · ${J.item ? '' : ''}${J.trade ? J.trade.name : ''}</b><p>${g.jobLabel()}</p><button class="pa-btn ghost" data-a="cancel">근무 포기</button></div>` : ''}
@@ -106,6 +118,9 @@ export class Phone {
     } else if (this.app === 'stock') {
       h = bar('증권') + `<div class="pa-list">${Object.keys(g.stock).map((k) => { const hist = g.stockHist[k] || []; const v = g.stock[k]; const v0 = hist.length ? hist[0] : v; const ch = ((v - v0) / v0) * 100; const pts = hist.slice(-40); const mn = Math.min(...pts, v), mx = Math.max(...pts, v); const path = pts.map((q, i) => `${(i / Math.max(1, pts.length - 1)) * 70},${22 - ((q - mn) / Math.max(1e-6, mx - mn)) * 20}`).join(' ');
         return `<div class="pa-stock"><span><b>${k.toUpperCase()}</b><small>보유 ${s.shares[k] || 0}주</small></span><svg viewBox="0 0 70 24"><polyline points="${path}" fill="none" stroke="${ch >= 0 ? '#ff5a5a' : '#4a90ff'}" stroke-width="1.6"/></svg><span class="px"><b>${fmt(Math.round(v))}</b><small class="${ch >= 0 ? 'up' : 'dn'}">${ch >= 0 ? '+' : ''}${ch.toFixed(2)}%</small></span><span class="bs"><button data-a="share" data-id="${k}" data-n="1">매수</button><button data-a="share" data-id="${k}" data-n="-1">매도</button></span></div>`; }).join('')}</div>`;
+    } else if (this.app === 'cam') {
+      const last = this.photos[0];
+      h = `<div class="pa-cam"><canvas class="pa-vf" width="360" height="640"></canvas><div class="cam-top"><span>사진</span><span>${g.district().name}</span></div><div class="cam-bot"><button class="cam-th" data-a="app" data-id="photo">${last ? `<img src="${last.src}" alt="최근 사진">` : ''}</button><button class="cam-sh" data-a="snap" aria-label="촬영"><i></i></button><button class="cam-x" data-a="home">완료</button></div></div>`;
     } else if (this.app === 'photo') {
       if (this.viewing != null && this.photos[this.viewing]) { const p = this.photos[this.viewing]; h = `<div class="pa-bar"><button class="pa-back" data-a="unview">‹</button><b>${p.where}</b><span>${p.t}</span></div><img class="pa-full" src="${p.src}" alt="사진">`; }
       else h = bar('사진', `${this.photos.length}장`) + (this.photos.length ? `<div class="pa-gal">${this.photos.map((p, i) => `<button data-a="view" data-i="${i}"><img src="${p.src}" alt="사진 ${i + 1}"></button>`).join('')}</div>` : '<p class="pa-empty">아직 찍은 사진이 없습니다.<br>카메라로 도시를 찍어 보세요.</p>');
@@ -115,13 +130,14 @@ export class Phone {
         <div class="pa-card"><small>그래픽 품질 · 현재 ${q}</small><div class="pa-row2">${['low', 'medium', 'high', 'ultra'].map((v) => `<button class="pa-btn ghost" data-a="q" data-q="${v}">${{ low: '낮음', medium: '보통', high: '높음', ultra: '최상' }[v]}</button>`).join('')}</div></div>
         <div class="pa-card"><small>기기</small><p>KAIROS ONE · 카이로스-9 통신망 6G<br>배터리는 숙소에서 쉬면 충전됩니다.</p></div></div>`;
     }
-    this.view.innerHTML = h; this.view.className = 'ph-view a-' + this.app.replace(':', '-').split('-')[0];
+    if (!force && h === this._last) return; const keepScroll = this._lastApp === this.app ? this.view.scrollTop : 0; this._last = h; this._lastApp = this.app;
+    this.view.innerHTML = h; const anim = this.view.classList.contains('enter') ? ' enter' : this.view.classList.contains('exit') ? ' exit' : ''; this.view.className = 'ph-view a-' + this.app.replace(':', '-').split('-')[0] + anim; this.view.scrollTop = this.app.startsWith('th:') ? 1e6 : keepScroll;
     if (this.app === 'map') this.drawMap();
     void COMMODITIES;
   }
   drawMap() {
     const cv = this.view.querySelector('.pa-map'); if (!cv) return; const c = cv.getContext('2d'); const W = cv.width, H = cv.height; const g = this.g, p = g.player.p, ctx = g.city.ctx;
-    const k = 0.45 * this.mapZoom; const T = (x, z) => [W / 2 + (x - p.x) * k, H / 2 + (z - p.z) * k];
+    const k = 0.45 * this.mapZoom; const cx = p.x + this.mapOff.x, cz = p.z + this.mapOff.z; const T = (x, z) => [W / 2 + (x - cx) * k, H / 2 + (z - cz) * k];
     c.fillStyle = '#e9e6df'; c.fillRect(0, 0, W, H);
     c.fillStyle = '#d5d1c7'; for (const b of ctx.blocks || []) { const q = b.corners; if (!q) continue; const a = T(q[0][0], q[0][1]); if (a[0] < -400 || a[0] > W + 400 || a[1] < -400 || a[1] > H + 400) continue; c.beginPath(); q.forEach((v, i) => { const t = T(v[0], v[1]); i ? c.lineTo(t[0], t[1]) : c.moveTo(t[0], t[1]); }); c.closePath(); c.fill(); }
     c.strokeStyle = '#fff'; c.lineCap = 'round';

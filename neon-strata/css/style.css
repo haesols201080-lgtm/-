@@ -148,3 +148,17 @@ body.panel-open .panel { background: rgba(6, 9, 15, 0.96); }
 .pa-gal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px; } .pa-gal button { border: 0; padding: 0; cursor: pointer; aspect-ratio: 1; overflow: hidden; } .pa-gal img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pa-full { width: 100%; display: block; margin-top: 8%; }
 .b-ph { right: 156px; bottom: 140px; }
+.ph-view.enter { animation: phIn .22s cubic-bezier(.2,.8,.2,1); } .ph-view.exit { animation: phOut .2s ease-out; }
+@keyframes phIn { from { transform: scale(.9); opacity: 0; border-radius: 30px; } to { transform: none; opacity: 1; } }
+@keyframes phOut { from { transform: scale(1.06); opacity: .4; } to { transform: none; opacity: 1; } }
+.ph-app .ph-ic, .pa-btn, .pa-row, .ph-dock .ph-app { transition: transform .12s, filter .12s; } .ph-app:active .ph-ic, .pa-btn:active, .pa-row:active { transform: scale(.92); }
+.bub.me { align-self: flex-end; background: #0a84ff; color: #fff; border-radius: 18px 18px 6px 18px; } .bub.me small { color: #d6e8ff; }
+.pa-qr { position: sticky; bottom: 0; display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 4% 10px; background: #f2f2f7f0; backdrop-filter: blur(8px); }
+.pa-qr button { border: 1px solid #c7c7cc; background: #fff; border-radius: 99px; padding: 5px 11px; font: inherit; font-size: calc(var(--pw) * .036); color: #0a84ff; cursor: pointer; }
+.ph-view.a-cam { background: #000; padding: 0; } .pa-cam { position: absolute; inset: 0; } .pa-vf { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.cam-top { position: absolute; top: 11%; left: 0; right: 0; display: flex; justify-content: space-between; padding: 0 7%; color: #ffd60a; font-size: calc(var(--pw) * .038); font-weight: 700; text-shadow: 0 1px 3px #000; }
+.cam-bot { position: absolute; bottom: 0; left: 0; right: 0; height: 20%; background: #000a; display: flex; align-items: center; justify-content: space-around; }
+.cam-sh { width: calc(var(--pw) * .2); aspect-ratio: 1; border-radius: 50%; border: 4px solid #fff; background: none; padding: 4px; cursor: pointer; } .cam-sh i { display: block; width: 100%; height: 100%; border-radius: 50%; background: #fff; transition: transform .1s; } .cam-sh:active i { transform: scale(.88); }
+.cam-th { width: calc(var(--pw) * .13); aspect-ratio: 1; border-radius: 10px; border: 2px solid #fff; background: #222; padding: 0; overflow: hidden; cursor: pointer; } .cam-th img { width: 100%; height: 100%; object-fit: cover; }
+.cam-x { background: none; border: 0; color: #fff; font: inherit; font-size: calc(var(--pw) * .042); cursor: pointer; }
+.pa-map { touch-action: none; cursor: grab; }
