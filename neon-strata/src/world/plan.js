@@ -84,10 +84,14 @@ export function buildPlan(ctx) {
   ctx.blocks = blocks; ctx.streets = streets;
 
   // --- draw local streets (lane markings on wider ones) + block slabs
+  // ground layer stack (no two surfaces share a height): ground 0 · unmarked streets 0.035–0.041 (arcs above radials, neighbours alternate) · marked streets 0.044–0.046
+  // · zebras 0.052 · boulevards 0.06 · rings 0.1 · lots 0.2 · pavements 0.22
+  let si = 0;
   for (const s of streets) {
     const fr = s.pts.map((p, i) => { const a = s.pts[Math.max(0, i - 1)], b = s.pts[Math.min(s.pts.length - 1, i + 1)]; let tx = b[0] - a[0], tz = b[1] - a[1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l; return [tx, tz, -tz, tx]; });
     const marked = s.w >= 16;
-    ribbon(ctx, s.pts, fr, false, s.w / 2 + 0.3, 0.035, -s.w / 2 - 0.3, 0.035, M(ST.ROAD, { cellW: marked ? s.w : 0 }), { up: true, uA: 0, uB: s.w });
+    const sy = marked ? (s.arc ? 0.0458 : 0.0442) : (s.arc ? 0.0395 : 0.035) + (si++ % 2) * 0.0015;
+    ribbon(ctx, s.pts, fr, false, s.w / 2 + 0.3, sy, -s.w / 2 - 0.3, sy, M(ST.ROAD, { cellW: marked ? s.w : 0 }), { up: true, uA: 0, uB: s.w });
     if (marked) { ctx.lanes.push({ pts: s.pts.map((p, i) => [p[0] + fr[i][2] * s.w * 0.22, 1.1, p[1] + fr[i][3] * s.w * 0.22]), closed: false, kind: 'ground', speed: 14 }); }
   }
   const curb = K.conc(0.44);

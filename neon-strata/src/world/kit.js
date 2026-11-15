@@ -165,9 +165,9 @@ export function xBrace(ctx, cx, cz, sx, sz, y0, y1, bay, mat, t = 0.6) {
   for (let i = 0; i < n; i++) {
     const a = y0 + i * dh, b = a + dh;
     for (const s of [-1, 1]) {
-      const z = cz + s * (sz / 2 + o), x = cx + s * (sx / 2 + o);
-      pen.beam(cx - sx / 2, a, z, cx + sx / 2, b, z, t, t); pen.beam(cx + sx / 2, a, z, cx - sx / 2, b, z, t, t);
-      pen.beam(x, a, cz - sz / 2, x, b, cz + sz / 2, t, t); pen.beam(x, a, cz + sz / 2, x, b, cz - sz / 2, t, t);
+      const z = cz + s * (sz / 2 + o), x = cx + s * (sx / 2 + o), z2 = z + s * 0.04, x2 = x + s * 0.04; // the crossing diagonal sits 4 cm proud (no coplanar faces)
+      pen.beam(cx - sx / 2, a, z, cx + sx / 2, b, z, t, t); pen.beam(cx + sx / 2, a, z2, cx - sx / 2, b, z2, t, t);
+      pen.beam(x, a, cz - sz / 2, x, b, cz + sz / 2, t, t); pen.beam(x2, a, cz + sz / 2, x2, b, cz - sz / 2, t, t);
     }
   }
 }

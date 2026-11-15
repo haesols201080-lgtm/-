@@ -174,7 +174,7 @@ export const MEGA = {
 
 // roof toppers for low-rise shop-houses so a terrace doesn't read as a row of identical boxes
 export function roofForm(ctx, rng, v, h, kind, wallM) {
-  const pen = ctx.pen; const { cx, cz, w, d } = v; const x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2; ctx.main();
+  const pen = ctx.pen; const { cx, cz } = v; const w = v.w - 0.08, d = v.d - 0.08; const x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2; ctx.main(); // 4 cm inside the parapet faces (no coplanar walls)
   if (kind === 'pent') { // set-back penthouse storey
     const pw = w * rng.f(0.6, 0.85), pd = d * rng.f(0.5, 0.75); const pv = new Vol(ctx, cx + rng.f(-1, 1) * (w - pw) * 0.3, cz - (d - pd) * 0.35, pw, pd, h, h + 3.2);
     facade(pv, 0, h, h + 3.2, { wall: { ...wallM, flags: wallM.flags & 7 }, bayCells: 99, floorH: 3.2 }); for (const f of [1, 2, 3]) blindWall(pv, f, h, h + 3.2, K.conc(0.3), rng, {}); pv.roof(K.conc(0.25)); pv.solid(); return 3.2;

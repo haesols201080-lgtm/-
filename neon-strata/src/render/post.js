@@ -12,7 +12,10 @@ function fsTri() {
   g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array([0, 0, 2, 0, 0, 2]), 2));
   return g;
 }
-const mk = (frag, uniforms, extra = {}) => new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: frag, uniforms, depthTest: false, depthWrite: false, ...extra });
+// depth convention: reversed float depth (near = 1, far / sky = 0) when the GPU has EXT_clip_control, else classic [0, 1]
+let DEPTH_DEFS = { NDCZ: '(d*2.0-1.0)', ISSKY: '(d>=0.99999)' };
+const depthHead = () => `#define NDCZ(d) ${DEPTH_DEFS.NDCZ}\n#define ISSKY(d) ${DEPTH_DEFS.ISSKY}\n`;
+const mk = (frag, uniforms, extra = {}) => new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: depthHead() + frag, uniforms, depthTest: false, depthWrite: false, ...extra });
 
 export class PostFX {
   constructor(renderer, quality) {
@@ -40,7 +43,8 @@ export class PostFX {
     const q = this.q;
     const size = this.r.getDrawingBufferSize(new THREE.Vector2());
     const w = size.x, h = size.y; this.w = w; this.h = h;
-    const depthTex = new THREE.DepthTexture(w, h); depthTex.type = THREE.UnsignedIntType; depthTex.format = THREE.DepthFormat;
+    const rev = this.r.state.buffers.depth.getReversed(); DEPTH_DEFS = rev ? { NDCZ: '(d)', ISSKY: '(d<=0.0)' } : { NDCZ: '(d*2.0-1.0)', ISSKY: '(d>=0.99999)' };
+    const depthTex = new THREE.DepthTexture(w, h); depthTex.type = rev ? THREE.FloatType : THREE.UnsignedIntType; depthTex.format = THREE.DepthFormat;
     depthTex.minFilter = depthTex.magFilter = THREE.NearestFilter;
     this.sceneRT = this._rt(w, h, { depthBuffer: true, depthTexture: depthTex, samples: q.msaa || 0 });
     this.cloudRT = this._rt(w * q.cloudScale, h * q.cloudScale);
@@ -73,7 +77,7 @@ export class PostFX {
         vec2 uv = vUv + stp * ign(gl_FragCoord.xy);
         float acc = 0.0; float wgt = 1.0; float tot = 0.0;
         for (int i = 0; i < N; i++) {
-          float sky = step(0.99999, texture2D(tDepth, uv).r) * texture2D(tCloud, uv).a;
+          float sky = (ISSKY(texture2D(tDepth, uv).r) ? 1.0 : 0.0) * texture2D(tCloud, uv).a;
           vec2 q = (uv - uSunScreen.xy) * vec2(uAspect, 1.0);
           float near = exp(-dot(q, q) * 9.0);
           acc += sky * near * wgt; tot += wgt; wgt *= 0.965; uv += stp;
@@ -86,11 +90,11 @@ export class PostFX {
     this.mAO = mk(/* glsl */ `
       precision highp float;
       uniform sampler2D tDepth; uniform mat4 uProj; uniform mat4 uInvProj; uniform vec2 uRes; uniform float uRadius; varying vec2 vUv;
-      vec3 vpos(vec2 uv){ float d = texture2D(tDepth, uv).r; vec4 p = uInvProj * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); return p.xyz / p.w; }
+      vec3 vpos(vec2 uv){ float d = texture2D(tDepth, uv).r; vec4 p = uInvProj * vec4(uv * 2.0 - 1.0, NDCZ(d), 1.0); return p.xyz / p.w; }
       float ign(vec2 p){ return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
       void main(){
         float d0 = texture2D(tDepth, vUv).r;
-        if (d0 >= 0.99999) { gl_FragColor = vec4(1.0); return; }
+        if (ISSKY(d0)) { gl_FragColor = vec4(1.0); return; }
         vec3 p = vpos(vUv);
         vec2 t = 1.0 / uRes;
         // normal from the closest depth neighbours (avoids edge artefacts)
@@ -132,11 +136,11 @@ export class PostFX {
     this.mSSR = mk(/* glsl */ `
       precision highp float;
       uniform sampler2D tScene; uniform sampler2D tDepth; uniform mat4 uProj; uniform mat4 uInvProj; uniform vec3 uUpV; varying vec2 vUv;
-      vec3 vpos(vec2 uv){ float d = texture2D(tDepth, uv).r; vec4 p = uInvProj * vec4(uv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0); return p.xyz / p.w; }
+      vec3 vpos(vec2 uv){ float d = texture2D(tDepth, uv).r; vec4 p = uInvProj * vec4(uv * 2.0 - 1.0, NDCZ(d), 1.0); return p.xyz / p.w; }
       float ign(vec2 p){ return fract(52.9829189 * fract(dot(p, vec2(0.06711056, 0.00583715)))); }
       void main(){
         float m = texture2D(tScene, vUv).a; float d0 = texture2D(tDepth, vUv).r;
-        if (m < 0.02 || d0 >= 0.99999) { gl_FragColor = vec4(0.0); return; }
+        if (m < 0.02 || ISSKY(d0)) { gl_FragColor = vec4(0.0); return; }
         vec3 P = vpos(vUv); vec3 V = normalize(P);
         // wet asphalt is not a mirror: jitter the normal, mostly along the view direction → vertical streaks
         float j = ign(gl_FragCoord.xy) - 0.5, j2 = ign(gl_FragCoord.yx + 17.0) - 0.5;
@@ -172,7 +176,7 @@ export class PostFX {
         vec3 col;
         #ifdef NS_MOTION_BLUR
           float depth = texture2D(tDepth, vUv).r;
-          vec4 ndc = vec4(vUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+          vec4 ndc = vec4(vUv * 2.0 - 1.0, NDCZ(depth), 1.0);
           vec4 wp = uInvVP * ndc; wp /= wp.w;
           vec4 pp = uPrevVP * wp; vec2 puv = pp.xy / pp.w * 0.5 + 0.5;
           vec2 vel = (vUv - puv) * uBlur;

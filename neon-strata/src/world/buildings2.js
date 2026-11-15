@@ -42,7 +42,7 @@ export function capsuleBlock(ctx, rng, lot, S, o = {}) {
       // megacolumns + megabeams (with accent-painted beams = sky streets)
       ctx.main(); const L = v.len(f); const nc = Math.max(2, Math.round(L / 27));
       for (let i = 0; i <= nc; i++) { const s = Math.min(L - 1.4, Math.max(1.4, (i / nc) * L)); v.box(f, s - 1.4, s + 1.4, 0, 2.6, 0, H + 3, frameM, { bottom: false }); }
-      for (let y = 9.5 + fh * 9; y < H - 2; y += fh * 9) { v.box(f, 0, L, 0, 2.6, y - 1.3, y + 1.3, (Math.round(y / (fh * 9)) % 2) ? paint : frameM); pen.use(K.lamps(K.mixW(acc, 0.6), 6, Math.round(y))); v.box(f, 1, L - 1, 2.6, 2.72, y + 0.1, y + 0.6, null, { ends: false, top: false, bottom: false }); }
+      for (let y = 9.5 + fh * 9; y < H - 2; y += fh * 9) { v.box(f, 1.4, L - 1.4, 0, 2.45, y - 1.3, y + 1.3, (Math.round(y / (fh * 9)) % 2) ? paint : frameM); pen.use(K.lamps(K.mixW(acc, 0.6), 6, Math.round(y))); v.box(f, 1.4, L - 1.4, 2.45, 2.57, y + 0.1, y + 0.6, null, { ends: false, top: false, bottom: false }); }
       // extra pulled-out capsule clusters
       if (f === 0 && info) for (let i = 0; i < Math.round(L / 16); i++) { const c0 = rng.i(1, info.cells - 3), fl = rng.i(1, info.floors - 3); const s0 = c0 * info.cw, y0 = 9.5 + fl * info.floorH; const wC = rng.pick([1, 2]), hC = rng.pick([1, 1, 2]); const u = nextU(); ctx.detail(); v.box(0, s0, s0 + wC * info.cw, 1.7, 3.1, y0, y0 + hC * info.floorH, { ...capM, color: dim(rng.pick(S.walls), 1.1), seed: rng.i(0, 255) }, { uv: [u, 0, u + wC, hC], endMat: K.conc(0.3), botMat: K.dark(0.08) }); }
     }
@@ -310,11 +310,12 @@ export function farmTower(ctx, rng, lot, S, o = {}) {
   // crown: collector dish + beacon
   { const y = 10 + n * dk; pen.use(rim); pen.lathe(cx, cz, [[R * 0.3, y - 2], [R * 0.8, y + 3], [R * 0.95, y + 9]], 16, { cap: false }); pen.use({ st: ST.MIRROR, color: [1, 1, 1] }); pen.lathe(cx, cz, [[R * 0.93, y + 8.9], [R * 0.78, y + 3.2], [R * 0.3, y - 1.6], [0.3, y - 1.9]], 16, { cap: false }); pen.use(K.MAT_POLE); pen.tube(cx, y - 2, cz, cx, y + 26, cz, 0.5, 6, { r1: 0.15 }); pen.use(K.emis(acc, 16, 2, false, rng.i(0, 255))); pen.lathe(cx, cz, [[0.6, y + 26], [0.6, y + 27], [0.05, y + 27.6]], 6, {}); ctx.spark(pen.wx(cx, cz), 0.2 + y + 27, pen.wz(cx, cz), acc, 7, 2.2); }
   ctx.light(pen.wx(cx, cz), pen.wz(cx, cz), R * 3.2, [1, 0.68, 0.42], 0.6, 20);
-  ctx.footprint(cx, cz, R * 2, R * 2, 0, H, lot.block.id);
+  ctx.footprint(cx, cz, R * 0.9, R * 0.9, 0, 9, lot.block.id); ctx.footprint(cx, cz, R * 2.52 + 2.8, R * 2.52 + 2.8, 9, H + 6, lot.block.id); ctx.footprints[ctx.footprints.length - 1].cyl = true; // core · deck stack (round: radius 1.26R + 1.4)
   // greenhouse vaults along the front + algae silos at the back
   const nv = Math.max(1, Math.floor(W / 30)); const vl = Math.min(60, Dp * 0.3);
   for (let i = 0; i < nv; i++) {
-    const gx = -W / 2 + 15 + i * (W - 30) / Math.max(1, nv - 1 || 1), gz = Dp / 2 - vl / 2 - 3; if (Math.hypot(gx - cx, gz - cz) < R + 18) continue;
+    const gx = -W / 2 + 15 + i * (W - 30) / Math.max(1, nv - 1 || 1), gz = Dp / 2 - vl / 2 - 3;
+    { const qx = Math.max(Math.abs(gx - cx) - 9.5, 0), qz = Math.max(Math.abs(gz - cz) - vl / 2, 0); if (Math.hypot(qx, qz) < R * 1.3 + 3) continue; } // vault rectangle clear of the widest deck (r ≤ 1.12R, helix 0.14R, rim 1.4 m)
     const gr = 9; ctx.main(); pen.use(M(ST.CONCRETE, { color: [0.38, 0.38, 0.38] })); pen.box(gx, gz, gr * 2 + 1, vl, 0, 1.2, {});
     const segs = 8; pen.use({ ...grow, cellW: 3.2, floorH: 3.2 });
     for (let k = 0; k < segs; k++) { const a0 = Math.PI * (k / segs), a1 = Math.PI * ((k + 1) / segs); const x0 = gx - Math.cos(a0) * gr, x1 = gx - Math.cos(a1) * gr, y0 = 1.2 + Math.sin(a0) * gr, y1 = 1.2 + Math.sin(a1) * gr; pen.quad(x0, y0, gz + vl / 2, x1, y1, gz + vl / 2, x1, y1, gz - vl / 2, x0, y0, gz - vl / 2, k * 3, 0, k * 3 + 1, Math.round(vl / 3.2)); }
@@ -323,7 +324,7 @@ export function farmTower(ctx, rng, lot, S, o = {}) {
     const lp = [pen.wx(gx, gz), pen.wz(gx, gz)]; ctx.light(lp[0], lp[1], 30, i % 3 === 1 ? [1, 0.45, 0.7] : [1, 0.66, 0.36], 0.6, 6);
   }
   const ns = Math.floor(W / 14);
-  for (let i = 0; i < ns; i++) { const sx = -W / 2 + 7 + i * 14, sz = -Dp / 2 + 8; if (Math.hypot(sx - cx, sz - cz) < R + 10) continue; const sh = rng.f(16, 34); ctx.main(); pen.use(M(ST.METAL, { color: [0.42, 0.46, 0.44], seed: i })); pen.lathe(sx, sz, [[4.6, 0], [4.6, sh], [3.6, sh + 2], [0.6, sh + 3]], 12, { cap: false, aoB: 0.55 }); pen.use(K.lamps([0.62, 1, 0.72], 5, i * 13)); for (const yy of [sh * 0.3, sh * 0.6, sh * 0.9]) pen.lathe(sx, sz, [[4.66, yy], [4.66, yy + 0.5]], 12, { cap: false }); ctx.solidCyl(sx, sz, 4.6, 0, sh + 2); if (i % 4 === 0) ctx.light(pen.wx(sx, sz), pen.wz(sx, sz), 14, [0.6, 1, 0.7], 0.3, 8); }
+  for (let i = 0; i < ns; i++) { const sx = -W / 2 + 7 + i * 14, sz = -Dp / 2 + 8; if (Math.hypot(sx - cx, sz - cz) < R * 1.3 + 7.5) continue; const sh = rng.f(16, 34); ctx.footprint(sx, sz, 9.2, 9.2, 0, sh + 2.5, lot.block.id); ctx.main(); pen.use(M(ST.METAL, { color: [0.42, 0.46, 0.44], seed: i })); pen.lathe(sx, sz, [[4.6, 0], [4.6, sh], [3.6, sh + 2], [0.6, sh + 3]], 12, { cap: false, aoB: 0.55 }); pen.use(K.lamps([0.62, 1, 0.72], 5, i * 13)); for (const yy of [sh * 0.3, sh * 0.6, sh * 0.9]) pen.lathe(sx, sz, [[4.66, yy], [4.66, yy + 0.5]], 12, { cap: false }); ctx.solidCyl(sx, sz, 4.6, 0, sh + 2); if (i % 4 === 0) ctx.light(pen.wx(sx, sz), pen.wz(sx, sz), 14, [0.6, 1, 0.7], 0.3, 8); }
   for (let i = 0; i < 12; i++) { const lx = rng.f(-0.48, 0.48) * W, lz = rng.f(-0.3, 0.2) * Dp; if (Math.hypot(lx - cx, lz - cz) < R + 6) continue; ctx.propL(rng.pick(['tree', 'planter', 'tree']), lx, 0, lz, rng.f(0, 6.28), rng.f(0.9, 1.6)); }
   ctx.shade(lot.x, lot.z, R * 2.2 + H * 0.2, 0.6); ctx.stats.buildings++; lot.h = H;
   return H;

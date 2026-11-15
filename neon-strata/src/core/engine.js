@@ -8,7 +8,7 @@ import { MATU } from '../render/cityMaterial.js';
 export class Engine {
   constructor(canvas, quality) {
     this.q = quality; this.canvas = canvas;
-    const r = this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false, alpha: false });
+    const r = this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false, alpha: false, reversedDepthBuffer: true });
     if (!r.capabilities.isWebGL2) throw new Error('WebGL2 가 필요합니다');
     r.outputColorSpace = THREE.LinearSRGBColorSpace; // final pass does its own grading / gamma
     r.toneMapping = THREE.NoToneMapping;

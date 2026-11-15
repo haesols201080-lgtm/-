@@ -88,7 +88,10 @@ export function facade(vol, f, y0, y1, spec) {
   }
   if (spec.belts) {
     const bl = spec.belts; const dtb = bl.detail ? () => ctx.detail() : () => ctx.main(); dtb();
-    for (let fl = bl.every; fl < floors + (bl.top ? 1 : 0); fl += bl.every) { const y = y0 + (fl * (y1 - y0)) / floors; vol.box(f, 0, L, 0, bl.d, y - bl.h / 2, y + bl.h / 2, bl.mat); }
+    // belts never share a plane with the ribs (set 4 cm back, ends tucked inside the end ribs) nor with the next face's
+    // belts at the corner (each face's belt a few mm higher)
+    const rd = spec.ribs ? spec.ribs.d : -1; const bd = Math.abs(bl.d - rd) < 0.03 ? rd - 0.04 : bl.d; const e = spec.ribs ? 0.02 : 0; const fy = f * 0.003;
+    for (let fl = bl.every; fl < floors + (bl.top ? 1 : 0); fl += bl.every) { const y = y0 + (fl * (y1 - y0)) / floors + fy; vol.box(f, e, L - e, 0, bd, y - bl.h / 2, y + bl.h / 2, bl.mat); }
   }
   ctx.main();
   return { cells, cw, floors, bays, bayW: bayCells * cw, offs, floorH: (y1 - y0) / floors };
@@ -125,11 +128,11 @@ export function bladeSign(vol, f, s, y, hgt, rng, o = {}) {
   const ctx = vol.ctx; const rect = o.rect || ctx.atlas.pickV(rng); const w = hgt * rect.aspect;
   const a = vol.P(f, s, 0), c = vol.P(f, s, w / 2 + 0.35);
   ctx.detail(); const pen = vol.pen;
-  pen.use(K.dark(0.07)); vol.box(f, s - 0.09, s + 0.09, 0.3, w + 0.42, y - hgt / 2 - 0.06, y + hgt / 2 + 0.06, null, {});
+  pen.use(K.dark(0.07)); vol.box(f, s - 0.08, s + 0.08, 0.3, w + 0.42, y - hgt / 2 - 0.06, y + hgt / 2 + 0.06, null, {});
   // the two faces sit just outside the backing box
   const n = [Math.sin(FACE_ANG[f] + Math.PI / 2), Math.cos(FACE_ANG[f] + Math.PI / 2)];
-  pen.sign(c[0] + n[0] * 0.1, y, c[1] + n[1] * 0.1, FACE_ANG[f] + Math.PI / 2, w, hgt, rect, { seed: rng.i(0, 255), intensity: o.intensity ?? 4.5 });
-  pen.sign(c[0] - n[0] * 0.1, y, c[1] - n[1] * 0.1, FACE_ANG[f] - Math.PI / 2, w, hgt, rect, { seed: rng.i(0, 255), intensity: o.intensity ?? 4.5 });
+  pen.sign(c[0] + n[0] * 0.125, y, c[1] + n[1] * 0.125, FACE_ANG[f] + Math.PI / 2, w, hgt, rect, { seed: rng.i(0, 255), intensity: o.intensity ?? 4.5 });
+  pen.sign(c[0] - n[0] * 0.125, y, c[1] - n[1] * 0.125, FACE_ANG[f] - Math.PI / 2, w, hgt, rect, { seed: rng.i(0, 255), intensity: o.intensity ?? 4.5 });
   pen.use(K.MAT_POLE); pen.beam(a[0], y + hgt * 0.4, a[1], c[0], y + hgt * 0.4, c[1], 0.07, 0.07); pen.beam(a[0], y - hgt * 0.4, a[1], c[0], y - hgt * 0.4, c[1], 0.07, 0.07);
   const lp = vol.world(f, s, w + 2); ctx.light(lp[0], lp[1], o.radius ?? Math.max(9, hgt * 2), rect.glow || [1, 0.6, 0.4], o.power ?? 0.45, pen.oy + y);
   ctx.main();

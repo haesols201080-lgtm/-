@@ -79,6 +79,13 @@ export async function buildCity(engine, { seed = 2049, quality, onProgress = () 
       if (top > 260) { put(hx, -hz, top + 1.5, 3.2); put(-hx, hz, top + 1.5, 3.2); for (let y = top - 150; y > 120; y -= 150) { put(hx, hz, y, 2.6); put(-hx, -hz, y, 2.6); } }
     } }
   const sparks = createSparks(ctx.sparks); group.add(sparks);
+  // street furniture that a skewed block outline put inside a building is dropped (no lamp posts through walls)
+  { const OUT = { tree: 1.2, lampA: 0.25, lampB: 0.25, lampC: 0.25, signal: 0.3, shelter: 1.4, bin: 0.15, bollard: 0.15, utilBox: 0.15, vending: 0.2, scooter: 0.8, trash: 0.4 };
+    const F = ctx.footprints; const cell = 64; const grid = new Map();
+    F.forEach((f, i) => { if (f[5] > 2) return; const r = Math.hypot(f[2], f[3]); for (let gx = Math.floor((f[0] - r) / cell); gx <= Math.floor((f[0] + r) / cell); gx++) for (let gz = Math.floor((f[1] - r) / cell); gz <= Math.floor((f[1] + r) / cell); gz++) { const k = gx * 10007 + gz; let a = grid.get(k); if (!a) grid.set(k, (a = [])); a.push(f); } });
+    const inside = (x, y, z, rad) => { const lst = grid.get(Math.floor(x / cell) * 10007 + Math.floor(z / cell)); if (!lst) return false; for (const f of lst) { if (y < f[5] - 0.5 || y > f[5] + 2) continue; const c = Math.cos(f[4]), s = Math.sin(f[4]); const dx = x - f[0], dz = z - f[1]; const lx = dx * c - dz * s, lz = dx * s + dz * c; if (Math.abs(lx) < f[2] + rad - 0.05 && Math.abs(lz) < f[3] + rad - 0.05) return true; } return false; };
+    const dropped = {}; for (const [name, rad] of Object.entries(OUT)) { const arr = ctx.props[name]; if (!arr) continue; const keep = arr.filter((p) => !inside(p[0], p[1], p[2], rad * (p[4] || 1))); if (arr.length > keep.length) dropped[name] = arr.length - keep.length; ctx.props[name] = keep; }
+    console.log(`[NS] street props inside buildings dropped: ${JSON.stringify(dropped)}`); }
   const props = instanceProps(ctx, mat, group);
   onProgress('라이트 필드 베이크', 0.94); await tick();
   lf.bake(engine.renderer);
@@ -91,10 +98,11 @@ export async function buildCity(engine, { seed = 2049, quality, onProgress = () 
   const audit = () => {
     const F = ctx.footprints; const cell = 120; const grid = new Map(); let bad = 0; const samples = [];
     const ax = (f) => { const c = Math.cos(f[4]), s = Math.sin(f[4]); return [[c, -s], [s, c]]; };
-    const sep = (a, b) => { const A = ax(a), B = ax(b); const dx = b[0] - a[0], dz = b[1] - a[1]; for (const [n, h] of [[A[0], null], [A[1], null], [B[0], null], [B[1], null]]) { const pa = a[2] * Math.abs(A[0][0] * n[0] + A[0][1] * n[1]) + a[3] * Math.abs(A[1][0] * n[0] + A[1][1] * n[1]); const pb = b[2] * Math.abs(B[0][0] * n[0] + B[0][1] * n[1]) + b[3] * Math.abs(B[1][0] * n[0] + B[1][1] * n[1]); if (Math.abs(dx * n[0] + dz * n[1]) > pa + pb - 0.05) return true; } return false; };
+    const sepCyl = (c, r) => { const cs = Math.cos(r[4]), sn = Math.sin(r[4]); const dx = c[0] - r[0], dz = c[1] - r[1]; const lx = dx * cs - dz * sn, lz = dx * sn + dz * cs; return Math.hypot(Math.max(Math.abs(lx) - r[2], 0), Math.max(Math.abs(lz) - r[3], 0)) > c[2] - 0.05; };
+    const sep = (a, b) => { if (a.cyl) return sepCyl(a, b); if (b.cyl) return sepCyl(b, a); const A = ax(a), B = ax(b); const dx = b[0] - a[0], dz = b[1] - a[1]; for (const [n, h] of [[A[0], null], [A[1], null], [B[0], null], [B[1], null]]) { const pa = a[2] * Math.abs(A[0][0] * n[0] + A[0][1] * n[1]) + a[3] * Math.abs(A[1][0] * n[0] + A[1][1] * n[1]); const pb = b[2] * Math.abs(B[0][0] * n[0] + B[0][1] * n[1]) + b[3] * Math.abs(B[1][0] * n[0] + B[1][1] * n[1]); if (Math.abs(dx * n[0] + dz * n[1]) > pa + pb - 0.05) return true; } return false; };
     F.forEach((f, i) => { const r = Math.hypot(f[2], f[3]); for (let gx = Math.floor((f[0] - r) / cell); gx <= Math.floor((f[0] + r) / cell); gx++) for (let gz = Math.floor((f[1] - r) / cell); gz <= Math.floor((f[1] + r) / cell); gz++) { const k = gx * 10007 + gz; let a = grid.get(k); if (!a) { a = []; grid.set(k, a); } a.push(i); } });
     const seen = new Set();
-    for (const arr of grid.values()) for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) { const a = F[arr[i]], b = F[arr[j]]; const key = arr[i] * 100000 + arr[j]; if (seen.has(key)) continue; seen.add(key); if (a[6] <= b[5] + 0.05 || b[6] <= a[5] + 0.05) continue; if (!sep(a, b)) { bad++; if (samples.length < 6) samples.push([a[0].toFixed(0), a[1].toFixed(0), a[7], b[7]]); } }
+    for (const arr of grid.values()) for (let i = 0; i < arr.length; i++) for (let j = i + 1; j < arr.length; j++) { const a = F[arr[i]], b = F[arr[j]]; const key = arr[i] * 100000 + arr[j]; if (seen.has(key)) continue; seen.add(key); if (a[6] <= b[5] + 0.05 || b[6] <= a[5] + 0.05) continue; if (!sep(a, b)) { bad++; if (samples.length < 80) samples.push(`${a[0].toFixed(1)},${a[1].toFixed(1)} [${(a[2] * 2).toFixed(1)}×${(a[3] * 2).toFixed(1)} y${a[5].toFixed(1)}-${a[6].toFixed(1)} ${a[8] || ''}] vs ${b[0].toFixed(1)},${b[1].toFixed(1)} [${(b[2] * 2).toFixed(1)}×${(b[3] * 2).toFixed(1)} y${b[5].toFixed(1)}-${b[6].toFixed(1)} ${b[8] || ''}]`); } }
     return { footprints: F.length, overlaps: bad, samples };
   };
   const city = {

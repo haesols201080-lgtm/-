@@ -1,3 +1,4 @@
+const DEBUG = typeof location !== 'undefined' && /debug=1/.test(location.search);
 // Shared generation context: chunked batches, occupancy grid, light-field emitters, colliders, POIs.
 import * as THREE from 'three';
 import { Batch, Pen } from './builder.js';
@@ -136,5 +137,5 @@ export class CityContext {
   // instanced prop in the current pen frame
   propL(name, lx, ly, lz, yaw = 0, scale = 1, tint = null) { const p = this.pen; this.prop(name, p.wx(lx, lz), p.oy + ly, p.wz(lx, lz), p.yaw + yaw, scale, tint); }
   // register a building footprint (pen frame) for the overlap audit
-  footprint(cx, cz, w, d, y0, y1, tag) { const p = this.pen; this.footprints.push([p.wx(cx, cz), p.wz(cx, cz), w / 2, d / 2, p.yaw, p.oy + y0, p.oy + y1, tag]); }
+  footprint(cx, cz, w, d, y0, y1, tag) { const p = this.pen; const f = [p.wx(cx, cz), p.wz(cx, cz), w / 2, d / 2, p.yaw, p.oy + y0, p.oy + y1, tag]; if (DEBUG) f.push((new Error().stack || '').split('\n').slice(2, 5).map((l) => (l.match(/at (\S+)/) || [])[1]).join('<')); this.footprints.push(f); }
 }

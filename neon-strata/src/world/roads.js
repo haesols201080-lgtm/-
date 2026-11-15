@@ -71,8 +71,9 @@ export function buildRoads(ctx) {
     for (const s of [1, -1]) {
       const a = s * r.w / 2, b = s * (r.w / 2 + SIDEWALK);
       const skip = (x, z) => onOther(x, z, SIDEWALK * 0.6);
-      ribbon(ctx, r.pts, fr, r.closed, a, 0.22, b, 0.22, paveM, { up: true, skip });
-      ribbon(ctx, r.pts, fr, r.closed, a, r.y, a, 0.22, curbM, { out: -s, skip });
+      const py = 0.22 - roads.indexOf(r) * 0.0008; // where two roads' pavements meet they never share a plane
+      ribbon(ctx, r.pts, fr, r.closed, a, py, b, py, paveM, { up: true, skip });
+      ribbon(ctx, r.pts, fr, r.closed, a, r.y, a, py, curbM, { out: -s, skip });
       // colliders + lamps
       const n = r.pts.length; let acc = 0;
       for (let i = 0; i < (r.closed ? n : n - 1); i++) {
@@ -130,7 +131,7 @@ function buildMaglev(ctx) {
     const p = pts[idx], f = fr[idx]; const yaw = Math.atan2(f[0], f[1]);
     ctx.penAt(p[0], 0, p[1], yaw); let pen = ctx.main();
     const L = 96, W = 22;
-    pen.box(0, 0, W, L, H - 2.6, H, { wall: sideM, roof: M(ST.TILE, { color: [0.5, 0.5, 0.52] }), bottom: sideM });
+    pen.box(0, 0, W, L, H - 2.6, H + 0.04, { wall: sideM, roof: M(ST.TILE, { color: [0.5, 0.5, 0.52] }), bottom: sideM }); // proud of the track deck (H) and its guide strips (H + 0.02) it straddles
     ctx.solid(0, 0, W, L, H - 2.6, H);
     // canopy
     pen.box(0, 0, W + 4, L - 6, H + 8.5, H + 9.2, { wall: dark(0.2), roof: dark(0.2), bottom: emis(NEON.ice, 2.5) });

@@ -160,7 +160,7 @@ export const PROPS = {
   },
   rack(pen) { // server / parts rack with status lights
     const fr = M(ST.COMPOSITE, { color: [0.12, 0.12, 0.14], flags: 8 }); pen.box(0, 0, 2.0, 0.6, 0, 2.2, { wall: fr, roof: fr });
-    for (let i = 0; i < 7; i++) { pen.use(M(ST.LOUVER, { color: [0.3, 0.3, 0.34], flags: 8 })); pen.quad(-0.9, 0.2 + i * 0.28, 0.305, 0.9, 0.2 + i * 0.28, 0.305, 0.9, 0.42 + i * 0.28, 0.305, -0.9, 0.42 + i * 0.28, 0.305, 0, i, 1.8, i + 0.22); pen.use(K.emis(i % 3 === 0 ? [0.2, 1, 0.5] : [0.2, 0.8, 1], 6, i % 2 ? 2 : 0, false, i * 13)); pen.box(0.78, 0.31, 0.12, 0.02, 0.28 + i * 0.28, 0.32 + i * 0.28, {}); }
+    for (let i = 0; i < 7; i++) { pen.use(M(ST.LOUVER, { color: [0.3, 0.3, 0.34], flags: 8 })); pen.quad(-0.9, 0.2 + i * 0.28, 0.316, 0.9, 0.2 + i * 0.28, 0.316, 0.9, 0.42 + i * 0.28, 0.316, -0.9, 0.42 + i * 0.28, 0.316, 0, i, 1.8, i + 0.22); pen.use(K.emis(i % 3 === 0 ? [0.2, 1, 0.5] : [0.2, 0.8, 1], 6, i % 2 ? 2 : 0, false, i * 13)); pen.box(0.78, 0.31, 0.12, 0.02, 0.28 + i * 0.28, 0.32 + i * 0.28, {}); }
   },
   signal(pen) { // traffic signal: mast arm over the carriageway (+z), vehicle heads, pedestrian box, push-button
     pen.use(steel); pen.tube(0, 0, 0, 0, 6.2, 0, 0.11, 6, { r1: 0.09 }); pen.tube(0, 5.9, 0, 0, 6.3, 4.6, 0.07, 5); pen.lathe(0, 0, [[0.2, 0], [0.16, 0.35]], 6, { cap: false });

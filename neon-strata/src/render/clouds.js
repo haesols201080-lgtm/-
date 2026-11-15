@@ -84,11 +84,11 @@ float hg(float c, float g){ float g2 = g * g; return (1.0 - g2) / (12.566 * pow(
 
 void main(){
   float depth = texture2D(tDepth, vUv).r;
-  vec4 ndc = vec4(vUv * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+  vec4 ndc = vec4(vUv * 2.0 - 1.0, NDCZ(depth), 1.0);
   vec4 vp = uInvProj * ndc; vp /= vp.w;
   vec3 wp = (uInvView * vec4(vp.xyz, 1.0)).xyz;
   vec3 rd = wp - uCamPos; float sceneDist = length(rd); rd /= sceneDist;
-  if (depth >= 0.99999) sceneDist = 1e9;
+  if (ISSKY(depth)) sceneDist = 1e9;
 
   float tA, tB;
   float y0 = uCloud.x, y1 = uCloud.y;
