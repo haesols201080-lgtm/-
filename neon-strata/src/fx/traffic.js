@@ -55,7 +55,7 @@ export function buildLanes(ctx) {
 }
 
 const PATH_GLSL = /* glsl */ `
-uniform sampler2D uPaths; uniform float uSamples;
+uniform sampler2D uPaths; uniform float uSamples; uniform float uNear;
 vec4 pathAt(float lane, float t){ float x = fract(t) * uSamples; float i0 = floor(x); float f = x - i0; int row = int(lane + 0.5);
   vec4 a = texelFetch(uPaths, ivec2(int(i0), row), 0); vec4 b = texelFetch(uPaths, ivec2(int(mod(i0 + 1.0, uSamples)), row), 0); return mix(a, b, f); }
 `;
@@ -82,7 +82,7 @@ export function createTraffic(ctx, quality) {
   lanes.forEach((l, r) => { if (l.kind === 'train' || l.kind === 'drone') return; const n = Math.round((N * l.len * l.w) / tw); for (let i = 0; i < n; i++) inst.push(r, rng.next(), l.speed * rng.f(0.8, 1.25), rng.f(-2.2, 2.2) * (l.kind === 'ground' ? 0.5 : 1), l.kind === 'ground' ? 0 : rng.f(-3, 3), rng.next()); });
   const count = inst.length / 6;
   const group = new THREE.Group(); group.name = 'traffic';
-  const uniforms = { ...U, uPaths: { value: tex }, uSamples: { value: SAMPLES }, uScale: { value: 600 } };
+  const uniforms = { ...U, uPaths: { value: tex }, uSamples: { value: SAMPLES }, uScale: { value: 600 }, uNear: { value: 0 } };
 
   // --- bodies
   const carB = new Batch(512); const cp = new Pen(carB); cp.at(0, 0, 0, 0); PROPS.hovercar(cp); const carGeo0 = carB.build();
@@ -108,7 +108,8 @@ export function createTraffic(ctx, quality) {
         vWPos = wp; vN = normalize(rt * normal.x + up * normal.y + fw * normal.z);
         vCol = aColor.rgb * aColor.rgb; vEm = (aStyle.x > 3.5 && aStyle.x < 4.5) ? aStyle2.w * 0.2 : 0.0; vSeed = aOff.y;
         float d = distance(wp, cameraPosition);
-        gl_Position = d > 950.0 ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix * viewMatrix * vec4(wp, 1.0);
+        bool simNear = p.y < 3.0 && distance(p.xz, cameraPosition.xz) < uNear; // simulated street traffic takes over here
+        gl_Position = (d > 950.0 || simNear) ? vec4(2.0, 2.0, 2.0, 1.0) : projectionMatrix * viewMatrix * vec4(wp, 1.0);
       }`,
     fragmentShader: /* glsl */ `
       ${NS_COMMON}
@@ -150,6 +151,7 @@ export function createTraffic(ctx, quality) {
         vec3 V = normalize(cameraPosition - p); float facing = dot(V, fw) * (aOff.z < 0.5 ? 1.0 : -1.0);
         vec3 c = aOff.z < 0.5 ? vec3(1.0, 0.95, 0.85) * 2.6 : vec3(1.0, 0.1, 0.05) * 2.0;
         vC = c * k * (0.25 + 0.75 * smoothstep(-0.2, 0.5, facing)) * exp(-nsFogOD(cameraPosition, p)) * smoothstep(20.0, 90.0, d);
+        if (p.y < 3.0 && distance(p.xz, cameraPosition.xz) < uNear) vC = vec3(0.0);
         gl_PointSize = sz; gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */ `varying vec3 vC; void main(){ float r = length(gl_PointCoord - 0.5) * 2.0; float a = max(0.0, 1.0 - r); gl_FragColor = vec4(vC * a * a, 0.0); }`,
@@ -165,6 +167,7 @@ export function createTraffic(ctx, quality) {
   }
   return {
     group, lanes, count,
+    setNear(r) { uniforms.uNear.value = r; },
     update(engine) { uniforms.uScale.value = engine.renderer.getDrawingBufferSize(new THREE.Vector2()).y / (2 * Math.tan((engine.camera.fov * Math.PI) / 360)); },
   };
 }
