@@ -12,11 +12,11 @@ import { civic, CIVIC } from './civic.js';
 const NE = K.NEON;
 const TARPS = [[0.2, 0.32, 0.45], [0.48, 0.25, 0.2], [0.5, 0.42, 0.2], [0.22, 0.4, 0.32], [0.45, 0.45, 0.46], [0.4, 0.22, 0.35]];
 export const STYLES = {
-  sump: { walls: [[0.36, 0.33, 0.3], [0.3, 0.32, 0.33], [0.38, 0.31, 0.27], [0.33, 0.34, 0.3], [0.4, 0.36, 0.3], [0.28, 0.3, 0.32]], wk: [WK.PLASTER, WK.CONCRETE, WK.CONCRETE, WK.PLASTER], win: ST.WIN_RES, lights: [PAL.WARM, PAL.MIXED, PAL.WARM], lit: [0.18, 0.45], accents: [NE.pink, NE.cyan, NE.amber, NE.green], floorH: 3.0, cellW: 3.0, awning: true, tarps: TARPS, balcony: 0.4, blade: 0.75, upperSigns: 0.5, signI: 5, enter: 0.4, roof: ROOF_LOW, roofDensity: 1.4, lamp: 'lampB', lampTint: [1, 0.7, 0.4], lampCol: NE.sodium, furniture: [[3, 'crates'], [2, 'barrels'], [2, 'trash'], [2, 'bin'], [1.5, 'scooter'], [1, 'utilBox'], [1.2, 'vending'], [1, 'cart']] },
-  oldq: { walls: [[0.5, 0.47, 0.42], [0.46, 0.44, 0.4], [0.52, 0.48, 0.41], [0.42, 0.42, 0.42]], wk: [WK.STONE, WK.STONE, WK.PLASTER], win: ST.WIN_RES, lights: [PAL.WARM, PAL.GOLD, PAL.WARM, PAL.VIOLET], lit: [0.15, 0.4], accents: [NE.violet, NE.gold, NE.amber], floorH: 3.4, cellW: 2.9, balcony: 0.15, blade: 0.35, upperSigns: 0.15, signI: 3.5, roof: ROOF_LOW, roofDensity: 0.6, lamp: 'lampC', lampTint: [1, 0.75, 0.5], lampCol: NE.gold, furniture: [[3, 'bench'], [2, 'planter'], [2, 'bollard'], [1, 'bin'], [1, 'kiosk']] },
-  lumina: { walls: [[0.26, 0.24, 0.3], [0.3, 0.26, 0.28], [0.22, 0.24, 0.3], [0.32, 0.28, 0.26]], wk: [WK.COMPOSITE, WK.METAL, WK.PLASTER], win: ST.WIN_RES, towerWin: [ST.WIN_LUX, ST.WIN_RIBBON, ST.WIN_OFFICE], lights: [PAL.WARM, PAL.WARM, PAL.MIXED, PAL.MAGENTA], lit: [0.35, 0.6], accents: [NE.pink, NE.violet, NE.cyan], floorH: 3.6, cellW: 3.2, balcony: 0.2, blade: 0.9, upperSigns: 0.8, signI: 6, enter: 0.45, pads: 0.25, screens: 0.45, bands: 0.7, forms: { disc: 2, cyl: 1.6, aframe: 2.2, stack: 1.6, slab: 0.5, gate: 1.4 }, roof: ROOF_TECH, lamp: 'lampC', lampTint: [1, 0.4, 0.8], lampCol: NE.pink, furniture: [[3, 'vending'], [2, 'kiosk'], [2, 'bench'], [2, 'scooter'], [1, 'bin'], [1, 'cart'], [1, 'droneDock']] },
-  meridian: { walls: [[0.3, 0.38, 0.44], [0.34, 0.36, 0.4], [0.4, 0.36, 0.3], [0.26, 0.32, 0.4], [0.36, 0.4, 0.42]], wk: [WK.COMPOSITE, WK.METAL, WK.COMPOSITE], win: ST.WIN_OFFICE, towerWin: [ST.WIN_OFFICE, ST.WIN_OFFICE, ST.WIN_RIBBON], lights: [PAL.NEUTRAL, PAL.COOL, PAL.NEUTRAL], lit: [0.3, 0.55], accents: [NE.ice, NE.ice, NE.white, NE.cyan], floorH: 4.2, cellW: 3.0, pads: 0.55, screens: 0.1, bands: 0.15, roof: ROOF_TECH, lamp: 'lampA', lampTint: [0.75, 0.9, 1], lampCol: NE.ice, furniture: [[3, 'tree'], [2, 'bench'], [2, 'planter'], [2, 'bollard'], [1.5, 'kiosk'], [1, 'droneDock'], [1, 'bin']] },
-  hive: { walls: [[0.44, 0.4, 0.34], [0.4, 0.38, 0.36], [0.46, 0.38, 0.3], [0.36, 0.38, 0.4]], wk: [WK.CONCRETE, WK.PLASTER, WK.CONCRETE], win: ST.WIN_RES, lights: [PAL.WARM, PAL.WARM, PAL.NEUTRAL, PAL.MIXED], lit: [0.25, 0.55], accents: [NE.amber, NE.sodium, NE.cyan, NE.gold], floorH: 3.0, cellW: 3.0, awning: true, tarps: TARPS, balcony: 0.7, blade: 0.5, upperSigns: 0.3, signI: 4.5, roof: ROOF_LOW, lamp: 'lampA', lampTint: [1, 0.75, 0.45], lampCol: NE.sodium, furniture: [[3, 'bench'], [2, 'vending'], [2, 'scooter'], [2, 'bin'], [1, 'cart'], [1, 'planter'], [1, 'crates']] },
+  sump: { walls: [[0.36, 0.33, 0.3], [0.3, 0.32, 0.33], [0.42, 0.21, 0.16], [0.56, 0.52, 0.44], [0.4, 0.5, 0.45], [0.42, 0.48, 0.55], [0.58, 0.42, 0.36], [0.6, 0.6, 0.58], [0.5, 0.44, 0.28], [0.28, 0.3, 0.32]], wk: [WK.PLASTER, WK.CONCRETE, WK.CONCRETE, WK.PLASTER], win: ST.WIN_RES, lights: [PAL.WARM, PAL.MIXED, PAL.WARM], lit: [0.18, 0.45], accents: [NE.pink, NE.cyan, NE.amber, NE.green], floorH: 3.0, cellW: 3.0, awning: true, tarps: TARPS, balcony: 0.4, blade: 0.75, upperSigns: 0.5, signI: 5, enter: 0.4, roof: ROOF_LOW, roofDensity: 1.4, lamp: 'lampB', lampTint: [1, 0.7, 0.4], lampCol: NE.sodium, furniture: [[3, 'crates'], [2, 'barrels'], [2, 'trash'], [2, 'bin'], [1.5, 'scooter'], [1, 'utilBox'], [1.2, 'vending'], [1, 'cart']], wins: [[5, ST.WIN_RES], [1.5, ST.WIN_SLIT], [1, ST.WIN_SHANTY]], roofForms: [[4, 'flat'], [1.5, 'pent'], [1.2, 'shed'], [1.4, 'gable'], [0.8, 'vault'], [1.2, 'garden']], pitch: 0.7 },
+  oldq: { walls: [[0.5, 0.47, 0.42], [0.62, 0.58, 0.48], [0.56, 0.42, 0.24], [0.5, 0.27, 0.18], [0.4, 0.2, 0.15], [0.66, 0.64, 0.6], [0.42, 0.46, 0.38], [0.46, 0.44, 0.4], [0.56, 0.36, 0.3]], wk: [WK.STONE, WK.STONE, WK.PLASTER], win: ST.WIN_RES, lights: [PAL.WARM, PAL.GOLD, PAL.WARM, PAL.VIOLET], lit: [0.15, 0.4], accents: [NE.violet, NE.gold, NE.amber], floorH: 3.4, cellW: 2.9, balcony: 0.15, blade: 0.35, upperSigns: 0.15, signI: 3.5, roof: ROOF_LOW, roofDensity: 0.6, lamp: 'lampC', lampTint: [1, 0.75, 0.5], lampCol: NE.gold, furniture: [[3, 'bench'], [2, 'planter'], [2, 'bollard'], [1, 'bin'], [1, 'kiosk']], wins: [[5, ST.WIN_RES], [1, ST.WIN_SLIT]], roofForms: [[1.2, 'flat'], [3, 'gable'], [2.5, 'hip'], [2.5, 'mansard'], [1, 'garden']], pitch: 2.4 },
+  lumina: { walls: [[0.26, 0.24, 0.3], [0.3, 0.26, 0.28], [0.58, 0.58, 0.6], [0.5, 0.44, 0.36], [0.32, 0.14, 0.14], [0.16, 0.3, 0.32], [0.22, 0.24, 0.3], [0.44, 0.36, 0.44]], wk: [WK.COMPOSITE, WK.METAL, WK.PLASTER], win: ST.WIN_RES, towerWin: [ST.WIN_LUX, ST.WIN_RIBBON, ST.WIN_OFFICE], lights: [PAL.WARM, PAL.WARM, PAL.MIXED, PAL.MAGENTA], lit: [0.35, 0.6], accents: [NE.pink, NE.violet, NE.cyan], floorH: 3.6, cellW: 3.2, balcony: 0.2, blade: 0.9, upperSigns: 0.8, signI: 6, enter: 0.45, pads: 0.25, screens: 0.45, bands: 0.7, forms: { disc: 2, cyl: 1.6, aframe: 2.2, stack: 1.6, slab: 0.5, gate: 1.4 }, roof: ROOF_TECH, lamp: 'lampC', lampTint: [1, 0.4, 0.8], lampCol: NE.pink, furniture: [[3, 'vending'], [2, 'kiosk'], [2, 'bench'], [2, 'scooter'], [1, 'bin'], [1, 'cart'], [1, 'droneDock']], roofForms: [[4, 'flat'], [2, 'pent'], [2.2, 'garden'], [0.8, 'mansard']] },
+  meridian: { walls: [[0.3, 0.38, 0.44], [0.34, 0.36, 0.4], [0.62, 0.62, 0.6], [0.52, 0.46, 0.38], [0.26, 0.32, 0.4], [0.36, 0.4, 0.42], [0.18, 0.2, 0.24]], wk: [WK.COMPOSITE, WK.METAL, WK.COMPOSITE], win: ST.WIN_OFFICE, towerWin: [ST.WIN_OFFICE, ST.WIN_OFFICE, ST.WIN_RIBBON], lights: [PAL.NEUTRAL, PAL.COOL, PAL.NEUTRAL], lit: [0.3, 0.55], accents: [NE.ice, NE.ice, NE.white, NE.cyan], floorH: 4.2, cellW: 3.0, pads: 0.55, screens: 0.1, bands: 0.15, roof: ROOF_TECH, lamp: 'lampA', lampTint: [0.75, 0.9, 1], lampCol: NE.ice, furniture: [[3, 'tree'], [2, 'bench'], [2, 'planter'], [2, 'bollard'], [1.5, 'kiosk'], [1, 'droneDock'], [1, 'bin']], roofForms: [[4, 'flat'], [2, 'pent'], [2.5, 'garden']] },
+  hive: { walls: [[0.44, 0.4, 0.34], [0.6, 0.6, 0.58], [0.6, 0.54, 0.36], [0.4, 0.48, 0.54], [0.6, 0.44, 0.44], [0.4, 0.48, 0.4], [0.36, 0.38, 0.4], [0.46, 0.24, 0.18], [0.52, 0.5, 0.46]], wk: [WK.CONCRETE, WK.PLASTER, WK.CONCRETE], win: ST.WIN_RES, lights: [PAL.WARM, PAL.WARM, PAL.NEUTRAL, PAL.MIXED], lit: [0.25, 0.55], accents: [NE.amber, NE.sodium, NE.cyan, NE.gold], floorH: 3.0, cellW: 3.0, awning: true, tarps: TARPS, balcony: 0.7, blade: 0.5, upperSigns: 0.3, signI: 4.5, roof: ROOF_LOW, lamp: 'lampA', lampTint: [1, 0.75, 0.45], lampCol: NE.sodium, furniture: [[3, 'bench'], [2, 'vending'], [2, 'scooter'], [2, 'bin'], [1, 'cart'], [1, 'planter'], [1, 'crates']], wins: [[5, ST.WIN_RES], [1.5, ST.WIN_RIBBON], [1, ST.WIN_SLIT]], roofForms: [[4, 'flat'], [1.5, 'pent'], [1.5, 'gable'], [1.2, 'hip'], [1, 'shed'], [1.5, 'garden']], pitch: 1.0 },
   verdant: { walls: [[0.36, 0.42, 0.38], [0.4, 0.42, 0.4], [0.32, 0.36, 0.34]], wk: [WK.COMPOSITE, WK.CONCRETE, WK.METAL], win: ST.WIN_GROW, towerWin: [ST.WIN_GROW], lights: [PAL.MAGENTA, PAL.VIOLET, PAL.GREEN], lit: [0.6, 0.9], accents: [NE.magenta, NE.green, NE.violet], floorH: 4.5, cellW: 3.6, pads: 0.3, roof: ROOF_TECH, lamp: 'lampA', lampTint: [0.7, 1, 0.75], lampCol: NE.green, furniture: [[3, 'planter'], [3, 'tree'], [1, 'bench'], [1, 'utilBox'], [1, 'crates']] },
   foundry: { walls: [[0.34, 0.3, 0.27], [0.3, 0.29, 0.28], [0.38, 0.32, 0.26]], wk: [WK.RUST, WK.RIBBED, WK.CONCRETE], win: ST.WIN_INDUSTRIAL, towerWin: [ST.WIN_INDUSTRIAL, ST.WIN_RIBBON], lights: [PAL.AMBER, PAL.RED, PAL.WARM], lit: [0.3, 0.6], accents: [NE.red, NE.amber, NE.sodium], floorH: 5, cellW: 4, roof: ROOF_TECH, lamp: 'lampA', lampTint: [1, 0.55, 0.25], lampCol: NE.sodium, furniture: [[3, 'barrels'], [3, 'crates'], [2, 'utilBox'], [2, 'barrier'], [1, 'trash']] },
   port: { walls: [[0.34, 0.36, 0.38], [0.3, 0.33, 0.36], [0.38, 0.38, 0.36]], wk: [WK.RIBBED, WK.METAL, WK.CONCRETE], win: ST.WIN_INDUSTRIAL, towerWin: [ST.WIN_RIBBON, ST.WIN_INDUSTRIAL], lights: [PAL.COOL, PAL.NEUTRAL, PAL.AMBER], lit: [0.25, 0.5], accents: [NE.cyan, NE.blue, NE.amber], floorH: 4.5, cellW: 4, pads: 0.6, roof: ROOF_TECH, lamp: 'lampA', lampTint: [0.7, 0.9, 1], lampCol: NE.ice, furniture: [[3, 'crates'], [2, 'barrier'], [2, 'barrels'], [2, 'utilBox'], [1, 'droneDock']] },
@@ -195,6 +195,81 @@ function edgeLots(ctx, b, rng, o) {
   return lots;
 }
 
+// The inside of a perimeter block is not left as bare slab: the largest free rectangles become what courtyards
+// really hold — a garden with trees and paths, a car park, a cluttered yard with sheds, or allotments.
+const COURT = { sump: [[3, 'yard'], [2, 'parking'], [1.2, 'garden'], [1.2, 'allot']], oldq: [[3, 'garden'], [1.6, 'allot'], [1, 'parking']], hive: [[2.5, 'garden'], [2, 'parking'], [1.2, 'yard']], lumina: [[3, 'garden'], [1.2, 'parking'], [1, 'pool']], meridian: [[3, 'garden'], [1.5, 'pool'], [1, 'parking']] };
+function courtyard(ctx, rng, b, S, lots, fB) {
+  const g = 2, inW = b.w / 2 - (b.walk || 3) - 1, inD = b.d / 2 - (b.walk || 3) - 1; if (inW < 8 || inD < 8) return;
+  const nx = Math.floor((2 * inW) / g), nz = Math.floor((2 * inD) / g); const cs = Math.cos(b.yaw), sn = Math.sin(b.yaw);
+  const rects = lots.map((l) => [l.x, l.z, l.w / 2 + 1.2, l.d / 2 + 1.2, l.yaw]).concat(ctx.footprints.slice(fB).map((f) => [f[0], f[1], f[2] + 1.2, f[3] + 1.2, f[4]]));
+  const C = b.corners; let gx = 0, gz = 0; if (C) for (const p of C) { gx += p[0] / C.length; gz += p[1] / C.length; }
+  const inBlock = (x, z) => { if (!C) return true; for (let i = 0; i < C.length; i++) { const a = C[i], q = C[(i + 1) % C.length]; let tx = q[0] - a[0], tz = q[1] - a[1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l; let mx = -tz, mz = tx; if ((gx - a[0]) * mx + (gz - a[1]) * mz < 0) { mx = -mx; mz = -mz; } if ((x - a[0]) * mx + (z - a[1]) * mz < (b.walk || 3) + 1.5) return false; } return true; };
+  const free = new Uint8Array(nx * nz);
+  for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+    const lx = -inW + (i + 0.5) * g, lz = -inD + (j + 0.5) * g; const x = b.x + lx * cs + lz * sn, z = b.z - lx * sn + lz * cs;
+    if (!inBlock(x, z)) continue; let ok = true;
+    for (const r of rects) { const c = Math.cos(r[4]), s2 = Math.sin(r[4]); const dx = x - r[0], dz = z - r[1]; if (Math.abs(dx * c - dz * s2) < r[2] + g * 0.5 && Math.abs(dx * s2 + dz * c) < r[3] + g * 0.5) { ok = false; break; } }
+    free[j * nx + i] = ok ? 1 : 0;
+  }
+  const pen = ctx.penAt(b.x, 0.2, b.z, b.yaw); const kinds = COURT[b.district] || COURT.hive;
+  for (let pass = 0; pass < 3; pass++) {
+    // largest all-free rectangle (histogram method)
+    const hgt = new Int32Array(nx); let best = null;
+    for (let j = 0; j < nz; j++) { for (let i = 0; i < nx; i++) hgt[i] = free[j * nx + i] ? hgt[i] + 1 : 0;
+      const st = []; for (let i = 0; i <= nx; i++) { const hh = i < nx ? hgt[i] : 0; let start = i; while (st.length && st[st.length - 1][1] >= hh) { const [si, sh] = st.pop(); const a = sh * (i - si); if (sh >= 3 && i - si >= 3 && (!best || a > best.a)) best = { a, i0: si, i1: i, j0: j - sh + 1, j1: j + 1 }; start = si; } st.push([start, hh]); } }
+    if (!best || best.a * g * g < 90) break;
+    for (let j = best.j0; j < best.j1; j++) for (let i = best.i0; i < best.i1; i++) free[j * nx + i] = 0;
+    const x0 = -inW + best.i0 * g + 0.6, x1 = -inW + best.i1 * g - 0.6, z0 = -inD + best.j0 * g + 0.6, z1 = -inD + best.j1 * g - 0.6;
+    // a big court is several things side by side (a car park next to a garden next to a yard), split by paths
+    const W = x1 - x0, D = z1 - z0, alongX = W >= D, Lg = alongX ? W : D; const parts = Math.max(1, Math.min(3, Math.round((W * D) / 520), Math.floor(Lg / 16)));
+    let last = null;
+    for (let k = 0; k < parts; k++) { const a = k / parts, c = (k + 1) / parts, gap = parts > 1 ? 0.8 : 0; const sx0 = alongX ? x0 + W * a + (k ? gap : 0) : x0, sx1 = alongX ? x0 + W * c - (k < parts - 1 ? gap : 0) : x1, sz0 = alongX ? z0 : z0 + D * a + (k ? gap : 0), sz1 = alongX ? z1 : z0 + D * c - (k < parts - 1 ? gap : 0);
+      let kind; for (let t = 0; t < 4; t++) { kind = rng.weighted(kinds); if (kind !== last && !(kind === 'yard' && (sx1 - sx0) * (sz1 - sz0) > 420)) break; } last = kind;
+      fillCourt(ctx, rng, pen, kind, sx0, sz0, sx1, sz1, S); }
+    if (parts > 1) { ctx.detail(); pen.use(M(ST.PAVE, { color: [0.46, 0.44, 0.41] })); for (let k = 1; k < parts; k++) { const t = alongX ? x0 + (W * k) / parts : z0 + (D * k) / parts; if (alongX) pen.flat(t - 0.8, z0, t + 0.8, z1, 0.026); else pen.flat(x0, t - 0.8, x1, t + 0.8, 0.026); } ctx.main(); }
+  }
+}
+function fillCourt(ctx, rng, pen, kind, x0, z0, x1, z1, S) {
+  const W = x1 - x0, D = z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2; const P = (n, x, z, yaw = 0, sc = 1) => ctx.propL(n, x, 0, z, yaw, sc);
+  const tree = (x, z) => { P('tree', x, z, rng.f(0, 6.28), rng.f(0.75, 1.25)); ctx.solidCyl(x, z, 0.3, 0, 3); };
+  ctx.detail();
+  if (kind === 'garden' || kind === 'pool') {
+    pen.use(K.foliage(rng.pick([[0.2, 0.32, 0.14], [0.24, 0.34, 0.16], [0.18, 0.28, 0.13]]))); pen.flat(x0, z0, x1, z1, 0.018);
+    const pave = M(ST.PAVE, { color: rng.pick([[0.5, 0.47, 0.42], [0.44, 0.42, 0.4]]) }); pen.use(pave);
+    const alongX = W >= D; if (alongX) pen.flat(x0, cz - 1.1, x1, cz + 1.1, 0.03); else pen.flat(cx - 1.1, z0, cx + 1.1, z1, 0.03);
+    if (W > 14 && D > 14) { if (alongX) pen.flat(cx - 1.1, z0, cx + 1.1, z1, 0.034); else pen.flat(x0, cz - 1.1, x1, cz + 1.1, 0.034); }
+    if (kind === 'pool' && W > 12 && D > 10) { const pw = Math.min(W * 0.45, 18), pd = Math.min(D * 0.35, 8), px = cx + (alongX ? W * 0.22 : 0), pz = cz + (alongX ? 0 : D * 0.22) + (alongX ? -D * 0.25 : 0);
+      pen.use(M(ST.STONE, { color: [0.6, 0.58, 0.54] })); pen.box(px, pz, pw + 1.2, pd + 1.2, 0, 0.12, {}); pen.use(M(ST.WATER, { color: [0.12, 0.3, 0.34] })); pen.flat(px - pw / 2, pz - pd / 2, px + pw / 2, pz + pd / 2, 0.13); }
+    const sp = rng.f(6, 8.5); for (let x = x0 + 2; x < x1 - 1.5; x += sp) for (let z = z0 + 2; z < z1 - 1.5; z += sp) { const tx = x + rng.f(-1.2, 1.2), tz = z + rng.f(-1.2, 1.2); if (alongX ? Math.abs(tz - cz) < 2.4 : Math.abs(tx - cx) < 2.4) continue; if (W > 14 && D > 14 && (alongX ? Math.abs(tx - cx) < 2.4 : Math.abs(tz - cz) < 2.4)) continue; if (kind === 'pool' && Math.abs(tx - cx - W * 0.22) < 11 && Math.abs(tz - cz + D * 0.25) < 6) continue; if (rng.chance(0.8)) tree(tx, tz); else P('planter', tx, tz); }
+    const nb = Math.max(1, Math.round((alongX ? W : D) / 9)); for (let k = 0; k < nb; k++) { const t = (k + 0.5) / nb; if (alongX) { P('bench', x0 + W * t, cz + 1.9, Math.PI); } else P('bench', cx + 1.9, z0 + D * t, -Math.PI / 2); }
+    for (const t of [0.25, 0.75]) { const lx = alongX ? x0 + W * t : cx - 1.6, lz = alongX ? cz - 1.6 : z0 + D * t; P(S.lamp || 'lampC', lx, lz); ctx.light(pen.wx(lx, lz), pen.wz(lx, lz), 12, [1, 0.82, 0.6], 0.45, pen.oy + 4); }
+  } else if (kind === 'parking') {
+    pen.use(M(ST.ROAD, { cellW: 0 })); pen.flat(x0, z0, x1, z1, 0.02);
+    const alongX = W >= D; const L = alongX ? W : D, Wd = alongX ? D : W; const rows = Wd >= 17 ? 2 : 1; pen.use(M(ST.PLASTER, { color: [0.62, 0.62, 0.58] }));
+    for (let r = 0; r < rows; r++) { const off = rows === 2 ? (r ? Wd / 2 - 2.8 : -Wd / 2 + 2.8) : -Wd / 2 + 2.8; const yaw = (rows === 2 && r ? Math.PI : 0) + (alongX ? 0 : Math.PI / 2);
+      for (let t = 1.2; t + 2.7 < L - 1; t += 2.7) { const a = (alongX ? x0 : z0) + t; if (alongX) pen.flat(a - 0.06, cz + off - 2.5, a + 0.06, cz + off + 2.5, 0.03); else pen.flat(cx + off - 2.5, a - 0.06, cx + off + 2.5, a + 0.06, 0.03);
+        if (rng.chance(0.68)) { const m = a + 1.35; if (alongX) P('hovercar', m, cz + off, yaw + Math.PI / 2 + rng.f(-0.04, 0.04)); else P('hovercar', cx + off, m, yaw + Math.PI / 2 + rng.f(-0.04, 0.04)); } } }
+    for (const t of [0.2, 0.8]) { const lx = alongX ? x0 + W * t : cx, lz = alongX ? cz : z0 + D * t; if (rows === 2) { P('lampA', lx, lz); ctx.light(pen.wx(lx, lz), pen.wz(lx, lz), 16, [1, 0.85, 0.65], 0.5, pen.oy + 6); } }
+    if (rng.chance(0.7)) for (const [x, z] of [[x0 + 1, z0 + 1], [x1 - 1, z1 - 1]]) tree(x, z);
+  } else if (kind === 'allot') {
+    pen.use(M(ST.PAVE, { color: [0.36, 0.3, 0.24] })); pen.flat(x0, z0, x1, z1, 0.02);
+    const beds = Math.max(2, Math.floor(W / 3)); for (let k = 0; k < beds; k++) { const bx0 = x0 + 0.6 + k * (W - 1.2) / beds, bx1 = bx0 + (W - 1.2) / beds - 0.9; pen.use(K.foliage(rng.pick([[0.22, 0.38, 0.15], [0.3, 0.4, 0.16], [0.36, 0.3, 0.16], [0.18, 0.3, 0.12]]))); pen.box((bx0 + bx1) / 2, cz, bx1 - bx0, D - 1.6, 0, 0.32, { wall: M(ST.CONCRETE, { color: [0.3, 0.24, 0.18] }) }); }
+    const sx = x1 - 2, sz = z0 + 1.8; pen.box(sx, sz, 2.6, 2.2, 0, 2.3, { wall: M(ST.CORRUGATED, { color: rng.pick([[0.3, 0.4, 0.3], [0.42, 0.24, 0.18], [0.36, 0.38, 0.4]]) }), roof: K.rust([0.32, 0.26, 0.2]) }); ctx.solid(sx, sz, 2.6, 2.2, 0, 2.3); P('barrels', sx - 2, sz);
+    if (rng.chance(0.6)) tree(x0 + 1.2, z1 - 1.2);
+  } else { // yard: a row of sheds and lean-tos along one edge, their clutter in front, the rest open hardstanding
+    pen.use(K.conc(0.3)); pen.flat(x0, z0, x1, z1, 0.02);
+    const alongX = W >= D; const L = alongX ? W : D; let t = 0.4; const dep = Math.min(4, (alongX ? D : W) * 0.4); const side = rng.sign();
+    while (t < L - 2.4) { const w = Math.min(L - t - 0.4, rng.f(2.6, 4.6)), hh = rng.f(2.2, 3.0); const m = t + w / 2; const off = side * ((alongX ? D : W) / 2 - dep / 2);
+      const x = alongX ? x0 + m : cx + off, z = alongX ? cz + off : z0 + m; const sx = alongX ? w - 0.15 : dep, sz = alongX ? dep : w - 0.15;
+      const col = rng.pick([[0.36, 0.38, 0.4], [0.42, 0.26, 0.2], [0.3, 0.36, 0.42], [0.46, 0.42, 0.34], [0.3, 0.4, 0.32]]);
+      pen.box(x, z, sx, sz, 0, hh, { wall: M(ST.CORRUGATED, { color: col, seed: rng.i(0, 255) }), roof: rng.chance(0.5) ? K.rust([0.34, 0.26, 0.2]) : M(ST.FABRIC, { color: rng.pick(S.tarps || [[0.2, 0.3, 0.5]]) }) }); ctx.solid(x, z, sx, sz, 0, hh);
+      if (rng.chance(0.55)) { const fx = alongX ? x + rng.f(-w / 3, w / 3) : cx + off - side * (dep / 2 + 0.8), fz = alongX ? cz + off - side * (dep / 2 + 0.8) : z + rng.f(-w / 3, w / 3); P(rng.pick(['crates', 'barrels', 'scooter', 'trash']), fx, fz, rng.f(0, 6.28)); }
+      t += w + rng.f(0.1, 0.6); }
+    for (let k = 0; k < 2; k++) if (rng.chance(0.7)) tree(alongX ? x0 + 1.5 + k * (W - 3) : cx - side * (W / 2 - 1.5), alongX ? cz - side * (D / 2 - 1.5) : z0 + 1.5 + k * (D - 3));
+  }
+  ctx.main();
+}
+
 export function buildDistricts(ctx) {
   const rng0 = ctx.rng.fork('districts'); const ls = 1 / Math.sqrt(ctx.density);
   let cur = []; const subdivideT = (b, rng, o) => { const l = subdivide(b, rng, o); cur.push(...l); return l; };
@@ -208,7 +283,12 @@ export function buildDistricts(ctx) {
     const rng = rng0.fork(b.id); const S = STYLES[b.district]; const H = skyline(b, rng);
     const prime = b.edge.inner || b.edge.outer || b.edge.left || b.edge.right; // faces an arterial
     streetscape(ctx, rng, b, S);
-    if (b.plaza) { plaza(ctx, rng, b, S); continue; }
+    if (b.plaza) { plaza(ctx, rng, b, S);
+      if (b.district === 'oldq') { // a square is framed by lawns and avenues of trees outside the colonnade
+        const W = b.w - b.walk * 2, Dp = b.d - b.walk * 2, R = Math.min(W, Dp) * 0.36 + 3.5, e = Math.min(16, Math.min(W, Dp) / 2 - R - 2); const pen = ctx.penAt(b.x, 0.2, b.z, b.yaw); const fr = rng.fork(51);
+        if (e >= 6) { const hw = W / 2 - 2, hd = Dp / 2 - 2; fillCourt(ctx, fr, pen, 'garden', -hw, hd - e, hw, hd, S); fillCourt(ctx, fr, pen, 'garden', -hw, -hd, hw, -hd + e, S);
+          if (hd - e - 1.6 > -hd + e + 1.6) { fillCourt(ctx, fr, pen, 'garden', hw - e, -hd + e + 1.6, hw, hd - e - 1.6, S); fillCourt(ctx, fr, pen, 'garden', -hw, -hd + e + 1.6, -hw + e, hd - e - 1.6, S); } } }
+      continue; }
     cur = []; const fB = ctx.footprints.length;
     switch (b.district) {
       case 'sump': {
@@ -251,6 +331,7 @@ export function buildDistricts(ctx) {
       case 'foundry': { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); factory(ctx, rng, lot, S, { h: H }); break; }
       case 'port': { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); depot(ctx, rng, lot, S, { h: H }); break; }
     }
+    if (cur.length > 1 && COURT[b.district]) courtyard(ctx, rng.fork(733), b, S, cur, fB);
     if (cur.length === 1 && ['oldq', 'lumina', 'meridian', 'hive', 'verdant'].includes(b.district)) linerRows(ctx, rng.fork(455), b, STYLES[b.district === 'verdant' || b.district === 'meridian' ? 'lumina' : b.district], fB);
     if (b.district === 'lumina' || b.district === 'meridian' || b.district === 'hive') { const fr = rng.fork(977); for (const lot of cur) finishLot(ctx, fr, lot, fB, S); }
     const t = tally[b.district] || (tally[b.district] = { blocks: 0, bld: 0, verts: 0 }); t.blocks++; t.bld += ctx.stats.buildings - b0; t.verts += countV() - v0;

@@ -6,6 +6,23 @@ import { isWindowStyle } from './builder.js';
 import * as K from './kit.js';
 
 let uCounter = 3;
+// What a flat roof is really covered with, seen from the air: pale membranes, black bitumen, gravel ballast, bare
+// slabs, the odd planted roof and metal deck — chosen per roof (deterministic in position) instead of one grey.
+const COVERS = [
+  [3.0, () => ({ st: ST.CONCRETE, color: [0.6, 0.6, 0.58] })], // white / light grey single-ply membrane
+  [1.6, () => ({ st: ST.CONCRETE, color: [0.47, 0.48, 0.5] })], // grey membrane
+  [2.0, () => ({ st: ST.CONCRETE, color: [0.1, 0.1, 0.11] })], // bitumen / tar
+  [2.0, () => ({ st: ST.PAVE, color: [0.44, 0.41, 0.37] })], // gravel ballast
+  [1.6, () => ({ st: ST.CONCRETE, color: [0.31, 0.31, 0.32] })], // weathered slab
+  [0.8, () => ({ st: ST.CORRUGATED, color: [0.36, 0.38, 0.4] })], // metal deck
+  [0.7, () => ({ st: ST.FOLIAGE, color: [0.2, 0.3, 0.15] }), 70], // sedum / planted roof (low buildings only)
+  [0.5, () => ({ st: ST.CONCRETE, color: [0.42, 0.22, 0.18] })], // red coated membrane
+];
+export function roofCover(x, z, y) {
+  let h = Math.imul(Math.round(x * 3) | 0, 73856093) ^ Math.imul(Math.round(z * 3) | 0, 19349663) ^ Math.imul(Math.round(y * 5) | 0, 83492791); h = Math.imul(h ^ (h >>> 13), 1274126177); h = ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  const ok = COVERS.filter((c) => !c[2] || y < c[2]); let t = h * ok.reduce((a, c) => a + c[0], 0);
+  for (const c of ok) { t -= c[0]; if (t <= 0) return c[1](); } return ok[0][1]();
+}
 export const FACE_ANG = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
 
 export class Vol {
@@ -40,7 +57,7 @@ export class Vol {
     if (o.top !== false) { if (o.topMat) p.use(o.topMat); this.cap(f, s0, s1, o0, o1, y1, true); }
     if (o.bottom !== false && y0 > 0.3) { if (o.botMat) p.use(o.botMat); this.cap(f, s0, s1, o0, o1, y0, false); }
   }
-  roof(mat, ao = 1) { const p = this.pen; if (mat) p.use(mat); p.flat(this.cx - this.w / 2, this.cz - this.d / 2, this.cx + this.w / 2, this.cz + this.d / 2, this.y1, true, ao); }
+  roof(mat, ao = 1) { const p = this.pen; if (mat) p.use(mat && mat.st === ST.CONCRETE && !mat.keep ? roofCover(p.wx(this.cx, this.cz), p.wz(this.cx, this.cz), p.oy + this.y1) : mat); p.flat(this.cx - this.w / 2, this.cz - this.d / 2, this.cx + this.w / 2, this.cz + this.d / 2, this.y1, true, ao); }
   solid() { this.ctx.solid(this.cx, this.cz, this.w, this.d, this.y0, this.y1); }
   inset(dx, dz = dx) { return new Vol(this.ctx, this.cx, this.cz, this.w - dx * 2, this.d - dz * 2, this.y0, this.y1); }
 }

@@ -173,7 +173,68 @@ export const MEGA = {
 };
 
 // roof toppers for low-rise shop-houses so a terrace doesn't read as a row of identical boxes
-export function roofForm(ctx, rng, v, h, kind, wallM) {
+// what a pitched roof is clad in, by quarter
+const PITCH = {
+  oldq: [[4, [ST.CORRUGATED, [0.46, 0.21, 0.13]]], [3, [ST.METAL, [0.15, 0.16, 0.18]]], [1.2, [ST.CORRUGATED, [0.36, 0.17, 0.12]]], [0.6, [ST.METAL, [0.28, 0.42, 0.36]]]],
+  sump: [[3, [ST.RUST, [0.36, 0.25, 0.19]]], [3, [ST.CORRUGATED, [0.4, 0.42, 0.43]]], [1.5, [ST.CORRUGATED, [0.2, 0.32, 0.46]]], [1.2, [ST.CORRUGATED, [0.44, 0.2, 0.14]]]],
+  hive: [[3, [ST.CORRUGATED, [0.44, 0.21, 0.14]]], [2.5, [ST.METAL, [0.17, 0.18, 0.2]]], [2, [ST.CORRUGATED, [0.42, 0.44, 0.45]]], [1, [ST.CORRUGATED, [0.22, 0.36, 0.3]]]],
+};
+const pitchMat = (rng, district) => { const [st, c] = rng.weighted(PITCH[district] || PITCH.hive); const k = rng.f(0.85, 1.12); return M(st, { color: [c[0] * k, c[1] * k, c[2] * k], seed: rng.i(0, 255) }); };
+export const PITCHED = new Set(['gable', 'hip', 'mansard']);
+
+// pitched roofs built in a ridge frame: u along the ridge, v across (a proper rotation of the pen frame)
+function pitched(ctx, rng, v, h, kind, wallM, o) {
+  const pen = ctx.pen; ctx.main(); const along = v.w >= v.d; const L = (along ? v.w : v.d) / 2, B = (along ? v.d : v.w) / 2;
+  const P = (u, vv) => (along ? [v.cx + u, v.cz + vv] : [v.cx - vv, v.cz + u]);
+  const Q = (a, b, c, dd) => { const A = P(a[0], a[2]), Bq = P(b[0], b[2]), C = P(c[0], c[2]), D = P(dd[0], dd[2]); pen.quad(A[0], a[1], A[1], Bq[0], b[1], Bq[1], C[0], c[1], C[1], D[0], dd[1], D[1], 0, 0, Math.hypot(b[0] - a[0], b[2] - a[2]) || 1, Math.hypot(c[1] - a[1], c[2] - a[2]) || 1); };
+  const rm = pitchMat(rng, o.district); const gw = { st: ST.PLASTER, color: wallM.color, seed: wallM.seed }; const e = 0.4;
+  if (kind === 'gable') { const r = Math.min(B * 0.75, 6.5); const Le = L + 0.25, Be = B + e;
+    pen.use(rm); Q([-Le, h, Be], [Le, h, Be], [Le, h + r, 0], [-Le, h + r, 0]); Q([Le, h, -Be], [-Le, h, -Be], [-Le, h + r, 0], [Le, h + r, 0]);
+    pen.use(rm); Q([-Le, h + 0.012, Be], [-Le, h + 0.012, -Be], [Le, h + 0.012, -Be], [Le, h + 0.012, Be]); // soffit
+    pen.use(gw); Q([L, h, B], [L, h, -B], [L, h + r * (Be - 0.02) / Be, 0], [L, h + r * (Be - 0.02) / Be, 0]); Q([-L, h, -B], [-L, h, B], [-L, h + r * (Be - 0.02) / Be, 0], [-L, h + r * (Be - 0.02) / Be, 0]);
+    // a dormer or a roof window or two on the street side
+    if (L > 3) { const n = Math.max(1, Math.round(L / 3.4)); for (let i = 0; i < n; i++) { if (!rng.chance(0.55)) continue; const u = -L + (i + 0.5) * (2 * L / n); const t = 0.45; const y = h + r * (1 - t); pen.use(K.dark(0.07)); Q([u - 0.55, y + 0.012, Be * t], [u + 0.55, y + 0.012, Be * t], [u + 0.55, y + r * 0.18 + 0.012, Be * (t - 0.18)], [u - 0.55, y + r * 0.18 + 0.012, Be * (t - 0.18)]); } }
+    ctx.solid(v.cx, v.cz, v.w, v.d, h, h + r * 0.6); return r; }
+  if (kind === 'hip') { const Le = L + e, Be = B + e; const r = Math.min(Be * 0.7, 6); const lr = Math.max(0.05, Le - Be);
+    pen.use(rm); Q([-Le, h, Be], [Le, h, Be], [lr, h + r, 0], [-lr, h + r, 0]); Q([Le, h, -Be], [-Le, h, -Be], [-lr, h + r, 0], [lr, h + r, 0]);
+    Q([Le, h, Be], [Le, h, -Be], [lr, h + r, 0], [lr, h + r, 0]); Q([-Le, h, -Be], [-Le, h, Be], [-lr, h + r, 0], [-lr, h + r, 0]);
+    Q([-Le, h + 0.012, Be], [-Le, h + 0.012, -Be], [Le, h + 0.012, -Be], [Le, h + 0.012, Be]);
+    ctx.solid(v.cx, v.cz, v.w, v.d, h, h + r * 0.6); return r; }
+  // mansard: steep lower slopes with dormers, near-flat top
+  { const Le = L + 0.25, Be = B + 0.25, t = Math.min(1.5, B * 0.35), r = 3.0; const Lt = Le - t, Bt = Be - t;
+    pen.use(rm); Q([-Le, h, Be], [Le, h, Be], [Lt, h + r, Bt], [-Lt, h + r, Bt]); Q([Le, h, -Be], [-Le, h, -Be], [-Lt, h + r, -Bt], [Lt, h + r, -Bt]);
+    Q([Le, h, Be], [Le, h, -Be], [Lt, h + r, -Bt], [Lt, h + r, Bt]); Q([-Le, h, -Be], [-Le, h, Be], [-Lt, h + r, Bt], [-Lt, h + r, -Bt]);
+    pen.use(M(ST.METAL, { color: [0.2, 0.21, 0.22] })); Q([-Lt, h + r, Bt], [Lt, h + r, Bt], [Lt, h + r + 0.3, 0], [-Lt, h + r + 0.3, 0]); Q([Lt, h + r, -Bt], [-Lt, h + r, -Bt], [-Lt, h + r + 0.3, 0], [Lt, h + r + 0.3, 0]);
+    Q([Lt, h + r, Bt], [Lt, h + r, -Bt], [Lt, h + r + 0.3, 0], [Lt, h + r + 0.3, 0]); Q([-Lt, h + r, -Bt], [-Lt, h + r, Bt], [-Lt, h + r + 0.3, 0], [-Lt, h + r + 0.3, 0]);
+    // dormers: a little gabled box with a lit window on both long sides
+    const n = Math.max(1, Math.floor((2 * L - 1) / 3.2)); const dw = { st: ST.WIN_RES, color: wallM.color, seed: wallM.seed, A: wallM.A ?? 0.4, B: wallM.B ?? PAL.WARM, cellW: 1.3, floorH: 1.9, flags: WK.PLASTER };
+    for (const sgn of [1, -1]) for (let i = 0; i < n; i++) { const u = -L + (i + 0.5) * (2 * L / n); const vf = sgn * (Be - t * 0.45), vb = sgn * (Bt - 0.05), y0 = h + r * 0.4, y1 = y0 + 1.9; const a = u - 0.65, b = u + 0.65;
+      pen.use(dw); if (sgn > 0) Q([a, y0, vf], [b, y0, vf], [b, y1, vf], [a, y1, vf]); else Q([b, y0, vf], [a, y0, vf], [a, y1, vf], [b, y1, vf]);
+      pen.use(gw); if (sgn > 0) { Q([b, y0, vf], [b, y0, vb], [b, y1, vb], [b, y1, vf]); Q([a, y0, vb], [a, y0, vf], [a, y1, vf], [a, y1, vb]); } else { Q([a, y0, vf], [a, y0, vb], [a, y1, vb], [a, y1, vf]); Q([b, y0, vb], [b, y0, vf], [b, y1, vf], [b, y1, vb]); }
+      pen.use(rm); if (sgn > 0) { Q([a - 0.1, y1, vf + 0.1], [u, y1 + 0.6, vf + 0.1], [u, y1 + 0.6, vb], [a - 0.1, y1, vb]); Q([u, y1 + 0.6, vf + 0.1], [b + 0.1, y1, vf + 0.1], [b + 0.1, y1, vb], [u, y1 + 0.6, vb]); }
+      else { Q([b + 0.1, y1, vf - 0.1], [u, y1 + 0.6, vf - 0.1], [u, y1 + 0.6, vb], [b + 0.1, y1, vb]); Q([u, y1 + 0.6, vf - 0.1], [a - 0.1, y1, vf - 0.1], [a - 0.1, y1, vb], [u, y1 + 0.6, vb]); } }
+    ctx.solid(v.cx, v.cz, v.w, v.d, h, h + r); return r + 0.3; }
+}
+
+// roof garden on a flat roof: timber deck, planters with small trees, a pergola, benches
+function roofGarden(ctx, rng, v, h) {
+  const pen = ctx.pen; const w = v.w - 1.2, d = v.d - 1.2; if (w < 4 || d < 4) return 0; ctx.detail();
+  const dw = Math.min(w, Math.max(4, w * rng.f(0.5, 0.9))), dd = Math.min(d, Math.max(3.5, d * rng.f(0.5, 0.85))); const dx = v.cx + rng.f(-0.5, 0.5) * (w - dw), dz = v.cz + rng.f(-0.5, 0.5) * (d - dd);
+  pen.use(M(ST.PAVE, { color: rng.pick([[0.42, 0.3, 0.2], [0.36, 0.26, 0.18], [0.5, 0.42, 0.34]]), seed: rng.i(0, 255) })); pen.flat(dx - dw / 2, dz - dd / 2, dx + dw / 2, dz + dd / 2, h + 0.05);
+  const pl = M(ST.CONCRETE, { color: [0.44, 0.43, 0.41] }), soil = K.foliage([0.16, 0.3, 0.12]);
+  const box = (x, z, sx, sz) => { pen.box(x, z, sx, sz, h, h + 0.55, { wall: pl, roof: soil }); };
+  const nT = Math.max(1, Math.round((dw + dd) / 7));
+  for (let i = 0; i < nT; i++) { const side = i % 2; const t = (Math.floor(i / 2) + 0.5) / Math.ceil(nT / 2); const x = side ? dx - dw / 2 + 0.5 : dx - dw / 2 + dw * t, z = side ? dz - dd / 2 + dd * t : dz - dd / 2 + 0.5; box(x, z, 1.0, 1.0); ctx.propL(rng.pick(['tree', 'tree', 'planter']), x, h + 0.5, z, rng.f(0, 6.28), rng.f(0.35, 0.55)); }
+  if (dw > 5 && dd > 4 && rng.chance(0.6)) { const px = dx + dw * 0.18, pz = dz + dd * 0.1, sx = Math.min(4.2, dw * 0.45), sz = Math.min(3.2, dd * 0.5); pen.use(M(ST.PAVE, { color: [0.3, 0.22, 0.15] }));
+    for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) pen.box(px + a * sx / 2, pz + b * sz / 2, 0.14, 0.14, h + 0.05, h + 2.6, {});
+    for (let k = 0; k <= 5; k++) { const xx = px - sx / 2 + (sx * k) / 5; pen.beam(xx, h + 2.65, pz - sz / 2 - 0.2, xx, h + 2.65, pz + sz / 2 + 0.2, 0.08, 0.16); }
+    ctx.propL('bench', px, h + 0.05, pz, rng.pick([0, Math.PI])); ctx.light(pen.wx(px, pz), pen.wz(px, pz), 7, [1, 0.78, 0.5], 0.35, pen.oy + h + 2.4); }
+  ctx.main(); return 0;
+}
+
+export function roofForm(ctx, rng, v, h, kind, wallM, o = {}) {
+  if (PITCHED.has(kind)) return pitched(ctx, rng, v, h, kind, wallM, o);
+  if (kind === 'garden') return roofGarden(ctx, rng, v, h);
   const pen = ctx.pen; const { cx, cz } = v; const w = v.w - 0.08, d = v.d - 0.08; const x0 = cx - w / 2, x1 = cx + w / 2, z0 = cz - d / 2, z1 = cz + d / 2; ctx.main(); // 4 cm inside the parapet faces (no coplanar walls)
   if (kind === 'pent') { // set-back penthouse storey
     const pw = w * rng.f(0.6, 0.85), pd = d * rng.f(0.5, 0.75); const pv = new Vol(ctx, cx + rng.f(-1, 1) * (w - pw) * 0.3, cz - (d - pd) * 0.35, pw, pd, h, h + 3.2);

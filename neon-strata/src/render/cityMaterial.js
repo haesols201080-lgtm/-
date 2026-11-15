@@ -696,13 +696,16 @@ const FRAG_SURFACE = /* glsl */ `
   }
   float wet = uWet * wetAllow;
   if (wet > 0.001) {
-    vec4 pn = nsNoise(vWPos.xz * 0.017); vec4 pn2 = nsNoise(vWPos.xz * 0.061 + 0.37);
-    float pud = smoothstep(0.50, 0.60, pn.r * 0.62 + pn2.g * 0.38) * up * step(vWPos.y, uCloud.x) * wet;
+    // standing water: metre-scale puddles in the dips of streets and yards; roofs drain, so they only keep a few
+    // small ponds (the old 60 m blobs read as black camouflage from the air)
+    vec4 pn = nsNoise(vWPos.xz * 0.045); vec4 pn2 = nsNoise(vWPos.xz * 0.19 + 0.37);
+    float pv = pn.r * 0.55 + pn2.g * 0.45; float onRoof = step(1.6, vWPos.y);
+    float pud = smoothstep(mix(0.56, 0.68, onRoof), mix(0.63, 0.72, onRoof), pv) * up * step(vWPos.y, uCloud.x) * wet;
     float film = wet * mix(0.35, 0.8, up);
     albedo *= mix(1.0, 0.55, film * (1.0 - metal));
     rough = mix(rough, mix(0.3, 0.2, up), film * 0.8);
     rough = mix(rough, 0.025, pud);
-    albedo *= mix(1.0, 0.5, pud);
+    albedo *= mix(1.0, 0.62, pud);
     slope *= 1.0 - pud;
     if (uRain > 0.02 && up > 0.5 && px < 0.03) {
       float e = 0.012; vec2 rp1 = vWPos.xz * 6.0; float t1 = uTime * 1.6;
