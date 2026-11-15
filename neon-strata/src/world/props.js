@@ -175,6 +175,34 @@ export const PROPS = {
     pen.box(-0.7, -0.3, 2.2, 0.36, 0.42, 0.5, { wall: K.rust([0.36, 0.3, 0.26]), roof: K.rust([0.38, 0.32, 0.28]), bottom: dk }); pen.use(steel); for (const x of [-1.6, 0.2]) pen.box(x, -0.3, 0.06, 0.3, 0, 0.42, {});
     pen.use(steel); pen.tube(2.45, 0, 0.3, 2.45, 3.0, 0.3, 0.05, 5); pen.box(2.45, 0.3, 0.5, 0.08, 2.5, 3.2, { wall: K.emis([1, 0.75, 0.3], 3), roof: dk });
   },
+  // --- furniture for the floors above (flag 8 = indoor lighting) ---------------------------
+  desk(pen) { // workstation: the worker sits at -z facing +z
+    const top = M(ST.COMPOSITE, { color: [0.66, 0.64, 0.6], flags: 8 }), leg = M(ST.METAL, { color: [0.22, 0.22, 0.24], flags: 8 }), fab = M(ST.FABRIC, { color: [0.16, 0.17, 0.2], flags: 8 }), dkI = M(ST.METAL, { color: [0.06, 0.06, 0.07], flags: 8 });
+    pen.box(0, 0, 1.5, 0.75, 0.71, 0.75, { wall: top, roof: top, bottom: top }); pen.use(leg); for (const x of [-0.7, 0.7]) pen.box(x, 0, 0.05, 0.68, 0, 0.71, {}); pen.box(0, 0.34, 1.4, 0.03, 0.22, 0.71, {});
+    pen.box(0, 0.25, 0.62, 0.04, 0.93, 1.3, { wall: dkI, roof: dkI, bottom: dkI }); pen.box(0, 0.27, 0.07, 0.07, 0.75, 0.93, { wall: dkI, roof: dkI }); pen.box(0, 0.24, 0.22, 0.16, 0.75, 0.77, { wall: dkI, roof: dkI });
+    pen.use(K.emis([0.5, 0.72, 1], 2.4)); pen.quad(0.28, 0.96, 0.228, -0.28, 0.96, 0.228, -0.28, 1.27, 0.228, 0.28, 1.27, 0.228, 0, 0, 1, 1);
+    pen.box(0, -0.05, 0.46, 0.15, 0.75, 0.77, { wall: dkI, roof: dkI }); pen.box(0.35, -0.02, 0.07, 0.11, 0.75, 0.78, { wall: dkI, roof: dkI });
+    pen.box(0, -0.66, 0.48, 0.46, 0.42, 0.49, { wall: fab, roof: fab, bottom: leg }); pen.box(0, -0.9, 0.46, 0.06, 0.52, 1.02, { wall: fab, roof: fab }); pen.use(leg); pen.tube(0, 0.05, -0.66, 0, 0.42, -0.66, 0.025, 5); pen.box(0, -0.66, 0.5, 0.04, 0.03, 0.06, {}); pen.box(0, -0.66, 0.04, 0.5, 0.03, 0.06, {});
+  },
+  sdesk(pen) { // classroom desk + chair; the pupil sits at -z facing +z
+    const top = M(ST.COMPOSITE, { color: [0.7, 0.62, 0.48], flags: 8 }), leg = M(ST.METAL, { color: [0.3, 0.32, 0.36], flags: 8 }), seat = M(ST.PLASTER, { color: [0.24, 0.36, 0.5], flags: 8 });
+    pen.box(0, 0, 0.66, 0.46, 0.68, 0.71, { wall: top, roof: top, bottom: top }); pen.use(leg); for (const x of [-0.29, 0.29]) pen.box(x, 0, 0.04, 0.4, 0, 0.68, {}); pen.box(0, 0.06, 0.6, 0.32, 0.5, 0.52, {});
+    pen.box(0, -0.5, 0.4, 0.38, 0.4, 0.44, { wall: seat, roof: seat, bottom: leg }); pen.box(0, -0.7, 0.4, 0.04, 0.48, 0.8, { wall: seat, roof: seat }); pen.use(leg); for (const x of [-0.17, 0.17]) for (const z of [-0.34, -0.66]) pen.box(x, z, 0.03, 0.03, 0, 0.4, {});
+  },
+  bed(pen) { // hotel bed, head at -z
+    const wood = M(ST.COMPOSITE, { color: [0.36, 0.26, 0.18], flags: 8 }), sheet = M(ST.FABRIC, { color: [0.86, 0.85, 0.82], flags: 8 }), duv = M(ST.FABRIC, { color: [0.42, 0.36, 0.3], flags: 8, seed: 3 });
+    pen.box(0, 0, 1.6, 2.05, 0.08, 0.36, { wall: wood, roof: wood, bottom: wood }); pen.box(0, 0, 1.54, 1.98, 0.36, 0.58, { wall: sheet, roof: sheet }); pen.box(0, 0.32, 1.58, 1.3, 0.58, 0.64, { wall: duv, roof: duv }); pen.box(0, -1.06, 1.7, 0.08, 0.08, 1.15, { wall: wood, roof: wood });
+    for (const x of [-0.4, 0.4]) pen.box(x, -0.78, 0.6, 0.34, 0.58, 0.72, { wall: sheet, roof: sheet });
+    for (const x of [-1.15, 1.15]) { pen.box(x, -0.8, 0.46, 0.42, 0, 0.52, { wall: wood, roof: wood }); pen.use(M(ST.FABRIC, { color: [0.9, 0.82, 0.62], flags: 8 })); pen.lathe(x, -0.8, [[0.12, 0.52], [0.04, 0.64], [0.04, 0.82], [0.16, 0.86], [0.11, 1.06]], 8, {}); }
+  },
+  bedH(pen) { // hospital bed: rails, raised back, IV pole; head at -z
+    const fr = M(ST.METAL, { color: [0.7, 0.72, 0.74], flags: 8 }), sheet = M(ST.FABRIC, { color: [0.84, 0.88, 0.9], flags: 8 }), bl = M(ST.FABRIC, { color: [0.4, 0.55, 0.62], flags: 8 });
+    pen.box(0, 0, 0.95, 2.0, 0.38, 0.5, { wall: fr, roof: fr, bottom: fr }); pen.use(fr); for (const x of [-0.42, 0.42]) for (const z of [-0.9, 0.9]) pen.tube(x, 0, z, x, 0.38, z, 0.025, 4);
+    pen.box(0, 0.3, 0.9, 1.3, 0.5, 0.66, { wall: sheet, roof: sheet }); pen.box(0, 0.42, 0.92, 1.0, 0.66, 0.72, { wall: bl, roof: bl }); pen.quad(-0.45, 0.6, -0.36, 0.45, 0.6, -0.36, 0.45, 1.0, -0.95, -0.45, 1.0, -0.95, 0, 0, 1, 1); pen.box(0, -0.78, 0.6, 0.3, 0.86, 1.0, { wall: sheet, roof: sheet });
+    pen.use(fr); for (const x of [-0.5, 0.5]) { pen.box(x, 0.1, 0.03, 0.9, 0.62, 0.66, {}); pen.box(x, -0.2, 0.03, 0.03, 0.5, 0.66, {}); pen.box(x, 0.5, 0.03, 0.03, 0.5, 0.66, {}); }
+    pen.box(0, -1.02, 1.0, 0.05, 0.38, 1.1, { wall: fr, roof: fr }); pen.box(0, 1.02, 1.0, 0.05, 0.38, 0.8, { wall: fr, roof: fr });
+    pen.tube(0.62, 0, -0.8, 0.62, 1.9, -0.8, 0.018, 4); pen.use(M(ST.PLASTER, { color: [0.85, 0.9, 0.92], flags: 8 })); pen.box(0.62, -0.8, 0.12, 0.05, 1.62, 1.84, {}); pen.use(K.emis([0.3, 1, 0.6], 2)); pen.box(0.56, -1.0, 0.18, 0.12, 1.2, 1.32, {});
+  },
   // --- shopfront clutter + street tech ------------------------------------------------------
   table(pen) { // plastic table with three stools: the pavement extension of every eatery
     pen.use(M2(ST.PLASTER, [0.62, 0.2, 0.16])); pen.lathe(0, 0, [[0.42, 0.7], [0.44, 0.72], [0.42, 0.74]], 10, {}); pen.use(steel); pen.tube(0, 0, 0, 0, 0.7, 0, 0.04, 5); pen.lathe(0, 0, [[0.26, 0], [0.24, 0.03]], 8, {});

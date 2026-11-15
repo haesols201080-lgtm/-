@@ -4,7 +4,7 @@ import { ST, PAL, WK, FLAG } from '../render/cityMaterial.js';
 import { M, rectPts, scalePts, ngonPts, rotPts } from './builder.js';
 import * as K from './kit.js';
 import { Vol, facade, blindWall, shopSign, bladeSign, screenWall, FACE_ANG } from './facade.js';
-import { hollow, lobby, shopRoom } from './interiors.js';
+import { hollow, lobby, shopRoom, upperFloors } from './interiors.js';
 import { FORMS, MEGA, pickForm, roofForm } from './buildings3.js';
 
 let uo = 11;
@@ -335,7 +335,8 @@ export function techTower(ctx, rng, lot, S, o = {}) {
     const lp = base.world(0, (s0 + s1) / 2, 3); ctx.light(lp[0], lp[1], 22, acc, 0.7, 4);
     const rect = o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].word : null;
     shopSign(base, 0, s0 - 2, s1 + 2, bh - 1.6, rng, { rect: rect || undefined, maxH: 1.8, maxW: 11, intensity: 4 }); }
-  if (hasLobby) { const lw = Math.min(20, 2 * Math.min(sC - 1.2, w - sC - 1.2)); const lb = lobby(ctx, rng, -w / 2 + sC, cz + d / 2, { w: lw, d: Math.min(d * 0.55, 15), h: bh - 0.8, doorHW, doorH: 4.6, accent: acc, logo: o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].logo : null, brand: o.brand }); hollow(ctx, 0, cz, w, d, bh, lb.room, lb.door); ctx.main(); } else base.solid();
+  let pendingLb = null;
+  if (hasLobby) { const lw = Math.min(20, 2 * Math.min(sC - 1.2, w - sC - 1.2)); const lb = pendingLb = lobby(ctx, rng, -w / 2 + sC, cz + d / 2, { w: lw, d: Math.min(d * 0.55, 15), h: bh - 0.8, doorHW, doorH: 4.6, accent: acc, logo: o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].logo : null, brand: o.brand }); void lb; ctx.main(); } else base.solid();
   if (rng.chance(S.bands ?? 0.25)) K.neonBand(ctx, 0, cz, w, d, bh - 0.35, acc, { intensity: 5, light: false, lamps: true, seed: rng.i(0, 255), sides: allFaces ? 15 : 1, h: 0.45 });
   // --- plant floor (louvres)
   const lv = { st: ST.LOUVER, color: [0.26, 0.27, 0.29] };
@@ -344,6 +345,7 @@ export function techTower(ctx, rng, lot, S, o = {}) {
   const form = o.form ?? pickForm(rng, S, w, d, H, lot);
   if (form !== 'slab' && FORMS[form]) { // a different typology on the same base
     plant.y1 = bh + mh; plant.roof(K.conc(0.24)); ctx.solid(0, cz, w - 1.2, d - 1.2, bh, bh + mh);
+    if (pendingLb) hollow(ctx, 0, cz, w, d, bh, pendingLb.room, pendingLb.door);
     FORMS[form](ctx, rng, { w: w - 1.2, d: d - 1.2, cz, y0: bh + mh, H, S, acc, fh, lot, o }); ctx.main();
     return finish(ctx, lot, w, d, H, cz);
   }
@@ -365,7 +367,8 @@ export function techTower(ctx, rng, lot, S, o = {}) {
     }
   };
   const shaft = new Vol(ctx, 0, cz, w, d, bh + mh, hasSet ? setY : H);
-  drawShaft(shaft, bh + mh, hasSet ? setY : H, true); shaft.solid();
+  drawShaft(shaft, bh + mh, hasSet ? setY : H, true);
+  if (pendingLb) { const yT = hasSet ? setY : H; upperFloors(ctx, rng, { room: pendingLb.room, door: pendingLb.door, foot: { x0: -w / 2, x1: w / 2, z0: cz - d / 2, z1: cz + d / 2 }, fp: { x0: -w / 2 + 0.5, x1: w / 2 - 0.5, z0: cz - d / 2 + 0.5, z1: cz + d / 2 - (slots.size ? 1.9 : 0.5) }, y1: bh + mh, fh, n: Math.floor((yT - bh - mh) / fh), top: yT, use: 'office', win: [1, 1, allFaces ? 1 : 0], name: o.brand ? o.brand.toUpperCase() : '타워' }); ctx.main(); } else shaft.solid();
   let top = shaft, topY = hasSet ? setY : H;
   if (hasSet) {
     shaft.roof(K.conc(0.25));

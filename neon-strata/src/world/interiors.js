@@ -162,3 +162,122 @@ export function shopRoom(ctx, rng, xa, xb, zFront, dep, h, door, o = {}) {
   const work = { back: Wp(cx, room.zb + 2.4), front: Wp(cx, zi - 1.5), side: Wp(xa + 1.3, room.zb + dep * 0.55), upA: up ? Wp(ux + 0.9, room.zb + dep * 0.3, h + 0.02) : null, upB: up ? Wp(ux + 0.9, room.zb + dep * 0.62, h + 0.02) : null };
   return { room, door, kind, up, stair: st, work };
 }
+
+// ---------------------------------------------------------------------------------------------
+// Floors above a lobby: a lift core rising from the lobby's back corner to every served floor, and each floor a real
+// plate laid out the way that kind of building works (open office / wards / guest rooms / classrooms off a corridor).
+// Colliders, the lift and the floor plan are made here; the visible fit-out is built on demand (see interiorStream).
+// o: { room, door, foot:{x0,x1,z0,z1}, fp:{x0,x1,z0,z1}, y1, fh, n, top, use, win:[front, back, sides], name }
+export function upperFloors(ctx, rng, o) {
+  const pen = ctx.pen; const { room, fp, fh, foot: F } = o; const n = Math.max(0, Math.min(15, o.n | 0));
+  if (n < 1) { hollow(ctx, (F.x0 + F.x1) / 2, (F.z0 + F.z1) / 2, F.x1 - F.x0, F.z1 - F.z0, o.top, room, o.door); return null; }
+  const hs = 1.45, sx = Math.min(room.xa + 1.85, room.xb - 1.85), sz = room.zb + 1.85; const hole = [sx - hs, sx + hs, sz - hs, sz + hs];
+  const B = (xa, xb, za, zb, ya, yb) => (xb - xa > 0.05 && zb - za > 0.05 && yb - ya > 0.05 ? ctx.solid((xa + xb) / 2, (za + zb) / 2, xb - xa, zb - za, ya, yb) : null);
+  const BH = (xa, xb, za, zb, ya, yb) => { const [h0, h1, k0, k1] = hole; B(xa, h0, za, zb, ya, yb); B(h1, xb, za, zb, ya, yb); B(Math.max(xa, h0), Math.min(xb, h1), za, k0, ya, yb); B(Math.max(xa, h0), Math.min(xb, h1), k1, zb, ya, yb); };
+  hollow(ctx, (F.x0 + F.x1) / 2, (F.z0 + F.z1) / 2, F.x1 - F.x0, F.z1 - F.z0, room.h, room, o.door); // ground floor as before; the shaft column stays open above it
+  BH(F.x0, F.x1, F.z0, F.z1, room.h, o.y1);
+  const ys = []; for (let k = 0; k < n; k++) ys.push(o.y1 + k * fh);
+  const floors = [], doors = [];
+  for (let k = 0; k < n; k++) {
+    const y = ys[k], yc = y + fh - 0.3;
+    B(F.x0, fp.x0, F.z0, F.z1, y, y + fh); B(fp.x1, F.x1, F.z0, F.z1, y, y + fh); B(fp.x0, fp.x1, F.z0, fp.z0, y, y + fh); B(fp.x0, fp.x1, fp.z1, F.z1, y, y + fh);
+    if (k < n - 1) BH(F.x0, F.x1, F.z0, F.z1, yc, y + fh); else B(F.x0, F.x1, F.z0, F.z1, yc, Math.max(yc + 0.3, o.top));
+    // lift core: three walls and a front with a door that the car opens
+    B(hole[0] - 0.15, hole[0], hole[2] - 0.15, hole[3] + 0.15, y, yc); B(hole[1], hole[1] + 0.15, hole[2] - 0.15, hole[3] + 0.15, y, yc); B(hole[0], hole[1], hole[2] - 0.15, hole[2], y, yc);
+    B(hole[0], sx - 0.7, hole[3], hole[3] + 0.15, y, yc); B(sx + 0.7, hole[1], hole[3], hole[3] + 0.15, y, yc); B(sx - 0.7, sx + 0.7, hole[3], hole[3] + 0.15, 2.3 + y, yc);
+    doors.push(B(sx - 0.7, sx + 0.7, hole[3], hole[3] + 0.15, y, y + 2.3));
+    // the plan of this floor
+    const use = o.use === 'office' ? (k === n - 1 ? 'lounge' : rng.weighted([[7, 'open'], [1.6, 'meet'], [1.4, 'lounge']])) : o.use;
+    const band = use === 'ward' || use === 'rooms' || use === 'class' ? bandPlan(fp, hole, use === 'ward' ? 6.4 : use === 'rooms' ? 4.6 : 8.8) : null;
+    if (band) for (const w of band.walls) { const t = 0.06; if (Math.abs(w[1] - w[3]) < 1e-3) B(Math.min(w[0], w[2]), Math.max(w[0], w[2]), w[1] - t, w[1] + t, y + (w[4] ?? 0), Math.min(yc, y + (w[5] ?? 9))); else B(w[0] - t, w[0] + t, Math.min(w[1], w[3]), Math.max(w[1], w[3]), y + (w[4] ?? 0), Math.min(yc, y + (w[5] ?? 9))); }
+    floors.push({ y, use, band, seed: rng.i(0, 1e6) });
+  }
+  const stops = [{ y: pen.oy + 0.03, name: o.name ? `${o.name} 로비` : '로비' }, ...ys.map((y, k) => ({ y: pen.oy + y + 0.02, name: `${k + 2}층 · ${USE_NAME[floors[k].use]}` }))];
+  const yaw = pen.yaw; const L = { id: 'b' + (ctx.lifts ? ctx.lifts.length : 0), bld: true, x: pen.wx(sx, sz), z: pen.wz(sx, sz), ang: Math.atan2(Math.cos(yaw), Math.sin(yaw)), r: 1.2, stops, doors };
+  (ctx.lifts || (ctx.lifts = [])).push(L);
+  const spec = { ox: pen.ox, oy: pen.oy, oz: pen.oz, yaw, fp, hole, sx, sz, fh, floors, win: o.win || [1, 1, 0], room: { xa: room.xa, xb: room.xb, zb: room.zb, h: room.h }, wx: L.x, wz: L.z, kind: o.use };
+  (ctx.towers || (ctx.towers = [])).push(spec);
+  return spec;
+}
+export const USE_NAME = { open: '사무실', meet: '회의실', lounge: '라운지', ward: '병동', rooms: '객실', class: '교실' };
+// rooms off a corridor that runs past the lift door: front band split into rooms, each with its own door
+function bandPlan(fp, hole, roomW) {
+  const zc0 = hole[3] + 0.2, zc1 = zc0 + 2.3; if (fp.z1 - zc1 < 3.4) return null;
+  const n = Math.max(1, Math.floor((fp.x1 - fp.x0) / roomW)); const rw = (fp.x1 - fp.x0) / n; const rooms = [], walls = [];
+  const row = (zd, zw, skipCore) => { let prev = null;
+    for (let i = 0; i < n; i++) { const xa = fp.x0 + i * rw, xb = xa + rw; if (skipCore && xa < hole[1] + 3.6 && xb > hole[0] - 0.3) { prev = null; continue; } const dx = xa + 0.45;
+      rooms.push({ x0: xa, x1: xb, zd, zw, d0: dx, d1: dx + 1.0 }); walls.push([xa, zd, dx, zd], [dx + 1.0, zd, xb, zd], [dx, zd, dx + 1.0, zd, 2.2, 9]);
+      if (prev !== null || i > 0) walls.push([xa, zd, xa, zw]); if (i === n - 1 || (skipCore && xb + rw > hole[0] - 0.3 && xb < hole[1] + 3.6)) walls.push([xb, zd, xb, zw]); prev = i; } };
+  row(zc1, fp.z1, false); if (zc0 - fp.z0 >= 3.4) row(zc0, fp.z0, true);
+  return { zc0, zc1, rooms, walls };
+}
+
+// ---- fit-out (geometry), built when the player comes close
+export function furnishFloors(spec, pen, PROPS) {
+  const { fp, hole, sx, fh } = spec; const C = Math.cos(spec.yaw), S = Math.sin(spec.yaw); const spots = [], walks = [];
+  const W = (lx, lz) => [spec.ox + lx * C + lz * S, spec.oz - lx * S + lz * C];
+  const home = () => pen.at(spec.ox, spec.oy, spec.oz, spec.yaw);
+  const prop = (name, lx, ly, lz, ry = 0, sc = 1) => { const [x, z] = W(lx, lz); pen.at(x, spec.oy + ly, z, spec.yaw + ry); if (sc !== 1) { const b = pen.b; const n0 = b.n; PROPS[name](pen); scaleFrom(b, n0, x, spec.oy + ly, z, sc); } else PROPS[name](pen); home(); };
+  const seat = (lx, ly, lz, ry, o = {}) => { const [x, z] = W(lx, lz); spots.push({ x, y: spec.oy + ly, z, yaw: spec.yaw + ry, indoor: true, ...o }); };
+  const keep = (x, z, m = 0) => x > hole[0] - 1.2 - m && x < hole[1] + 1.2 + m && z > hole[2] - 1.2 - m && z < hole[3] + 2.6 + m;
+  home();
+  // lobby part of the core
+  core(pen, hole, sx, 0.03, spec.room.h, true);
+  for (const f of spec.floors) {
+    const y = f.y, yc = y + fh - 0.3; let rs = f.seed; const r = () => ((rs = (rs * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+    const flo = f.use === 'ward' || f.use === 'class' ? im(ST.TILE, [0.62, 0.64, 0.62]) : f.use === 'rooms' ? im(ST.FABRIC, [0.32, 0.26, 0.24]) : f.use === 'lounge' ? im(ST.COMPOSITE, [0.5, 0.42, 0.34]) : im(ST.FABRIC, [0.3, 0.32, 0.36]);
+    holeFlat(pen, fp, hole, y + 0.02, flo, true); holeFlat(pen, fp, hole, yc, im(ST.TILE, [0.8, 0.8, 0.78]), false);
+    // perimeter: glazing where the facade has windows (sill + head band), solid wall elsewhere
+    const wallM = im(ST.PLASTER, f.use === 'ward' ? [0.78, 0.82, 0.8] : f.use === 'class' ? [0.8, 0.76, 0.66] : [0.76, 0.75, 0.72]);
+    const side = (x0, z0, x1, z1, glazed) => { pen.use(wallM); if (glazed) { pen.wall(x0, z0, x1, z1, y, y + 0.92, { aoB: 0.7 }); pen.wall(x0, z0, x1, z1, yc - 0.5, yc, {}); pen.use(K.dark(0.12)); pen.wall(x0, z0, x1, z1, y + 0.92, y + 0.98, {}); } else pen.wall(x0, z0, x1, z1, y, yc, { aoB: 0.7 }); };
+    side(fp.x0, fp.z1, fp.x0, fp.z0, spec.win[2]); side(fp.x0, fp.z0, fp.x1, fp.z0, spec.win[1]); side(fp.x1, fp.z0, fp.x1, fp.z1, spec.win[2]); side(fp.x1, fp.z1, fp.x0, fp.z1, spec.win[0]);
+    core(pen, hole, sx, y, yc, false);
+    // ceiling light panels
+    pen.use(glow([1, 0.96, 0.9], f.use === 'rooms' ? 3 : 5)); for (let x = fp.x0 + 2; x < fp.x1 - 1.5; x += 3.6) for (let z = fp.z0 + 1.8; z < fp.z1 - 1.2; z += 3.2) if (!keep(x, z, -1)) pen.flat(x - 0.6, z - 0.3, x + 0.6, z + 0.3, yc - 0.02, false);
+    const B = f.band;
+    if (B) { // corridor and rooms
+      for (const w of B.walls) { const y0 = y + (w[4] ?? 0), y1 = Math.min(yc, y + (w[5] ?? 9)); pen.use(wallM); pen.wall(w[0], w[1], w[2], w[3], y0, y1, {}); pen.wall(w[2], w[3], w[0], w[1], y0, y1, {}); }
+      pen.use(im(ST.TILE, [0.5, 0.5, 0.5])); pen.flat(fp.x0, B.zc0, fp.x1, B.zc1, y + 0.03);
+      walks.push({ pts: [[fp.x0 + 1, y, (B.zc0 + B.zc1) / 2], [fp.x1 - 1, y, (B.zc0 + B.zc1) / 2]].map(([lx, ly, lz]) => { const [x, z] = W(lx, lz); return [x, spec.oy + ly + 0.03, z]; }), closed: false, district: 'core', indoor: true });
+      for (const rm of B.rooms) {
+        const zd = rm.zd, zw = rm.zw, sg = zw > zd ? 1 : -1, rf = sg > 0 ? 0 : Math.PI, w = rm.x1 - rm.x0, cx = (rm.x0 + rm.x1) / 2, zm = (zd + zw) / 2;
+        pen.use(K.dark(0.14)); pen.wall(rm.d0, zd - 0.07, rm.d0 - 0.02, zd + 0.07, y, y + 2.2, {});
+        if (f.use === 'rooms') { prop('bed', cx + 0.3, y, zd + sg * 1.25, rf); prop('desk', rm.x1 - 0.55, y, zw - sg * 1.4, -Math.PI / 2, 0.85); prop('sofa', rm.x0 + 0.7, y, zw - sg * 1.0, Math.PI / 2); if (r() < 0.35) seat(rm.x0 + 1.0, y + 0.03, zw - sg * 1.0, Math.PI / 2, { sit: true }); }
+        else if (f.use === 'ward') { const nb = w > 5.6 ? 2 : 1; for (let i = 0; i < nb; i++) { const bx = nb === 1 ? cx : (i ? rm.x1 - 1.0 : rm.x0 + 1.0); for (const bz of [zd + sg * 1.4, zw - sg * 1.4]) { if (Math.abs(bz - zd) < 1.3 || Math.abs(zw - bz) < 1.3) continue; prop('bedH', bx, y, bz, i ? Math.PI / 2 : -Math.PI / 2); if (r() < 0.4) seat(bx + (i ? -1.5 : 1.5), y + 0.03, bz + 0.6, i ? Math.PI / 2 : -Math.PI / 2, { sit: true }); } }
+          pen.use(im(ST.FABRIC, [0.6, 0.72, 0.74])); pen.wall(cx - 0.6, zd + sg * 0.6, cx - 0.6, zw - sg * 0.6, y + 0.25, y + 2.1, {}); pen.wall(cx - 0.6, zw - sg * 0.6, cx - 0.6, zd + sg * 0.6, y + 0.25, y + 2.1, {}); }
+        else { pen.use(im(ST.METAL, [0.08, 0.14, 0.12])); pen.wall(rm.x0 + 0.08, Math.max(zd, zw) - 0.8, rm.x0 + 0.08, Math.min(zd, zw) + 0.8, y + 0.9, y + 2.3, {});
+          prop('desk', rm.x0 + 1.4, y, zm, Math.PI / 2, 0.9);
+          for (let x = rm.x0 + 2.8; x < rm.x1 - 0.7; x += 1.05) for (let z = Math.min(zd, zw) + 0.8; z < Math.max(zd, zw) - 0.6; z += 1.15) { prop('sdesk', x, y, z, -Math.PI / 2); if (r() < 0.55) seat(x + 0.5, y + 0.03, z, -Math.PI / 2, { sit: true }); } }
+      }
+      // back-of-house behind the corridor: station counter, trolleys or stores
+      const bx = hole[1] + 0.4; if (bx < fp.x1 - 3.5 && fp.z0 + 1.2 < B.zc0 - 1.2) { pen.use(im(ST.COMPOSITE, [0.6, 0.62, 0.64])); pen.box(bx + 1.6, (fp.z0 + B.zc0) / 2, 3.2, 0.7, y, y + 1.05, { wall: im(ST.COMPOSITE, [0.55, 0.57, 0.6]), roof: im(ST.TILE, [0.7, 0.7, 0.7]) }); if (r() < 0.8) seat(bx + 1.6, y + 0.03, (fp.z0 + B.zc0) / 2 - 0.8, 0, { clip: 'phone' }); }
+    } else if (f.use === 'open') {
+      for (let z = fp.z0 + 1.5; z < fp.z1 - 2.0; z += 3.6) for (let x = fp.x0 + 1.2; x < fp.x1 - 1.0; x += 1.75) { if (keep(x, z) || keep(x, z + 0.9)) continue; prop('desk', x, y, z, Math.PI); prop('desk', x, y, z + 0.9, 0); if (r() < 0.45) seat(x, y + 0.03, z + 0.9 - 0.62, 0, { sit: true }); if (r() < 0.45) seat(x, y + 0.03, z + 0.62, Math.PI, { sit: true }); }
+      for (let x = fp.x0 + 0.8; x < fp.x1 - 0.5; x += 5.4) if (!keep(x, fp.z0 + 0.6)) prop('planterIn', x, y, fp.z0 + 0.6, 0);
+    } else if (f.use === 'meet') {
+      const cx = (fp.x0 + fp.x1) / 2 + (keep((fp.x0 + fp.x1) / 2, (fp.z0 + fp.z1) / 2, 3) ? (fp.x1 - fp.x0) / 4 : 0), cz = (fp.z0 + fp.z1) / 2, L = Math.min(7, (fp.x1 - fp.x0) * 0.4);
+      pen.box(cx, cz, L, 1.3, y + 0.7, y + 0.76, { wall: im(ST.COMPOSITE, [0.3, 0.24, 0.18]), roof: im(ST.COMPOSITE, [0.34, 0.27, 0.2]) }); pen.use(im(ST.METAL, [0.2, 0.2, 0.22])); pen.box(cx, cz, L * 0.8, 0.4, y, y + 0.7, {});
+      for (let x = cx - L / 2 + 0.6; x < cx + L / 2 - 0.3; x += 1.1) for (const sd of [-1, 1]) { prop('stool', x, y, cz + sd * 1.0, 0); if (r() < 0.6) seat(x, y + 0.03, cz + sd * 1.0, sd > 0 ? Math.PI : 0, { sit: true }); }
+      pen.use(im(ST.SCREEN, [1, 1, 1])); pen.use({ st: ST.SCREEN, color: [1, 1, 1], seed: f.seed & 255, cellW: 12, floorH: 7, extra: 18, flags: 8 }); pen.wall(fp.x0 + 0.05, cz + 1.8, fp.x0 + 0.05, cz - 1.8, y + 0.9, y + 2.9, { uv: [0, 0, 1, 1] });
+    } else { // lounge / pantry
+      pen.box((fp.x0 + fp.x1) / 2, fp.z0 + 0.4, Math.min(8, fp.x1 - fp.x0 - 4), 0.7, y, y + 1.0, { wall: im(ST.COMPOSITE, [0.24, 0.26, 0.3]), roof: im(ST.TILE, [0.8, 0.8, 0.78]) });
+      for (let x = fp.x0 + 2.2; x < fp.x1 - 2; x += 4.6) for (let z = fp.z0 + 3.2; z < fp.z1 - 2; z += 4.2) { if (keep(x, z, 0.5)) continue; prop('sofa', x - 1.0, y, z, Math.PI / 2); prop('sofa', x + 1.0, y, z, -Math.PI / 2); prop('table', x, y, z, 0, 0.8); if (r() < 0.5) seat(x - 0.9, y + 0.03, z, Math.PI / 2, { sit: true }); if (r() < 0.4) seat(x + 0.9, y + 0.03, z, -Math.PI / 2, { sit: true }); }
+      for (let x = fp.x0 + 1; x < fp.x1 - 1; x += 3.3) if (!keep(x, fp.z1 - 0.7)) prop('planterIn', x, y, fp.z1 - 0.7, 0);
+    }
+    if (!B) { const pts = [[fp.x0 + 1, fp.z0 + 1], [fp.x1 - 1, fp.z0 + 1], [fp.x1 - 1, fp.z1 - 1], [fp.x0 + 1, fp.z1 - 1]]; walks.push({ pts: pts.map(([lx, lz]) => { const [x, z] = W(lx, lz); return [x, spec.oy + y + 0.03, z]; }), closed: true, district: 'core', indoor: true }); }
+  }
+  home();
+  return { spots, walks };
+}
+function scaleFrom(b, n0, x, y, z, k) { const P = b.pos; for (let i = n0; i < b.n; i++) { P[i * 3] = x + (P[i * 3] - x) * k; P[i * 3 + 1] = y + (P[i * 3 + 1] - y) * k; P[i * 3 + 2] = z + (P[i * 3 + 2] - z) * k; } }
+// floor / ceiling plate with the shaft cut out (pen frame)
+function holeFlat(pen, fp, hole, y, mat, up) { pen.use(mat); const [h0, h1, k0, k1] = hole; const R = (a, b, c, d) => { if (b - a > 0.05 && d - c > 0.05) pen.flat(a, c, b, d, y, up); }; R(fp.x0, h0, fp.z0, fp.z1); R(h1, fp.x1, fp.z0, fp.z1); R(h0, h1, fp.z0, k0); R(h0, h1, k1, fp.z1); }
+// the lift core seen from the floor: three walls, a framed door with a lit floor indicator
+function core(pen, hole, sx, y0, y1, ground) {
+  const [h0, h1, k0, k1] = hole; const m = im(ST.STONE, [0.42, 0.41, 0.4]);
+  pen.use(m); pen.wall(h1 + 0.15, k0 - 0.15, h0 - 0.15, k0 - 0.15, y0, y1, { aoB: 0.7 }); pen.wall(h0 - 0.15, k0 - 0.15, h0 - 0.15, k1 + 0.15, y0, y1, { aoB: 0.7 }); pen.wall(h1 + 0.15, k1 + 0.15, h1 + 0.15, k0 - 0.15, y0, y1, { aoB: 0.7 });
+  pen.wall(h0 - 0.15, k1 + 0.15, sx - 0.7, k1 + 0.15, y0, y1, { aoB: 0.7 }); pen.wall(sx + 0.7, k1 + 0.15, h1 + 0.15, k1 + 0.15, y0, y1, { aoB: 0.7 }); pen.wall(sx - 0.7, k1 + 0.15, sx + 0.7, k1 + 0.15, y0 + 2.3, y1, {});
+  pen.use(im(ST.METAL, [0.62, 0.62, 0.64])); pen.wall(sx - 0.82, k1 + 0.17, sx - 0.7, k1 + 0.17, y0, y0 + 2.42, {}); pen.wall(sx + 0.7, k1 + 0.17, sx + 0.82, k1 + 0.17, y0, y0 + 2.42, {}); pen.wall(sx - 0.82, k1 + 0.17, sx + 0.82, k1 + 0.17, y0 + 2.3, y0 + 2.42, {});
+  pen.use(glow([1, 0.7, 0.3], 5)); pen.wall(sx - 0.25, k1 + 0.18, sx + 0.25, k1 + 0.18, y0 + 2.5, y0 + 2.62, {}); pen.use(glow([0.6, 0.9, 1], 4)); pen.wall(sx + 0.95, k1 + 0.18, sx + 1.07, k1 + 0.18, y0 + 1.1, y0 + 1.3, {});
+  void ground;
+}

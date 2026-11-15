@@ -14,6 +14,7 @@ import { Game, INTERACT } from './game/game.js';
 import { GameAudio } from './game/audio.js';
 import { HUD } from './ui/hud.js';
 import { loadFonts } from './render/signs.js';
+import { createInteriorStream } from './world/interiorStream.js';
 
 const params = new URLSearchParams(location.search);
 const quality = pickQuality(params);
@@ -34,6 +35,7 @@ async function start() {
   const rain = createRain(quality); scene.add(rain.mesh);
   const parts = createParticles(city.ctx.steam); scene.add(parts.mesh);
   const crowd = new Crowd(city, quality, scene);
+  const interiors = createInteriorStream(city, scene, crowd);
   const audio = new GameAudio();
   const game = new Game({ engine, city, crowd, env, U, audio });
   const input = new Input(canvas, null);
@@ -67,7 +69,7 @@ async function start() {
     } else { // title: slow orbit around the start area
       const t = performance.now() * 0.00004; const c = player.pos; camera.position.set(c.x + Math.cos(t) * 150, 90 + Math.sin(t * 2) * 30, c.z + Math.sin(t) * 150); camera.lookAt(0, 420, 0);
     }
-    env.update(dt, camera.position); city.update(camera.position); traffic.update(engine); crowd.update(dt, started ? player.p : camera.position, env.weather.rain);
+    env.update(dt, camera.position); city.update(camera.position); traffic.update(engine); crowd.update(dt, started ? player.p : camera.position, env.weather.rain, started ? player.indoor : 0); interiors.update(started ? player.p : camera.position);
     rain.uniforms.uLocal.value = 1 - player.indoor; engine.post.settings.bloom = 1 + env.weather.rain * 0.35;
     engine.post.mFinal.uniforms.uSpeedFx.value = Math.min(1, player.speed / 110); engine.post.mFinal.uniforms.uFade.value = 1 - (game.fade || 0);
     audio.update(env.weather.rain, player.indoor, player.mode === 'fly', player.speed, player.p.y);
@@ -90,12 +92,12 @@ async function start() {
 
   const setCam = (x, y, z, yaw = 0, pitch = 0) => { camera.position.set(x, y, z); camera.rotation.set(pitch, yaw, 0, 'YXZ'); };
   window.__dbg = {
-    engine, env, U, THREE, city, MATU, crowd, traffic, game, player, hud, input,
+    engine, env, U, THREE, city, MATU, crowd, traffic, game, player, hud, input, interiors,
     step, cam: setCam, hour: (h) => env.setHour(h),
     sim: (n, dt = 1 / 30) => { noRender = true; for (let i = 0; i < n; i++) step(dt); noRender = false; },
     look: (x, y, z, tx, ty, tz) => { camera.position.set(x, y, z); camera.lookAt(tx, ty, tz); },
     // render one frame from a free camera (bypasses the player rig)
-    free: (dt = 1 / 30) => { env.update(dt, camera.position); city.update(camera.position); traffic.update(engine); crowd.update(dt, camera.position, env.weather.rain); engine.render(dt); },
+    free: (dt = 1 / 30) => { env.update(dt, camera.position); city.update(camera.position); traffic.update(engine); interiors.update(camera.position); crowd.update(dt, camera.position, env.weather.rain, 0); engine.render(dt); },
     probe: () => { city.update(camera.position); engine.refreshProbe(); engine.render(0); engine.render(0); },
     // park the free camera on the pavement in front of a shop / lobby door in the district at `ang` degrees
     street: (ang, idx = 0, o = {}) => { const A = (ang * Math.PI) / 180; const c = (o.mark ? city.ctx.marks.filter((p) => p.type === o.mark) : city.pois).filter((p) => p.doorX !== undefined && p.type !== 'home' && (!o.type || p.type === o.type) && Math.hypot(p.x, p.z) > (o.rmin ?? 800) && Math.hypot(p.x, p.z) < (o.rmax ?? 3200) && Math.abs(((Math.atan2(p.z, p.x) - A + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 0.22); const p = c[idx % Math.max(1, c.length)]; if (!p) return null; let nx = p.doorX - p.x, nz = p.doorZ - p.z; const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l; const d = o.dir ?? 1; const tx = -nz * d, tz = nx * d; const b = o.back ?? 6; camera.position.set(p.doorX + nx * b - tx * 3, o.h ?? 1.7, p.doorZ + nz * b - tz * 3); camera.lookAt(p.doorX + nx * (b - (o.turn ?? 1)) + tx * 40, o.ty ?? 5, p.doorZ + nz * (b - (o.turn ?? 1)) + tz * 40); return [p.type, p.name, Math.round(p.doorX), Math.round(p.doorZ), c.length]; },

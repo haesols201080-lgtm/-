@@ -37,19 +37,32 @@ export class Player {
 
   _buildLifts() {
     const { engine, city } = this.g; this.lifts = [];
-    for (const l of city.ctx.lifts || []) {
-      const grp = new THREE.Group(); const b = new Batch(256); const pen = new Pen(b); pen.at(0, 0, 0, 0);
+    this._mkLift = (L) => {
+      const grp = new THREE.Group(); const b = new Batch(256); const pen = new Pen(b); pen.at(0, 0, 0, 0); const l = L;
       pen.use({ st: 27, color: [0.3, 0.31, 0.34], flags: 8 }); pen.lathe(0, 0, [[l.r, -0.5], [l.r, 0], [0.1, 0]], 16, { cap: false }); pen.use({ st: 4, color: [0.6, 0.9, 1], extra: 30, flags: 0 }); pen.lathe(0, 0, [[l.r - 0.5, 0.02], [l.r - 0.9, 0.02]], 16, { cap: false }); pen.lathe(0, 0, [[l.r - 0.05, 2.9], [l.r - 0.05, 3.1]], 16, { cap: false, inside: true });
       pen.use({ st: 3, color: [0.4, 0.5, 0.56], flags: 8 }); pen.lathe(0, 0, [[l.r - 0.1, 0], [l.r - 0.1, 1.1]], 16, { cap: false, inside: true, a0: 0.5, a1: 5.78 });
-      const mesh = new THREE.Mesh(b.build(), city.mat); mesh.frustumCulled = false; grp.add(mesh); grp.position.set(l.x, l.stops[0].y, l.z); grp.rotation.y = -l.ang; engine.scene.add(grp);
-      const col = city.phys.addDynamic({ t: 0, cx: l.x, cz: l.z, hx: l.r, hz: l.r, cs: 1, sn: 0, y0: l.stops[0].y - 0.5, y1: l.stops[0].y, tag: 9 });
-      this.lifts.push({ ...l, grp, col, y: l.stops[0].y, vy: 0, at: 0, to: 0 });
+      const mesh = new THREE.Mesh(b.build(), city.mat); mesh.frustumCulled = false; grp.add(mesh); grp.position.set(l.x, L.y, l.z); grp.rotation.y = -l.ang; engine.scene.add(grp); L.grp = grp;
+    };
+    for (const l of city.ctx.lifts || []) {
+      const L = { ...l, grp: null, y: l.stops[0].y, vy: 0, at: 0, to: 0, active: false };
+      L.col = { t: 0, cx: l.x, cz: l.z, hx: l.r, hz: l.r, cs: 1, sn: 0, y0: l.stops[0].y - 0.5, y1: l.stops[0].y, tag: 9 };
+      if (!l.bld) { this._mkLift(L); city.phys.addDynamic(L.col); L.active = true; }
+      if (l.doors) for (const c of l.doors) if (c) c._y1 = c.y1;
+      this.lifts.push(L);
     }
   }
   _updateLifts(dt, input) {
     this.riding = null; this.liftPrompt = null;
+    const dyn = this.phys.dyn;
     for (const L of this.lifts) {
       const d = Math.hypot(this.pos.x - L.x, this.pos.z - L.z);
+      if (L.bld) { // building lifts only exist for the player while they are nearby
+        const want = d < 60 || L.at !== L.to;
+        if (want && !L.active) { if (!L.grp) this._mkLift(L); L.grp.visible = true; dyn.push(L.col); L.active = true; }
+        else if (!want && L.active) { L.grp.visible = false; const i = dyn.indexOf(L.col); if (i >= 0) dyn.splice(i, 1); L.active = false; }
+        if (L.doors) L.doors.forEach((c, k) => { if (!c) return; const open = L.at === L.to && L.at === k + 1; c.y1 = open ? c.y0 - 100 : c._y1; });
+        if (!L.active) continue;
+      }
       const on = this.mode === 'foot' && d < L.r - 0.3 && Math.abs(this.pos.y - L.y) < 1.6;
       if (L.at !== L.to) {
         const ty = L.stops[L.to].y; const dy = ty - L.y; const dir = Math.sign(dy);
@@ -59,7 +72,7 @@ export class Player {
         const up = L.at < L.stops.length - 1, dn = L.at > 0;
         this.liftPrompt = `${L.stops[L.at].name}  ·  ${up ? '[E] ▲ ' + L.stops[L.at + 1].name : ''}${up && dn ? '   ' : ''}${dn ? '[Q] ▼ ' + L.stops[L.at - 1].name : ''}`;
         let want = -1; if (up && input.hit('KeyE', 'BtnE')) want = L.at + 1; if (dn && input.hit('KeyQ', 'BtnQ')) want = L.at - 1;
-        if (want >= 0) { const need = want === 2 ? 3 : want === 1 ? 1 : 0; if (this.g.state.license < need) this.g.toast(`고도 면허 ${need}급이 필요합니다`, 'bad'); else { L.to = want; this.g.audio?.blip(440, 0.2); } }
+        if (want >= 0) { const need = L.bld ? 0 : want === 2 ? 3 : want === 1 ? 1 : 0; if (this.g.state.license < need) this.g.toast(`고도 면허 ${need}급이 필요합니다`, 'bad'); else { L.to = want; this.g.audio?.blip(440, 0.2); } }
       } else if (this.mode === 'foot' && d < L.r + 5 && d >= L.r - 0.3) {
         const here = L.stops.findIndex((s) => Math.abs(s.y - this.pos.y) < 3);
         if (here >= 0 && here !== L.at && L.at === L.to) { this.liftPrompt = '[E] 승강기 호출'; if (input.hit('KeyE', 'BtnE')) L.to = here; }
