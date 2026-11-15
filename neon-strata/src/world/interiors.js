@@ -49,6 +49,7 @@ export function lobby(ctx, rng, cx, zFront, o) {
   pen.use(glow(acc, 4)); for (let i = 0; i <= nx; i++) { const x = room.xa + 0.06 + i * ((w - 0.12) / nx); if (i === 0 || i === nx) continue; pen.wall(x - 0.08, room.zb + 0.05, x + 0.08, room.zb + 0.05, 0.4, h - 0.6, {}); }
   for (let j = 1; j < nz; j++) { const z = room.zb + j * ((dep - 0.4) / nz); pen.wall(room.xa + 0.05, z + 0.08, room.xa + 0.05, z - 0.08, 0.4, h - 0.6, {}); pen.wall(room.xb - 0.05, z - 0.08, room.xb - 0.05, z + 0.08, 0.4, h - 0.6, {}); }
   { const lx = Math.max(1, Math.round(w / 10)), lz = Math.max(1, Math.round(dep / 10)); const rg = Math.min(22, Math.max(9, h * 2.3)); for (let i = 0; i < lx; i++) for (let j = 0; j < lz; j++) { const x = room.xa + (i + 0.5) * (w / lx), z = room.zb + (j + 0.5) * ((dep - 0.4) / lz); ctx.light(pen.wx(x, z), pen.wz(x, z), rg, [1, 0.93, 0.82], 1.0, pen.oy + h - 0.4, { indoor: true, range: rg, gain: 4 }); } }
+  if (ctx.atlas.bb && ctx.atlas.bb.length) for (const sx of [-1, 1]) for (let z = room.zb + 4; z < zi - 4; z += 7) { const r = rng.pick(ctx.atlas.bb); const pw = Math.min(4.2, h * 0.7), ph = pw / r.aspect; const x = cx + sx * (w / 2 - 0.06); pen.use(K.dark(0.06)); pen.box(x, z, 0.05, pw + 0.16, h * 0.5 - ph / 2 - 0.08, h * 0.5 + ph / 2 + 0.08, {}); pen.sign(x - sx * 0.04, h * 0.5, z, sx > 0 ? -Math.PI / 2 : Math.PI / 2, pw, ph, r, { intensity: 0.9, seed: rng.i(0, 255) }); }
   // floor inlay leading from the door to reception
   pen.use(glow(acc, 2)); pen.flat(cx - 0.07, room.zb + dep * 0.32, cx + 0.07, zi - 0.5, 0.045);
   // reception desk with brand wall behind
@@ -83,6 +84,27 @@ export function lobby(ctx, rng, cx, zFront, o) {
   return { room, door };
 }
 
+
+// what makes a room read as a room: skirting, a dado band, framed posters, pendant lamps, an exit sign, an extinguisher, a till
+function dress(ctx, rng, room, zi, h, door, kind, lc, up) {
+  const pen = ctx.pen; const { xa, xb, zb } = room; const w = xb - xa, dep = zi - zb, cx = (xa + xb) / 2; const dk = im(ST.METAL, [0.16, 0.16, 0.17]);
+  pen.box(cx, zb + 0.03, w, 0.05, 0.03, 0.16, { wall: dk, roof: dk }); pen.box(xa + 0.03, (zb + zi) / 2, 0.05, dep, 0.03, 0.16, { wall: dk, roof: dk }); if (!up) pen.box(xb - 0.03, (zb + zi) / 2, 0.05, dep, 0.03, 0.16, { wall: dk, roof: dk });
+  const dado = im(kind === 'bar' ? ST.RUST : ST.TILE, kind === 'bar' ? [0.4, 0.28, 0.2] : [0.36, 0.42, 0.46]); pen.box(xa + 0.02, (zb + zi) / 2, 0.035, dep - 0.1, 0.16, 1.05, { wall: dado, roof: dk }); pen.box(cx, zb + 0.02, w - 0.1, 0.035, 0.16, 1.05, { wall: dado, roof: dk });
+  const at = ctx.atlas; const frame = (x, z, ang, rect, pw, y = 1.75) => { const ph = pw / rect.aspect; const nx = Math.sin(ang), nz = Math.cos(ang); pen.use(dk); pen.box(x + nx * 0.02, z + nz * 0.02, Math.abs(nz) * (pw + 0.1) + Math.abs(nx) * 0.04, Math.abs(nx) * (pw + 0.1) + Math.abs(nz) * 0.04, y - ph / 2 - 0.05, y + ph / 2 + 0.05, {}); pen.sign(x + nx * 0.045, y, z + nz * 0.045, ang, pw, ph, rect, { intensity: 0.7, seed: rng.i(0, 255) }); };
+  if (at.bb && at.bb.length) { for (let z = zb + 1.4; z < zi - 1.4; z += rng.f(2.4, 3.4)) frame(xa + 0.04, z, Math.PI / 2, rng.pick(at.bb), 1.5); if (!up) for (let z = zb + 1.8; z < zi - 3.2; z += rng.f(2.6, 3.6)) frame(xb - 0.04, z, -Math.PI / 2, rng.pick(at.sq && at.sq.length && rng.chance(0.5) ? at.sq : at.bb), 1.0); }
+  if (at.notice && at.notice.length) frame(cx - w * 0.25, zb + 0.04, 0, rng.pick(at.notice), 0.9, 2.05);
+  // pendant lamps over the middle of the room
+  const np = Math.max(2, Math.min(4, Math.round(dep / 2.6))); for (let i = 0; i < np; i++) { const z = zb + (i + 0.5) * (dep / np), x = cx + (kind === 'bar' ? -w * 0.18 : 0); pen.use(dk); pen.tube(x, h - 0.02, z, x, h - 0.62, z, 0.012, 3); pen.lathe(x, z, [[0.2, h - 0.84], [0.07, h - 0.62]], 8, { cap: false }); pen.use(glow(lc, 10)); pen.lathe(x, z, [[0.07, h - 0.86], [0.07, h - 0.76]], 6, {}); }
+  // the middle of the room is used: tables with people at them, gondola shelving, benches of equipment
+  { const fx = cx + w * 0.17; if (w > 5.2) for (let z = zb + 3.3; z < zi - 2.4; z += 2.5) {
+      if (kind === 'bar') { ctx.propL('table', fx, 0.03, z, 0, 1, [rng.f(0.7, 1.4), rng.f(0.7, 1.3), rng.f(0.7, 1.3)]); ctx.solidCyl(fx, z, 0.42, 0, 0.75); for (let k = 0; k < 3; k++) if (rng.chance(0.6)) { const an = k * 2.094 + 0.5; const lx = Math.cos(an) * 0.74, lz = Math.sin(an) * 0.74; ctx.spots.push({ x: pen.wx(fx + lx, z + lz), y: pen.oy + 0.03, z: pen.wz(fx + lx, z + lz), yaw: pen.yaw + Math.atan2(-lx, -lz), sit: true }); } }
+      else if (kind === 'home') break;
+      else { ctx.propL(kind === 'tech' ? 'rack' : 'shelf', fx, 0.03, z, Math.PI / 2); ctx.solid(fx, z, 0.6, 2.1, 0, 1.9); } } }
+  // exit sign over the door, extinguisher by it, a till screen on the counter side
+  pen.use(glow([0.2, 1, 0.45], 5)); pen.box((door.a + door.b) / 2, zi - 0.03, 0.5, 0.04, (door.h ?? 2.7) + 0.12, (door.h ?? 2.7) + 0.3, {});
+  pen.use(im(ST.PLASTER, [0.62, 0.1, 0.08])); pen.lathe(xa + 0.22, zi - 0.35, [[0.075, 0.18], [0.075, 0.6], [0.03, 0.7]], 7, {});
+  pen.use(dk); pen.box(cx - w * 0.2, zb + 1.25, 0.34, 0.26, 1.02, 1.3, {}); pen.use(glow([0.5, 0.85, 1], 3)); pen.box(cx - w * 0.2, zb + 1.39, 0.28, 0.02, 1.06, 1.26, {});
+}
 // ---------------------------------------------------------------------------------------------
 // small shop behind an open shopfront. kind: 'bar' | 'store' | 'tech' | 'home'
 export function shopRoom(ctx, rng, xa, xb, zFront, dep, h, door, o = {}) {
@@ -91,8 +113,9 @@ export function shopRoom(ctx, rng, xa, xb, zFront, dep, h, door, o = {}) {
   const up = o.upper && kind !== 'home' && w >= 4.6 && dep >= 6.4 ? o.upper : 0; // a real second storey reached by a real stair
   const room = { xa, xb, zb: zFront - dep, zf: zFront, h: h + up };
   const warm = [1, 0.78, 0.5], cool = [0.7, 0.9, 1.0]; const lc = kind === 'tech' ? cool : kind === 'home' ? [1, 0.7, 0.45] : rng.pick([warm, warm, [1, 0.9, 0.75]]);
-  const wallC = kind === 'tech' ? [0.3, 0.32, 0.36] : rng.pick([[0.44, 0.4, 0.34], [0.36, 0.38, 0.36], [0.46, 0.36, 0.3]]);
-  shell(ctx, room, door, { floor: im(kind === 'tech' ? ST.TILE : ST.CONCRETE, [0.34, 0.33, 0.32]), ceil: im(ST.PLASTER, [0.3, 0.3, 0.3]), wall: im(ST.PLASTER, wallC), trim: K.dark(0.1) });
+  const wallC = kind === 'tech' ? [0.5, 0.53, 0.58] : rng.pick([[0.7, 0.66, 0.58], [0.62, 0.65, 0.62], [0.72, 0.6, 0.5], [0.74, 0.72, 0.68]]);
+  shell(ctx, room, door, { floor: im(kind === 'bar' ? ST.CONCRETE : ST.TILE, kind === 'bar' ? [0.4, 0.36, 0.32] : [0.5, 0.5, 0.5]), ceil: im(ST.TILE, [0.72, 0.72, 0.7]), wall: im(ST.PLASTER, wallC), trim: K.dark(0.1) });
+  dress(ctx, rng, room, zFront - 0.36, h, door, kind, lc, up);
   const zi = zFront - 0.36;
   pen.use(glow(lc, 6)); pen.flat(cx - Math.min(1.6, w * 0.3), room.zb + dep * 0.35, cx + Math.min(1.6, w * 0.3), room.zb + dep * 0.35 + 0.5, h - 0.04, false, 1); pen.flat(cx - Math.min(1.6, w * 0.3), room.zb + dep * 0.72, cx + Math.min(1.6, w * 0.3), room.zb + dep * 0.72 + 0.5, h - 0.04, false, 1);
   { const rg = Math.min(13, Math.max(6.5, h * 2.4)); const nl = dep > 9 ? 2 : 1; for (let i = 0; i < nl; i++) { const z = room.zb + dep * (nl === 1 ? 0.5 : 0.3 + 0.42 * i); ctx.light(pen.wx(cx, z), pen.wz(cx, z), rg, lc, 1.0, pen.oy + h - 0.35, { indoor: true, range: rg, gain: 5 }); } }

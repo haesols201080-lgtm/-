@@ -682,6 +682,7 @@ const FRAG_SURFACE = /* glsl */ `
       vec3 gd = nsGrunge(hm * 0.83 + 0.3); albedo *= 1.0 + (gd.g - 0.5) * 0.28 * nearK; rough = clamp(rough + (gd.r - 0.5) * 0.2 * nearK, 0.02, 1.0);
       if (!winS) slope += (vec2(gd.r, gd.b) - 0.5) * 0.3 * nearK;
       float blot = smoothstep(0.56, 0.82, nsNoise(vWPos.xz * 0.06 + 0.7).b); albedo *= 1.0 - up * blot * 0.22; }
+    if (nsIndoor > 0.5 && st == 26) albedo = mix(albedo, base * 0.92, 0.7); // interior paint is even, not weathered render
     float low = (1.0 - up) * exp(-max(vWPos.y, 0.0) / 9.0) * (1.0 - nsIndoor);
     albedo *= 1.0 - 0.4 * low * (0.5 + nsNoise(vWPos.xz * 0.13 + vWPos.y * 0.21).r);
     float dirtAO = clamp(1.0 - vCol.a, 0.0, 1.0);
@@ -742,7 +743,7 @@ const FRAG_LIGHT_END = /* glsl */ `
   #ifdef NS_LOCAL_LIGHTS
     nsSpill *= 0.5; // the grid lights carry the near field; the light field is the soft bounce + far field
   #endif
-  vec3 irr = hemi + nsSpill * (0.55 + 0.45 * (1.0 - abs(wNn.y))) + vec3(0.085, 0.075, 0.065) * nsIndoor * (0.6 + 0.4 * wNn.y);
+  vec3 irr = hemi + nsSpill * (0.55 + 0.45 * (1.0 - abs(wNn.y))) + vec3(0.26, 0.24, 0.21) * nsIndoor * (0.7 + 0.3 * wNn.y); // light bouncing around a lit room
   reflectedLight.indirectDiffuse += irr * material.diffuseColor;
   float gl = (1.0 - material.roughness); gl *= gl;
   reflectedLight.indirectSpecular += nsSpill * gl * 0.35 * mix(vec3(0.04), material.diffuseColor + material.specularColor, 0.5);
