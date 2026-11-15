@@ -41,7 +41,7 @@ export class HUD {
   stick(on, x, y, dx, dy) { const s = this.el.stick; s.style.display = on ? 'block' : 'none'; if (on) { s.style.left = x - 60 + 'px'; s.style.top = y - 60 + 'px'; s.firstChild.style.transform = `translate(${dx}px,${dy}px)`; } }
   _touch() {
     const t = $('#h-touch'); const mk = (name, label, cls = '') => { const b = document.createElement('button'); b.className = 'tbtn ' + cls; b.textContent = label; b.dataset.name = name; const dn = (e) => { e.preventDefault(); this.input.setButton(name, true); b.classList.add('on'); }, up = (e) => { e.preventDefault(); this.input.setButton(name, false); b.classList.remove('on'); }; b.addEventListener('touchstart', dn, { passive: false }); b.addEventListener('touchend', up); b.addEventListener('touchcancel', up); t.appendChild(b); return b; };
-    mk('Jump', '▲', 'b-jump'); this.bDown = mk('Down', '▼', 'b-down'); mk('Run', '≫', 'b-run'); this.bF = mk('F', '탑승', 'b-f'); this.bE = mk('E', 'E', 'b-e'); this.bQ = mk('Q', 'Q', 'b-q'); mk('R', '호출', 'b-r');
+    mk('Jump', '▲', 'b-jump'); this.bDown = mk('Down', '▼', 'b-down'); mk('Run', '≫', 'b-run'); this.bF = mk('F', '탑승', 'b-f'); this.bE = mk('E', 'E', 'b-e'); this.bQ = mk('Q', 'Q', 'b-q'); mk('R', '호출', 'b-r'); mk('P', '폰', 'b-ph');
   }
   _mapBg() { // 512px map of ±5300 m: district tint + blocks + rings
     const S = 512, R = 5300; const cv = document.createElement('canvas'); cv.width = cv.height = S; const c = cv.getContext('2d'); const img = c.createImageData(S, S);

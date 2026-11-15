@@ -218,13 +218,13 @@ export function buildDistricts(ctx) {
           const tall = lot.w > 16 && rng.chance(0.7);
           const res = lot.ring ? rng.chance(0.9) : rng.chance(prime ? 0.15 : 0.45);
           if (tall) tenement(ctx, rng, lot, S, { floors: Math.round(clamp(H / 3 * rng.f(0.6, 1.5), 5, 26)), shanty: true, res });
-          else { const home = !ctx.homeDone && dense && lot.w > 8 && Math.hypot(b.x, b.z - 1750) < 520; if (home) ctx.homeDone = true; shopHouse(ctx, rng, lot, S, { floors: home ? 5 : Math.round(clamp((H / 3.2) * rng.f(0.3, 1.1), 1, 9)), shanty: true, shutter: 0.22, res: res && !home, ...(home ? { enter: true, kind: 'home', home: true } : {}) }); }
+          else { const home = !ctx.homeDone && dense && lot.w > 8 && Math.hypot(b.x, b.z - 1750) < 520; if (home) ctx.homeDone = true; shopHouse(ctx, rng, lot, S, { floors: home ? 5 : Math.round(clamp((H / 3.2) * rng.f(0.55, 1.35), 3, 12)), shanty: true, shutter: 0.22, res: res && !home, ...(home ? { enter: true, kind: 'home', home: true } : {}) }); }
         }
         break;
       }
       case 'oldq': {
         if (b.w > 90 && b.noise2 > 0.7 && rng.chance(0.3)) { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); archiveSpire(ctx, rng, lot, S, { h: 160 + 380 * b.noise }); break; }
-        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 11, wmax: 24, alley: 5, minDepth: 11 })) { { const ck = civPick(b, lot, rng); if (ck) { civic(ctx, rng, lot, S, ck); continue; } } const fl = Math.round(clamp((H / 3.4) * rng.f(0.6, 1.3), 2, 9)); if (lot.ring || (!lot.corner && !prime && rng.chance(0.62))) shopHouse(ctx, rng, lot, S, { floors: Math.min(fl, 5), res: lot.ring ? true : rng.chance(0.75) }); else guildHouse(ctx, rng, lot, S, { floors: fl }); }
+        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 11, wmax: 24, alley: 5, minDepth: 11 })) { { const ck = civPick(b, lot, rng); if (ck) { civic(ctx, rng, lot, S, ck); continue; } } const fl = Math.round(clamp((H / 3.4) * rng.f(0.6, 1.3), 2, 9)); if (lot.ring || (!lot.corner && !prime && rng.chance(0.62))) shopHouse(ctx, rng, lot, S, { floors: Math.min(fl + 1, 8), res: lot.ring ? true : rng.chance(0.75) }); else guildHouse(ctx, rng, lot, S, { floors: fl }); }
         break;
       }
       case 'lumina': {

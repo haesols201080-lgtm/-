@@ -6,6 +6,7 @@ import * as K from './kit.js';
 import { Vol, facade, blindWall, shopSign, bladeSign, screenWall, FACE_ANG } from './facade.js';
 import { hollow, lobby, shopRoom, upperFloors } from './interiors.js';
 import { FORMS, MEGA, pickForm, roofForm } from './buildings3.js';
+import { registerWalkin } from './walkin.js';
 
 let uo = 11;
 const nextU = () => (uo = (uo * 37 + 11) % 877);
@@ -71,7 +72,7 @@ function apron(v, rng, a, b, kind, nc, walk = 4) {
 }
 // the way in for the people who live upstairs: recessed glazed door under a canopy, intercom, letterboxes, pasted notices
 function entryUnit(v, rng, S, s0, s1, gh, o = {}) {
-  const ctx = v.ctx, pen = v.pen; const wv = s1 - s0, c = (s0 + s1) / 2, top = gh - 0.7; const dw = Math.min(2.0, wv - 1.4), dh = Math.min(2.6, top - 0.2), rec = 0.9;
+  const ctx = v.ctx, pen = v.pen; const wv = s1 - s0, c = (s0 + s1) / 2, top = gh - 0.7; const dw = Math.min(2.0, wv - 1.4), dh = Math.min(2.6, top - 0.2), rec = 0.9; if (o.units) o.units.push({ s0, s1, kind: 'entry', door: c, dw });
   const x0 = v.cx - v.w / 2, zF = v.cz + v.d / 2, xa = x0 + c - dw / 2, xb = x0 + c + dw / 2, zB = zF - rec;
   ctx.main(); v.box(0, s0, s0 + 0.36, 0, 0.14, 0, gh, K.conc(0.33), { top: false });
   const wm = M(ST.TILE, { color: [0.3, 0.3, 0.33], seed: rng.i(0, 255) }); pen.use(wm);
@@ -95,7 +96,7 @@ function entryUnit(v, rng, S, s0, s1, gh, o = {}) {
 }
 // vehicle entrance: a real, lit recess with hazard jambs, a guide line on the floor, a barrier and a car parked inside
 function garageUnit(v, rng, S, s0, s1, gh, o = {}) {
-  const ctx = v.ctx, pen = v.pen; const wv = s1 - s0, c = (s0 + s1) / 2; const ow = Math.min(5.4, wv - 1.3), oh = Math.min(3.1, gh - 1.0), dep = Math.min(v.d - 1.5, 7.5);
+  const ctx = v.ctx, pen = v.pen; const wv = s1 - s0, c = (s0 + s1) / 2; const ow = Math.min(5.4, wv - 1.3), oh = Math.min(3.1, gh - 1.0), dep = Math.min(v.d - 1.5, 7.5); if (o.units) o.units.push({ s0, s1, kind: 'garage', door: c, dw: ow });
   const x0 = v.cx - v.w / 2, zF = v.cz + v.d / 2, xa = x0 + c - ow / 2, xb = x0 + c + ow / 2, zB = zF - dep; const IN = FLAG.INDOOR;
   ctx.main(); v.box(0, s0, s0 + 0.36, 0, 0.14, 0, gh, K.conc(0.33), { top: false });
   pen.use(M(ST.CONCRETE, { color: [0.32, 0.32, 0.33], seed: rng.i(0, 255) })); v.wall(0, s0 + 0.36, c - ow / 2, 0, 0, gh, { aoB: 0.6 }); v.wall(0, c + ow / 2, s1, 0, 0, gh, { aoB: 0.6 }); v.wall(0, c - ow / 2, c + ow / 2, 0, oh, gh);
@@ -162,6 +163,7 @@ function shopUnit(v, rng, S, s0, s1, gh, o = {}) {
     const lp = v.world(0, (dA + dB) / 2, 2.2); ctx.light(lp[0], lp[1], 9, [1, 0.82, 0.6], 0.6, pen.oy + 2.4);
     ctx.main();
   } else if (rng.chance(o.shutter ?? 0.16)) {
+    if (o.units) o.units.push({ s0: a, s1: b, kind: 'shut' });
     pen.use(M(ST.CORRUGATED, { color: [0.3, 0.31, 0.33], seed: rng.i(0, 255) })); v.wall(0, a, b, 0, 0, gh - 0.7, { aoB: 0.6 });
   } else {
     // a trading shop: you can see what it sells and who is inside (interior-mapped storefront)
@@ -171,6 +173,7 @@ function shopUnit(v, rng, S, s0, s1, gh, o = {}) {
     v.wall(0, a, b, 0, 0, gh - 0.7, { uv: [u, 0, u + nc, 1], aoB: 0.6 });
     const lp = v.world(0, (a + b) / 2, 1.8); ctx.light(lp[0], lp[1], Math.max(8, wv * 1.3), SHOP_LIGHT[kind], 0.8, pen.oy + 2.2);
     apron(v, rng, a, b, kind, nc, o.walk);
+    if (o.units) o.units.push({ s0: a, s1: b, kind, door: a + (nc - 0.5) * (wv / nc), dw: Math.min(1.8, wv / nc - 0.7) });
   }
   pen.use(K.conc(0.3)); v.wall(0, a, b, 0, gh - 0.7, gh);
   if (S.awning && rng.chance(0.55)) { const p = v.P(0, (a + b) / 2, 0); K.awning(ctx, p[0], gh - 0.55, p[1], 0, wv * 0.92, rng.f(1.0, 1.5), rng.pick(S.tarps || [[0.3, 0.3, 0.32]]), rng.i(0, 255)); }
@@ -188,10 +191,11 @@ export function shopHouse(ctx, rng, lot, S, o = {}) {
   const v = new Vol(ctx, 0, cz, w, d, 0, h);
   const wall = wallMat(rng, S, { flags: rng.chance(S.balcony ?? 0.3) ? FLAG.VAR_A : 0, cellW: w / Math.max(1, Math.round(w / (S.cellW ?? 3.1))) });
   const party = M(ST.PLASTER, { color: dim(wall.color, 0.85), seed: wall.seed });
-  const ent = o.res ? null : shopUnit(v, rng, S, 0, w - 0.36, gh, { ...o, upperH: floors >= 2 ? fh : 0, upperN: floors - 1, walk: lot.block.walk, enter: o.enter ?? rng.chance(S.enter ?? 0.3) });
+  const units = []; let resDoor = null;
+  const ent = o.res ? null : shopUnit(v, rng, S, 0, w - 0.36, gh, { ...o, units, upperH: floors >= 2 ? fh : 0, upperN: floors - 1, walk: lot.block.walk, enter: o.enter ?? rng.chance(S.enter ?? 0.3) });
   if (!o.res) { ctx.main(); v.box(0, w - 0.36, w, 0, 0.14, 0, gh, K.conc(0.33), { top: false }); }
   else { // a dwelling: plinth, front door with a step, a lamp and a number, the bins by the wall
-    const ds = Math.min(w - 1.2, Math.max(1.2, w * rng.f(0.25, 0.75))); ctx.detail(); pen.use(K.conc(0.3)); v.box(0, 0, w, 0, 0.06, 0, 0.45, null, { ends: false, bottom: false });
+    const ds = Math.min(w - 1.2, Math.max(1.2, w * rng.f(0.25, 0.75))); resDoor = ds; ctx.detail(); pen.use(K.conc(0.3)); v.box(0, 0, w, 0, 0.06, 0, 0.45, null, { ends: false, bottom: false });
     pen.use(K.dark(0.07)); v.box(0, ds - 0.55, ds + 0.55, 0.02, 0.09, 0.12, 2.25, null, {}); pen.use(K.metal([0.42, 0.36, 0.3])); v.box(0, ds - 0.47, ds + 0.47, 0.09, 0.12, 0.2, 2.15, null, {}); pen.use(K.conc(0.36)); v.box(0, ds - 0.8, ds + 0.8, 0, 0.5, 0, 0.14, null, {});
     pen.use(K.emis([1, 0.82, 0.6], 4)); v.box(0, ds + 0.7, ds + 0.86, 0.02, 0.14, 2.0, 2.14, null, {}); const lp = v.world(0, ds, 0.8); ctx.light(lp[0], lp[1], 5.5, [1, 0.82, 0.6], 0.35, pen.oy + 2.1);
     if (rng.chance(0.4)) { const p = v.P(0, Math.min(w - 0.6, ds + 1.5), 0.45); ctx.propL(rng.chance(0.5) ? 'bin' : 'planter', p[0], 0, p[1], 0, 0.8); } ctx.main(); }
@@ -202,7 +206,7 @@ export function shopHouse(ctx, rng, lot, S, o = {}) {
   facade(v, 2, 0, h, { wall: { ...wall, flags: wall.flags & 7 }, bayCells: 999, floorH: fh, aoB: 0.6 });
   pen.use(party); v.wall(2, 0, w, 0, h, h + par);
   blindWall(v, 1, 0, h + par, party, rng, { mural: rng.chance(0.1), aoB: 0.6 }); blindWall(v, 3, 0, h + par, party, rng, { mural: rng.chance(0.1), aoB: 0.6 });
-  v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else v.solid();
+  v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else { if (o.res) units.push({ s0: 0, s1: w, kind: 'res', door: resDoor ?? w / 2, dw: 1.0 }); registerWalkin(ctx, rng, v, { gh, fh, n: floors, units, district: lot.block.district, office: !o.res && rng.chance(0.35) }); }
   if (ent && o.home) { const r = ent.room; ctx.poi({ type: 'home', id: 'home', x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), name: '캡슐텔 0번지', doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5), yaw: pen.yaw }); }
   else if (ent) { const r = ent.room; ctx.poi({ type: 'shop', kind: ent.kind, stair: ent.stair, work: ent.work, district: lot.block.district, x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5) }); }
   wallKit(v, 0, o.res ? 0.45 : gh, h, fh, rng, { dens: o.res ? 0.7 : 1.3, cellW: wall.cellW, pier: !!(wall.flags & FLAG.VAR_A) });
@@ -234,17 +238,17 @@ export function tenement(ctx, rng, lot, S, o = {}) {
   const wall = wallMat(rng, S, { flags: rng.chance(0.65) ? FLAG.VAR_A : 0, cellW: w / Math.max(2, Math.round(w / 3.2)) });
   const party = M(ST.CONCRETE, { color: dim(wall.color, 0.8), seed: wall.seed });
   const nShops = Math.max(1, Math.round(w / 7.5)); const sw = (w - 0.36) / nShops;
-  const eI = rng.chance(S.enter ?? 0.3) ? rng.i(0, nShops - 1) : -1; let ent = null;
+  const eI = rng.chance(S.enter ?? 0.3) ? rng.i(0, nShops - 1) : -1; let ent = null; const units = [];
   // every block of flats needs its front door; the bigger ones also swallow vehicles
   let resI = nShops >= 2 ? Math.floor(nShops / 2) : -1; if (resI === eI) resI = (resI + 1) % nShops; let garI = -1; if (nShops >= 4 && sw >= 6.2 && d > 9 && rng.chance(0.6)) { garI = [0, nShops - 1].find((k) => k !== eI && k !== resI) ?? -1; }
-  for (let i = 0; i < nShops; i++) { if (o.res && i !== resI && i !== garI) { ctx.main(); v.box(0, i * sw, i * sw + 0.36, 0, 0.14, 0, gh, K.conc(0.33), { top: false }); pen.use(M(ST.WIN_RES, { color: wall.color, seed: rng.i(0, 255), A: 0.3, B: PAL.WARM, cellW: (sw - 0.36) / Math.max(1, Math.round(sw / 3.2)), floorH: gh, flags: wall.flags & 7 })); v.wall(0, i * sw + 0.36, (i + 1) * sw, 0, 0, gh, { aoB: 0.6 }); continue; } if (i === resI) { entryUnit(v, rng, S, i * sw, (i + 1) * sw, gh, { walk: lot.block.walk }); continue; } if (i === garI) { garageUnit(v, rng, S, i * sw, (i + 1) * sw, gh, {}); continue; } const e = shopUnit(v, rng, S, i * sw, (i + 1) * sw, gh, { ...o, upperH: fh, upperN: Math.min(floors - 1, 12), walk: lot.block.walk, enter: i === eI }); if (e) ent = e; }
+  for (let i = 0; i < nShops; i++) { if (o.res && i !== resI && i !== garI) { ctx.main(); v.box(0, i * sw, i * sw + 0.36, 0, 0.14, 0, gh, K.conc(0.33), { top: false }); pen.use(M(ST.WIN_RES, { color: wall.color, seed: rng.i(0, 255), A: 0.3, B: PAL.WARM, cellW: (sw - 0.36) / Math.max(1, Math.round(sw / 3.2)), floorH: gh, flags: wall.flags & 7 })); v.wall(0, i * sw + 0.36, (i + 1) * sw, 0, 0, gh, { aoB: 0.6 }); units.push({ s0: i * sw + 0.36, s1: (i + 1) * sw, kind: 'res' }); continue; } if (i === resI) { entryUnit(v, rng, S, i * sw, (i + 1) * sw, gh, { walk: lot.block.walk, units }); continue; } if (i === garI) { garageUnit(v, rng, S, i * sw, (i + 1) * sw, gh, { units }); continue; } const e = shopUnit(v, rng, S, i * sw, (i + 1) * sw, gh, { ...o, units, upperH: fh, upperN: Math.min(floors - 1, 12), walk: lot.block.walk, enter: i === eI }); if (e) ent = e; }
   ctx.main(); v.box(0, w - 0.36, w, 0, 0.14, 0, gh, K.conc(0.33), { top: false });
   const ribM = K.conc(0.34);
   facade(v, 0, gh, h, { wall, bayCells: 2, floorH: fh, aoB: 0.9, ribs: { d: 0.4, w: 0.34, mat: ribM, detail: true, over: par }, belts: { every: Math.max(2, Math.round(floors / 5)), d: 0.4, h: 0.45, mat: ribM, detail: true } });
   pen.use(party); v.wall(0, 0, w, 0, h, h + par);
   facade(v, 2, 0, h, { wall: { ...wall, flags: wall.flags & 7 }, bayCells: 999, floorH: fh, aoB: 0.6 }); pen.use(party); v.wall(2, 0, w, 0, h, h + par);
   blindWall(v, 1, 0, h + par, party, rng, { mural: rng.chance(0.4), aoB: 0.6 }); blindWall(v, 3, 0, h + par, party, rng, { mural: rng.chance(0.4), aoB: 0.6 });
-  v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else v.solid();
+  v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else registerWalkin(ctx, rng, v, { gh, fh, n: floors, units, district: lot.block.district, office: !o.res && rng.chance(0.4) });
   wallKit(v, 0, gh, h, fh, rng, { dens: 0.8, cellW: wall.cellW, pier: !!(wall.flags & FLAG.VAR_A) });
   if (!lot.ring && floors <= 14) articulate(v, gh, h, fh, wall, rng, { noPil: true });
   // roof-top service core

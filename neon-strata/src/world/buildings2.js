@@ -1,6 +1,7 @@
 // District-specific landmark recipes: capsule megablocks, entertainment terraces, guild houses,
 // archive spires, foundry plants, port depots, farm towers and plazas.
 import { ST, PAL, WK, FLAG } from '../render/cityMaterial.js';
+import { registerWalkin } from './walkin.js';
 import { M, rectPts, scalePts, ngonPts } from './builder.js';
 import * as K from './kit.js';
 import { Vol, facade, blindWall, shopSign, bladeSign, screenWall, FACE_ANG } from './facade.js';
@@ -134,10 +135,10 @@ export function guildHouse(ctx, rng, lot, S, o = {}) {
   const tone = rng.pick(S.walls); const stone = M(ST.STONE, { color: dim(tone, 0.9), seed: rng.i(0, 255) });
   const wall = wallMat(rng, S, { st: rng.chance(0.3) ? ST.WIN_SLIT : ST.WIN_RES, color: tone, cellW: w / Math.max(2, Math.round(w / 2.8)), wk: rng.pick([WK.STONE, WK.STONE, WK.PLASTER]) });
   // arcaded ground floor
-  const nb = Math.max(1, Math.round(w / 4.2)); const bw = w / nb;
+  const nb = Math.max(1, Math.round(w / 4.2)); const bw = w / nb; const units = [];
   for (let i = 0; i < nb; i++) {
     ctx.main(); v.box(0, i * bw, i * bw + 0.55, 0, 0.3, 0, gh, stone, { top: false }); const u = nextU();
-    const shop = rng.chance(0.6);
+    const shop = rng.chance(0.6); units.push(shop ? { s0: i * bw + 0.55, s1: (i + 1) * bw, kind: rng.pick([0, 1, 1, 2, 3]), door: (i + 0.5) * bw + 0.27, dw: Math.min(1.4, bw - 1.4) } : { s0: i * bw + 0.55, s1: (i + 1) * bw, kind: i === 0 ? 'entry' : 'res', door: i === 0 ? (i + 0.5) * bw + 0.27 : null, dw: 1.1 });
     pen.use(shop ? M(ST.WIN_LUX, { color: [0.2, 0.18, 0.16], seed: rng.i(0, 255), A: 0.9, B: rng.pick([PAL.WARM, PAL.GOLD, PAL.AMBER]), cellW: bw - 0.55, floorH: gh - 1.0, flags: WK.STONE }) : K.dark(0.07));
     v.wall(0, i * bw + 0.55, (i + 1) * bw, -0.0, 0, gh - 1.0, { uv: [u, 0, u + 1, 1], aoB: 0.5 });
     pen.use(stone); v.wall(0, i * bw + 0.55, (i + 1) * bw, 0, gh - 1.0, gh);
@@ -153,7 +154,7 @@ export function guildHouse(ctx, rng, lot, S, o = {}) {
   const front = rng.chance(0.5) && w < 14; const rh = (front ? w : d) * rng.f(0.32, 0.5);
   ctx.main(); v.box(0, 0, w, 0, 0.35, h - 0.3, h + 0.1, stone);
   gableRoof(v, h, rh, M(ST.STONE, { color: [0.2, 0.2, 0.23], seed: rng.i(0, 255) }), wall.st === ST.WIN_SLIT ? party : party, front);
-  v.solid(); ctx.solid(0, cz, w * 0.6, d * 0.6, h, h + rh * 0.6);
+  registerWalkin(ctx, rng, v, { gh, fh, n: floors, units, district: lot.block.district }); ctx.solid(0, cz, w * 0.6, d * 0.6, h, h + rh * 0.6);
   ctx.detail(); pen.use(stone); const chx = rng.f(-0.3, 0.3) * w; pen.box(chx, cz + rng.f(-0.2, 0.2) * d, 1.0, 1.0, h + rh * 0.35, h + rh + 1.2, {});
   // techno retrofit: glowing data conduit up the front, lantern by the door
   if (rng.chance(0.55)) { pen.use(K.emis(acc, 4, 3, true, rng.i(0, 255))); const s = rng.pick([0.28, w - 0.28]); v.box(0, s - 0.05, s + 0.05, 0.3, 0.36, 0.4, h - 0.5, null, { ends: false, top: false, bottom: false }); }

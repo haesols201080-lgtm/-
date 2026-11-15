@@ -13,8 +13,10 @@ import { Player } from './game/player.js';
 import { Game, INTERACT } from './game/game.js';
 import { GameAudio } from './game/audio.js';
 import { HUD } from './ui/hud.js';
+import { Phone } from './ui/phone.js';
 import { loadFonts } from './render/signs.js';
 import { createInteriorStream } from './world/interiorStream.js';
+import { createWalkinStream } from './world/walkin.js';
 
 const params = new URLSearchParams(location.search);
 const quality = pickQuality(params);
@@ -35,12 +37,13 @@ async function start() {
   const rain = createRain(quality); scene.add(rain.mesh);
   const parts = createParticles(city.ctx.steam); scene.add(parts.mesh);
   const crowd = new Crowd(city, quality, scene);
-  const interiors = createInteriorStream(city, scene, crowd);
+  const interiors = createInteriorStream(city, scene, crowd); const walkins = createWalkinStream(city, scene, crowd);
   const audio = new GameAudio();
   const game = new Game({ engine, city, crowd, env, U, audio });
   const input = new Input(canvas, null);
   const player = new Player(game); game.player = player;
   const hud = new HUD(game, input); input.ui = hud; game.hud = hud;
+  const phone = new Phone(game, input, hud, engine); game.phone = phone;
   const tm = (e) => {}; void tm;
   // touch stick visual hookup
   const _ts = input; _ts.uiStick = hud;
@@ -59,22 +62,23 @@ async function start() {
   const step = (dt) => {
     input.frame();
     if (started) {
-      if (input.hit('Tab', 'KeyM', 'Escape') && (hud.open || !input.hit('Escape'))) hud.toggle();
-      if (input.hit('KeyE', 'BtnE') && game.near && !player.liftPrompt && !hud.open && !(game.job && game.job.stage === 1)) {
+      if (input.hit('KeyP', 'BtnP') && !hud.open) phone.toggle(); else if (phone.open && input.hit('Escape')) phone.toggle(false);
+      else if (input.hit('Tab', 'KeyM', 'Escape') && (hud.open || !input.hit('Escape'))) { if (phone.open) phone.toggle(false); hud.toggle(); }
+      if (input.hit('KeyE', 'BtnE') && game.near && !player.liftPrompt && !hud.open && !phone.open && !(game.job && game.job.stage === 1)) {
         const t = game.near.type;
         if (game.service(game.near)) { /* the building did its job */ } else if (t === 'shop' && game.near.kind === 'bar' && !game.job && game.meal()) { /* ate */ } else if (t === 'home') { game.state.energy = 100; game.sleep(); } else if (t === 'license') hud.toggle('garage'); else if (t === 'exchange') hud.toggle('stock'); else if (t === 'bank') hud.toggle('rank'); else if (t === 'station') hud.toggle('sys'); else if (t === 'crown') hud.toggle('biz'); else if (t === 'lobby') hud.toggle('biz'); else hud.toggle('trade');
       }
-      player.update(dt, hud.open ? { ...input, move: { x: 0, y: 0 }, lookX: 0, lookY: 0, wheel: 0, hit: () => false, down: () => false, enabled: false, touch: input.touch } : input);
+      player.update(dt, hud.open || phone.open ? { ...input, move: { x: 0, y: 0 }, lookX: 0, lookY: 0, wheel: 0, hit: () => false, down: () => false, enabled: false, touch: input.touch } : input);
       game.update(dt, input);
     } else { // title: slow orbit around the start area
       const t = performance.now() * 0.00004; const c = player.pos; camera.position.set(c.x + Math.cos(t) * 150, 90 + Math.sin(t * 2) * 30, c.z + Math.sin(t) * 150); camera.lookAt(0, 420, 0);
     }
-    env.update(dt, camera.position); city.update(camera.position); traffic.update(engine); crowd.update(dt, started ? player.p : camera.position, env.weather.rain, started ? player.indoor : 0); interiors.update(started ? player.p : camera.position);
+    env.update(dt, camera.position); city.update(camera.position); traffic.update(engine); crowd.update(dt, started ? player.p : camera.position, env.weather.rain, started ? player.indoor : 0); interiors.update(started ? player.p : camera.position); walkins.update(started ? player.p : camera.position);
     rain.uniforms.uLocal.value = 1 - player.indoor; engine.post.settings.bloom = 1 + env.weather.rain * 0.35;
     engine.post.mFinal.uniforms.uSpeedFx.value = Math.min(1, player.speed / 110); engine.post.mFinal.uniforms.uFade.value = 1 - (game.fade || 0);
     audio.update(env.weather.rain, player.indoor, player.mode === 'fly', player.speed, player.p.y);
     if (!noRender) engine.render(dt);
-    if (started) hud.update(dt);
+    if (started) { hud.update(dt); phone.update(dt); }
     input.endFrame();
   };
 
@@ -92,12 +96,12 @@ async function start() {
 
   const setCam = (x, y, z, yaw = 0, pitch = 0) => { camera.position.set(x, y, z); camera.rotation.set(pitch, yaw, 0, 'YXZ'); };
   window.__dbg = {
-    engine, env, U, THREE, city, MATU, crowd, traffic, game, player, hud, input, interiors,
+    engine, env, U, THREE, city, MATU, crowd, traffic, game, player, hud, input, interiors, walkins, phone,
     step, cam: setCam, hour: (h) => env.setHour(h),
     sim: (n, dt = 1 / 30) => { noRender = true; for (let i = 0; i < n; i++) step(dt); noRender = false; },
     look: (x, y, z, tx, ty, tz) => { camera.position.set(x, y, z); camera.lookAt(tx, ty, tz); },
     // render one frame from a free camera (bypasses the player rig)
-    free: (dt = 1 / 30) => { env.update(dt, camera.position); city.update(camera.position); traffic.update(engine); interiors.update(camera.position); crowd.update(dt, camera.position, env.weather.rain, 0); engine.render(dt); },
+    free: (dt = 1 / 30) => { env.update(dt, camera.position); city.update(camera.position); traffic.update(engine); interiors.update(camera.position); walkins.update(camera.position); crowd.update(dt, camera.position, env.weather.rain, 0); engine.render(dt); },
     probe: () => { city.update(camera.position); engine.refreshProbe(); engine.render(0); engine.render(0); },
     // park the free camera on the pavement in front of a shop / lobby door in the district at `ang` degrees
     street: (ang, idx = 0, o = {}) => { const A = (ang * Math.PI) / 180; const c = (o.mark ? city.ctx.marks.filter((p) => p.type === o.mark) : city.pois).filter((p) => p.doorX !== undefined && p.type !== 'home' && (!o.type || p.type === o.type) && Math.hypot(p.x, p.z) > (o.rmin ?? 800) && Math.hypot(p.x, p.z) < (o.rmax ?? 3200) && Math.abs(((Math.atan2(p.z, p.x) - A + Math.PI * 3) % (Math.PI * 2)) - Math.PI) < 0.22); const p = c[idx % Math.max(1, c.length)]; if (!p) return null; let nx = p.doorX - p.x, nz = p.doorZ - p.z; const l = Math.hypot(nx, nz) || 1; nx /= l; nz /= l; const d = o.dir ?? 1; const tx = -nz * d, tz = nx * d; const b = o.back ?? 6; camera.position.set(p.doorX + nx * b - tx * 3, o.h ?? 1.7, p.doorZ + nz * b - tz * 3); camera.lookAt(p.doorX + nx * (b - (o.turn ?? 1)) + tx * 40, o.ty ?? 5, p.doorZ + nz * (b - (o.turn ?? 1)) + tz * 40); return [p.type, p.name, Math.round(p.doorX), Math.round(p.doorZ), c.length]; },
