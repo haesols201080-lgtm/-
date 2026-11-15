@@ -46,6 +46,9 @@ flat varying vec4 vStyle; flat varying vec4 vStyle2;
 varying vec3 vWPos; varying vec3 vWNormal; varying vec2 vFUv; varying vec4 vCol;
 uniform sampler2D uSignAtlas; uniform float uInterior;
 uniform sampler2DArray uMatA; uniform sampler2DArray uMatB;
+uniform vec4 uLiveA[8]; uniform vec4 uLiveB[8]; uniform int uLiveN;
+float nsLiveAt(vec3 p){ for (int i = 0; i < 8; i++) { if (i >= uLiveN) break; vec4 a = uLiveA[i], b = uLiveB[i]; float c = cos(a.z), s = sin(a.z); vec2 d = p.xz - a.xy; float lx = d.x * c - d.y * s, lz = d.x * s + d.y * c;
+  if (lx > b.x - 0.7 && lx < b.y + 0.7 && lz > b.z - 0.7 && lz < b.w + 0.7 && p.y < a.w + 0.5) return 1.0; } return 0.0; }
 float nsOpen = 1.0; vec3 nsSpill = vec3(0.0); float nsAO = 1.0; float nsIndoor = 0.0; float nsRefl = 0.0;
 ${NS_LOCAL_LIGHTS}
 struct NsM { vec3 alb; float h; vec2 n; float rough; float cav; };
@@ -276,6 +279,7 @@ const FRAG_SURFACE = /* glsl */ `
   vec2 hm = abs(wN.y) > 0.7 ? vWPos.xz : vFUv; // metres on the surface
 
   if ((st >= 10 && st <= 19 && st != 15) || st == 30) {
+    float nsLive = uLiveN > 0 ? nsLiveAt(vWPos) : 0.0;
     // ================================================================== windowed facades
     vec2 cs = max(vStyle2.xy * 0.1, vec2(0.6));
     vec2 uvc = vFUv; vec2 cell = floor(uvc); vec2 f = fract(uvc);
@@ -493,6 +497,7 @@ const FRAG_SURFACE = /* glsl */ `
       // balcony rail in front of the recess (wall plane)
       float rail = 0.0;
       if (st == 10 && varA) { float bars = 1.0 - smoothstep(0.012, 0.012 + aa, abs(fract(fm.x / 0.11) - 0.5) * 0.11); float top = 1.0 - smoothstep(0.025, 0.025 + aa, abs(fm.y - 1.15)); rail = max(bars * step(fm.y, 1.15), top) * step(o0.x, fm.x) * step(fm.x, o1.x) * step(o0.y, fm.y); }
+      if (nsLive > 0.5 && glassHit > 0.5 && frame < 0.5 && rail < 0.5 && lod < 0.5) discard; // real glass: you see the real room
       if (st == 17) { float gl = step(fm.y, 1.1) * step(o0.y, fm.y); rail = max(rail, (1.0 - smoothstep(0.02, 0.02 + aa, abs(fm.y - 1.1))) * 0.9); gR = mix(gR, 0.03, gl * 0.0); }
       // compose opening
       vec3 oAlb = mix(jamb, gAlb, glassHit); float oR = mix(0.85, gR, glassHit); float oM = mix(0.0, gM, glassHit); vec3 oEm = gEm * glassHit;
@@ -563,6 +568,7 @@ const FRAG_SURFACE = /* glsl */ `
     albedo *= mix(1.0, 0.08, gap) * mix(0.75, 1.0, smoothstep(0.0, 0.5, sl) * fade + (1.0 - fade));
     slope.y += (sl - 0.3) * 2.2 * fade * (1.0 - gap); cav *= 1.0 - 0.6 * gap;
     vec3 sm = nsSeams(m, vec2(2.4, 9.0), 0.04, px); albedo = mix(albedo, base * 0.5, sm.x);
+  } else if ((st == 3 || st == 9) && varB && uLiveN > 0 && nsLiveAt(vWPos) > 0.5) { discard; // a door leaf of an open building swings out of the way
   } else if (st == 3 || st == 9) {
     // ================================================================== dark glass / mirror panels
     vec2 ps = st == 9 ? vec2(2.0, 2.0) : vec2(1.5, 3.6);

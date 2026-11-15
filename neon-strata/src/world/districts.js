@@ -185,7 +185,8 @@ function edgeLots(ctx, b, rng, o) {
     while (s < L - o.wmin * 0.6) { let w = rng.f(o.wmin, o.wmax) * wk; if (L - (s + w) < o.wmin * 0.75) w = L - s; if (w < 5) break;
       const al = b.walk + off + 0.3 + s + w / 2, dp = b.walk + off + dL / 2; const x = e.a[0] + e.tx * al - e.nx * dp, z = e.a[1] + e.tz * al - e.nz * dp; const yaw = Math.atan2(e.nx, e.nz);
       const R = { x, z, hw: w / 2 - 0.05, hd: dL / 2 - 0.05, c: Math.cos(yaw), s: Math.sin(yaw) };
-      if (placed.every((P) => sep(P, R))) { placed.push(R); lots.push({ cx: 0, cz: 0, w, d: dL, face: 1, ring, corner: s < dL + 1 || s + w > L - 1, block: b, x, z, yaw }); }
+      const inBlock = [[-1, -1], [1, -1], [1, 1], [-1, 1]].every(([sx2, sz2]) => { const px = R.x + sx2 * R.hw * R.c + sz2 * R.hd * R.s, pz = R.z - sx2 * R.hw * R.s + sz2 * R.hd * R.c; return E.every((q) => -((px - q.a[0]) * q.nx + (pz - q.a[1]) * q.nz) >= b.walk - 0.05); });
+      if (inBlock && placed.every((P) => sep(P, R))) { placed.push(R); lots.push({ cx: 0, cz: 0, w, d: dL, face: 1, ring, corner: s < dL + 1 || s + w > L - 1, block: b, x, z, yaw }); }
       s += w; }
   } }
   // the court behind: a few trees, somewhere to leave a vehicle

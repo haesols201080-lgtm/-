@@ -36,6 +36,9 @@ export const U = {
   uProbeMix: { value: 0 },
   uInterior: { value: 0 },
   uLGrid: { value: null },
+  uLiveA: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) }, // open buildings: origin x, z, yaw, top
+  uLiveB: { value: Array.from({ length: 8 }, () => new THREE.Vector4()) }, // footprint x0, x1, z0, z1 (pen frame)
+  uLiveN: { value: 0 },
 };
 
 // GLSL shared by all world shaders (materials + post passes).

@@ -146,6 +146,7 @@ export class Game {
       case 'hotel': if (pay(18)) { s.energy = 100; s.rested = 2; this.env.hour = 7; this.fade = 1; this.save(); this.toast('객실에서 숙면 — 체력 회복, 다음 근무 2회 급여 +15%', 'good'); } return true;
       case 'school': { if (s.energy < 25) { this.toast('수업을 들을 체력이 없습니다', 'bad'); return true; } const hr = this.env.hour; if (hr < 8 || hr >= 21) { this.toast('학교는 08–21시에만 수업합니다', 'bad'); return true; } const ids = [['eatery', '조리'], ['store', '유통'], ['tech', '정비'], ['office', '사무'], ['care', '간호'], ['hotel', '접객']]; s.course = ((s.course ?? -1) + 1) % ids.length; const [id, nm] = ids[s.course]; if (pay(40)) { c[id] = (c[id] || 0) + 2; s.energy -= 18; pass(2); this.toast(`${nm} 과정 수료 — ${nm} 경력 +2 (2시간 경과)`, 'good'); } return true; }
       case 'library': { if (this.t - (this._studyT ?? -1e9) < 240) { this.toast('방금 공부했습니다 — 조금 쉬었다 오세요'); return true; } if (s.energy < 15) { this.toast('집중할 체력이 없습니다', 'bad'); return true; } this._studyT = this.t; let low = 'store'; for (const k of ['eatery', 'store', 'tech', 'office']) if ((c[k] || 0) < (c[low] || 0)) low = k; c[low] = (c[low] || 0) + 1; s.energy -= 10; pass(1.5); this.toast('열람실에서 독학 — 가장 부족한 분야 경력 +1 (무료)', 'good'); return true; }
+      case 'flat': { const h = s.homeAt; const here = h && Math.hypot(h.x - poi.x, h.z - poi.z) < 1; if (!here) { if (pay(poi.rent)) { s.homeAt = { x: poi.x, y: poi.y, z: poi.z, name: poi.name }; this.toast(`월세 계약 — ${poi.name}, 주 ${fmt(Math.round(poi.rent * lm))} ℓ. 이제 여기가 집입니다`, 'good'); this.phone?._msg('집주인', `계약 감사합니다. 열쇠는 우편함에 있어요. 월세는 매주 ${fmt(Math.round(poi.rent * lm))} ℓ 입니다.`); } } else { s.energy = 100; s.rested = 1; this.env.hour = 7; this.fade = 1; this.save(); this.toast('집에서 푹 잤습니다 — 체력 회복, 저장됨', 'good'); } return true; }
       case 'police': this.toast('치안센터 민원실 — 접수할 사건이 없습니다. 분실 광편은 주운 사람 소유입니다'); return true;
     }
     return false;
@@ -257,7 +258,7 @@ export class Game {
   reset() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } location.reload(); }
 }
 // trades: where you work decides what you do. stations (back / front / side / upA / upB) are real places inside the building
-export const SERVICE_TYPES = ['hospital', 'hotel', 'school', 'library', 'police'];
+export const SERVICE_TYPES = ['hospital', 'hotel', 'school', 'library', 'police', 'flat'];
 export const RANKS = [['수습', 0], ['직원', 3], ['주임', 8], ['매니저', 16], ['점장', 30]];
 export const TRADES = {
   bar: { hours: [10, 2], id: 'eatery', name: '식당', place: '골목 식당', base: 46, tasks: [['back', '주방에서 음식 받기', 2.5], ['upA', '2층 테이블에 서빙', 2.5], ['upB', '2층 테이블 치우기', 3], ['back', '주방에 그릇 반납', 2], ['front', '입구에서 손님 맞이', 3], ['side', '홀 서빙', 2.5], ['back', '마감 — 주방 정리', 3.5]] },
@@ -270,5 +271,5 @@ export const TRADES = {
   police: { hours: [0, 24], id: 'guard', name: '치안', place: '치안센터', base: 68, tasks: [['back', '민원 접수', 4], ['front', '출입구 근무', 4], ['side', '순찰 장비 점검', 3], ['upB', '보관함 정리', 3], ['back', '근무 일지 작성', 3.5]] },
   lobby: { hours: [8, 19], id: 'office', name: '사무', place: '타워 로비', base: 70, tasks: [['back', '안내 데스크 근무', 4], ['side', '승강기 홀 점검', 3], ['front', '방문객 안내', 3], ['upB', '반대편 승강기 홀 순찰', 3], ['back', '출입 기록 정리', 4], ['front', '퇴근 전 로비 마감', 3]] },
 };
-export const INTERACT = { hospital: '[E] 진료 접수', hotel: '[E] 객실 숙박', school: '[E] 수강 신청', library: '[E] 열람실 이용', police: '[E] 민원실', shop: '[E] 거래', market: '[E] 시장 거래', plaza: '[E] 광장 거래소', lobby: '[E] 사업 · 거래', license: '[E] 고도 면허', exchange: '[E] 에테르 거래소', bank: '[E] 광휘 서열', home: '[E] 휴식 · 저장', station: '[E] 마그레브 탑승 (8 ℓ)', crown: '[E] 왕관 인수' };
+export const INTERACT = { flat: '[E] 집 · 월세 계약 / 휴식', hospital: '[E] 진료 접수', hotel: '[E] 객실 숙박', school: '[E] 수강 신청', library: '[E] 열람실 이용', police: '[E] 민원실', shop: '[E] 거래', market: '[E] 시장 거래', plaza: '[E] 광장 거래소', lobby: '[E] 사업 · 거래', license: '[E] 고도 면허', exchange: '[E] 에테르 거래소', bank: '[E] 광휘 서열', home: '[E] 휴식 · 저장', station: '[E] 마그레브 탑승 (8 ℓ)', crown: '[E] 왕관 인수' };
 export { STOCK_BASE, CORP_DIST, PM, RIVALS };

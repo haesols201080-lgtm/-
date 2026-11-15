@@ -108,7 +108,7 @@ export function buildPlan(ctx) {
       for (let i = 0; i < n; i++) { const e0 = ed[(i + n - 1) % n], e1 = ed[i]; // corner i = intersection of the two inset edge lines
         const p0 = [e0.a[0] - e0.nx * m, e0.a[1] - e0.nz * m], p1 = [e1.a[0] - e1.nx * m, e1.a[1] - e1.nz * m]; const den = e0.tx * e1.tz - e0.tz * e1.tx;
         if (Math.abs(den) < 1e-4) pts.push([p1[0], 0.2, p1[1]]); else { const t = ((p1[0] - p0[0]) * e1.tz - (p1[1] - p0[1]) * e1.tx) / den; pts.push([p0[0] + e0.tx * t, 0.2, p0[1] + e0.tz * t]); } }
-      ctx.walkways.push({ pts, closed: true, district: b.district, block: b.id }); }
+      ctx.walkways.push({ pts, closed: true, district: b.district, block: b.id, latMax: Math.max(0.2, Math.min(m, b.walk - m) - 0.45) }); }
   }
   return blocks;
 }

@@ -3,6 +3,7 @@
 import { ST, PAL, WK, FLAG } from '../render/cityMaterial.js';
 import { M } from './builder.js';
 import * as K from './kit.js';
+import { officeFloor } from './walkin.js';
 
 const IN = FLAG.INDOOR;
 const im = (st, color, extra = {}) => M(st, { color, flags: IN, ...extra });
@@ -189,7 +190,7 @@ export function upperFloors(ctx, rng, o) {
     // the plan of this floor
     const use = o.use === 'office' ? (k === n - 1 ? 'lounge' : rng.weighted([[7, 'open'], [1.6, 'meet'], [1.4, 'lounge']])) : o.use;
     const band = use === 'ward' || use === 'rooms' || use === 'class' ? bandPlan(fp, hole, use === 'ward' ? 6.4 : use === 'rooms' ? 4.6 : 8.8) : null;
-    if (band) for (const w of band.walls) { const t = 0.06; if (Math.abs(w[1] - w[3]) < 1e-3) B(Math.min(w[0], w[2]), Math.max(w[0], w[2]), w[1] - t, w[1] + t, y + (w[4] ?? 0), Math.min(yc, y + (w[5] ?? 9))); else B(w[0] - t, w[0] + t, Math.min(w[1], w[3]), Math.max(w[1], w[3]), y + (w[4] ?? 0), Math.min(yc, y + (w[5] ?? 9))); }
+    if (band) for (const w of band.walls) { const t = 0.06; if (Math.abs(w[1] - w[3]) < 1e-3) B(Math.min(w[0], w[2]), Math.max(w[0], w[2]), w[1] - t - 0.03, w[1] + t + 0.03, y + (w[4] ?? 0), Math.min(yc, y + (w[5] ?? 9))); else B(w[0] - t, w[0] + t, Math.min(w[1], w[3]), Math.max(w[1], w[3]), y + (w[4] ?? 0), Math.min(yc, y + (w[5] ?? 9))); }
     floors.push({ y, use, band, seed: rng.i(0, 1e6) });
   }
   const stops = [{ y: pen.oy + 0.03, name: o.name ? `${o.name} 로비` : '로비' }, ...ys.map((y, k) => ({ y: pen.oy + y + 0.02, name: `${k + 2}층 · ${USE_NAME[floors[k].use]}` }))];
@@ -236,9 +237,9 @@ export function furnishFloors(spec, pen, PROPS) {
     pen.use(glow([1, 0.96, 0.9], f.use === 'rooms' ? 3 : 5)); for (let x = fp.x0 + 2; x < fp.x1 - 1.5; x += 3.6) for (let z = fp.z0 + 1.8; z < fp.z1 - 1.2; z += 3.2) if (!keep(x, z, -1)) pen.flat(x - 0.6, z - 0.3, x + 0.6, z + 0.3, yc - 0.02, false);
     const B = f.band;
     if (B) { // corridor and rooms
-      for (const w of B.walls) { const y0 = y + (w[4] ?? 0), y1 = Math.min(yc, y + (w[5] ?? 9)); pen.use(wallM); pen.wall(w[0], w[1], w[2], w[3], y0, y1, {}); pen.wall(w[2], w[3], w[0], w[1], y0, y1, {}); }
+      for (const w of B.walls) { const y0 = y + (w[4] ?? 0), y1 = Math.min(yc, y + (w[5] ?? 9)); const along = Math.abs(w[1] - w[3]) < 1e-3; const L = Math.abs(along ? w[2] - w[0] : w[3] - w[1]); if (L > 0.02) pen.box((w[0] + w[2]) / 2, (w[1] + w[3]) / 2, along ? L : 0.16, along ? 0.16 : L, y0, y1, { wall: wallM, roof: wallM, bottom: wallM, aoB: 0.75 }); }
       pen.use(im(ST.TILE, [0.5, 0.5, 0.5])); pen.flat(fp.x0, B.zc0, fp.x1, B.zc1, y + 0.03);
-      walks.push({ pts: [[fp.x0 + 1, y, (B.zc0 + B.zc1) / 2], [fp.x1 - 1, y, (B.zc0 + B.zc1) / 2]].map(([lx, ly, lz]) => { const [x, z] = W(lx, lz); return [x, spec.oy + ly + 0.03, z]; }), closed: false, district: 'core', indoor: true });
+      walks.push({ pts: [[fp.x0 + 1, y, (B.zc0 + B.zc1) / 2], [fp.x1 - 1, y, (B.zc0 + B.zc1) / 2]].map(([lx, ly, lz]) => { const [x, z] = W(lx, lz); return [x, spec.oy + ly + 0.03, z]; }), closed: false, district: 'core', indoor: true, latMax: 0.3 });
       for (const rm of B.rooms) {
         const zd = rm.zd, zw = rm.zw, sg = zw > zd ? 1 : -1, rf = sg > 0 ? 0 : Math.PI, w = rm.x1 - rm.x0, cx = (rm.x0 + rm.x1) / 2, zm = (zd + zw) / 2;
         pen.use(K.dark(0.14)); pen.wall(rm.d0, zd - 0.07, rm.d0 - 0.02, zd + 0.07, y, y + 2.2, {});
@@ -252,8 +253,7 @@ export function furnishFloors(spec, pen, PROPS) {
       // back-of-house behind the corridor: station counter, trolleys or stores
       const bx = hole[1] + 0.4; if (bx < fp.x1 - 3.5 && fp.z0 + 1.2 < B.zc0 - 1.2) { pen.use(im(ST.COMPOSITE, [0.6, 0.62, 0.64])); pen.box(bx + 1.6, (fp.z0 + B.zc0) / 2, 3.2, 0.7, y, y + 1.05, { wall: im(ST.COMPOSITE, [0.55, 0.57, 0.6]), roof: im(ST.TILE, [0.7, 0.7, 0.7]) }); if (r() < 0.8) seat(bx + 1.6, y + 0.03, (fp.z0 + B.zc0) / 2 - 0.8, 0, { clip: 'phone' }); }
     } else if (f.use === 'open') {
-      for (let z = fp.z0 + 1.5; z < fp.z1 - 2.0; z += 3.6) for (let x = fp.x0 + 1.2; x < fp.x1 - 1.0; x += 1.75) { if (keep(x, z) || keep(x, z + 0.9)) continue; prop('desk', x, y, z, Math.PI); prop('desk', x, y, z + 0.9, 0); if (r() < 0.45) seat(x, y + 0.03, z + 0.9 - 0.62, 0, { sit: true }); if (r() < 0.45) seat(x, y + 0.03, z + 0.62, Math.PI, { sit: true }); }
-      for (let x = fp.x0 + 0.8; x < fp.x1 - 0.5; x += 5.4) if (!keep(x, fp.z0 + 0.6)) prop('planterIn', x, y, fp.z0 + 0.6, 0);
+      officeFloor(fp.x0 + 0.3, fp.x1 - 0.3, fp.z0 + 0.3, fp.z1 - 0.3, y, prop, seat, () => {}, r, pen, keep);
     } else if (f.use === 'meet') {
       const cx = (fp.x0 + fp.x1) / 2 + (keep((fp.x0 + fp.x1) / 2, (fp.z0 + fp.z1) / 2, 3) ? (fp.x1 - fp.x0) / 4 : 0), cz = (fp.z0 + fp.z1) / 2, L = Math.min(7, (fp.x1 - fp.x0) * 0.4);
       pen.box(cx, cz, L, 1.3, y + 0.7, y + 0.76, { wall: im(ST.COMPOSITE, [0.3, 0.24, 0.18]), roof: im(ST.COMPOSITE, [0.34, 0.27, 0.2]) }); pen.use(im(ST.METAL, [0.2, 0.2, 0.22])); pen.box(cx, cz, L * 0.8, 0.4, y, y + 0.7, {});
@@ -264,7 +264,6 @@ export function furnishFloors(spec, pen, PROPS) {
       for (let x = fp.x0 + 2.2; x < fp.x1 - 2; x += 4.6) for (let z = fp.z0 + 3.2; z < fp.z1 - 2; z += 4.2) { if (keep(x, z, 0.5)) continue; prop('sofa', x - 1.0, y, z, Math.PI / 2); prop('sofa', x + 1.0, y, z, -Math.PI / 2); prop('table', x, y, z, 0, 0.8); if (r() < 0.5) seat(x - 0.9, y + 0.03, z, Math.PI / 2, { sit: true }); if (r() < 0.4) seat(x + 0.9, y + 0.03, z, -Math.PI / 2, { sit: true }); }
       for (let x = fp.x0 + 1; x < fp.x1 - 1; x += 3.3) if (!keep(x, fp.z1 - 0.7)) prop('planterIn', x, y, fp.z1 - 0.7, 0);
     }
-    if (!B) { const pts = [[fp.x0 + 1, fp.z0 + 1], [fp.x1 - 1, fp.z0 + 1], [fp.x1 - 1, fp.z1 - 1], [fp.x0 + 1, fp.z1 - 1]]; walks.push({ pts: pts.map(([lx, lz]) => { const [x, z] = W(lx, lz); return [x, spec.oy + y + 0.03, z]; }), closed: true, district: 'core', indoor: true }); }
   }
   home();
   return { spots, walks };

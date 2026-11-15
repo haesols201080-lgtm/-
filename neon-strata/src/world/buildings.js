@@ -196,7 +196,7 @@ export function shopHouse(ctx, rng, lot, S, o = {}) {
   if (!o.res) { ctx.main(); v.box(0, w - 0.36, w, 0, 0.14, 0, gh, K.conc(0.33), { top: false }); }
   else { // a dwelling: plinth, front door with a step, a lamp and a number, the bins by the wall
     const ds = Math.min(w - 1.2, Math.max(1.2, w * rng.f(0.25, 0.75))); resDoor = ds; ctx.detail(); pen.use(K.conc(0.3)); v.box(0, 0, w, 0, 0.06, 0, 0.45, null, { ends: false, bottom: false });
-    pen.use(K.dark(0.07)); v.box(0, ds - 0.55, ds + 0.55, 0.02, 0.09, 0.12, 2.25, null, {}); pen.use(K.metal([0.42, 0.36, 0.3])); v.box(0, ds - 0.47, ds + 0.47, 0.09, 0.12, 0.2, 2.15, null, {}); pen.use(K.conc(0.36)); v.box(0, ds - 0.8, ds + 0.8, 0, 0.5, 0, 0.14, null, {});
+    pen.use(K.dark(0.07)); v.box(0, ds - 0.55, ds + 0.55, 0.02, 0.09, 0.12, 2.25, null, {}); pen.use(M(ST.DARKGLASS, { color: [0.36, 0.32, 0.28], flags: FLAG.VAR_B })); v.box(0, ds - 0.47, ds + 0.47, 0.09, 0.12, 0.2, 2.15, null, {}); pen.use(K.conc(0.36)); v.box(0, ds - 0.8, ds + 0.8, 0, 0.5, 0, 0.14, null, {});
     pen.use(K.emis([1, 0.82, 0.6], 4)); v.box(0, ds + 0.7, ds + 0.86, 0.02, 0.14, 2.0, 2.14, null, {}); const lp = v.world(0, ds, 0.8); ctx.light(lp[0], lp[1], 5.5, [1, 0.82, 0.6], 0.35, pen.oy + 2.1);
     if (rng.chance(0.4)) { const p = v.P(0, Math.min(w - 0.6, ds + 1.5), 0.45); ctx.propL(rng.chance(0.5) ? 'bin' : 'planter', p[0], 0, p[1], 0, 0.8); } ctx.main(); }
   // upper floors
@@ -340,7 +340,7 @@ export function techTower(ctx, rng, lot, S, o = {}) {
     const rect = o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].word : null;
     shopSign(base, 0, s0 - 2, s1 + 2, bh - 1.6, rng, { rect: rect || undefined, maxH: 1.8, maxW: 11, intensity: 4 }); }
   let pendingLb = null;
-  if (hasLobby) { const lw = Math.min(20, 2 * Math.min(sC - 1.2, w - sC - 1.2)); const lb = pendingLb = lobby(ctx, rng, -w / 2 + sC, cz + d / 2, { w: lw, d: Math.min(d * 0.55, 15), h: bh - 0.8, doorHW, doorH: 4.6, accent: acc, logo: o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].logo : null, brand: o.brand }); void lb; ctx.main(); } else base.solid();
+  if (hasLobby) { const lw = Math.min(20, 2 * Math.min(sC - 1.2, w - sC - 1.2)); const lb = pendingLb = lobby(ctx, rng, -w / 2 + sC, cz + d / 2, { w: lw, d: Math.min(d * 0.55, 15), h: bh - 0.8, doorHW, doorH: 4.6, accent: acc, logo: o.brand && ctx.atlas.corp[o.brand] ? ctx.atlas.corp[o.brand].logo : null, brand: o.brand }); void lb; ctx.main(); }
   if (rng.chance(S.bands ?? 0.25)) K.neonBand(ctx, 0, cz, w, d, bh - 0.35, acc, { intensity: 5, light: false, lamps: true, seed: rng.i(0, 255), sides: allFaces ? 15 : 1, h: 0.45 });
   // --- plant floor (louvres)
   const lv = { st: ST.LOUVER, color: [0.26, 0.27, 0.29] };
@@ -349,7 +349,7 @@ export function techTower(ctx, rng, lot, S, o = {}) {
   const form = o.form ?? pickForm(rng, S, w, d, H, lot);
   if (form !== 'slab' && FORMS[form]) { // a different typology on the same base
     plant.y1 = bh + mh; plant.roof(K.conc(0.24)); ctx.solid(0, cz, w - 1.2, d - 1.2, bh, bh + mh);
-    if (pendingLb) hollow(ctx, 0, cz, w, d, bh, pendingLb.room, pendingLb.door);
+    if (pendingLb) hollow(ctx, 0, cz, w, d, bh, pendingLb.room, pendingLb.door); else base.solid();
     FORMS[form](ctx, rng, { w: w - 1.2, d: d - 1.2, cz, y0: bh + mh, H, S, acc, fh, lot, o }); ctx.main();
     return finish(ctx, lot, w, d, H, cz);
   }
@@ -372,7 +372,8 @@ export function techTower(ctx, rng, lot, S, o = {}) {
   };
   const shaft = new Vol(ctx, 0, cz, w, d, bh + mh, hasSet ? setY : H);
   drawShaft(shaft, bh + mh, hasSet ? setY : H, true);
-  if (pendingLb) { const yT = hasSet ? setY : H; upperFloors(ctx, rng, { room: pendingLb.room, door: pendingLb.door, foot: { x0: -w / 2, x1: w / 2, z0: cz - d / 2, z1: cz + d / 2 }, fp: { x0: -w / 2 + 0.5, x1: w / 2 - 0.5, z0: cz - d / 2 + 0.5, z1: cz + d / 2 - (slots.size ? 1.9 : 0.5) }, y1: bh + mh, fh, n: Math.floor((yT - bh - mh) / fh), top: yT, use: 'office', win: [1, 1, allFaces ? 1 : 0], name: o.brand ? o.brand.toUpperCase() : '타워' }); ctx.main(); } else shaft.solid();
+  if (pendingLb) { const yT = hasSet ? setY : H; upperFloors(ctx, rng, { room: pendingLb.room, door: pendingLb.door, foot: { x0: -w / 2, x1: w / 2, z0: cz - d / 2, z1: cz + d / 2 }, fp: { x0: -w / 2 + 0.5, x1: w / 2 - 0.5, z0: cz - d / 2 + 0.5, z1: cz + d / 2 - (slots.size ? 1.9 : 0.5) }, y1: bh + mh, fh, n: Math.floor((yT - bh - mh) / fh), top: yT, use: 'office', win: [1, 1, allFaces ? 1 : 0], name: o.brand ? o.brand.toUpperCase() : '타워' }); ctx.main(); }
+  else { const yT = hasSet ? setY : H; registerWalkin(ctx, rng, new Vol(ctx, 0, cz, w, d, 0, yT), { gh: bh, fh, n: Math.max(1, Math.floor((yT - bh) / fh)), units: [{ s0: 0, s1: w, kind: 'entry', door: w / 2, dw: 2.4 }], district: lot.block.district, allOffice: true }); }
   let top = shaft, topY = hasSet ? setY : H;
   if (hasSet) {
     shaft.roof(K.conc(0.25));

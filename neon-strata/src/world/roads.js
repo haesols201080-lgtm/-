@@ -94,7 +94,7 @@ export function buildRoads(ctx) {
     for (let i = 0; i < (r.closed ? n : n - 1); i++) { const p = r.pts[i], q = r.pts[(i + 1) % n]; ctx.occ.markLine(p[0], p[1], q[0], q[1], r.w / 2 + SIDEWALK + 2, 1); }
     ctx.lanes.push({ pts: r.pts.map((p, i) => [p[0] + fr[i][2] * r.w * 0.22, 1.1, p[1] + fr[i][3] * r.w * 0.22]), closed: r.closed, kind: 'ground', speed: 22, dir: 1 });
     ctx.lanes.push({ pts: r.pts.map((p, i) => [p[0] - fr[i][2] * r.w * 0.22, 1.1, p[1] - fr[i][3] * r.w * 0.22]).reverse(), closed: r.closed, kind: 'ground', speed: 22, dir: 1 });
-    for (const s of [1, -1]) ctx.walkways.push({ pts: r.pts.map((p, i) => [p[0] + fr[i][2] * s * (r.w / 2 + SIDEWALK * 0.5), 0.22, p[1] + fr[i][3] * s * (r.w / 2 + SIDEWALK * 0.5)]), closed: r.closed });
+    for (const s of [1, -1]) ctx.walkways.push({ pts: r.pts.map((p, i) => [p[0] + fr[i][2] * s * (r.w / 2 + SIDEWALK * 0.5), 0.22, p[1] + fr[i][3] * s * (r.w / 2 + SIDEWALK * 0.5)]), closed: r.closed, latMax: SIDEWALK * 0.5 - 0.6 });
   }
   buildMaglev(ctx);
 }
