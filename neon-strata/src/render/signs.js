@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { RNG } from '../core/rng.js';
 import { SHOPS, BLADES, ADS, TICKERS, DECALS, NOTICES, BRANDS } from '../data/signs.js';
 
+const CIVIC_RE = /학교|안전센터|치안|주차장|병원|도서관|충전소|호텔/;
 export const CORPS = Object.entries(BRANDS).filter(([id]) => id !== 'gov').map(([id, b]) => ({ id, ...b }));
 
 const FONT_FILES = [
@@ -312,9 +313,10 @@ export class SignAtlas {
     });
   }
 
-  pickH(rng) { return rng.pick(this.h); }
+  pickH(rng) { if (!this._hn) this._hn = this.h.filter((r) => !CIVIC_RE.test(r.name || '')); return rng.pick(this._hn.length ? this._hn : this.h); }
+  byName(k) { return this.h.find((r) => (r.name || '').includes(k)) || null; }
   // kind: 0 store, 1 eatery, 2 tech, 3 clinic / salon
-  pickHKind(rng, kind) { if (!this._hk) { this._hk = [[], [], [], []]; for (const r of this.h) { const n = r.name || ''; const k = /국수|국밥|포차|분식|구이|치킨|만두|해장|꼬치|주점|다방|김밥|호프|식당|횟집|반찬/.test(n) ? 1 : /약국|의원|치과|세탁|이발|헤어|사우나|클리닉|안과|장기/.test(n) ? 3 : /정비|드론|기억|배터리|홀로|칩|전파|다이브|태양광|조명|환전|노래방/.test(n) ? 2 : 0; r.kind = k; this._hk[k].push(r); } } const a = this._hk[kind]; return a && a.length ? rng.pick(a) : rng.pick(this.h); }
+  pickHKind(rng, kind) { if (!this._hk) { this._hk = [[], [], [], []]; for (const r of this.h) { const n = r.name || ''; if (CIVIC_RE.test(n)) { r.kind = 4; continue; } const k = /국수|국밥|포차|분식|구이|치킨|만두|해장|꼬치|주점|다방|김밥|호프|식당|횟집|반찬/.test(n) ? 1 : /약국|의원|치과|세탁|이발|헤어|사우나|클리닉|안과|장기/.test(n) ? 3 : /정비|드론|기억|배터리|홀로|칩|전파|다이브|태양광|조명|환전|노래방/.test(n) ? 2 : 0; r.kind = k; this._hk[k].push(r); } } const a = this._hk[kind]; return a && a.length ? rng.pick(a) : rng.pick(this.h); }
   pickV(rng) { return rng.pick(this.v); }
   pickBB(rng) { return rng.pick(this.bb); }
   pickLogo(rng) { return rng.pick(this.sq); }

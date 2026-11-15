@@ -7,6 +7,7 @@ import { subdivide, DPLAN } from './plan.js';
 import { shopHouse, tenement, techTower, megaTower, ROOF_LOW, ROOF_TECH } from './buildings.js';
 import { capsuleBlock, terrace, guildHouse, archiveSpire, factory, depot, farmTower, plaza } from './buildings2.js';
 import { clamp } from '../core/rng.js';
+import { civic, CIVIC } from './civic.js';
 
 const NE = K.NEON;
 const TARPS = [[0.2, 0.32, 0.45], [0.48, 0.25, 0.2], [0.5, 0.42, 0.2], [0.22, 0.4, 0.32], [0.45, 0.45, 0.46], [0.4, 0.22, 0.35]];
@@ -198,6 +199,8 @@ export function buildDistricts(ctx) {
   let cur = []; const subdivideT = (b, rng, o) => { const l = subdivide(b, rng, o); cur.push(...l); return l; };
   const sub = (b, rng, o) => { const oo = { ...o, wmin: o.wmin * ls, wmax: o.wmax * ls }; if ((o.mode === 'perimeter' || o.mode === 'rows') && b.corners && b.corners.length === 4) { if (o.mode === 'rows') oo.minDepth = o.depth ?? 13; const l = edgeLots(ctx, b, rng, oo); if (l.length) { cur.push(...l); return l; } } return subdivideT(b, rng, oo); };
   const tally = {}; const countV = () => { let n = 0; for (const c of ctx.chunks.values()) n += c.main.n + c.detail.n; return n; };
+  // a share of the larger street-front lots goes to the institutions every district needs, in rotation so each kind appears
+  const civN = {}; const civPick = (b, lot, rng) => { if (lot.ring || lot.w < 19 || lot.d < 9 || !rng.chance(0.17)) return null; const k = (civN[b.district] = (civN[b.district] || 0) + 1); return CIVIC[(k + b.district.length) % CIVIC.length]; };
   for (const b of ctx.blocks) {
     if (b.reserved) continue;
     const v0 = countV(), b0 = ctx.stats.buildings;
@@ -211,6 +214,7 @@ export function buildDistricts(ctx) {
         const dense = b.noise > 0.52 && b.j < 2;
         const lots = dense ? sub(b, rng, { mode: 'rows', wmin: 9, wmax: 17, depth: 13, alley: 3.4 }) : sub(b, rng, { mode: 'perimeter', wmin: 18, wmax: 44, alley: 6, minDepth: 12 });
         for (const lot of lots) {
+          { const ck = civPick(b, lot, rng); if (ck) { civic(ctx, rng, lot, S, ck); continue; } }
           const tall = lot.w > 16 && rng.chance(0.7);
           const res = lot.ring ? rng.chance(0.9) : rng.chance(prime ? 0.15 : 0.45);
           if (tall) tenement(ctx, rng, lot, S, { floors: Math.round(clamp(H / 3 * rng.f(0.6, 1.5), 5, 26)), shanty: true, res });
@@ -220,12 +224,13 @@ export function buildDistricts(ctx) {
       }
       case 'oldq': {
         if (b.w > 90 && b.noise2 > 0.7 && rng.chance(0.3)) { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); archiveSpire(ctx, rng, lot, S, { h: 160 + 380 * b.noise }); break; }
-        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 11, wmax: 24, alley: 5, minDepth: 11 })) { const fl = Math.round(clamp((H / 3.4) * rng.f(0.6, 1.3), 2, 9)); if (lot.ring || (!lot.corner && !prime && rng.chance(0.62))) shopHouse(ctx, rng, lot, S, { floors: Math.min(fl, 5), res: lot.ring ? true : rng.chance(0.75) }); else guildHouse(ctx, rng, lot, S, { floors: fl }); }
+        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 11, wmax: 24, alley: 5, minDepth: 11 })) { { const ck = civPick(b, lot, rng); if (ck) { civic(ctx, rng, lot, S, ck); continue; } } const fl = Math.round(clamp((H / 3.4) * rng.f(0.6, 1.3), 2, 9)); if (lot.ring || (!lot.corner && !prime && rng.chance(0.62))) shopHouse(ctx, rng, lot, S, { floors: Math.min(fl, 5), res: lot.ring ? true : rng.chance(0.75) }); else guildHouse(ctx, rng, lot, S, { floors: fl }); }
         break;
       }
       case 'lumina': {
         if (b.noise > 0.6 && rng.chance(0.45)) { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); terrace(ctx, rng, lot, S, { h: clamp(H * 1.3, 60, 320), mega: true }); break; }
         for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 16, wmax: 40, alley: 4, minDepth: 16 })) {
+          { const ck = civPick(b, lot, rng); if (ck) { civic(ctx, rng, lot, S, ck); continue; } }
           const k = rng.next(); const hh = clamp(H * rng.f(0.5, 1.4), 18, 300);
           if (k < 0.4) terrace(ctx, rng, lot, S, { h: Math.min(hh, 110) }); else if (k < 0.75 && lot.w > 22) techTower(ctx, rng, lot, S, { h: hh, brand: rng.chance(0.3) ? 'lumina' : null }); else shopHouse(ctx, rng, lot, S, { floors: Math.round(clamp(hh / 3.6, 3, 9)), gh: 4.6, res: lot.ring ? true : rng.chance(0.2) });
         }
@@ -238,7 +243,7 @@ export function buildDistricts(ctx) {
       }
       case 'hive': {
         if (b.w > 150 && rng.chance(0.75)) { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); capsuleBlock(ctx, rng, lot, S, { h: clamp(H * rng.f(0.8, 1.3), 180, 620) }); break; }
-        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 26, wmax: 60, alley: 8, minDepth: 20 })) tenement(ctx, rng, lot, S, { floors: Math.round(clamp(H / 3 * rng.f(0.15, 0.4), 8, 40)), res: lot.ring ? true : rng.chance(prime ? 0.2 : 0.6) });
+        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 26, wmax: 60, alley: 8, minDepth: 20 })) if (civPick(b, lot, rng)) civic(ctx, rng, lot, S, CIVIC[(civN[b.district] + 4) % CIVIC.length]); else tenement(ctx, rng, lot, S, { floors: Math.round(clamp(H / 3 * rng.f(0.15, 0.4), 8, 40)), res: lot.ring ? true : rng.chance(prime ? 0.2 : 0.6) });
         break;
       }
       case 'verdant': { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); farmTower(ctx, rng, lot, S, { h: clamp(H * rng.f(0.7, 1.4), 60, 420) }); break; }
