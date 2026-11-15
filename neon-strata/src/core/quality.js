@@ -31,7 +31,7 @@ export function pickQuality(params) {
   const mem = navigator.deviceMemory || 4;
   const cores = navigator.hardwareConcurrency || 4;
   if (mobile) return { ...(mem >= 6 && cores >= 8 ? PRESETS.medium : PRESETS.low) };
-  return { ...(cores >= 8 ? PRESETS.high : PRESETS.medium) };
+  return { ...(cores >= 12 && mem >= 8 ? PRESETS.high : PRESETS.medium) }; // the city is dense: only clearly strong machines start on high
 }
 
 export function isMobile() {

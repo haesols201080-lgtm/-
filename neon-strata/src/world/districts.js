@@ -45,7 +45,10 @@ const ZEBRA = M(ST.PLASTER, { color: [0.6, 0.6, 0.58], seed: 3 });
 function streetscape(ctx, rng, b, S) {
   // lamps on the kerb line, arms over the carriageway; furniture in between on a slot grid along each side
   const hw = b.w / 2, hd = b.d / 2; const inset = 0.9;
-  const sides = [[-hw, hd - inset, hw, hd - inset, 0], [hw - inset, hd, hw - inset, -hd, Math.PI / 2], [hw, -hd + inset, -hw, -hd + inset, Math.PI], [-hw + inset, -hd, -hw + inset, hd, -Math.PI / 2]];
+  let sides = [[-hw, hd - inset, hw, hd - inset, 0], [hw - inset, hd, hw - inset, -hd, Math.PI / 2], [hw, -hd + inset, -hw, -hd + inset, Math.PI], [-hw + inset, -hd, -hw + inset, hd, -Math.PI / 2]];
+  if (b.corners && b.corners.length === 4) { // the block's real outline, in block-local coordinates
+    const cs = Math.cos(b.yaw), sn = Math.sin(b.yaw); const Lc = b.corners.map((p) => { const dx = p[0] - b.x, dz = p[1] - b.z; return [dx * cs - dz * sn, dx * sn + dz * cs]; }); let gx = 0, gz = 0; for (const p of Lc) { gx += p[0] / 4; gz += p[1] / 4; }
+    sides = Lc.map((a, i) => { const q = Lc[(i + 1) % 4]; let tx = q[0] - a[0], tz = q[1] - a[1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l; let nx = tz, nz = -tx; if ((a[0] - gx) * nx + (a[1] - gz) * nz < 0) { nx = -nx; nz = -nz; } return [a[0] - nx * inset + tx * 0.5, a[1] - nz * inset + tz * 0.5, q[0] - nx * inset - tx * 0.5, q[1] - nz * inset - tz * 0.5, Math.atan2(nx, nz)]; }); }
   const prime0 = b.edge && (b.edge.inner || b.edge.outer || b.edge.left || b.edge.right); const stW = (DPLAN[b.district] || {}).sw || 12; let si = -1;
   for (const [x0, z0, x1, z1, ang] of sides) {
     const L = Math.hypot(x1 - x0, z1 - z0); si++;
@@ -120,14 +123,17 @@ function gantries(ctx, rng) {
 
 // A landmark never stands alone on a slab of paving: the block's street edges are built up with ordinary shop-houses
 // and the big building sits in the court behind them, reached through a gap.
-function linerRows(ctx, rng, b, S, f0) {
+export function linerRows(ctx, rng, b, S, f0) {
   const F = ctx.footprints; const c = Math.cos(b.yaw), s = Math.sin(b.yaw); const W = b.w - 2 * b.walk, Dp = b.d - 2 * b.walk;
-  let z0 = 1e9, z1 = -1e9, any = false;
-  for (let i = f0; i < F.length; i++) { const f = F[i]; const dx = f[0] - b.x, dz = f[1] - b.z; const lz = dx * s + dz * c; const r = f[4] - b.yaw; const ez = Math.abs(f[2] * Math.sin(r)) + Math.abs(f[3] * Math.cos(r)); z0 = Math.min(z0, lz - ez); z1 = Math.max(z1, lz + ez); any = true; }
-  if (!any || W < 40) return;
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9, any = false;
+  for (let i = f0; i < F.length; i++) { const f = F[i]; const dx = f[0] - b.x, dz = f[1] - b.z; const lx = dx * c - dz * s, lz = dx * s + dz * c; const r = f[4] - b.yaw; const ex = Math.abs(f[2] * Math.cos(r)) + Math.abs(f[3] * Math.sin(r)), ez = Math.abs(f[2] * Math.sin(r)) + Math.abs(f[3] * Math.cos(r)); x0 = Math.min(x0, lx - ex); x1 = Math.max(x1, lx + ex); z0 = Math.min(z0, lz - ez); z1 = Math.max(z1, lz + ez); any = true; }
+  if (!any || W < 40 || Dp < 30) return;
+  const dR = Math.min(12.5, Dp / 2 - 2.5);
   for (const sg of [1, -1]) {
-    const free = sg > 0 ? Dp / 2 - z1 : z0 + Dp / 2; if (free < 13) continue; const dR = Math.min(12.5, free - 3.5); const zc = sg * (Dp / 2 - dR / 2);
-    let x = -W / 2; while (x < W / 2 - 6) { let w = rng.f(8, 15); if (W / 2 - (x + w) < 7) w = W / 2 - x; const cx = x + w / 2; x += w; if (Math.abs(cx) < 7 + w / 2) continue; // the way through to the court
+    const zc = sg * (Dp / 2 - dR / 2), za = zc - dR / 2, zb = zc + dR / 2;
+    let x = -W / 2; while (x < W / 2 - 6) { let w = rng.f(8, 15); if (W / 2 - (x + w) < 7) w = W / 2 - x; const cx = x + w / 2; const xa = x, xb = x + w; x += w;
+      if (xb > x0 - 3 && xa < x1 + 3 && zb > z0 - 3 && za < z1 + 3) continue; // the landmark itself
+      if (Math.abs(cx) < 7 + w / 2 && Math.abs(cx - (x0 + x1) / 2) < (x1 - x0) / 2 + 10) continue; // the way through to it
       const lot = { cx, cz: zc, w, d: dR, face: sg, corner: false, block: b, x: b.x + cx * c + zc * s, z: b.z - cx * s + zc * c, yaw: b.yaw + (sg < 0 ? Math.PI : 0) };
       shopHouse(ctx, rng, lot, S, { floors: rng.i(2, 5), shutter: 0.12 }); }
   }
@@ -163,10 +169,34 @@ function finishLot(ctx, rng, lot, f0, S) {
   ctx.main();
 }
 
+// Perimeter block, the way real city blocks are built: lots line each street edge of the block's true outline
+// (not its bounding box), share party walls, turn the corners pinwheel-fashion, and leave a court in the middle.
+function edgeLots(ctx, b, rng, o) {
+  const C = b.corners; let gx = 0, gz = 0; for (const p of C) { gx += p[0] / 4; gz += p[1] / 4; }
+  const E = []; let inr = 1e9;
+  for (let i = 0; i < 4; i++) { const a = C[i], q = C[(i + 1) % 4]; let tx = q[0] - a[0], tz = q[1] - a[1]; const L = Math.hypot(tx, tz); if (L < 1) continue; tx /= L; tz /= L; let nx = tz, nz = -tx; if ((a[0] - gx) * nx + (a[1] - gz) * nz < 0) { nx = -nx; nz = -nz; } inr = Math.min(inr, (a[0] - gx) * nx + (a[1] - gz) * nz - b.walk); E.push({ a, tx, tz, nx, nz, L }); }
+  const dL = Math.max(6.5, Math.min((o.minDepth ?? 12) * rng.f(1.0, 1.2), inr - 1.2)); const lots = [], placed = [];
+  const sep = (A, B) => { for (const [ux, uz] of [[A.c, -A.s], [A.s, A.c], [B.c, -B.s], [B.s, B.c]]) { const ra = A.hw * Math.abs(ux * A.c - uz * A.s) + A.hd * Math.abs(ux * A.s + uz * A.c), rb = B.hw * Math.abs(ux * B.c - uz * B.s) + B.hd * Math.abs(ux * B.s + uz * B.c); if (Math.abs((B.x - A.x) * ux + (B.z - A.z) * uz) > ra + rb - 0.25) return true; } return false; };
+  const alley = Math.max(3.4, o.alley ?? 4); let rings = 0;
+  for (let ring = 0; ring < 2; ring++) { const off = ring * (dL + alley); if (ring > 0 && inr - off < dL + 1.5) break; rings = ring + 1; const wk = ring ? 2.0 : 1.35;
+  for (const e of E) {
+    const L = e.L - 2 * (b.walk + off) - 0.6; let s = dL + 0.5; if (L < o.wmin + dL) continue;
+    while (s < L - o.wmin * 0.6) { let w = rng.f(o.wmin, o.wmax) * wk; if (L - (s + w) < o.wmin * 0.75) w = L - s; if (w < 5) break;
+      const al = b.walk + off + 0.3 + s + w / 2, dp = b.walk + off + dL / 2; const x = e.a[0] + e.tx * al - e.nx * dp, z = e.a[1] + e.tz * al - e.nz * dp; const yaw = Math.atan2(e.nx, e.nz);
+      const R = { x, z, hw: w / 2 - 0.05, hd: dL / 2 - 0.05, c: Math.cos(yaw), s: Math.sin(yaw) };
+      if (placed.every((P) => sep(P, R))) { placed.push(R); lots.push({ cx: 0, cz: 0, w, d: dL, face: 1, ring, corner: s < dL + 1 || s + w > L - 1, block: b, x, z, yaw }); }
+      s += w; }
+  } }
+  // the court behind: a few trees, somewhere to leave a vehicle
+  const core = inr - rings * (dL + alley) + alley;
+  if (core > 7) { const r = core * 0.55; for (let k = 0; k < Math.min(6, Math.floor(r / 2.5)); k++) { const a = rng.f(0, 6.283), q = rng.f(0.2, 1) * r; const x = gx + Math.cos(a) * q, z = gz + Math.sin(a) * q; if (k % 3 === 2) ctx.prop('hovercar', x, 0.2, z, rng.f(0, 6.28), 1, [rng.f(0.5, 1.5), rng.f(0.5, 1.4), rng.f(0.5, 1.5)]); else { ctx.prop('tree', x, 0.2, z, rng.f(0, 6.28), rng.f(0.9, 1.4)); ctx.phys.addCyl(x, z, 0.3, 0.2, 3); } } }
+  return lots;
+}
+
 export function buildDistricts(ctx) {
   const rng0 = ctx.rng.fork('districts'); const ls = 1 / Math.sqrt(ctx.density);
   let cur = []; const subdivideT = (b, rng, o) => { const l = subdivide(b, rng, o); cur.push(...l); return l; };
-  const sub = (b, rng, o) => subdivideT(b, rng, { ...o, wmin: o.wmin * ls, wmax: o.wmax * ls });
+  const sub = (b, rng, o) => { const oo = { ...o, wmin: o.wmin * ls, wmax: o.wmax * ls }; if ((o.mode === 'perimeter' || o.mode === 'rows') && b.corners && b.corners.length === 4) { if (o.mode === 'rows') oo.minDepth = o.depth ?? 13; const l = edgeLots(ctx, b, rng, oo); if (l.length) { cur.push(...l); return l; } } return subdivideT(b, rng, oo); };
   const tally = {}; const countV = () => { let n = 0; for (const c of ctx.chunks.values()) n += c.main.n + c.detail.n; return n; };
   for (const b of ctx.blocks) {
     if (b.reserved) continue;
@@ -182,21 +212,22 @@ export function buildDistricts(ctx) {
         const lots = dense ? sub(b, rng, { mode: 'rows', wmin: 9, wmax: 17, depth: 13, alley: 3.4 }) : sub(b, rng, { mode: 'perimeter', wmin: 18, wmax: 44, alley: 6, minDepth: 12 });
         for (const lot of lots) {
           const tall = lot.w > 16 && rng.chance(0.7);
-          if (tall) tenement(ctx, rng, lot, S, { floors: Math.round(clamp(H / 3 * rng.f(0.6, 1.5), 5, 26)), shanty: true });
-          else { const home = !ctx.homeDone && dense && lot.w > 8 && Math.hypot(b.x, b.z - 1750) < 520; if (home) ctx.homeDone = true; shopHouse(ctx, rng, lot, S, { floors: home ? 5 : Math.round(clamp((H / 3.2) * rng.f(0.3, 1.1), 1, 9)), shanty: true, shutter: 0.22, ...(home ? { enter: true, kind: 'home', home: true } : {}) }); }
+          const res = lot.ring ? rng.chance(0.9) : rng.chance(prime ? 0.15 : 0.45);
+          if (tall) tenement(ctx, rng, lot, S, { floors: Math.round(clamp(H / 3 * rng.f(0.6, 1.5), 5, 26)), shanty: true, res });
+          else { const home = !ctx.homeDone && dense && lot.w > 8 && Math.hypot(b.x, b.z - 1750) < 520; if (home) ctx.homeDone = true; shopHouse(ctx, rng, lot, S, { floors: home ? 5 : Math.round(clamp((H / 3.2) * rng.f(0.3, 1.1), 1, 9)), shanty: true, shutter: 0.22, res: res && !home, ...(home ? { enter: true, kind: 'home', home: true } : {}) }); }
         }
         break;
       }
       case 'oldq': {
         if (b.w > 90 && b.noise2 > 0.7 && rng.chance(0.3)) { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); archiveSpire(ctx, rng, lot, S, { h: 160 + 380 * b.noise }); break; }
-        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 11, wmax: 24, alley: 5, minDepth: 11 })) guildHouse(ctx, rng, lot, S, { floors: Math.round(clamp((H / 3.4) * rng.f(0.6, 1.3), 2, 9)) });
+        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 11, wmax: 24, alley: 5, minDepth: 11 })) { const fl = Math.round(clamp((H / 3.4) * rng.f(0.6, 1.3), 2, 9)); if (lot.ring || (!lot.corner && !prime && rng.chance(0.62))) shopHouse(ctx, rng, lot, S, { floors: Math.min(fl, 5), res: lot.ring ? true : rng.chance(0.75) }); else guildHouse(ctx, rng, lot, S, { floors: fl }); }
         break;
       }
       case 'lumina': {
         if (b.noise > 0.6 && rng.chance(0.45)) { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); terrace(ctx, rng, lot, S, { h: clamp(H * 1.3, 60, 320), mega: true }); break; }
         for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 16, wmax: 40, alley: 4, minDepth: 16 })) {
           const k = rng.next(); const hh = clamp(H * rng.f(0.5, 1.4), 18, 300);
-          if (k < 0.4) terrace(ctx, rng, lot, S, { h: Math.min(hh, 110) }); else if (k < 0.75 && lot.w > 22) techTower(ctx, rng, lot, S, { h: hh, brand: rng.chance(0.3) ? 'lumina' : null }); else shopHouse(ctx, rng, lot, S, { floors: Math.round(clamp(hh / 3.6, 3, 9)), gh: 4.6 });
+          if (k < 0.4) terrace(ctx, rng, lot, S, { h: Math.min(hh, 110) }); else if (k < 0.75 && lot.w > 22) techTower(ctx, rng, lot, S, { h: hh, brand: rng.chance(0.3) ? 'lumina' : null }); else shopHouse(ctx, rng, lot, S, { floors: Math.round(clamp(hh / 3.6, 3, 9)), gh: 4.6, res: lot.ring ? true : rng.chance(0.2) });
         }
         break;
       }
@@ -207,7 +238,7 @@ export function buildDistricts(ctx) {
       }
       case 'hive': {
         if (b.w > 150 && rng.chance(0.75)) { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); capsuleBlock(ctx, rng, lot, S, { h: clamp(H * rng.f(0.8, 1.3), 180, 620) }); break; }
-        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 26, wmax: 60, alley: 8, minDepth: 20 })) tenement(ctx, rng, lot, S, { floors: Math.round(clamp(H / 3 * rng.f(0.15, 0.4), 8, 40)) });
+        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 26, wmax: 60, alley: 8, minDepth: 20 })) tenement(ctx, rng, lot, S, { floors: Math.round(clamp(H / 3 * rng.f(0.15, 0.4), 8, 40)), res: lot.ring ? true : rng.chance(prime ? 0.2 : 0.6) });
         break;
       }
       case 'verdant': { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); farmTower(ctx, rng, lot, S, { h: clamp(H * rng.f(0.7, 1.4), 60, 420) }); break; }

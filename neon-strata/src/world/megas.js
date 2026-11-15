@@ -7,7 +7,7 @@ import { boundaryAngle, DISTRICTS, COAST_X, R_CITY, R_CORE, R_SPRAWL, yawFacing 
 import { reserve, nearestBlock } from './plan.js';
 import { megaTower, techTower, landingPad } from './buildings.js';
 import { archiveSpire, farmTower } from './buildings2.js';
-import { STYLES } from './districts.js';
+import { STYLES, linerRows } from './districts.js';
 import { Vol, facade, shopSign } from './facade.js';
 import { TAU, fbm2 } from '../core/rng.js';
 
@@ -256,7 +256,7 @@ export function buildGiants(ctx) {
   const rng = ctx.rng.fork('giants');
   for (const { kind, b } of ctx.giants) {
     const lot = { cx: 0, cz: 0, w: b.w - 2 * b.walk, d: b.d - 2 * b.walk, face: 1, corner: true, block: b, x: b.x, z: b.z, yaw: b.yaw };
-    const S = STYLES[b.district];
+    const S = STYLES[b.district]; const fG = ctx.footprints.length;
     if (kind === 'trident') megaTower(ctx, rng, lot, S, { h: rng.f(1250, 1700), brand: rng.pick(['meridian', 'helion', 'aether']) });
     else if (kind === 'archive') archiveSpire(ctx, rng, lot, S, { h: 1180 });
     else if (kind === 'seed') farmTower(ctx, rng, lot, S, { h: 1150 });
@@ -271,6 +271,7 @@ export function buildGiants(ctx) {
       ctx.footprint(0, 0, r0 * 2, r0 * 2, 0, H, b.id); ctx.stats.buildings++;
     }
     ctx.poi({ type: 'landmark', id: kind + b.id, x: b.x, y: 0, z: b.z, name: { trident: '트라이던트 타워', archive: '대기록원', seed: '종자탑', stack: '주조 굴뚝', needle: '루미나 니들', monolith: '하이브 모놀리스' }[kind] });
+    if (b.at) linerRows(ctx, rng.fork(b.id + 31), b, STYLES[['oldq', 'hive', 'sump'].includes(b.district) ? b.district : 'lumina'], fG);
   }
 }
 

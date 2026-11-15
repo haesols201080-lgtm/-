@@ -176,7 +176,7 @@ export class PostFX {
           vec4 wp = uInvVP * ndc; wp /= wp.w;
           vec4 pp = uPrevVP * wp; vec2 puv = pp.xy / pp.w * 0.5 + 0.5;
           vec2 vel = (vUv - puv) * uBlur;
-          float vl = length(vel); if (vl > 0.035) vel *= 0.035 / vl;
+          float vl = length(vel); if (vl > 0.009) vel *= 0.009 / vl;
           if (pp.w <= 0.0) vel = vec2(0.0);
           col = vec3(0.0); float j = ign(gl_FragCoord.xy) - 0.5;
           for (int i = 0; i < 8; i++) col += texture2D(tScene, vUv + vel * ((float(i) + j) / 8.0 - 0.5)).rgb;
@@ -394,7 +394,7 @@ export class PostFX {
     // 4. combine (+ motion blur)
     const mc = this.mCombine.uniforms;
     mc.uInvVP.value.copy(this.curVP).invert(); mc.uPrevVP.value.copy(this.prevVP);
-    mc.uBlur.value = dt > 0 ? Math.min(1, (1 / 60) / dt) * 0.55 : 0;
+    mc.uBlur.value = dt > 0 ? Math.min(1, (1 / 60) / dt) * 0.22 : 0;
     this._pass(this.mCombine, this.hdrRT);
     this.prevVP.copy(this.curVP);
     // 5. bloom
