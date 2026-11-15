@@ -368,7 +368,7 @@ const FRAG_SURFACE = /* glsl */ `
 
     // residential extras: wall AC units, balcony rails
     if (st == 10 && lod < 0.9) {
-      if (!varA && h2 > 0.68 && cs.x > 2.4) { // split AC outdoor unit under the window
+      if (false) { // split AC outdoor unit under the window
         vec2 a0 = vec2(cs.x * 0.5 - 0.42 + (h1 - 0.5) * 0.5, 0.18); vec2 a1 = a0 + vec2(0.84, 0.58);
         float ad = nsBoxD(fm, a0, a1, 0.03); float ac = smoothstep(-aa, aa, ad);
         vec2 au = (fm - a0) / (a1 - a0);

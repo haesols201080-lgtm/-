@@ -116,7 +116,16 @@ export const PROPS = {
     for (const x of [-0.65, 0.65]) { pen.use(dk); pen.lathe(x, 0, [[0.52, 1.6], [0.52, 1.78], [0.46, 1.8]], 10, { cap: false }); pen.use(K.dark(0.03)); pen.lathe(x, 0, [[0.46, 1.74], [0.01, 1.72]], 10, { cap: false }); }
     pen.use(rust); pen.tube(1.3, 0.5, 0.3, 2.0, 0.5, 0.3, 0.07, 5); pen.tube(2.0, 0.5, 0.3, 2.0, 0.05, 0.3, 0.07, 5);
   },
-  acSmall(pen) { pen.box(0, 0, 0.95, 0.4, 0.12, 0.8, { wall: K.metal([0.5, 0.5, 0.48]), roof: galv }); pen.use(K.dark(0.04)); pen.quad(-0.42, 0.2, 0.205, 0.12, 0.2, 0.205, 0.12, 0.72, 0.205, -0.42, 0.72, 0.205, 0, 0, 1, 1); pen.use(steel); pen.box(0, 0, 1.0, 0.45, 0, 0.12, {}); },
+  acSmall(pen) {
+    const cas = K.metal([0.56, 0.56, 0.53]); pen.box(0, 0, 0.95, 0.36, 0.12, 0.8, { wall: cas, roof: galv, bottom: galv });
+    const fx = -0.15, fy = 0.46, z0 = 0.181; // fan well on the +z face
+    const disc = (r0, r1, z, mat) => { pen.use(mat); const n = 14; for (let k = 0; k < n; k++) { const a0 = (k / n) * 6.2832, a1 = ((k + 1) / n) * 6.2832; pen.quad(fx + Math.cos(a0) * r0, fy + Math.sin(a0) * r0, z, fx + Math.cos(a0) * r1, fy + Math.sin(a0) * r1, z, fx + Math.cos(a1) * r1, fy + Math.sin(a1) * r1, z, fx + Math.cos(a1) * r0, fy + Math.sin(a1) * r0, z, 0, 0, 1, 1); } };
+    disc(0.0, 0.27, z0 + 0.002, K.dark(0.025)); disc(0.27, 0.3, z0 + 0.03, K.metal([0.4, 0.4, 0.4])); disc(0.0, 0.06, z0 + 0.03, K.metal([0.3, 0.3, 0.3]));
+    pen.use(K.metal([0.2, 0.2, 0.21])); for (let k = 0; k < 5; k++) { const a = (k / 5) * 6.2832 + 0.3; pen.beam(fx + Math.cos(a) * 0.05, fy + Math.sin(a) * 0.05, z0 + 0.012, fx + Math.cos(a + 0.5) * 0.25, fy + Math.sin(a + 0.5) * 0.25, z0 + 0.016, 0.09, 0.008); }
+    pen.use(K.metal([0.62, 0.62, 0.6])); for (let k = -3; k <= 3; k++) pen.box(fx, z0 + 0.04, 0.6, 0.008, fy + k * 0.075 - 0.006, fy + k * 0.075 + 0.006, {}); pen.box(fx, z0 + 0.045, 0.012, 0.01, fy - 0.29, fy + 0.29, {});
+    pen.use(K.dark(0.05)); for (let k = 0; k < 6; k++) pen.box(0.33, z0 + 0.004, 0.2, 0.006, 0.24 + k * 0.085, 0.27 + k * 0.085, {});
+    pen.use(steel); pen.box(-0.36, 0, 0.06, 0.42, 0, 0.12, {}); pen.box(0.36, 0, 0.06, 0.42, 0, 0.12, {}); pen.tube(0.46, 0.3, -0.1, 0.52, 0.3, -0.2, 0.02, 4); pen.tube(0.46, 0.38, -0.1, 0.52, 0.38, -0.2, 0.014, 4);
+  },
   tank(pen) {
     pen.use(steel); for (const [x, z] of [[-0.9, -0.9], [0.9, -0.9], [0.9, 0.9], [-0.9, 0.9]]) pen.beam(x, 0, z, x, 2.2, z, 0.12, 0.12);
     pen.beam(-0.9, 1.0, -0.9, 0.9, 1.9, -0.9, 0.06, 0.06); pen.beam(0.9, 1.0, 0.9, -0.9, 1.9, 0.9, 0.06, 0.06); pen.box(0, 0, 2.2, 2.2, 2.1, 2.25, { roof: steel, bottom: steel });

@@ -180,7 +180,7 @@ export function shopHouse(ctx, rng, lot, S, o = {}) {
   blindWall(v, 1, 0, h + par, party, rng, { mural: rng.chance(0.1), aoB: 0.6 }); blindWall(v, 3, 0, h + par, party, rng, { mural: rng.chance(0.1), aoB: 0.6 });
   v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else v.solid();
   if (ent && o.home) { const r = ent.room; ctx.poi({ type: 'home', id: 'home', x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), name: '캡슐텔 0번지', doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5), yaw: pen.yaw }); }
-  else if (ent) { const r = ent.room; ctx.poi({ type: 'shop', kind: ent.kind, stair: ent.stair, district: lot.block.district, x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5) }); }
+  else if (ent) { const r = ent.room; ctx.poi({ type: 'shop', kind: ent.kind, stair: ent.stair, work: ent.work, district: lot.block.district, x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5) }); }
   wallKit(v, 0, gh, h, fh, rng, { dens: 1.3 });
   // projecting sign + downpipe
   if (floors >= 2 && rng.chance(S.blade ?? 0.5)) { const hgt = Math.min(4.6, fh * floors * 0.5); bladeSign(v, 0, 0.55, gh + 1.9 + hgt / 2, hgt, rng, { intensity: S.signI ?? 4.5 }); }

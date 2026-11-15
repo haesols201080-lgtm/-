@@ -73,7 +73,7 @@ export class HUD {
     if (this.tab === 'jobs') {
       h += `<h3>주변 일자리 <small>가게·로비로 직접 출근</small></h3>`;
       if (g.job) h += row(`<b>진행 중</b> — ${g.job.item}`, `${g.jobLabel()} · 급여 ${fmt(g.job.pay)} ℓ`, btn('포기', 'cancel'));
-      else { h += g.offers.map((o, i) => row(`<b>${o.name}</b> 근무`, `${o.item} 배달 ${o.stops.length}건 · 동선 ${Math.round(o.d)} m · ${o.time}초`, `<span class="pay">${fmt(o.pay)} ℓ</span>${btn('수락', 'accept', `data-i="${i}"`)}`)).join('') || '<p class="dim">근처에 사람을 구하는 가게가 없습니다. 상점가로 이동해 보세요.</p>'; h += btn('구인 새로 고침', 'reroll'); }
+      else { h += g.offers.map((o, i) => row(`<b>${o.name}</b> · ${o.item} ${o.rankName}`, `업무 ${o.tasks.length}가지 · ${Math.round(o.d)} m 거리 · 근무 약 ${o.time}초`, `<span class="pay">${fmt(o.pay)} ℓ</span>${btn('지원', 'accept', `data-i="${i}"`)}`)).join('') || '<p class="dim">근처에 사람을 구하는 가게가 없습니다. 상점가로 이동해 보세요.</p>'; h += btn('구인 새로 고침', 'reroll'); }
       h += `<h3>현재 목표</h3><p>${g.objective ? g.objective.text : ''}</p><p class="dim">${g.objective ? g.objective.sub : ''}</p>`;
       h += `<h3>적재 화물 <small>${g.cargoUsed()} / ${g.cargoCap()}</small></h3>` + (Object.keys(s.cargo).map((k) => row(COMMODITIES.find((c) => c.id === k).name, `${s.cargo[k].n}개 · 평단 ${fmt(s.cargo[k].avg)} ℓ`)).join('') || '<p class="dim">비어 있음</p>');
     } else if (this.tab === 'trade') {
@@ -118,7 +118,7 @@ export class HUD {
     if (!pr && pl.mode === 'foot' && pl.hasCar && pl.pos.distanceTo(pl.vpos) < 7) pr = '[F] 스키머 탑승';
     e.prompt.textContent = pr; e.prompt.classList.toggle('show', !!pr);
     if (this.bDown) { this.bDown.style.display = pl.mode === 'fly' ? '' : 'none'; this.bE.style.display = pr.includes('[E]') ? '' : 'none'; this.bQ.style.display = pr.includes('[Q]') ? '' : 'none'; this.bF.style.display = pl.hasCar ? '' : 'none'; }
-    const J = g.job; if (J) { const t = J.route[J.stage]; e.job.innerHTML = `<b>${J.stage === 0 ? '출근' : J.stage === J.route.length - 1 ? '복귀' : '배달'}</b> ${J.item} · ${Math.round(Math.hypot(t.x - p.x, t.z - p.z))} m · <span class="${J.left < 15 ? 'lo' : ''}">${Math.max(0, Math.round(J.left))}초</span>`; e.job.classList.add('show'); } else e.job.classList.remove('show');
+    const J = g.job; if (J) { const t = J.route[J.stage]; e.job.innerHTML = `<b>${J.stage === 0 ? '출근' : '근무'}</b> ${J.item} · ${Math.round(Math.hypot(t.x - p.x, t.z - p.z))} m · <span class="${J.left < 15 ? 'lo' : ''}">${Math.max(0, Math.round(J.left))}초</span>`; e.job.classList.add('show'); } else e.job.classList.remove('show');
     e.toasts.innerHTML = g.toasts.map((t) => `<div class="toast ${t.kind}" style="opacity:${Math.min(1, t.t)}">${t.text}</div>`).join('');
     if (e.news.textContent !== g.news) e.news.textContent = g.news;
     e.fade.style.opacity = g.fade || 0;

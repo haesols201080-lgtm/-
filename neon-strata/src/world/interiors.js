@@ -78,7 +78,8 @@ export function lobby(ctx, rng, cx, zFront, o) {
   ctx.walkways.push({ pts: [P(cx - 2.2, zi + 3.5), P(cx - w * 0.2, room.zb + dep * 0.5), P(cx - w * 0.3, room.zb + 2.2), P(cx + w * 0.3, room.zb + 2.2), P(cx + w * 0.2, room.zb + dep * 0.5), P(cx + 2.2, zi + 3.5)], closed: true, district: 'core', indoor: true });
   const wp = P(cx, room.zb + dep * 0.5);
   const dp = P(cx, zFront + 7);
-  ctx.poi({ type: 'lobby', x: wp[0], y: wp[1], z: wp[2], brand: o.brand || null, name: o.name || '타워 로비', doorX: dp[0], doorZ: dp[2], big });
+  const Lp = (lx, lz) => { const q = P(lx, lz); return { x: q[0], y: q[1], z: q[2] }; };
+  ctx.poi({ type: 'lobby', work: { back: Lp(cx, rz + 2.0), front: Lp(cx, zi - 2.6), side: Lp(cx - w * 0.3, room.zb + 2.6), upA: null, upB: Lp(cx + w * 0.3, room.zb + 2.6) }, x: wp[0], y: wp[1], z: wp[2], brand: o.brand || null, name: o.name || '타워 로비', doorX: dp[0], doorZ: dp[2], big });
   return { room, door };
 }
 
@@ -133,5 +134,7 @@ export function shopRoom(ctx, rng, xa, xb, zFront, dep, h, door, o = {}) {
   if (o.sign) { const sz = Math.min(1.1, h * 0.3); pen.sign(cx, h - 0.8, room.zb + 0.06, 0, sz * o.sign.aspect > w - 1 ? w - 1 : sz * o.sign.aspect, sz, o.sign, { intensity: 2.5, seed: rng.i(0, 255) }); }
   ctx.main();
   const st = up ? { foot: [pen.wx(xb - 0.56, room.zb + 0.25 + Math.min(dep - 1.7, 5.4) - 0.3), pen.wz(xb - 0.56, room.zb + 0.25 + Math.min(dep - 1.7, 5.4) - 0.3)], top: [pen.wx(xb - 0.56, room.zb + 0.5), pen.wz(xb - 0.56, room.zb + 0.5)], y: pen.oy + h } : null;
-  return { room, door, kind, up, stair: st };
+  const ux = (xa + xb - 1.12) / 2; const Wp = (lx, lz, y = 0.03) => ({ x: pen.wx(lx, lz), y: pen.oy + y, z: pen.wz(lx, lz) });
+  const work = { back: Wp(cx, room.zb + 2.4), front: Wp(cx, zi - 1.5), side: Wp(xa + 1.3, room.zb + dep * 0.55), upA: up ? Wp(ux + 0.9, room.zb + dep * 0.3, h + 0.02) : null, upB: up ? Wp(ux + 0.9, room.zb + dep * 0.62, h + 0.02) : null };
+  return { room, door, kind, up, stair: st, work };
 }

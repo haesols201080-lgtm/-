@@ -118,6 +118,21 @@ function gantries(ctx, rng) {
   }
 }
 
+// A landmark never stands alone on a slab of paving: the block's street edges are built up with ordinary shop-houses
+// and the big building sits in the court behind them, reached through a gap.
+function linerRows(ctx, rng, b, S, f0) {
+  const F = ctx.footprints; const c = Math.cos(b.yaw), s = Math.sin(b.yaw); const W = b.w - 2 * b.walk, Dp = b.d - 2 * b.walk;
+  let z0 = 1e9, z1 = -1e9, any = false;
+  for (let i = f0; i < F.length; i++) { const f = F[i]; const dx = f[0] - b.x, dz = f[1] - b.z; const lz = dx * s + dz * c; const r = f[4] - b.yaw; const ez = Math.abs(f[2] * Math.sin(r)) + Math.abs(f[3] * Math.cos(r)); z0 = Math.min(z0, lz - ez); z1 = Math.max(z1, lz + ez); any = true; }
+  if (!any || W < 40) return;
+  for (const sg of [1, -1]) {
+    const free = sg > 0 ? Dp / 2 - z1 : z0 + Dp / 2; if (free < 13) continue; const dR = Math.min(12.5, free - 3.5); const zc = sg * (Dp / 2 - dR / 2);
+    let x = -W / 2; while (x < W / 2 - 6) { let w = rng.f(8, 15); if (W / 2 - (x + w) < 7) w = W / 2 - x; const cx = x + w / 2; x += w; if (Math.abs(cx) < 7 + w / 2) continue; // the way through to the court
+      const lot = { cx, cz: zc, w, d: dR, face: sg, corner: false, block: b, x: b.x + cx * c + zc * s, z: b.z - cx * s + zc * c, yaw: b.yaw + (sg < 0 ? Math.PI : 0) };
+      shopHouse(ctx, rng, lot, S, { floors: rng.i(2, 5), shutter: 0.12 }); }
+  }
+}
+
 // Real lots are used edge to edge. Whatever a building leaves free of its lot becomes a planted forecourt on the
 // street side, marked parking courts down the sides and a service yard (plant, stores, a low annex) at the back.
 function finishLot(ctx, rng, lot, f0, S) {
@@ -199,6 +214,7 @@ export function buildDistricts(ctx) {
       case 'foundry': { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); factory(ctx, rng, lot, S, { h: H }); break; }
       case 'port': { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); depot(ctx, rng, lot, S, { h: H }); break; }
     }
+    if (cur.length === 1 && ['oldq', 'lumina', 'meridian', 'hive', 'verdant'].includes(b.district)) linerRows(ctx, rng.fork(455), b, STYLES[b.district === 'verdant' || b.district === 'meridian' ? 'lumina' : b.district], fB);
     if (b.district === 'lumina' || b.district === 'meridian' || b.district === 'hive') { const fr = rng.fork(977); for (const lot of cur) finishLot(ctx, fr, lot, fB, S); }
     const t = tally[b.district] || (tally[b.district] = { blocks: 0, bld: 0, verts: 0 }); t.blocks++; t.bld += ctx.stats.buildings - b0; t.verts += countV() - v0;
   }
