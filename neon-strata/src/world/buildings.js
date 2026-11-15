@@ -126,6 +126,23 @@ function wallKit(v, f, y0, y1, fh, rng, o = {}) {
   if (rng.chance(0.5)) { const s = rng.f(1, L - 1), y = y0 + rng.i(0, floors - 1) * fh + fh - 0.75; v.box(f, s - 0.2, s + 0.2, 0, 0.3, y, y + 0.3, K.metal([0.36, 0.37, 0.38]), {}); }
   ctx.main();
 }
+// A front is composed, not just glazed: cornice and frieze on top, pilasters closing the ends, and a stack of real
+// projecting balconies (slab, parapet, rail, washing on a line or plants) on one bay.
+function articulate(v, y0, y1, fh, wall, rng, o = {}) {
+  const ctx = v.ctx, pen = v.pen, L = v.len(0); const floors = Math.max(1, Math.round((y1 - y0) / fh)); const cw = L / Math.max(1, Math.round(L / (wall.cellW || 3.1))); const nb = Math.round(L / cw);
+  const trim = K.conc(0.5), dk = K.dark(0.1); ctx.detail();
+  v.box(0, -0.1, L + 0.1, 0, 0.36, y1 - 0.08, y1 + 0.2, trim, {}); v.box(0, -0.04, L + 0.04, 0, 0.2, y1 - 0.34, y1 - 0.08, trim, {});
+  if (!o.noPil) { v.box(0, 0, 0.34, 0, 0.16, y0, y1 - 0.34, trim, { bottom: false, top: false }); v.box(0, L - 0.34, L, 0, 0.16, y0, y1 - 0.34, trim, { bottom: false, top: false }); }
+  if (nb >= 2 && floors >= 2) { const bay = nb > 2 ? rng.i(1, nb - 2) : rng.i(0, 1); const s0 = bay * cw + 0.2, s1 = (bay + 1) * cw - 0.2; const col = rng.pick([[0.5, 0.5, 0.52], [0.38, 0.4, 0.42], [0.58, 0.52, 0.44], [0.44, 0.36, 0.32]]);
+    for (let fl = o.res ? 1 : 0; fl < Math.min(floors, 5); fl++) { const y = y0 + fl * fh + 0.02;
+      v.box(0, s0, s1, 0, 1.0, y - 0.14, y, K.conc(0.42), {}); v.box(0, s0, s1, 0.94, 1.0, y, y + 0.95, M(ST.PLASTER, { color: col, seed: fl * 7 }), { bottom: false });
+      v.box(0, s0, s0 + 0.06, 0, 0.94, y, y + 0.95, dk, { bottom: false }); v.box(0, s1 - 0.06, s1, 0, 0.94, y, y + 0.95, dk, { bottom: false }); v.box(0, s0, s1, 0.9, 1.04, y + 0.95, y + 1.0, dk, {});
+      if (rng.chance(0.45)) { const a = v.P(0, s0 + 0.2, 0.8), b = v.P(0, s1 - 0.2, 0.8); pen.use(dk); pen.tube(a[0], y + 1.75, a[1], b[0], y + 1.75, b[1], 0.008, 3); const n = rng.i(2, 4);
+        for (let k = 0; k < n; k++) { const t0 = (k + 0.15) / n, t1 = (k + 0.85) / n; const p0 = [a[0] + (b[0] - a[0]) * t0, a[1] + (b[1] - a[1]) * t0], p1 = [a[0] + (b[0] - a[0]) * t1, a[1] + (b[1] - a[1]) * t1]; const hh = rng.f(0.45, 0.8), yt = y + 1.75;
+          pen.use(M(ST.FABRIC, { color: rng.pick([[0.72, 0.72, 0.74], [0.56, 0.2, 0.2], [0.2, 0.3, 0.52], [0.7, 0.62, 0.4], [0.3, 0.46, 0.36]]), seed: k })); pen.quad(p0[0], yt - hh, p0[1], p1[0], yt - hh, p1[1], p1[0], yt, p1[1], p0[0], yt, p0[1], 0, 0, 1, 1); pen.quad(p1[0], yt - hh, p1[1], p0[0], yt - hh, p0[1], p0[0], yt, p0[1], p1[0], yt, p1[1], 0, 0, 1, 1); } }
+      else if (rng.chance(0.45)) { const q = v.P(0, (s0 + s1) / 2 + rng.f(-0.4, 0.4), 0.7); ctx.propL('planterIn', q[0], y, q[1], 0, 0.6); } } }
+  ctx.main();
+}
 // ground floor shop unit on a stretch of the front face
 function shopUnit(v, rng, S, s0, s1, gh, o = {}) {
   const ctx = v.ctx, pen = v.pen; const pil = 0.36;
@@ -188,6 +205,7 @@ export function shopHouse(ctx, rng, lot, S, o = {}) {
   if (ent && o.home) { const r = ent.room; ctx.poi({ type: 'home', id: 'home', x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), name: '캡슐텔 0번지', doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5), yaw: pen.yaw }); }
   else if (ent) { const r = ent.room; ctx.poi({ type: 'shop', kind: ent.kind, stair: ent.stair, work: ent.work, district: lot.block.district, x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5) }); }
   wallKit(v, 0, o.res ? 0.45 : gh, h, fh, rng, { dens: o.res ? 0.7 : 1.3, cellW: wall.cellW, pier: !!(wall.flags & FLAG.VAR_A) });
+  if (!lot.ring && (lot.corner || rng.chance(0.6))) articulate(v, o.res ? 0.45 : gh, h, fh, wall, rng, { res: o.res });
   // projecting sign + downpipe
   if (!o.res && floors >= 2 && rng.chance(S.blade ?? 0.5)) { const hgt = Math.min(4.6, fh * floors * 0.5); bladeSign(v, 0, 0.55, gh + 1.9 + hgt / 2, hgt, rng, { intensity: S.signI ?? 4.5 }); }
   ctx.detail(); v.box(0, w - 0.52, w - 0.4, 0, 0.13, gh, h, K.MAT_POLE, { bottom: false, top: false }); ctx.main();
@@ -227,6 +245,7 @@ export function tenement(ctx, rng, lot, S, o = {}) {
   blindWall(v, 1, 0, h + par, party, rng, { mural: rng.chance(0.4), aoB: 0.6 }); blindWall(v, 3, 0, h + par, party, rng, { mural: rng.chance(0.4), aoB: 0.6 });
   v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else v.solid();
   wallKit(v, 0, gh, h, fh, rng, { dens: 0.8, cellW: wall.cellW, pier: !!(wall.flags & FLAG.VAR_A) });
+  if (!lot.ring && floors <= 14) articulate(v, gh, h, fh, wall, rng, { noPil: true });
   // roof-top service core
   const cw = Math.min(6, w * 0.3), cd = Math.min(5, d * 0.4), cx = rng.f(-0.25, 0.25) * w;
   pen.box(cx, cz, cw, cd, h, h + 4.2, { wall: M(ST.WIN_SLIT, { color: dim(wall.color, 0.8), seed: wall.seed, A: 0.7, B: PAL.COOL, cellW: 2, floorH: 4.2, flags: WK.CONCRETE }), roof: K.conc(0.25) });

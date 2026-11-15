@@ -179,7 +179,7 @@ function edgeLots(ctx, b, rng, o) {
   const dL = Math.max(6.5, Math.min((o.minDepth ?? 12) * rng.f(1.0, 1.2), inr - 1.2)); const lots = [], placed = [];
   const sep = (A, B) => { for (const [ux, uz] of [[A.c, -A.s], [A.s, A.c], [B.c, -B.s], [B.s, B.c]]) { const ra = A.hw * Math.abs(ux * A.c - uz * A.s) + A.hd * Math.abs(ux * A.s + uz * A.c), rb = B.hw * Math.abs(ux * B.c - uz * B.s) + B.hd * Math.abs(ux * B.s + uz * B.c); if (Math.abs((B.x - A.x) * ux + (B.z - A.z) * uz) > ra + rb - 0.25) return true; } return false; };
   const alley = Math.max(3.4, o.alley ?? 4); let rings = 0;
-  for (let ring = 0; ring < 2; ring++) { const off = ring * (dL + alley); if (ring > 0 && inr - off < dL + 1.5) break; rings = ring + 1; const wk = ring ? 2.0 : 1.35;
+  for (let ring = 0; ring < 2; ring++) { const off = ring * (dL + alley); if (ring > 0 && inr - off < dL + 1.5) break; rings = ring + 1; const wk = ring ? 2.4 : 1.5;
   for (const e of E) {
     const L = e.L - 2 * (b.walk + off) - 0.6; let s = dL + 0.5; if (L < o.wmin + dL) continue;
     while (s < L - o.wmin * 0.6) { let w = rng.f(o.wmin, o.wmax) * wk; if (L - (s + w) < o.wmin * 0.75) w = L - s; if (w < 5) break;

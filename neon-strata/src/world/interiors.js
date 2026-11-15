@@ -96,7 +96,7 @@ function dress(ctx, rng, room, zi, h, door, kind, lc, up) {
   // pendant lamps over the middle of the room
   const np = Math.max(2, Math.min(4, Math.round(dep / 2.6))); for (let i = 0; i < np; i++) { const z = zb + (i + 0.5) * (dep / np), x = cx + (kind === 'bar' ? -w * 0.18 : 0); pen.use(dk); pen.tube(x, h - 0.02, z, x, h - 0.62, z, 0.012, 3); pen.lathe(x, z, [[0.2, h - 0.84], [0.07, h - 0.62]], 8, { cap: false }); pen.use(glow(lc, 10)); pen.lathe(x, z, [[0.07, h - 0.86], [0.07, h - 0.76]], 6, {}); }
   // the middle of the room is used: tables with people at them, gondola shelving, benches of equipment
-  { const fx = cx + w * 0.17; if (w > 5.2) for (let z = zb + 3.3; z < zi - 2.4; z += 2.5) {
+  { const fx = up ? Math.min(cx + w * 0.17, xb - 1.12 - 1.7) : cx + w * 0.17; if (w > (up ? 6.6 : 5.2)) for (let z = zb + 3.3; z < zi - 2.4; z += 2.5) {
       if (kind === 'bar') { ctx.propL('table', fx, 0.03, z, 0, 1, [rng.f(0.7, 1.4), rng.f(0.7, 1.3), rng.f(0.7, 1.3)]); ctx.solidCyl(fx, z, 0.42, 0, 0.75); for (let k = 0; k < 3; k++) if (rng.chance(0.6)) { const an = k * 2.094 + 0.5; const lx = Math.cos(an) * 0.74, lz = Math.sin(an) * 0.74; ctx.spots.push({ x: pen.wx(fx + lx, z + lz), y: pen.oy + 0.03, z: pen.wz(fx + lx, z + lz), yaw: pen.yaw + Math.atan2(-lx, -lz), sit: true }); } }
       else if (kind === 'home') break;
       else { ctx.propL(kind === 'tech' ? 'rack' : 'shelf', fx, 0.03, z, Math.PI / 2); ctx.solid(fx, z, 0.6, 2.1, 0, 1.9); } } }
@@ -129,7 +129,7 @@ export function shopRoom(ctx, rng, xa, xb, zFront, dep, h, door, o = {}) {
     for (let i = 0; i < 3; i++) { pen.use(im(ST.RUST, [0.3, 0.3, 0.32])); pen.lathe(wallX - sx * 0.55, cz - cl / 2 + 0.7 + i * 1.1, [[0.24, 1.1], [0.28, 1.5], [0.2, 1.54]], 7, {}); }
     if (rng.chance(0.6)) ctx.steam.push({ x: pen.wx(wallX - sx * 0.55, cz), y: pen.oy + 1.7, z: pen.wz(wallX - sx * 0.55, cz), s: 0.35 });
   } else if (kind === 'store' || kind === 'tech') {
-    for (const s of [-1, 1]) { if (s === (left ? 1 : -1) && w < 5) continue; const x = (s < 0 ? xa : xb) - s * 0.32; for (let z = room.zb + 0.9; z < zi - 2.2; z += 2.3) { ctx.propL(kind === 'tech' ? 'rack' : 'shelf', x, 0.03, z, s < 0 ? Math.PI / 2 : -Math.PI / 2); } }
+    for (const s of [-1, 1]) { if (s === (left ? 1 : -1) && w < 5) continue; if (up && s > 0) continue; /* the stair runs along that wall */ const x = (s < 0 ? xa : xb) - s * 0.32; for (let z = room.zb + 0.9; z < zi - 2.2; z += 2.3) { ctx.propL(kind === 'tech' ? 'rack' : 'shelf', x, 0.03, z, s < 0 ? Math.PI / 2 : -Math.PI / 2); } }
     pen.box(cx - sx * (w / 2 - 1.6), room.zb + 1.2, 2.0, 0.7, 0.03, 1.0, { wall: im(ST.COMPOSITE, [0.2, 0.2, 0.22]), roof: im(ST.TILE, [0.3, 0.3, 0.3]) }); ctx.solid(cx - sx * (w / 2 - 1.6), room.zb + 1.2, 2.0, 0.7, 0, 1.0);
     pen.use(glow(kind === 'tech' ? K.NEON.cyan : lc, 5)); pen.wall(cx - sx * (w / 2 - 1.6) - 0.4, room.zb + 1.56, cx - sx * (w / 2 - 1.6) + 0.4, room.zb + 1.56, 1.05, 1.5, {});
   } else { // capsule home: bunk pods along the wall, terminal, locker
