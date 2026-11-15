@@ -136,7 +136,7 @@ export function linerRows(ctx, rng, b, S, f0) {
       if (xb > x0 - 3 && xa < x1 + 3 && zb > z0 - 3 && za < z1 + 3) continue; // the landmark itself
       if (Math.abs(cx) < 7 + w / 2 && Math.abs(cx - (x0 + x1) / 2) < (x1 - x0) / 2 + 10) continue; // the way through to it
       const lot = { cx, cz: zc, w, d: dR, face: sg, corner: false, block: b, x: b.x + cx * c + zc * s, z: b.z - cx * s + zc * c, yaw: b.yaw + (sg < 0 ? Math.PI : 0) };
-      shopHouse(ctx, rng, lot, S, { floors: rng.i(2, 5), shutter: 0.12 }); }
+      shopHouse(ctx, rng, lot, S, { floors: rng.i(4, 8), shutter: 0.12 }); }
   }
 }
 
@@ -299,13 +299,13 @@ export function buildDistricts(ctx) {
           const tall = lot.w > 16 && rng.chance(0.7);
           const res = lot.ring ? rng.chance(0.9) : rng.chance(prime ? 0.15 : 0.45);
           if (tall) tenement(ctx, rng, lot, S, { floors: Math.round(clamp(H / 3 * rng.f(0.6, 1.5), 5, 26)), shanty: true, res });
-          else { const home = !ctx.homeDone && dense && lot.w > 8 && Math.hypot(b.x, b.z - 1750) < 520; if (home) ctx.homeDone = true; shopHouse(ctx, rng, lot, S, { floors: home ? 5 : Math.round(clamp((H / 3.2) * rng.f(0.55, 1.35), 3, 12)), shanty: true, shutter: 0.22, res: res && !home, ...(home ? { enter: true, kind: 'home', home: true } : {}) }); }
+          else { const home = !ctx.homeDone && dense && lot.w > 8 && Math.hypot(b.x, b.z - 1750) < 520; if (home) ctx.homeDone = true; shopHouse(ctx, rng, lot, S, { floors: home ? 5 : Math.round(clamp((H / 3.2) * rng.f(0.55, 1.35), 4, 12)), shanty: true, shutter: 0.22, res: res && !home, ...(home ? { enter: true, kind: 'home', home: true } : {}) }); }
         }
         break;
       }
       case 'oldq': {
         if (b.w > 90 && b.noise2 > 0.7 && rng.chance(0.3)) { const [lot] = subdivideT(b, rng, { mode: 'mega', wmin: 999 }); archiveSpire(ctx, rng, lot, S, { h: 160 + 380 * b.noise }); break; }
-        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 11, wmax: 24, alley: 5, minDepth: 11 })) { { const ck = civPick(b, lot, rng); if (ck) { civic(ctx, rng, lot, S, ck); continue; } } const fl = Math.round(clamp((H / 3.4) * rng.f(0.6, 1.3), 2, 9)); if (lot.ring || (!lot.corner && !prime && rng.chance(0.62))) shopHouse(ctx, rng, lot, S, { floors: Math.min(fl + 1, 8), res: lot.ring ? true : rng.chance(0.75) }); else guildHouse(ctx, rng, lot, S, { floors: fl }); }
+        for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 11, wmax: 24, alley: 5, minDepth: 11 })) { { const ck = civPick(b, lot, rng); if (ck) { civic(ctx, rng, lot, S, ck); continue; } } const fl = Math.round(clamp((H / 3.4) * rng.f(0.6, 1.3), 4, 10)); if (lot.ring || (!lot.corner && !prime && rng.chance(0.62))) shopHouse(ctx, rng, lot, S, { floors: Math.min(fl + 1, 8), res: lot.ring ? true : rng.chance(0.75) }); else guildHouse(ctx, rng, lot, S, { floors: fl }); }
         break;
       }
       case 'lumina': {
@@ -313,7 +313,7 @@ export function buildDistricts(ctx) {
         for (const lot of sub(b, rng, { mode: 'perimeter', wmin: 16, wmax: 40, alley: 4, minDepth: 16 })) {
           { const ck = civPick(b, lot, rng); if (ck) { civic(ctx, rng, lot, S, ck); continue; } }
           const k = rng.next(); const hh = clamp(H * rng.f(0.5, 1.4), 18, 300);
-          if (k < 0.4) terrace(ctx, rng, lot, S, { h: Math.min(hh, 110) }); else if (k < 0.75 && lot.w > 22) techTower(ctx, rng, lot, S, { h: hh, brand: rng.chance(0.3) ? 'lumina' : null }); else shopHouse(ctx, rng, lot, S, { floors: Math.round(clamp(hh / 3.6, 3, 9)), gh: 4.6, res: lot.ring ? true : rng.chance(0.2) });
+          if (k < 0.4) terrace(ctx, rng, lot, S, { h: Math.min(hh, 110) }); else if (k < 0.75 && lot.w > 22) techTower(ctx, rng, lot, S, { h: hh, brand: rng.chance(0.3) ? 'lumina' : null }); else shopHouse(ctx, rng, lot, S, { floors: Math.round(clamp(hh / 3.6, 4, 10)), gh: 4.6, res: lot.ring ? true : rng.chance(0.2) });
         }
         break;
       }
