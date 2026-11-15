@@ -37,7 +37,7 @@ const SAVE_KEY = 'ns.save.v1';
 export class Game {
   constructor({ engine, city, crowd, env, U, audio }) {
     Object.assign(this, { engine, city, crowd, env, U, audio }); this.rng = new RNG(Date.now() & 0xffff); this.shake = 0; this.toasts = []; this.news = '카이로스-9에 오신 것을 환영합니다';
-    this.state = { lux: 20, license: 0, vehicle: 0, cargo: {}, biz: {}, shares: {}, remote: false, shards: 0, deliveries: 0, visited: {}, hour: 21.5, won: false, playtime: 0, step: 0, pos: null };
+    this.state = { energy: 100, lux: 20, license: 0, vehicle: 0, cargo: {}, biz: {}, shares: {}, remote: false, shards: 0, deliveries: 0, visited: {}, hour: 21.5, won: false, playtime: 0, step: 0, pos: null };
     this.prices = {}; this.stock = {}; this.stockHist = {}; for (const k in STOCK_BASE) { this.stock[k] = STOCK_BASE[k]; this.stockHist[k] = []; }
     this.event = null; this.eventT = 50; this.drift = {}; for (const c of COMMODITIES) this.drift[c.id] = 1;
     this.job = null; this.offers = []; this.pickups = []; this.near = null; this.t = 0; this.saveT = 0; this.tickT = 0;
@@ -45,7 +45,7 @@ export class Game {
     this.pois = city.pois; this.trade = this.pois.filter((p) => p.type === 'shop' || p.type === 'market' || p.type === 'plaza' || (p.type === 'lobby' && p.big));
     this.spots = this.pois.filter((p) => p.type === 'shop' || p.type === 'lobby' || p.type === 'pad' || p.type === 'market');
     // work happens in real buildings: employers are shops and tower lobbies you walk into, deliveries go to real front doors
-    this.employers = this.pois.filter((p) => p.type === 'shop' || p.type === 'lobby');
+    this.employers = this.pois.filter((p) => p.type === 'shop' || p.type === 'lobby' || SERVICE_TYPES.includes(p.type));
     this.doors = (city.ctx.marks || []).filter((m) => m.type === 'entry' || m.type === 'garage').map((m) => ({ x: m.doorX, y: 0.2, z: m.doorZ, type: m.type }));
   }
   // ---------------------------------------------------------------- derived values
@@ -84,7 +84,7 @@ export class Game {
     const lm = [1, 2.2, 6, 20, 80][this.state.license] || 1;
     for (let i = 0; i < 5 && emp.length; i++) {
       const a = this.rng.pick(emp); if (this.offers.some((o) => o.a === a)) continue;
-      const T = TRADES[a.type === 'lobby' ? 'lobby' : a.kind] || TRADES.store; const rk = this.rankOf(T.id);
+      const T = TRADES[a.type === 'shop' ? a.kind : a.type] || TRADES.store; const rk = this.rankOf(T.id); const hr = this.env.hour; const open = T.hours[0] <= T.hours[1] ? hr >= T.hours[0] && hr < T.hours[1] : hr >= T.hours[0] || hr < T.hours[1]; if (!open) continue;
       const tasks = T.tasks.filter((t) => a.work[t[0]]); if (tasks.length < 3) continue;
       const hold = tasks.reduce((n, t) => n + t[2], 0);
       this.offers.push({ a, trade: T, tasks, name: (a.name && a.type !== 'lobby' ? a.name : T.place), rankName: RANKS[rk][0], d: Math.hypot(a.x - p.x, a.z - p.z), item: T.name, pay: Math.round(T.base * (1 + 0.65 * rk) * lm * this.rng.f(0.92, 1.12)), time: Math.round(hold + tasks.length * 14 + Math.hypot(a.x - p.x, a.z - p.z) / 3 + 40) });
@@ -94,10 +94,45 @@ export class Game {
   rankOf(id) { const xp = (this.state.career || {})[id] || 0; let r = 0; for (let k = 0; k < RANKS.length; k++) if (xp >= RANKS[k][1]) r = k; return r; }
   accept(i) {
     const o = this.offers[i]; if (!o || this.job) return;
-    const route = [{ x: o.a.x, y: o.a.y, z: o.a.z, big: o.a.big, hold: 1.5, label: `${o.name} 안으로 들어가 출근 기록` }, ...o.tasks.map((t) => ({ ...o.a.work[t[0]], hold: t[2], label: t[1] }))];
-    this.job = { ...o, route, stage: 0, prog: 0, left: o.time * 1.6 }; this.offers = []; this.toast(`${o.name} ${o.rankName}(으)로 채용 — 가게 안으로 출근하세요`, 'good'); this.audio?.blip(700, 0.1);
+    if ((this.state.energy ?? 100) < 20) { this.toast('너무 지쳤습니다 — 식사하거나 숙소에서 쉬고 오세요', 'bad'); return; }
+    const total = 4 + Math.min(3, this.rankOf(o.trade.id));
+    this.job = { ...o, stage: 0, prog: 0, orders: [], spawned: 0, total, nextT: 1.5, done: 0, missed: 0, tips: 0, left: (total * 60 + 120) * 1.3, time: total * 60 + 120 };
+    this.offers = []; this.toast(`${o.name} ${o.rankName}(으)로 채용 — 안으로 들어가 출근 기록을 하세요`, 'good'); this.audio?.blip(700, 0.1);
   }
-  jobLabel() { const J = this.job; if (!J) return ''; const t = J.route[J.stage]; return `${t.label}${J.prog > 0.05 ? ` · ${Math.min(99, Math.round((J.prog / t.hold) * 100))}%` : ''} (${J.stage}/${J.route.length - 1})`; }
+  // one customer / one piece of work: a chain of things to do at real places in the building, with someone waiting on it
+  _order(J) {
+    const W = J.a.work, r = this.rng; const pick = (...k) => { const a = k.filter((q) => W[q]); return a.length ? r.pick(a) : 'back'; }; const id = J.trade.id; let who, steps, patience = 60;
+    if (id === 'eatery') { const t = pick('side', 'upA', 'upB', 'front'); const up = t[0] === 'u' ? '2층 ' : ''; who = r.pick(['국밥 손님', '만두 손님', '단체 손님', '혼밥 손님', '포장 손님']); steps = [[t, `${up}테이블에서 주문 받기`, 1.6], ['back', '주방에 주문 넣고 음식 받기', 3.2], [t, `${up}테이블에 서빙`, 1.2]]; if (r.chance(0.5)) steps.push(['front', '계산 · 배웅', 1.6]); patience = 62; }
+    else if (id === 'store') { if (r.chance(0.35)) { const t = pick('side', 'upA', 'upB'); who = '입고 상자'; steps = [['front', '입구에서 납품 상자 받기', 1.8], [t, `${t[0] === 'u' ? '2층 ' : ''}진열대에 채우기`, 3.2]]; patience = 75; } else { const t = pick('side', 'upA', 'upB'); who = r.pick(['필터 찾는 손님', '쌀 사러 온 손님', '급한 손님', '단골 손님']); steps = [['front', '손님 응대 — 찾는 물건 확인', 1.5], [t, `${t[0] === 'u' ? '2층 ' : ''}진열대에서 상품 찾기`, 2.4], ['back', '계산대에서 계산', 2.0]]; patience = 58; } }
+    else if (id === 'tech') { who = r.pick(['고장 난 드론', '의체 관절', '먹통 단말기', '과열 배터리']); steps = [['front', '접수 — 증상 듣기', 1.6], ['back', '작업대에서 진단', 3.0], [pick('upA', 'upB', 'side'), '부품 찾기', 2.4], ['back', '작업대에서 수리', 3.6], ['front', '시험 후 손님에게 인계', 1.6]]; patience = 95; }
+    else if (id === 'care') { who = r.pick(['호흡기 환자', '낙상 환자', '검진 예약자', '보호자']); steps = [['front', '내원객 맞이 — 증상 확인', 1.6], ['back', '접수 창구에서 등록', 3.0], [pick('side', 'upB'), '진료실 앞까지 안내 · 이송', 2.6]]; patience = 60; }
+    else if (id === 'hotel') { who = r.pick(['체크인 손님', '장기 투숙객', '짐 많은 손님']); steps = [['front', '투숙객 맞이 — 짐 받기', 1.5], ['back', '프런트에서 체크인', 3.0], [pick('side', 'upB'), '승강기 홀까지 짐 운반', 2.4]]; patience = 62; }
+    else { who = r.pick(['방문객', '민원인', '택배 기사', '면담 예약자']); steps = [['front', '방문객 맞이 — 용건 확인', 1.5], ['back', '데스크에서 접수 · 조회', 3.0], [pick('side', 'upB'), '담당 창구 · 승강기 홀로 안내', 2.4]]; patience = 62; }
+    return { who, steps: steps.map(([k, label, hold]) => ({ ...W[k], label, hold })), i: 0, prog: 0, left: patience, patience };
+  }
+  jobTarget() { const J = this.job; if (!J) return null; if (J.stage !== 1 || !J.orders.length) return J.a; const p = this.player.p; let best = null, bd = 1e9; for (const o of J.orders) { const t = o.steps[o.i]; const d = Math.hypot(t.x - p.x, t.z - p.z) + Math.abs(t.y - p.y) * 3 + o.left * 0.4; if (d < bd) { bd = d; best = t; } } return best; }
+  jobLabel() {
+    const J = this.job; if (!J) return ''; const en = ` · 체력 ${Math.round(this.state.energy ?? 100)}`;
+    if (J.stage === 0) return `${J.name} 안으로 들어가 출근 기록${en}`;
+    if (J.stage === 2) return `퇴근 기록 — 처리 ${J.done}/${J.total}${J.missed ? ` · 놓침 ${J.missed}` : ''}${en}`;
+    if (!J.orders.length) return `손님을 기다리는 중 (${J.done + J.missed}/${J.total})${en}`;
+    return J.orders.map((o) => `${o.who}: ${o.steps[o.i].label}${o.prog > 0.05 ? ` ${Math.round((o.prog / o.steps[o.i].hold) * 100)}%` : ''} (${Math.max(0, Math.ceil(o.left))}초)`).join(' / ') + en;
+  }
+  // buildings do what they are for: treatment, a bed, courses, study, a meal
+  service(poi) {
+    const s = this.state; const lm = [1, 2.2, 6, 20, 80][s.license] || 1; const c = s.career || (s.career = {}); if (s.energy == null) s.energy = 100;
+    const pay = (n) => { n = Math.round(n * lm); if (s.lux < n) { this.toast(`럭스가 부족합니다 — ${fmt(n)} ℓ 필요`, 'bad'); return false; } s.lux -= n; this.audio?.coin(); return true; };
+    const pass = (hrs) => { this.env.hour = (this.env.hour + hrs) % 24; this.fade = 1; };
+    switch (poi.type) {
+      case 'hospital': if (s.energy > 85) this.toast('접수 창구 — 검진 결과 이상 없음. 진료가 필요 없습니다'); else if (pay(30)) { s.energy = 100; pass(1); this.toast('진료 완료 — 체력 100 회복 (1시간 경과)', 'good'); } return true;
+      case 'hotel': if (pay(18)) { s.energy = 100; s.rested = 2; this.env.hour = 7; this.fade = 1; this.save(); this.toast('객실에서 숙면 — 체력 회복, 다음 근무 2회 급여 +15%', 'good'); } return true;
+      case 'school': { if (s.energy < 25) { this.toast('수업을 들을 체력이 없습니다', 'bad'); return true; } const hr = this.env.hour; if (hr < 8 || hr >= 21) { this.toast('학교는 08–21시에만 수업합니다', 'bad'); return true; } const ids = [['eatery', '조리'], ['store', '유통'], ['tech', '정비'], ['office', '사무'], ['care', '간호'], ['hotel', '접객']]; s.course = ((s.course ?? -1) + 1) % ids.length; const [id, nm] = ids[s.course]; if (pay(40)) { c[id] = (c[id] || 0) + 2; s.energy -= 18; pass(2); this.toast(`${nm} 과정 수료 — ${nm} 경력 +2 (2시간 경과)`, 'good'); } return true; }
+      case 'library': { if (this.t - (this._studyT ?? -1e9) < 240) { this.toast('방금 공부했습니다 — 조금 쉬었다 오세요'); return true; } if (s.energy < 15) { this.toast('집중할 체력이 없습니다', 'bad'); return true; } this._studyT = this.t; let low = 'store'; for (const k of ['eatery', 'store', 'tech', 'office']) if ((c[k] || 0) < (c[low] || 0)) low = k; c[low] = (c[low] || 0) + 1; s.energy -= 10; pass(1.5); this.toast('열람실에서 독학 — 가장 부족한 분야 경력 +1 (무료)', 'good'); return true; }
+      case 'police': this.toast('치안센터 민원실 — 접수할 사건이 없습니다. 분실 광편은 주운 사람 소유입니다'); return true;
+    }
+    return false;
+  }
+  meal() { const s = this.state; if (s.energy == null) s.energy = 100; if (s.energy > 75) return false; const lm = [1, 2.2, 6, 20, 80][s.license] || 1; const n = Math.round(6 * lm); if (s.lux < n) return false; s.lux -= n; s.energy = Math.min(100, s.energy + 45); this.env.hour = (this.env.hour + 0.5) % 24; this.toast(`식사 — 체력 +45 (${fmt(n)} ℓ)`, 'good'); this.audio?.coin(); return true; }
   cancelJob() { this.job = null; }
 
   // ---------------------------------------------------------------- world bits
@@ -150,25 +185,29 @@ export class Game {
     // courier job
     const J = this.job;
     if (J) {
-      J.left -= dt; const tgt = J.route[J.stage]; const dd = Math.hypot(tgt.x - p.x, tgt.z - p.z); const dy = Math.abs(tgt.y - p.y); const last = J.route.length - 1; J.item = tgt.label;
-      // a task is done by being at its station and working there: leave and the progress is lost
-      if (pl.mode === 'foot' && dd < (tgt.big ? 9 : J.stage === 0 ? 4 : 2.0) && dy < 1.5) {
-        J.prog += dt;
-        if (J.prog >= tgt.hold) {
-          J.prog = 0; this.env.hour = (this.env.hour + 0.35) % 24; this.audio?.blip(880, 0.08);
-          if (J.stage < last) { J.stage++; this.toast(J.stage === 1 ? `출근 완료 — ${J.route[1].label}` : `다음 업무 — ${J.route[J.stage].label}`, 'good'); }
-          else { const T = J.trade; const c = s.career || (s.career = {}); const r0 = this.rankOf(T.id); c[T.id] = (c[T.id] || 0) + 1; const r1 = this.rankOf(T.id);
-            const bonus = J.left > 0 ? Math.round(J.pay * 0.25) : 0; this.earn(J.pay + bonus, bonus ? `${J.name} 근무 완료 (성실 수당 포함)` : `${J.name} 근무 완료`); s.deliveries++;
-            if (r1 > r0) this.toast(`승진 — ${T.name} ${RANKS[r1][0]} (급여 인상)`, 'good'); this.job = null; }
-        }
-      } else J.prog = Math.max(0, J.prog - dt * 2);
+      J.left -= dt; const near = (t, r) => pl.mode === 'foot' && Math.hypot(t.x - p.x, t.z - p.z) < r && Math.abs(t.y - p.y) < 1.5; const tgt = this.jobTarget(); J.item = this.jobLabel();
+      if (J.stage === 0) { if (near(J.a, J.a.big ? 9 : 4)) { J.prog += dt; if (J.prog > 1.2) { J.stage = 1; J.prog = 0; this.toast('출근 완료 — 손님이 오면 주문을 받으세요', 'good'); this.audio?.blip(880, 0.08); } } else J.prog = 0; }
+      else if (J.stage === 1) {
+        J.nextT -= dt; if (J.spawned < J.total && J.orders.length < 2 && J.nextT <= 0) { const o = this._order(J); J.orders.push(o); J.spawned++; J.nextT = this.rng.f(9, 17); this.toast(`${o.who} — ${o.steps[0].label}`); this.audio?.blip(620, 0.06); }
+        let act = null; for (const o of J.orders) { o.left -= dt; if (near(o.steps[o.i], 2.0) && (!act || o.left < act.left)) act = o; }
+        for (const o of J.orders) if (o !== act) o.prog = Math.max(0, o.prog - dt * 2);
+        if (act) { act.prog += dt; if (act.prog >= act.steps[act.i].hold) { act.prog = 0; act.i++; this.audio?.blip(880, 0.06); s.energy = Math.max(0, (s.energy ?? 100) - 2.5);
+            if (act.i >= act.steps.length) { J.orders.splice(J.orders.indexOf(act), 1); J.done++; this.env.hour = (this.env.hour + 0.4) % 24; const quick = act.left > act.patience * 0.4; if (quick) J.tips += Math.round(J.pay * 0.07); this.toast(`${act.who} 처리 완료${quick ? ' — 빠른 응대에 팁' : ''}`, 'good'); }
+            else this.toast(`${act.who} — 다음: ${act.steps[act.i].label}`); } }
+        for (let k = J.orders.length - 1; k >= 0; k--) if (J.orders[k].left <= 0) { this.toast(`${J.orders[k].who} — 기다리다 그냥 갔습니다`, 'bad'); J.orders.splice(k, 1); J.missed++; }
+        if (s.energy <= 0) { this.toast('탈진 — 근무 중단. 병원이나 숙소에서 회복하세요', 'bad'); this.job = null; }
+        else if (J.spawned >= J.total && !J.orders.length) { J.stage = 2; J.prog = 0; this.toast('오늘 손님 끝 — 출근했던 자리에서 퇴근 기록을 하세요', 'good'); }
+      } else if (near(J.a, J.a.big ? 9 : 4)) { J.prog += dt; if (J.prog > 1.2) { const T = J.trade; const c = s.career || (s.career = {}); const r0 = this.rankOf(T.id); const good = J.done >= J.total * 0.5; if (good) c[T.id] = (c[T.id] || 0) + 1; const r1 = this.rankOf(T.id);
+          const rest = s.rested > 0 ? 1.15 : 1; if (s.rested > 0) s.rested--; const wage = Math.round(J.pay * rest * (J.done / J.total)); this.earn(wage + J.tips, `${J.name} 근무 — 처리 ${J.done}/${J.total}${J.tips ? `, 팁 ${fmt(J.tips)} ℓ` : ''}`); s.deliveries++;
+          if (!good) this.toast('손님을 너무 많이 놓쳤습니다 — 경력 인정 없음', 'bad'); else if (r1 > r0) this.toast(`승진 — ${T.name} ${RANKS[r1][0]} (급여 인상)`, 'good'); this.job = null; } }
+      const last = 0;
       if (this.job && J.left < -J.time) { this.toast('근무 시간 초과 — 무단 이탈로 해고', 'bad'); this.job = null; }
-      const atEmp = J.stage === 0; this.mkA.visible = !!this.job && atEmp; this.mkB.visible = !!this.job && !atEmp;
+      const atEmp = J.stage !== 1 || !J.orders.length; this.mkA.visible = !!this.job && atEmp; this.mkB.visible = !!this.job && !atEmp;
       if (this.job) { const mk = atEmp ? this.mkA : this.mkB; mk.position.set(tgt.x, tgt.y, tgt.z); mk.children[1].rotation.z = this.t; }
     } else { this.mkA.visible = this.mkB.visible = false; }
     // nearest interactable
     this.near = null; let best = 1e9;
-    if (pl.mode === 'foot') for (const o of this.pois) { if (!INTERACT[o.type]) continue; const dd = Math.hypot(o.x - p.x, o.z - p.z); const r = o.type === 'lobby' && o.big ? 9 : o.type === 'market' || o.type === 'plaza' ? 22 : o.type === 'station' ? 5 : 3.6; if (dd < r && Math.abs(o.y - p.y) < 4 && dd < best) { best = dd; this.near = o; } }
+    if (pl.mode === 'foot') for (const o of this.pois) { if (!INTERACT[o.type]) continue; const dd = Math.hypot(o.x - p.x, o.z - p.z); const r = o.type === 'lobby' && o.big ? 9 : SERVICE_TYPES.includes(o.type) ? 6 : o.type === 'market' || o.type === 'plaza' ? 22 : o.type === 'station' ? 5 : 3.6; if (dd < r && Math.abs(o.y - p.y) < 4 && dd < best) { best = dd; this.near = o; } }
     // toasts, autosave
     for (const t of this.toasts) t.t -= dt; while (this.toasts.length && this.toasts[0].t <= 0) this.toasts.shift();
     this.fade = Math.max(0, (this.fade || 0) - dt * 0.8);
@@ -197,12 +236,18 @@ export class Game {
   reset() { try { localStorage.removeItem(SAVE_KEY); } catch (e) { /* ignore */ } location.reload(); }
 }
 // trades: where you work decides what you do. stations (back / front / side / upA / upB) are real places inside the building
+export const SERVICE_TYPES = ['hospital', 'hotel', 'school', 'library', 'police'];
 export const RANKS = [['수습', 0], ['직원', 3], ['주임', 8], ['매니저', 16], ['점장', 30]];
 export const TRADES = {
-  bar: { id: 'eatery', name: '식당', place: '골목 식당', base: 46, tasks: [['back', '주방에서 음식 받기', 2.5], ['upA', '2층 테이블에 서빙', 2.5], ['upB', '2층 테이블 치우기', 3], ['back', '주방에 그릇 반납', 2], ['front', '입구에서 손님 맞이', 3], ['side', '홀 서빙', 2.5], ['back', '마감 — 주방 정리', 3.5]] },
-  store: { id: 'store', name: '상점', place: '동네 상점', base: 42, tasks: [['back', '창고에서 상품 꺼내기', 2.5], ['side', '진열대 채우기', 3.5], ['upA', '2층 재고 확인', 3], ['upB', '2층 선반 정리', 3], ['back', '계산대 근무', 4], ['front', '쇼윈도 정리', 3], ['back', '마감 정산', 3.5]] },
-  tech: { id: 'tech', name: '기술점', place: '기술 수리점', base: 58, tasks: [['front', '접수 — 고장 기기 받기', 2.5], ['back', '작업대에서 진단', 3.5], ['upA', '2층 부품실에서 부품 찾기', 3], ['back', '작업대에서 수리', 4.5], ['side', '시험 가동', 3], ['front', '출고 — 손님에게 인계', 2.5]] },
-  lobby: { id: 'office', name: '사무', place: '타워 로비', base: 70, tasks: [['back', '안내 데스크 근무', 4], ['side', '승강기 홀 점검', 3], ['front', '방문객 안내', 3], ['upB', '반대편 승강기 홀 순찰', 3], ['back', '출입 기록 정리', 4], ['front', '퇴근 전 로비 마감', 3]] },
+  bar: { hours: [10, 2], id: 'eatery', name: '식당', place: '골목 식당', base: 46, tasks: [['back', '주방에서 음식 받기', 2.5], ['upA', '2층 테이블에 서빙', 2.5], ['upB', '2층 테이블 치우기', 3], ['back', '주방에 그릇 반납', 2], ['front', '입구에서 손님 맞이', 3], ['side', '홀 서빙', 2.5], ['back', '마감 — 주방 정리', 3.5]] },
+  store: { hours: [8, 23], id: 'store', name: '상점', place: '동네 상점', base: 42, tasks: [['back', '창고에서 상품 꺼내기', 2.5], ['side', '진열대 채우기', 3.5], ['upA', '2층 재고 확인', 3], ['upB', '2층 선반 정리', 3], ['back', '계산대 근무', 4], ['front', '쇼윈도 정리', 3], ['back', '마감 정산', 3.5]] },
+  tech: { hours: [9, 21], id: 'tech', name: '기술점', place: '기술 수리점', base: 58, tasks: [['front', '접수 — 고장 기기 받기', 2.5], ['back', '작업대에서 진단', 3.5], ['upA', '2층 부품실에서 부품 찾기', 3], ['back', '작업대에서 수리', 4.5], ['side', '시험 가동', 3], ['front', '출고 — 손님에게 인계', 2.5]] },
+  hospital: { hours: [0, 24], id: 'care', name: '병원', place: '성모병원', base: 66, tasks: [['back', '접수 창구 근무', 4], ['side', '환자 이송 보조', 3], ['front', '내원객 안내', 3], ['upB', '병동 물품 보충', 3], ['back', '진료 기록 정리', 4], ['side', '대기실 소독', 3]] },
+  hotel: { hours: [0, 24], id: 'hotel', name: '호텔', place: '궤도호텔', base: 54, tasks: [['back', '프런트 체크인 응대', 4], ['front', '투숙객 짐 받기', 2.5], ['side', '승강기 홀까지 짐 운반', 3], ['upB', '객실 키 정리', 3], ['back', '예약 장부 마감', 3.5]] },
+  school: { hours: [8, 17], id: 'teach', name: '학교', place: '중앙고등학교', base: 60, tasks: [['back', '교무실 서류 접수', 3.5], ['side', '수업 자료 운반', 3], ['front', '등하교 지도', 4], ['upB', '실습실 정리', 3], ['back', '출석부 정리', 3.5]] },
+  library: { hours: [9, 21], id: 'office', name: '도서관', place: '구립도서관', base: 48, tasks: [['back', '대출 데스크 근무', 4], ['side', '반납 도서 정리', 3], ['upB', '서가 순회', 3], ['front', '이용객 안내', 3]] },
+  police: { hours: [0, 24], id: 'guard', name: '치안', place: '치안센터', base: 68, tasks: [['back', '민원 접수', 4], ['front', '출입구 근무', 4], ['side', '순찰 장비 점검', 3], ['upB', '보관함 정리', 3], ['back', '근무 일지 작성', 3.5]] },
+  lobby: { hours: [8, 19], id: 'office', name: '사무', place: '타워 로비', base: 70, tasks: [['back', '안내 데스크 근무', 4], ['side', '승강기 홀 점검', 3], ['front', '방문객 안내', 3], ['upB', '반대편 승강기 홀 순찰', 3], ['back', '출입 기록 정리', 4], ['front', '퇴근 전 로비 마감', 3]] },
 };
-export const INTERACT = { shop: '[E] 거래', market: '[E] 시장 거래', plaza: '[E] 광장 거래소', lobby: '[E] 사업 · 거래', license: '[E] 고도 면허', exchange: '[E] 에테르 거래소', bank: '[E] 광휘 서열', home: '[E] 휴식 · 저장', station: '[E] 마그레브 탑승 (8 ℓ)', crown: '[E] 왕관 인수' };
+export const INTERACT = { hospital: '[E] 진료 접수', hotel: '[E] 객실 숙박', school: '[E] 수강 신청', library: '[E] 열람실 이용', police: '[E] 민원실', shop: '[E] 거래', market: '[E] 시장 거래', plaza: '[E] 광장 거래소', lobby: '[E] 사업 · 거래', license: '[E] 고도 면허', exchange: '[E] 에테르 거래소', bank: '[E] 광휘 서열', home: '[E] 휴식 · 저장', station: '[E] 마그레브 탑승 (8 ℓ)', crown: '[E] 왕관 인수' };
 export { STOCK_BASE, CORP_DIST, PM, RIVALS };

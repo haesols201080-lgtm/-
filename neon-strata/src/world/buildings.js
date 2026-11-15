@@ -118,7 +118,8 @@ function garageUnit(v, rng, S, s0, s1, gh, o = {}) {
 function wallKit(v, f, y0, y1, fh, rng, o = {}) {
   const ctx = v.ctx, pen = v.pen; const L = v.len(f); const floors = Math.max(1, Math.round((y1 - y0) / fh)); if (L < 4) return;
   const n = Math.min(10, Math.round(floors * L / 26 * (o.dens ?? 1)));
-  for (let i = 0; i < n; i++) { const s = rng.f(0.9, L - 0.9), y = y0 + rng.i(0, floors - 1) * fh + 0.12; const p = v.P(f, s, 0.22); ctx.propL('acSmall', p[0], y, p[1], FACE_ANG[f], 0.9); ctx.detail(); pen.use(K.MAT_POLE); v.box(f, s - 0.4, s + 0.4, 0, 0.42, y + 0.02, y + 0.1, null, {}); ctx.main(); }
+  const cw = o.cellW ? L / Math.max(1, Math.round(L / o.cellW)) : 3.1; const nb = Math.max(1, Math.round(L / cw)); const used = new Set();
+  for (let i = 0; i < n; i++) { const bay = rng.i(0, nb - 1), fl = rng.i(0, floors - 1); if (used.has(bay * 64 + fl)) continue; used.add(bay * 64 + fl); const s = Math.min(L - 0.6, Math.max(0.6, o.pier ? bay * cw + 0.02 : (bay + 0.5) * cw)), y = y0 + fl * fh + (o.pier ? 0.5 : 0.07); const p = v.P(f, s, 0.2); ctx.propL('acSmall', p[0], y, p[1], FACE_ANG[f], 0.85); ctx.detail(); pen.use(K.MAT_POLE); v.box(f, s - 0.42, s + 0.42, 0, 0.42, y + 0.02, y + 0.09, null, {}); const b0 = v.P(f, s - 0.36, 0.38), b1 = v.P(f, s - 0.36, 0.02), b2 = v.P(f, s + 0.36, 0.38), b3 = v.P(f, s + 0.36, 0.02); pen.beam(b0[0], y + 0.02, b0[1], b1[0], y - 0.3, b1[1], 0.03, 0.03); pen.beam(b2[0], y + 0.02, b2[1], b3[0], y - 0.3, b3[1], 0.03, 0.03); ctx.main(); }
   ctx.detail(); pen.use(K.dark(0.09));
   { const s = rng.f(0.3, 0.7) < 0.5 ? 0.22 : L - 0.6; const a = v.P(f, s, 0.05); pen.tube(a[0], y0 - 0.6, a[1], a[0], y1 - 0.4, a[1], 0.035, 4); v.box(f, s - 0.16, s + 0.16, 0, 0.12, y0 + 0.5, y0 + 0.95, K.metal([0.4, 0.41, 0.43]), {});
     if (floors > 1) { const yy = y0 + fh - 0.22; const b0 = v.P(f, 0.4, 0.05), b1 = v.P(f, L - 0.4, 0.05); pen.use(K.dark(0.09)); pen.tube(b0[0], yy, b0[1], b1[0], yy, b1[1], 0.025, 3); } }
@@ -186,7 +187,7 @@ export function shopHouse(ctx, rng, lot, S, o = {}) {
   v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else v.solid();
   if (ent && o.home) { const r = ent.room; ctx.poi({ type: 'home', id: 'home', x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), name: '캡슐텔 0번지', doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5), yaw: pen.yaw }); }
   else if (ent) { const r = ent.room; ctx.poi({ type: 'shop', kind: ent.kind, stair: ent.stair, work: ent.work, district: lot.block.district, x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5) }); }
-  wallKit(v, 0, gh, h, fh, rng, { dens: o.res ? 0.7 : 1.3 });
+  wallKit(v, 0, o.res ? 0.45 : gh, h, fh, rng, { dens: o.res ? 0.7 : 1.3, cellW: wall.cellW, pier: !!(wall.flags & FLAG.VAR_A) });
   // projecting sign + downpipe
   if (!o.res && floors >= 2 && rng.chance(S.blade ?? 0.5)) { const hgt = Math.min(4.6, fh * floors * 0.5); bladeSign(v, 0, 0.55, gh + 1.9 + hgt / 2, hgt, rng, { intensity: S.signI ?? 4.5 }); }
   ctx.detail(); v.box(0, w - 0.52, w - 0.4, 0, 0.13, gh, h, K.MAT_POLE, { bottom: false, top: false }); ctx.main();
@@ -225,7 +226,7 @@ export function tenement(ctx, rng, lot, S, o = {}) {
   facade(v, 2, 0, h, { wall: { ...wall, flags: wall.flags & 7 }, bayCells: 999, floorH: fh, aoB: 0.6 }); pen.use(party); v.wall(2, 0, w, 0, h, h + par);
   blindWall(v, 1, 0, h + par, party, rng, { mural: rng.chance(0.4), aoB: 0.6 }); blindWall(v, 3, 0, h + par, party, rng, { mural: rng.chance(0.4), aoB: 0.6 });
   v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else v.solid();
-  wallKit(v, 0, gh, h, fh, rng, { dens: 0.8 });
+  wallKit(v, 0, gh, h, fh, rng, { dens: 0.8, cellW: wall.cellW, pier: !!(wall.flags & FLAG.VAR_A) });
   // roof-top service core
   const cw = Math.min(6, w * 0.3), cd = Math.min(5, d * 0.4), cx = rng.f(-0.25, 0.25) * w;
   pen.box(cx, cz, cw, cd, h, h + 4.2, { wall: M(ST.WIN_SLIT, { color: dim(wall.color, 0.8), seed: wall.seed, A: 0.7, B: PAL.COOL, cellW: 2, floorH: 4.2, flags: WK.CONCRETE }), roof: K.conc(0.25) });

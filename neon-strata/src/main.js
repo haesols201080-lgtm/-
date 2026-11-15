@@ -60,7 +60,7 @@ async function start() {
       if (input.hit('Tab', 'KeyM', 'Escape') && (hud.open || !input.hit('Escape'))) hud.toggle();
       if (input.hit('KeyE', 'BtnE') && game.near && !player.liftPrompt && !hud.open) {
         const t = game.near.type;
-        if (t === 'home') game.sleep(); else if (t === 'license') hud.toggle('garage'); else if (t === 'exchange') hud.toggle('stock'); else if (t === 'bank') hud.toggle('rank'); else if (t === 'station') hud.toggle('sys'); else if (t === 'crown') hud.toggle('biz'); else if (t === 'lobby') hud.toggle('biz'); else hud.toggle('trade');
+        if (game.service(game.near)) { /* the building did its job */ } else if (t === 'shop' && game.near.kind === 'bar' && !game.job && game.meal()) { /* ate */ } else if (t === 'home') { game.state.energy = 100; game.sleep(); } else if (t === 'license') hud.toggle('garage'); else if (t === 'exchange') hud.toggle('stock'); else if (t === 'bank') hud.toggle('rank'); else if (t === 'station') hud.toggle('sys'); else if (t === 'crown') hud.toggle('biz'); else if (t === 'lobby') hud.toggle('biz'); else hud.toggle('trade');
       }
       player.update(dt, hud.open ? { ...input, move: { x: 0, y: 0 }, lookX: 0, lookY: 0, wheel: 0, hit: () => false, down: () => false, enabled: false, touch: input.touch } : input);
       game.update(dt, input);

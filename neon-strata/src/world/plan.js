@@ -103,7 +103,12 @@ export function buildPlan(ctx) {
     const m = Math.min(b.walk * 0.5, 2.2); const cs = Math.cos(b.yaw), sn = Math.sin(b.yaw);
     const at = (lx, lz) => [b.x + lx * cs + lz * sn, 0.2, b.z - lx * sn + lz * cs];
     b.at = (lx, lz) => { const p = at(lx, lz); return [p[0], p[2]]; };
-    ctx.walkways.push({ pts: [at(-b.w / 2 + m, -b.d / 2 + m), at(b.w / 2 - m, -b.d / 2 + m), at(b.w / 2 - m, b.d / 2 - m), at(-b.w / 2 + m, b.d / 2 - m)], closed: true, district: b.district, block: b.id });
+    { const C = b.corners; let gx = 0, gz = 0; for (const p of C) { gx += p[0] / 4; gz += p[1] / 4; } const n = C.length; const pts = [];
+      const ed = C.map((a, i) => { const q = C[(i + 1) % n]; let tx = q[0] - a[0], tz = q[1] - a[1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l; let nx = tz, nz = -tx; if ((a[0] - gx) * nx + (a[1] - gz) * nz < 0) { nx = -nx; nz = -nz; } return { a, tx, tz, nx, nz }; });
+      for (let i = 0; i < n; i++) { const e0 = ed[(i + n - 1) % n], e1 = ed[i]; // corner i = intersection of the two inset edge lines
+        const p0 = [e0.a[0] - e0.nx * m, e0.a[1] - e0.nz * m], p1 = [e1.a[0] - e1.nx * m, e1.a[1] - e1.nz * m]; const den = e0.tx * e1.tz - e0.tz * e1.tx;
+        if (Math.abs(den) < 1e-4) pts.push([p1[0], 0.2, p1[1]]); else { const t = ((p1[0] - p0[0]) * e1.tz - (p1[1] - p0[1]) * e1.tx) / den; pts.push([p0[0] + e0.tx * t, 0.2, p0[1] + e0.tz * t]); } }
+      ctx.walkways.push({ pts, closed: true, district: b.district, block: b.id }); }
   }
   return blocks;
 }
