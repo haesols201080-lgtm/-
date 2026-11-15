@@ -133,6 +133,7 @@ function articulate(v, y0, y1, fh, wall, rng, o = {}) {
   const trim = K.conc(0.5), dk = K.dark(0.1); ctx.detail();
   v.box(0, -0.1, L + 0.1, 0, 0.36, y1 - 0.08, y1 + 0.2, trim, {}); v.box(0, -0.04, L + 0.04, 0, 0.2, y1 - 0.34, y1 - 0.08, trim, {});
   if (!o.noPil) { v.box(0, 0, 0.34, 0, 0.16, y0, y1 - 0.34, trim, { bottom: false, top: false }); v.box(0, L - 0.34, L, 0, 0.16, y0, y1 - 0.34, trim, { bottom: false, top: false }); }
+  { const stone = M(ST.STONE, { color: [0.5, 0.48, 0.45], seed: 5 }); if (!o.res) v.box(0, 0, L, 0, 0.1, y0 - 0.32, y0, stone, { ends: false }); let nS = 0; for (let fl = 0; fl < Math.min(floors, 4) && nS < 22; fl++) for (let b2 = 0; b2 < nb && nS < 22; b2++, nS++) { const c = (b2 + 0.5) * cw, yy = y0 + fl * fh; v.box(0, c - 1.05, c + 1.05, 0, 0.14, yy + 0.86, yy + 0.95, trim, {}); v.box(0, c - 1.0, c + 1.0, 0, 0.09, yy + 2.42, yy + 2.56, trim, {}); } }
   if (nb >= 2 && floors >= 2) { const bay = nb > 2 ? rng.i(1, nb - 2) : rng.i(0, 1); const s0 = bay * cw + 0.2, s1 = (bay + 1) * cw - 0.2; const col = rng.pick([[0.5, 0.5, 0.52], [0.38, 0.4, 0.42], [0.58, 0.52, 0.44], [0.44, 0.36, 0.32]]);
     for (let fl = o.res ? 1 : 0; fl < Math.min(floors, 5); fl++) { const y = y0 + fl * fh + 0.02;
       v.box(0, s0, s1, 0, 1.0, y - 0.14, y, K.conc(0.42), {}); v.box(0, s0, s1, 0.94, 1.0, y, y + 0.95, M(ST.PLASTER, { color: col, seed: fl * 7 }), { bottom: false });
@@ -156,7 +157,7 @@ function shopUnit(v, rng, S, s0, s1, gh, o = {}) {
     pen.use(M(ST.WIN_LUX, { color: [0.2, 0.2, 0.22], seed: rng.i(0, 255), A: 0.96, B: rng.pick(S.shopLights || [PAL.WARM, PAL.NEUTRAL, PAL.COOL]), cellW: wv / nc, floorH: top, flags: WK.COMPOSITE }));
     v.wall(0, a, dA, 0, 0, top, { uv: [uu(a), 0, uu(dA), 1], aoB: 0.6 }); v.wall(0, dB, b, 0, 0, top, { uv: [uu(dB), 0, uu(b), 1], aoB: 0.6 }); v.wall(0, dA, dB, 0, dH, top, { uv: [uu(dA), vv(dH), uu(dB), 1] });
     const x0 = v.cx - v.w / 2; const zF = v.cz + v.d / 2; const dep = Math.min(v.d - 1.2, rng.f(6, 8.5));
-    entered = shopRoom(ctx, rng, x0 + a, x0 + b, zF, dep, top - 0.05, { a: x0 + dA, b: x0 + dB, h: dH }, { kind: o.kind, sign: o.roomSign, upper: o.upperH });
+    entered = shopRoom(ctx, rng, x0 + a, x0 + b, zF, dep, top - 0.05, { a: x0 + dA, b: x0 + dB, h: dH }, { kind: o.kind, sign: o.roomSign, upper: o.upperH, upperN: o.upperN });
     signKind = entered.kind === 'bar' ? 1 : entered.kind === 'tech' ? 2 : entered.kind === 'store' ? 0 : null; if (signKind !== null) { ctx.main(); apron(v, rng, a, dA - 0.3, signKind, 1, o.walk); }
     const lp = v.world(0, (dA + dB) / 2, 2.2); ctx.light(lp[0], lp[1], 9, [1, 0.82, 0.6], 0.6, pen.oy + 2.4);
     ctx.main();
@@ -187,7 +188,7 @@ export function shopHouse(ctx, rng, lot, S, o = {}) {
   const v = new Vol(ctx, 0, cz, w, d, 0, h);
   const wall = wallMat(rng, S, { flags: rng.chance(S.balcony ?? 0.3) ? FLAG.VAR_A : 0, cellW: w / Math.max(1, Math.round(w / (S.cellW ?? 3.1))) });
   const party = M(ST.PLASTER, { color: dim(wall.color, 0.85), seed: wall.seed });
-  const ent = o.res ? null : shopUnit(v, rng, S, 0, w - 0.36, gh, { ...o, upperH: floors >= 2 ? fh : 0, walk: lot.block.walk, enter: o.enter ?? rng.chance(S.enter ?? 0.3) });
+  const ent = o.res ? null : shopUnit(v, rng, S, 0, w - 0.36, gh, { ...o, upperH: floors >= 2 ? fh : 0, upperN: floors - 1, walk: lot.block.walk, enter: o.enter ?? rng.chance(S.enter ?? 0.3) });
   if (!o.res) { ctx.main(); v.box(0, w - 0.36, w, 0, 0.14, 0, gh, K.conc(0.33), { top: false }); }
   else { // a dwelling: plinth, front door with a step, a lamp and a number, the bins by the wall
     const ds = Math.min(w - 1.2, Math.max(1.2, w * rng.f(0.25, 0.75))); ctx.detail(); pen.use(K.conc(0.3)); v.box(0, 0, w, 0, 0.06, 0, 0.45, null, { ends: false, bottom: false });
@@ -236,7 +237,7 @@ export function tenement(ctx, rng, lot, S, o = {}) {
   const eI = rng.chance(S.enter ?? 0.3) ? rng.i(0, nShops - 1) : -1; let ent = null;
   // every block of flats needs its front door; the bigger ones also swallow vehicles
   let resI = nShops >= 2 ? Math.floor(nShops / 2) : -1; if (resI === eI) resI = (resI + 1) % nShops; let garI = -1; if (nShops >= 4 && sw >= 6.2 && d > 9 && rng.chance(0.6)) { garI = [0, nShops - 1].find((k) => k !== eI && k !== resI) ?? -1; }
-  for (let i = 0; i < nShops; i++) { if (o.res && i !== resI && i !== garI) { ctx.main(); v.box(0, i * sw, i * sw + 0.36, 0, 0.14, 0, gh, K.conc(0.33), { top: false }); pen.use(M(ST.WIN_RES, { color: wall.color, seed: rng.i(0, 255), A: 0.3, B: PAL.WARM, cellW: (sw - 0.36) / Math.max(1, Math.round(sw / 3.2)), floorH: gh, flags: wall.flags & 7 })); v.wall(0, i * sw + 0.36, (i + 1) * sw, 0, 0, gh, { aoB: 0.6 }); continue; } if (i === resI) { entryUnit(v, rng, S, i * sw, (i + 1) * sw, gh, { walk: lot.block.walk }); continue; } if (i === garI) { garageUnit(v, rng, S, i * sw, (i + 1) * sw, gh, {}); continue; } const e = shopUnit(v, rng, S, i * sw, (i + 1) * sw, gh, { ...o, upperH: fh, walk: lot.block.walk, enter: i === eI }); if (e) ent = e; }
+  for (let i = 0; i < nShops; i++) { if (o.res && i !== resI && i !== garI) { ctx.main(); v.box(0, i * sw, i * sw + 0.36, 0, 0.14, 0, gh, K.conc(0.33), { top: false }); pen.use(M(ST.WIN_RES, { color: wall.color, seed: rng.i(0, 255), A: 0.3, B: PAL.WARM, cellW: (sw - 0.36) / Math.max(1, Math.round(sw / 3.2)), floorH: gh, flags: wall.flags & 7 })); v.wall(0, i * sw + 0.36, (i + 1) * sw, 0, 0, gh, { aoB: 0.6 }); continue; } if (i === resI) { entryUnit(v, rng, S, i * sw, (i + 1) * sw, gh, { walk: lot.block.walk }); continue; } if (i === garI) { garageUnit(v, rng, S, i * sw, (i + 1) * sw, gh, {}); continue; } const e = shopUnit(v, rng, S, i * sw, (i + 1) * sw, gh, { ...o, upperH: fh, upperN: 3, walk: lot.block.walk, enter: i === eI }); if (e) ent = e; }
   ctx.main(); v.box(0, w - 0.36, w, 0, 0.14, 0, gh, K.conc(0.33), { top: false });
   const ribM = K.conc(0.34);
   facade(v, 0, gh, h, { wall, bayCells: 2, floorH: fh, aoB: 0.9, ribs: { d: 0.4, w: 0.34, mat: ribM, detail: true, over: par }, belts: { every: Math.max(2, Math.round(floors / 5)), d: 0.4, h: 0.45, mat: ribM, detail: true } });
