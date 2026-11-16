@@ -287,7 +287,7 @@ const FRAG_SURFACE = /* glsl */ `
     float h1 = nsHash(cell + seed * 7.31); float h2 = nsHash(cell * 1.73 + seed * 3.17 + 11.0); float h3 = nsHash(cell.yx * 2.31 + seed + 5.0);
     float hb = nsHash(vec2(seed, 17.0)); float hFloor = nsHash(vec2(cell.y * 3.1, seed));
     // opening geometry (metres within the bay)
-    vec2 o0 = vec2(0.7, 0.95); vec2 o1 = cs - vec2(0.7, 0.6); float D = 0.2; float fw = 0.055; vec2 pd = vec2(2.0, 1.0); float rnd = 0.0; float winKeep = 1.0; float hasWin = 1.0;
+    vec2 o0 = vec2(0.7, 0.95); vec2 o1 = cs - vec2(0.7, 0.6); float D = 0.2; float fw = 0.055; vec2 pd = vec2(2.0, 1.0); float rnd = 0.0; float winKeep = 1.0; float unitFr = -1.0; float grille = 0.0; float hasWin = 1.0;
     float office = 0.0; float roomSpan = 1.0; float litBoost = 1.0; float glassRough = 0.07; vec3 glassTint = vec3(0.018, 0.02, 0.024);
     if (st == 10) {
       float ww = min(cs.x - 1.0, mix(1.15, 1.6, hb)); float wh = min(cs.y - 1.4, mix(1.3, 1.5, fract(hb * 5.3))); float sillY = 0.95;
@@ -301,9 +301,17 @@ const FRAG_SURFACE = /* glsl */ `
       else if (pat > 2.5 && pat < 3.5) { big = step(mcol, 0.5); small = step(1.5, mcol); }
       else if (pat > 3.5) { big = step(mcol, 0.5); hasWin = 1.0 - step(1.5, mcol); }
       if (pat > 1.5 && (pat < 2.5 || pat > 3.5)) winKeep = 0.667;
+      // ...but each flat is somebody's home: owners replace sashes, fit security grilles (more of them low down),
+      // knock two windows into one; and the stair core shows its landing windows half a storey off the grid
+      float uw = 2.0 + step(0.5, fract(hb * 7.7)); float unit = floor((cell.x + floor(seed)) / uw); float uh = nsHash(vec2(unit * 1.31 + seed, cell.y * 2.17 + 0.5)); float uh2 = fract(uh * 17.3);
+      if (uh < 0.24) unitFr = floor(uh2 * 4.0);
+      grille = step(fract(uh * 5.1), cell.y < 2.5 ? 0.42 : 0.14) * step(0.25, fract(hb * 4.3));
+      if (small < 0.5 && big < 0.5 && fract(uh * 9.7) < 0.08) { ww = min(cs.x - 0.5, ww * 1.55); }
+      float stair = step(0.4, fract(hb * 2.9)) * step(mod(cell.x + floor(seed * 0.7), 9.0), 0.5);
+      if (stair > 0.5) { hasWin = 1.0; big = 0.0; small = 0.0; ww = 0.85; wh = 0.95; sillY = cs.y * 0.5; grille = 0.0; unitFr = -1.0; }
       if (big > 0.5) { ww = min(cs.x - 0.6, ww * 1.35); wh = min(cs.y - 0.9, wh * 1.22); sillY = 0.6; }
       if (small > 0.5) { ww = 0.62; wh = 0.68; sillY = min(1.6, cs.y - wh - 0.55); }
-      o0 = vec2((cs.x - ww) * 0.5, sillY); o1 = o0 + vec2(ww, wh);
+      o0 = vec2((cs.x - ww) * 0.5, sillY); o1 = o0 + vec2(ww, min(wh, cs.y - sillY - 0.12));
       if (varA) { o0 = vec2(0.3, 0.14); o1 = vec2(cs.x - 0.3, cs.y - 0.5); pd = vec2(3.0, 1.0); D = 1.0; }
     } else if (st == 11) { o0 = vec2(0.03, 1.0); o1 = vec2(cs.x - 0.03, cs.y - 0.06); D = 0.07; fw = 0.035; pd = vec2(1.0); office = 1.0; roomSpan = 8.0; glassTint = mix(base, vec3(dot(base, vec3(0.333))), 0.5) * 0.1 + 0.008; glassRough = 0.04; }
     else if (st == 12) { o0 = vec2(-0.3, 1.0); o1 = vec2(cs.x + 0.3, cs.y - 0.8); D = 0.16; pd = vec2(1.0); office = 1.0; roomSpan = 6.0; }
@@ -460,6 +468,7 @@ const FRAG_SURFACE = /* glsl */ `
           poster = pm; posterC = mix(mix(vec3(0.92, 0.9, 0.82), nsPalette(floor(h3 * 9.99), h1) * 0.7 + 0.2, step(0.6, h2)), vec3(0.1), max(ln, hd * step(h2, 0.6))); posterC = mix(posterC, vec3(0.95, 0.2, 0.12), hd * step(0.6, h2) * 0.0); }
       }
       vec3 frameCol = st == 17 ? vec3(0.5, 0.36, 0.18) : mix(vec3(0.05), vec3(0.55), step(0.6, hb) * (1.0 - office));
+      if (unitFr > -0.5) frameCol = unitFr < 0.5 ? vec3(0.78, 0.78, 0.76) : unitFr < 1.5 ? vec3(0.06, 0.06, 0.065) : unitFr < 2.5 ? vec3(0.3, 0.2, 0.12) : vec3(0.42, 0.44, 0.46); // a replaced sash: white PVC, black, bronze, grey
       // curtains / blinds state for this room
       float cst = nsHash(cell * 0.37 + seed * 0.61 + 1.7);
       float side = (cst > 0.3 && cst < 0.56) ? smoothstep(0.24 + 0.2 * h2, 0.2 + 0.2 * h2, min(gu.x, 1.0 - gu.x)) : 0.0;
@@ -504,6 +513,10 @@ const FRAG_SURFACE = /* glsl */ `
       // balcony rail in front of the recess (wall plane)
       float rail = 0.0;
       if (st == 10 && varA) { float bars = 1.0 - smoothstep(0.012, 0.012 + aa, abs(fract(fm.x / 0.11) - 0.5) * 0.11); float top = 1.0 - smoothstep(0.025, 0.025 + aa, abs(fm.y - 1.15)); rail = max(bars * step(fm.y, 1.15), top) * step(o0.x, fm.x) * step(fm.x, o1.x) * step(o0.y, fm.y); }
+      if (st == 10 && grille > 0.5 && open > 0.5) { // a burglar grille in front of the window: square bars, a mid rail, a frame
+        vec2 gq = fm - o0; float gb = 1.0 - smoothstep(0.011, 0.011 + aa, abs(fract(gq.x / 0.13) - 0.5) * 0.13);
+        float gh2 = 1.0 - smoothstep(0.014, 0.014 + aa, min(abs(gq.y - (o1.y - o0.y) * 0.5), min(gq.y, o1.y - o0.y - gq.y)));
+        rail = max(rail, max(gb, gh2) * step(o0.x, fm.x) * step(fm.x, o1.x) * step(o0.y, fm.y) * step(fm.y, o1.y)); }
       if (nsLive > 0.5 && glassHit > 0.5 && frame < 0.5 && rail < 0.5 && lod < 0.5) discard; // real glass: you see the real room
       if (st == 17) { float gl = step(fm.y, 1.1) * step(o0.y, fm.y); rail = max(rail, (1.0 - smoothstep(0.02, 0.02 + aa, abs(fm.y - 1.1))) * 0.9); gR = mix(gR, 0.03, gl * 0.0); }
       // compose opening
