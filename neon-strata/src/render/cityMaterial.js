@@ -287,15 +287,22 @@ const FRAG_SURFACE = /* glsl */ `
     float h1 = nsHash(cell + seed * 7.31); float h2 = nsHash(cell * 1.73 + seed * 3.17 + 11.0); float h3 = nsHash(cell.yx * 2.31 + seed + 5.0);
     float hb = nsHash(vec2(seed, 17.0)); float hFloor = nsHash(vec2(cell.y * 3.1, seed));
     // opening geometry (metres within the bay)
-    vec2 o0 = vec2(0.7, 0.95); vec2 o1 = cs - vec2(0.7, 0.6); float D = 0.2; float fw = 0.055; vec2 pd = vec2(2.0, 1.0); float rnd = 0.0; float hasWin = 1.0;
+    vec2 o0 = vec2(0.7, 0.95); vec2 o1 = cs - vec2(0.7, 0.6); float D = 0.2; float fw = 0.055; vec2 pd = vec2(2.0, 1.0); float rnd = 0.0; float winKeep = 1.0; float hasWin = 1.0;
     float office = 0.0; float roomSpan = 1.0; float litBoost = 1.0; float glassRough = 0.07; vec3 glassTint = vec3(0.018, 0.02, 0.024);
     if (st == 10) {
-      float ww = min(cs.x - 0.9, mix(1.25, 1.85, hb)); float wh = min(cs.y - 1.35, mix(1.3, 1.55, hb));
-      // a flat's rooms stack vertically: the same column is always the living room, the bedroom or the bathroom slit
-      float uw0 = 2.0 + floor(hb * 2.0); float colT = nsHash(vec2(mod(cell.x, uw0) + 1.0, seed * 3.3 + 0.7)); float sillY = 0.95;
-      if (colT < 0.28) { ww *= 0.52; }
-      else if (colT < 0.4) { ww *= 0.4; wh *= 0.5; sillY = min(1.75, cs.y - wh - 0.5); }
-      else if (colT > 0.74) { ww = min(cs.x - 0.5, ww * 1.4); wh = min(cs.y - 0.85, wh * 1.3); sillY = 0.45; }
+      float ww = min(cs.x - 1.0, mix(1.15, 1.6, hb)); float wh = min(cs.y - 1.4, mix(1.3, 1.5, fract(hb * 5.3))); float sillY = 0.95;
+      // one composition per building, repeated bay after bay and storey after storey (a facade is designed, not
+      // rolled per window): uniform · living/bedroom alternating · pairs with a blank pier · living/bed/bath ·
+      // living + bed with blank pier
+      float pat = floor(fract(hb * 13.7) * 5.0); float mcol = mod(cell.x + floor(fract(hb * 3.1) * 3.0), pat < 1.5 ? 2.0 : 3.0);
+      float big = 0.0, small = 0.0;
+      if (pat > 0.5 && pat < 1.5) big = step(mcol, 0.5);
+      else if (pat > 1.5 && pat < 2.5) hasWin = 1.0 - step(1.5, mcol);
+      else if (pat > 2.5 && pat < 3.5) { big = step(mcol, 0.5); small = step(1.5, mcol); }
+      else if (pat > 3.5) { big = step(mcol, 0.5); hasWin = 1.0 - step(1.5, mcol); }
+      if (pat > 1.5 && (pat < 2.5 || pat > 3.5)) winKeep = 0.667;
+      if (big > 0.5) { ww = min(cs.x - 0.6, ww * 1.35); wh = min(cs.y - 0.9, wh * 1.22); sillY = 0.6; }
+      if (small > 0.5) { ww = 0.62; wh = 0.68; sillY = min(1.6, cs.y - wh - 0.55); }
       o0 = vec2((cs.x - ww) * 0.5, sillY); o1 = o0 + vec2(ww, wh);
       if (varA) { o0 = vec2(0.3, 0.14); o1 = vec2(cs.x - 0.3, cs.y - 0.5); pd = vec2(3.0, 1.0); D = 1.0; }
     } else if (st == 11) { o0 = vec2(0.03, 1.0); o1 = vec2(cs.x - 0.03, cs.y - 0.06); D = 0.07; fw = 0.035; pd = vec2(1.0); office = 1.0; roomSpan = 8.0; glassTint = mix(base, vec3(dot(base, vec3(0.333))), 0.5) * 0.1 + 0.008; glassRough = 0.04; }
@@ -347,7 +354,7 @@ const FRAG_SURFACE = /* glsl */ `
     float pier = pierN > 0.5 ? step(mod(cell.x + floor(seed), pierN), 0.5) : 0.0;
     float mechN = office > 0.5 ? 16.0 + floor(fract(hb * 3.7) * 14.0) : 0.0;
     float mech = mechN > 0.5 ? step(mod(cell.y + floor(seed * 0.5), mechN), 1.5) : 0.0;
-    float winFrac = pierN > 0.5 ? 1.0 - 1.0 / pierN : 1.0;
+    float winFrac = (pierN > 0.5 ? 1.0 - 1.0 / pierN : 1.0) * winKeep;
     hasWin *= (1.0 - pier) * (1.0 - mech);
     if (pier > 0.5 && st == 11) { albedo = mix(base, vec3(dot(base, vec3(0.333))), 0.5) * 0.4 * (0.8 + 0.3 * gr.g); rough = 0.42; metal = 0.6; }
     if (mech > 0.5) { float sl = fract(fm.y / 0.24); albedo = mix(base, vec3(dot(base, vec3(0.333))), 0.6) * 0.3 * mix(1.0, 0.25, smoothstep(0.55, 0.7, sl) * (1.0 - lod)); rough = 0.5; metal = 0.7; slope.y += (sl - 0.3) * 1.6 * (1.0 - lod); }

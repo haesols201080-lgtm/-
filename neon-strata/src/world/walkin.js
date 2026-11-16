@@ -179,6 +179,62 @@ export function officeFloor(x0, x1, z0, z1, y, prop, seat, block, r, pen, keep) 
   prop('kiosk', x0 + 0.7, y, z0 + 0.8, Math.PI / 2); prop('planterIn', x0 + 0.6, y, z1 - 0.6, 0); prop('planterIn', xe - 0.6, y, z0 + 0.6, 0);
 }
 
+// ---- real doors -------------------------------------------------------------------------------------------------
+// Every opening a walk-in has gets a leaf: automatic sliding glass pairs on shop fronts and office lobbies, a
+// swinging street door on residential entrances, timber doors on the shop back doors and every flat / office on
+// the corridors. They stand closed (and block) until someone walks up, then open and close again behind them.
+function doorList(rec, P) {
+  const { x0, x1, z1 } = rec; const out = []; const gh = rec.gh; const zc = rec.z0 + CORR;
+  for (const u of rec.units) { if (u.door == null) continue; const w = u.dw || 1.2, h = Math.min(gh, 2.5) - 0.07; const shop = typeof u.kind === 'number' || u.kind === 'entry';
+    out.push({ x: x0 + u.door, y: 0.07, z: z1 - 0.15, w, h, type: shop ? 'slide' : 'street', inward: -1 }); }
+  if (P.deep) { const ds = rec.units.length ? rec.units.map((u) => x0 + u.s0 + 0.6) : [x0 + 0.6]; for (const a of ds) out.push({ x: a + 0.5, y: 0, z: zc, w: 1.0, h: 2.3, type: 'wood', inward: 1 });
+    for (let k = 1; k <= rec.n; k++) { const y = P.lv[k] + 0.02; const F = flats(rec, P, k);
+      for (const u of F.units) { if (u.door != null) out.push({ x: u.door + 0.5, y, z: zc, w: 1.0, h: 2.18, type: 'wood', inward: 1 }); else if (u.office) out.push({ x: x0 + 1.2, y, z: zc, w: 1.2, h: 2.28, type: 'glass', inward: 1 }); } } }
+  return out;
+}
+const DOOR_GEO = new Map();
+function leafGeo(type, w, h) { // geometry in leaf space: hinge / sliding edge at x = 0, leaf along +x, centred on z = 0
+  const key = type + w.toFixed(2) + h.toFixed(2); let g = DOOR_GEO.get(key); if (g) return g;
+  const b = new Batch(256); const pen = new Pen(b); pen.at(0, 0, 0, 0); const t = 0.05;
+  if (type === 'slide' || type === 'glass') { pen.use(im(ST.METAL, [0.16, 0.16, 0.17])); pen.box(w / 2, 0, w, t, 0, 0.08, {}); pen.box(w / 2, 0, w, t, h - 0.08, h, {}); pen.box(0.03, 0, 0.06, t, 0.08, h - 0.08, {}); pen.box(w - 0.03, 0, 0.06, t, 0.08, h - 0.08, {});
+    if (type === 'slide') { pen.use(im(ST.METAL, [0.5, 0.5, 0.52])); pen.box(w - 0.12, 0, 0.03, 0.09, 0.95, 1.15, {}); } }
+  else if (type === 'street') { pen.use(im(ST.METAL, [0.12, 0.13, 0.14])); pen.box(w / 2, 0, w, t, 0, h, {}); pen.use(im(ST.DARKGLASS, [0.3, 0.32, 0.3])); pen.box(w / 2, 0, w - 0.36, t + 0.012, h * 0.45, h - 0.2, {}); pen.use(im(ST.METAL, [0.55, 0.55, 0.56])); pen.box(w - 0.1, 0, 0.03, 0.14, 0.98, 1.08, {}); }
+  else { const c = [[0.36, 0.24, 0.15], [0.3, 0.3, 0.32], [0.5, 0.44, 0.36], [0.24, 0.2, 0.18]][(Math.round(w * 13 + h * 7)) % 4]; pen.use(im(ST.COMPOSITE, c)); pen.box(w / 2, 0, w, t, 0, h, {}); pen.use(im(ST.COMPOSITE, c.map((q) => q * 0.8))); pen.box(w / 2, 0, w - 0.3, t + 0.012, 0.3, h - 0.3, {}); pen.use(im(ST.METAL, [0.62, 0.6, 0.55])); pen.box(w - 0.08, 0, 0.12, 0.13, 1.0, 1.06, {}); }
+  g = b.build(); DOOR_GEO.set(key, g); return g;
+}
+function makeDoors(rec, P, mat, phys) {
+  const grp = new THREE.Group(); grp.position.set(rec.ox, rec.oy, rec.oz); grp.rotation.y = rec.yaw; grp.updateMatrixWorld(true);
+  const C = Math.cos(rec.yaw), S = Math.sin(rec.yaw); const W = (lx, lz) => [rec.ox + lx * C + lz * S, rec.oz - lx * S + lz * C];
+  const doors = doorList(rec, P).map((d) => {
+    const leaves = []; const pair = d.type === 'slide' || (d.type === 'glass' && d.w > 1.1);
+    const mk = (w, hx, flip) => { const m = new THREE.Group(); const f = new THREE.Mesh(leafGeo(d.type, w, d.h), mat); f.frustumCulled = false; m.add(f);
+      if (d.type === 'slide' || d.type === 'glass') { const g = new THREE.Mesh(PANE, GLASS); g.scale.set(w - 0.12, d.h - 0.16, 1); g.position.set(w / 2, d.h / 2, 0); g.renderOrder = 60; m.add(g); }
+      m.position.set(hx, d.y, d.z); if (flip) m.rotation.y = Math.PI; grp.add(m); leaves.push({ m, hx, flip }); };
+    if (pair) { mk(d.w / 2, d.x - d.w / 2, false); mk(d.w / 2, d.x + d.w / 2, true); } else mk(d.w, d.x - d.w / 2, false);
+    const [wx, wz] = W(d.x, d.z); const col = phys.addBox(wx, wz, d.w / 2, 0.06, rec.yaw, rec.oy + d.y, rec.oy + d.y + d.h); col._y1 = col.y1;
+    return { ...d, wx, wz, wy: rec.oy + d.y, leaves, col, open: 0, pair };
+  });
+  // the shop windows themselves: a real pane in front of the real room (the facade's painted glass is cut away)
+  for (const u of rec.units) { if (typeof u.kind !== 'number') continue; const a = rec.x0 + u.s0 + 0.05, b = rec.x0 + u.s1 - 0.05, da = u.door != null ? rec.x0 + u.door - (u.dw || 1.2) / 2 - 0.02 : b, db = u.door != null ? rec.x0 + u.door + (u.dw || 1.2) / 2 + 0.02 : b; const y0 = 0.12, y1 = rec.gh - 0.78;
+    for (const [p0, p1] of [[a, da], [db, b]]) { if (p1 - p0 < 0.2) continue; const m = new THREE.Mesh(PANE, GLASS); m.scale.set(p1 - p0, y1 - y0, 1); m.position.set((p0 + p1) / 2, (y0 + y1) / 2, rec.z1 - 0.08); m.renderOrder = 60; grp.add(m); } }
+  return { grp, doors };
+}
+const PANE = new THREE.PlaneGeometry(1, 1);
+// clear glass: reflects the street, keeps the frame buffer's alpha (the SSR mask lives there)
+const GLASS = new THREE.MeshStandardMaterial({ color: 0x0c1216, transparent: true, opacity: 0.2, roughness: 0.03, metalness: 0.85, depthWrite: false, side: THREE.DoubleSide, blending: THREE.CustomBlending, blendSrc: THREE.SrcAlphaFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor });
+const _doorVec = new THREE.Vector3();
+function stepDoors(set, dt, p, agents) {
+  for (const d of set.doors) {
+    let want = 0; const near = (x, y, z, r) => Math.abs(y - d.wy) < 1.6 && (x - d.wx) * (x - d.wx) + (z - d.wz) * (z - d.wz) < r * r;
+    if (near(p.x, p.y, p.z, d.type === 'slide' ? 2.6 : 1.7)) want = 1; else for (const a of agents) if (near(a.x, a.y, a.z, 1.5)) { want = 1; break; }
+    const sp = d.type === 'slide' ? 2.6 : 1.9; d.open += Math.max(-dt * sp, Math.min(dt * sp, want - d.open)); const o = d.open * d.open * (3 - 2 * d.open);
+    for (const L of d.leaves) {
+      if (d.type === 'slide' || (d.pair && d.type === 'glass')) { const lw = d.w / 2; L.m.position.x = L.hx + (L.flip ? 1 : -1) * lw * 0.96 * o; L.m.position.z = d.z + (L.flip ? 0.07 : -0.07) * Math.min(1, o * 4); }
+      else L.m.rotation.y = (L.flip ? Math.PI : 0) - d.inward * 1.45 * o;
+    }
+    d.col.y1 = o > 0.45 ? d.col.y0 - 100 : d.col._y1;
+  }
+}
 export function createWalkinStream(city, scene, crowd) {
   const recs = city.ctx.walkins || []; const live = new Map(); let tick = 0; const phys = city.phys;
   const open = (rec) => {
@@ -187,14 +243,16 @@ export function createWalkinStream(city, scene, crowd) {
     const b = new Batch(8192); const pen = new Pen(b); const res = fitOut(rec, pen);
     if (!rec.fcols) { const C = Math.cos(rec.yaw), S = Math.sin(rec.yaw); rec.fcols = res.solids.map(([lx, lz, hx, hz, ry, y0, y1]) => { const c = phys.addBox(rec.ox + lx * C + lz * S, rec.oz - lx * S + lz * C, hx, hz, rec.yaw + ry, rec.oy + y0, rec.oy + y1); c._y1 = c.y1; return c; }); } else for (const c of rec.fcols) c.y1 = c._y1;
     const mesh = new THREE.Mesh(b.build(), city.mat); mesh.matrixAutoUpdate = false; mesh.frustumCulled = false; scene.add(mesh); live.set(rec, mesh);
+    if (!rec.doorSet) rec.doorSet = makeDoors(rec, plan(rec), city.mat, phys); else for (const d of rec.doorSet.doors) { d.col.y1 = d.col._y1; d.open = 0; } scene.add(rec.doorSet.grp);
     if (!rec.peopled) { rec.peopled = true; crowd.addSpots(res.spots); crowd.addWalkways(res.walks); }
   };
-  const close = (rec) => { const m = live.get(rec); scene.remove(m); m.geometry.dispose(); live.delete(rec); for (const c of rec.cols) c.y1 = c.y0 - 100; for (const c of rec.fcols || []) c.y1 = c.y0 - 100; rec.col.y1 = rec._sy1; };
+  const close = (rec) => { const m = live.get(rec); scene.remove(m); m.geometry.dispose(); live.delete(rec); if (rec.doorSet) { scene.remove(rec.doorSet.grp); for (const d of rec.doorSet.doors) d.col.y1 = d.col.y0 - 100; } for (const c of rec.cols) c.y1 = c.y0 - 100; for (const c of rec.fcols || []) c.y1 = c.y0 - 100; rec.col.y1 = rec._sy1; };
   // tell the city shader which buildings are open, so their glass shows the real rooms and their doors stand open
   const mask = () => { let i = 0; for (const r of live.keys()) { if (i >= 8) break; U.uLiveA.value[i].set(r.ox, r.oz, r.yaw, r.oy + r.top); U.uLiveB.value[i].set(r.x0, r.x1, r.z0, r.z1); i++; } U.uLiveN.value = i; };
   return {
     recs,
     update(p, force = false) {
+      { const now = performance.now(); const dt = Math.min(0.1, (now - (this._t || now)) / 1000); this._t = now; if (live.size) { const ag = crowd.agents.filter((a) => Math.abs(a.x - p.x) < 40 && Math.abs(a.z - p.z) < 40); for (const r of live.keys()) if (r.doorSet) stepDoors(r.doorSet, dt, p, ag); } }
       if (!force && (tick++ % 10)) return;
       let best = null, bd = 1e9;
       for (const r of recs) { const d = Math.hypot(r.wx - p.x, r.wz - p.z) - r.r; if (d < 14 && !live.has(r) && d < bd) { bd = d; best = r; } }
