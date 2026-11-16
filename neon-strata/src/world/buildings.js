@@ -118,7 +118,7 @@ function garageUnit(v, rng, S, s0, s1, gh, o = {}) {
 // what a lived-in wall carries: condensers under the sills, a conduit riser with a junction box, a vent hood, a bulkhead lamp
 function wallKit(v, f, y0, y1, fh, rng, o = {}) {
   const ctx = v.ctx, pen = v.pen; const L = v.len(f); const floors = Math.max(1, Math.round((y1 - y0) / fh)); if (L < 4) return;
-  const n = Math.min(10, Math.round(floors * L / 26 * (o.dens ?? 1)));
+  const n = o.noAC ? 0 : Math.min(10, Math.round(floors * L / 26 * (o.dens ?? 1)));
   const cw = o.cellW ? L / Math.max(1, Math.round(L / o.cellW)) : 3.1; const nb = Math.max(1, Math.round(L / cw)); const used = new Set();
   for (let i = 0; i < n; i++) { const bay = rng.i(0, nb - 1), fl = rng.i(0, floors - 1); if (used.has(bay * 64 + fl)) continue; used.add(bay * 64 + fl); const s = Math.min(L - 0.6, Math.max(0.6, o.pier ? bay * cw + 0.02 : (bay + 0.5) * cw)), y = y0 + fl * fh + (o.pier ? 0.5 : 0.07); const p = v.P(f, s, 0.2); ctx.propL('acSmall', p[0], y, p[1], FACE_ANG[f], 0.85); ctx.detail(); pen.use(K.MAT_POLE); v.box(f, s - 0.42, s + 0.42, 0, 0.42, y + 0.02, y + 0.09, null, {}); const b0 = v.P(f, s - 0.36, 0.38), b1 = v.P(f, s - 0.36, 0.02), b2 = v.P(f, s + 0.36, 0.38), b3 = v.P(f, s + 0.36, 0.02); pen.beam(b0[0], y + 0.02, b0[1], b1[0], y - 0.3, b1[1], 0.03, 0.03); pen.beam(b2[0], y + 0.02, b2[1], b3[0], y - 0.3, b3[1], 0.03, 0.03); ctx.main(); }
   ctx.detail(); pen.use(K.dark(0.09));
@@ -200,18 +200,18 @@ export function shopHouse(ctx, rng, lot, S, o = {}) {
     pen.use(K.emis([1, 0.82, 0.6], 4)); v.box(0, ds + 0.7, ds + 0.86, 0.02, 0.14, 2.0, 2.14, null, {}); const lp = v.world(0, ds, 0.8); ctx.light(lp[0], lp[1], 5.5, [1, 0.82, 0.6], 0.35, pen.oy + 2.1);
     if (rng.chance(0.4)) { const p = v.P(0, Math.min(w - 0.6, ds + 1.5), 0.45); ctx.propL(rng.chance(0.5) ? 'bin' : 'planter', p[0], 0, p[1], 0, 0.8); } ctx.main(); }
   // upper floors
-  facade(v, 0, o.res ? 0.45 : gh, h, { wall, bayCells: 1, floorH: fh, aoB: 0.9, belts: floors <= 4 ? { every: 1, d: 0.13, h: 0.2, mat: K.conc(0.35), detail: true } : null });
+  facade(v, 0, o.res ? 0.45 : gh, h, { wall, bayCells: 1, floorH: fh, aoB: 0.9, dress: S.dress, dressSkip0: !o.res, belts: floors <= 4 ? { every: 1, d: 0.13, h: 0.2, mat: K.conc(0.35), detail: true } : null });
   // the roof decides the top: pitched roofs sit straight on the walls, flat ones get a parapet
   const rf = o.roof ?? rng.weighted(S.roofForms ? S.roofForms.filter((r) => !(r[1] === 'mansard' && w < 6)) : [[5, 'flat'], [2.2, 'pent'], [1.4, 'vault'], [1.6, 'shed'], [1.6, 'garden']]); const pz = PITCHED.has(rf) ? 0 : par;
   if (pz) { pen.use(party); v.wall(0, 0, w, 0, h, h + pz); v.box(0, 0, w, 0, 0.28, h + pz - 0.24, h + pz, K.conc(0.32)); }
   else { v.box(0, -0.05, w + 0.05, 0, 0.22, h - 0.32, h, K.conc(0.36), {}); } // eaves cornice under the roof
-  facade(v, 2, 0, h, { wall: { ...wall, flags: wall.flags & 7 }, bayCells: 999, floorH: fh, aoB: 0.6 });
+  facade(v, 2, 0, h, { wall: { ...wall, flags: wall.flags & 7 }, bayCells: 999, floorH: fh, aoB: 0.6, dress: S.dress, dressSkip0: true });
   if (pz) { pen.use(party); v.wall(2, 0, w, 0, h, h + pz); }
   blindWall(v, 1, 0, h + pz, party, rng, { mural: rng.chance(0.1), aoB: 0.6 }); blindWall(v, 3, 0, h + pz, party, rng, { mural: rng.chance(0.1), aoB: 0.6 });
   v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else { if (o.res) units.push({ s0: 0, s1: w, kind: 'res', door: resDoor ?? w / 2, dw: 1.0 }); registerWalkin(ctx, rng, v, { gh, fh, n: floors, units, district: lot.block.district, office: !o.res && rng.chance(0.35) }); }
   if (ent && o.home) { const r = ent.room; ctx.poi({ type: 'home', id: 'home', x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), name: '캡슐텔 0번지', doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5), yaw: pen.yaw }); }
   else if (ent) { const r = ent.room; ctx.poi({ type: 'shop', kind: ent.kind, stair: ent.stair, work: ent.work, district: lot.block.district, x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5) }); }
-  wallKit(v, 0, o.res ? 0.45 : gh, h, fh, rng, { dens: o.res ? 0.7 : 1.3, cellW: wall.cellW, pier: !!(wall.flags & FLAG.VAR_A) });
+  wallKit(v, 0, o.res ? 0.45 : gh, h, fh, rng, { dens: o.res ? 0.7 : 1.3, cellW: wall.cellW, pier: !!(wall.flags & FLAG.VAR_A), noAC: !!S.dress && wall.st === ST.WIN_RES });
   if (!lot.ring && (lot.corner || rng.chance(0.6))) articulate(v, o.res ? 0.45 : gh, h, fh, wall, rng, { res: o.res });
   // projecting sign + downpipe
   if (!o.res && floors >= 2 && rng.chance(S.blade ?? 0.5)) { const hgt = Math.min(4.6, fh * floors * 0.5); bladeSign(v, 0, 0.55, gh + 1.9 + hgt / 2, hgt, rng, { intensity: S.signI ?? 4.5 }); }
@@ -247,13 +247,13 @@ export function tenement(ctx, rng, lot, S, o = {}) {
   for (let i = 0; i < nShops; i++) { if (o.res && i !== resI && i !== garI) { ctx.main(); v.box(0, i * sw, i * sw + 0.36, 0, 0.14, 0, gh, K.conc(0.33), { top: false }); pen.use(M(ST.WIN_RES, { color: wall.color, seed: rng.i(0, 255), A: 0.3, B: PAL.WARM, cellW: (sw - 0.36) / Math.max(1, Math.round(sw / 3.2)), floorH: gh, flags: wall.flags & 7 })); v.wall(0, i * sw + 0.36, (i + 1) * sw, 0, 0, gh, { aoB: 0.6 }); units.push({ s0: i * sw + 0.36, s1: (i + 1) * sw, kind: 'res' }); continue; } if (i === resI) { entryUnit(v, rng, S, i * sw, (i + 1) * sw, gh, { walk: lot.block.walk, units }); continue; } if (i === garI) { garageUnit(v, rng, S, i * sw, (i + 1) * sw, gh, { units }); continue; } const e = shopUnit(v, rng, S, i * sw, (i + 1) * sw, gh, { ...o, units, upperH: fh, upperN: Math.min(floors - 1, 12), walk: lot.block.walk, enter: i === eI }); if (e) ent = e; }
   ctx.main(); v.box(0, w - 0.36, w, 0, 0.14, 0, gh, K.conc(0.33), { top: false });
   const ribM = K.conc(0.34);
-  facade(v, 0, gh, h, { wall, bayCells: 2, floorH: fh, aoB: 0.9, ribs: { d: 0.4, w: 0.34, mat: ribM, detail: true, over: par }, belts: { every: Math.max(2, Math.round(floors / 5)), d: 0.4, h: 0.45, mat: ribM, detail: true } });
+  facade(v, 0, gh, h, { wall, bayCells: 2, floorH: fh, aoB: 0.9, dress: S.dress, dressSkip0: !o.res, ribs: { d: 0.4, w: 0.34, mat: ribM, detail: true, over: par }, belts: { every: Math.max(2, Math.round(floors / 5)), d: 0.4, h: 0.45, mat: ribM, detail: true } });
   const pw = S.pitch ?? 0.6; const rf = o.roof ?? rng.weighted(floors <= 9 ? [[4, 'flat'], [2, 'garden'], [1.6 * pw, 'hip'], [2 * pw, 'mansard'], [0.8 * pw, 'gable']] : [[5, 'flat'], [2.2, 'garden'], [floors <= 14 ? 1.2 * pw : 0, 'mansard']]); const pz = PITCHED.has(rf) ? 0 : par;
   if (pz) { pen.use(party); v.wall(0, 0, w, 0, h, h + pz); } else v.box(0, -0.05, w + 0.05, 0, 0.42, h - 0.45, h, ribM, {});
-  facade(v, 2, 0, h, { wall: { ...wall, flags: wall.flags & 7 }, bayCells: 999, floorH: fh, aoB: 0.6 }); if (pz) { pen.use(party); v.wall(2, 0, w, 0, h, h + pz); }
+  facade(v, 2, 0, h, { wall: { ...wall, flags: wall.flags & 7 }, bayCells: 999, floorH: fh, aoB: 0.6, dress: S.dress, dressSkip0: true }); if (pz) { pen.use(party); v.wall(2, 0, w, 0, h, h + pz); }
   blindWall(v, 1, 0, h + pz, party, rng, { mural: rng.chance(0.4), aoB: 0.6 }); blindWall(v, 3, 0, h + pz, party, rng, { mural: rng.chance(0.4), aoB: 0.6 });
   v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else registerWalkin(ctx, rng, v, { gh, fh, n: floors, units, district: lot.block.district, office: !o.res && rng.chance(0.4) });
-  wallKit(v, 0, gh, h, fh, rng, { dens: 0.8, cellW: wall.cellW, pier: !!(wall.flags & FLAG.VAR_A) });
+  wallKit(v, 0, gh, h, fh, rng, { dens: 0.8, cellW: wall.cellW, pier: !!(wall.flags & FLAG.VAR_A), noAC: !!S.dress && wall.st === ST.WIN_RES });
   if (!lot.ring && floors <= 14) articulate(v, gh, h, fh, wall, rng, { noPil: true });
   // roof-top service core (lift overrun + stair) — a pitched roof hides it
   const cw = Math.min(6, w * 0.3), cd = Math.min(5, d * 0.4), cx = rng.f(-0.25, 0.25) * w; let rise = 0;
