@@ -113,7 +113,7 @@ void nsWall(int kind, vec2 m, vec3 base, float px, float seed, inout vec3 albedo
   } else {
     t = nsMat(7.0, m / 2.4 + so); albedo = base * t.alb; rough = t.rough; metal = 0.0; slope += t.n * 1.5 * nf; cav *= t.cav;
   }
-  albedo *= mix(1.0, 0.5, g.r * 0.7) * (0.78 + 0.35 * g.g);
+  albedo *= mix(1.0, 0.72, g.r * 0.6) * (0.88 + 0.2 * g.g);
   rough = clamp(rough + g.r * 0.15 - g.b * 0.2 * metal, 0.04, 1.0);
 }
 float nsBoxD(vec2 p, vec2 a, vec2 b, float r){ // signed distance (positive inside) to a rounded rect a..b
@@ -270,7 +270,7 @@ const FRAG_SURFACE = /* glsl */ `
   float px = max(length(dFdx(vWPos)), length(dFdy(vWPos)));
   vec3 Vw = normalize(cameraPosition - vWPos);
   vec3 albedo = base; float rough = 0.7; float metal = 0.0; vec3 emis = vec3(0.0); vec2 slope = vec2(0.0); float cav = 1.0;
-  float wetAllow = 1.0 - nsIndoor; float roadWet = 0.0;
+  float wetAllow = 1.0 - nsIndoor; float roadWet = 0.0; float isWall = 0.0; float mineral = 0.0;
   vec4 lf = nsLightField(vWPos, 0.0);
   nsOpen = mix(lf.a, 1.0, smoothstep(40.0, 260.0, vWPos.y));
   nsSpill = lf.rgb * exp(-max(vWPos.y - uLightMapInfo.z, 0.0) / uLightMapInfo.w) * (1.0 - nsIndoor);
@@ -370,7 +370,7 @@ const FRAG_SURFACE = /* glsl */ `
 
     // ---- opening + recess parallax
     float dOut = nsBoxD(fm, o0, o1, rnd);
-    float open = smoothstep(-aa, aa, dOut) * hasWin;
+    float open = smoothstep(-aa, aa, dOut) * hasWin; isWall = (1.0 - open) * (1.0 - office); mineral = float(wk == 0 || wk == 2 || wk == 4);
     vec3 vt = vec3(dot(-Vw, T), dot(-Vw, Bt), dot(-Vw, wN));
     vec2 shift = vt.xy / max(-vt.z, 0.14) * D * (1.0 - lod);
     vec2 fg = fm + shift;
@@ -577,7 +577,7 @@ const FRAG_SURFACE = /* glsl */ `
   } else if (st == 0 || st == 1 || st == 8 || st == 22 || st == 26 || st == 27 || st == 2 || st == 7) {
     // ================================================================== plain textured surfaces
     int kind = st == 0 ? 0 : (st == 1 ? 1 : (st == 8 ? 6 : (st == 22 ? 4 : (st == 26 ? 2 : (st == 27 ? 3 : (st == 2 ? 5 : 7))))));
-    nsWall(kind, hm, base, px, seed, albedo, rough, metal, slope, cav);
+    nsWall(kind, hm, base, px, seed, albedo, rough, metal, slope, cav); isWall = (st == 1 || st == 7 || varA) ? 0.0 : 1.0; mineral = float(kind == 0 || kind == 2 || kind == 4);
     if (varA) { float hz = step(0.5, fract((hm.x + hm.y) * 0.8)); albedo = mix(albedo, mix(vec3(0.02), vec3(0.72, 0.5, 0.03), hz) * (0.6 + 0.4 * nsGrunge(hm * 0.2).g), 0.85); }
   } else if (st == 28) {
     // ================================================================== louvres / mechanical grilles
@@ -752,6 +752,26 @@ const FRAG_SURFACE = /* glsl */ `
     albedo *= 1.0 - 0.4 * low * (0.5 + nsNoise(vWPos.xz * 0.13 + vWPos.y * 0.21).r);
     float dirtAO = clamp(1.0 - vCol.a, 0.0, 1.0);
     albedo *= 1.0 - 0.35 * dirtAO; rough = mix(rough, 0.9, dirtAO * 0.5);
+  }
+  // ---- weathering where it really happens on a facade: rain streaks hanging from every ledge line, the splash
+  // zone and rising damp at the foot, salts on masonry, and a building that is dirtier low down than high up
+  if (isWall > 0.01 && nsIndoor < 0.5 && abs(wN.y) < 0.3) {
+    float wf = isWall * (1.0 - smoothstep(0.15, 0.9, px)); float h = vWPos.y; float a = dot(vWPos.xz, T.xz);
+    float col = floor(a / 0.42); float ch = nsHash(vec2(col, seed * 0.37 + 3.0)); float FH = 3.1 + 0.6 * nsHash(vec2(seed, 5.0)); float o = ch * FH;
+    float flr = floor((h + o) / FH); float db = (flr + 1.0) * FH - o - h; // distance below the ledge line above
+    float fh2 = nsHash(vec2(col * 1.7, flr + seed)); float len = 0.6 + 2.6 * fh2 * fh2;
+    float cx = (fract(a / 0.42) - (0.3 + 0.4 * nsHash(vec2(col, flr * 3.1)))) * 0.42; float wid = 0.03 + 0.09 * nsHash(vec2(col + 7.0, flr));
+    float wig = nsNoise(vec2(a * 3.0, h * 0.6)).r * 0.05; float prof = exp(-pow((cx + wig) / wid, 2.0));
+    float streak = prof * exp(-db / len) * step(0.66, fh2 + 0.25 * nsHash(vec2(col, 11.0))) * smoothstep(0.0, 0.12, db);
+    float sheet = exp(-db / 0.35) * 0.35; // a thin dark film right under each ledge
+    float hz = h - 0.2; float splash = (1.0 - smoothstep(0.05, 0.9, hz)) * step(-0.5, hz);
+    float tide = 0.45 + 0.35 * nsNoise(vec2(a * 0.25, 1.3)).g; float damp = (1.0 - smoothstep(tide - 0.06, tide + 0.02, hz)) * step(0.0, hz) * mineral;
+    float salt = mineral * smoothstep(0.6, 0.75, nsNoise(vec2(a * 1.3, h * 2.1)).b) * smoothstep(tide + 0.25, tide, hz) * step(tide - 0.05, hz);
+    float low = 1.0 - smoothstep(2.0, 30.0, h);
+    float dirt = clamp(streak * 0.55 + sheet + splash * 0.35 + damp * 0.22 + low * 0.08, 0.0, 0.8) * wf;
+    albedo *= 1.0 - dirt * mix(0.55, 0.75, mineral); albedo = mix(albedo, albedo * vec3(0.95, 0.97, 0.9), streak * wf * 0.5);
+    albedo = mix(albedo, vec3(0.62, 0.61, 0.58) * (0.7 + 0.3 * nsGrunge(vec2(a, h) * 0.9).g), salt * 0.4 * wf);
+    rough = clamp(rough + dirt * 0.15, 0.04, 1.0);
   }
   float wet = uWet * wetAllow;
   if (wet > 0.001) {
