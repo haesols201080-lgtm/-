@@ -45,7 +45,7 @@ async function start() {
   const player = new Player(game); game.player = player;
   const hud = new HUD(game, input); input.ui = hud; game.hud = hud;
   const phone = new Phone(game, input, hud, engine); game.phone = phone;
-  const streets = createStreetTraffic(city, scene, quality, game); traffic.setNear(streets.R);
+  const streets = createStreetTraffic(city, scene, quality, game); crowd.streets = streets; traffic.setNear(streets.R);
   const tm = (e) => {}; void tm;
   // touch stick visual hookup
   const _ts = input; _ts.uiStick = hud;

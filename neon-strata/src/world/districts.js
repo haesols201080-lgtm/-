@@ -57,6 +57,7 @@ function streetscape(ctx, rng, b, S) {
     if (si < 2 && !prime0 && L > 34 && stW <= 22) for (const tt of [5.5 / L, 1 - 5.5 / L]) {
       const [zx, zz] = b.at(x0 + (x1 - x0) * tt + Math.sin(ang) * inset, z0 + (z1 - z0) * tt + Math.cos(ang) * inset);
       const zp = ctx.penAt(zx, 0, zz, b.yaw + ang); ctx.detail(); zp.use(ZEBRA); for (let q = 0.7; q < stW - 0.9; q += 1.0) zp.flat(-1.7, q, 1.7, q + 0.5, 0.052); ctx.main();
+      (ctx.crossings || (ctx.crossings = [])).push({ x: zx, z: zz, dx: Math.sin(b.yaw + ang), dz: Math.cos(b.yaw + ang), w: stW });
     } const n = Math.max(1, Math.round(L / 34)); const slots = Math.floor(L / 5.5);
     const lampSlots = new Set(); const poles = [];
     for (let i = 0; i < n; i++) {

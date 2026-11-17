@@ -99,8 +99,16 @@ export function createStreetTraffic(city, scene, quality, game) {
     }
   };
   let simT = 0, first = true;
+  // pedestrian phase for a crossing: the walk light is on while the cars on the crossed street have red (and stay
+  // red long enough to get across); an unsignalled crossing is used when no car is close
+  const bind = (cr) => { if (cr.bound) return; cr.bound = true; const mx = cr.x + cr.dx * cr.w / 2, mz = cr.z + cr.dz * cr.w / 2; let best = null, bd = 30;
+    for (const n of nodes) { const d = Math.hypot(n.x - mx, n.z - mz); if (d < bd) { bd = d; best = n; } } if (best && best.a0 != null) { cr.node = best; const ang = Math.atan2(cr.dx, -cr.dz); let dd = Math.abs(((ang - best.a0) % Math.PI + Math.PI) % Math.PI); dd = Math.min(dd, Math.PI - dd); cr.group = dd < Math.PI / 4 ? 0 : 1; } cr.mx = mx; cr.mz = mz; };
+  const walkOK = (cr) => { bind(cr); const T = cr.w / 1.2 + 1.5;
+    if (cr.node) return signal(cr.node, cr.group, simT) === 2 && signal(cr.node, cr.group, simT + T) === 2;
+    for (const c of cars) if (Math.abs(c.rx - cr.mx) < 26 && Math.abs(c.rz - cr.mz) < 26 && Math.hypot(c.rx - cr.mx, c.rz - cr.mz) < 26 && c.v > 0.5) return false; return true; };
+  const peds = [];
   return {
-    lanes, nodes, cars, R,
+    lanes, nodes, cars, R, walkOK, peds,
     update(dt, p) {
       dt = Math.min(dt, 0.1); simT += dt; if (simT - localT > 2 || first) { localT = simT; refresh(p); }
       while (cars.length < N) { const k = cars.length; spawn(p, first); if (cars.length === k) break; } first = false;
@@ -113,6 +121,7 @@ export function createStreetTraffic(city, scene, quality, game) {
         let gap = 1e9, dv = 0; const arr = by.get(L); const k = arr.indexOf(c);
         if (k >= 0 && k < arr.length - 1) { const o = arr[k + 1]; gap = o.s - c.s - 5; dv = c.v - o.v; } else if (L.closed && arr.length > 1) { const o = arr[0]; gap = o.s + L.len - c.s - 5; dv = c.v - o.v; }
         for (const st of L.stops) { if (st.s < c.s - 0.5) continue; if (st.s - c.s > 80) break; const sg = signal(st.node, st.group, simT); const dist = st.s - c.s; if (sg === 2 || (sg === 1 && dist > c.v * c.v / 7 + 1)) { if (dist < gap) { gap = dist; dv = c.v; } } break; }
+        if (peds.length) { const [x, z, hx, hz] = at(L, c.s); for (const q of peds) { const rx = q.x - x, rz = q.z - z; if (Math.abs(rx) > 32 || Math.abs(rz) > 32) continue; const ahead = rx * hx + rz * hz, lat = Math.abs(-rx * hz + rz * hx); if (ahead > 0 && ahead < 30 && lat < 2.6 && ahead - 4 < gap) { gap = Math.max(0.1, ahead - 4); dv = c.v; } } }
         if (onRoad) { const [x, z, hx, hz] = at(L, c.s); const rx = pp.x - x, rz = pp.z - z; const ahead = rx * hx + rz * hz, lat = Math.abs(-rx * hz + rz * hx); if (ahead > 0 && ahead < 30 && lat < 2.4 && ahead - 4 < gap) { gap = Math.max(0.1, ahead - 4); dv = c.v; } }
         if (!L.closed && c.s > L.len - 25) { if (!L.next.length) gap = Math.min(gap, L.len - c.s); else { if (!c.nx || c.nxL !== L) { c.nx = rng.pick(L.next); c.nxL = L; } const tgt = by.get(c.nx.lane); if (tgt && tgt.some((o) => o !== c && Math.abs(o.s - c.nx.s) < 7)) gap = Math.min(gap, L.len - 1 - c.s); } }
         const sStar = 2.5 + Math.max(0, c.v * 1.3 + (c.v * dv) / (2 * Math.sqrt(2.0 * 3.2)));

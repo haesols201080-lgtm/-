@@ -30,16 +30,16 @@ export class Crowd {
     this.umb = new THREE.InstancedMesh(umbrellaGeometry(), um, this.max); this.umb.frustumCulled = false; this.umb.count = 0; this.umb.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(this.umb);
     // spatial index of walkways
     this.grid = new Map(); const cell = 160;
-    city.ctx.walkways.forEach((w, i) => { let cx = 0, cz = 0; for (const p of w.pts) { cx += p[0]; cz += p[2]; } cx /= w.pts.length; cz /= w.pts.length; w.cx = cx; w.cz = cz; w.y = w.pts[0][1]; const k = Math.floor(cx / cell) * 1000 + Math.floor(cz / cell); (this.grid.get(k) || this.grid.set(k, []).get(k)).push(w); });
+    city.ctx.walkways.forEach((w, i) => { let cx = 0, cz = 0; for (const p of w.pts) { cx += p[0]; cz += p[2]; } cx /= w.pts.length; cz /= w.pts.length; w.cx = cx; w.cz = cz; w.r = 0; for (const p of w.pts) w.r = Math.max(w.r, Math.hypot(p[0] - cx, p[2] - cz)); w.y = w.pts[0][1]; const k = Math.floor(cx / cell) * 1000 + Math.floor(cz / cell); (this.grid.get(k) || this.grid.set(k, []).get(k)).push(w); });
     // lingering spots registered by the world (pavement tables, shopfronts, groups): spatial index
     this.sgrid = new Map(); for (const s of city.ctx.spots || []) { const k = Math.floor(s.x / 80) * 1000 + Math.floor(s.z / 80); (this.sgrid.get(k) || this.sgrid.set(k, []).get(k)).push(s); } this.nStatic = 0;
     this.cell = cell; this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._p = new THREE.Vector3(); this._s = new THREE.Vector3(); this._up = new THREE.Vector3(0, 1, 0); this._c = new THREE.Color();
   }
   addSpots(list) { for (const s of list) { const k = Math.floor(s.x / 80) * 1000 + Math.floor(s.z / 80); (this.sgrid.get(k) || this.sgrid.set(k, []).get(k)).push(s); } }
-  addWalkways(list) { const c = this.cell; for (const w of list) { let cx = 0, cz = 0; for (const p of w.pts) { cx += p[0]; cz += p[2]; } w.cx = cx / w.pts.length; w.cz = cz / w.pts.length; w.y = w.pts[0][1]; const k = Math.floor(w.cx / c) * 1000 + Math.floor(w.cz / c); (this.grid.get(k) || this.grid.set(k, []).get(k)).push(w); } }
+  addWalkways(list) { const c = this.cell; for (const w of list) { let cx = 0, cz = 0; for (const p of w.pts) { cx += p[0]; cz += p[2]; } w.cx = cx / w.pts.length; w.cz = cz / w.pts.length; w.r = 0; for (const p of w.pts) w.r = Math.max(w.r, Math.hypot(p[0] - w.cx, p[2] - w.cz)); w.y = w.pts[0][1]; const k = Math.floor(w.cx / c) * 1000 + Math.floor(w.cz / c); (this.grid.get(k) || this.grid.set(k, []).get(k)).push(w); } }
   _near(x, y, z, R) {
-    const out = []; const c = this.cell; const n = Math.ceil(R / c);
-    for (let i = -n; i <= n; i++) for (let j = -n; j <= n; j++) { const a = this.grid.get((Math.floor(x / c) + i) * 1000 + Math.floor(z / c) + j); if (a) for (const w of a) if (Math.abs(w.y - y) < (w.indoor ? 2.5 : 30) && Math.hypot(w.cx - x, w.cz - z) < R + 60) out.push(w); }
+    const out = []; const c = this.cell; const n = Math.ceil((R + 120) / c);
+    for (let i = -n; i <= n; i++) for (let j = -n; j <= n; j++) { const a = this.grid.get((Math.floor(x / c) + i) * 1000 + Math.floor(z / c) + j); if (a) for (const w of a) if (Math.abs(w.y - y) < (w.indoor ? 2.5 : 30) && Math.hypot(w.cx - x, w.cz - z) < R + (w.r ?? 60)) out.push(w); }
     return out;
   }
   _spawn(cam, near, initial) {
@@ -57,6 +57,16 @@ export class Crowd {
     // company: friends, couples, colleagues keep step side by side
     if (rng.chance(0.42)) { const n = rng.chance(0.25) ? 2 : 1; for (let k = 0; k < n && this.agents.length < this.max; k++) { const v2 = rng.i(0, VARIANTS.length - 1); if (this.agents.filter((g) => g.variant === v2).length >= this.per) break; this.agents.push({ ...lead, variant: v2, lat: Math.max(-(w.latMax ?? 1.1), Math.min(w.latMax ?? 1.1, lead.lat + (k + 1) * 0.62 * (lead.lat > 0 ? -1 : 1))), phase: rng.next(), phaseB: rng.next(), h: rng.f(0.93, 1.07), c0: rng.pick(TOPS), c1: rng.pick(BOTS), c2: rng.pick(HAIR), tone: rng.next(), timer: lead.timer, clip: lead.clip }); } }
   }
+  // ---- crossings: each zebra joins the pavements on both sides of a street --------------------------------------
+  _linkCrossings() {
+    this._xl = true; this.xgrid = new Map(); const near = (x, z) => { let best = null, bd = 6;
+      for (const w of this._near(x, 0.2, z, 160)) { if (w.indoor || !w.closed) continue; const P = w.pts, n = P.length;
+        for (let i = 0; i < n; i++) { const a = P[i], b = P[(i + 1) % n]; const ex = b[0] - a[0], ez = b[2] - a[2]; const l2 = ex * ex + ez * ez || 1; let t = ((x - a[0]) * ex + (z - a[2]) * ez) / l2; t = Math.max(0, Math.min(1, t)); const px = a[0] + ex * t, pz = a[2] + ez * t; const d = Math.hypot(px - x, pz - z); if (d < bd) { bd = d; best = { w, x: px, z: pz, y: a[1] + (b[1] - a[1]) * t }; } } }
+      return best; };
+    for (const cr of this.city.ctx.crossings || []) { const A = near(cr.x - cr.dx * 0.8, cr.z - cr.dz * 0.8), B = near(cr.x + cr.dx * (cr.w + 0.8), cr.z + cr.dz * (cr.w + 0.8)); if (!A || !B || A.w === B.w) continue;
+      cr.ends = [A, B]; for (let e = 0; e < 2; e++) { const q = cr.ends[e]; const k = Math.floor(q.x / 50) * 100003 + Math.floor(q.z / 50); (this.xgrid.get(k) || this.xgrid.set(k, []).get(k)).push({ cr, e }); } }
+  }
+  _crossAt(g) { const a = this.xgrid.get(Math.floor(g.x / 50) * 100003 + Math.floor(g.z / 50)); if (!a) return null; for (const it of a) { const q = it.cr.ends[it.e]; if (q.w === g.w && Math.abs(q.x - g.x) < 1.6 && Math.abs(q.z - g.z) < 1.6) return it; } return null; }
   _linger(cam, rain) {
     const rng = this.rng; const cx = Math.floor(cam.x / 80), cz = Math.floor(cam.z / 80);
     const a = this.sgrid.get((cx + rng.i(-1, 1)) * 1000 + cz + rng.i(-1, 1)); if (!a || !a.length) return;
@@ -76,6 +86,7 @@ export class Crowd {
     const near = this._near(cam.x, cam.y, cam.z, 70);
     for (let i = 0; i < 8 && A.length < this.max; i++) this._spawn(cam, near, this._init !== true);
     this._init = true;
+    if (!this._xl && this.streets) this._linkCrossings(); this._peds = []; if (this.streets) { this.streets.peds.length = 0; }
     const counts = this.meshes.map(() => 0); let nu = 0; const rainy = rain > 0.25;
     for (let i = A.length - 1; i >= 0; i--) {
       const g = A[i]; const d = Math.hypot(g.x - cam.x, g.z - cam.z);
@@ -83,7 +94,29 @@ export class Crowd {
       if (!g.guest && (d > 108 || Math.abs(g.y - cam.y) > dyMax)) { if (g.spot) { g.spot.used = false; this.nStatic--; } A.splice(i, 1); continue; }
       const pts = g.w.pts, n = pts.length;
       if (g.state === 2) { g.phase += dt / (g.clip === CLIP.talk ? 5 : g.clip === CLIP.sit ? 9 : 7.5); }
+      else if (g.state === 3 || g.state === 4) { // at the kerb waiting for the walk light / on the zebra
+        const X = g.xing, cr = X.cr, A = cr.ends[X.e], B = cr.ends[1 - X.e]; const sx = -cr.dz * X.k, sz = cr.dx * X.k;
+        const tx = (g.state === 3 ? A.x : B.x) + sx, tz = (g.state === 3 ? A.z : B.z) + sz; const ddx = tx - g.x, ddz = tz - g.z, dd = Math.hypot(ddx, ddz);
+        if (g.state === 3) {
+          if (dd > 0.05) { const st = Math.min(dd, 1.2 * dt); g.x += (ddx / dd) * st; g.z += (ddz / dd) * st; }
+          const fx = (B.x - A.x), fz = (B.z - A.z); let dy = Math.atan2(fx, fz) - g.yaw; dy -= Math.round(dy / 6.2832) * 6.2832; g.yaw += dy * Math.min(1, dt * 4);
+          g.blend = Math.min(1, g.blend + dt * 3.5); g.phaseB += dt / 7; g.timer += dt;
+          if (this.streets && this.streets.walkOK(cr)) { X.go = (X.go ?? this.rng.f(0.3, 1.5)) - dt; if (X.go <= 0) { g.state = 4; X.go = null; } } else X.go = null;
+          if (g.timer > 60) { g.state = 0; g.timer = this.rng.f(10, 30); g.xcd = 30; }
+        } else {
+          const base = g.clip === CLIP.brisk ? stride[CLIP.brisk] : stride[CLIP.walk]; const v = (base / 1.05) * g.sp * g.h * 1.08; g.phase += (dt / 1.05) * g.sp * 1.08; g.blend = Math.max(0, g.blend - dt * 3.5);
+          if (dd > 0.25) { const st = Math.min(dd, v * dt); g.x += (ddx / dd) * st; g.z += (ddz / dd) * st; let dy = Math.atan2(ddx, ddz) - g.yaw; dy -= Math.round(dy / 6.2832) * 6.2832; g.yaw += dy * Math.min(1, dt * 6);
+            const fromA = Math.hypot(g.x - A.x - sx, g.z - A.z - sz); g.y = fromA < 0.7 || dd < 0.7 ? A.y : 0.06; this._peds.push(g); }
+          else { // step onto the far pavement and carry on along it
+            const w2 = B.w, P = w2.pts, n = P.length; let bi = 0, bt = 0, bd = 1e9; for (let k = 0; k < n; k++) { const a = P[k], b = P[(k + 1) % n]; const ex = b[0] - a[0], ez = b[2] - a[2]; const l2 = ex * ex + ez * ez || 1; let t = ((g.x - a[0]) * ex + (g.z - a[2]) * ez) / l2; t = Math.max(0, Math.min(1, t)); const d = Math.hypot(a[0] + ex * t - g.x, a[2] + ez * t - g.z); if (d < bd) { bd = d; bi = k; bt = t; } }
+            g.w = w2; g.seg = bi; g.t = bt; g.dir = this.rng.sign(); g.lat = Math.max(-(w2.latMax ?? 1.1), Math.min(w2.latMax ?? 1.1, g.lat)); g.y = B.y; g.state = 0; g.timer = this.rng.f(10, 40); g.xcd = 25; g.xing = null; }
+        }
+      }
       else if (g.state === 0) {
+        g.xcd = (g.xcd || 0) - dt; g.xc = (g.xc || 0) - dt;
+        if (this._xl && !g.guest && !g.w.indoor && g.xcd <= 0 && g.xc <= 0) { g.xc = 0.3; const it = this._crossAt(g); if (it) { if (this.rng.chance(0.5)) { g.state = 3; g.timer = 0; g.xing = { cr: it.cr, e: it.e, k: this.rng.f(-1.3, 1.3) }; g.clipB = this.rng.pick([CLIP.idle, CLIP.idle, CLIP.phone]); } else g.xcd = 6; } }
+      }
+      if (g.state === 0) {
         const a = pts[g.seg], b = pts[(g.seg + 1) % n]; const L = Math.hypot(b[0] - a[0], b[2] - a[2]) || 1;
         const base = g.clip === CLIP.brisk ? stride[CLIP.brisk] : stride[CLIP.walk]; const v = (base / 1.05) * g.sp * g.h; // cycle = 1.05 s
         g.t += (g.dir * v * dt) / L; g.phase += (dt / 1.05) * g.sp;
@@ -93,7 +126,7 @@ export class Crowd {
         let want = Math.atan2(dx * g.dir, dz * g.dir); let dy = want - g.yaw; dy -= Math.round(dy / 6.2832) * 6.2832; g.yaw += dy * Math.min(1, dt * 5);
         g.blend = Math.max(0, g.blend - dt * 3.5);
         g.timer -= dt; if (g.timer <= 0) { g.state = 1; g.timer = this.rng.f(4, 16); g.clipB = this.rng.pick([CLIP.idle, CLIP.phone, CLIP.phone, CLIP.talk, CLIP.idle]); }
-      } else {
+      } else if (g.state === 1) {
         g.blend = Math.min(1, g.blend + dt * 3.5); g.phaseB += dt / (g.clipB === CLIP.talk ? 5 : 7);
         g.timer -= dt; if (g.timer <= 0) { g.state = 0; g.timer = this.rng.f(10, 50); }
       }
@@ -107,6 +140,7 @@ export class Crowd {
       m.geometry.getAttribute('iC0').setXYZ(k, g.c0[0], g.c0[1], g.c0[2]); m.geometry.getAttribute('iC1').setXYZ(k, g.c1[0], g.c1[1], g.c1[2]); m.geometry.getAttribute('iC2').setXYZW(k, g.c2[0], g.c2[1], g.c2[2], g.tone);
       if (holdU && nu < this.max) { const cs = Math.cos(g.yaw), sn = Math.sin(g.yaw); const ox = -0.2, oz = 0.24; this._s.set(g.h, g.h, g.h); this._m.compose(this._p.set(g.x + ox * cs + oz * sn, g.y + 1.2 * g.h, g.z - ox * sn + oz * cs), this._q, this._s); this.umb.setMatrixAt(nu, this._m); this.umb.setColorAt(nu, this._c.setRGB(g.umbCol[0], g.umbCol[1], g.umbCol[2])); nu++; }
     }
+    if (this.streets) for (const g of this._peds) this.streets.peds.push(g);
     this.meshes.forEach((m, i) => { m.count = counts[i]; m.instanceMatrix.needsUpdate = true; for (const k of ['iAnim', 'iC0', 'iC1', 'iC2']) m.geometry.getAttribute(k).needsUpdate = true; });
     this.umb.count = nu; this.umb.instanceMatrix.needsUpdate = true; if (this.umb.instanceColor) this.umb.instanceColor.needsUpdate = true;
   }
