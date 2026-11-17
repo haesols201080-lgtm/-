@@ -66,7 +66,7 @@ export function buildRoads(ctx) {
     const fr = frames(r.pts, r.closed); r.fr = fr;
     const others = roads.filter((o) => o !== r);
     const onOther = (x, z, pad = 0) => { for (const o of others) if (distToPolyline(x, z, o.pts, o.closed) < o.w / 2 + pad) return true; return false; };
-    const roadM = M(ST.ROAD, { cellW: r.w });
+    const roadM = M(ST.ROAD, { cellW: Math.min(25.5, r.w), floorH: Math.min(25.5, r.w), extra: r.w });
     ribbon(ctx, r.pts, fr, r.closed, r.w / 2, r.y, -r.w / 2, r.y, roadM, { up: true, uA: 0, uB: r.w });
     for (const s of [1, -1]) {
       const a = s * r.w / 2, b = s * (r.w / 2 + SIDEWALK);

@@ -91,7 +91,7 @@ export function buildPlan(ctx) {
     const fr = s.pts.map((p, i) => { const a = s.pts[Math.max(0, i - 1)], b = s.pts[Math.min(s.pts.length - 1, i + 1)]; let tx = b[0] - a[0], tz = b[1] - a[1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l; return [tx, tz, -tz, tx]; });
     const marked = s.w >= 16;
     const sy = marked ? (s.arc ? 0.0458 : 0.0442) : (s.arc ? 0.0395 : 0.035) + (si++ % 2) * 0.0015;
-    ribbon(ctx, s.pts, fr, false, s.w / 2 + 0.3, sy, -s.w / 2 - 0.3, sy, M(ST.ROAD, { cellW: marked ? s.w : 0 }), { up: true, uA: 0, uB: s.w });
+    ribbon(ctx, s.pts, fr, false, s.w / 2 + 0.3, sy, -s.w / 2 - 0.3, sy, M(ST.ROAD, { cellW: marked ? s.w : 0, floorH: Math.min(25.5, s.w) }), { up: true, uA: 0, uB: s.w });
     if (marked) { ctx.lanes.push({ pts: s.pts.map((p, i) => [p[0] + fr[i][2] * s.w * 0.22, 1.1, p[1] + fr[i][3] * s.w * 0.22]), closed: false, kind: 'ground', speed: 14 }); }
   }
   // kerbside parking: cars nose-to-tail along both kerbs of the wider streets, kept clear of the corners

@@ -102,7 +102,7 @@ function garageUnit(v, rng, S, s0, s1, gh, o = {}) {
   pen.use(M(ST.CONCRETE, { color: [0.32, 0.32, 0.33], seed: rng.i(0, 255) })); v.wall(0, s0 + 0.36, c - ow / 2, 0, 0, gh, { aoB: 0.6 }); v.wall(0, c + ow / 2, s1, 0, 0, gh, { aoB: 0.6 }); v.wall(0, c - ow / 2, c + ow / 2, 0, oh, gh);
   const cm = M(ST.CONCRETE, { color: [0.3, 0.3, 0.31], seed: rng.i(0, 255), flags: IN }); pen.use(cm);
   pen.wall(xa, zF, xa, zB, 0, oh, { aoB: 0.6 }); pen.wall(xb, zB, xb, zF, 0, oh, { aoB: 0.6 }); pen.wall(xa, zB, xb, zB, 0, oh, { aoB: 0.6 }); pen.flat(xa, zB, xb, zF, oh, false, 0.7);
-  pen.use(M(ST.ROAD, { cellW: 0, flags: IN })); pen.flat(xa, zB, xb, zF + 0.02, 0.03);
+  pen.use(M(ST.ROAD, { cellW: 0, floorH: 0, flags: IN })); pen.flat(xa, zB, xb, zF + 0.02, 0.03);
   pen.use(K.emis([0.3, 0.95, 1], 2.2)); pen.flat((xa + xb) / 2 - 0.06, zB + 0.6, (xa + xb) / 2 + 0.06, zF - 0.2, 0.045);
   pen.use(K.emis([0.9, 0.96, 1], 6)); for (const z of [zB + dep * 0.3, zB + dep * 0.72]) pen.flat(xa + 0.8, z - 0.09, xb - 0.8, z + 0.09, oh - 0.03, false);
   ctx.detail(); const hz = { st: ST.METAL, color: [0.7, 0.5, 0.05], flags: 16 };

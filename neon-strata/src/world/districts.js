@@ -58,6 +58,11 @@ function streetscape(ctx, rng, b, S) {
       const [zx, zz] = b.at(x0 + (x1 - x0) * tt + Math.sin(ang) * inset, z0 + (z1 - z0) * tt + Math.cos(ang) * inset);
       const zp = ctx.penAt(zx, 0, zz, b.yaw + ang); ctx.detail(); zp.use(ZEBRA); for (let q = 0.7; q < stW - 0.9; q += 1.0) zp.flat(-1.7, q, 1.7, q + 0.5, 0.052); ctx.main();
       (ctx.crossings || (ctx.crossings = [])).push({ x: zx, z: zz, dx: Math.sin(b.yaw + ang), dz: Math.cos(b.yaw + ang), w: stW });
+      { // stop line across the lane that runs into the junction, a car length short of the zebra
+        const cs = Math.cos(b.yaw), sn = Math.sin(b.yaw); const k = tt < 0.5 ? -1 : 1; const ldx = (x1 - x0) / L * k, ldz = (z1 - z0) / L * k; const Tx = ldx * cs + ldz * sn, Tz = -ldx * sn + ldz * cs;
+        const Y = b.yaw + ang; const sgn = Math.sign(Tx * Math.cos(Y) - Tz * Math.sin(Y)) || 1; const far = (-Tz * Math.sin(Y) + Tx * Math.cos(Y)) > 0;
+        const xa = -sgn * 2.7, xb = -sgn * 3.15, za = far ? stW / 2 + 0.15 : 0.5, zb = far ? stW - 0.5 : stW / 2 - 0.15;
+        ctx.detail(); zp.use(ZEBRA); zp.flat(Math.min(xa, xb), za, Math.max(xa, xb), zb, 0.052); ctx.main(); }
     } const n = Math.max(1, Math.round(L / 34)); const slots = Math.floor(L / 5.5);
     const lampSlots = new Set(); const poles = [];
     for (let i = 0; i < n; i++) {
@@ -245,7 +250,7 @@ function fillCourt(ctx, rng, pen, kind, x0, z0, x1, z1, S) {
     const nb = Math.max(1, Math.round((alongX ? W : D) / 9)); for (let k = 0; k < nb; k++) { const t = (k + 0.5) / nb; if (alongX) { P('bench', x0 + W * t, cz + 1.9, Math.PI); } else P('bench', cx + 1.9, z0 + D * t, -Math.PI / 2); }
     for (const t of [0.25, 0.75]) { const lx = alongX ? x0 + W * t : cx - 1.6, lz = alongX ? cz - 1.6 : z0 + D * t; P(S.lamp || 'lampC', lx, lz); ctx.light(pen.wx(lx, lz), pen.wz(lx, lz), 12, [1, 0.82, 0.6], 0.45, pen.oy + 4); }
   } else if (kind === 'parking') {
-    pen.use(M(ST.ROAD, { cellW: 0 })); pen.flat(x0, z0, x1, z1, 0.02);
+    pen.use(M(ST.ROAD, { cellW: 0, floorH: 0 })); pen.flat(x0, z0, x1, z1, 0.02);
     const alongX = W >= D; const L = alongX ? W : D, Wd = alongX ? D : W; const rows = Wd >= 17 ? 2 : 1; pen.use(M(ST.PLASTER, { color: [0.62, 0.62, 0.58] }));
     for (let r = 0; r < rows; r++) { const off = rows === 2 ? (r ? Wd / 2 - 2.8 : -Wd / 2 + 2.8) : -Wd / 2 + 2.8; const yaw = (rows === 2 && r ? Math.PI : 0) + (alongX ? 0 : Math.PI / 2);
       for (let t = 1.2; t + 2.7 < L - 1; t += 2.7) { const a = (alongX ? x0 : z0) + t; if (alongX) pen.flat(a - 0.06, cz + off - 2.5, a + 0.06, cz + off + 2.5, 0.03); else pen.flat(cx + off - 2.5, a - 0.06, cx + off + 2.5, a + 0.06, 0.03);

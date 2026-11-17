@@ -46,7 +46,7 @@ export async function buildCity(engine, { seed = 2049, quality, onProgress = () 
   const add = (batch, m, order = 0) => { if (batch.empty) return null; verts += batch.n; tris += batch.ni / 3; const mesh = new THREE.Mesh(batch.build(), m); mesh.matrixAutoUpdate = false; mesh.renderOrder = order; group.add(mesh); return mesh; };
   // ground: one merged slab of chunk quads inside the playable radius
   const nC = Math.ceil((R_SPRAWL + 600) / CHUNK);
-  const gb = new Batch(4096); gb.use(M(ST.ROAD, { cellW: 0 }));
+  const gb = new Batch(4096); gb.use(M(ST.ROAD, { cellW: 0, floorH: 0 }));
   for (let cx = -nC; cx < nC; cx++) for (let cz = -nC; cz < nC; cz++) {
     const x0 = cx * CHUNK, z0 = cz * CHUNK;
     if (Math.hypot(x0 + CHUNK / 2, z0 + CHUNK / 2) > R_SPRAWL + 700) continue;

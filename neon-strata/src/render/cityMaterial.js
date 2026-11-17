@@ -270,7 +270,7 @@ const FRAG_SURFACE = /* glsl */ `
   float px = max(length(dFdx(vWPos)), length(dFdy(vWPos)));
   vec3 Vw = normalize(cameraPosition - vWPos);
   vec3 albedo = base; float rough = 0.7; float metal = 0.0; vec3 emis = vec3(0.0); vec2 slope = vec2(0.0); float cav = 1.0;
-  float wetAllow = 1.0 - nsIndoor;
+  float wetAllow = 1.0 - nsIndoor; float roadWet = 0.0;
   vec4 lf = nsLightField(vWPos, 0.0);
   nsOpen = mix(lf.a, 1.0, smoothstep(40.0, 260.0, vWPos.y));
   nsSpill = lf.rgb * exp(-max(vWPos.y - uLightMapInfo.z, 0.0) / uLightMapInfo.w) * (1.0 - nsIndoor);
@@ -643,19 +643,44 @@ const FRAG_SURFACE = /* glsl */ `
     emis = (ad + vec3(dot(ad, vec3(0.333))) * 0.12) * wipe * led * vStyle2.w * 0.2 * mix(0.35, 1.0, night); albedo = vec3(0.015); rough = 0.3; wetAllow = 0.0;
   } else if (st == 6) {
     // ================================================================== road (u across in metres, v along)
-    vec2 m = vFUv; float width = vStyle2.x;
+    vec2 m = vFUv; float width = vStyle2.w > 0.5 ? vStyle2.w : vStyle2.x * 0.1; // marked carriageway width (m; wide roads carry it in metres), 0 = unmarked
     NsM t = nsMat(4.0, vWPos.xz / 5.0);
     float macro = nsNoise(vWPos.xz * 0.011).g; vec3 g = nsGrunge(vWPos.xz * 0.05);
     albedo = vec3(0.036, 0.037, 0.04) * t.alb * (0.75 + 0.5 * macro) * (0.8 + 0.3 * g.g);
     rough = t.rough; slope += t.n * 1.4 * (1.0 - smoothstep(0.05, 0.4, px)); cav = t.cav;
-    float patchM = smoothstep(0.62, 0.64, nsNoise(floor(vWPos.xz / vec2(3.4, 8.0)) * 0.173).b);
-    albedo *= 1.0 - 0.28 * patchM;
     float fadeM = 1.0 - smoothstep(0.08, 0.5, px);
     { vec2 mc = floor(vWPos.xz / 23.0); vec2 mo = (nsHash22(mc) - 0.5) * 14.0; vec2 mp = vWPos.xz - (mc + 0.5) * 23.0 - mo; float md = length(mp); float mk = step(0.45, nsHash(mc + 7.0));
       float disc = (1.0 - smoothstep(0.36, 0.38, md)) * mk * fadeM; float ring = (1.0 - smoothstep(0.02, 0.035, abs(md - 0.4))) * mk * fadeM;
       float grid = step(0.5, fract(mp.x * 7.0)) * step(0.5, fract(mp.y * 7.0));
       albedo = mix(albedo, vec3(0.05, 0.048, 0.045) * (0.7 + 0.5 * grid), disc); albedo = mix(albedo, vec3(0.02), ring); rough = mix(rough, 0.45, disc); metal = mix(metal, 0.8, disc); slope += normalize(mp + 1e-4) * ring * 0.8;
       float oil = smoothstep(0.62, 0.8, nsNoise(vWPos.xz * 0.045 + 0.2).b) * smoothstep(0.4, 0.7, g.r); albedo *= 1.0 - 0.3 * oil; rough = mix(rough, 0.3, oil * 0.5); }
+    float cw = vStyle2.y * 0.1; // carriageway width (m), u runs across it
+    if (cw > 2.5) {
+      float nl = width > 0.5 ? max(2.0, floor(width / 3.6)) : 2.0; if (width > 0.5) cw = width; float lw = cw / nl; float lf = fract(m.x / lw) * lw;
+      // wheel paths: two darker, smoother bands per lane where the tyres run, ruts hold the rain
+      float trk = exp(-pow((abs(lf - lw * 0.5) - 0.85) / 0.34, 2.0));
+      albedo *= 1.0 - 0.2 * trk; rough = mix(rough, rough * 0.72, trk);
+      // gutters: grime and water along both kerbs
+      float edgeD = min(m.x, cw - m.x); float gut = 1.0 - smoothstep(0.12, 0.75, edgeD);
+      albedo *= 1.0 - 0.22 * gut; roadWet = 0.1 * gut + 0.07 * trk;
+      // repairs: rectangular patches cut along the road (fresher or older tar) with sealed joints, a utility trench now and then
+      vec2 pc = vec2(floor(m.x / lw), floor(m.y / 13.0)); float ph = nsHash(pc * 1.37 + 3.1);
+      if (ph > 0.78) { vec2 c0 = vec2(pc.x * lw + lw * (0.15 + 0.3 * nsHash(pc + 1.0)), pc.y * 13.0 + 13.0 * 0.2 * nsHash(pc + 2.0)); vec2 sz = vec2(lw * (0.35 + 0.4 * nsHash(pc + 3.0)), 2.5 + 6.0 * nsHash(pc + 4.0));
+        vec2 q = m - c0; float inP = step(0.0, q.x) * step(q.x, sz.x) * step(0.0, q.y) * step(q.y, sz.y); float bd = min(min(q.x, sz.x - q.x), min(q.y, sz.y - q.y));
+        float fresh = step(0.5, nsHash(pc + 5.0)); albedo = mix(albedo, albedo * mix(1.25, 0.62, fresh), inP); rough = mix(rough, mix(0.8, 0.5, fresh), inP * 0.5);
+        float seal = inP * (1.0 - smoothstep(0.03, 0.06 + px, bd)); albedo = mix(albedo, vec3(0.012), seal * 0.85); rough = mix(rough, 0.25, seal); }
+      { float tc = floor(m.y / 70.0); float th = nsHash(vec2(tc, 9.1)); if (th > 0.7) { float tx = (0.2 + 0.6 * nsHash(vec2(tc, 4.3))) * cw; float tr = step(abs(m.x - tx), 0.35) * step(fract(m.y / 70.0), 0.55); albedo = mix(albedo, albedo * 0.7, tr); float te = tr * (1.0 - smoothstep(0.02, 0.05 + px, 0.35 - abs(m.x - tx))); albedo = mix(albedo, vec3(0.012), te * 0.8); } }
+      // cracks: a longitudinal crack on the lane joints, crazing at the edges, sealed with glossy tar
+      float cn = nsNoise(vec2(m.x * 1.7, m.y * 0.21)).r; float lj = 1.0 - smoothstep(0.0, 0.5, abs(fract(m.x / lw + 0.5) - 0.5) * lw);
+      float crack = (1.0 - smoothstep(0.008, 0.02 + px, abs(cn - 0.5) * 0.25)) * max(lj, gut * 0.6) * step(0.45, nsNoise(m * vec2(0.3, 0.05)).g);
+      albedo = mix(albedo, vec3(0.008), crack * 0.8 * fadeM); rough = mix(rough, 0.3, crack * fadeM);
+      // kerb drains every ~25 m on both sides
+      { float dvv = fract(m.y / 25.0 + 0.37) * 25.0; float side = step(cw * 0.5, m.x); float dx = side > 0.5 ? cw - m.x : m.x; vec2 dq = vec2(dx - 0.35, dvv - 0.5);
+        float gr = step(abs(dq.x), 0.3) * step(abs(dq.y), 0.45); float slots = step(0.5, fract(dvv * 9.0)); albedo = mix(albedo, vec3(0.02) * (0.4 + slots), gr * fadeM); metal = mix(metal, 0.8, gr); rough = mix(rough, 0.45, gr); }
+      // narrow two-way streets carry a dashed centre line
+      if (width < 0.5 && cw >= 9.5) { float cl = 1.0 - smoothstep(0.06, 0.06 + px, abs(m.x - cw * 0.5)); float dsh = step(0.5, fract(m.y / 6.0)); float wr = smoothstep(0.25, 0.65, nsGrunge(m * 0.3).g + 0.25);
+        albedo = mix(albedo, vec3(0.5, 0.49, 0.46), cl * dsh * wr * 0.75 * fadeM); }
+    }
     if (width > 0.5) {
       float lanes = max(2.0, floor(width / 3.6));
       float lu = m.x / width * lanes;
@@ -733,7 +758,7 @@ const FRAG_SURFACE = /* glsl */ `
     // standing water: metre-scale puddles in the dips of streets and yards; roofs drain, so they only keep a few
     // small ponds (the old 60 m blobs read as black camouflage from the air)
     vec4 pn = nsNoise(vWPos.xz * 0.045); vec4 pn2 = nsNoise(vWPos.xz * 0.19 + 0.37);
-    float pv = pn.r * 0.55 + pn2.g * 0.45; float onRoof = step(1.6, vWPos.y);
+    float pv = pn.r * 0.55 + pn2.g * 0.45 + roadWet; float onRoof = step(1.6, vWPos.y);
     float pud = smoothstep(mix(0.56, 0.68, onRoof), mix(0.63, 0.72, onRoof), pv) * up * step(vWPos.y, uCloud.x) * wet;
     float film = wet * mix(0.35, 0.8, up);
     albedo *= mix(1.0, 0.55, film * (1.0 - metal));
