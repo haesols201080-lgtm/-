@@ -1,13 +1,47 @@
 // Instanced prop library: every model is built once (procedurally, around the origin, facing +z) and
 // drawn thousands of times through InstancedMesh with per-instance tint.
 import * as THREE from 'three';
-import { ST } from '../render/cityMaterial.js';
+import { ST, FLAG } from '../render/cityMaterial.js';
 import { Batch, Pen, M, ngonPts, rectPts, scalePts } from './builder.js';
 import * as K from './kit.js';
 
 const steel = K.dark(0.16), dk = K.dark(0.08), galv = K.metal([0.5, 0.52, 0.55]), conc = K.conc(0.42), rust = K.rust([0.42, 0.36, 0.32]);
 const white = (i = 10, mode = 0) => K.emis([1, 1, 1], i, mode);
 const M2 = (st, color) => M(st, { color });
+function leafTree(pen, o) {
+  let r = o.seed * 9301 + 49297; const rnd = () => { r = (r * 9301 + 49297) % 233280; return r / 233280; };
+  const bark = K.rust([0.27, 0.22, 0.18]); const [rx, ry, rz] = o.crown; const cy = o.cy; const lean = [(rnd() - 0.5) * 0.4, (rnd() - 0.5) * 0.4];
+  pen.use(bark); const top = [lean[0], o.trunkH, lean[1]]; pen.tube(0, 0, 0, top[0], top[1], top[2], 0.17, 7, { r1: 0.12 });
+  pen.use(steel); pen.lathe(0, 0, [[0.9, 0], [0.9, 0.06], [0.3, 0.06]], 8, { cap: false }); // tree grate
+  const b = pen.b; const clumps = [];
+  for (let i = 0; i < o.clumps; i++) { // clump centres spread through the crown, denser outside
+    const u = rnd() * 2 - 1, th = rnd() * 6.2832, rr = Math.pow(rnd(), 0.45); const s2 = Math.sqrt(1 - u * u);
+    let x = Math.cos(th) * s2 * rr * rx, y = u * rr * ry, z = Math.sin(th) * s2 * rr * rz; if (o.cone) { const k = 1 - (y / ry + 1) * 0.42; x *= k; z *= k; }
+    clumps.push([x + lean[0] * 1.4, cy + y, z + lean[1] * 1.4]); }
+  // branches from the trunk head to the lower / outer clumps
+  pen.use(bark); for (let i = 0; i < clumps.length; i += 3) { const c = clumps[i]; if (c[1] > cy + ry * 0.4) continue; pen.tube(top[0], top[1] - 0.3 * rnd(), top[2], c[0] * 0.75, c[1] - 0.2, c[2] * 0.75, 0.07, 4, { r1: 0.03 }); }
+  // a dark inner mass so the crown has body between the cards
+  sphere(pen, lean[0] * 1.4, cy, lean[1] * 1.4, rx * 0.36, ry * 0.36, 8, M(ST.FOLIAGE, { color: o.col.map((v) => v * 0.72) }), 4);
+  for (const [cx, cyy, cz] of clumps) {
+    const k = 0.82 + 0.36 * rnd(); pen.use(M(ST.FOLIAGE, { color: o.col.map((v, j) => v * k * (j === 1 ? 0.96 + 0.1 * rnd() : 1)), seed: Math.floor(rnd() * 255), flags: FLAG.VAR_A }));
+    let nx = cx - lean[0] * 1.4, ny = (cyy - cy) * 0.7 + 0.6, nz = cz - lean[1] * 1.4; const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl; // crown normal: soft, volumetric light
+    const h = o.card * (0.75 + 0.5 * rnd()) / 2; const a0 = rnd() * 3.1416;
+    for (let q = 0; q < 3; q++) { const a = a0 + q * 1.047, tilt = (rnd() - 0.5) * 1.2; const ux = Math.cos(a), uz = Math.sin(a); const vx = -uz * Math.sin(tilt), vy = Math.cos(tilt), vz = ux * Math.sin(tilt);
+      const P = (su, sv) => b.vert(cx + (ux * su + vx * sv) * h, cyy + vy * sv * h, cz + (uz * su + vz * sv) * h, nx, ny, nz, (su + 1) / 2, (sv + 1) / 2);
+      const i0 = P(-1, -1), i1 = P(1, -1), i2 = P(1, 1), i3 = P(-1, 1); b.quadI(i0, i1, i2, i3); b.quadI(i3, i2, i1, i0); }
+  }
+}
+// a shrub: leaf-card clumps around a small inner mass (same cut-out leaves as the trees)
+function leafBush(pen, x, y, z, rx, ry, n, card, col, seed, indoor = 0) {
+  let r = seed * 9301 + 49297; const rnd = () => { r = (r * 9301 + 49297) % 233280; return r / 233280; }; const b = pen.b;
+  sphere(pen, x, y, z, rx * 0.55, ry * 0.5, 7, M(ST.FOLIAGE, { color: col.map((v) => v * 0.7), flags: indoor }), 4);
+  for (let i = 0; i < n; i++) { const th = rnd() * 6.2832, u = rnd() * 1.4 - 0.4, s2 = Math.sqrt(Math.max(0, 1 - u * u)), rr = 0.55 + 0.45 * rnd(); const cx = x + Math.cos(th) * s2 * rx * rr, cy = y + u * ry * rr, cz = z + Math.sin(th) * s2 * rx * rr;
+    const k = 0.85 + 0.3 * rnd(); pen.use(M(ST.FOLIAGE, { color: col.map((v) => v * k), seed: Math.floor(rnd() * 255), flags: FLAG.VAR_A | indoor }));
+    let nx = cx - x, ny = (cy - y) + 0.4, nz = cz - z; const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl; const h = card * (0.7 + 0.5 * rnd()) / 2; const a0 = rnd() * 3.1416;
+    for (let q = 0; q < 2; q++) { const a = a0 + q * 1.5708, tilt = (rnd() - 0.5) * 1.0; const ux = Math.cos(a), uz = Math.sin(a); const vx = -uz * Math.sin(tilt), vy = Math.cos(tilt), vz = ux * Math.sin(tilt);
+      const P = (su, sv) => b.vert(cx + (ux * su + vx * sv) * h, cy + vy * sv * h, cz + (uz * su + vz * sv) * h, nx, ny, nz, (su + 1) / 2, (sv + 1) / 2);
+      const i0 = P(-1, -1), i1 = P(1, -1), i2 = P(1, 1), i3 = P(-1, 1); b.quadI(i0, i1, i2, i3); b.quadI(i3, i2, i1, i0); } }
+}
 const sphere = (pen, x, y, z, rx, ry, segs, mat, rings = 5) => { const prof = []; for (let i = 0; i <= rings; i++) { const a = -Math.PI / 2 + (i / rings) * Math.PI; prof.push([Math.max(0.001, Math.cos(a) * rx), y + Math.sin(a) * ry]); } pen.use(mat); pen.lathe(x, z, prof, segs, { cap: false }); };
 
 export const PROPS = {
@@ -64,12 +98,12 @@ export const PROPS = {
     pen.use(K.emis([1, 0.3, 0.1], 5, 2, false, 31)); pen.box(0.5, 0.27, 0.06, 0.03, 0.6, 0.66, {});
   },
   barrier(pen) { pen.use({ st: ST.METAL, color: [0.7, 0.5, 0.05], flags: 16 }); pen.box(0, 0, 1.8, 0.1, 0.5, 1.0, { roof: steel, bottom: steel }); pen.use(steel); for (const x of [-0.8, 0.8]) { pen.box(x, 0, 0.08, 0.5, 0, 0.08, {}); pen.box(x, 0, 0.06, 0.06, 0.08, 0.5, {}); } pen.use(K.emis([1, 0.5, 0.05], 12, 2, false, 5)); pen.lathe(0.8, 0, [[0.07, 1.0], [0.07, 1.12], [0.01, 1.16]], 6, {}); },
-  planter(pen) { pen.box(0, 0, 1.6, 1.6, 0, 0.55, { wall: K.conc(0.4), roof: K.rust([0.2, 0.16, 0.12]) }); sphere(pen, 0, 1.15, 0, 0.85, 0.75, 8, K.foliage([0.28, 0.5, 0.24])); sphere(pen, 0.4, 0.95, 0.3, 0.5, 0.45, 6, K.foliage([0.34, 0.52, 0.2]), 4); },
-  tree(pen) {
-    pen.use(K.rust([0.3, 0.24, 0.2])); pen.tube(0, 0, 0, 0.15, 3.2, 0.1, 0.2, 6, { r1: 0.13 }); pen.tube(0.15, 3.2, 0.1, -0.5, 4.6, 0.3, 0.1, 5, { r1: 0.06 }); pen.tube(0.15, 3.2, 0.1, 0.9, 4.4, -0.3, 0.1, 5, { r1: 0.06 });
-    sphere(pen, 0.1, 5.4, 0, 2.0, 1.6, 9, K.foliage([0.26, 0.48, 0.22])); sphere(pen, -1.1, 4.6, 0.6, 1.2, 1.0, 7, K.foliage([0.3, 0.52, 0.2]), 4); sphere(pen, 1.2, 4.5, -0.5, 1.3, 1.0, 7, K.foliage([0.22, 0.44, 0.22]), 4);
-    pen.use(steel); pen.lathe(0, 0, [[0.9, 0], [0.9, 0.06], [0.3, 0.06]], 8, { cap: false });
-  },
+  planter(pen) { pen.box(0, 0, 1.6, 1.6, 0, 0.55, { wall: K.conc(0.4), roof: K.rust([0.2, 0.16, 0.12]) }); leafBush(pen, 0, 1.0, 0, 0.75, 0.55, 19, 0.9, [0.26, 0.44, 0.2], 5); },
+  // street trees: a leaning trunk, branches that reach the clumps, and a crown of crossed leaf cards cut out in the
+  // shader (ragged silhouette, sky through the gaps) — three species so an avenue is not a row of clones
+  tree(pen) { leafTree(pen, { seed: 11, trunkH: 3.0, crown: [2.4, 1.9, 2.4], cy: 5.3, clumps: 24, card: 1.7, col: [0.24, 0.42, 0.18] }); },
+  treeB(pen) { leafTree(pen, { seed: 23, trunkH: 2.2, crown: [1.5, 3.0, 1.5], cy: 5.6, clumps: 22, card: 1.4, col: [0.2, 0.36, 0.17], cone: true }); },
+  treeC(pen) { leafTree(pen, { seed: 37, trunkH: 4.2, crown: [2.9, 1.6, 2.7], cy: 6.4, clumps: 26, card: 1.9, col: [0.3, 0.44, 0.2] }); },
   // --- market ------------------------------------------------------------------------------
   stall(pen) {
     const w = 3.4, d = 2.2, h = 2.5;
@@ -150,7 +184,7 @@ export const PROPS = {
   duct(pen) { pen.box(0, 0, 0.7, 5, 0.5, 1.1, { wall: galv, roof: galv, bottom: galv }); pen.box(0, 2.5, 0.7, 0.7, 0, 1.1, { wall: galv, roof: galv }); pen.use(steel); for (const z of [-1.8, 0]) { pen.box(0, z, 0.8, 0.08, 0, 0.5, {}); } pen.use(dk); for (const z of [-2, -1, 0, 1]) pen.box(0, z, 0.74, 0.05, 0.5, 1.12, {}); },
   shack(pen) { pen.box(0, 0, 3.4, 2.8, 0, 2.4, { wall: M2(ST.CORRUGATED, [0.34, 0.33, 0.3]), roof: null }); pen.use(M2(ST.CORRUGATED, [0.3, 0.26, 0.24])); pen.quad(-1.9, 2.3, 1.6, 1.9, 2.3, 1.6, 1.9, 2.75, -1.6, -1.9, 2.75, -1.6, 0, 0, 3.8, 3.2); pen.use(K.emis([1, 0.7, 0.4], 2.2)); pen.quad(-0.5, 0.9, 1.41, 0.3, 0.9, 1.41, 0.3, 1.7, 1.41, -0.5, 1.7, 1.41, 0, 0, 1, 1); pen.use(dk); pen.quad(0.7, 0, 1.41, 1.4, 0, 1.41, 1.4, 1.95, 1.41, 0.7, 1.95, 1.41, 0, 0, 1, 1); },
   sofa(pen) { const f = M(ST.FABRIC, { color: [0.2, 0.2, 0.24], flags: 8 }), d = M(ST.COMPOSITE, { color: [0.12, 0.12, 0.14], flags: 8 }); pen.box(0, 0, 1.0, 2.0, 0.12, 0.44, { wall: f, roof: f }); pen.box(-0.42, 0, 0.18, 2.0, 0.44, 0.9, { wall: f, roof: f }); pen.box(0, 0.95, 1.0, 0.14, 0.12, 0.62, { wall: f, roof: f }); pen.box(0, -0.95, 1.0, 0.14, 0.12, 0.62, { wall: f, roof: f }); pen.box(0, 0, 0.9, 1.9, 0, 0.12, { wall: d, roof: d }); },
-  planterIn(pen) { pen.use(M(ST.COMPOSITE, { color: [0.16, 0.16, 0.18], flags: 8 })); pen.lathe(0, 0, [[0.34, 0], [0.42, 0.7], [0.4, 0.74]], 8, {}); sphere(pen, 0, 1.3, 0, 0.6, 0.7, 8, M(ST.FOLIAGE, { color: [0.24, 0.46, 0.22], flags: 8 })); sphere(pen, 0.2, 1.85, 0.1, 0.36, 0.4, 6, M(ST.FOLIAGE, { color: [0.3, 0.5, 0.2], flags: 8 }), 4); },
+  planterIn(pen) { pen.use(M(ST.COMPOSITE, { color: [0.16, 0.16, 0.18], flags: 8 })); pen.lathe(0, 0, [[0.34, 0], [0.42, 0.7], [0.4, 0.74]], 8, {}); pen.use(M(ST.RUST, { color: [0.3, 0.24, 0.18], flags: 8 })); pen.tube(0, 0.7, 0, 0.05, 1.1, 0, 0.03, 4); leafBush(pen, 0.04, 1.45, 0, 0.5, 0.6, 12, 0.7, [0.24, 0.44, 0.2], 9, 8); },
   stool(pen) { pen.use(M(ST.METAL, { color: [0.3, 0.3, 0.32], flags: 8 })); pen.tube(0, 0, 0, 0, 0.66, 0, 0.04, 5); pen.lathe(0, 0, [[0.2, 0], [0.2, 0.03]], 8, {}); pen.use(M(ST.FABRIC, { color: [0.36, 0.14, 0.1], flags: 8 })); pen.lathe(0, 0, [[0.19, 0.66], [0.2, 0.72], [0.17, 0.74]], 8, {}); },
   shelf(pen) { // faces +z, 2.2 wide, goods on four boards
     const fr = M(ST.METAL, { color: [0.3, 0.3, 0.32], flags: 8 }); pen.box(0, 0, 2.1, 0.5, 0, 0.1, { wall: fr, roof: fr }); for (const x of [-1.05, 1.05]) pen.box(x, 0, 0.05, 0.5, 0, 2.1, { wall: fr, roof: fr }); pen.box(0, -0.24, 2.1, 0.03, 0, 2.1, { wall: fr, roof: fr });
@@ -243,6 +277,8 @@ export function buildPropGeometries() {
 // turn recorded instances into InstancedMeshes grouped by coarse cell for culling
 export function instanceProps(ctx, material, group, cell = 720) {
   const geos = buildPropGeometries(); const cells = [];
+  if (ctx.props.tree) { const T = ctx.props.tree; ctx.props.tree = []; ctx.props.treeB = ctx.props.treeB || []; ctx.props.treeC = ctx.props.treeC || []; // three species, mixed by position
+    for (const it of T) { const h = Math.abs(Math.sin(it[0] * 12.9898 + it[2] * 78.233) * 43758.5453) % 1; (h < 0.45 ? ctx.props.tree : h < 0.72 ? ctx.props.treeB : ctx.props.treeC).push(it); } }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
   let total = 0;
   for (const name in ctx.props) {

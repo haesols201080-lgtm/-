@@ -690,6 +690,20 @@ const FRAG_SURFACE = /* glsl */ `
     vec2 m = abs(wN.y) > 0.7 ? vWPos.xz : vec2(dot(vWPos.xz, T.xz), vWPos.y);
     NsM t = nsMat(10.0, m / 3.0); NsM t2 = nsMat(10.0, m / 0.9 + 0.37);
     albedo = base * t.alb * (0.6 + 0.5 * t2.alb.g); rough = t.rough; metal = 0.0; slope += t.n * 2.2 + t2.n * 1.2; cav = t.cav * (0.6 + 0.4 * t2.cav);
+    if (varA) { // a leaf card: an irregular clump of individual leaves, cut out (alpha test), lit through from behind
+      vec2 q = vFUv - 0.5; float edge = nsNoise(vFUv * 2.3 + seed * 0.37).r;
+      float shape = 1.0 - smoothstep(0.62 + 0.3 * edge - 0.12, 0.62 + 0.3 * edge, length(q) * 2.0);
+      float leaves = 0.0; float lh = 0.0;
+      for (int k = 0; k < 2; k++) { vec2 lp = vFUv * 8.0 + float(k) * vec2(0.5, 0.31); vec2 lc = floor(lp); vec2 lf = fract(lp) - 0.5; float h = nsHash(lc + seed + float(k) * 7.0);
+        vec2 jo = (vec2(nsHash(lc + 3.1 + seed), nsHash(lc + 7.7 + seed)) - 0.5) * 0.45; float an = h * 6.2832; vec2 rd = mat2(cos(an), -sin(an), sin(an), cos(an)) * (lf - jo);
+        float l = 1.0 - smoothstep(0.8, 1.0, length(rd * vec2(2.0, 3.6))); if (l > leaves) { leaves = l; lh = h; } }
+      float far = smoothstep(0.02, 0.07, px); // leaves smaller than a pixel: keep the clump silhouette instead
+      float cover = mix(leaves * shape, shape * step(0.32, nsHash(floor(gl_FragCoord.xy) + seed)), far);
+      if (cover < 0.5) discard;
+      albedo = base * (0.7 + 0.6 * lh) * mix(vec3(1.0), vec3(1.08, 1.06, 0.82), step(0.8, lh)); rough = 0.55 + 0.2 * lh; cav = 1.0;
+      slope += (vec2(nsHash(vec2(lh, 1.0)), nsHash(vec2(lh, 2.0))) - 0.5) * 1.6 * (1.0 - far);
+      emis += base * uSunColor * 0.06 * max(0.0, dot(-Vw, uSunDir)) * (1.0 - night); // sun through the leaves
+    }
   } else if (st == 25) {
     // ================================================================== fabric / tarp
     NsM t = nsMat(9.0, vFUv / 1.5 + seed * 0.1);
