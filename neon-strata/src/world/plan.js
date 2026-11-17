@@ -94,6 +94,18 @@ export function buildPlan(ctx) {
     ribbon(ctx, s.pts, fr, false, s.w / 2 + 0.3, sy, -s.w / 2 - 0.3, sy, M(ST.ROAD, { cellW: marked ? s.w : 0 }), { up: true, uA: 0, uB: s.w });
     if (marked) { ctx.lanes.push({ pts: s.pts.map((p, i) => [p[0] + fr[i][2] * s.w * 0.22, 1.1, p[1] + fr[i][3] * s.w * 0.22]), closed: false, kind: 'ground', speed: 14 }); }
   }
+  // kerbside parking: cars nose-to-tail along both kerbs of the wider streets, kept clear of the corners
+  { const pr = ctx.rng.fork('kerbside'); let parked = 0;
+    const eg = new Map(); const ek = (x, z) => Math.floor(x / 30) * 100003 + Math.floor(z / 30); for (const q of streets) for (const e of [q.pts[0], q.pts[q.pts.length - 1]]) { const k = ek(e[0], e[1]); (eg.get(k) || eg.set(k, []).get(k)).push(e); }
+    const nearEnd = (x, z) => { for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { const a = eg.get(ek(x + i * 30, z + j * 30)); if (a && a.some((e) => Math.hypot(e[0] - x, e[1] - z) < 15)) return true; } return false; };
+    for (const st of streets) { if (st.w < 12) continue; const off = st.w / 2 - 1.2; const dens = { sump: 0.62, hive: 0.55, oldq: 0.5, lumina: 0.42, meridian: 0.3 }[st.district] ?? 0.3;
+      let acc = 0; const total = st.pts.reduce((a, p, i) => i ? a + Math.hypot(p[0] - st.pts[i - 1][0], p[1] - st.pts[i - 1][1]) : 0, 0);
+      for (let i = 1; i < st.pts.length; i++) { const a = st.pts[i - 1], b = st.pts[i]; const L = Math.hypot(b[0] - a[0], b[1] - a[1]); const tx = (b[0] - a[0]) / L, tz = (b[1] - a[1]) / L;
+        for (const side of [1, -1]) { let run = pr.chance(0.5); for (let t = 3; t < L - 3; t += 6.0) { const g = acc + t; if (g < 16 || g > total - 16) continue; if (pr.chance(0.12)) run = !run; if (!run || !pr.chance(dens + 0.25)) continue;
+          const x = a[0] + tx * t + (-tz) * side * off, z = a[1] + tz * t + tx * side * off; if (nearEnd(x, z)) continue; const yaw = Math.atan2(tx, tz) + (side < 0 ? Math.PI : 0) + pr.f(-0.03, 0.03);
+          ctx.prop('hovercar', x, st.y ?? 0.045, z, yaw, 1, null); ctx.phys.addBox(x, z, 1.0, 2.3, yaw, 0, 1.5); parked++; } }
+        acc += L; } }
+    ctx.parked = parked; }
   const curb = K.conc(0.44);
   const lotMat = { sump: M(ST.CONCRETE, { color: [0.36, 0.36, 0.37] }), oldq: M(ST.PAVE, { color: [0.42, 0.4, 0.37] }), meridian: M(ST.TILE, { color: [0.4, 0.41, 0.44] }), lumina: M(ST.TILE, { color: [0.3, 0.3, 0.34] }), foundry: M(ST.CONCRETE, { color: [0.38, 0.36, 0.34] }), port: M(ST.CONCRETE, { color: [0.4, 0.4, 0.4] }) };
   for (const b of blocks) {
