@@ -135,6 +135,31 @@ void nsWall(int kind, vec2 m, vec3 base, float px, float seed, inout vec3 albedo
   albedo *= mix(1.0, 0.72, g.r * 0.6) * (0.88 + 0.2 * g.g);
   rough = clamp(rough + g.r * 0.15 - g.b * 0.2 * metal, 0.04, 1.0);
 }
+// ---- laid paving: square pavers · running-bond bricks · basket weave · staggered slabs · cobbles.
+// returns the tile id (for per-unit tone / tilt) and the distance to the nearest joint (m)
+void nsPaveLayout(vec2 p, float kind, out vec2 id, out float jd, out vec2 lc){
+  if (kind < 0.5) { vec2 s = vec2(0.4); id = floor(p / s); vec2 f = fract(p / s); lc = f; jd = min(min(f.x, 1.0 - f.x) * s.x, min(f.y, 1.0 - f.y) * s.y); }
+  else if (kind < 1.5) { vec2 s = vec2(0.22, 0.11); float row = floor(p.y / s.y); vec2 q = vec2(p.x / s.x + 0.5 * mod(row, 2.0), p.y / s.y); id = floor(q); vec2 f = fract(q); lc = f; jd = min(min(f.x, 1.0 - f.x) * s.x, min(f.y, 1.0 - f.y) * s.y); }
+  else if (kind < 2.5) { float u = 0.11; vec2 b = floor(p / (2.0 * u)); vec2 f = fract(p / (2.0 * u)); float par = mod(b.x + b.y, 2.0); float sp = par < 0.5 ? step(0.5, f.y) : step(0.5, f.x);
+    id = b * 2.0 + vec2(sp, par); float dSplit = (par < 0.5 ? abs(f.y - 0.5) : abs(f.x - 0.5)) * 2.0 * u; lc = f; jd = min(min(min(f.x, 1.0 - f.x), min(f.y, 1.0 - f.y)) * 2.0 * u, dSplit); }
+  else if (kind < 3.5) { vec2 s = vec2(0.6, 0.4); float row = floor(p.y / s.y); vec2 q = vec2(p.x / s.x + nsHash(vec2(row, 3.7)), p.y / s.y); id = floor(q); vec2 f = fract(q); lc = f; jd = min(min(f.x, 1.0 - f.x) * s.x, min(f.y, 1.0 - f.y) * s.y); }
+  else { vec2 s = vec2(0.14, 0.12); float row = floor(p.y / s.y); vec2 q = vec2(p.x / s.x + 0.5 * mod(row, 2.0) + (nsHash(vec2(row, 1.3)) - 0.5) * 0.3, p.y / s.y); id = floor(q); vec2 f = fract(q); lc = f;
+    vec2 e = min(f, 1.0 - f) * s; jd = length(max(vec2(0.025) - e, 0.0)) > 0.0 ? 0.025 - length(max(vec2(0.025) - e, 0.0)) : min(e.x, e.y); }
+}
+void nsPaving(vec2 p, float kind, float seed, vec3 base, float px, inout vec3 albedo, inout float rough, inout vec2 slope, inout float cav){
+  vec2 id; float jd; vec2 lc; nsPaveLayout(p, kind, id, jd, lc);
+  float fade = 1.0 - smoothstep(0.012, 0.05, px); float jw = kind > 3.5 ? 0.018 : (kind < 0.5 || kind > 2.5 ? 0.007 : 0.005);
+  float joint = (1.0 - smoothstep(jw, jw + max(px, 0.002), jd)) * fade;
+  float h = nsHash(id + seed * 0.13); float h2 = nsHash(id * 1.7 + 4.1);
+  vec3 tone = kind > 0.5 && kind < 1.5 ? mix(vec3(1.0), vec3(1.25, 0.82, 0.68), step(0.55, nsHash(vec2(seed, 2.0)))) : vec3(1.0); // some brick lanes are red
+  albedo *= tone * (0.82 + 0.34 * h) * mix(1.0, 0.85 + 0.3 * h2, 0.5);
+  float worn = smoothstep(0.65, 0.95, nsNoise(p * 0.06).g); albedo *= 1.0 + 0.12 * worn * (1.0 - joint);
+  vec3 jc = mix(albedo * 0.35, vec3(0.06, 0.09, 0.04), step(0.72, nsNoise(p * 0.5).r) * 0.7); // grime, the odd bit of moss in the joints
+  albedo = mix(albedo, jc, joint); rough = mix(rough, 0.95, joint); cav *= 1.0 - 0.5 * joint;
+  vec2 tilt = (vec2(h, h2) - 0.5) * 0.14; if (kind > 3.5) tilt += (lc - 0.5) * 0.9; // lippage; cobbles are domed
+  slope += tilt * fade * (1.0 - joint) + vec2(0.0) ;
+  if (h2 > 0.965) { float cr = 1.0 - smoothstep(0.004, 0.008 + px, abs(lc.x - lc.y * (0.6 + 0.8 * h)) * 0.2); albedo = mix(albedo, albedo * 0.4, cr * fade); } // a cracked unit
+}
 float nsBoxD(vec2 p, vec2 a, vec2 b, float r){ // signed distance (positive inside) to a rounded rect a..b
   vec2 q = abs(p - (a + b) * 0.5) - (b - a) * 0.5 + r;
   return -(length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r);
@@ -601,6 +626,9 @@ const FRAG_SURFACE = /* glsl */ `
     int kind = st == 0 ? 0 : (st == 1 ? 1 : (st == 8 ? 6 : (st == 22 ? 4 : (st == 26 ? 2 : (st == 27 ? 3 : (st == 2 ? 5 : 7))))));
     nsWall(kind, hm, base, px, seed, albedo, rough, metal, slope, cav); isWall = (st == 1 || st == 7 || varA) ? 0.0 : 1.0; mineral = float(kind == 0 || kind == 2 || kind == 4);
     if (varA) { float hz = step(0.5, fract((hm.x + hm.y) * 0.8)); albedo = mix(albedo, mix(vec3(0.02), vec3(0.72, 0.5, 0.03), hz) * (0.6 + 0.4 * nsGrunge(hm * 0.2).g), 0.85); }
+    if (st == 7 && wN.y > 0.7) { // pavements are laid, unit by unit: the pattern changes from street to street
+      vec2 rg = floor(vWPos.xz / 140.0); float r = nsHash(rg + seed * 0.31); float kind = r < 0.3 ? 0.0 : r < 0.52 ? 1.0 : r < 0.68 ? 2.0 : r < 0.88 ? 3.0 : 4.0;
+      nsPaving(vWPos.xz, kind, seed + r * 50.0, base, px, albedo, rough, slope, cav); }
   } else if (st == 28) {
     // ================================================================== louvres / mechanical grilles
     vec2 m = hm; float sl = fract(m.y / 0.16);
@@ -721,6 +749,7 @@ const FRAG_SURFACE = /* glsl */ `
     NsM t = nsMat(6.0, m * 0.35); vec3 g = nsGrunge(m * 0.07);
     albedo = base * t.alb * (0.82 + 0.3 * ph) * (0.8 + 0.3 * g.g); rough = clamp(0.22 + 0.3 * g.g + 0.2 * ph, 0.05, 1.0); metal = 0.0; slope += t.n * 0.4;
     vec3 sm = nsSeams(m, ps, 0.012, px); albedo *= 1.0 - sm.x * 0.6; slope += sm.yz * 0.6;
+    if (nsIndoor < 0.5 && wN.y > 0.7) { albedo = base * t.alb * (0.85 + 0.2 * g.g); nsPaving(vWPos.xz, 3.0, seed, base, px, albedo, rough, slope, cav); rough = clamp(rough + 0.25, 0.0, 1.0); }
   } else if (st == 20) {
     // ================================================================== water
     vec2 m = vWPos.xz; float t = uTime * 0.6;

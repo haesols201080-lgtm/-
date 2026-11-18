@@ -111,7 +111,7 @@ export function facade(vol, f, y0, y1, spec) {
     for (let fl = bl.every; fl < floors + (bl.top ? 1 : 0); fl += bl.every) { const y = y0 + (fl * (y1 - y0)) / floors + fy; vol.box(f, e, L - e, 0, bd, y - bl.h / 2, y + bl.h / 2, bl.mat); }
   }
   ctx.main();
-  const info = { cells, cw, floors, bays, bayW: bayCells * cw, offs, floorH: (y1 - y0) / floors, uoff };
+  const info = { cells, cw, floors, bays, bayW: bayCells * cw, offs, floorH: (y1 - y0) / floors, uoff, bayCellsN: bayCells };
   if (spec.dress && wall.st === ST.WIN_RES) dressFacade(vol, f, y0, info, wall, spec);
   return info;
 }
@@ -140,6 +140,8 @@ function dressFacade(vol, f, y0, info, wall, spec) {
   for (let fl = 0; fl < floors; fl++) {
     if (spec.dressSkip0 && fl === 0) continue; const fy = y0 + fl * fh; const belt = spec.belts && fl > 0 && fl % spec.belts.every === 0;
     for (let c = 0; c < cells; c++) {
+      const ob = Math.max(0, (info.offs[Math.floor(c / info.bayCellsN)] || 0)); // things on a proud bay sit on its face
+      const V = ob > 0 ? { P: (ff, sx, o) => vol.P(ff, sx, o + ob), wall: (ff, a1, b1, o, ya, yb, opt) => vol.wall(ff, a1, b1, o + ob, ya, yb, opt), cap: (ff, a1, b1, o0, o1, y, up) => vol.cap(ff, a1, b1, o0 + ob, o1 + ob, y, up), ret: (ff, sx, oa, ob2, ya, yb) => vol.ret(ff, sx, oa + ob, ob2 + ob, ya, yb), box: (ff, a1, b1, o0, o1, ya, yb, m, o) => vol.box(ff, a1, b1, o0 + ob, o1 + ob, ya, yb, m, o) } : vol;
       const X = uoff + c; if (pierN > 0 && (X + seed) % pierN === 0) continue; if (stairOn && (X + Math.floor(seed * 0.7)) % 9 === 0) continue;
       const m = (X + off) % per; let has = true, big = false, small = false;
       if (pat === 1) big = m === 0; else if (pat === 2) has = m < 2; else if (pat === 3) { big = m === 0; small = m === 2; } else if (pat === 4) { big = m === 0; has = m < 2; }
@@ -151,25 +153,25 @@ function dressFacade(vol, f, y0, info, wall, spec) {
       const flowerHere = !small && !varA && fr(hU * 7.3) < D.flower && !(!big && !small && !varA && !belt && firstOfUnit && hU < D.ac);
       if (balcHere) { // a real balcony in front of the living room: floor slab with its edge and soffit, a parapet front and returns
         const bw = Math.min(csx - 0.4, ww + 0.7), dd = 1.15, a = sc - bw / 2, b = sc + bw / 2, yb = fy; pen.use(K.conc(0.55));
-        vol.wall(f, a, b, dd, yb - 0.18, yb); vol.cap(f, a, b, 0, dd, yb, true); vol.cap(f, a, b, 0, dd, yb - 0.18, false); vol.ret(f, a, 0, dd, yb - 0.18, yb); vol.ret(f, b, dd, 0, yb - 0.18, yb);
-        pen.use(balM); vol.wall(f, a, b, dd, yb, yb + 1.02); vol.cap(f, a, b, dd - 0.07, dd, yb + 1.02, true); vol.ret(f, a, 0, dd, yb, yb + 1.02); vol.ret(f, b, dd, 0, yb, yb + 1.02);
-        if (fr(hU * 5.7) < 0.35) ctx.propL('planterIn', ...vol.P(f, a + 0.45, dd - 0.35).slice(0, 1), yb, vol.P(f, a + 0.45, dd - 0.35)[1], 0, 0.5); }
+        V.wall(f, a, b, dd, yb - 0.18, yb); V.cap(f, a, b, 0, dd, yb, true); V.cap(f, a, b, 0, dd, yb - 0.18, false); V.ret(f, a, 0, dd, yb - 0.18, yb); V.ret(f, b, dd, 0, yb - 0.18, yb);
+        pen.use(balM); V.wall(f, a, b, dd, yb, yb + 1.02); V.cap(f, a, b, dd - 0.07, dd, yb + 1.02, true); V.ret(f, a, 0, dd, yb, yb + 1.02); V.ret(f, b, dd, 0, yb, yb + 1.02);
+        if (fr(hU * 5.7) < 0.35) ctx.propL('planterIn', ...V.P(f, a + 0.45, dd - 0.35).slice(0, 1), yb, V.P(f, a + 0.45, dd - 0.35)[1], 0, 0.5); }
       if (trim > 0 && fl < 14 && !balcHere) { const trim = f === 0 ? trimS : 1; // backs keep just their sills // only the faces you can see from the street are built (front, top/underside, the reveal side)
         const wh = Math.min(big ? Math.min(fh - 0.55, 2.3) : small ? 0.68 : bh, fh - sill - 0.12); const a = sc - ww / 2, b = sc + ww / 2, y0w = fy + sill, y1w = y0w + wh; pen.use(tm);
-        if (!flowerHere) { vol.wall(f, a - 0.09, b + 0.09, 0.11, y0w - 0.075, y0w); vol.cap(f, a - 0.09, b + 0.09, 0, 0.11, y0w, true); vol.cap(f, a - 0.09, b + 0.09, 0, 0.11, y0w - 0.075, false); } // sill
-        if (trim >= 2) { const d = trim === 3 ? 0.1 : 0.07, hh = trim === 3 ? 0.22 : 0.15; vol.wall(f, a - 0.12, b + 0.12, d, y1w, y1w + hh); vol.cap(f, a - 0.12, b + 0.12, 0, d, y1w, false); if (trim === 3) vol.cap(f, a - 0.12, b + 0.12, 0, d, y1w + hh, true); } // head / lintel
-        if (trim === 3) { vol.wall(f, a - 0.13, a, 0.06, y0w, y1w); vol.ret(f, a, 0.06, 0, y0w, y1w); vol.wall(f, b, b + 0.13, 0.06, y0w, y1w); vol.ret(f, b, 0, 0.06, y0w, y1w); } } // jambs + their reveal faces
+        if (!flowerHere) { V.wall(f, a - 0.09, b + 0.09, 0.11, y0w - 0.075, y0w); V.cap(f, a - 0.09, b + 0.09, 0, 0.11, y0w, true); V.cap(f, a - 0.09, b + 0.09, 0, 0.11, y0w - 0.075, false); } // sill
+        if (trim >= 2) { const d = trim === 3 ? 0.1 : 0.07, hh = trim === 3 ? 0.22 : 0.15; V.wall(f, a - 0.12, b + 0.12, d, y1w, y1w + hh); V.cap(f, a - 0.12, b + 0.12, 0, d, y1w, false); if (trim === 3) V.cap(f, a - 0.12, b + 0.12, 0, d, y1w + hh, true); } // head / lintel
+        if (trim === 3) { V.wall(f, a - 0.13, a, 0.06, y0w, y1w); V.ret(f, a, 0.06, 0, y0w, y1w); V.wall(f, b, b + 0.13, 0.06, y0w, y1w); V.ret(f, b, 0, 0.06, y0w, y1w); } } // jambs + their reveal faces
       // outdoor AC unit under one normal window of the flat
-      if (!big && !small && !varA && !belt && firstOfUnit && hU < D.ac) { const p = vol.P(f, sc + (hW - 0.5) * 0.4, 0.2); ctx.propL('acSmall', p[0], fy + 0.06, p[1], FACE_ANG[f], 0.75); }
+      if (!big && !small && !varA && !belt && firstOfUnit && hU < D.ac) { const p = V.P(f, sc + (hW - 0.5) * 0.4, 0.2); ctx.propL('acSmall', p[0], fy + 0.06, p[1], FACE_ANG[f], 0.75); }
       // flower boxes along the sills of the flats that keep them
-      else if (!balcHere && !small && !varA && fr(hU * 7.3) < D.flower) { const a = sc - ww / 2 - 0.05, b = sc + ww / 2 + 0.05, sy = fy + sill; pen.use(M_POT[Math.floor(hW * 3)]); vol.wall(f, a, b, 0.26, sy - 0.26, sy - 0.04); vol.cap(f, a, b, 0, 0.26, sy - 0.26, false); pen.use(K.foliage(FLOWERS[Math.floor(hW * 5)])); const pt = sy + 0.16 + 0.1 * fr(hW * 9.1); vol.wall(f, a + 0.06, b - 0.06, 0.3, sy - 0.04, pt); vol.cap(f, a + 0.06, b - 0.06, 0.04, 0.3, pt, true); }
+      else if (!balcHere && !small && !varA && fr(hU * 7.3) < D.flower) { const a = sc - ww / 2 - 0.05, b = sc + ww / 2 + 0.05, sy = fy + sill; pen.use(M_POT[Math.floor(hW * 3)]); V.wall(f, a, b, 0.26, sy - 0.26, sy - 0.04); V.cap(f, a, b, 0, 0.26, sy - 0.26, false); pen.use(K.foliage(FLOWERS[Math.floor(hW * 5)])); const pt = sy + 0.16 + 0.1 * fr(hW * 9.1); V.wall(f, a + 0.06, b - 0.06, 0.3, sy - 0.04, pt); V.cap(f, a + 0.06, b - 0.06, 0.04, 0.3, pt, true); }
       // drying rack: two arms out of the wall at the sill, a rail, the washing
-      else if (!balcHere && !small && !belt && fr(hU * 3.7) < D.laundry && firstOfUnit) { const a = vol.P(f, sc - 0.6, 0), b = vol.P(f, sc + 0.6, 0), a2 = vol.P(f, sc - 0.6, 0.65), b2 = vol.P(f, sc + 0.6, 0.65), y = fy + sill - 0.05;
+      else if (!balcHere && !small && !belt && fr(hU * 3.7) < D.laundry && firstOfUnit) { const a = V.P(f, sc - 0.6, 0), b = V.P(f, sc + 0.6, 0), a2 = V.P(f, sc - 0.6, 0.65), b2 = V.P(f, sc + 0.6, 0.65), y = fy + sill - 0.05;
         pen.use(K.MAT_POLE); pen.tube(a[0], y, a[1], a2[0], y, a2[1], 0.018, 3); pen.tube(b[0], y, b[1], b2[0], y, b2[1], 0.018, 3); pen.tube(a2[0], y, a2[1], b2[0], y, b2[1], 0.015, 3);
         const n = 2 + Math.floor(hW * 3); for (let k = 0; k < n; k++) { const t0 = (k + 0.1) / n, t1 = (k + 0.85) / n, hh = 0.35 + 0.4 * fr(hW * (k + 3.1)); const q0 = [a2[0] + (b2[0] - a2[0]) * t0, a2[1] + (b2[1] - a2[1]) * t0], q1 = [a2[0] + (b2[0] - a2[0]) * t1, a2[1] + (b2[1] - a2[1]) * t1];
           pen.use(M_CLOTH(CLOTH[Math.floor(fr(hW * (k + 1.7)) * CLOTH.length)], k)); pen.quad(q0[0], y - hh, q0[1], q1[0], y - hh, q1[1], q1[0], y, q1[1], q0[0], y, q0[1], 0, 0, 1, 1); pen.quad(q1[0], y - hh, q1[1], q0[0], y - hh, q0[1], q0[0], y, q0[1], q1[0], y, q1[1], 0, 0, 1, 1); } }
       // a small dish on a bracket beside the frame
-      if (!belt && fr(hU * 11.9) < D.dish && firstOfUnit && sc - ww / 2 > 0.55) { const p = vol.P(f, sc - ww / 2 - 0.35, 0.3); ctx.propL('dish', p[0], fy + 1.5, p[1], FACE_ANG[f] + Math.PI, 0.26); }
+      if (!belt && fr(hU * 11.9) < D.dish && firstOfUnit && sc - ww / 2 > 0.55) { const p = V.P(f, sc - ww / 2 - 0.35, 0.3); ctx.propL('dish', p[0], fy + 1.5, p[1], FACE_ANG[f] + Math.PI, 0.26); }
     }
   }
   // services on the back: a yellow gas main along the wall with a riser and meter per stack of flats, downpipes at
@@ -185,6 +187,14 @@ const M_CLOTH = (c, k) => ({ st: ST.FABRIC, color: c, seed: k });
 const M_STONE = { st: ST.STONE, color: [0.56, 0.53, 0.48], seed: 7 };
 const M_POT = [{ st: ST.CONCRETE, color: [0.5, 0.28, 0.18] }, { st: ST.METAL, color: [0.2, 0.22, 0.2] }, { st: ST.CONCRETE, color: [0.62, 0.6, 0.56] }];
 
+// massing rhythm for a front: some bays stand proud of the wall plane so a building is not a sheer box
+export function bayRhythm(rng) {
+  const r = rng.next(); if (r < 0.28) return null; const d = rng.f(0.45, 0.9);
+  if (r < 0.46) return (b) => (b % 2 === 1 ? d : 0); // alternating oriels
+  if (r < 0.62) return (b, n) => (n > 2 && (b === 0 || b === n - 1) ? d : 0); // end pavilions
+  if (r < 0.8) return (b, n) => (b >= Math.floor(n / 3) && b < Math.ceil((2 * n) / 3) ? d : 0); // a central frontispiece
+  return (b) => (b % 3 !== 1 ? d * 0.7 : 0); // pairs of bays with a recessed slot between
+}
 // plain (blind) wall on a face, optionally with a faded painted mural / number
 export function blindWall(vol, f, y0, y1, mat, rng, o = {}) {
   const pen = vol.pen; pen.use(mat); vol.wall(f, 0, vol.len(f), 0, y0, y1, { aoB: o.aoB ?? 1 });
