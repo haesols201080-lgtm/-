@@ -7,17 +7,17 @@ export const PRESETS = {
   },
   medium: {
     name: 'medium', pixelRatio: 1, maxPixels: 1280 * 720, msaa: 0, density: 0.75, detailDist: 700, farChunkDist: 5200,
-    cloudScale: 0.33, cloudSteps: 18, bloomMips: 5, probe: 1, probeSize: 96, shadows: 0, motionBlur: 0, ssao: 0,
+    cloudScale: 0.33, cloudSteps: 18, bloomMips: 5, probe: 1, probeSize: 96, shadows: 1, shadowMap: 2048, shadowExt: 150, shadowDetail: 0, motionBlur: 0, ssao: 0,
     traffic: 3600, crowd: 240, rain: 6000, godrays: 1, interiorMap: 1, far: 20000, localLights: 6,
   },
   high: {
     name: 'high', pixelRatio: 1, maxPixels: 1920 * 1080, msaa: 4, density: 1, detailDist: 1000, farChunkDist: 7000,
-    cloudScale: 0.5, cloudSteps: 28, bloomMips: 6, probe: 1, probeSize: 128, shadows: 1, motionBlur: 1, ssao: 1,
+    cloudScale: 0.5, cloudSteps: 28, bloomMips: 6, probe: 1, probeSize: 128, shadows: 1, shadowMap: 4096, shadowExt: 200, shadowDetail: 1, motionBlur: 1, ssao: 1,
     traffic: 7000, crowd: 460, rain: 12000, godrays: 1, interiorMap: 1, far: 26000, localLights: 8,
   },
   ultra: {
     name: 'ultra', pixelRatio: 1.5, maxPixels: 2560 * 1440, msaa: 4, density: 1, detailDist: 1500, farChunkDist: 9000,
-    cloudScale: 0.5, cloudSteps: 44, bloomMips: 7, probe: 1, probeSize: 256, shadows: 1, motionBlur: 1, ssao: 1,
+    cloudScale: 0.5, cloudSteps: 44, bloomMips: 7, probe: 1, probeSize: 256, shadows: 1, shadowMap: 4096, shadowExt: 240, shadowDetail: 1, motionBlur: 1, ssao: 1,
     traffic: 9500, crowd: 640, rain: 20000, godrays: 1, interiorMap: 1, far: 30000, localLights: 8,
   },
 };

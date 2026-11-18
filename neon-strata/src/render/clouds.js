@@ -72,7 +72,7 @@ float cloudDensity(vec3 p, float cov, bool detail){
   float prof = smoothstep(0.0, 0.16, h) * smoothstep(top, top * 0.55, h);
   vec3 w = vec3(uTime * 1.8, 0.0, uTime * 0.7);
   float n = texture(uCloudNoise, (p + w) * vec3(0.00085, 0.0017, 0.00085)).r;
-  float d = prof * (0.35 + thick * 0.75) - (1.0 - n) * 0.62;
+  float d = prof * (0.35 + thick * 0.75) - (1.0 - n) * 0.62 - max(0.0, 0.5 - uCloud.w) * 0.75; // fair weather: the deck breaks into scattered cumulus
   if (detail && d > -0.12) {
     float dn = texture(uCloudNoise, (p + w * 1.6) * 0.0042).g;
     d -= (1.0 - dn) * 0.20 * (1.0 - clamp(d * 1.5, 0.0, 1.0));

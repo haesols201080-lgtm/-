@@ -31,8 +31,8 @@ export class Engine {
     this.scene.add(this.sun); this.scene.add(this.sun.target);
     if (quality.shadows) {
       const s = this.sun.shadow; this.sun.castShadow = true;
-      s.mapSize.set(2048, 2048); s.camera.near = 10; s.camera.far = 2600; s.bias = -0.0006; s.normalBias = 0.6;
-      const e = 260; s.camera.left = -e; s.camera.right = e; s.camera.top = e; s.camera.bottom = -e;
+      const ms = quality.shadowMap || 2048; s.mapSize.set(ms, ms); s.camera.near = 10; s.camera.far = 3000; s.bias = -0.00025; s.normalBias = 0.35;
+      const e = this.shadowExt = quality.shadowExt || 200; s.camera.left = -e; s.camera.right = e; s.camera.top = e; s.camera.bottom = -e;
     }
 
     this._size(); // sets pixel ratio before post targets are created
@@ -98,9 +98,17 @@ export class Engine {
     // key light follows camera
     const sd = U.uSunDir.value, sc = U.uSunColor.value;
     this.sun.color.setRGB(sc.r, sc.g, sc.b); this.sun.intensity = 1;
-    this.sun.target.position.copy(cam.position);
-    this.sun.position.copy(cam.position).addScaledVector(sd, 1300);
-    this.sun.castShadow = !!this.q.shadows && cam.position.y > 700 && sd.y > 0.08;
+    // the sun's shadow box follows the camera (a little ahead of it), snapped to whole shadow texels so the edges
+    // do not crawl as you move; high above the city it opens up to cover the skyline
+    const sh = !!this.q.shadows && sd.y > 0.04; this.sun.castShadow = sh;
+    if (sh) { const s = this.sun.shadow, high = cam.position.y > 500; const e = high ? 1300 : this.shadowExt;
+      if (s.camera.right !== e) { s.camera.left = -e; s.camera.right = e; s.camera.top = e; s.camera.bottom = -e; s.camera.far = high ? 6000 : 3000; s.camera.updateProjectionMatrix(); }
+      const fw = this._fw || (this._fw = new THREE.Vector3()); cam.getWorldDirection(fw); fw.y = 0; if (fw.lengthSq() > 1e-6) fw.normalize();
+      const c = this._sc || (this._sc = new THREE.Vector3()); c.copy(cam.position).addScaledVector(fw, high ? 0 : e * 0.45); c.y = high ? cam.position.y * 0.3 : 0;
+      const up = Math.abs(sd.y) > 0.99 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0); const rgt = this._r || (this._r = new THREE.Vector3()); rgt.crossVectors(up, sd).normalize(); const u2 = this._u || (this._u = new THREE.Vector3()); u2.crossVectors(sd, rgt).normalize();
+      const tx = (2 * e) / s.mapSize.x; const a = Math.round(c.dot(rgt) / tx) * tx - c.dot(rgt), b = Math.round(c.dot(u2) / tx) * tx - c.dot(u2); c.addScaledVector(rgt, a).addScaledVector(u2, b);
+      this.sun.target.position.copy(c); this.sun.position.copy(c).addScaledVector(sd, 1500); }
+    else { this.sun.target.position.copy(cam.position); this.sun.position.copy(cam.position).addScaledVector(sd, 1300); }
 
     if (this.probeOn && !this.probeHold) {
       const every = this.q.name === 'medium' ? 3 : 1;

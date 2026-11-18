@@ -296,6 +296,7 @@ export function instanceProps(ctx, material, group, cell = 720) {
     for (const it of list) { const k = Math.floor(it[0] / cell) * 1000 + Math.floor(it[2] / cell); let a = buckets.get(k); if (!a) { a = []; buckets.set(k, a); } a.push(it); }
     for (const [, arr] of buckets) {
       const im = new THREE.InstancedMesh(geos[name], material, arr.length); im.matrixAutoUpdate = false;
+      if (ctx.q.shadows) { im.receiveShadow = true; if (name !== 'grass' && name !== 'acSmall') { im.castShadow = true; im.customDepthMaterial = material.userData.depth; } }
       let cx = 0, cz = 0, cy = 0;
       arr.forEach((it, i) => { p.set(it[0], it[1], it[2]); q.setFromAxisAngle(up, it[3]); s.setScalar(it[4]); m4.compose(p, q, s); im.setMatrixAt(i, m4); const t = it[5]; col.setRGB(t ? t[0] : 1, t ? t[1] : 1, t ? t[2] : 1); im.setColorAt(i, col); cx += it[0]; cy += it[1]; cz += it[2]; });
       im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;

@@ -77,7 +77,7 @@ export function createStreetTraffic(city, scene, quality, game) {
   const rng = new RNG(4242); const cars = [];
   // body: the hover-car model, instanced with per-car paint
   const b = new Batch(512); const pen = new Pen(b); pen.at(0, 0, 0, 0); PROPS.hovercar(pen);
-  const mesh = new THREE.InstancedMesh(b.build(), city.mat, N); mesh.frustumCulled = false; mesh.count = 0; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(mesh);
+  const mesh = new THREE.InstancedMesh(b.build(), city.mat, N); mesh.frustumCulled = false; if (quality.shadows) { mesh.castShadow = true; mesh.receiveShadow = true; mesh.customDepthMaterial = city.mat.userData.depth; } mesh.count = 0; mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(mesh);
   const col = new THREE.Color(); for (let i = 0; i < N; i++) mesh.setColorAt(i, col.setRGB(1, 1, 1));
   // head, tail and brake lights + signal heads: one additive point cloud
   const MAXP = N * 2 + 400; const lp = new Float32Array(MAXP * 3), lc = new Float32Array(MAXP * 4); const lg = new THREE.BufferGeometry();

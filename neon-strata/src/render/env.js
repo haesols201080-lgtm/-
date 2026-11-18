@@ -127,7 +127,7 @@ export const env = {
   hour: 21.5,          // 0..24
   dayLength: 1440,     // real seconds per in-game day
   paused: false,
-  weather: { rain: 0.7, target: 0.7, storm: 0, timer: 40 },
+  weather: { rain: 0.7, target: 0.7, storm: 0, timer: 40, clear: 0, clearT: 0 },
   sunElev: 0,
   isDay: false,
   exposureBias: 1,
@@ -157,14 +157,18 @@ export const env = {
     U.uSkyZenith.value.setRGB(s.zen[0], s.zen[1], s.zen[2]);
     U.uSkyHorizon.value.setRGB(s.hor[0], s.hor[1], s.hor[2]);
     U.uNight.value = s.night;
-    U.uCloud.value.z = s.ct;
+    // weather sets how much sky there is: a clear day lets the sun through the deck (hard shadows, crisp air),
+    // broken cloud lets some through, rain closes it
+    const cl = this.weather.clear; U.uCloud.value.z = s.ct + (0.95 - s.ct) * cl; U.uCloud.value.w = 0.72 - 0.6 * cl;
 
     // weather drift
     const w = this.weather;
     if (dt > 0) {
       w.timer -= dt;
-      if (w.timer <= 0) { w.timer = 60 + Math.random() * 150; const r = Math.random(); w.target = r < 0.3 ? 0 : r < 0.65 ? 0.45 : 1; w.storm = w.target > 0.9 && Math.random() < 0.6 ? 1 : 0; }
-      w.rain += clamp(w.target - w.rain, -dt * 0.03, dt * 0.03);
+      if (w.timer <= 0) { w.timer = 90 + Math.random() * 200; const r = Math.random(); // clear · broken cloud · drizzle · rain / storm
+        if (r < 0.32) { w.target = 0; w.clearT = 1; } else if (r < 0.6) { w.target = 0; w.clearT = 0.55; } else if (r < 0.8) { w.target = 0.45; w.clearT = 0; } else { w.target = 1; w.clearT = 0; }
+        w.storm = w.target > 0.9 && Math.random() < 0.6 ? 1 : 0; }
+      w.rain += clamp(w.target - w.rain, -dt * 0.03, dt * 0.03); w.clear += clamp((w.rain > 0.05 ? 0 : w.clearT) - w.clear, -dt * 0.02, dt * 0.02);
       // lightning
       this.flashT -= dt;
       if (w.storm && w.rain > 0.6 && this.flashT < -2 - Math.random() * 9) {
@@ -178,7 +182,7 @@ export const env = {
     }
     U.uRain.value = w.rain;
     U.uWet.value = clamp(lerp(U.uWet.value, w.rain > 0.05 ? 1 : 0.25, dt * 0.02 + (dt === 0 ? 1 : 0)), 0, 1);
-    U.uFogParams.value.x = s.d0 * (1 + w.rain * 0.45);
+    U.uFogParams.value.x = s.d0 * (1 + w.rain * 0.45) * (1 - 0.45 * w.clear);
   },
 };
 

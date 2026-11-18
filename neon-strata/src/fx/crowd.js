@@ -24,7 +24,7 @@ export class Crowd {
     this.city = city; this.max = quality.crowd; this.rng = new RNG(31337);
     this.anim = bakeAnimations(); this.mat = createHumanMaterial(this.anim);
     const per = Math.ceil(this.max / VARIANTS.length) + 8;
-    this.meshes = VARIANTS.map((v) => { const m = makeHumanMesh(buildBody(v.v), this.mat, per); scene.add(m); return m; });
+    this.meshes = VARIANTS.map((v) => { const m = makeHumanMesh(buildBody(v.v), this.mat, per); m.receiveShadow = !!quality.shadows; scene.add(m); return m; });
     this.per = per; this.agents = [];
     const um = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.1, side: THREE.DoubleSide, transparent: true, opacity: 0.78 }); injectNS(um, { key: 'umb' });
     this.umb = new THREE.InstancedMesh(umbrellaGeometry(), um, this.max); this.umb.frustumCulled = false; this.umb.count = 0; this.umb.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(this.umb);

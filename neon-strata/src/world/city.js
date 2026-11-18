@@ -55,15 +55,16 @@ export async function buildCity(engine, { seed = 2049, quality, onProgress = () 
     const i0 = gb.vert(xa, 0, z0 + CHUNK, 0, 1, 0, 0, 0), i1 = gb.vert(x0 + CHUNK, 0, z0 + CHUNK, 0, 1, 0, 1, 0), i2 = gb.vert(x0 + CHUNK, 0, z0, 0, 1, 0, 1, 1), i3 = gb.vert(xa, 0, z0, 0, 1, 0, 0, 1);
     gb.quadI(i0, i1, i2, i3);
   }
-  const ground = add(gb, groundMat, -5); ground.frustumCulled = false;
+  const ground = add(gb, groundMat, -5); ground.frustumCulled = false; ground.receiveShadow = !!quality.shadows;
+  const shadowy = (m, cast) => { if (!m || !quality.shadows) return m; m.receiveShadow = true; if (cast) { m.castShadow = true; m.customDepthMaterial = mat.userData.depth; } return m; };
   for (const c of ctx.chunks.values()) {
-    const rec = { x: c.x, z: c.z, ground: null, main: add(c.main, mat), detail: add(c.detail, mat), glow: null };
+    const rec = { x: c.x, z: c.z, ground: null, main: shadowy(add(c.main, mat), true), detail: shadowy(add(c.detail, mat), !!quality.shadowDetail), glow: null };
     if (!c.glow.empty) { rec.glow = new THREE.Mesh(c.glow.build(), glowMat); rec.glow.matrixAutoUpdate = false; rec.glow.renderOrder = 50; group.add(rec.glow); }
     chunks.push(rec);
   }
   const bigs = [];
   for (const [name, b] of ctx.named) {
-    const rec = { name, main: add(b.main, mat), glow: null };
+    const rec = { name, main: shadowy(add(b.main, mat), true), glow: null };
     if (rec.main && name === 'spire') { rec.main.castShadow = true; rec.main.receiveShadow = true; }
     if (!b.glow.empty) { rec.glow = new THREE.Mesh(b.glow.build(), glowMat); rec.glow.matrixAutoUpdate = false; rec.glow.renderOrder = 50; group.add(rec.glow); }
     bigs.push(rec);

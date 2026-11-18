@@ -888,7 +888,7 @@ function patchedLightsBegin() {
   if (_lightsBegin) return _lightsBegin;
   let src = THREE.ShaderChunk.lights_fragment_begin;
   const key = 'getDirectionalLightInfo( directionalLight, directLight );';
-  if (src.includes(key)) src = src.replace(key, key + '\n\t\tdirectLight.color *= nsSunVis(vWPos.y) * mix(0.3, 1.0, nsOpen) * (1.0 - nsIndoor);');
+  if (src.includes(key)) src = src.replace(key, key + '\n#ifndef NS_OPENK\n#define NS_OPENK 0.3\n#endif\n\t\tdirectLight.color *= nsSunVis(vWPos.y) * mix(NS_OPENK, 1.0, nsOpen) * (1.0 - nsIndoor);');
   else console.warn('[NS] could not patch directional light chunk');
   _lightsBegin = src;
   return src;
@@ -947,7 +947,26 @@ export function injectNS(material, opts = {}) {
 export function createCityMaterial(quality, signAtlasUniform) {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, metalness: 0, envMapIntensity: 1 });
   injectNS(m, { facade: true, interior: !!quality.interiorMap, signAtlas: signAtlasUniform });
+  // with real sun shadows the old "street canyon" darkening of direct sun is (almost) dropped: the shadows do it
+  m.defines = { ...(m.defines || {}), NS_OPENK: quality.shadows ? '0.85' : '0.3' };
+  m.userData.depth = createCityDepthMaterial();
   return m;
+}
+// shadow-casting depth for the city geometry: leaf cards cut a dappled crown out of the shadow, grass casts none
+export function createCityDepthMaterial() {
+  const d = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking }); d.defines = { USE_UV: '' };
+  d.onBeforeCompile = (sh) => {
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aStyle; attribute vec4 aStyle2; flat varying vec4 vSt; flat varying vec4 vSt2;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSt = aStyle; vSt2 = aStyle2;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nflat varying vec4 vSt; flat varying vec4 vSt2;')
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+        { int st = int(vSt.x + 0.5); int fl = int(vSt2.z + 0.5);
+          if (st == 21 && (fl / 16) % 2 == 1) { if ((fl / 32) % 2 == 1) discard; vec2 q = vUv - 0.5;
+            float shape = length(q) * 2.0 + 0.18 * sin(vUv.x * 17.0 + vUv.y * 11.0 + vSt.y) * cos(vUv.y * 13.0);
+            vec2 lc = floor(vUv * 7.0); float h = fract(sin(dot(lc + vSt.y, vec2(12.9898, 78.233))) * 43758.5453);
+            if (shape > 0.62 || h < 0.32) discard; } }`);
+  };
+  return d;
 }
 
 // unlit additive material for light cones, holograms, beams (with fog attenuation + soft fade)
