@@ -21,7 +21,7 @@ export class Player {
     this.camYaw = 0; this.camPitch = -0.12; this.camDist = 3.8; this.camDistCur = 3.8; this.sens = 0.0024;
     this.clip = CLIP.idle; this.clipPrev = CLIP.idle; this.blend = 0; this.phase = 0; this.phasePrev = 0;
     // hero body (long coat, visor)
-    this.body = makeHumanMesh(buildBody({ coat: 1, boots: 1, visor: 1 }), crowd.mat, 1); this.body.count = 1; this.body.frustumCulled = false; engine.scene.add(this.body);
+    this.body = makeHumanMesh(buildBody({ coat: 1, boots: 1, visor: 1 }), crowd.mat, 1); this.body.count = 1; this.body.frustumCulled = false; if (engine.q.shadows) { this.body.castShadow = true; this.body.receiveShadow = true; this.body.customDepthMaterial = crowd.depth; } engine.scene.add(this.body);
     this.body.geometry.getAttribute('iC0').setXYZ(0, 0.14, 0.13, 0.13); this.body.geometry.getAttribute('iC1').setXYZ(0, 0.1, 0.1, 0.12); this.body.geometry.getAttribute('iC2').setXYZW(0, 0.08, 0.07, 0.07, 0.3);
     // skimmer
     const b = new Batch(512); const pen = new Pen(b); pen.at(0, 0, 0, 0); PROPS.hovercar(pen);

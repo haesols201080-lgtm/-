@@ -7,7 +7,7 @@ export const PRESETS = {
   },
   medium: {
     name: 'medium', pixelRatio: 1, maxPixels: 1280 * 720, msaa: 0, density: 0.75, detailDist: 700, farChunkDist: 5200,
-    cloudScale: 0.33, cloudSteps: 18, bloomMips: 5, probe: 1, probeSize: 96, shadows: 1, shadowMap: 2048, shadowExt: 150, shadowDetail: 0, motionBlur: 0, ssao: 0,
+    cloudScale: 0.33, cloudSteps: 18, bloomMips: 5, probe: 1, probeSize: 96, shadows: 1, shadowMap: 2048, shadowExt: 150, shadowDetail: 0, motionBlur: 0, ssao: 1,
     traffic: 3600, crowd: 240, rain: 6000, godrays: 1, interiorMap: 1, far: 20000, localLights: 6,
   },
   high: {

@@ -127,15 +127,15 @@ const FLOWERS = [[0.62, 0.12, 0.16], [0.7, 0.42, 0.55], [0.75, 0.62, 0.15], [0.2
 const CLOTH = [[0.72, 0.72, 0.74], [0.56, 0.2, 0.2], [0.2, 0.3, 0.52], [0.7, 0.62, 0.4], [0.3, 0.46, 0.36], [0.12, 0.12, 0.14]];
 function dressFacade(vol, f, y0, info, wall, spec) {
   const ctx = vol.ctx, pen = vol.pen, D = spec.dress; const seed = (wall.seed ?? 0) & 255; const hb = gHash(seed, 17.0);
-  const pat = Math.floor(fr(hb * 13.7) * 5.0), off = Math.floor(fr(hb * 3.1) * 3.0), per = pat < 1.5 ? 2 : 3;
+  let pat = Math.floor(fr(hb * 13.7) * 5.0); if (((pat > 1.5 && pat < 2.5) || pat > 3.5) && fr(hb * 5.9) < 0.65) pat = 1; const off = Math.floor(fr(hb * 3.1) * 3.0), per = pat < 1.5 ? 2 : 3;
   const pierN = Math.floor(4.0 + hb * 5.0) * (fr(hb * 7.3) >= 0.35 ? 1 : 0), stairOn = fr(hb * 2.9) >= 0.4, uw = 2 + (fr(hb * 7.7) >= 0.5 ? 1 : 0);
   const varA = !!(wall.flags & FLAG.VAR_A); const { cw, floorH: fh, cells, floors, uoff } = info; const csx = cw;
-  const baseW = Math.min(csx - 1.0, 1.15 + 0.45 * hb), baseH = Math.min(fh - 1.4, 1.3 + 0.2 * fr(hb * 5.3));
+  const baseW = Math.min(csx - 0.65, 1.55 + 0.6 * hb), baseH = Math.min(fh - 1.15, 1.45 + 0.3 * fr(hb * 5.3));
   // window trim, one style per building: none (flush modern) · projecting sill · sill + head · full surround
   const tw = D.trim || [1, 1, 1, 0]; let tr = gHash(seed, 29.0) * (tw[0] + tw[1] + tw[2] + tw[3]); let trim = 0; for (let k = 0; k < 4; k++) { tr -= tw[k]; if (tr <= 0) { trim = k; break; } }
   if (varA || ctx.q?.name === 'low') trim = 0; const trimS = trim;
   const tm = [K.conc(0.62), M_STONE, K.conc(0.42), { st: ST.PLASTER, color: wall.color.map((v) => Math.min(1, v * 1.35 + 0.1)), seed }][Math.floor(gHash(seed, 31.0) * 4)];
-  const bh = Math.min(fh - 1.4, 1.3 + 0.2 * fr(hb * 5.3));
+  const bh = baseH; const balc = !varA && gHash(seed, 41.0) < (D.balc ?? 0.45) && pat !== 0 && pat !== 2; const balM = [K.conc(0.6), { st: ST.PLASTER, color: wall.color.map((v) => Math.min(1, v * 1.3 + 0.12)), seed }, K.metal([0.62, 0.64, 0.66]), K.conc(0.48)][Math.floor(gHash(seed, 43.0) * 4)];
   ctx.detail();
   for (let fl = 0; fl < floors; fl++) {
     if (spec.dressSkip0 && fl === 0) continue; const fy = y0 + fl * fh; const belt = spec.belts && fl > 0 && fl % spec.belts.every === 0;
@@ -145,20 +145,26 @@ function dressFacade(vol, f, y0, info, wall, spec) {
       if (pat === 1) big = m === 0; else if (pat === 2) has = m < 2; else if (pat === 3) { big = m === 0; small = m === 2; } else if (pat === 4) { big = m === 0; has = m < 2; }
       if (!has) continue;
       const unit = Math.floor((X + seed) / uw), hU = jHash(unit, fl, seed + f * 31), hW = jHash(X, fl, seed + 7);
-      const sc = (c + 0.5) * cw; const ww = big ? Math.min(csx - 0.6, baseW * 1.35) : small ? 0.62 : baseW; const sill = big ? 0.6 : small ? Math.min(1.6, fh - 0.68 - 0.55) : 0.95;
+      const sc = (c + 0.5) * cw; const ww = big ? Math.min(csx - 0.35, baseW * 1.3) : small ? 0.62 : baseW; const sill = big ? 0.12 : small ? Math.min(1.6, fh - 0.68 - 0.55) : 0.85;
+      const balcHere = balc && big && f === 0 && fl > 0 && !belt && fl < 16;
       const firstOfUnit = (X + seed) % uw === 0 || c === 0;
       const flowerHere = !small && !varA && fr(hU * 7.3) < D.flower && !(!big && !small && !varA && !belt && firstOfUnit && hU < D.ac);
-      if (trim > 0 && fl < 14) { const trim = f === 0 ? trimS : 1; // backs keep just their sills // only the faces you can see from the street are built (front, top/underside, the reveal side)
-        const wh = Math.min(big ? Math.min(fh - 0.9, bh * 1.22) : small ? 0.68 : bh, fh - sill - 0.12); const a = sc - ww / 2, b = sc + ww / 2, y0w = fy + sill, y1w = y0w + wh; pen.use(tm);
+      if (balcHere) { // a real balcony in front of the living room: floor slab with its edge and soffit, a parapet front and returns
+        const bw = Math.min(csx - 0.4, ww + 0.7), dd = 1.15, a = sc - bw / 2, b = sc + bw / 2, yb = fy; pen.use(K.conc(0.55));
+        vol.wall(f, a, b, dd, yb - 0.18, yb); vol.cap(f, a, b, 0, dd, yb, true); vol.cap(f, a, b, 0, dd, yb - 0.18, false); vol.ret(f, a, 0, dd, yb - 0.18, yb); vol.ret(f, b, dd, 0, yb - 0.18, yb);
+        pen.use(balM); vol.wall(f, a, b, dd, yb, yb + 1.02); vol.cap(f, a, b, dd - 0.07, dd, yb + 1.02, true); vol.ret(f, a, 0, dd, yb, yb + 1.02); vol.ret(f, b, dd, 0, yb, yb + 1.02);
+        if (fr(hU * 5.7) < 0.35) ctx.propL('planterIn', ...vol.P(f, a + 0.45, dd - 0.35).slice(0, 1), yb, vol.P(f, a + 0.45, dd - 0.35)[1], 0, 0.5); }
+      if (trim > 0 && fl < 14 && !balcHere) { const trim = f === 0 ? trimS : 1; // backs keep just their sills // only the faces you can see from the street are built (front, top/underside, the reveal side)
+        const wh = Math.min(big ? Math.min(fh - 0.55, 2.3) : small ? 0.68 : bh, fh - sill - 0.12); const a = sc - ww / 2, b = sc + ww / 2, y0w = fy + sill, y1w = y0w + wh; pen.use(tm);
         if (!flowerHere) { vol.wall(f, a - 0.09, b + 0.09, 0.11, y0w - 0.075, y0w); vol.cap(f, a - 0.09, b + 0.09, 0, 0.11, y0w, true); vol.cap(f, a - 0.09, b + 0.09, 0, 0.11, y0w - 0.075, false); } // sill
         if (trim >= 2) { const d = trim === 3 ? 0.1 : 0.07, hh = trim === 3 ? 0.22 : 0.15; vol.wall(f, a - 0.12, b + 0.12, d, y1w, y1w + hh); vol.cap(f, a - 0.12, b + 0.12, 0, d, y1w, false); if (trim === 3) vol.cap(f, a - 0.12, b + 0.12, 0, d, y1w + hh, true); } // head / lintel
         if (trim === 3) { vol.wall(f, a - 0.13, a, 0.06, y0w, y1w); vol.ret(f, a, 0.06, 0, y0w, y1w); vol.wall(f, b, b + 0.13, 0.06, y0w, y1w); vol.ret(f, b, 0, 0.06, y0w, y1w); } } // jambs + their reveal faces
       // outdoor AC unit under one normal window of the flat
       if (!big && !small && !varA && !belt && firstOfUnit && hU < D.ac) { const p = vol.P(f, sc + (hW - 0.5) * 0.4, 0.2); ctx.propL('acSmall', p[0], fy + 0.06, p[1], FACE_ANG[f], 0.75); }
       // flower boxes along the sills of the flats that keep them
-      else if (!small && !varA && fr(hU * 7.3) < D.flower) { const a = sc - ww / 2 - 0.05, b = sc + ww / 2 + 0.05, sy = fy + sill; pen.use(M_POT[Math.floor(hW * 3)]); vol.wall(f, a, b, 0.26, sy - 0.26, sy - 0.04); vol.cap(f, a, b, 0, 0.26, sy - 0.26, false); pen.use(K.foliage(FLOWERS[Math.floor(hW * 5)])); const pt = sy + 0.16 + 0.1 * fr(hW * 9.1); vol.wall(f, a + 0.06, b - 0.06, 0.3, sy - 0.04, pt); vol.cap(f, a + 0.06, b - 0.06, 0.04, 0.3, pt, true); }
+      else if (!balcHere && !small && !varA && fr(hU * 7.3) < D.flower) { const a = sc - ww / 2 - 0.05, b = sc + ww / 2 + 0.05, sy = fy + sill; pen.use(M_POT[Math.floor(hW * 3)]); vol.wall(f, a, b, 0.26, sy - 0.26, sy - 0.04); vol.cap(f, a, b, 0, 0.26, sy - 0.26, false); pen.use(K.foliage(FLOWERS[Math.floor(hW * 5)])); const pt = sy + 0.16 + 0.1 * fr(hW * 9.1); vol.wall(f, a + 0.06, b - 0.06, 0.3, sy - 0.04, pt); vol.cap(f, a + 0.06, b - 0.06, 0.04, 0.3, pt, true); }
       // drying rack: two arms out of the wall at the sill, a rail, the washing
-      else if (!small && !belt && fr(hU * 3.7) < D.laundry && firstOfUnit) { const a = vol.P(f, sc - 0.6, 0), b = vol.P(f, sc + 0.6, 0), a2 = vol.P(f, sc - 0.6, 0.65), b2 = vol.P(f, sc + 0.6, 0.65), y = fy + sill - 0.05;
+      else if (!balcHere && !small && !belt && fr(hU * 3.7) < D.laundry && firstOfUnit) { const a = vol.P(f, sc - 0.6, 0), b = vol.P(f, sc + 0.6, 0), a2 = vol.P(f, sc - 0.6, 0.65), b2 = vol.P(f, sc + 0.6, 0.65), y = fy + sill - 0.05;
         pen.use(K.MAT_POLE); pen.tube(a[0], y, a[1], a2[0], y, a2[1], 0.018, 3); pen.tube(b[0], y, b[1], b2[0], y, b2[1], 0.018, 3); pen.tube(a2[0], y, a2[1], b2[0], y, b2[1], 0.015, 3);
         const n = 2 + Math.floor(hW * 3); for (let k = 0; k < n; k++) { const t0 = (k + 0.1) / n, t1 = (k + 0.85) / n, hh = 0.35 + 0.4 * fr(hW * (k + 3.1)); const q0 = [a2[0] + (b2[0] - a2[0]) * t0, a2[1] + (b2[1] - a2[1]) * t0], q1 = [a2[0] + (b2[0] - a2[0]) * t1, a2[1] + (b2[1] - a2[1]) * t1];
           pen.use(M_CLOTH(CLOTH[Math.floor(fr(hW * (k + 1.7)) * CLOTH.length)], k)); pen.quad(q0[0], y - hh, q0[1], q1[0], y - hh, q1[1], q1[0], y, q1[1], q0[0], y, q0[1], 0, 0, 1, 1); pen.quad(q1[0], y - hh, q1[1], q0[0], y - hh, q0[1], q0[0], y, q0[1], q1[0], y, q1[1], 0, 0, 1, 1); } }

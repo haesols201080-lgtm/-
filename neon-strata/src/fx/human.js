@@ -194,6 +194,22 @@ export const VARIANTS = [
 ];
 
 // ---- material (instanced, GPU-skinned) ------------------------------------------------------------
+// shadow depth for the people: the same GPU skinning, so a walker's shadow walks
+export function createHumanDepthMaterial(anim) {
+  const d = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+  d.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, { uAnimTex: { value: anim.tex }, uAnimSize: { value: new THREE.Vector2(anim.W, anim.H) } });
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
+      attribute vec4 aSkin; attribute vec4 iAnim; uniform sampler2D uAnimTex; uniform vec2 uAnimSize;
+      mat4 nsBone(float bone, float row){ float u = (bone * 3.0 + 0.5) / uAnimSize.x; float v = (row + 0.5) / uAnimSize.y; float du = 1.0 / uAnimSize.x;
+        vec4 r0 = texture2D(uAnimTex, vec2(u, v)), r1 = texture2D(uAnimTex, vec2(u + du, v)), r2 = texture2D(uAnimTex, vec2(u + 2.0 * du, v));
+        return mat4(r0.x, r1.x, r2.x, 0.0, r0.y, r1.y, r2.y, 0.0, r0.z, r1.z, r2.z, 0.0, r0.w, r1.w, r2.w, 1.0); }
+      mat4 nsSkin(float row){ mat4 a = nsBone(aSkin.x, row); mat4 b = nsBone(aSkin.y, row); return a * (1.0 - aSkin.z) + b * aSkin.z; }`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        { mat4 nsSk = nsSkin(iAnim.x); if (iAnim.w > 0.001) { mat4 s2 = nsSkin(iAnim.z); nsSk = nsSk * (1.0 - iAnim.w) + s2 * iAnim.w; } transformed = (nsSk * vec4(transformed, 1.0)).xyz; }`);
+  };
+  return d;
+}
 export function createHumanMaterial(anim) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.82, metalness: 0.0 });
   const uni = { uAnimTex: { value: anim.tex }, uAnimSize: { value: new THREE.Vector2(anim.W, anim.H) } };

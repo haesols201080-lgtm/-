@@ -68,7 +68,7 @@ uniform sampler2DArray uMatA; uniform sampler2DArray uMatB;
 uniform vec4 uLiveA[8]; uniform vec4 uLiveB[8]; uniform int uLiveN;
 float nsLiveAt(vec3 p){ for (int i = 0; i < 8; i++) { if (i >= uLiveN) break; vec4 a = uLiveA[i], b = uLiveB[i]; float c = cos(a.z), s = sin(a.z); vec2 d = p.xz - a.xy; float lx = d.x * c - d.y * s, lz = d.x * s + d.y * c;
   if (lx > b.x - 0.7 && lx < b.y + 0.7 && lz > b.z - 0.7 && lz < b.w + 0.7 && p.y < a.w + 0.5) return 1.0; } return 0.0; }
-float nsOpen = 1.0; vec3 nsSpill = vec3(0.0); float nsAO = 1.0; float nsIndoor = 0.0; float nsRefl = 0.0;
+float nsOpen = 1.0; vec3 nsSpill = vec3(0.0); float nsAO = 1.0; float nsIndoor = 0.0; float nsRefl = 0.0; float nsGlass = 0.0; uniform vec3 uSkyZenith; uniform vec3 uSkyHorizon;
 ${NS_LOCAL_LIGHTS}
 struct NsM { vec3 alb; float h; vec2 n; float rough; float cav; };
 NsM nsMat(float layer, vec2 uv){
@@ -309,11 +309,11 @@ const FRAG_SURFACE = /* glsl */ `
     vec2 o0 = vec2(0.7, 0.95); vec2 o1 = cs - vec2(0.7, 0.6); float D = 0.2; float fw = 0.055; vec2 pd = vec2(2.0, 1.0); float rnd = 0.0; float winKeep = 1.0; float unitFr = -1.0; float grille = 0.0; float hasWin = 1.0;
     float office = 0.0; float roomSpan = 1.0; float litBoost = 1.0; float glassRough = 0.07; vec3 glassTint = vec3(0.018, 0.02, 0.024);
     if (st == 10) {
-      float ww = min(cs.x - 1.0, mix(1.15, 1.6, hb)); float wh = min(cs.y - 1.4, mix(1.3, 1.5, fract(hb * 5.3))); float sillY = 0.95;
+      float ww = min(cs.x - 0.65, mix(1.55, 2.15, hb)); float wh = min(cs.y - 1.15, mix(1.45, 1.75, fract(hb * 5.3))); float sillY = 0.85;
       // one composition per building, repeated bay after bay and storey after storey (a facade is designed, not
       // rolled per window): uniform · living/bedroom alternating · pairs with a blank pier · living/bed/bath ·
       // living + bed with blank pier
-      float pat = floor(fract(hb * 13.7) * 5.0); float mcol = mod(cell.x + floor(fract(hb * 3.1) * 3.0), pat < 1.5 ? 2.0 : 3.0);
+      float pat = floor(fract(hb * 13.7) * 5.0); if ((pat > 1.5 && pat < 2.5 || pat > 3.5) && fract(hb * 5.9) < 0.65) pat = 1.0; float mcol = mod(cell.x + floor(fract(hb * 3.1) * 3.0), pat < 1.5 ? 2.0 : 3.0);
       float big = 0.0, small = 0.0;
       if (pat > 0.5 && pat < 1.5) big = step(mcol, 0.5);
       else if (pat > 1.5 && pat < 2.5) hasWin = 1.0 - step(1.5, mcol);
@@ -324,11 +324,11 @@ const FRAG_SURFACE = /* glsl */ `
       // knock two windows into one; and the stair core shows its landing windows half a storey off the grid
       float uw = 2.0 + step(0.5, fract(hb * 7.7)); float unit = floor((cell.x + floor(seed)) / uw); float uh = nsHash(vec2(unit * 1.31 + seed, cell.y * 2.17 + 0.5)); float uh2 = fract(uh * 17.3);
       if (uh < 0.24) unitFr = floor(uh2 * 4.0);
-      grille = step(fract(uh * 5.1), cell.y < 2.5 ? 0.42 : 0.14) * step(0.25, fract(hb * 4.3));
+      grille = step(fract(uh * 5.1), cell.y < 2.5 ? 0.16 : 0.025) * step(0.5, fract(hb * 4.3)) * (1.0 - big);
       if (small < 0.5 && big < 0.5 && fract(uh * 9.7) < 0.08) { ww = min(cs.x - 0.5, ww * 1.55); }
       float stair = step(0.4, fract(hb * 2.9)) * step(mod(cell.x + floor(seed * 0.7), 9.0), 0.5);
       if (stair > 0.5) { hasWin = 1.0; big = 0.0; small = 0.0; ww = 0.85; wh = 0.95; sillY = cs.y * 0.5; grille = 0.0; unitFr = -1.0; }
-      if (big > 0.5) { ww = min(cs.x - 0.6, ww * 1.35); wh = min(cs.y - 0.9, wh * 1.22); sillY = 0.6; }
+      if (big > 0.5) { ww = min(cs.x - 0.35, ww * 1.3); wh = min(cs.y - 0.55, 2.3); sillY = 0.12; } // full-height living-room glazing / balcony door
       if (small > 0.5) { ww = 0.62; wh = 0.68; sillY = min(1.6, cs.y - wh - 0.55); }
       o0 = vec2((cs.x - ww) * 0.5, sillY); o1 = o0 + vec2(ww, min(wh, cs.y - sillY - 0.12));
       if (varA) { o0 = vec2(0.3, 0.14); o1 = vec2(cs.x - 0.3, cs.y - 0.5); pd = vec2(3.0, 1.0); D = 1.0; }
@@ -529,6 +529,8 @@ const FRAG_SURFACE = /* glsl */ `
       gAlb = mix(gAlb, posterC * 0.5, poster); gEm = mix(gEm, posterC * lc * inten * 0.32, poster); gR = mix(gR, 0.5, poster);
       // frames on top
       gAlb = mix(gAlb, frameCol, frame); gEm *= 1.0 - frame; gR = mix(gR, 0.4, frame); float gM = frame * 0.7;
+      nsGlass = glassHit * open * (1.0 - frame) * (1.0 - poster) * (1.0 - lod * 0.5); // real glass mirrors the world (see the light pass)
+      slope += (vec2(nsHash(cell * 1.31 + 0.7), nsHash(cell * 0.77 + 3.3)) - 0.5) * 0.09 * nsGlass; // no two panes sit perfectly flat
       // balcony rail in front of the recess (wall plane)
       float rail = 0.0;
       if (st == 10 && varA) { float bars = 1.0 - smoothstep(0.012, 0.012 + aa, abs(fract(fm.x / 0.11) - 0.5) * 0.11); float top = 1.0 - smoothstep(0.025, 0.025 + aa, abs(fm.y - 1.15)); rail = max(bars * step(fm.y, 1.15), top) * step(o0.x, fm.x) * step(fm.x, o1.x) * step(o0.y, fm.y); }
@@ -557,6 +559,7 @@ const FRAG_SURFACE = /* glsl */ `
     if (st == 30) avgEmis = lc * 0.5 * areaF * mix(0.7, 1.0, night);
     albedo = mix(albedo, mix(wallAlb, glassTint + 0.01, areaF), lod);
     rough = mix(rough, mix(wallRough, 0.15, areaF), lod); metal = mix(metal, wallMetal * (1.0 - areaF), lod);
+    nsGlass = mix(nsGlass, areaF * (st == 16 ? 0.4 : 0.9), lod); // far facades: the glass share of the wall still mirrors the sky
     emis = mix(emis, avgEmis, lod);
     if (st == 17) { float trim = (1.0 - smoothstep(0.03, 0.045, abs(fm.y - 0.05))) * (1.0 - lod); albedo = mix(albedo, vec3(1.0, 0.72, 0.3), trim); metal = mix(metal, 1.0, trim); rough = mix(rough, 0.25, trim); }
     wetAllow *= 0.35;
@@ -689,10 +692,6 @@ const FRAG_SURFACE = /* glsl */ `
         float fresh = step(0.5, nsHash(pc + 5.0)); albedo = mix(albedo, albedo * mix(1.25, 0.62, fresh), inP); rough = mix(rough, mix(0.8, 0.5, fresh), inP * 0.5);
         float seal = inP * (1.0 - smoothstep(0.03, 0.06 + px, bd)); albedo = mix(albedo, vec3(0.012), seal * 0.85); rough = mix(rough, 0.25, seal); }
       { float tc = floor(m.y / 70.0); float th = nsHash(vec2(tc, 9.1)); if (th > 0.7) { float tx = (0.2 + 0.6 * nsHash(vec2(tc, 4.3))) * cw; float tr = step(abs(m.x - tx), 0.35) * step(fract(m.y / 70.0), 0.55); albedo = mix(albedo, albedo * 0.7, tr); float te = tr * (1.0 - smoothstep(0.02, 0.05 + px, 0.35 - abs(m.x - tx))); albedo = mix(albedo, vec3(0.012), te * 0.8); } }
-      // cracks: a longitudinal crack on the lane joints, crazing at the edges, sealed with glossy tar
-      float cn = nsNoise(vec2(m.x * 1.7, m.y * 0.21)).r; float lj = 1.0 - smoothstep(0.0, 0.5, abs(fract(m.x / lw + 0.5) - 0.5) * lw);
-      float crack = (1.0 - smoothstep(0.008, 0.02 + px, abs(cn - 0.5) * 0.25)) * max(lj, gut * 0.6) * step(0.45, nsNoise(m * vec2(0.3, 0.05)).g);
-      albedo = mix(albedo, vec3(0.008), crack * 0.8 * fadeM); rough = mix(rough, 0.3, crack * fadeM);
       // kerb drains every ~25 m on both sides
       { float dvv = fract(m.y / 25.0 + 0.37) * 25.0; float side = step(cw * 0.5, m.x); float dx = side > 0.5 ? cw - m.x : m.x; vec2 dq = vec2(dx - 0.35, dvv - 0.5);
         float gr = step(abs(dq.x), 0.3) * step(abs(dq.y), 0.45); float slots = step(0.5, fract(dvv * 9.0)); albedo = mix(albedo, vec3(0.02) * (0.4 + slots), gr * fadeM); metal = mix(metal, 0.8, gr); rough = mix(rough, 0.45, gr); }
@@ -802,7 +801,7 @@ const FRAG_SURFACE = /* glsl */ `
     float tide = 0.45 + 0.35 * nsNoise(vec2(a * 0.25, 1.3)).g; float damp = (1.0 - smoothstep(tide - 0.06, tide + 0.02, hz)) * step(0.0, hz) * mineral;
     float salt = mineral * smoothstep(0.6, 0.75, nsNoise(vec2(a * 1.3, h * 2.1)).b) * smoothstep(tide + 0.25, tide, hz) * step(tide - 0.05, hz);
     float low = 1.0 - smoothstep(2.0, 30.0, h);
-    float dirt = clamp(streak * 0.55 + sheet + splash * 0.35 + damp * 0.22 + low * 0.08, 0.0, 0.8) * wf;
+    float dirt = clamp(streak * 0.28 + sheet * 0.45 + splash * 0.3 + damp * 0.18 + low * 0.04, 0.0, 0.6) * wf;
     albedo *= 1.0 - dirt * mix(0.55, 0.75, mineral); albedo = mix(albedo, albedo * vec3(0.95, 0.97, 0.9), streak * wf * 0.5);
     albedo = mix(albedo, vec3(0.62, 0.61, 0.58) * (0.7 + 0.3 * nsGrunge(vec2(a, h) * 0.9).g), salt * 0.4 * wf);
     rough = clamp(rough + dirt * 0.15, 0.04, 1.0);
@@ -855,7 +854,8 @@ const FRAG_SURFACE_SIMPLE = /* glsl */ `
 
 const FRAG_LIGHT_END = /* glsl */ `
 {
-  float hiAmb = mix(mix(1.0, 1.9, 1.0 - uNight), 3.2, smoothstep(uCloud.x, uCloud.y, vWPos.y)) * (1.0 - nsIndoor); // an overcast day is bright and flat
+  float ovc = smoothstep(0.1, 0.7, uCloud.w); // 0 clear sky … 1 overcast deck
+  float hiAmb = mix(mix(1.0, mix(0.85, 1.9, ovc), 1.0 - uNight), 3.2, smoothstep(uCloud.x, uCloud.y, vWPos.y)) * (1.0 - nsIndoor); // an overcast day is bright and flat, a clear one is contrasty
   vec3 wNn = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
   vec3 hemi = mix(uAmbGround, uAmbSky, wNn.y * 0.5 + 0.5) * hiAmb * mix(0.35, 1.0, nsOpen);
   float fl = uFlash.w * exp(-dot(vWPos.xz - uFlash.xy, vWPos.xz - uFlash.xy) / (uFlash.z * uFlash.z * 2.0)) * (1.0 - nsIndoor);
@@ -869,6 +869,20 @@ const FRAG_LIGHT_END = /* glsl */ `
   reflectedLight.indirectDiffuse += irr * material.diffuseColor;
   float gl = (1.0 - material.roughness); gl *= gl;
   reflectedLight.indirectSpecular += nsSpill * gl * 0.35 * mix(vec3(0.04), material.diffuseColor + material.specularColor, 0.5);
+  // window glass: a Fresnel mirror of what is really out there — sky above the street, the facades opposite
+  // and the street below the horizon — strongest at grazing angles, letting the room show through head-on
+  if (nsGlass > 0.01) {
+    vec3 Vv = normalize(cameraPosition - vWPos); vec3 Rr = reflect(-Vv, wNn); float NoV = clamp(dot(wNn, Vv), 0.0, 1.0);
+    float F = 0.05 + 0.95 * pow(1.0 - NoV, 5.0); F = mix(F, max(F, 0.22), 0.6); // coated / double glazing reads mirror-like
+    float up = Rr.y; vec3 sky = mix(uSkyHorizon, uSkyZenith, pow(clamp(up, 0.0, 1.0), 0.45)) * mix(1.0, 0.35, uNight);
+    float sd = max(dot(Rr, uTrueSunDir), 0.0); sky += uSunColor * nsSunVis(2000.0) * (pow(sd, 400.0) * 3.0 + pow(sd, 18.0) * 0.08) * (1.0 - uNight);
+    vec3 opp = (uAmbSky * 0.55 + uSunColor * nsSunVis(vWPos.y) * 0.05) * vec3(0.55, 0.52, 0.5) * (1.0 - uNight * 0.9) + nsSpill * 0.4; // the buildings across the street
+    vec3 street = uAmbGround * 1.4 + nsSpill * 0.5;
+    float skyFrac = smoothstep(-0.02, 0.35 + 0.4 * (1.0 - nsOpen), up) * mix(0.35, 1.0, nsOpen);
+    vec3 env = up < 0.0 ? mix(opp, street, smoothstep(0.0, -0.3, up)) : mix(opp, sky, skyFrac);
+    reflectedLight.indirectSpecular = mix(reflectedLight.indirectSpecular, env * F, nsGlass);
+    reflectedLight.indirectDiffuse *= 1.0 - F * nsGlass; reflectedLight.directDiffuse *= 1.0 - F * nsGlass;
+  }
   reflectedLight.indirectDiffuse *= nsAO;
   reflectedLight.indirectSpecular *= mix(1.0, nsAO, 0.7) * mix(0.55, 1.0, nsOpen);
   #ifdef NS_LOCAL_LIGHTS
@@ -925,7 +939,7 @@ export function injectNS(material, opts = {}) {
     if (opts.vertexReplace) for (const [a, b] of opts.vertexReplace) shader.vertexShader = shader.vertexShader.replace(a, b);
     const fp = facade ? FRAG_PARS : NS_COMMON + /* glsl */ `
       varying vec3 vWPos; varying vec3 vWNormal; uniform float uInterior;
-      float nsOpen = 1.0; vec3 nsSpill = vec3(0.0); float nsAO = 1.0; float nsIndoor = 0.0; float nsRefl = 0.0;
+      float nsOpen = 1.0; vec3 nsSpill = vec3(0.0); float nsAO = 1.0; float nsIndoor = 0.0; float nsRefl = 0.0; float nsGlass = 0.0; uniform vec3 uSkyZenith; uniform vec3 uSkyHorizon;
       ${NS_LOCAL_LIGHTS}`;
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\n' + fp + (opts.fragmentPars || ''))

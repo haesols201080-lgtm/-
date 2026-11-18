@@ -1,7 +1,7 @@
 // Ambient population: people walk the sidewalks around the player, stop, check their phones, talk,
 // and put umbrellas up when it rains. Agents are recycled around the camera; rendering is instanced + GPU skinned.
 import * as THREE from 'three';
-import { bakeAnimations, buildBody, VARIANTS, createHumanMaterial, makeHumanMesh, CLIP, clipRow } from './human.js';
+import { bakeAnimations, buildBody, VARIANTS, createHumanMaterial, createHumanDepthMaterial, makeHumanMesh, CLIP, clipRow } from './human.js';
 import { injectNS } from '../render/cityMaterial.js';
 import { RNG } from '../core/rng.js';
 
@@ -22,9 +22,9 @@ function umbrellaGeometry() {
 export class Crowd {
   constructor(city, quality, scene) {
     this.city = city; this.max = quality.crowd; this.rng = new RNG(31337);
-    this.anim = bakeAnimations(); this.mat = createHumanMaterial(this.anim);
+    this.anim = bakeAnimations(); this.mat = createHumanMaterial(this.anim); this.depth = createHumanDepthMaterial(this.anim);
     const per = Math.ceil(this.max / VARIANTS.length) + 8;
-    this.meshes = VARIANTS.map((v) => { const m = makeHumanMesh(buildBody(v.v), this.mat, per); m.receiveShadow = !!quality.shadows; scene.add(m); return m; });
+    this.meshes = VARIANTS.map((v) => { const m = makeHumanMesh(buildBody(v.v), this.mat, per); m.receiveShadow = !!quality.shadows; if (quality.shadows) { m.castShadow = true; m.customDepthMaterial = this.depth; } scene.add(m); return m; });
     this.per = per; this.agents = [];
     const um = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.35, metalness: 0.1, side: THREE.DoubleSide, transparent: true, opacity: 0.78 }); injectNS(um, { key: 'umb' });
     this.umb = new THREE.InstancedMesh(umbrellaGeometry(), um, this.max); this.umb.frustumCulled = false; this.umb.count = 0; this.umb.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(this.umb);

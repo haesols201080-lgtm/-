@@ -182,7 +182,7 @@ export const env = {
     }
     U.uRain.value = w.rain;
     U.uWet.value = clamp(lerp(U.uWet.value, w.rain > 0.05 ? 1 : 0.25, dt * 0.02 + (dt === 0 ? 1 : 0)), 0, 1);
-    U.uFogParams.value.x = s.d0 * (1 + w.rain * 0.45) * (1 - 0.45 * w.clear);
+    U.uFogParams.value.x = s.d0 * (1 + w.rain * 0.45) * (1 - 0.7 * w.clear); U.uFogParams.value.z = 0.000022 * (1 - 0.5 * w.clear);
   },
 };
 
