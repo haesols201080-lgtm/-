@@ -23,9 +23,28 @@ export const FLAG = { INDOOR: 8, VAR_A: 16, VAR_B: 32 };
 export const PAL = { WARM: 0, NEUTRAL: 1, COOL: 2, TEAL: 3, MAGENTA: 4, AMBER: 5, MIXED: 6, RED: 7, GREEN: 8, VIOLET: 9, GOLD: 10 };
 
 const VERT_PARS = /* glsl */ `
-attribute vec4 aColor; attribute vec4 aStyle; attribute vec4 aStyle2;
+attribute vec4 aColor; attribute vec4 aStyle; attribute vec4 aStyle2; uniform float uTime; uniform float uRain;
 flat varying vec4 vStyle; flat varying vec4 vStyle2;
 varying vec3 vWPos; varying vec3 vWNormal; varying vec2 vFUv; varying vec4 vCol;
+`;
+// leaves, grass and ivy move in the wind: a slow sway that grows with height, gusts drifting across the city, and a
+// fast flutter of the cards themselves (stronger in the rain)
+const VERT_WIND = /* glsl */ `
+{ int nst = int(aStyle.x + 0.5); int nfl = int(aStyle2.z + 0.5);
+  if (nst == 21 && (nfl / 16) % 2 == 1) {
+    vec4 wp0 = vec4(transformed, 1.0);
+    #ifdef USE_INSTANCING
+      wp0 = instanceMatrix * wp0; float hgt = clamp((transformed.y - 0.4) / 6.0, 0.15, 1.0);
+    #else
+      float hgt = 0.12;
+    #endif
+    wp0 = modelMatrix * wp0; bool grass = (nfl / 32) % 2 == 1; if (grass) hgt = uv.y;
+    float gust = 0.55 + 0.45 * sin(uTime * 0.31 + wp0.x * 0.011 + wp0.z * 0.008) + uRain * 0.7; float ph = wp0.x * 0.35 + wp0.z * 0.27;
+    vec3 d = vec3(sin(uTime * 1.6 + ph), 0.0, cos(uTime * 1.25 + ph * 1.3)) * (grass ? 0.07 : 0.13) * hgt * gust;
+    d += vec3(sin(uTime * 7.0 + ph * 9.0 + transformed.y * 4.0), sin(uTime * 8.3 + ph * 5.0) * 0.5, cos(uTime * 6.1 + ph * 7.0)) * (grass ? 0.012 : 0.03) * gust * max(hgt, 0.3);
+    transformed += d;
+  }
+}
 `;
 const VERT_MAIN = /* glsl */ `
 vec4 nsWP = vec4(transformed, 1.0); vec3 nsWN = objectNormal;
@@ -902,7 +921,7 @@ export function injectNS(material, opts = {}) {
       vWNormal = normalize(mat3(modelMatrix) * nsWN);`;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\n' + vp + (opts.vertexPars || ''))
-      .replace('#include <project_vertex>', (opts.vertexTransform || '') + '\n#include <project_vertex>\n' + vm);
+      .replace('#include <project_vertex>', (opts.vertexTransform || '') + (facade ? VERT_WIND : '') + '\n#include <project_vertex>\n' + vm);
     if (opts.vertexReplace) for (const [a, b] of opts.vertexReplace) shader.vertexShader = shader.vertexShader.replace(a, b);
     const fp = facade ? FRAG_PARS : NS_COMMON + /* glsl */ `
       varying vec3 vWPos; varying vec3 vWNormal; uniform float uInterior;

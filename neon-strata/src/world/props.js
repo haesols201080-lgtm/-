@@ -20,14 +20,13 @@ function leafTree(pen, o) {
     clumps.push([x + lean[0] * 1.4, cy + y, z + lean[1] * 1.4]); }
   // branches from the trunk head to the lower / outer clumps
   pen.use(bark); for (let i = 0; i < clumps.length; i += 3) { const c = clumps[i]; if (c[1] > cy + ry * 0.4) continue; pen.tube(top[0], top[1] - 0.3 * rnd(), top[2], c[0] * 0.75, c[1] - 0.2, c[2] * 0.75, 0.07, 4, { r1: 0.03 }); }
-  // a dark inner mass so the crown has body between the cards
-  sphere(pen, lean[0] * 1.4, cy, lean[1] * 1.4, rx * 0.36, ry * 0.36, 8, M(ST.FOLIAGE, { color: o.col.map((v) => v * 0.72) }), 4);
   for (const [cx, cyy, cz] of clumps) {
     const k = 0.82 + 0.36 * rnd(); pen.use(M(ST.FOLIAGE, { color: o.col.map((v, j) => v * k * (j === 1 ? 0.96 + 0.1 * rnd() : 1)), seed: Math.floor(rnd() * 255), flags: FLAG.VAR_A }));
     let nx = cx - lean[0] * 1.4, ny = (cyy - cy) * 0.7 + 0.6, nz = cz - lean[1] * 1.4; const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl; // crown normal: soft, volumetric light
     const h = o.card * (0.75 + 0.5 * rnd()) / 2; const a0 = rnd() * 3.1416;
     for (let q = 0; q < 3; q++) { const a = a0 + q * 1.047, tilt = (rnd() - 0.5) * 1.2; const ux = Math.cos(a), uz = Math.sin(a); const vx = -uz * Math.sin(tilt), vy = Math.cos(tilt), vz = ux * Math.sin(tilt);
-      const P = (su, sv) => b.vert(cx + (ux * su + vx * sv) * h, cyy + vy * sv * h, cz + (uz * su + vz * sv) * h, nx, ny, nz, (su + 1) / 2, (sv + 1) / 2);
+      const ao = 0.4 + 0.6 * Math.min(1, Math.hypot((cx - lean[0] * 1.4) / rx, (cyy - cy) / ry, (cz - lean[1] * 1.4) / rz)) * (cyy > cy - ry * 0.3 ? 1 : 0.85);
+      const P = (su, sv) => b.vert(cx + (ux * su + vx * sv) * h, cyy + vy * sv * h, cz + (uz * su + vz * sv) * h, nx, ny, nz, (su + 1) / 2, (sv + 1) / 2, ao);
       const i0 = P(-1, -1), i1 = P(1, -1), i2 = P(1, 1), i3 = P(-1, 1); b.quadI(i0, i1, i2, i3); b.quadI(i3, i2, i1, i0); }
   }
 }
@@ -39,7 +38,8 @@ function leafBush(pen, x, y, z, rx, ry, n, card, col, seed, indoor = 0) {
     const k = 0.85 + 0.3 * rnd(); pen.use(M(ST.FOLIAGE, { color: col.map((v) => v * k), seed: Math.floor(rnd() * 255), flags: FLAG.VAR_A | indoor }));
     let nx = cx - x, ny = (cy - y) + 0.4, nz = cz - z; const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl; const h = card * (0.7 + 0.5 * rnd()) / 2; const a0 = rnd() * 3.1416;
     for (let q = 0; q < 2; q++) { const a = a0 + q * 1.5708, tilt = (rnd() - 0.5) * 1.0; const ux = Math.cos(a), uz = Math.sin(a); const vx = -uz * Math.sin(tilt), vy = Math.cos(tilt), vz = ux * Math.sin(tilt);
-      const P = (su, sv) => b.vert(cx + (ux * su + vx * sv) * h, cy + vy * sv * h, cz + (uz * su + vz * sv) * h, nx, ny, nz, (su + 1) / 2, (sv + 1) / 2);
+      const ao = 0.5 + 0.5 * Math.min(1, Math.hypot((cx - x) / rx, (cy - y) / ry, (cz - z) / rx));
+      const P = (su, sv) => b.vert(cx + (ux * su + vx * sv) * h, cy + vy * sv * h, cz + (uz * su + vz * sv) * h, nx, ny, nz, (su + 1) / 2, (sv + 1) / 2, ao);
       const i0 = P(-1, -1), i1 = P(1, -1), i2 = P(1, 1), i3 = P(-1, 1); b.quadI(i0, i1, i2, i3); b.quadI(i3, i2, i1, i0); } }
 }
 const sphere = (pen, x, y, z, rx, ry, segs, mat, rings = 5) => { const prof = []; for (let i = 0; i <= rings; i++) { const a = -Math.PI / 2 + (i / rings) * Math.PI; prof.push([Math.max(0.001, Math.cos(a) * rx), y + Math.sin(a) * ry]); } pen.use(mat); pen.lathe(x, z, prof, segs, { cap: false }); };
@@ -100,7 +100,7 @@ export const PROPS = {
   barrier(pen) { pen.use({ st: ST.METAL, color: [0.7, 0.5, 0.05], flags: 16 }); pen.box(0, 0, 1.8, 0.1, 0.5, 1.0, { roof: steel, bottom: steel }); pen.use(steel); for (const x of [-0.8, 0.8]) { pen.box(x, 0, 0.08, 0.5, 0, 0.08, {}); pen.box(x, 0, 0.06, 0.06, 0.08, 0.5, {}); } pen.use(K.emis([1, 0.5, 0.05], 12, 2, false, 5)); pen.lathe(0.8, 0, [[0.07, 1.0], [0.07, 1.12], [0.01, 1.16]], 6, {}); },
   // a tuft of grass / weeds: crossed blade cards (blades cut out in the shader)
   grass(pen) { let r = 7; const rnd = () => { r = (r * 9301 + 49297) % 233280; return r / 233280; }; const b = pen.b;
-    for (let q = 0; q < 4; q++) { const a = q * 0.785 + rnd() * 0.3, w = 0.32 + 0.14 * rnd(), h = 0.38 + 0.22 * rnd(); const ux = Math.cos(a), uz = Math.sin(a); const k = 0.85 + 0.3 * rnd();
+    for (let q = 0; q < 6; q++) { const a = q * 0.524 + rnd() * 0.3, w = 0.32 + 0.14 * rnd(), h = 0.38 + 0.22 * rnd(); const ux = Math.cos(a), uz = Math.sin(a); const k = 0.85 + 0.3 * rnd();
       pen.use(M(ST.FOLIAGE, { color: [0.26 * k, 0.4 * k, 0.16 * k], seed: Math.floor(rnd() * 255), flags: FLAG.VAR_A | FLAG.VAR_B }));
       const P = (su, sv) => b.vert(ux * su * w, sv * h, uz * su * w, 0, 1, 0, (su + 1) / 2, sv); const i0 = P(-1, 0), i1 = P(1, 0), i2 = P(1, 1), i3 = P(-1, 1); b.quadI(i0, i1, i2, i3); b.quadI(i3, i2, i1, i0); } },
   // a clipped box hedge: dark body inside a skin of leaf cards
@@ -109,9 +109,9 @@ export const PROPS = {
   planter(pen) { pen.box(0, 0, 1.6, 1.6, 0, 0.55, { wall: K.conc(0.4), roof: K.rust([0.2, 0.16, 0.12]) }); leafBush(pen, 0, 1.0, 0, 0.75, 0.55, 19, 0.9, [0.26, 0.44, 0.2], 5); },
   // street trees: a leaning trunk, branches that reach the clumps, and a crown of crossed leaf cards cut out in the
   // shader (ragged silhouette, sky through the gaps) — three species so an avenue is not a row of clones
-  tree(pen) { leafTree(pen, { seed: 11, trunkH: 3.0, crown: [2.4, 1.9, 2.4], cy: 5.3, clumps: 24, card: 1.7, col: [0.24, 0.42, 0.18] }); },
-  treeB(pen) { leafTree(pen, { seed: 23, trunkH: 2.2, crown: [1.5, 3.0, 1.5], cy: 5.6, clumps: 22, card: 1.4, col: [0.2, 0.36, 0.17], cone: true }); },
-  treeC(pen) { leafTree(pen, { seed: 37, trunkH: 4.2, crown: [2.9, 1.6, 2.7], cy: 6.4, clumps: 26, card: 1.9, col: [0.3, 0.44, 0.2] }); },
+  tree(pen) { leafTree(pen, { seed: 11, trunkH: 3.0, crown: [2.4, 1.9, 2.4], cy: 5.3, clumps: 36, card: 1.5, col: [0.24, 0.42, 0.18] }); },
+  treeB(pen) { leafTree(pen, { seed: 23, trunkH: 2.2, crown: [1.5, 3.0, 1.5], cy: 5.6, clumps: 32, card: 1.25, col: [0.2, 0.36, 0.17], cone: true }); },
+  treeC(pen) { leafTree(pen, { seed: 37, trunkH: 4.2, crown: [2.9, 1.6, 2.7], cy: 6.4, clumps: 40, card: 1.65, col: [0.3, 0.44, 0.2] }); },
   // --- market ------------------------------------------------------------------------------
   stall(pen) {
     const w = 3.4, d = 2.2, h = 2.5;
