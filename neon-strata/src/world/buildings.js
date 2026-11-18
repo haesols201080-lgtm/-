@@ -207,7 +207,7 @@ export function shopHouse(ctx, rng, lot, S, o = {}) {
   else { v.box(0, -0.05, w + 0.05, 0, 0.22, h - 0.32, h, K.conc(0.36), {}); } // eaves cornice under the roof
   facade(v, 2, 0, h, { wall: { ...wall, flags: wall.flags & 7 }, bayCells: 999, floorH: fh, aoB: 0.6, dress: S.dress, dressSkip0: true, pipes: true });
   if (pz) { pen.use(party); v.wall(2, 0, w, 0, h, h + pz); }
-  blindWall(v, 1, 0, h + pz, party, rng, { mural: rng.chance(0.1), aoB: 0.6 }); blindWall(v, 3, 0, h + pz, party, rng, { mural: rng.chance(0.1), aoB: 0.6 });
+  blindWall(v, 1, 0, h + pz, party, rng, { mural: rng.chance(0.1), aoB: 0.6, ivy: lot.corner && rng.chance(S.ivy ?? 0.25) }); blindWall(v, 3, 0, h + pz, party, rng, { mural: rng.chance(0.1), aoB: 0.6, ivy: lot.corner && rng.chance(S.ivy ?? 0.25) });
   v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else { if (o.res) units.push({ s0: 0, s1: w, kind: 'res', door: resDoor ?? w / 2, dw: 1.0 }); registerWalkin(ctx, rng, v, { gh, fh, n: floors, units, district: lot.block.district, office: !o.res && rng.chance(0.35) }); }
   if (ent && o.home) { const r = ent.room; ctx.poi({ type: 'home', id: 'home', x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), name: '캡슐텔 0번지', doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5), yaw: pen.yaw }); }
   else if (ent) { const r = ent.room; ctx.poi({ type: 'shop', kind: ent.kind, stair: ent.stair, work: ent.work, district: lot.block.district, x: pen.wx((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), y: pen.oy + 0.03, z: pen.wz((r.xa + r.xb) / 2, (r.zb + r.zf) / 2), doorX: pen.wx((ent.door.a + ent.door.b) / 2, r.zf + 2.5), doorZ: pen.wz((ent.door.a + ent.door.b) / 2, r.zf + 2.5) }); }
@@ -251,7 +251,7 @@ export function tenement(ctx, rng, lot, S, o = {}) {
   const pw = S.pitch ?? 0.6; const rf = o.roof ?? rng.weighted(floors <= 9 ? [[4, 'flat'], [2, 'garden'], [1.6 * pw, 'hip'], [2 * pw, 'mansard'], [0.8 * pw, 'gable']] : [[5, 'flat'], [2.2, 'garden'], [floors <= 14 ? 1.2 * pw : 0, 'mansard']]); const pz = PITCHED.has(rf) ? 0 : par;
   if (pz) { pen.use(party); v.wall(0, 0, w, 0, h, h + pz); } else v.box(0, -0.05, w + 0.05, 0, 0.42, h - 0.45, h, ribM, {});
   facade(v, 2, 0, h, { wall: { ...wall, flags: wall.flags & 7 }, bayCells: 999, floorH: fh, aoB: 0.6, dress: S.dress, dressSkip0: true, pipes: true }); if (pz) { pen.use(party); v.wall(2, 0, w, 0, h, h + pz); }
-  blindWall(v, 1, 0, h + pz, party, rng, { mural: rng.chance(0.4), aoB: 0.6 }); blindWall(v, 3, 0, h + pz, party, rng, { mural: rng.chance(0.4), aoB: 0.6 });
+  blindWall(v, 1, 0, h + pz, party, rng, { mural: rng.chance(0.4), aoB: 0.6, ivy: lot.corner && rng.chance((S.ivy ?? 0.25) * 0.7) }); blindWall(v, 3, 0, h + pz, party, rng, { mural: rng.chance(0.4), aoB: 0.6, ivy: lot.corner && rng.chance((S.ivy ?? 0.25) * 0.7) });
   v.roof(K.conc(0.26)); if (ent) hollow(ctx, 0, cz, w, d, h, ent.room, ent.door); else registerWalkin(ctx, rng, v, { gh, fh, n: floors, units, district: lot.block.district, office: !o.res && rng.chance(0.4) });
   wallKit(v, 0, gh, h, fh, rng, { dens: 0.8, cellW: wall.cellW, pier: !!(wall.flags & FLAG.VAR_A), noAC: !!S.dress && wall.st === ST.WIN_RES });
   if (!lot.ring && floors <= 14) articulate(v, gh, h, fh, wall, rng, { noPil: true });

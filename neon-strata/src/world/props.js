@@ -98,6 +98,14 @@ export const PROPS = {
     pen.use(K.emis([1, 0.3, 0.1], 5, 2, false, 31)); pen.box(0.5, 0.27, 0.06, 0.03, 0.6, 0.66, {});
   },
   barrier(pen) { pen.use({ st: ST.METAL, color: [0.7, 0.5, 0.05], flags: 16 }); pen.box(0, 0, 1.8, 0.1, 0.5, 1.0, { roof: steel, bottom: steel }); pen.use(steel); for (const x of [-0.8, 0.8]) { pen.box(x, 0, 0.08, 0.5, 0, 0.08, {}); pen.box(x, 0, 0.06, 0.06, 0.08, 0.5, {}); } pen.use(K.emis([1, 0.5, 0.05], 12, 2, false, 5)); pen.lathe(0.8, 0, [[0.07, 1.0], [0.07, 1.12], [0.01, 1.16]], 6, {}); },
+  // a tuft of grass / weeds: crossed blade cards (blades cut out in the shader)
+  grass(pen) { let r = 7; const rnd = () => { r = (r * 9301 + 49297) % 233280; return r / 233280; }; const b = pen.b;
+    for (let q = 0; q < 4; q++) { const a = q * 0.785 + rnd() * 0.3, w = 0.32 + 0.14 * rnd(), h = 0.38 + 0.22 * rnd(); const ux = Math.cos(a), uz = Math.sin(a); const k = 0.85 + 0.3 * rnd();
+      pen.use(M(ST.FOLIAGE, { color: [0.26 * k, 0.4 * k, 0.16 * k], seed: Math.floor(rnd() * 255), flags: FLAG.VAR_A | FLAG.VAR_B }));
+      const P = (su, sv) => b.vert(ux * su * w, sv * h, uz * su * w, 0, 1, 0, (su + 1) / 2, sv); const i0 = P(-1, 0), i1 = P(1, 0), i2 = P(1, 1), i3 = P(-1, 1); b.quadI(i0, i1, i2, i3); b.quadI(i3, i2, i1, i0); } },
+  // a clipped box hedge: dark body inside a skin of leaf cards
+  hedge(pen) { pen.use(M(ST.FOLIAGE, { color: [0.15, 0.25, 0.11] })); pen.box(0, 0, 1.5, 0.42, 0, 0.78, {});
+    leafBush(pen, -0.45, 0.62, 0, 0.55, 0.32, 9, 0.6, [0.2, 0.34, 0.15], 21); leafBush(pen, 0.45, 0.62, 0, 0.55, 0.32, 9, 0.6, [0.2, 0.34, 0.15], 33); leafBush(pen, 0, 0.35, 0, 0.85, 0.35, 8, 0.55, [0.18, 0.3, 0.13], 45); },
   planter(pen) { pen.box(0, 0, 1.6, 1.6, 0, 0.55, { wall: K.conc(0.4), roof: K.rust([0.2, 0.16, 0.12]) }); leafBush(pen, 0, 1.0, 0, 0.75, 0.55, 19, 0.9, [0.26, 0.44, 0.2], 5); },
   // street trees: a leaning trunk, branches that reach the clumps, and a crown of crossed leaf cards cut out in the
   // shader (ragged silhouette, sky through the gaps) — three species so an avenue is not a row of clones
@@ -278,7 +286,8 @@ export function buildPropGeometries() {
 export function instanceProps(ctx, material, group, cell = 720) {
   const geos = buildPropGeometries(); const cells = [];
   if (ctx.props.tree) { const T = ctx.props.tree; ctx.props.tree = []; ctx.props.treeB = ctx.props.treeB || []; ctx.props.treeC = ctx.props.treeC || []; // three species, mixed by position
-    for (const it of T) { const h = Math.abs(Math.sin(it[0] * 12.9898 + it[2] * 78.233) * 43758.5453) % 1; (h < 0.45 ? ctx.props.tree : h < 0.72 ? ctx.props.treeB : ctx.props.treeC).push(it); } }
+    for (const it of T) { const h = Math.abs(Math.sin(it[0] * 12.9898 + it[2] * 78.233) * 43758.5453) % 1; (h < 0.45 ? ctx.props.tree : h < 0.72 ? ctx.props.treeB : ctx.props.treeC).push(it);
+      if (it[1] < 0.5) { const G = ctx.props.grass || (ctx.props.grass = []); for (let k = 0; k < 3; k++) { const a = h * 40 + k * 2.1; G.push([it[0] + Math.cos(a) * 0.5, it[1] + 0.06, it[2] + Math.sin(a) * 0.5, a, 0.6 + 0.3 * ((h * 7 + k) % 1), null]); } } } }
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
   let total = 0;
   for (const name in ctx.props) {

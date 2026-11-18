@@ -715,7 +715,22 @@ const FRAG_SURFACE = /* glsl */ `
     vec2 m = abs(wN.y) > 0.7 ? vWPos.xz : vec2(dot(vWPos.xz, T.xz), vWPos.y);
     NsM t = nsMat(10.0, m / 3.0); NsM t2 = nsMat(10.0, m / 0.9 + 0.37);
     albedo = base * t.alb * (0.6 + 0.5 * t2.alb.g); rough = t.rough; metal = 0.0; slope += t.n * 2.2 + t2.n * 1.2; cav = t.cav * (0.6 + 0.4 * t2.cav);
-    if (varA) { // a leaf card: an irregular clump of individual leaves, cut out (alpha test), lit through from behind
+    if (!varA && wN.y > 0.7) { // a lawn: tufty grass with dry patches, clover, the odd daisy / dandelion
+      vec2 q = vWPos.xz; float dry = smoothstep(0.55, 0.8, nsNoise(q * 0.09).g); float clov = smoothstep(0.62, 0.7, nsNoise(q * 0.35 + 3.1).r);
+      float tuft = nsNoise(q * 2.3).b; albedo = base * 1.35 * mix(vec3(1.0), vec3(1.5, 1.25, 0.62), dry * 0.6) * mix(1.0, 0.78, clov) * (0.8 + 0.4 * tuft);
+      vec2 fc = floor(q * 3.0); float fh = nsHash(fc + 2.7); vec2 fo = fract(q * 3.0) - 0.5 - (vec2(nsHash(fc + 5.1), nsHash(fc + 8.3)) - 0.5) * 0.6;
+      float fl = step(0.93, fh) * (1.0 - smoothstep(0.06, 0.09, length(fo))) * (1.0 - smoothstep(0.03, 0.1, px)); albedo = mix(albedo, mix(vec3(0.9, 0.9, 0.85), vec3(0.95, 0.78, 0.1), step(0.965, fh)), fl);
+      slope += (vec2(nsNoise(q * 9.0).r, nsNoise(q * 9.0 + 4.0).g) - 0.5) * 1.4 * (1.0 - smoothstep(0.02, 0.2, px)); rough = 0.85;
+    }
+    if (varA && varB) { // grass / weed tuft: tapering blades leaning out, cut out
+      float bl = 0.0; float bh = 0.0; float v = vFUv.y;
+      for (int k = 0; k < 2; k++) { float lp = vFUv.x * 9.0 + float(k) * 0.5; float c = floor(lp); float hh = nsHash(vec2(c, seed + float(k) * 3.0)); float top = 0.45 + 0.55 * hh;
+        float bend = (nsHash(vec2(c + 2.0, seed)) - 0.5) * 0.9 * v * v; float x = fract(lp) - 0.5 + bend; float w = 0.32 * (1.0 - v / top);
+        float b2 = step(abs(x), w) * step(v, top); if (b2 > bl) { bl = b2; bh = hh; } }
+      if (bl < 0.5) discard;
+      albedo = base * mix(0.55, 1.15, v) * (0.85 + 0.3 * bh) * mix(vec3(1.0), vec3(1.25, 1.1, 0.6), step(0.85, bh)); rough = 0.6; cav = 1.0;
+      emis += base * uSunColor * 0.05 * max(0.0, dot(-Vw, uSunDir)) * (1.0 - night);
+    } else if (varA) { // a leaf card: an irregular clump of individual leaves, cut out (alpha test), lit through from behind
       vec2 q = vFUv - 0.5; float edge = nsNoise(vFUv * 2.3 + seed * 0.37).r;
       float shape = 1.0 - smoothstep(0.62 + 0.3 * edge - 0.12, 0.62 + 0.3 * edge, length(q) * 2.0);
       float leaves = 0.0; float lh = 0.0;

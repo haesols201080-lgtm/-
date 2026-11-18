@@ -182,6 +182,18 @@ const M_POT = [{ st: ST.CONCRETE, color: [0.5, 0.28, 0.18] }, { st: ST.METAL, co
 // plain (blind) wall on a face, optionally with a faded painted mural / number
 export function blindWall(vol, f, y0, y1, mat, rng, o = {}) {
   const pen = vol.pen; pen.use(mat); vol.wall(f, 0, vol.len(f), 0, y0, y1, { aoB: o.aoB ?? 1 });
+  if (o.ivy && vol.len(f) > 3) { // ivy climbing a bare wall: an irregular mound of leaf cards lying against it, thickest low down
+    const ctx = vol.ctx, L = vol.len(f); const H = Math.min(y1 - y0 - 0.5, rng.f(4, 13)); const s0 = rng.f(0, L * 0.45), s1 = Math.min(L - 0.2, s0 + rng.f(3, 10)); ctx.detail();
+    const col = rng.pick([[0.16, 0.3, 0.12], [0.2, 0.34, 0.13], [0.22, 0.3, 0.12]]); (ctx.ivyAt || (ctx.ivyAt = [])).push([...vol.world(f, (s0 + s1) / 2, 0), ...vol.world(f, (s0 + s1) / 2, 1), vol.pen.oy + y0]);
+    const lobes = []; for (let k = 0, n = rng.i(2, 4); k < n; k++) lobes.push([rng.f(s0, s1), rng.f(0.8, 2.6), H * rng.f(0.35, 1.0)]); let walk = 0; // a few stems, each fanning out to its own height
+    for (let sc = s0; sc < s1; sc += 0.4) { walk = Math.max(-1.2, Math.min(1.2, walk + rng.f(-0.45, 0.45))); let hh = 0; for (const [c, wd, ht] of lobes) { const t = (sc - c) / wd; if (Math.abs(t) < 1) hh = Math.max(hh, ht * Math.pow(1 - t * t, 0.7)); } hh += walk; if (hh < 0.5) continue;
+      for (let yc = y0 + 0.15; yc < y0 + hh; yc += 0.4) { if (rng.chance(0.1 + 0.4 * Math.max(0, (yc - y0) / hh - 0.75))) continue;
+        const sz = rng.f(0.45, 0.72), th = rng.f(-0.7, 0.7), off = rng.f(0.03, 0.14) * (1.2 - (yc - y0) / hh), c = Math.cos(th), sn = Math.sin(th); const k = rng.f(0.85, 1.15);
+        pen.use({ st: ST.FOLIAGE, color: [col[0] * k, col[1] * k, col[2] * k], seed: rng.i(0, 255), flags: FLAG.VAR_A });
+        const Q = (i, j) => { const da = (i * c - j * sn) * sz / 2, dy = (i * sn + j * c) * sz / 2; const p = vol.P(f, Math.max(0.02, Math.min(L - 0.02, sc + da)), off + (j > 0 ? 0.07 : 0)); return [p[0], yc + dy, p[1]]; };
+        const A = Q(-1, -1), B = Q(1, -1), C = Q(1, 1), Dd = Q(-1, 1); pen.quad(A[0], A[1], A[2], B[0], B[1], B[2], C[0], C[1], C[2], Dd[0], Dd[1], Dd[2], 0, 0, 1, 1); } }
+    ctx.main();
+  }
   if (o.mural && y1 - y0 > 14 && vol.len(f) > 9) {
     const at = vol.ctx.atlas; const L = vol.len(f);
     vol.ctx.detail();
