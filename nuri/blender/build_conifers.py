@@ -388,7 +388,7 @@ def make_conifer(name, kind, seed, lod=0, opt=None):
         if i >= n_trunk: return (0.95, 0.94, 0.93)     # dead branches: weathered silver-grey
         k = min(1.0, max(0.0, co.z / 2.5))               # the base is darker (soil splash, damp)
         n = 1 + 0.08 * noise.noise(Vector((co.x * 1.3, co.y * 1.3, co.z * 0.4 + seed)))
-        return tuple(base_t[c] * (0.78 + 0.22 * k) * n for c in range(3))
+        return tuple(base_t[c] * (0.9 + 0.1 * k) * n for c in range(3))
     bo['tints'] = [c for i, v in enumerate(bo.data.vertices) for c in tint(i if i < n_bark else 0, v.co)]
     bo['rootw'] = [0.0] * n_bark + (base_w if base_obj is not None else [])
     if kind == 'snag':
