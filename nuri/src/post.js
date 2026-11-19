@@ -17,7 +17,12 @@ export function makeDofPass(depthTexture, camera, samples = 19) {
       uniform sampler2D tDiffuse, tDepth; uniform float cameraNear, cameraFar, uFocus, uStrength, uMaxR; uniform vec2 uRes;
       varying vec2 vUv;
       float lin(vec2 uv){ return -perspectiveDepthToViewZ(texture2D(tDepth, uv).x, cameraNear, cameraFar); }
-      float coc(float d){ return clamp(abs(d - uFocus) / max(d, 1e-3) * uStrength, 0.0, 1.0) * uMaxR; }
+      // background blur only: everything from the lens up to a little behind the subject stays sharp
+      // (a sharp band around the focus distance), only things far behind it melt into the haze
+      float coc(float d){
+        float rel = (d - uFocus) / max(d, 1e-3);
+        return clamp((rel - 0.22) * 1.25 * uStrength, 0.0, 1.0) * uMaxR;
+      }
       void main(){
         float d0 = lin(vUv); float c0 = coc(d0);
         vec4 base = texture2D(tDiffuse, vUv);
