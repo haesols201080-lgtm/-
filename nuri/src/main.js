@@ -175,8 +175,7 @@ async function boot() {
     }
   };
   ui.on('continue', () => startGame(true));
-  ui.on('new', () => { location.hash = 'new'; if (loadSave()) { writeSave(null); location.reload(); } else startGame(false); });
-  if (location.hash === '#new') { history.replaceState(null, '', location.pathname); }
+  ui.on('new', () => { writeSave(null); startGame(false); });
   const togglePause = () => {
     if (G.mode !== 'play') return;
     G.paused = !G.paused;

@@ -27,8 +27,11 @@ export class UI {
     $('title').classList.remove('hidden'); $('hud').classList.add('hidden'); document.body.classList.add('menu-open');
     $('btn-continue').classList.toggle('hidden', !hasSave);
     $('btn-continue').onclick = () => this.fire('continue');
+    // in-page confirmation (browser confirm() dialogs are not available everywhere)
+    let armed = false;
+    $('btn-new').textContent = '새 게임';
     $('btn-new').onclick = () => {
-      if (hasSave && !confirm('새 게임을 시작하면 저장된 진행이 지워져요. 계속할까요?')) return;
+      if (hasSave && !armed) { armed = true; $('btn-new').textContent = '저장이 지워져요 · 한 번 더 누르면 시작'; return; }
       this.fire('new');
     };
     $('btn-settings').onclick = () => this.openSettings();

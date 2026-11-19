@@ -60,9 +60,27 @@ export class Assets {
     t.anisotropy = this.maxAniso; t.needsUpdate = true;
     return t;
   }
+  // HDR stored as two PNGs (RGBE mantissas + exponent), decoded to a half-float equirect texture
+  async loadRGBEPair(base) {
+    const [rgb, ex] = await Promise.all([this.loadImage(base + '_rgb.png'), this.loadImage(base + '_e.png')]);
+    const w = rgb.width, h = rgb.height;
+    const px = (bmp) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(bmp, 0, 0); return g.getImageData(0, 0, w, h).data; };
+    const a = px(rgb), e = px(ex);
+    const out = new Uint16Array(w * h * 4), toH = THREE.DataUtils.toHalfFloat;
+    for (let i = 0; i < w * h; i++) {
+      const E = e[i * 4], f = E ? Math.pow(2, E - 136) : 0;
+      out[i * 4] = toH((a[i * 4] + 0.5) * f); out[i * 4 + 1] = toH((a[i * 4 + 1] + 0.5) * f); out[i * 4 + 2] = toH((a[i * 4 + 2] + 0.5) * f); out[i * 4 + 3] = toH(1);
+    }
+    const t = new THREE.DataTexture(out, w, h, THREE.RGBAFormat, THREE.HalfFloatType);
+    t.flipY = true; t.colorSpace = THREE.LinearSRGBColorSpace; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false;
+    t.needsUpdate = true;
+    return t;
+  }
+
   async gltf(path, key) {
     const loader = this.gltfLoader || (this.gltfLoader = new GLTFLoader());
-    const g = await loader.loadAsync(`${BASE}models/${path}.glb`);
+    // production builds ship glTF JSON (.json) because some static hosts don't serve .glb
+    const g = await loader.loadAsync(`${BASE}models/${path}${import.meta.env.PROD ? '.json' : '.glb'}`);
     this.models[key || path] = g; this.step(key || path);
     return g;
   }
@@ -85,7 +103,8 @@ export class Assets {
     Object.assign(T, { rock, moss, bark, twig, grass, lichen });
     T.water = makeWaterNormal();
     // HDRI: Poly Haven "forest_slope" (CC0)
-    const hdr = await new HDRLoader().setDataType(THREE.HalfFloatType).loadAsync(`${BASE}hdri/forest_slope_${tier.texSize >= 2048 ? '2k' : '1k'}.hdr`);
+    const hname = `${BASE}hdri/forest_slope_${tier.texSize >= 2048 ? '2k' : '1k'}`;
+    const hdr = import.meta.env.PROD ? await this.loadRGBEPair(hname) : await new HDRLoader().setDataType(THREE.HalfFloatType).loadAsync(`${hname}.hdr`);
     hdr.mapping = THREE.EquirectangularReflectionMapping;
     T.hdr = hdr;
     const pm = new THREE.PMREMGenerator(this.renderer);
