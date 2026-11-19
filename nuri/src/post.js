@@ -80,3 +80,34 @@ export function makeContactShadow() {
   tex.colorSpace = THREE.SRGBColorSpace;
   return m;
 }
+
+// screen-space crepuscular rays: bright sky seen through the canopy streams toward the camera along the sun direction
+export function makeGodRaysPass(depthTexture) {
+  const pass = new ShaderPass({
+    uniforms: { tDiffuse: { value: null }, tDepth: { value: depthTexture }, uSun: { value: new THREE.Vector2(0.5, 0.8) }, uI: { value: 0 },
+      uCol: { value: new THREE.Color(1.0, 0.86, 0.62) } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: /* glsl */`
+      uniform sampler2D tDiffuse, tDepth; uniform vec2 uSun; uniform float uI; uniform vec3 uCol; varying vec2 vUv;
+      float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+      void main(){
+        vec4 base = texture2D(tDiffuse, vUv);
+        if (uI < 0.002) { gl_FragColor = base; return; }
+        vec2 d = (uSun - vUv) / 36.0 * 0.85;
+        vec2 uv = vUv + d * h(vUv * 1000.0);
+        float acc = 0.0, decay = 1.0;
+        for (int i = 0; i < 36; i++) {
+          uv += d;
+          if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) break;
+          float sky = step(0.99999, texture2D(tDepth, uv).x);
+          float l = dot(texture2D(tDiffuse, uv).rgb, vec3(0.3, 0.59, 0.11));
+          acc += sky * smoothstep(0.35, 1.6, l) * decay; decay *= 0.955;
+        }
+        base.rgb += uCol * (acc / 36.0) * uI;
+        gl_FragColor = base;
+      }`,
+  });
+  pass.material.depthTest = false; pass.material.depthWrite = false;
+  pass.uniforms.tDepth.value = depthTexture;
+  return pass;
+}

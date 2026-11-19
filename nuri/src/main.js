@@ -20,7 +20,8 @@ import { Audio } from './audio.js';
 import { UI, loadSave, writeSave, loadSettings, writeSettings } from './ui.js';
 import { START, STREAM, POND, REGIONS } from './layout.js';
 import { WIND } from './shaders.js';
-import { makeDofPass, makeGradePass, makeContactShadow } from './post.js';
+import { makeDofPass, makeGradePass, makeContactShadow, makeGodRaysPass } from './post.js';
+import { Lighting } from './lighting.js';
 import { DUST } from './nuri.js';
 import { clamp, damp, angleDiff } from './util.js';
 
@@ -51,7 +52,7 @@ async function boot() {
   const sr = tier.shadowRange; Object.assign(sun.shadow.camera, { left: -sr, right: sr, top: sr, bottom: -sr, near: 1, far: 90 });
   sun.shadow.bias = -0.00025; sun.shadow.normalBias = 0.025; sun.shadow.radius = 2;
   scene.add(sun, sun.target);
-  const hemi = new THREE.HemisphereLight(0xc8d8e8, 0x3b3122, 0.12); scene.add(hemi);
+  const hemi = new THREE.HemisphereLight(0xc8d8e8, 0x3b3122, 0.06); scene.add(hemi);
   scene.fog = new THREE.FogExp2(new THREE.Color().setRGB(0.36, 0.38, 0.33, THREE.SRGBColorSpace), 0.011);
   function setSun(elev, azim) {
     if (elev === null) sunDir.copy(HDRI_SUN);
@@ -67,7 +68,7 @@ async function boot() {
   physics.timestep = 1 / 60;
   const assets = new Assets(renderer, tier, (k, l) => ui.progress(0.05 + k * 0.85, l));
   await assets.loadAll();
-  scene.environment = assets.tex.envMap; scene.environmentIntensity = 0.85;
+  scene.environment = assets.tex.envMap; scene.environmentIntensity = 0.95;
   scene.background = assets.tex.hdr; scene.backgroundIntensity = 0.95;
 
   const ctx = { scene, RAPIER, physics, assets, tier, sunDir, camera, terrain: null };
@@ -85,9 +86,15 @@ async function boot() {
   const orbit = new OrbitCam(camera, ctx); orbit.set(START.yaw + Math.PI, 0.25);
   const fx = new FX(scene);
   const audio = new Audio();
+  physics.step(); // register the new colliders with the query pipeline before gameplay probes the world
   const gameplay = new Gameplay(ctx, world, player, ui, audio, fx);
   gameplay.build();
   const creatures = new Creatures(ctx, world, audio);
+  // lighting model: sky occlusion under canopy / in the cave, sun in-scattering, eye adaptation
+  const lighting = new Lighting(ctx, world);
+  lighting.patchScene(scene);
+  // Nuri's face screen faintly lights its surroundings in the dark
+  const faceLight = new THREE.PointLight(0x5fe6ff, 0, 0.9, 2); faceLight.position.set(0, 0.29, 0.14); nuri.root.add(faceLight);
 
   // settings
   const applySettings = () => {
@@ -99,7 +106,7 @@ async function boot() {
   ui.bindSettings(S, applySettings, input); applySettings();
 
   // post-processing
-  let composer = null, bloom = null, dof = null, grade = null;
+  let composer = null, bloom = null, dof = null, grade = null, rays = null;
   if (tier.post) {
     const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: tier.msaa });
     rt.depthTexture = new THREE.DepthTexture(innerWidth, innerHeight);
@@ -113,6 +120,7 @@ async function boot() {
     }
     bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.32, 0.55, 0.92);
     composer.addPass(bloom);
+    rays = makeGodRaysPass(rt.depthTexture); composer.addPass(rays);
     if (tier.dof) { dof = makeDofPass(rt.depthTexture, camera); composer.addPass(dof); }
     composer.addPass(new OutputPass());
     grade = makeGradePass(); composer.addPass(grade);
@@ -124,7 +132,7 @@ async function boot() {
     renderer.setSize(innerWidth, innerHeight);
     composer?.setSize(innerWidth, innerHeight);
     const pr = renderer.getPixelRatio();
-    if (dof) { dof.uniforms.uRes.value.set(innerWidth * pr, innerHeight * pr); dof.uniforms.uMaxR.value = 7 * innerHeight * pr / 1080; }
+    if (dof) { dof.uniforms.uRes.value.set(innerWidth * pr, innerHeight * pr); dof.uniforms.uMaxR.value = 5 * innerHeight * pr / 1080; }
     if (grade) grade.uniforms.uRes.value.set(innerWidth * pr, innerHeight * pr);
     fx.setHeight(innerHeight * renderer.getPixelRatio());
   };
@@ -362,12 +370,12 @@ async function boot() {
     const elev = S.timeFlow ? 14 + Math.sin(G.tod * Math.PI) * 46 : null, azim = S.timeFlow ? 120 + G.tod * 140 : 0;
     setSun(elev, azim);
     const rainK = G.rainK = damp(G.rainK || 0, S.weather === 'rain' ? 1 : 0, 0.6, dt);
-    sun.intensity = (1.2 + 2.4 * clamp(Math.asin(sunDir.y) * 57.3 / 40, 0, 1)) * (1 - rainK * 0.75);
-    hemi.intensity = 0.12 + rainK * 0.2;
+    sun.intensity = (1.6 + 3.4 * clamp(Math.asin(sunDir.y) * 57.3 / 40, 0, 1)) * (1 - rainK * 0.8);
+    hemi.intensity = 0.06 + rainK * 0.2;
     scene.backgroundIntensity = 0.95 - rainK * 0.5;
     scene.fog.density = 0.011 + rainK * 0.03;
     scene.fog.color.setRGB(0.36 - rainK * 0.1, 0.38 - rainK * 0.1, 0.33 - rainK * 0.08, THREE.SRGBColorSpace);
-    scene.environmentIntensity = 0.85 - rainK * 0.35;
+    scene.environmentIntensity = 0.95 - rainK * 0.35;
     world.terrain.material.userData.uniforms.uWet.value = rainK;
     world.shaftMat.uniforms.uI.value = 1 - rainK;
     WIND.strength.value = 1 + rainK * 0.8;
@@ -403,13 +411,23 @@ async function boot() {
       dof.uniforms.uStrength.value = G.mode === 'title' ? 1.4 : 1.0;
     }
     if (grade) grade.uniforms.uTime.value = G.time;
+    // eye adaptation + face light + god rays
+    const vis = lighting.update(dt, renderer, 1.05 * (1 + G.rainK * 0.15), camera.position, player.pos);
+    faceLight.intensity = (1 - vis) * 0.35;
+    if (rays) {
+      const sp = tmpV.copy(camera.position).addScaledVector(sunDir, 200).project(camera);
+      const inFront = sunDir.dot(camera.getWorldDirection(new THREE.Vector3())) > 0;
+      const off = Math.hypot(sp.x, sp.y);
+      rays.uniforms.uSun.value.set(sp.x * 0.5 + 0.5, sp.y * 0.5 + 0.5);
+      rays.uniforms.uI.value = inFront ? 0.6 * clamp(1.6 - off * 0.6, 0, 1) * (1 - G.rainK) : 0;
+    }
     if (composer) composer.render(); else renderer.render(scene, camera);
     frames++; fpsT += dt;
     if (fpsT > 1) { window.__fps = frames / fpsT; frames = 0; fpsT = 0; }
   }
   frame();
   // debug / test hooks
-  window.__game = { player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio };
+  window.__game = { player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, get dof() { return dof; }, get rays() { return rays; } };
 }
 
 function makeRain(scene) {
