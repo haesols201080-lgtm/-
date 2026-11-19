@@ -63,7 +63,7 @@ export class Creatures {
     const beakM = new THREE.MeshPhysicalMaterial({ color: 0x1c1712, roughness: 0.35, clearcoat: 0.5 });
     const legM = new THREE.MeshStandardMaterial({ color: 0x5a4434, roughness: 0.55 });
     const eyeM = new THREE.MeshPhysicalMaterial({ color: 0x050404, roughness: 0.06, clearcoat: 1, clearcoatRoughness: 0.03 });
-    const shells = this.ctx.tier.post ? 10 : 7;
+    const shells = this.ctx.tier.rich ? 10 : 7;
     const clone = (o, mat) => { const m = new THREE.Mesh(o.geometry, mat); m.position.copy(o.position); m.quaternion.copy(o.quaternion); m.castShadow = true; return m; };
     for (let i = 0; i < n; i++) {
       const g = new THREE.Group();
@@ -101,7 +101,7 @@ export class Creatures {
       model.scene.traverse((o) => {
         if (!o.isMesh) return;
         if (o.name.includes('body')) {
-          const shells = this.ctx.tier.post ? (this.ctx.tier.ao ? 24 : 18) : 12;
+          const shells = this.ctx.tier.rich ? (this.ctx.tier.ao ? 24 : 18) : 12;
           const fm = furredMesh(o, { shells, length: 0.006, density: 1250 });
           fm.applyMatrix4(o.matrixWorld); g.add(fm); furU = fm.userData.fur;
         } else {

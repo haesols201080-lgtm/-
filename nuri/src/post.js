@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 
-export function makeDofPass(depthTexture, camera) {
+export function makeDofPass(depthTexture, camera, samples = 19) {
   const pass = new ShaderPass({
     uniforms: {
       tDiffuse: { value: null }, tDepth: { value: depthTexture },
@@ -24,8 +24,8 @@ export function makeDofPass(depthTexture, camera) {
         if (c0 < 0.6) { gl_FragColor = base; return; }
         vec3 acc = base.rgb; float wsum = 1.0;
         const float GA = 2.39996323;
-        for (int i = 1; i < 20; i++) {
-          float r = sqrt(float(i) / 19.0) * c0;
+        for (int i = 1; i <= ${samples}; i++) {
+          float r = sqrt(float(i) / ${samples.toFixed(1)}) * c0;
           float a = float(i) * GA;
           vec2 off = vec2(cos(a), sin(a)) * r / uRes;
           vec2 uv = clamp(vUv + off, vec2(0.001), vec2(0.999));

@@ -315,6 +315,24 @@ def build_logs():
         export_glb([o], os.path.join(OUT, f'stump_{i}.glb'))
 
 # ------------------------------------------------------------------ rock outcrop with tunnel cave
+def despike(ob, passes=4, k=1.6):
+    """displacing along vertex normals pushes creases out into thin spikes: pull every vertex that sits far off its
+    neighbours' average back onto it, then relax the surface lightly"""
+    import bmesh
+    bm = bmesh.new(); bm.from_mesh(ob.data); bm.verts.ensure_lookup_table()
+    for _ in range(passes):
+        moved = 0
+        for v in bm.verts:
+            nb = [e.other_vert(v) for e in v.link_edges]
+            if len(nb) < 3: continue
+            avg = sum((n.co for n in nb), Vector()) / len(nb)
+            el = sum((n.co - v.co).length for n in nb) / len(nb)
+            if (v.co - avg).length > k * el * 0.5 or any(f.calc_area() < 1e-7 for f in v.link_faces):
+                v.co = avg; moved += 1
+        print('despike moved', moved)
+    bmesh.ops.smooth_vert(bm, verts=bm.verts[:], factor=0.35, use_axis_x=True, use_axis_y=True, use_axis_z=True)
+    bm.to_mesh(ob.data); bm.free(); ob.data.update()
+
 def build_outcrop():
     reset_scene()
     rnd = random.Random(42)
@@ -356,8 +374,10 @@ def build_outcrop():
         strata = 0.06 * math.sin(p.z * 5.5 + 0.8 * fbm3(p * 0.5, 2, seed=3))
         n_ = v.normal
         v.co = p + n_ * (d + strata)
+    despike(mass)
     smooth(mass)
     decimate(mass, 0.22)
+    despike(mass, passes=2)
     smart_uv(mass, 60, 0.004)
     mass.data.materials.append(named_mat('Rock'))
     bake_ao_vcol([mass], 1.5, 48)

@@ -351,7 +351,7 @@ export class Gameplay {
     // vine strands with leaves
     const leafGeo = new THREE.PlaneGeometry(0.06, 0.05);
     const vineMat = new THREE.MeshStandardMaterial({ color: 0x3a4a1c, roughness: 0.8 });
-    const leafMat = new THREE.MeshStandardMaterial({ map: this.ctx.assets.tex.leaves.map, alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.7 });
+    const leafMat = new THREE.MeshStandardMaterial({ map: ivyLeafTexture(), alphaTest: 0.4, side: THREE.DoubleSide, roughness: 0.6 });
     const side = new THREE.Vector3(-out.z, 0, out.x);
     const leaves = [];
     for (let k = 0; k < 9; k++) {
@@ -709,3 +709,20 @@ function animateCompanion(c, dt, P, camera) {
   else if (c.found) m.position.y = c.pos.y + Math.abs(Math.sin(t * 5)) * 0.015 * (near ? 1 : 0);
   if (!c.found) m.rotation.z = Math.sin(t * 1.3) * 0.05; else m.rotation.z = 0;
 }
+
+// ivy-like leaf (three lobes, pale veins, darker edges) painted once into a canvas
+let _ivy = null;
+function ivyLeafTexture() {
+  if (_ivy) return _ivy;
+  const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+  g.translate(64, 118);
+  const lobe = (ang, len, wid) => { g.save(); g.rotate(ang); g.beginPath(); g.moveTo(0, 0);
+    g.bezierCurveTo(wid, -len * 0.3, wid * 0.8, -len * 0.85, 0, -len); g.bezierCurveTo(-wid * 0.8, -len * 0.85, -wid, -len * 0.3, 0, 0); g.fill(); g.restore(); };
+  const grd = g.createRadialGradient(0, -50, 4, 0, -50, 70); grd.addColorStop(0, '#4f6b2a'); grd.addColorStop(0.7, '#3a5420'); grd.addColorStop(1, '#2a3d17');
+  g.fillStyle = grd;
+  lobe(0, 100, 40); lobe(-0.95, 70, 30); lobe(0.95, 70, 30); lobe(-1.7, 40, 18); lobe(1.7, 40, 18);
+  g.strokeStyle = 'rgba(190,205,150,0.55)'; g.lineWidth = 2;
+  for (const a of [0, -0.95, 0.95, -1.7, 1.7]) { g.save(); g.rotate(a); g.beginPath(); g.moveTo(0, 0); g.lineTo(0, a === 0 ? -92 : -55); g.stroke(); g.restore(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; _ivy = t; return t;
+}
+

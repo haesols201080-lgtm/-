@@ -78,7 +78,7 @@ export const PH_MODELS = ['rock_moss_set_01', 'rock_moss_set_02', 'boulder_01', 
   'shrub_03', 'shrub_04', 'nettle_plant', 'dandelion_01', 'weed_plant_02', 'dry_branches_medium_01', 'periwinkle_plant',
   'bark_debris_01', 'namaqualand_stones_01', 'root_cluster_01'];
 export const DEBRIS = ['pinecone_0', 'pinecone_1', 'pinecone_2', 'mush_amanita', 'mush_bolete', 'mush_cluster', 'mush_bracket'];
-export const TREES = ['pine_0', 'pine_1', 'pine_2', 'pine_3', 'fir_4', 'fir_5'];
+export const TREES = ['pine_0', 'pine_1', 'pine_2', 'pine_3', 'fir_4', 'fir_5', 'pine_11', 'pine_12', 'pine_13', 'fir_14', 'fir_15'];
 export const SAPLINGS = ['sapling_6', 'sapling_7', 'sapling_8'];
 export const SNAGS = ['snag_9', 'snag_10'];
 
@@ -209,12 +209,8 @@ export class Assets {
         nearFade(sh);
         sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>',
           THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', '/* foliage keeps crown-shaped normals on both sides */'));
-        // foliage translucency: light passing through needles when back-lit, plus a soft canopy self-shadow tint
-        sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `
-          vec3 vd = normalize(vViewPosition);
-          float back = pow(clamp(dot(vd, normalize((viewMatrix * vec4(0.58, 0.64, 0.51, 0.0)).xyz)), 0.0, 1.0), 4.0);
-          outgoingLight += diffuseColor.rgb * vec3(0.55, 0.65, 0.25) * back * 0.9;
-          #include <opaque_fragment>`);
+        // needles: sunlight through the sprays when looking toward the sun, sky light from behind
+        leafLight(sh, 1.5);
       } });
     M.grass = patchMaterial(new THREE.MeshStandardMaterial({ map: T.grass.map, normalMap: T.grass.normal, alphaTest: 0.42, side: THREE.DoubleSide,
       roughness: 0.75, metalness: 0, envMapIntensity: 0.5 }), {

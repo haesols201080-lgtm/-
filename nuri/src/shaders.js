@@ -143,8 +143,10 @@ export function leafLight(sh, k = 1) {
       #else
         float svL = 1.0; float back = 0.0;
       #endif
+      vec3 tr = diffuseColor.rgb * diffuseColor.rgb * 2.2;                         // light through a leaf is deeper, more saturated
       outgoingLight += reflectedLight.indirectDiffuse * ${(0.3 * k).toFixed(3)}
-                     + diffuseColor.rgb * vec3(1.0, 1.0, 0.62) * back * ${(0.55 * k).toFixed(3)} * mix(0.15, 1.0, svL);
+                     + tr * vec3(1.0, 0.95, 0.6) * back * ${(0.75 * k).toFixed(3)} * mix(0.15, 1.0, svL)
+                     + tr * reflectedLight.indirectDiffuse * ${(0.25 * k).toFixed(3)};
     }
     #include <opaque_fragment>`);
 }

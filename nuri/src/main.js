@@ -55,7 +55,7 @@ async function boot() {
   sun.shadow.bias = -0.00025; sun.shadow.normalBias = 0.025; sun.shadow.radius = 2;
   scene.add(sun, sun.target);
   const hemi = new THREE.HemisphereLight(0xc8d8e8, 0x3b3122, 0.06); scene.add(hemi);
-  scene.fog = new THREE.FogExp2(new THREE.Color().setRGB(0.36, 0.38, 0.33, THREE.SRGBColorSpace), 0.011);
+  scene.fog = new THREE.FogExp2(new THREE.Color().setRGB(0.44, 0.48, 0.44, THREE.SRGBColorSpace), 0.017);
   function setSun(elev, azim) {
     if (elev === null) sunDir.copy(HDRI_SUN);
     else sunDir.setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - elev), THREE.MathUtils.degToRad(azim));
@@ -120,10 +120,9 @@ async function boot() {
       ao.updateGtaoMaterial({ radius: 0.35, distanceExponent: 1.5, thickness: 1, scale: 1, samples: 12 });
       ao.blendIntensity = 0.85; composer.addPass(ao);
     }
-    bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.32, 0.55, 0.92);
-    composer.addPass(bloom);
-    rays = makeGodRaysPass(rt.depthTexture); composer.addPass(rays);
-    if (tier.dof) { dof = makeDofPass(rt.depthTexture, camera); composer.addPass(dof); }
+    if (tier.bloom) { bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.32, 0.55, 0.92); composer.addPass(bloom); }
+    if (tier.rays) { rays = makeGodRaysPass(rt.depthTexture); composer.addPass(rays); }
+    if (tier.dof) { dof = makeDofPass(rt.depthTexture, camera, tier.dofSamples || 19); composer.addPass(dof); }
     composer.addPass(new OutputPass());
     grade = makeGradePass(); composer.addPass(grade);
   } else document.body.classList.add('css-vignette');
@@ -133,9 +132,9 @@ async function boot() {
   fx.setWater({ y: wy, isWater: (x, z) => world.terrain.isWater(x, z), ground: (x, z) => world.terrain.heightAt(x, z) - 0.02,
     onDrop: (x, z, r, k) => world.sim.drop(x, z, r, k) });
   const surf = (p) => ({ x: p.x, y: wy, z: p.z });
-  fx.initAmbient(tier.post ? 260 : 120);
+  fx.initAmbient(tier.rich ? 260 : 120);
   // footprints / skids are pressed into the terrain surface itself (lit and shaded like the scanned ground)
-  const marks = new GroundMarks(renderer, tier.post ? { N: 2048, size: 10 } : { N: 1024, size: 8 });
+  const marks = new GroundMarks(renderer, tier.rich ? { N: 2048, size: 10 } : { N: 1024, size: 8 });
   const TU = world.terrain.material.userData.uniforms;
   // share the terrain material's own uniform objects (its program may already be compiled during loading)
   for (const k of Object.keys(marks.uniforms)) { TU[k].value = marks.uniforms[k].value; marks.uniforms[k] = TU[k]; }
@@ -390,6 +389,15 @@ async function boot() {
     // world + effects
     world.update(dt, G.time, camera.position, player.pos);
     creatures.update(dt, G.time, player, gameplay.caveCenter);
+    // waterfall: spray droplets and drifting mist at the plunge point
+    if (world.waterfallPos && camera.position.distanceToSquared(world.waterfallPos) < 30 * 30) {
+      const wf = world.waterfallPos;
+      if (Math.random() < dt * 18) fx.droplet(wf.x + (Math.random() - 0.5) * 0.8, wy + 0.05, wf.z + (Math.random() - 0.5) * 0.5,
+        (Math.random() - 0.5) * 1.2, 1.2 + Math.random() * 1.8, (Math.random() - 0.3) * 1.2, 0.003 + Math.random() * 0.004);
+      if (Math.random() < dt * 6) fx.spawn({ x: wf.x + (Math.random() - 0.5) * 0.8, y: wy + 0.1, z: wf.z + (Math.random() - 0.5) * 0.6,
+        vx: (Math.random() - 0.5) * 0.3, vy: 0.25 + Math.random() * 0.3, vz: 0.2 + Math.random() * 0.3, g: -0.05, drag: 0.6,
+        max: 2.5 + Math.random() * 1.5, s0: 0.25, s1: 0.9, c: [0.86, 0.9, 0.9], a: 0.09 });
+    }
     fx.update(dt);
     audio.setListener(camera);
     const inCave = gameplay.caveCenter && player.pos.distanceTo(gameplay.caveCenter) < 2.6 && player.pos.y < gameplay.caveCenter.y + 1.2 ? 1 : 0;
@@ -402,8 +410,8 @@ async function boot() {
     sun.intensity = (1.6 + 3.4 * clamp(Math.asin(sunDir.y) * 57.3 / 40, 0, 1)) * (1 - rainK * 0.8);
     hemi.intensity = 0.06 + rainK * 0.2;
     scene.backgroundIntensity = 0.95 - rainK * 0.5;
-    scene.fog.density = 0.011 + rainK * 0.03;
-    scene.fog.color.setRGB(0.36 - rainK * 0.1, 0.38 - rainK * 0.1, 0.33 - rainK * 0.08, THREE.SRGBColorSpace);
+    scene.fog.density = 0.017 + rainK * 0.03;
+    scene.fog.color.setRGB(0.44 - rainK * 0.14, 0.48 - rainK * 0.14, 0.44 - rainK * 0.1, THREE.SRGBColorSpace);
     scene.environmentIntensity = 0.95 - rainK * 0.35;
     world.terrain.material.userData.uniforms.uWet.value = rainK;
     world.shaftMat.uniforms.uI.value = 1 - rainK;

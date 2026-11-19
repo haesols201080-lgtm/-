@@ -108,7 +108,7 @@ float causticsAt(vec2 p, float t){
 
 // water surface material
 export function makeWaterMaterial(tier, assets, sim) {
-  const refract = tier.post; // transmission (screen-space refraction) on medium/high
+  const refract = tier.rich; // transmission (screen-space refraction) on medium/high
   const u = { uTime: { value: 0 }, tN: { value: assets.tex.water }, ...sim.uniforms };
   const mat = new THREE.MeshPhysicalMaterial(refract ? {
     color: 0xffffff, roughness: 0.02, metalness: 0, transmission: 1, thickness: 0.4, ior: 1.33,

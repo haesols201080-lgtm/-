@@ -87,12 +87,15 @@ def tube(mb_v, mb_f, mb_uv, spine, rfn, radial, tile=1.2, v0=0.0, ku=None):
             mb_f.append((a, a + 1, a + radial + 2, a + radial + 1))
 
 def twig_card(mb, base, direction, side_hint, length, sprite, droop=0.15, fold=0.35, rnd=None):
-    """V-folded card: sprite stem at base, tip along `direction`."""
+    """V-folded card: sprite stem at base, tip along `direction`; rolled at random around its axis."""
     x0, y0, x1, y1 = sprite[:4]
     aspect = (x1 - x0) / max(1e-6, (y1 - y0))
     w = length * aspect
     d = direction.normalized()
     s = d.cross(side_hint); s = s.normalized() if s.length > 1e-6 else Vector((1, 0, 0))
+    if rnd is not None:
+        s = (Matrix.Rotation(rnd.uniform(-0.75, 0.75), 3, d) @ s).normalized()
+        fold = fold * rnd.uniform(0.6, 1.9)
     up = s.cross(d).normalized()
     tip = base + d * length - up * droop * length
     mid_b, mid_t = base, tip
@@ -423,7 +426,9 @@ def bake_ao(ob):
 # girth classes as in a real stand: dominant, co-dominant, intermediate and a slender suppressed pole
 SPECS = [('pine', 11, {'R0': 0.44, 'H': 23}), ('pine', 22, {'R0': 0.31, 'H': 21}), ('pine', 33, {'R0': 0.21, 'H': 18, 'curve': 0.32, 'crown0': 0.66}),
          ('pine', 44, {'R0': 0.13, 'H': 15, 'curve': 0.5, 'crown0': 0.72}), ('fir', 55, {}), ('fir', 66, {}),
-         ('sapling', 77, {}), ('sapling', 88, {}), ('sapling', 99, {}), ('snag', 111, {}), ('snag', 122, {})]
+         ('sapling', 77, {}), ('sapling', 88, {}), ('sapling', 99, {}), ('snag', 111, {}), ('snag', 122, {}),
+         ('pine', 133, {'R0': 0.38, 'H': 25, 'crown0': 0.62}), ('pine', 144, {'R0': 0.25, 'H': 17, 'curve': 0.25, 'crown0': 0.58}),
+         ('pine', 155, {'R0': 0.17, 'H': 13, 'curve': 0.4, 'crown0': 0.68}), ('fir', 166, {'H': 13.5, 'R0': 0.3}), ('fir', 177, {'H': 8.5, 'R0': 0.19})]
 ONLY = [int(x) for x in sys.argv[3].split(',')] if len(sys.argv) > 3 else None
 for i, (kind, seed, opt) in enumerate(SPECS):
     if ONLY is not None and i not in ONLY: continue

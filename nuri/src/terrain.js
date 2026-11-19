@@ -156,6 +156,7 @@ export class Terrain {
   }
 }
 
+const WHITE1 = (() => { const t = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); t.needsUpdate = true; return t; })();
 export function makeTerrainMaterial(T, tier = {}) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0, envMapIntensity: 0.6 });
   const uniforms = {
@@ -163,6 +164,7 @@ export function makeTerrainMaterial(T, tier = {}) {
     tRockA: { value: T.rock.map }, tRockN: { value: T.rock.normal }, tRockO: { value: T.rock.orm },
     uWet: { value: 0 }, uTime: { value: 0 }, uScales: { value: new THREE.Vector4(...TERRAIN_SCALES) }, uWaterY: { value: WORLD.waterY },
     tMarks: { value: null }, uMarkOrigin: { value: new THREE.Vector2(-999, -999) }, uMarkSize: { value: 12 }, uMarkTexel: { value: 1 / 1024 },
+    tGroundAO: { value: WHITE1 }, uGAOB: { value: new THREE.Vector4(0, 0, 0, 0) },
     uRobot: { value: new THREE.Vector4(0, -99, 0, 0) }, uFeet: { value: [new THREE.Vector4(0, -99, 0, 0), new THREE.Vector4(0, -99, 0, 0)] },
   };
   mat.userData.uniforms = uniforms;
@@ -183,6 +185,7 @@ export function makeTerrainMaterial(T, tier = {}) {
         uniform sampler2DArray tAlb, tNrm, tOrm;
         uniform sampler2D tRockA, tRockN, tRockO;
         uniform float uWet, uTime, uWaterY; uniform vec4 uScales;
+        uniform sampler2D tGroundAO; uniform vec4 uGAOB;
         uniform sampler2D tMarks; uniform vec2 uMarkOrigin; uniform float uMarkSize, uMarkTexel; uniform vec4 uRobot; uniform vec4 uFeet[2];
         vec4 MK; vec2 MUV; float MSOFT;
         ${CAUSTICS_GLSL}
@@ -329,6 +332,9 @@ export function makeTerrainMaterial(T, tier = {}) {
       .replace('#include <aomap_fragment>', `
         float ambientOcclusion = mix(1.0, TO.r, 0.9);
         ambientOcclusion *= 1.0 - 0.4 * clamp(MK.r, 0.0, 1.0) * MSOFT;   // pressed hollows see less sky
+        float gAO = texture2D(tGroundAO, (vWPos.xz - uGAOB.xy) * uGAOB.zw).r;
+        ambientOcclusion *= gAO;
+        reflectedLight.directDiffuse *= mix(1.0, gAO, 0.25);
         // contact occlusion from the robot standing on this ground (and from each boot)
         {
           float dR = length(vWPos.xz - uRobot.xz), hR = max(0.0, uRobot.w), rr = 0.14 + hR * 0.45;
