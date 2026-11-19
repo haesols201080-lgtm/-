@@ -1,7 +1,6 @@
 // Nuri: Tiny Explorer — boot, render pipeline, game loop, emotions, save/load, settings.
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
-import { Sky } from 'three/examples/jsm/objects/Sky.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -42,24 +41,23 @@ async function boot() {
 
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.02, 220);
-  // sky + sun
-  const sky = new Sky(); sky.scale.setScalar(400); scene.add(sky);
-  const su = sky.material.uniforms; su.turbidity.value = 5.5; su.rayleigh.value = 1.35; su.mieCoefficient.value = 0.006; su.mieDirectionalG.value = 0.82;
-  const sunDir = new THREE.Vector3();
+  // sun (aligned to the sun in the forest_slope HDRI)
+  const HDRI_SUN = new THREE.Vector3(0.576, 0.641, 0.506).normalize();
+  const sunDir = HDRI_SUN.clone();
   const sun = new THREE.DirectionalLight(0xfff1dc, 3.4);
   sun.castShadow = true; sun.shadow.mapSize.set(tier.shadowMap, tier.shadowMap);
   const sr = tier.shadowRange; Object.assign(sun.shadow.camera, { left: -sr, right: sr, top: sr, bottom: -sr, near: 1, far: 90 });
   sun.shadow.bias = -0.00025; sun.shadow.normalBias = 0.025; sun.shadow.radius = 2;
   scene.add(sun, sun.target);
-  const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x3a3020, 0.35); scene.add(hemi);
-  scene.fog = new THREE.FogExp2(0x9fb3b0, 0.014);
+  const hemi = new THREE.HemisphereLight(0xc8d8e8, 0x3b3122, 0.12); scene.add(hemi);
+  scene.fog = new THREE.FogExp2(new THREE.Color().setRGB(0.36, 0.38, 0.33, THREE.SRGBColorSpace), 0.011);
   function setSun(elev, azim) {
-    sunDir.setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - elev), THREE.MathUtils.degToRad(azim));
-    su.sunPosition.value.copy(sunDir);
-    const warm = clamp((elev - 8) / 30, 0, 1);
-    sun.color.setRGB(1, 0.78 + 0.18 * warm, 0.6 + 0.3 * warm);
+    if (elev === null) sunDir.copy(HDRI_SUN);
+    else sunDir.setFromSphericalCoords(1, THREE.MathUtils.degToRad(90 - elev), THREE.MathUtils.degToRad(azim));
+    const warm = clamp((Math.asin(sunDir.y) * 57.3 - 8) / 30, 0, 1);
+    sun.color.setRGB(1, 0.8 + 0.16 * warm, 0.64 + 0.26 * warm);
   }
-  setSun(42, 200);
+  setSun(null);
 
   ui.progress(0.02, '물리 엔진');
   await RAPIER.init();
@@ -67,8 +65,8 @@ async function boot() {
   physics.timestep = 1 / 60;
   const assets = new Assets(renderer, tier, (k, l) => ui.progress(0.05 + k * 0.85, l));
   await assets.loadAll();
-  scene.environment = assets.tex.envMap; scene.environmentIntensity = 0.75;
-  scene.environmentRotation = new THREE.Euler(0, 2.1, 0);
+  scene.environment = assets.tex.envMap; scene.environmentIntensity = 0.85;
+  scene.background = assets.tex.hdr; scene.backgroundIntensity = 0.95;
 
   const ctx = { scene, RAPIER, physics, assets, tier, sunDir, camera, terrain: null };
   ui.progress(0.92, '숲 만들기');
@@ -351,15 +349,15 @@ async function boot() {
     audio.updateAmbience(dt, player.pos, S.weather === 'rain' ? 1.4 : 1, inCave);
     // time of day / weather
     if (S.timeFlow) G.tod = (G.tod + dt / 900) % 1;
-    const elev = S.timeFlow ? 14 + Math.sin(G.tod * Math.PI) * 46 : 42, azim = S.timeFlow ? 120 + G.tod * 140 : 200;
+    const elev = S.timeFlow ? 14 + Math.sin(G.tod * Math.PI) * 46 : null, azim = S.timeFlow ? 120 + G.tod * 140 : 0;
     setSun(elev, azim);
     const rainK = G.rainK = damp(G.rainK || 0, S.weather === 'rain' ? 1 : 0, 0.6, dt);
-    sun.intensity = (1.1 + 2.5 * clamp(elev / 40, 0, 1)) * (1 - rainK * 0.75);
-    hemi.intensity = 0.3 + rainK * 0.2;
-    su.turbidity.value = 5.5 + rainK * 12; su.rayleigh.value = 1.35 + rainK * 2;
-    scene.fog.density = 0.012 + rainK * 0.03;
-    scene.fog.color.setRGB(0.6 - rainK * 0.2, 0.68 - rainK * 0.22, 0.66 - rainK * 0.2);
-    scene.environmentIntensity = 0.75 - rainK * 0.35;
+    sun.intensity = (1.2 + 2.4 * clamp(Math.asin(sunDir.y) * 57.3 / 40, 0, 1)) * (1 - rainK * 0.75);
+    hemi.intensity = 0.12 + rainK * 0.2;
+    scene.backgroundIntensity = 0.95 - rainK * 0.5;
+    scene.fog.density = 0.011 + rainK * 0.03;
+    scene.fog.color.setRGB(0.36 - rainK * 0.1, 0.38 - rainK * 0.1, 0.33 - rainK * 0.08, THREE.SRGBColorSpace);
+    scene.environmentIntensity = 0.85 - rainK * 0.35;
     world.terrain.material.userData.uniforms.uWet.value = rainK;
     world.shaftMat.uniforms.uI.value = 1 - rainK;
     WIND.strength.value = 1 + rainK * 0.8;

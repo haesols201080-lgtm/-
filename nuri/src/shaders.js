@@ -106,9 +106,9 @@ export function makeRockMaterial(T, { moss = 0.55, scale = 0.45 } = {}) {
         RW = triWeights(wn0);
         RA = triSample(tRA, vWPos, RW, uScale).rgb;
         RO = triSample(tRO, vWPos, RW, uScale).rgb;
-        vec3 mA = triSample(tMA, vWPos, RW, 0.6).rgb;
-        vec3 mO = triSample(tMO, vWPos, RW, 0.6).rgb;
-        float mn = triSample(tMO, vWPos * 0.21, RW, 0.6).b;
+        vec3 mA = triSample(tMA, vWPos, RW, 0.33).rgb;
+        vec3 mO = triSample(tMO, vWPos, RW, 0.33).rgb;
+        float mn = triSample(tMO, vWPos * 0.21, RW, 0.33).b;
         mossK = smoothstep(0.35, 0.8, wn0.y + (mn - 0.5) * 0.7) * uMoss;
         mossK = clamp(mossK + mO.b * 0.4 * step(0.05, mossK), 0.0, 1.0);
         diffuseColor = vec4(mix(RA, mA, mossK), opacity);
@@ -117,7 +117,7 @@ export function makeRockMaterial(T, { moss = 0.55, scale = 0.45 } = {}) {
       .replace('#include <normal_fragment_maps>', `{
           vec3 wn = normalize(vWNrm);
           vec3 nr = triNormal(tRN, vWPos, wn, RW, uScale);
-          vec3 nm = triNormal(tMN, vWPos, wn, RW, 0.6);
+          vec3 nm = triNormal(tMN, vWPos, wn, RW, 0.33);
           vec3 nW = normalize(mix(nr, nm, mossK));
           normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);
         }`)

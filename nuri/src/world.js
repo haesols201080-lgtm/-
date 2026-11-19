@@ -1,38 +1,51 @@
-// Builds the forest region: terrain, Blender-made trees/rocks/logs/stumps/outcrop, water + waterfall,
-// grass, ferns, mushrooms, light shafts — and all their physics colliders.
+// Builds the pine-forest region from scanned (Poly Haven, CC0) assets processed in Blender:
+// terrain with scanned ground layers, conifers with scanned bark/twigs + scanned pine roots, mossy boulders,
+// stumps, dead trunks, rock faces, ferns and ground plants, grass cards, water + waterfall, and physics colliders.
 import * as THREE from 'three';
-import { mulberry32, makeNoise2D, fbm, smoothstep, distToPolyline, clamp } from './util.js';
+import { mulberry32, smoothstep, distToPolyline, clamp } from './util.js';
 import { WORLD, PATH, PATH2, PATH3, STREAM, POND, OUTCROP, HERO_TREES, BOULDERS, LOGS, STUMPS, START } from './layout.js';
 import { Terrain } from './terrain.js';
 import { patchMaterial, WIND } from './shaders.js';
+import { TREES, SAPLINGS } from './assets.js';
 
 const rnd = mulberry32(2024);
-const nz = makeNoise2D(77);
-const TREE_R0 = [0.62, 0.5, 0.7, 0.42, 0.58, 0.36];
+const TREE_R0 = { pine_0: 0.36, pine_1: 0.4, pine_2: 0.34, pine_3: 0.38, fir_4: 0.27, fir_5: 0.26 };
+const GRASS_SPRITES = [[0.207, 0.75, 0.496, 0.904], [0.605, 0.758, 0.826, 0.863], [0.252, 0.891, 0.49, 1.0], [0.598, 0.869, 0.789, 1.0], [0.051, 0.871, 0.18, 1.0]];
+const UP = new THREE.Vector3(0, 1, 0);
 
-function firstMesh(root, pred) { let m = null; root.traverse((o) => { if (!m && o.isMesh && (!pred || pred(o))) m = o; }); return m; }
-function meshes(root) { const out = []; root.traverse((o) => { if (o.isMesh) out.push(o); }); return out; }
+function meshes(root) { const out = []; root.updateMatrixWorld(true); root.traverse((o) => { if (o.isMesh) out.push(o); }); return out; }
 
 export class World {
   constructor(ctx) {
-    this.ctx = ctx; // { scene, RAPIER, physics, assets, tier }
-    this.scene = ctx.scene;
-    this.colliders = [];
-    this.treeSpots = [];
-    this.grassChunks = [];
-    this.waterAnim = [];
-    this.update = this.update.bind(this);
+    this.ctx = ctx; this.scene = ctx.scene;
+    this.treeSpots = []; this.grassChunks = []; this.rocks = []; this.logs = []; this.stumps = [];
+    this.variantCache = {};
+  }
+
+  // normalized geometry variants of a GLB: each mesh baked to the GLB's frame, centered on xz, resting at y=0
+  variants(key) {
+    if (this.variantCache[key]) return this.variantCache[key];
+    const g = this.ctx.assets.models[key];
+    const out = meshes(g.scene).map((o) => {
+      const geo = o.geometry.clone().applyMatrix4(o.matrixWorld);
+      geo.computeBoundingBox();
+      const bb = geo.boundingBox, c = bb.getCenter(new THREE.Vector3());
+      geo.translate(-c.x, -bb.min.y, -c.z);
+      geo.computeBoundingBox(); geo.computeBoundingSphere();
+      const size = geo.boundingBox.getSize(new THREE.Vector3());
+      return { geo, mat: o.material, size, name: o.name };
+    });
+    this.variantCache[key] = out;
+    return out;
   }
 
   build() {
     const { assets } = this.ctx;
     this.terrain = new Terrain();
-    // placements first (moss on terrain depends on them)
     this.planTrees();
     const mossSources = [
       ...BOULDERS.map(([x, z, r]) => ({ x, z, r: r * 2.2 })),
-      ...this.treeSpots.filter((t) => t.hero).map((t) => ({ x: t.x, z: t.z, r: 2.6 * t.s })),
-      ...LOGS.map(([x1, z1, x2, z2]) => ({ x: (x1 + x2) / 2, z: (z1 + z2) / 2, r: 2.5 })),
+      ...this.treeSpots.filter((t) => t.hero).map((t) => ({ x: t.x, z: t.z, r: 2.4 })),
     ];
     this.scene.add(this.terrain.buildMesh(assets.tex, this.ctx.tier, mossSources));
     this.terrain.buildCollider(this.ctx.RAPIER, this.ctx.physics);
@@ -40,208 +53,228 @@ export class World {
     this.buildRocks();
     this.buildLogsStumps();
     this.buildOutcrop();
+    this.buildRockFaces();
     this.buildWater();
     this.buildGrass();
-    this.buildFerns();
-    this.buildMushrooms();
+    this.buildPlants();
     this.buildShafts();
   }
 
   // ---------------------------------------------------------------- physics helpers
-  fixed(desc, data) {
-    const c = this.ctx.physics.createCollider(desc.setFriction(desc.friction ?? 0.9));
-    c.userData = data; this.colliders.push(c); return c;
-  }
-  trimeshFrom(mesh, matrix, maxY = Infinity, data = { kind: 'static', surface: 'rock' }) {
-    const g = mesh.geometry, pos = g.attributes.position, idx = g.index;
-    const v = new THREE.Vector3();
+  fixed(desc, data) { const c = this.ctx.physics.createCollider(desc.setFriction(0.9)); c.userData = data; return c; }
+  trimesh(geo, matrix, data, maxY = Infinity) {
+    const pos = geo.attributes.position, idx = geo.index, v = new THREE.Vector3();
     const verts = new Float32Array(pos.count * 3);
-    for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(matrix); verts.set([v.x, v.y, v.z], i * 3); }
-    const tris = [];
-    const n = idx ? idx.count : pos.count;
+    for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(matrix); verts[i * 3] = v.x; verts[i * 3 + 1] = v.y; verts[i * 3 + 2] = v.z; }
+    const tris = [], n = idx ? idx.count : pos.count;
     for (let i = 0; i < n; i += 3) {
       const a = idx ? idx.getX(i) : i, b = idx ? idx.getX(i + 1) : i + 1, c = idx ? idx.getX(i + 2) : i + 2;
       if (verts[a * 3 + 1] > maxY && verts[b * 3 + 1] > maxY && verts[c * 3 + 1] > maxY) continue;
       tris.push(a, b, c);
     }
     if (!tris.length) return null;
-    const R = this.ctx.RAPIER;
-    return this.fixed(R.ColliderDesc.trimesh(verts, new Uint32Array(tris)), data);
+    return this.fixed(this.ctx.RAPIER.ColliderDesc.trimesh(verts, new Uint32Array(tris)), data);
+  }
+  hull(geo, matrix, data) {
+    const pos = geo.attributes.position, v = new THREE.Vector3();
+    const step = Math.max(1, Math.floor(pos.count / 600));
+    const pts = [];
+    for (let i = 0; i < pos.count; i += step) { v.fromBufferAttribute(pos, i).applyMatrix4(matrix); pts.push(v.x, v.y, v.z); }
+    const d = this.ctx.RAPIER.ColliderDesc.convexHull(new Float32Array(pts));
+    return d ? this.fixed(d, data) : null;
+  }
+  place(variant, mat, pos, rotY, scale, opts = {}) {
+    const m = new THREE.Mesh(variant.geo, mat || variant.mat);
+    m.position.copy(pos); m.rotation.y = rotY;
+    if (typeof scale === 'number') m.scale.setScalar(scale); else m.scale.copy(scale);
+    m.castShadow = opts.cast !== false; m.receiveShadow = true;
+    this.scene.add(m); m.updateMatrixWorld(true);
+    return m;
+  }
+  okSpot(x, z, clear = 1) {
+    if (Math.hypot(x - START.x, z - START.z) < 3) return false;
+    if (Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d) < clear) return false;
+    if (this.terrain.isWater(x, z)) return false;
+    if (Math.hypot(x - OUTCROP.x, z - OUTCROP.z) < 7) return false;
+    return true;
   }
 
   // ---------------------------------------------------------------- trees
   planTrees() {
-    for (const [x, z, s, t] of HERO_TREES) this.treeSpots.push({ x, z, s, t, rot: rnd() * Math.PI * 2, hero: true });
-    // background forest via rejection sampling
+    HERO_TREES.forEach(([x, z, s], i) => this.treeSpots.push({ x, z, s: 0.85 + (s - 1) * 0.6, t: TREES[i % TREES.length], rot: rnd() * 6.28, hero: true }));
     let tries = 0;
-    while (this.treeSpots.length < 150 && tries++ < 8000) {
-      const x = (rnd() - 0.5) * 92, z = (rnd() - 0.5) * 92;
-      if (Math.hypot(x - START.x, z - START.z) < 8) continue;
-      if (Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d) < 2.2) continue;
-      if (distToPolyline(x, z, STREAM).d < 2.6) continue;
-      if (Math.hypot(x - POND.x, z - POND.z) < POND.r + 2.5) continue;
-      if (Math.hypot(x - OUTCROP.x, z - OUTCROP.z) < 9) continue;
-      const near = this.treeSpots.some((t) => Math.hypot(t.x - x, t.z - z) < (t.hero ? 5.5 : 3.6));
-      if (near) continue;
-      const inner = Math.max(Math.abs(x), Math.abs(z)) < 30;
-      if (inner && rnd() < 0.45) continue;
-      this.treeSpots.push({ x, z, s: 0.75 + rnd() * 0.5, t: Math.floor(rnd() * 6), rot: rnd() * Math.PI * 2, hero: false });
+    while (this.treeSpots.length < 230 && tries++ < 12000) {
+      const x = (rnd() - 0.5) * 94, z = (rnd() - 0.5) * 94;
+      if (Math.hypot(x - START.x, z - START.z) < 8.5) continue;
+      if (Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d) < 2.4) continue;
+      if (distToPolyline(x, z, STREAM).d < 2.6 || Math.hypot(x - POND.x, z - POND.z) < POND.r + 2.5 || Math.hypot(x - OUTCROP.x, z - OUTCROP.z) < 9) continue;
+      if (this.treeSpots.some((t) => Math.hypot(t.x - x, t.z - z) < (t.hero ? 5 : 3.2))) continue;
+      const inner = Math.max(Math.abs(x), Math.abs(z)) < 28;
+      if (inner && rnd() < 0.35) continue;
+      this.treeSpots.push({ x, z, s: 0.8 + rnd() * 0.45, t: TREES[Math.floor(rnd() * TREES.length)], rot: rnd() * 6.28, hero: false });
     }
   }
 
   buildTrees() {
     const { assets } = this.ctx, M = assets.mats, R = this.ctx.RAPIER;
-    const tmp = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
-    const byT = [[], [], [], [], [], []];
+    const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+    const byT = {};
+    const roots = this.variants('pine_roots');
     for (const t of this.treeSpots) {
-      t.y = this.terrain.heightAt(t.x, t.z) - 0.04;
+      t.y = this.terrain.heightAt(t.x, t.z) - 0.03;
+      const r0 = TREE_R0[t.t] * t.s;
       if (t.hero) {
-        const g = assets.models[`tree_${t.t}`].scene;
-        const bark = firstMesh(g, (m) => m.name.includes('bark')), leaves = firstMesh(g, (m) => m.name.includes('leaves'));
+        const ms = meshes(assets.models[t.t].scene);
         const grp = new THREE.Group();
-        const b = new THREE.Mesh(bark.geometry, M.bark); b.castShadow = true; b.receiveShadow = true;
-        const l = new THREE.Mesh(leaves.geometry, M.leaves); l.castShadow = true; l.receiveShadow = true;
-        grp.add(b, l);
+        for (const o of ms) {
+          const isBark = o.name.includes('bark');
+          const m = new THREE.Mesh(o.geometry, isBark ? M.bark : M.twig);
+          m.castShadow = true; m.receiveShadow = true; grp.add(m);
+        }
         grp.position.set(t.x, t.y, t.z); grp.rotation.y = t.rot; grp.scale.setScalar(t.s);
         this.scene.add(grp); grp.updateMatrixWorld(true);
-        this.trimeshFrom(bark, b.matrixWorld, t.y + 3.2, { kind: 'tree', surface: 'wood' });
-      } else byT[t.t].push(t);
-      // simple trunk collider for every tree (covers trunk above 3 m for hero trees too)
-      const r = TREE_R0[t.t] * t.s * 0.82;
-      this.fixed(R.ColliderDesc.cylinder(4, r).setTranslation(t.x, t.y + 4, t.z), { kind: 'tree', surface: 'wood' });
+        const bark = grp.children.find((c, i) => ms[i].name.includes('bark'));
+        this.trimesh(bark.geometry, bark.matrixWorld, { kind: 'tree', surface: 'wood' }, t.y + 2.5);
+        // scanned pine roots spreading from the base
+        const rv = roots[Math.floor(rnd() * roots.length)];
+        const rs = r0 / 0.32;
+        for (let k = 0; k < 2; k++) {
+          const rm = this.place(rv, null, new THREE.Vector3(t.x, t.y - 0.05, t.z), t.rot + k * Math.PI * 0.9 + rnd(), new THREE.Vector3(rs, rs * (0.9 + rnd() * 0.3), rs));
+          this.trimesh(rv.geo, rm.matrixWorld, { kind: 'root', surface: 'wood' });
+        }
+      } else (byT[t.t] = byT[t.t] || []).push(t);
+      this.fixed(R.ColliderDesc.cylinder(4, r0 * 0.95).setTranslation(t.x, t.y + 4, t.z), { kind: 'tree', surface: 'wood' });
     }
-    // background trees: LOD1 instanced
-    byT.forEach((list, ti) => {
-      if (!list.length) return;
-      const g = assets.models[`tree_${ti}_lod1`].scene;
-      const bark = firstMesh(g, (m) => m.name.includes('bark')), leaves = firstMesh(g, (m) => m.name.includes('leaves'));
-      const ib = new THREE.InstancedMesh(bark.geometry, M.bark, list.length), il = new THREE.InstancedMesh(leaves.geometry, M.leaves, list.length);
-      list.forEach((t, i) => {
-        q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.rot); sc.setScalar(t.s); p.set(t.x, t.y, t.z);
-        tmp.compose(p, q, sc); ib.setMatrixAt(i, tmp); il.setMatrixAt(i, tmp);
-      });
-      for (const m of [ib, il]) { m.castShadow = true; m.receiveShadow = true; m.computeBoundingSphere(); this.scene.add(m); }
+    for (const [key, list] of Object.entries(byT)) {
+      for (const o of meshes(assets.models[key + '_lod1'].scene)) {
+        const im = new THREE.InstancedMesh(o.geometry, o.name.includes('bark') ? M.barkPlain : M.twig, list.length);
+        list.forEach((t, i) => { q.setFromAxisAngle(UP, t.rot); sc.setScalar(t.s); p.set(t.x, t.y, t.z); mtx.compose(p, q, sc); im.setMatrixAt(i, mtx); });
+        im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
+      }
+    }
+    // understory saplings (very visible at robot height)
+    const sap = [];
+    for (let i = 0; i < 900 && sap.length < 140 * this.ctx.tier.fernDensity + 30; i++) {
+      const x = (rnd() - 0.5) * 84, z = (rnd() - 0.5) * 84;
+      if (!this.okSpot(x, z, 1.4) || Math.hypot(x - START.x, z - START.z) < 6) continue;
+      sap.push([x, z, 0.5 + rnd() * 0.9, Math.floor(rnd() * 3)]);
+    }
+    SAPLINGS.forEach((key, k) => {
+      const list = sap.filter((s) => s[3] === k);
+      for (const o of meshes(assets.models[key].scene)) {
+        const im = new THREE.InstancedMesh(o.geometry, o.name.includes('bark') ? M.barkPlain : M.twig, list.length);
+        list.forEach(([x, z, s], i) => { q.setFromAxisAngle(UP, rnd() * 6.28); sc.setScalar(s); p.set(x, this.terrain.heightAt(x, z) - 0.02, z); mtx.compose(p, q, sc); im.setMatrixAt(i, mtx); });
+        im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
+      }
+      for (const [x, z, s] of list) if (s > 0.9) this.fixed(R.ColliderDesc.cylinder(0.4 * s, 0.03).setTranslation(x, this.terrain.heightAt(x, z) + 0.4 * s, z), { kind: 'tree', surface: 'wood' });
     });
   }
 
   // ---------------------------------------------------------------- rocks
   buildRocks() {
-    const { assets } = this.ctx, M = assets.mats, R = this.ctx.RAPIER;
-    this.rocks = [];
-    const place = (x, z, radius, squash, seed, collide = true) => {
-      const ti = seed % 5;
-      const src = firstMesh(assets.models[`rock_${ti}`].scene);
-      src.geometry.computeBoundingBox();
-      const bb = src.geometry.boundingBox; const w = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z);
-      const s = (radius * 2) / w;
-      const m = new THREE.Mesh(src.geometry, M.rock);
-      const y = this.terrain.heightAt(x, z) - radius * 0.18;
-      m.position.set(x, y, z); m.rotation.y = seed * 1.7; m.scale.set(s, s * squash * 1.35, s);
-      m.castShadow = true; m.receiveShadow = true; this.scene.add(m); m.updateMatrixWorld(true);
-      if (collide) {
-        const pos = src.geometry.attributes.position; const pts = new Float32Array(pos.count * 3); const v = new THREE.Vector3();
-        for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld); pts.set([v.x, v.y, v.z], i * 3); }
-        const d = R.ColliderDesc.convexHull(pts);
-        if (d) this.fixed(d, { kind: 'rock', surface: 'rock' });
+    const rockVars = [...this.variants('rock_moss_set_01'), ...this.variants('rock_moss_set_02')];
+    const boulder = this.variants('boulder_01')[0];
+    BOULDERS.forEach(([x, z, r, squash, seed], i) => {
+      const v = r > 1.25 ? boulder : rockVars[seed % rockVars.length];
+      const w = Math.max(v.size.x, v.size.z);
+      const s = (r * 2) / w;
+      const y = this.terrain.heightAt(x, z) - 0.06 * r;
+      const m = this.place(v, null, new THREE.Vector3(x, y, z), seed * 1.7, new THREE.Vector3(s, s * squash * 1.1, s));
+      this.hull(v.geo, m.matrixWorld, { kind: 'rock', surface: 'rock' });
+      this.rocks.push({ x, z, r, top: y + v.size.y * s * squash * 1.1, mesh: m });
+    });
+    // scattered stones (instanced)
+    const small = [...this.variants('rock_07'), ...this.variants('rock_09'), ...this.variants('stone_01')];
+    const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), sv = new THREE.Vector3(), p = new THREE.Vector3(), e = new THREE.Euler();
+    small.forEach((v) => {
+      const items = [];
+      for (let i = 0; i < 700 && items.length < 70; i++) {
+        const x = (rnd() - 0.5) * 80, z = (rnd() - 0.5) * 80;
+        const near = distToPolyline(x, z, STREAM).d < 3.2;
+        if (!near && rnd() < 0.55) continue;
+        if (Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH3).d) < 0.5) continue;
+        items.push([x, z, 0.6 + rnd() * (near ? 2.2 : 1.4)]);
       }
-      this.rocks.push({ x, z, r: radius, top: y + (bb.max.y) * s * squash * 1.35, mesh: m });
-      return m;
-    };
-    for (const [x, z, r, sq, seed] of BOULDERS) place(x, z, r, sq, seed);
-    // scattered stones (instanced, colliders only for the bigger ones)
-    const geo = firstMesh(assets.models.rock_2.scene).geometry;
-    geo.computeBoundingBox();
-    const w0 = geo.boundingBox.max.x - geo.boundingBox.min.x;
-    const N = 260, im = new THREE.InstancedMesh(geo, M.rock, N);
-    const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), e = new THREE.Euler();
-    let k = 0;
-    for (let i = 0; i < 2000 && k < N; i++) {
-      const x = (rnd() - 0.5) * 80, z = (rnd() - 0.5) * 80;
-      const nearStream = distToPolyline(x, z, STREAM).d < 3;
-      if (!nearStream && rnd() < 0.6) continue;
-      if (Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH3).d) < 0.8) continue;
-      const r = (nearStream ? 0.08 + rnd() * 0.2 : 0.05 + rnd() * 0.16);
-      const sc = (r * 2) / w0;
-      p.set(x, this.terrain.heightAt(x, z) - r * 0.25, z); e.set(rnd() * 0.4, rnd() * 6.28, rnd() * 0.4); q.setFromEuler(e); s.set(sc, sc * (0.5 + rnd() * 0.4), sc);
-      mtx.compose(p, q, s); im.setMatrixAt(k++, mtx);
-      if (r > 0.13) this.fixed(R.ColliderDesc.ball(r * 0.7).setTranslation(x, p.y + r * 0.2, z), { kind: 'rock', surface: 'rock' });
+      const im = new THREE.InstancedMesh(v.geo, v.mat, items.length);
+      items.forEach(([x, z, s], i) => {
+        p.set(x, this.terrain.heightAt(x, z) - v.size.y * s * 0.25, z); e.set((rnd() - 0.5) * 0.4, rnd() * 6.28, (rnd() - 0.5) * 0.4); q.setFromEuler(e); sv.setScalar(s);
+        mtx.compose(p, q, sv); im.setMatrixAt(i, mtx);
+        if (v.size.x * s > 0.22) this.fixed(this.ctx.RAPIER.ColliderDesc.ball(v.size.y * s * 0.45).setTranslation(x, p.y + v.size.y * s * 0.4, z), { kind: 'rock', surface: 'rock' });
+      });
+      im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
+    });
+  }
+
+  buildRockFaces() {
+    const faces = [...this.variants('rock_face_01'), ...this.variants('rock_face_02')];
+    const spots = [];
+    // a broken rocky ridge along the north and east edges, plus a few around the outcrop
+    for (let i = 0; i < 18; i++) { const x = -38 + i * 4.4 + (rnd() - 0.5) * 2, z = -40 + (rnd() - 0.5) * 3; spots.push([x, z, 1.2 + rnd() * 0.8]); }
+    for (let i = 0; i < 10; i++) { const z = -30 + i * 6 + (rnd() - 0.5) * 2; spots.push([40 + (rnd() - 0.5) * 3, z, 1.0 + rnd() * 0.8]); }
+    for (let i = 0; i < 5; i++) { const a = 0.6 + i * 1.1; spots.push([OUTCROP.x + Math.cos(a) * 8.5, OUTCROP.z + Math.sin(a) * 8.5, 0.6 + rnd() * 0.3]); }
+    for (const [x, z, s] of spots) {
+      if (this.terrain.isWater(x, z) || Math.hypot(x - PATH3[PATH3.length - 1][0], z - PATH3[PATH3.length - 1][1]) < 4) continue;
+      const v = faces[Math.floor(rnd() * faces.length)];
+      const m = this.place(v, null, new THREE.Vector3(x, this.terrain.heightAt(x, z) - 0.4 * s, z), rnd() * 6.28, s);
+      this.hull(v.geo, m.matrixWorld, { kind: 'rock', surface: 'rock' });
     }
-    im.count = k; im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
   }
 
   // ---------------------------------------------------------------- logs & stumps
   buildLogsStumps() {
     const { assets } = this.ctx, M = assets.mats, R = this.ctx.RAPIER;
-    const names = ['log_bridge', 'log_hollow', 'log_small', 'log_small'];
-    this.logs = [];
+    const trunk1 = this.variants('dead_tree_trunk')[0], trunk2 = this.variants('dead_tree_trunk_02')[0];
     LOGS.forEach(([x1, z1, x2, z2, r, hollow], i) => {
-      const g = assets.models[names[i]].scene;
-      const grp = new THREE.Group();
-      for (const m of meshes(g)) {
-        const mm = new THREE.Mesh(m.geometry, m.material?.name === 'Wood' ? M.wood : M.bark);
-        mm.castShadow = mm.receiveShadow = true; grp.add(mm);
+      const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2, len = Math.hypot(x2 - x1, z2 - z1);
+      const yaw = -Math.atan2(z2 - z1, x2 - x1);
+      if (hollow) {
+        const g = assets.models.log_hollow.scene; const grp = new THREE.Group();
+        for (const o of meshes(g)) { const mm = new THREE.Mesh(o.geometry, M.bark); mm.castShadow = mm.receiveShadow = true; grp.add(mm); }
+        const y = Math.max(this.terrain.heightAt(x1, z1), this.terrain.heightAt(x2, z2)) + r * 0.7;
+        grp.position.set(cx, y, cz); grp.rotation.y = yaw; grp.scale.set(len / 5.2, r / 0.36, r / 0.36);
+        this.scene.add(grp); grp.updateMatrixWorld(true);
+        grp.children.forEach((c) => this.trimesh(c.geometry, c.matrixWorld, { kind: 'log', surface: 'wood' }));
+        this.logs.push({ x1, z1, x2, z2, r, y, group: grp, hollow });
+        return;
       }
-      const src = firstMesh(g); src.geometry.computeBoundingBox();
-      const L0 = src.geometry.boundingBox.max.x - src.geometry.boundingBox.min.x;
-      const len = Math.hypot(x2 - x1, z2 - z1);
-      const cx = (x1 + x2) / 2, cz = (z1 + z2) / 2;
-      const y1 = this.terrain.heightAt(x1, z1), y2 = this.terrain.heightAt(x2, z2);
-      const yc = Math.max((y1 + y2) / 2, i === 0 ? WORLD.waterY + 0.05 : -10) + r * 0.72;
-      grp.position.set(cx, yc, cz);
-      grp.rotation.y = -Math.atan2(z2 - z1, x2 - x1);
-      grp.rotation.z = Math.atan2(y2 - y1, len) * 0.6;
-      grp.scale.set(len / L0, r / 0.3 * (hollow ? 0.3 / 0.36 * 1.0 : 1), r / 0.3 * (hollow ? 0.3 / 0.36 : 1));
-      this.scene.add(grp); grp.updateMatrixWorld(true);
-      if (hollow) grp.children.forEach((c) => this.trimeshFrom(c, c.matrixWorld, Infinity, { kind: 'log', surface: 'wood' }));
-      else {
-        const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, grp.rotation.y, grp.rotation.z));
-        const qa = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
-        q.multiply(qa);
-        this.fixed(R.ColliderDesc.capsule(len / 2 - r, r * 0.95).setTranslation(cx, yc, cz).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }), { kind: 'log', surface: 'wood' });
-      }
-      this.logs.push({ x1, z1, x2, z2, r, y: yc, group: grp, hollow });
+      const v = i === 0 ? trunk1 : trunk2;
+      const along = v.size.x >= v.size.z ? 'x' : 'z';
+      const L0 = along === 'x' ? v.size.x : v.size.z;
+      const s = i === 0 ? 1.45 : (len / L0) * 0.9;
+      const yb = i === 0 ? WORLD.waterY + 0.02 : Math.min(this.terrain.heightAt(x1, z1), this.terrain.heightAt(x2, z2)) - 0.05;
+      const m = this.place(v, null, new THREE.Vector3(cx, yb, cz), yaw + (along === 'z' ? Math.PI / 2 : 0), s);
+      this.trimesh(v.geo, m.matrixWorld, { kind: 'log', surface: 'wood' });
+      this.logs.push({ x1, z1, x2, z2, r: v.size.y * s / 2, y: yb + v.size.y * s / 2, mesh: m });
     });
-    this.stumps = [];
+    const sv = [this.variants('tree_stump_01')[0], this.variants('tree_stump_02')[0]];
     STUMPS.forEach(([x, z, r, h], i) => {
-      const g = assets.models[`stump_${i}`].scene;
-      const grp = new THREE.Group();
-      for (const m of meshes(g)) {
-        const mm = new THREE.Mesh(m.geometry, m.material?.name === 'Wood' ? M.wood : M.bark);
-        mm.castShadow = mm.receiveShadow = true; grp.add(mm);
-      }
-      const y = this.terrain.heightAt(x, z) - 0.05;
-      grp.position.set(x, y, z); grp.rotation.y = i * 2.1;
-      this.scene.add(grp); grp.updateMatrixWorld(true);
-      grp.children.forEach((c) => this.trimeshFrom(c, c.matrixWorld, Infinity, { kind: 'stump', surface: 'wood' }));
-      const bb = new THREE.Box3().setFromObject(grp);
-      this.stumps.push({ x, z, r, top: bb.max.y });
+      const v = sv[i % 2];
+      const s = i === 0 ? 0.9 / v.size.y : Math.max(0.55, (r * 2.6) / Math.max(v.size.x, v.size.z));
+      const y = this.terrain.heightAt(x, z) - 0.04;
+      const m = this.place(v, null, new THREE.Vector3(x, y, z), i * 2.1, s);
+      this.trimesh(v.geo, m.matrixWorld, { kind: 'stump', surface: 'wood' });
+      this.stumps.push({ x, z, r, top: y + v.size.y * s });
     });
   }
 
-  // ---------------------------------------------------------------- outcrop with tunnel
   buildOutcrop() {
     const { assets } = this.ctx, M = assets.mats;
-    const src = firstMesh(assets.models.outcrop.scene);
+    const src = meshes(assets.models.outcrop.scene)[0];
     const m = new THREE.Mesh(src.geometry, M.rockOutcrop);
     m.position.set(OUTCROP.x, OUTCROP.base - 0.05, OUTCROP.z); m.rotation.y = OUTCROP.yaw;
     m.castShadow = true; m.receiveShadow = true; this.scene.add(m); m.updateMatrixWorld(true);
-    this.trimeshFrom(src, m.matrixWorld, Infinity, { kind: 'outcrop', surface: 'rock' });
-    this.outcrop = m;
-    const bb = new THREE.Box3().setFromObject(m); this.outcropTop = bb.max.y;
+    this.trimesh(src.geometry, m.matrixWorld, { kind: 'outcrop', surface: 'rock' });
+    this.outcrop = m; this.outcropTop = new THREE.Box3().setFromObject(m).max.y;
   }
 
   // ---------------------------------------------------------------- water + waterfall
   buildWater() {
     const T = this.terrain, { assets } = this.ctx;
     const N = T.res + 1, wy = T.waterY;
-    const pos = [], depth = [], idx = [];
-    const map = new Int32Array(N * N).fill(-1);
+    const pos = [], depth = [], idx = [], map = new Int32Array(N * N).fill(-1);
     const vert = (i, j) => {
-      const k = j * N + i;
-      if (map[k] >= 0) return map[k];
-      const x = -T.half + i * T.cell, z = -T.half + j * T.cell;
-      map[k] = pos.length / 3; pos.push(x, wy, z); depth.push(Math.max(0, wy - T.h[k]));
-      return map[k];
+      const k = j * N + i; if (map[k] >= 0) return map[k];
+      map[k] = pos.length / 3; pos.push(-T.half + i * T.cell, wy, -T.half + j * T.cell); depth.push(Math.max(0, wy - T.h[k])); return map[k];
     };
     for (let j = 0; j < T.res; j++) for (let i = 0; i < T.res; i++) {
       const hs = [T.h[j * N + i], T.h[j * N + i + 1], T.h[(j + 1) * N + i], T.h[(j + 1) * N + i + 1]];
@@ -250,220 +283,160 @@ export class World {
       idx.push(a, c, b, b, c, d);
     }
     const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-    geo.setAttribute('depth', new THREE.Float32BufferAttribute(depth, 1));
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('depth', new THREE.Float32BufferAttribute(depth, 1));
     geo.setIndex(idx); geo.computeVertexNormals();
     const u = { uTime: { value: 0 }, tN: { value: assets.tex.water } };
-    const mat = new THREE.MeshPhysicalMaterial({ color: 0x0e2a22, roughness: 0.04, metalness: 0, transparent: true, opacity: 1,
-      envMapIntensity: 1.0, depthWrite: false, normalMap: assets.tex.water, normalScale: new THREE.Vector2(0.35, 0.35), specularIntensity: 1 });
+    const mat = new THREE.MeshPhysicalMaterial({ color: 0x15261d, roughness: 0.03, metalness: 0, transparent: true, envMapIntensity: 1.1, depthWrite: false,
+      normalMap: assets.tex.water, specularIntensity: 1 });
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, u);
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float depth; varying float vDepth; varying vec3 vWP;')
         .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvDepth = depth; vWP = (modelMatrix * vec4(transformed,1.0)).xyz;');
       sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uTime; uniform sampler2D tN; varying float vDepth; varying vec3 vWP;')
         .replace('#include <normal_fragment_maps>', `
-          vec2 fl = vec2(0.06, 0.02) * uTime;
-          vec3 n1 = texture2D(tN, vWP.xz * 0.35 + fl).xyz * 2.0 - 1.0;
-          vec3 n2 = texture2D(tN, vWP.xz * 0.9 - fl * 1.7 + 0.37).xyz * 2.0 - 1.0;
-          vec3 nn = normalize(vec3((n1.xy + n2.xy) * 0.32, 1.0));
-          vec3 nW = normalize(vec3(nn.x, nn.z, nn.y));
-          normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);`)
+          vec2 fl = vec2(0.05, 0.02) * uTime;
+          vec3 n1 = texture2D(tN, vWP.xz * 0.45 + fl).xyz * 2.0 - 1.0;
+          vec3 n2 = texture2D(tN, vWP.xz * 1.3 - fl * 1.7 + 0.37).xyz * 2.0 - 1.0;
+          vec3 nn = normalize(vec3((n1.xy + n2.xy) * 0.18, 1.0));
+          normal = normalize((viewMatrix * vec4(nn.x, nn.z, nn.y, 0.0)).xyz);`)
         .replace('#include <opaque_fragment>', `
-          float fres = pow(1.0 - clamp(dot(normalize(vViewPosition), -normal) * -1.0, 0.0, 1.0), 3.0);
-          float a = clamp(smoothstep(0.0, 0.55, vDepth) * 0.78 + 0.12 + fres * 0.3, 0.0, 0.96);
-          float edgeFoam = smoothstep(0.06, 0.0, vDepth) * 0.6;
-          outgoingLight = mix(outgoingLight, vec3(0.75, 0.8, 0.78), edgeFoam);
-          gl_FragColor = vec4(outgoingLight, max(a, edgeFoam));`);
+          float fres = pow(1.0 - clamp(abs(dot(normalize(vViewPosition), normal)), 0.0, 1.0), 4.0);
+          float a = clamp(smoothstep(0.0, 0.7, vDepth) * 0.72 + 0.08 + fres * 0.5, 0.0, 0.97);
+          gl_FragColor = vec4(outgoingLight, a);`);
     };
-    this.water = new THREE.Mesh(geo, mat); this.water.renderOrder = 2; this.water.receiveShadow = true;
-    this.scene.add(this.water);
+    this.water = new THREE.Mesh(geo, mat); this.water.renderOrder = 2; this.water.receiveShadow = true; this.scene.add(this.water);
     this.waterU = u;
-    // waterfall curtain from the outcrop lip into the pond
     const lip = new THREE.Vector3(OUTCROP.x - 3.5, this.outcropTop - 0.6, OUTCROP.z + 5.2);
-    const bottomY = WORLD.waterY;
-    this.waterfallPos = new THREE.Vector3(lip.x, bottomY, lip.z + 1.0);
-    const fg = new THREE.PlaneGeometry(1.6, 1, 8, 24);
-    const fp = fg.attributes.position;
+    this.waterfallPos = new THREE.Vector3(lip.x, wy, lip.z + 1.0);
+    const fg = new THREE.PlaneGeometry(1.6, 1, 8, 24), fp = fg.attributes.position;
     for (let i = 0; i < fp.count; i++) {
-      const x = fp.getX(i), t = fp.getY(i) + 0.5; // t: 1 top -> 0 bottom
-      const fall = 1 - t;
-      const y = lip.y + (bottomY - lip.y) * fall;
-      const z = lip.z + 0.35 * Math.sqrt(fall) + 0.6 * fall * fall;
-      fp.setXYZ(i, lip.x + x * (1 + fall * 0.35), y, z);
+      const x = fp.getX(i), t = fp.getY(i) + 0.5, fall = 1 - t;
+      fp.setXYZ(i, lip.x + x * (1 + fall * 0.35), lip.y + (wy - lip.y) * fall, lip.z + 0.35 * Math.sqrt(fall) + 0.6 * fall * fall);
     }
-    fg.computeVertexNormals();
     const fu = { uTime: { value: 0 } };
-    const fmat = new THREE.ShaderMaterial({
-      uniforms: fu, transparent: true, depthWrite: false, side: THREE.DoubleSide,
+    const fmat = new THREE.ShaderMaterial({ uniforms: fu, transparent: true, depthWrite: false, side: THREE.DoubleSide,
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
       fragmentShader: `uniform float uTime; varying vec2 vUv;
         float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233))) * 43758.5453); }
         float n(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f); return mix(mix(h(i),h(i+vec2(1,0)),f.x), mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x), f.y); }
-        void main(){
-          vec2 p = vec2(vUv.x * 9.0, vUv.y * 3.0 + uTime * 2.4);
-          float s = n(p) * 0.6 + n(p * 2.3 + 4.0) * 0.4;
-          float streak = smoothstep(0.35, 0.85, s);
+        void main(){ vec2 p = vec2(vUv.x * 9.0, vUv.y * 3.0 + uTime * 2.4);
+          float s = n(p) * 0.6 + n(p * 2.3 + 4.0) * 0.4; float streak = smoothstep(0.35, 0.85, s);
           float edge = smoothstep(0.0, 0.18, vUv.x) * smoothstep(1.0, 0.82, vUv.x);
-          float a = (0.35 + 0.6 * streak) * edge * (0.6 + 0.4 * vUv.y);
-          vec3 c = mix(vec3(0.55,0.65,0.66), vec3(0.95,0.98,1.0), streak);
-          gl_FragColor = vec4(c, a);
+          gl_FragColor = vec4(mix(vec3(0.5,0.58,0.56), vec3(0.92,0.95,0.95), streak), (0.3 + 0.6 * streak) * edge * (0.6 + 0.4 * vUv.y));
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
         }` });
-    const fall = new THREE.Mesh(fg, fmat); fall.renderOrder = 3; this.scene.add(fall);
-    this.fallU = fu;
+    const fall = new THREE.Mesh(fg, fmat); fall.renderOrder = 3; this.scene.add(fall); this.fallU = fu;
   }
 
-  // ---------------------------------------------------------------- grass
+  // ---------------------------------------------------------------- grass: scanned clump cards
   buildGrass() {
-    const tier = this.ctx.tier;
-    const geo = grassClumpGeometry();
-    const mat = patchMaterial(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0, side: THREE.DoubleSide, envMapIntensity: 0.4 }), {
-      ao: false,
-      wind: `float flex = uv.y * uv.y;
-             transformed += windOffset(wp0.xyz, 0.035 * flex, wp0.x * 2.1 + wp0.z * 1.3);
-             vec3 toP = wp0.xyz - uPlayer;
-             float pd = length(toP.xz);
-             float push = smoothstep(0.32, 0.05, pd) * flex;
-             transformed.xz += normalize(toP.xz + 1e-4) * push * 0.08;
-             transformed.y -= push * 0.04;` });
-    const prevCompile = mat.onBeforeCompile;
+    const tier = this.ctx.tier, M = this.ctx.assets.mats;
     this.grassPlayer = { value: new THREE.Vector3(0, -99, 0) };
-    mat.onBeforeCompile = (sh, r) => {
+    const prev = M.grass.onBeforeCompile;
+    M.grass.onBeforeCompile = (sh, r) => {
       sh.uniforms.uPlayer = this.grassPlayer;
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec3 uPlayer;');
-      prevCompile(sh, r);
-      // translucent tips: brighten back-lit blades a little
-      sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', 'outgoingLight += diffuseColor.rgb * 0.06; \n#include <opaque_fragment>');
+      prev(sh, r);
     };
-    mat.customProgramCacheKey = () => 'grass';
-    const CH = 8, density = 34 * tier.grassDensity;
-    const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-    const col = new THREE.Color();
+    const geos = GRASS_SPRITES.map((spr) => grassCardGeometry(spr));
+    const CH = 8, density = 7 * tier.grassDensity;
+    const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
     for (let cz = -40; cz < 40; cz += CH) for (let cx = -40; cx < 40; cx += CH) {
-      const items = [];
+      const items = [[], [], [], [], []];
       const n = Math.floor(CH * CH * density);
       for (let i = 0; i < n; i++) {
         const x = cx + rnd() * CH, z = cz + rnd() * CH;
         const g = this.terrain.grassAt(x, z);
-        if (rnd() > g * g * 1.2) continue;
-        if (this.terrain.isWater(x, z)) continue;
-        items.push([x, z, g]);
+        if (rnd() > g * g * 1.3 || this.terrain.isWater(x, z)) continue;
+        items[Math.floor(rnd() * 5)].push([x, z, g]);
       }
-      if (!items.length) continue;
-      const im = new THREE.InstancedMesh(geo, mat, items.length);
-      items.forEach(([x, z, g], i) => {
-        q.setFromAxisAngle(up, rnd() * Math.PI * 2);
-        const sc = 0.55 + rnd() * 0.6 + g * 0.35;
-        s.set(sc, sc * (0.7 + rnd() * 0.6), sc);
-        p.set(x, this.terrain.heightAt(x, z) - 0.005, z);
-        mtx.compose(p, q, s); im.setMatrixAt(i, mtx);
-        col.setHSL(0.2 + rnd() * 0.06, 0.45 + rnd() * 0.2, 0.75 + rnd() * 0.35); im.setColorAt(i, col);
-      });
-      im.receiveShadow = true; im.castShadow = false;
-      im.frustumCulled = true; im.computeBoundingSphere();
-      im.userData.center = new THREE.Vector3(cx + CH / 2, 0, cz + CH / 2); im.userData.full = items.length;
-      this.scene.add(im); this.grassChunks.push(im);
-    }
-  }
-
-  // ---------------------------------------------------------------- ferns / mushrooms
-  buildFerns() {
-    const tier = this.ctx.tier, M = this.ctx.assets.mats;
-    // a fern = 6 fronds radiating from the center, each a bent card
-    const g = new THREE.BufferGeometry();
-    const pos = [], uv = [], idx = [];
-    for (let f = 0; f < 7; f++) {
-      const a = f / 7 * Math.PI * 2 + (f % 2) * 0.3;
-      const L = 0.55 + (f % 3) * 0.1, W = 0.28;
-      const base = pos.length / 3;
-      for (let k = 0; k <= 6; k++) {
-        const t = k / 6;
-        const r = t * L, y = Math.sin(t * Math.PI * 0.7) * 0.32 * L - t * t * 0.12;
-        for (const sd of [-1, 1]) {
-          const px = Math.cos(a) * r - Math.sin(a) * sd * W * 0.5, pz = Math.sin(a) * r + Math.cos(a) * sd * W * 0.5;
-          pos.push(px, y + Math.abs(sd) * 0.0, pz); uv.push(sd < 0 ? 0 : 1, t);
-        }
-      }
-      for (let k = 0; k < 6; k++) { const o = base + k * 2; idx.push(o, o + 1, o + 2, o + 1, o + 3, o + 2); }
-    }
-    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-    g.setIndex(idx); g.computeVertexNormals();
-    const spots = [];
-    for (const t of this.treeSpots) {
-      if (Math.max(Math.abs(t.x), Math.abs(t.z)) > 42) continue;
-      const n = Math.round((t.hero ? 7 : 3) * tier.fernDensity);
-      for (let i = 0; i < n; i++) {
-        const a = rnd() * 6.28, d = 1.4 + rnd() * 2.4;
-        const x = t.x + Math.cos(a) * d, z = t.z + Math.sin(a) * d;
-        if (distToPolyline(x, z, PATH).d < 1 || this.terrain.isWater(x, z)) continue;
-        spots.push([x, z, 0.5 + rnd() * 0.7]);
-      }
-    }
-    const im = new THREE.InstancedMesh(g, M.fern, spots.length);
-    const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-    spots.forEach(([x, z, sc], i) => {
-      q.setFromEuler(new THREE.Euler(0, rnd() * 6.28, 0)); s.setScalar(sc); p.set(x, this.terrain.heightAt(x, z) - 0.02, z);
-      mtx.compose(p, q, s); im.setMatrixAt(i, mtx);
-    });
-    im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
-    this.ferns = spots;
-  }
-
-  buildMushrooms() {
-    const { assets } = this.ctx, M = assets.mats;
-    this.mushrooms = [];
-    const spots = [];
-    for (const l of LOGS) for (let i = 0; i < 6; i++) { const t = rnd(); spots.push([l[0] + (l[2] - l[0]) * t + (rnd() - 0.5) * 1.2, l[1] + (l[3] - l[1]) * t + (rnd() - 0.5) * 1.2]); }
-    for (const t of this.treeSpots.filter((t) => t.hero)) for (let i = 0; i < 4; i++) { const a = rnd() * 6.28; spots.push([t.x + Math.cos(a) * (1.2 + rnd()), t.z + Math.sin(a) * (1.2 + rnd())]); }
-    for (let k = 0; k < 3; k++) {
-      const src = assets.models[`mushroom_${k}`].scene;
-      const ms = meshes(src);
-      const list = spots.filter((_, i) => i % 3 === k);
-      for (const m of ms) {
-        const mat = (m.material?.name || '').includes('Cap') ? M.mushCap : M.mushStem;
-        const im = new THREE.InstancedMesh(m.geometry, mat, list.length * 3);
-        let c = 0;
-        const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-        const r2 = mulberry32(k * 100 + 5);
-        list.forEach(([x, z]) => {
-          for (let j = 0; j < 3; j++) {
-            const xx = x + (r2() - 0.5) * 0.25, zz = z + (r2() - 0.5) * 0.25;
-            q.setFromEuler(new THREE.Euler((r2() - 0.5) * 0.3, r2() * 6, (r2() - 0.5) * 0.3)); s.setScalar(0.6 + r2() * 0.8);
-            p.set(xx, this.terrain.heightAt(xx, zz) - 0.01, zz); mtx.compose(p, q, s); im.setMatrixAt(c++, mtx);
-            if (j === 0) this.mushrooms.push(new THREE.Vector3(xx, p.y + 0.1, zz));
-          }
+      items.forEach((list, k) => {
+        if (!list.length) return;
+        const im = new THREE.InstancedMesh(geos[k], M.grass, list.length);
+        list.forEach(([x, z, g], i) => {
+          q.setFromAxisAngle(UP, rnd() * 6.28); const sc = 0.12 + rnd() * 0.16 + g * 0.08;
+          s.set(sc, sc * (0.8 + rnd() * 0.5), sc); p.set(x, this.terrain.heightAt(x, z) - 0.01, z);
+          mtx.compose(p, q, s); im.setMatrixAt(i, mtx);
         });
-        im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
-      }
+        im.receiveShadow = true; im.castShadow = false; im.computeBoundingSphere();
+        im.userData.center = new THREE.Vector3(cx + CH / 2, 0, cz + CH / 2); im.userData.full = list.length;
+        this.scene.add(im); this.grassChunks.push(im);
+      });
     }
   }
 
-  // ---------------------------------------------------------------- light shafts in the clearing
+  // ---------------------------------------------------------------- ferns + ground plants + debris (scanned)
+  buildPlants() {
+    const tier = this.ctx.tier;
+    const windMats = new Map();
+    const windy = (mat, amt) => {
+      if (windMats.has(mat)) return windMats.get(mat);
+      const m = mat.clone();
+      patchMaterial(m, { ao: false, wind: `transformed += windOffset(wp0.xyz, ${amt.toFixed(3)} * smoothstep(0.0, 0.6, position.y), wp0.x + wp0.z);` });
+      windMats.set(mat, m); return m;
+    };
+    const scatter = (key, count, rule, scaleR, wind = 0, cast = true) => {
+      const vars = this.variants(key);
+      const per = vars.map(() => []);
+      let tries = 0, placed = 0;
+      while (placed < count && tries++ < count * 30) {
+        const r = rule(); if (!r) continue;
+        const [x, z] = r;
+        per[Math.floor(rnd() * vars.length)].push([x, z, scaleR[0] + rnd() * (scaleR[1] - scaleR[0])]); placed++;
+      }
+      const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3(), e = new THREE.Euler();
+      vars.forEach((v, k) => {
+        const list = per[k]; if (!list.length) return;
+        const im = new THREE.InstancedMesh(v.geo, wind ? windy(v.mat, wind) : v.mat, list.length);
+        list.forEach(([x, z, sc], i) => {
+          const n = this.terrain.normalAt(x, z);
+          q.setFromUnitVectors(UP, n.lerp(UP, 0.5).normalize()).multiply(new THREE.Quaternion().setFromAxisAngle(UP, rnd() * 6.28));
+          s.setScalar(sc); p.set(x, this.terrain.heightAt(x, z) - 0.015, z); mtx.compose(p, q, s); im.setMatrixAt(i, mtx);
+        });
+        im.castShadow = cast; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
+      });
+    };
+    const k = tier.fernDensity;
+    const nearTree = (minD, maxD) => () => {
+      const t = this.treeSpots[Math.floor(rnd() * this.treeSpots.length)];
+      if (Math.max(Math.abs(t.x), Math.abs(t.z)) > 44) return null;
+      const a = rnd() * 6.28, d = minD + rnd() * (maxD - minD), x = t.x + Math.cos(a) * d, z = t.z + Math.sin(a) * d;
+      return this.okSpot(x, z, 0.9) ? [x, z] : null;
+    };
+    const anywhere = (clear = 0.8) => () => { const x = (rnd() - 0.5) * 86, z = (rnd() - 0.5) * 86; return this.okSpot(x, z, clear) ? [x, z] : null; };
+    const nearWater = () => { const i = Math.floor(rnd() * (STREAM.length - 1)), t = rnd(); const [ax, az] = STREAM[i], [bx, bz] = STREAM[i + 1];
+      const a = rnd() * 6.28, d = 1.8 + rnd() * 1.6; const x = ax + (bx - ax) * t + Math.cos(a) * d, z = az + (bz - az) * t + Math.sin(a) * d;
+      return this.okSpot(x, z, 0.6) ? [x, z] : null; };
+    const clearing = () => { const a = rnd() * 6.28, d = 1.5 + rnd() * 6; const x = START.x + Math.cos(a) * d, z = START.z - 1.5 + Math.sin(a) * d;
+      return distToPolyline(x, z, PATH).d > 0.7 && Math.hypot(x - START.x, z - START.z) > 1.2 ? [x, z] : null; };
+    scatter('fern_02', Math.round(420 * k), () => (rnd() < 0.7 ? nearTree(1.2, 4.5)() : nearWater()), [0.45, 0.9], 0.03);
+    scatter('nettle_plant', Math.round(260 * k), () => (rnd() < 0.5 ? nearWater() : anywhere(0.7)()), [0.9, 1.6], 0.02);
+    scatter('periwinkle_plant', Math.round(180 * k), () => (rnd() < 0.5 ? nearTree(0.8, 3)() : clearing()), [0.7, 1.2], 0.02);
+    scatter('dandelion_01', Math.round(160 * k), clearing, [0.8, 1.3], 0.01, false);
+    scatter('weed_plant_02', Math.round(200 * k), anywhere(0.5), [0.8, 1.4], 0.01, false);
+    scatter('shrub_03', Math.round(120 * k), () => (rnd() < 0.6 ? nearTree(1.5, 5)() : nearWater()), [1.0, 1.8], 0.03);
+    scatter('shrub_04', Math.round(40 * k), nearTree(2, 5), [0.9, 1.5], 0.02);
+    scatter('moss_01', Math.round(500 * k), () => (rnd() < 0.6 ? nearTree(0.4, 1.4)() : (() => { const r = this.rocks[Math.floor(rnd() * this.rocks.length)]; const a = rnd() * 6.28, d = r.r * (0.9 + rnd() * 0.4); return [r.x + Math.cos(a) * d, r.z + Math.sin(a) * d]; })()), [2, 4], 0, false);
+    scatter('dry_branches_medium_01', Math.round(90 * k), anywhere(0.6), [0.5, 1.0], 0, true);
+    scatter('root_cluster_02', Math.round(40 * k), nearTree(0.6, 2.2), [0.8, 1.3], 0, true);
+    scatter('single_root', Math.round(20 * k), nearTree(0.5, 1.5), [0.8, 1.2], 0, true);
+  }
+
   buildShafts() {
-    const mat = new THREE.ShaderMaterial({
-      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
       uniforms: { uTime: { value: 0 }, uI: { value: 1 } },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
       fragmentShader: `uniform float uTime, uI; varying vec2 vUv;
-        void main(){ float e = smoothstep(0.0,0.5,vUv.x)*smoothstep(1.0,0.5,vUv.x);
-          float v = smoothstep(0.0,0.35,vUv.y) * smoothstep(1.0,0.6,vUv.y);
-          float fl = 0.75 + 0.25*sin(uTime*0.4 + vUv.x*3.0);
-          gl_FragColor = vec4(vec3(1.0,0.93,0.75) * e * v * 0.05 * fl * uI, 1.0); }`,
-    });
+        void main(){ float e = smoothstep(0.0,0.5,vUv.x)*smoothstep(1.0,0.5,vUv.x); float v = smoothstep(0.0,0.35,vUv.y) * smoothstep(1.0,0.6,vUv.y);
+          float fl = 0.75 + 0.25*sin(uTime*0.4 + vUv.x*3.0); gl_FragColor = vec4(vec3(1.0,0.93,0.78) * e * v * 0.035 * fl * uI, 1.0); }` });
     this.shaftMat = mat;
     const sun = this.ctx.sunDir.clone().normalize();
-    for (let i = 0; i < 9; i++) {
-      const x = START.x + (rnd() - 0.5) * 12, z = START.z - 3 + (rnd() - 0.5) * 12;
-      const h = 14, w = 0.8 + rnd() * 1.6;
-      const g = new THREE.PlaneGeometry(w, h);
-      const m = new THREE.Mesh(g, mat);
-      const base = new THREE.Vector3(x, this.terrain.heightAt(x, z) + h / 2 * sun.y, z);
-      m.position.copy(base.clone().addScaledVector(sun, h / 2 * 0.5));
-      m.lookAt(m.position.clone().add(new THREE.Vector3(sun.z, 0, -sun.x)));
-      m.quaternion.multiply(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 1, 0)));
-      const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), sun);
-      m.quaternion.premultiply(q);
+    for (let i = 0; i < 7; i++) {
+      const x = START.x + (rnd() - 0.5) * 12, z = START.z - 3 + (rnd() - 0.5) * 12, h = 16, w = 0.8 + rnd() * 1.4;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+      m.position.set(x, this.terrain.heightAt(x, z), z).addScaledVector(sun, h * 0.5);
+      m.quaternion.setFromUnitVectors(UP, sun); m.rotateY(rnd() * 3);
       m.renderOrder = 4; this.scene.add(m);
     }
   }
@@ -472,51 +445,32 @@ export class World {
     WIND.time.value = time;
     if (this.waterU) this.waterU.uTime.value = time;
     if (this.fallU) this.fallU.uTime.value = time;
-    if (this.shaftMat) this.shaftMat.uniforms.uTime.value = time;
+    this.shaftMat.uniforms.uTime.value = time;
     if (playerPos) this.grassPlayer.value.copy(playerPos);
-    this.terrain.material.userData.uniforms.uTime.value = time;
-    // grass LOD: fewer blades with distance (instances are randomly ordered so a prefix is uniform)
     const R = this.ctx.tier.grassRadius;
     for (const im of this.grassChunks) {
       const d = Math.hypot(im.userData.center.x - camPos.x, im.userData.center.z - camPos.z);
-      const k = d < R * 0.5 ? 1 : d < R ? 1 - (d - R * 0.5) / (R * 0.5) * 0.75 : d < R * 1.6 ? 0.18 * (1 - (d - R) / (R * 0.6)) : 0;
-      im.count = Math.floor(im.userData.full * clamp(k, 0, 1));
-      im.visible = im.count > 0;
+      const k = d < R * 0.5 ? 1 : d < R ? 1 - (d - R * 0.5) / (R * 0.5) * 0.7 : d < R * 1.6 ? 0.25 * (1 - (d - R) / (R * 0.6)) : 0;
+      im.count = Math.floor(im.userData.full * clamp(k, 0, 1)); im.visible = im.count > 0;
     }
   }
 }
 
-function grassClumpGeometry() {
-  const pos = [], uv = [], col = [], idx = [];
-  const r = mulberry32(5);
-  const blades = 7, segs = 4;
-  for (let b = 0; b < blades; b++) {
-    const a = r() * Math.PI * 2, off = r() * 0.025;
-    const bx = Math.cos(a) * off, bz = Math.sin(a) * off;
-    const h = 0.07 + r() * 0.13, w = 0.006 + r() * 0.005;
-    const lean = 0.25 + r() * 0.5, la = r() * Math.PI * 2;
-    const base = pos.length / 3;
-    for (let s = 0; s <= segs; s++) {
-      const t = s / segs;
-      const bend = lean * t * t * h;
-      const cx = bx + Math.cos(la) * bend, cz = bz + Math.sin(la) * bend;
-      const ww = w * (1 - t * 0.9);
-      const px = -Math.sin(la) * ww, pz = Math.cos(la) * ww;
-      pos.push(cx - px, t * h, cz - pz, cx + px, t * h, cz + pz);
-      uv.push(0, t, 1, t);
-      const c0 = [0.035, 0.06, 0.012], c1 = [0.22, 0.3, 0.07], dry = [0.4, 0.36, 0.16];
-      const isDry = b % 5 === 0;
-      for (let k = 0; k < 2; k++) col.push(...c0.map((v, i) => v + ((isDry ? dry : c1)[i] - v) * Math.pow(t, 0.8)));
-    }
-    for (let s = 0; s < segs; s++) { const o = base + s * 2; idx.push(o, o + 1, o + 2, o + 1, o + 3, o + 2); }
+// three crossed vertical cards showing one scanned grass clump sprite
+function grassCardGeometry([x0, y0, x1, y1]) {
+  const aspect = (x1 - x0) / (y1 - y0);
+  const w = aspect, h = 1;
+  const pos = [], uv = [], idx = [];
+  for (let k = 0; k < 3; k++) {
+    const a = (k / 3) * Math.PI, c = Math.cos(a) * w / 2, s = Math.sin(a) * w / 2, b = pos.length / 3;
+    pos.push(-c, 0, -s, c, 0, s, c, h, s, -c, h, -s);
+    // atlas textures keep the image top at v=0, so v equals the image y coordinate
+    uv.push(x0, y1, x1, y1, x1, y0, x0, y0);
+    idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
   }
   const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setIndex(idx); g.computeVertexNormals();
-  // grass normals point mostly up for soft, even lighting
-  const n = g.attributes.normal;
-  for (let i = 0; i < n.count; i++) { const v = new THREE.Vector3(n.getX(i) * 0.35, 1, n.getZ(i) * 0.35).normalize(); n.setXYZ(i, v.x, v.y, v.z); }
+  const n = g.attributes.normal; for (let i = 0; i < n.count; i++) n.setXYZ(i, 0, 1, 0); // soft, even lighting like real grass
   return g;
 }

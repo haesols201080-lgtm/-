@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { makeNoise2D, fbm, smoothstep, clamp, lerp, distToPolyline } from './util.js';
 import { WORLD, PATH, PATH2, PATH3, STREAM, POND, START, OUTCROP } from './layout.js';
 import { SHADER_TRI } from './shaders.js';
+import { TERRAIN_SCALES } from './assets.js';
 
 const n2 = makeNoise2D(11), n3 = makeNoise2D(29), n4 = makeNoise2D(53);
 
@@ -105,7 +106,8 @@ export class Terrain {
       let moss = 0;
       for (const m of mossSources) { const d = Math.hypot(x - m.x, z - m.z); if (d < m.r) moss = Math.max(moss, smoothstep(m.r, m.r * 0.35, d)); }
       moss *= 0.5 + 0.5 * smoothstep(-0.2, 0.4, fbm(n3, x * 0.25, z * 0.25, 3));
-      const pebbles = wet;
+      const pebbles = smoothstep(0.55, 0.95, wet);
+      moss = Math.max(moss * 0.6, smoothstep(0.15, 0.6, wet) * (1 - pebbles));
       const dirt = Math.max(path, 0.25 * smoothstep(0.1, 0.5, fbm(n2, x * 0.11 + 7, z * 0.11, 3))) * (1 - pebbles);
       const litter = Math.max(0, 1 - dirt - pebbles - moss * 0.8);
       const sum = litter + dirt + pebbles + moss || 1;
@@ -158,7 +160,7 @@ export function makeTerrainMaterial(T) {
   const uniforms = {
     tAlb: { value: T.terrainAlb }, tNrm: { value: T.terrainNrm }, tOrm: { value: T.terrainOrm },
     tRockA: { value: T.rock.map }, tRockN: { value: T.rock.normal }, tRockO: { value: T.rock.orm },
-    uWet: { value: 0 }, uTime: { value: 0 },
+    uWet: { value: 0 }, uTime: { value: 0 }, uScales: { value: new THREE.Vector4(...TERRAIN_SCALES) },
   };
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (sh) => {
@@ -176,7 +178,7 @@ export function makeTerrainMaterial(T) {
         precision highp sampler2DArray;
         uniform sampler2DArray tAlb, tNrm, tOrm;
         uniform sampler2D tRockA, tRockN, tRockO;
-        uniform float uWet, uTime;
+        uniform float uWet, uTime; uniform vec4 uScales;
         varying vec4 vSplat; varying vec2 vAux; varying vec3 vWPos; varying vec3 vWNrm;
         ${SHADER_TRI}
         float hash21(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
@@ -192,7 +194,7 @@ export function makeTerrainMaterial(T) {
         vec3 TA; vec3 TN; vec3 TO; float terrainH;
       `)
       .replace('#include <map_fragment>', `
-        vec2 tuv = vWPos.xz * 0.5; // texture sets cover 2 m
+        vec2 tuv0 = vWPos.xz;
         float bl = smoothstep(0.35, 0.65, vnoise(vWPos.xz * 0.23));
         vec4 w = vSplat;
         // height-based blending using each layer's height (orm.b)
@@ -200,6 +202,7 @@ export function makeTerrainMaterial(T) {
         vec3 albL[4]; vec3 nrmL[4]; vec3 ormL[4];
         for (int i = 0; i < 4; i++) {
           float L = float(i);
+          vec2 tuv = tuv0 * uScales[i];
           albL[i] = sampleLayer(tAlb, tuv, L, bl);
           nrmL[i] = sampleLayer(tNrm, tuv, L, bl);
           ormL[i] = sampleLayer(tOrm, tuv, L, bl);
@@ -216,15 +219,15 @@ export function makeTerrainMaterial(T) {
         vec3 tw = triWeights(wn);
         float rockK = smoothstep(0.28, 0.45, slope + (vnoise(vWPos.xz*0.7)-0.5)*0.12);
         if (rockK > 0.001) {
-          vec3 ra = triSample(tRockA, vWPos, tw, 0.4).rgb;
-          vec3 ro = triSample(tRockO, vWPos, tw, 0.4).rgb;
+          vec3 ra = triSample(tRockA, vWPos, tw, 0.37).rgb;
+          vec3 ro = triSample(tRockO, vWPos, tw, 0.37).rgb;
           TA = mix(TA, ra, rockK); TO = mix(TO, ro, rockK);
         }
         // macro color variation breaks repetition at distance
         float macro = vnoise(vWPos.xz * 0.05) * 0.5 + vnoise(vWPos.xz * 0.013) * 0.5;
-        TA *= mix(0.82, 1.12, macro);
+        TA *= mix(0.86, 1.1, macro);
         // grass-covered ground is greener and darker beneath the blades
-        TA = mix(TA, TA * vec3(0.72, 0.9, 0.55), vAux.x * 0.55);
+        TA = mix(TA, TA * vec3(0.85, 0.92, 0.75), vAux.x * 0.35);
         // wetness near water and when raining: darker, glossier
         float wet = clamp(vAux.y + uWet * 0.6, 0.0, 1.0);
         TA *= mix(1.0, 0.62, wet);
@@ -242,7 +245,7 @@ export function makeTerrainMaterial(T) {
           vec3 Bv = normalize(cross(T, wn2));
           vec3 nW = normalize(T * tn.x - Bv * tn.y + wn2 * tn.z);
           if (rockK > 0.001) {
-            vec3 rn = triNormal(tRockN, vWPos, wn2, tw, 0.4);
+            vec3 rn = triNormal(tRockN, vWPos, wn2, tw, 0.37);
             nW = normalize(mix(nW, rn, rockK));
           }
           normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);

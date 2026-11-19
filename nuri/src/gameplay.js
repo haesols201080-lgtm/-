@@ -129,10 +129,10 @@ export class Gameplay {
   makeItem(kind, x, z, opts = {}) {
     let mesh, desc, mass = 1, r = 0.05;
     if (kind === 'stone') {
-      const src = this.ctx.assets.models.rock_3.scene.children[0] || this.ctx.assets.models.rock_3.scene;
-      let geo; this.ctx.assets.models.rock_3.scene.traverse((o) => { if (o.isMesh && !geo) geo = o.geometry; });
-      mesh = new THREE.Mesh(geo, this.ctx.assets.mats.rock); geo.computeBoundingBox();
-      const w = geo.boundingBox.max.x - geo.boundingBox.min.x; r = 0.05 + rnd() * 0.02; mesh.scale.setScalar(r * 2 / w);
+      const v = this.world.variants('rock_07')[0];
+      const geo = v.geo.clone(); geo.translate(0, -v.size.y / 2, 0);
+      mesh = new THREE.Mesh(geo, v.mat);
+      const w = Math.max(v.size.x, v.size.z); r = 0.05 + rnd() * 0.02; mesh.scale.setScalar(r * 2 / w);
       desc = this.R.ColliderDesc.ball(r * 0.9); mass = 1.2;
     } else if (kind === 'ball') {
       r = 0.075; mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 16), this.mats.rubber);
