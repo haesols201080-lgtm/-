@@ -14,6 +14,10 @@ BUDGET = {
     'shrub_03': 1600, 'shrub_04': 4000, 'nettle_plant': 2000, 'dandelion_01': 3000, 'weed_plant_02': 1500,
     'dry_branches_medium_01': 2500, 'periwinkle_plant': 2500,
     'bark_debris_01': 1200, 'namaqualand_stones_01': 900, 'root_cluster_01': 3000,
+    # understory: grasses, flowers, wood sorrel, low shrubs, real saplings
+    'grass_medium_01': 1400, 'grass_medium_02': 1600, 'grass_bermuda_01': 300, 'celandine_01': 1800, 'shrub_01': 7000,
+    'shrub_02': 4000, 'shrub_sorrel_01': 700, 'flower_heliophila': 3500, 'pine_sapling_small': 7000, 'fir_sapling': 7000,
+    'flower_empodium': 2500, 'flower_stinkkruid': 2500, 'leipoldtia_schultzei': 3000, 'flower_ursinia': 2500,
 }
 ONLY = sys.argv[3:]
 for d in sorted(glob.glob(f'{SRC}/models/*')):

@@ -274,6 +274,9 @@ export function makeTerrainMaterial(T, tier = {}) {
           TA = mix(TA, TA * vec3(0.74, 0.86, 0.56), m2 * 0.45 * fw * (1.0 - rockK));
           float far = smoothstep(5.0, 28.0, length(cameraPosition - vWPos));
           TA *= mix(1.0, 0.8, far * (1.0 - rockK * 0.5));
+          // forest floor is darker and more saturated than the bare scan suggests (litter is damp, shaded by itself)
+          float lum = dot(TA, vec3(0.3, 0.59, 0.11));
+          TA = mix(vec3(lum), TA, 1.18) * 0.86;
         }
         // grass-covered ground is greener and darker beneath the blades
         TA = mix(TA, TA * vec3(0.85, 0.92, 0.75), vAux.x * 0.35);

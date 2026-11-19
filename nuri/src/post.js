@@ -58,7 +58,9 @@ export function makeGradePass() {
       void main(){
         vec3 c = texture2D(tDiffuse, vUv).rgb;
         // gentle filmic contrast + shared split toning (cool-green shadows, warm highlights) for robot and forest alike
-        c = mix(c, c * c * (3.0 - 2.0 * c), 0.24);
+        // highlight roll-off that keeps colour (sunlit litter stays brown instead of going white)
+        { float mx = max(max(c.r, c.g), c.b); float k = mx > 0.72 ? (0.72 + (1.0 - exp(-(mx - 0.72) * 2.6)) * 0.28 / 1.0) / mx : 1.0; c *= k; }
+        c = mix(c, c * c * (3.0 - 2.0 * c), 0.2);
         float l = dot(c, vec3(0.299, 0.587, 0.114));
         c += vec3(-0.012, 0.006, 0.01) * (1.0 - l) + vec3(0.018, 0.008, -0.014) * l;
         c = mix(vec3(l), c, 1.03);

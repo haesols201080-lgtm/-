@@ -76,7 +76,10 @@ export const TERRAIN_SCALES = [1 / 1.5, 1 / 3.15, 1 / 2.9, 1 / 1.3]; // metres c
 export const PH_MODELS = ['rock_moss_set_01', 'rock_moss_set_02', 'boulder_01', 'rock_07', 'rock_09', 'stone_01', 'rock_face_01', 'rock_face_02',
   'tree_stump_01', 'tree_stump_02', 'dead_tree_trunk', 'dead_tree_trunk_02', 'root_cluster_02', 'single_root', 'fern_02', 'moss_01',
   'shrub_03', 'shrub_04', 'nettle_plant', 'dandelion_01', 'weed_plant_02', 'dry_branches_medium_01', 'periwinkle_plant',
-  'bark_debris_01', 'namaqualand_stones_01', 'root_cluster_01'];
+  'bark_debris_01', 'namaqualand_stones_01', 'root_cluster_01',
+  // understory: grasses, wildflowers, wood sorrel, low shrubs, young conifers
+  'grass_medium_01', 'grass_medium_02', 'celandine_01', 'shrub_01', 'shrub_02', 'shrub_sorrel_01', 'flower_heliophila',
+  'flower_empodium', 'flower_stinkkruid', 'leipoldtia_schultzei', 'flower_ursinia', 'pine_sapling_small', 'fir_sapling'];
 export const DEBRIS = ['pinecone_0', 'pinecone_1', 'pinecone_2', 'mush_amanita', 'mush_bolete', 'mush_cluster', 'mush_bracket'];
 export const TREES = ['pine_0', 'pine_1', 'pine_2', 'pine_3', 'fir_4', 'fir_5', 'pine_11', 'pine_12', 'pine_13', 'fir_14', 'fir_15'];
 export const SAPLINGS = ['sapling_6', 'sapling_7', 'sapling_8'];

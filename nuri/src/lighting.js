@@ -141,7 +141,7 @@ export class Lighting {
   // eye adaptation toward the light level around the camera / player
   update(dt, renderer, base, cam, player) {
     const v = Math.min(this.visibility(cam.x, cam.y, cam.z) * 0.5 + this.visibility(player.x, player.y + 0.2, player.z) * 0.5, 1);
-    const target = base * (1 + 0.85 * (1 - v));
+    const target = base * (1 + 0.3 * (1 - v));      // the eye adapts only a little (deep shade must stay darker than sun)
     this.exposure += (target - this.exposure) * (1 - Math.exp(-dt / 1.4));
     renderer.toneMappingExposure = this.exposure;
     return v;

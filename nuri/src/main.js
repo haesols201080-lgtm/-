@@ -407,12 +407,13 @@ async function boot() {
     const elev = S.timeFlow ? 14 + Math.sin(G.tod * Math.PI) * 46 : null, azim = S.timeFlow ? 120 + G.tod * 140 : 0;
     setSun(elev, azim);
     const rainK = G.rainK = damp(G.rainK || 0, S.weather === 'rain' ? 1 : 0, 0.6, dt);
-    sun.intensity = (1.6 + 3.4 * clamp(Math.asin(sunDir.y) * 57.3 / 40, 0, 1)) * (1 - rainK * 0.8);
+    // filtered forest light: a softer sun and a stronger sky keep sunlit patches from burning out to white
+    sun.intensity = (1.3 + 2.2 * clamp(Math.asin(sunDir.y) * 57.3 / 40, 0, 1)) * (1 - rainK * 0.8);
     hemi.intensity = 0.06 + rainK * 0.2;
     scene.backgroundIntensity = 0.95 - rainK * 0.5;
     scene.fog.density = 0.017 + rainK * 0.03;
-    scene.fog.color.setRGB(0.44 - rainK * 0.14, 0.48 - rainK * 0.14, 0.44 - rainK * 0.1, THREE.SRGBColorSpace);
-    scene.environmentIntensity = 0.95 - rainK * 0.35;
+    scene.fog.color.setRGB(0.38 - rainK * 0.1, 0.43 - rainK * 0.12, 0.39 - rainK * 0.08, THREE.SRGBColorSpace);
+    scene.environmentIntensity = 1.15 - rainK * 0.4;
     world.terrain.material.userData.uniforms.uWet.value = rainK;
     world.shaftMat.uniforms.uI.value = 1 - rainK;
     WIND.strength.value = 1 + rainK * 0.8;
@@ -488,7 +489,7 @@ async function boot() {
     if (grade) grade.uniforms.uTime.value = G.time;
     fx.updateAmbient(G.time, camera.position, 0.6 + 0.6 * lighting.visibility(camera.position.x, camera.position.y, camera.position.z));
     // eye adaptation + face light + god rays
-    const vis = lighting.update(dt, renderer, 1.05 * (1 + G.rainK * 0.15), camera.position, player.pos);
+    const vis = lighting.update(dt, renderer, 1.0 * (1 + G.rainK * 0.15), camera.position, player.pos);
     faceLight.intensity = (1 - vis) * 0.35;
     if (rays) {
       const sp = tmpV.copy(camera.position).addScaledVector(sunDir, 200).project(camera);

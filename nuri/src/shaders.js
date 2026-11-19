@@ -133,8 +133,8 @@ export function makeRockMaterial(T, { moss = 0.55, scale = 0.45 } = {}) {
 
 // Thin-leaf translucency for scanned plants and grass: sunlight shining through leaves seen against the sun, and some
 // ambient light from the far side (leaves are never black from behind). Uses the scene lighting model when present.
-export function leafLight(sh, k = 1) {
-  nearFade(sh);
+export function leafLight(sh, k = 1, fade = [0.03, 0.09]) {
+  nearFade(sh, fade[0], fade[1]);
   sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `
     {
       #ifdef LIT_SKY
