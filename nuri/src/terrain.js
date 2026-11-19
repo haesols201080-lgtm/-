@@ -5,6 +5,7 @@ import { makeNoise2D, fbm, smoothstep, clamp, lerp, distToPolyline } from './uti
 import { WORLD, PATH, PATH2, PATH3, STREAM, POND, START, OUTCROP } from './layout.js';
 import { SHADER_TRI } from './shaders.js';
 import { TERRAIN_SCALES } from './assets.js';
+import { CAUSTICS_GLSL } from './water.js';
 
 const n2 = makeNoise2D(11), n3 = makeNoise2D(29), n4 = makeNoise2D(53);
 
@@ -160,7 +161,7 @@ export function makeTerrainMaterial(T) {
   const uniforms = {
     tAlb: { value: T.terrainAlb }, tNrm: { value: T.terrainNrm }, tOrm: { value: T.terrainOrm },
     tRockA: { value: T.rock.map }, tRockN: { value: T.rock.normal }, tRockO: { value: T.rock.orm },
-    uWet: { value: 0 }, uTime: { value: 0 }, uScales: { value: new THREE.Vector4(...TERRAIN_SCALES) },
+    uWet: { value: 0 }, uTime: { value: 0 }, uScales: { value: new THREE.Vector4(...TERRAIN_SCALES) }, uWaterY: { value: WORLD.waterY },
   };
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (sh) => {
@@ -178,7 +179,8 @@ export function makeTerrainMaterial(T) {
         precision highp sampler2DArray;
         uniform sampler2DArray tAlb, tNrm, tOrm;
         uniform sampler2D tRockA, tRockN, tRockO;
-        uniform float uWet, uTime; uniform vec4 uScales;
+        uniform float uWet, uTime, uWaterY; uniform vec4 uScales;
+        ${CAUSTICS_GLSL}
         varying vec4 vSplat; varying vec2 vAux; varying vec3 vWPos; varying vec3 vWNrm;
         ${SHADER_TRI}
         float hash21(vec2 p){ p = fract(p*vec2(123.34, 456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
@@ -250,6 +252,17 @@ export function makeTerrainMaterial(T) {
           }
           normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);
         }`)
+      .replace('#include <opaque_fragment>', `
+        // sunlight caustics dancing on the stream / pond bed
+        {
+          float wd = uWaterY - vWPos.y;
+          if (wd > 0.0) {
+            float ck = causticsAt(vWPos.xz, uTime) * smoothstep(0.0, 0.12, wd) * (1.0 - smoothstep(0.7, 1.6, wd));
+            outgoingLight += TA * vec3(1.0, 0.97, 0.85) * ck * 1.6;
+            outgoingLight *= mix(vec3(1.0), vec3(0.78, 0.9, 0.86), smoothstep(0.0, 0.8, wd));
+          }
+        }
+        #include <opaque_fragment>`)
       .replace('#include <aomap_fragment>', `
         float ambientOcclusion = mix(1.0, TO.r, 0.9);
         reflectedLight.indirectDiffuse *= ambientOcclusion;

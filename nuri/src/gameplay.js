@@ -559,6 +559,14 @@ export class Gameplay {
       const t = p.body.translation(), r = p.body.rotation();
       p.mesh.position.set(t.x, t.y, t.z); p.mesh.quaternion.set(r.x, r.y, r.z, r.w);
       if (t.y < -10) { p.body.setTranslation({ x: t.x, y: this.groundY(t.x, t.z) + 0.5, z: t.z }, true); p.body.setLinvel({ x: 0, y: 0, z: 0 }, true); }
+      // splash when a prop drops into the water
+      const wy = this.T.waterY;
+      if (p.lastY !== undefined && p.lastY > wy && t.y <= wy + 0.02 && this.T.isWater(t.x, t.z)) {
+        const k = Math.min(1, Math.abs(p.body.linvel().y) / 4) * (p.kind === 'crate' ? 1 : 0.6);
+        this.fx.waterSplash({ x: t.x, y: wy, z: t.z }, 0.25 + k * 0.6); this.world.sim.drop(t.x, t.z, 0.08 + k * 0.08, -0.04 - k * 0.05);
+        this.audio.play('splash', { pos: p.mesh.position, vol: 0.3 + k * 0.6 });
+      }
+      p.lastY = t.y;
       // bounce sounds
       const v = p.body.linvel(); const vy = v.y;
       if (p.lastVy !== undefined && p.lastVy < -1.2 && vy > -0.2) this.audio.play(p.kind === 'ball' ? 'bounce' : p.kind === 'crate' ? 'thud' : 'clack', { vol: clamp(-p.lastVy / 5, 0.2, 1), pos: p.mesh.position });

@@ -7,6 +7,7 @@ import { WORLD, PATH, PATH2, PATH3, STREAM, POND, OUTCROP, HERO_TREES, BOULDERS,
 import { Terrain } from './terrain.js';
 import { patchMaterial, WIND } from './shaders.js';
 import { TREES, SAPLINGS } from './assets.js';
+import { WaterSim, makeWaterMaterial } from './water.js';
 
 const rnd = mulberry32(2024);
 const TREE_R0 = { pine_0: 0.36, pine_1: 0.4, pine_2: 0.34, pine_3: 0.38, fir_4: 0.27, fir_5: 0.26 };
@@ -285,27 +286,10 @@ export class World {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('depth', new THREE.Float32BufferAttribute(depth, 1));
     geo.setIndex(idx); geo.computeVertexNormals();
-    const u = { uTime: { value: 0 }, tN: { value: assets.tex.water } };
-    const mat = new THREE.MeshPhysicalMaterial({ color: 0x15261d, roughness: 0.03, metalness: 0, transparent: true, envMapIntensity: 1.1, depthWrite: false,
-      normalMap: assets.tex.water, specularIntensity: 1 });
-    mat.onBeforeCompile = (sh) => {
-      Object.assign(sh.uniforms, u);
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float depth; varying float vDepth; varying vec3 vWP;')
-        .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvDepth = depth; vWP = (modelMatrix * vec4(transformed,1.0)).xyz;');
-      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uTime; uniform sampler2D tN; varying float vDepth; varying vec3 vWP;')
-        .replace('#include <normal_fragment_maps>', `
-          vec2 fl = vec2(0.05, 0.02) * uTime;
-          vec3 n1 = texture2D(tN, vWP.xz * 0.45 + fl).xyz * 2.0 - 1.0;
-          vec3 n2 = texture2D(tN, vWP.xz * 1.3 - fl * 1.7 + 0.37).xyz * 2.0 - 1.0;
-          vec3 nn = normalize(vec3((n1.xy + n2.xy) * 0.18, 1.0));
-          normal = normalize((viewMatrix * vec4(nn.x, nn.z, nn.y, 0.0)).xyz);`)
-        .replace('#include <opaque_fragment>', `
-          float fres = pow(1.0 - clamp(abs(dot(normalize(vViewPosition), normal)), 0.0, 1.0), 4.0);
-          float a = clamp(smoothstep(0.0, 0.7, vDepth) * 0.72 + 0.08 + fres * 0.5, 0.0, 0.97);
-          gl_FragColor = vec4(outgoingLight, a);`);
-    };
+    this.sim = new WaterSim(this.ctx.renderer, T, { N: this.ctx.tier.post ? 256 : 192, size: 10 });
+    const mat = makeWaterMaterial(this.ctx.tier, assets, this.sim);
     this.water = new THREE.Mesh(geo, mat); this.water.renderOrder = 2; this.water.receiveShadow = true; this.scene.add(this.water);
-    this.waterU = u;
+    this.waterU = mat.userData.uniforms;
     const lip = new THREE.Vector3(OUTCROP.x - 3.5, this.outcropTop - 0.6, OUTCROP.z + 5.2);
     this.waterfallPos = new THREE.Vector3(lip.x, wy, lip.z + 1.0);
     const fg = new THREE.PlaneGeometry(1.6, 1, 8, 24), fp = fg.attributes.position;
@@ -444,6 +428,12 @@ export class World {
   update(dt, time, camPos, playerPos) {
     WIND.time.value = time;
     if (this.waterU) this.waterU.uTime.value = time;
+    if (this.sim && playerPos) {
+      // the waterfall keeps churning the pool when it is inside the simulated window
+      const wf = this.waterfallPos;
+      if (Math.abs(wf.x - playerPos.x) < 6 && Math.abs(wf.z - playerPos.z) < 6) for (let i = 0; i < 2; i++) this.sim.drop(wf.x + (Math.random() - 0.5) * 1.4, wf.z + (Math.random() - 0.5) * 0.6, 0.12, (Math.random() - 0.5) * 0.05);
+      this.sim.update(dt, playerPos);
+    }
     if (this.fallU) this.fallU.uTime.value = time;
     this.shaftMat.uniforms.uTime.value = time;
     if (playerPos) this.grassPlayer.value.copy(playerPos);

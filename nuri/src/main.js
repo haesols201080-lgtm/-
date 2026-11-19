@@ -22,7 +22,7 @@ import { START, STREAM, POND, REGIONS } from './layout.js';
 import { WIND } from './shaders.js';
 import { makeDofPass, makeGradePass, makeContactShadow, makeGodRaysPass } from './post.js';
 import { Lighting } from './lighting.js';
-import { DUST } from './nuri.js';
+import { DUST, WET } from './nuri.js';
 import { clamp, damp, angleDiff } from './util.js';
 
 const DEFAULTS = { master: 0.8, music: 0.45, sfx: 0.85, sens: 1, invertY: false, timeFlow: false, weather: 'clear', quality: null, padMap: null };
@@ -71,7 +71,7 @@ async function boot() {
   scene.environment = assets.tex.envMap; scene.environmentIntensity = 0.95;
   scene.background = assets.tex.hdr; scene.backgroundIntensity = 0.95;
 
-  const ctx = { scene, RAPIER, physics, assets, tier, sunDir, camera, terrain: null };
+  const ctx = { scene, RAPIER, physics, assets, tier, sunDir, camera, renderer, terrain: null };
   ui.progress(0.92, '숲 만들기');
   await new Promise((r) => setTimeout(r, 30));
   const world = new World(ctx); world.build(); ctx.terrain = world.terrain;
@@ -127,6 +127,10 @@ async function boot() {
   } else document.body.classList.add('css-vignette');
   // soft contact shadow under the robot (grounds it on every quality tier)
   const contact = makeContactShadow(); scene.add(contact);
+  const wy = world.terrain.waterY;
+  fx.setWater({ y: wy, isWater: (x, z) => world.terrain.isWater(x, z), ground: (x, z) => world.terrain.heightAt(x, z) - 0.02,
+    onDrop: (x, z, r, k) => world.sim.drop(x, z, r, k) });
+  const surf = (p) => ({ x: p.x, y: wy, z: p.z });
   const resize = () => {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
@@ -207,15 +211,18 @@ async function boot() {
           const surf = surfaceUnder();
           audio.play('step', { surface: surf, pos: pp, vol: clamp(0.35 + e.speed * 0.25, 0.3, 1), pitch: 0.9 + Math.random() * 0.2 });
           if (e.speed > 1.4 && (surf === 'dirt' || surf === 'leaves')) fx.dust(pp, 3, surf === 'dirt' ? [0.52, 0.44, 0.33] : [0.45, 0.36, 0.24]);
-          if (surf === 'water') fx.ring(pp, 0.25);
+          if (surf === 'water' || player.wadeDepth > 0.02) { const d = tmpV.set(player.vel.x, 0, player.vel.z).multiplyScalar(0.3); fx.wadeSplash({ x: pp.x, y: wy, z: pp.z }, d, 0.6); world.sim.drop(pp.x, pp.z, 0.07, -0.02); fx.ring({ x: pp.x, y: wy, z: pp.z }, 0.2); }
           break;
         }
-        case 'jump': audio.play('jump', { pos: pp }); if (e.water) fx.splash({ x: pp.x, y: world.terrain.waterY, z: pp.z }, 0.5); else fx.dust(pp, 4); break;
+        case 'jump': audio.play('jump', { pos: pp }); if (e.water) { fx.waterSplash(surf(pp), 0.55); world.sim.drop(pp.x, pp.z, 0.12, -0.05); audio.play('splash', { pos: pp, vol: 0.5 }); } else fx.dust(pp, 4); break;
         case 'djump': audio.play('djump', { pos: pp }); for (let i = 0; i < 10; i++) fx.exhaust({ x: pp.x, y: pp.y, z: pp.z }); setExpr('excited', 0.8); break;
         case 'land': if (e.impact > 3) { audio.play('land', { pos: pp, vol: clamp(e.impact / 9, 0.3, 1) }); fx.dust(pp, Math.round(clamp(e.impact, 3, 12))); if (e.impact > 8) orbit.shake = 0.6; }
           else audio.play('step', { surface: surfaceUnder(), pos: pp, vol: 0.5 }); break;
-        case 'splash': audio.play('splash', { pos: pp, vol: e.strength }); fx.splash({ x: pp.x, y: world.terrain.waterY, z: pp.z }, e.strength); setExpr('surprised', 0.8); moodBeep('surprised'); break;
-        case 'swimstroke': audio.play('swim', { pos: pp, vol: 0.6 }); fx.ring({ x: pp.x, y: world.terrain.waterY, z: pp.z }, 0.35); break;
+        case 'splash': audio.play('splash', { pos: pp, vol: e.strength }); fx.waterSplash(surf(pp), 0.5 + e.strength); world.sim.drop(pp.x, pp.z, 0.16, -0.06 - e.strength * 0.06); orbit.shake = 0.25 * e.strength; WET.value = 1; setExpr('surprised', 0.8); moodBeep('surprised'); break;
+        case 'swimstroke': { audio.play('swim', { pos: pp, vol: 0.6 }); const f = tmpV.set(Math.sin(player.yaw), 0, Math.cos(player.yaw));
+          for (const sd of [-1, 1]) { const hx = pp.x + f.z * sd * 0.09 + f.x * 0.05, hz = pp.z - f.x * sd * 0.09 + f.z * 0.05; world.sim.drop(hx, hz, 0.06, -0.025); fx.wadeSplash({ x: hx, y: wy, z: hz }, f, 0.35); }
+          break; }
+        case 'climbout': audio.play('swim', { pos: pp, vol: 0.8 }); audio.play('jump', { pos: pp, pitch: 0.8 }); world.sim.drop(pp.x, pp.z, 0.14, 0.04); for (let i = 0; i < 18; i++) fx.drip({ x: pp.x, y: pp.y + 0.1 + Math.random() * 0.25, z: pp.z }); setExpr('joy', 1); break;
         case 'roll': audio.play('roll', { pos: pp }); setExpr('focused', 0.5); break;
         case 'slide': audio.play('slide', { pos: pp }); setExpr('excited', 0.7); break;
         case 'grab': audio.play('grabledge', { pos: pp }); break;
@@ -389,6 +396,24 @@ async function boot() {
     if (G.mode === 'play' && !G.paused) ui.setPrompt(G.wokeUp ? gameplay.prompt(player) : null, input.usingPad);
     // autosave every 60 s
     if (G.mode === 'play' && G.time - G.lastSaveAt > 60) save();
+    // wake behind the robot in water, dripping and drying afterwards
+    if (G.mode === 'play' && !G.paused) {
+      const inW = player.state === 'swim' || (player.wadeDepth || 0) > 0.03;
+      const hs = Math.hypot(player.vel.x, player.vel.z);
+      if (inW) {
+        WET.value = Math.max(WET.value, player.state === 'swim' ? 1 : Math.min(1, WET.value + dt * 2 * (player.wadeDepth / 0.3)));
+        if (hs > 0.05) {
+          const back = tmpV.set(player.vel.x, 0, player.vel.z).normalize();
+          world.sim.drop(player.pos.x - back.x * 0.12, player.pos.z - back.z * 0.12, 0.07, -0.006 * Math.min(2, hs));
+          world.sim.drop(player.pos.x + back.x * 0.1, player.pos.z + back.z * 0.1, 0.06, 0.004 * Math.min(2, hs));
+        } else if (Math.random() < dt * 2) world.sim.drop(player.pos.x, player.pos.z, 0.1, 0.004);
+      } else {
+        WET.value = Math.max(0, WET.value - dt / 28);
+        if (WET.value > 0.12 && Math.random() < dt * 14 * WET.value) {
+          const n = nuri.root; fx.drip({ x: n.position.x, y: n.position.y + 0.05 + Math.random() * 0.25, z: n.position.z });
+        }
+      }
+    }
     // contact shadow follows the ground under the robot and fades with height
     {
       const gd = player.grounded ? 0 : Math.max(0, player.groundDist ?? 1);

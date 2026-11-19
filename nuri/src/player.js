@@ -7,7 +7,8 @@ import { clamp, damp, dampAngle, angleDiff, lerp } from './util.js';
 
 const R_CAP = 0.095, HH_STAND = 0.085, HH_CROUCH = 0.012;
 const G = 15.5, JUMP_V = 3.75, DJUMP_V = 3.3;
-const RUN = 2.3, WALK = 0.9, CRAWL = 0.45, SWIM = 0.95, CLIMB = 0.55, PUSH = 0.75;
+const RUN = 2.3, WALK = 0.9, CRAWL = 0.45, SWIM = 1.05, CLIMB = 0.55, PUSH = 0.75;
+const SWIM_DEPTH = 0.3; // deeper than this the robot floats and swims; shallower it wades on the bottom
 
 export class Player {
   constructor(ctx, nuri, spawn) {
@@ -99,7 +100,9 @@ export class Player {
     if (st === 'climb') return this.updateClimb(dt, input, dir, mag, jumpPressed, camYaw);
 
     // swimming check
-    const inWater = terrain.isWater(this.pos.x, this.pos.z) && this.pos.y < waterY - 0.12;
+    const depthHere = waterY - terrain.heightAt(this.pos.x, this.pos.z);
+    this.wadeDepth = terrain.isWater(this.pos.x, this.pos.z) ? Math.max(0, waterY - this.pos.y) : 0;
+    const inWater = depthHere > SWIM_DEPTH && this.pos.y < waterY - 0.2;
     if (inWater && st !== 'swim') { this.state = 'swim'; this.vel.y *= 0.3; this.emit('splash', { strength: Math.min(1, Math.abs(this.vel.y) / 4 + 0.3) }); this.setCrouch(false); if (this.carry) gameplay.dropCarry(this); }
     if (this.state === 'swim') return this.updateSwim(dt, dir, mag, jumpPressed, waterY);
 
@@ -133,6 +136,7 @@ export class Player {
       const crawling = this.crouched && grounded;
       let maxSp = crawling ? CRAWL : (input.btn.walk ? WALK : RUN);
       if (this.carry) maxSp *= 0.8;
+      if (this.wadeDepth > 0.02) maxSp *= 1 - 0.45 * Math.min(1, this.wadeDepth / 0.3);
       if (this.grab) maxSp = PUSH * 0.8;
       if (this.pushBody) maxSp = PUSH;
       const target = dir.clone().multiplyScalar(maxSp * mag);
@@ -366,12 +370,35 @@ export class Player {
   }
 
   updateSwim(dt, dir, mag, jumpPressed, waterY) {
-    const targetY = waterY - 0.25;
+    const terrain = this.ctx.terrain;
+    const targetY = waterY - 0.22; // head and shoulders stay above the surface
     this.vel.y = damp(this.vel.y, (targetY - this.pos.y) * 6, 6, dt);
     const tv = dir.clone().multiplyScalar(SWIM * mag);
     this.vel.x = damp(this.vel.x, tv.x, 4, dt); this.vel.z = damp(this.vel.z, tv.z, 4, dt);
     if (mag > 0.05) this.yaw = dampAngle(this.yaw, Math.atan2(dir.x, dir.z), 6, dt);
-    if (jumpPressed && Math.abs(this.pos.y - targetY) < 0.1) { this.vel.y = 3.2; this.state = 'jump'; this.jumpsUsed = 1; this.emit('jump', { water: true }); this.lastGround = -1; }
+    // jump out of the water: strong kick, carries forward momentum, any time near the surface
+    if (jumpPressed && this.pos.y > targetY - 0.15) {
+      this.vel.y = 3.9; if (mag > 0.1) { this.vel.x += dir.x * 1.1; this.vel.z += dir.z * 1.1; }
+      this.state = 'jump'; this.jumpsUsed = 1; this.jumpCut = false; this.emit('jump', { water: true }); this.lastGround = -1; this.wetT = 1;
+      return this.integrateFree(dt);
+    }
+    // swimming into a bank, rock or log: climb out onto it automatically
+    if (mag > 0.3 && this.tryClimbOut(dir, waterY)) return;
+    const desired = { x: this.vel.x * dt, y: this.vel.y * dt, z: this.vel.z * dt };
+    this.cc.computeColliderMovement(this.col, desired, this.ctx.RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
+    const mv = this.cc.computedMovement(), t = this.body.translation();
+    const next = { x: t.x + mv.x, y: t.y + mv.y, z: t.z + mv.z };
+    this.body.setNextKinematicTranslation(next);
+    this.pos.set(next.x, next.y - this.halfH(), next.z);
+    this.grounded = false; this.wetT = 1;
+    // feet touch the bottom again: stand up and wade out
+    const depth = waterY - terrain.heightAt(this.pos.x, this.pos.z);
+    if (depth < SWIM_DEPTH - 0.04 || !terrain.isWater(this.pos.x, this.pos.z)) { this.state = 'move'; this.vel.y = 0; this.lastGround = this.time; }
+    this.swimStroke = (this.swimStroke || 0) + dt * Math.hypot(this.vel.x, this.vel.z) * 3;
+    if (this.swimStroke > 1) { this.swimStroke = 0; this.emit('swimstroke'); }
+  }
+
+  integrateFree(dt) {
     const desired = { x: this.vel.x * dt, y: this.vel.y * dt, z: this.vel.z * dt };
     this.cc.computeColliderMovement(this.col, desired, this.ctx.RAPIER.QueryFilterFlags.EXCLUDE_SENSORS);
     const mv = this.cc.computedMovement(), t = this.body.translation();
@@ -379,11 +406,27 @@ export class Player {
     this.body.setNextKinematicTranslation(next);
     this.pos.set(next.x, next.y - this.halfH(), next.z);
     this.grounded = false;
-    const gh = this.ctx.terrain.heightAt(this.pos.x, this.pos.z);
-    if (!this.ctx.terrain.isWater(this.pos.x, this.pos.z) || gh > this.pos.y - 0.02) { this.state = 'move'; this.grounded = this.cc.computedGrounded(); }
-    this.swimStroke = (this.swimStroke || 0) + dt * Math.hypot(this.vel.x, this.vel.z) * 3;
-    if (this.swimStroke > 1) { this.swimStroke = 0; this.emit('swimstroke'); }
-    if (this.state !== 'swim') this.lastGround = this.time;
+  }
+
+  // find a surface just above the water ahead (bank, stone, log) and vault onto it
+  tryClimbOut(dir, waterY) {
+    const d = dir.clone().setY(0).normalize();
+    const o = { x: this.pos.x, y: waterY - 0.05, z: this.pos.z };
+    const wall = this.ray(o, { x: d.x, y: 0, z: d.z }, 0.42);
+    let probe;
+    if (wall) probe = { x: o.x + d.x * (wall.toi + 0.14), z: o.z + d.z * (wall.toi + 0.14) };
+    else probe = { x: o.x + d.x * 0.32, z: o.z + d.z * 0.32 }; // gentle bank without a wall in front
+    const top = this.ray({ x: probe.x, y: waterY + 0.75, z: probe.z }, { x: 0, y: -1, z: 0 }, 1.1);
+    if (!top || top.normal.y < 0.55) return false;
+    const ledgeY = waterY + 0.75 - top.toi;
+    if (ledgeY < waterY - 0.08 || ledgeY > waterY + 0.62) return false;
+    if (this.ctx.terrain.isWater(probe.x, probe.z) && ledgeY < waterY + 0.02) return false; // still water there
+    // head room
+    if (this.ray({ x: probe.x, y: ledgeY + 0.02, z: probe.z }, { x: 0, y: 1, z: 0 }, 0.36)) return false;
+    this.hangInfo = { ledgeY, wallN: d.clone().negate(), top: new THREE.Vector3(probe.x + d.x * 0.06, ledgeY, probe.z + d.z * 0.06) };
+    this.state = 'climbup'; this.climbT = 0; this.climbFrom = this.pos.clone(); this.vel.set(0, 0, 0); this.wetT = 1;
+    this.emit('climbout');
+    return true;
   }
 
   teleport(x, y, z) {

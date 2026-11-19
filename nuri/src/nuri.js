@@ -101,15 +101,16 @@ class FaceDisplay {
 // Weathering shared by the robot's painted/metal parts: dust collects on the boots and lower legs (rest-pose height),
 // plus fine grime mottling, so the robot sits in the same dirty, scanned world instead of looking freshly rendered.
 export const DUST = { value: 0.6 };
+export const WET = { value: 0 };
 const WEATHER_GLSL = /* glsl */`
-  varying vec3 vRest; uniform float uDust;
+  varying vec3 vRest; uniform float uDust, uWet;
   float wh(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
   float wn(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
     return mix(mix(mix(wh(i), wh(i + vec3(1,0,0)), f.x), mix(wh(i + vec3(0,1,0)), wh(i + vec3(1,1,0)), f.x), f.y),
                mix(mix(wh(i + vec3(0,0,1)), wh(i + vec3(1,0,1)), f.x), mix(wh(i + vec3(0,1,1)), wh(i + vec3(1,1,1)), f.x), f.y), f.z); }`;
 function weather(strength) {
   return (sh) => {
-    sh.uniforms.uDust = DUST;
+    sh.uniforms.uDust = DUST; sh.uniforms.uWet = WET;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRest;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRest = position;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + WEATHER_GLSL)
@@ -119,7 +120,14 @@ function weather(strength) {
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.34, 0.29, 0.22) * (0.8 + 0.4 * wnz), clamp(dust, 0.0, 0.8));
         diffuseColor.rgb *= 0.9 + 0.1 * wn(vRest * 420.0);`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
-        roughnessFactor = mix(roughnessFactor, 0.95, clamp(dust * 1.3, 0.0, 1.0));`);
+        roughnessFactor = mix(roughnessFactor, 0.95, clamp(dust * 1.3, 0.0, 1.0));
+        // wet: darker, glossy film (water beads dry from the top down)
+        float wetK = uWet * smoothstep(0.45 - uWet * 0.45, 0.0, vRest.y - 0.02) * (0.75 + 0.25 * wn(vRest * 90.0));
+        roughnessFactor = mix(roughnessFactor, 0.08, clamp(wetK, 0.0, 1.0));`)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>')
+      .replace('#include <aomap_fragment>', `#include <aomap_fragment>
+        reflectedLight.directDiffuse *= 1.0 - 0.28 * clamp(wetK, 0.0, 1.0);
+        reflectedLight.indirectDiffuse *= 1.0 - 0.28 * clamp(wetK, 0.0, 1.0);`);
   };
 }
 
