@@ -40,6 +40,39 @@ export class FX {
     this.water = null; // { y, isWater(x,z), onDrop(x,z,radius,strength) }
   }
   setWater(w) { this.water = w; }
+  // ambient life in the air around the camera: dust motes glinting in the light and slowly falling needles
+  initAmbient(count = 220) {
+    const mk = (n, size, color, additive) => {
+      const g = new THREE.BufferGeometry(); const pos = new Float32Array(n * 3), seed = new Float32Array(n);
+      for (let i = 0; i < n; i++) { pos.set([Math.random(), Math.random(), Math.random()], i * 3); seed[i] = Math.random(); }
+      g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('seed', new THREE.BufferAttribute(seed, 1));
+      const m = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+        uniforms: { uCam: { value: new THREE.Vector3() }, uTime: { value: 0 }, uBox: { value: new THREE.Vector3(7, 3.2, 7) }, uSize: { value: size }, uColor: { value: new THREE.Color(color) }, uScale: { value: 600 }, uFall: { value: additive ? 0.02 : 0.25 } },
+        vertexShader: `attribute float seed; uniform vec3 uCam, uBox; uniform float uTime, uSize, uScale, uFall; varying float vA;
+          void main(){
+            vec3 p = position * uBox;
+            p.y -= uTime * uFall * (0.6 + seed);
+            p.x += sin(uTime * (0.3 + seed * 0.4) + seed * 30.0) * 0.25 + uTime * 0.05;
+            p.z += cos(uTime * (0.25 + seed * 0.3) + seed * 17.0) * 0.25;
+            vec3 o = uCam - uBox * 0.5; o.y = uCam.y - 0.6;
+            p = o + mod(p - o, uBox);
+            vec4 mv = modelViewMatrix * vec4(p, 1.0);
+            float d = -mv.z;
+            vA = smoothstep(0.15, 0.6, d) * (1.0 - smoothstep(3.0, 4.5, d)) * (0.5 + 0.5 * sin(uTime * 2.0 + seed * 40.0));
+            gl_PointSize = uSize * uScale / d; gl_Position = projectionMatrix * mv; }`,
+        fragmentShader: `uniform vec3 uColor; varying float vA; void main(){ vec2 c = gl_PointCoord - 0.5; float a = smoothstep(0.5, 0.0, length(c)) * vA; gl_FragColor = vec4(uColor, a);
+          #include <colorspace_fragment>
+        }` });
+      const pts = new THREE.Points(g, m); pts.frustumCulled = false; pts.renderOrder = 6; this.scene.add(pts); return pts;
+    };
+    this.motes = mk(count, 0.006, 0xfff1cf, true);
+    this.needles = mk(Math.round(count * 0.25), 0.007, 0x3b2a18, false);
+  }
+  updateAmbient(t, cam, light = 1) {
+    if (!this.motes) return;
+    for (const p of [this.motes, this.needles]) { const u = p.material.uniforms; u.uCam.value.copy(cam); u.uTime.value = t; u.uScale.value = this.mat.uniforms.uScale.value; }
+    this.motes.material.uniforms.uColor.value.setRGB(1.0 * light, 0.94 * light, 0.8 * light);
+  }
   droplet(x, y, z, vx, vy, vz, r) { if (this.drops.length < this.DMAX) this.drops.push({ x, y, z, vx, vy, vz, r, t: 0 }); }
   foam(pos, size) {
     const m = new THREE.Mesh(new THREE.CircleGeometry(1, 24).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: this.foamTex, transparent: true, depthWrite: false, opacity: 0.3, color: 0xdfe8e6 }));

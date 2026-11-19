@@ -26,7 +26,7 @@ export class Terrain {
   }
 
   heightFn(x, z) {
-    let h = 1.25 * fbm(n2, x * 0.022, z * 0.022, 4) + 0.4 * fbm(n3, x * 0.07, z * 0.07, 3) + 0.05 * fbm(n4, x * 0.6, z * 0.6, 2);
+    let h = 1.25 * fbm(n2, x * 0.022, z * 0.022, 4) + 0.4 * fbm(n3, x * 0.07, z * 0.07, 3) + 0.07 * fbm(n4, x * 0.5, z * 0.5, 3) + 0.035 * fbm(n2, x * 1.1 + 31, z * 1.1, 2);
     // rising rim near the world edge (natural boundary)
     const e = Math.max(Math.abs(x), Math.abs(z));
     h += smoothstep(36, 47, e) * 5.5;
@@ -132,7 +132,7 @@ export class Terrain {
       for (let c = 0; c < 4; c++) this.splat[k * 4 + c] = splat[v * 4 + c];
       this.grass[k] = aux[v * 2];
     }
-    const mat = makeTerrainMaterial(textures);
+    const mat = makeTerrainMaterial(textures, tier);
     const mesh = new THREE.Mesh(geo, mat);
     mesh.receiveShadow = true; mesh.name = 'terrain';
     this.mesh = mesh; this.material = mat;
@@ -156,7 +156,7 @@ export class Terrain {
   }
 }
 
-export function makeTerrainMaterial(T) {
+export function makeTerrainMaterial(T, tier = {}) {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 0, envMapIntensity: 0.6 });
   const uniforms = {
     tAlb: { value: T.terrainAlb }, tNrm: { value: T.terrainNrm }, tOrm: { value: T.terrainOrm },
@@ -166,6 +166,7 @@ export function makeTerrainMaterial(T) {
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, uniforms);
+    sh.defines = sh.defines || {}; sh.defines.POM_STEPS = tier.pom || 0;
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>
         attribute vec4 splat; attribute vec2 aux;
@@ -197,6 +198,29 @@ export function makeTerrainMaterial(T) {
       `)
       .replace('#include <map_fragment>', `
         vec2 tuv0 = vWPos.xz;
+        #if POM_STEPS > 0
+        // parallax occlusion mapping: the scanned litter, stones and needles get real depth up close
+        {
+          vec3 V = normalize(cameraPosition - vWPos);
+          float dk = 1.0 - smoothstep(5.0, 14.0, length(cameraPosition - vWPos));
+          if (dk > 0.01 && V.y > 0.05) {
+            vec4 sw = vSplat / max(1e-3, vSplat.x + vSplat.y + vSplat.z + vSplat.w);
+            #define POMH(uv) (sw.x * texture(tOrm, vec3((uv) * uScales.x, 0.0)).b + sw.y * texture(tOrm, vec3((uv) * uScales.y, 1.0)).b + sw.z * texture(tOrm, vec3((uv) * uScales.z, 2.0)).b + sw.w * texture(tOrm, vec3((uv) * uScales.w, 3.0)).b)
+            vec2 P = V.xz / max(V.y, 0.3) * 0.045 * dk;
+            float stepD = 1.0 / float(POM_STEPS);
+            vec2 dUV = P * stepD;
+            vec2 uv = tuv0; float depth = 0.0; float hmap = 1.0 - POMH(uv); float prevH = hmap;
+            for (int i = 0; i < POM_STEPS; i++) {
+              if (depth >= hmap) break;
+              prevH = hmap; uv -= dUV; depth += stepD; hmap = 1.0 - POMH(uv);
+            }
+            // refine between the last two samples
+            float after = hmap - depth, before = prevH - (depth - stepD);
+            float w = after / (after - before + 1e-5);
+            tuv0 = mix(uv, uv + dUV, clamp(w, 0.0, 1.0));
+          }
+        }
+        #endif
         float bl = smoothstep(0.35, 0.65, vnoise(vWPos.xz * 0.23));
         vec4 w = vSplat;
         // height-based blending using each layer's height (orm.b)

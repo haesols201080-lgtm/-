@@ -13,10 +13,12 @@ BUDGET = {
     'dead_tree_trunk_02': 8000, 'pine_roots': 6000, 'root_cluster_02': 2500, 'single_root': 3500, 'fern_02': 2400, 'moss_01': 400,
     'shrub_03': 1600, 'shrub_04': 4000, 'nettle_plant': 2000, 'dandelion_01': 3000, 'weed_plant_02': 1500,
     'dry_branches_medium_01': 2500, 'periwinkle_plant': 2500,
+    'bark_debris_01': 1200, 'namaqualand_stones_01': 900, 'root_cluster_01': 3000,
 }
+ONLY = sys.argv[3:]
 for d in sorted(glob.glob(f'{SRC}/models/*')):
     name = os.path.basename(d)
-    if name not in BUDGET: continue
+    if name not in BUDGET or (ONLY and name not in ONLY): continue
     g = glob.glob(d + '/*.gltf')[0]
     bpy.ops.wm.read_factory_settings(use_empty=True)
     bpy.ops.import_scene.gltf(filepath=g)

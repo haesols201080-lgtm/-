@@ -131,6 +131,7 @@ async function boot() {
   fx.setWater({ y: wy, isWater: (x, z) => world.terrain.isWater(x, z), ground: (x, z) => world.terrain.heightAt(x, z) - 0.02,
     onDrop: (x, z, r, k) => world.sim.drop(x, z, r, k) });
   const surf = (p) => ({ x: p.x, y: wy, z: p.z });
+  fx.initAmbient(tier.post ? 260 : 120);
   const resize = () => {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
@@ -435,6 +436,7 @@ async function boot() {
       dof.uniforms.uStrength.value = G.mode === 'title' ? 1.4 : 1.0;
     }
     if (grade) grade.uniforms.uTime.value = G.time;
+    fx.updateAmbient(G.time, camera.position, 0.6 + 0.6 * lighting.visibility(camera.position.x, camera.position.y, camera.position.z));
     // eye adaptation + face light + god rays
     const vis = lighting.update(dt, renderer, 1.05 * (1 + G.rainK * 0.15), camera.position, player.pos);
     faceLight.intensity = (1 - vis) * 0.35;

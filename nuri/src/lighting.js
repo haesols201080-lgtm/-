@@ -61,6 +61,7 @@ export class Lighting {
     this.uniforms = {
       tSkyOcc: { value: this.tex }, uOccB: { value: new THREE.Vector4(-this.half, -this.half, 1 / this.size, 1 / this.size) },
       uOccK: { value: 1 }, uSunDirW: { value: ctx.sunDir }, uScatter: { value: new THREE.Color(0.55, 0.42, 0.26) },
+      uMist: { value: 0.03 }, uMistY: { value: -0.1 }, uMistColor: { value: new THREE.Color().setRGB(0.42, 0.45, 0.42, THREE.SRGBColorSpace) },
     };
     this.exposure = 1;
   }
@@ -95,7 +96,7 @@ export class Lighting {
       Object.assign(sh.uniforms, U);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
-          uniform sampler2D tSkyOcc; uniform vec4 uOccB; uniform float uOccK; uniform vec3 uSunDirW; uniform vec3 uScatter;
+          uniform sampler2D tSkyOcc; uniform vec4 uOccB; uniform float uOccK; uniform vec3 uSunDirW; uniform vec3 uScatter; uniform float uMist, uMistY; uniform vec3 uMistColor;
           vec3 litWorldPos(){ vec3 mv = -vViewPosition; return transpose(mat3(viewMatrix)) * (mv - viewMatrix[3].xyz); }
           float skyVisibility(vec3 wp){
             vec4 o = texture2D(tSkyOcc, (wp.xz - uOccB.xy) * uOccB.zw);
@@ -120,9 +121,15 @@ export class Lighting {
             #else
               float fogFactor = smoothstep(fogNear, fogFar, vFogDepth);
             #endif
-            vec3 vdir = normalize(litWorldPos() - cameraPosition);
+            vec3 wpF = litWorldPos(); vec3 rd = wpF - cameraPosition; float rl = length(rd);
+            vec3 vdir = rd / max(rl, 1e-4);
             float sd = pow(max(dot(vdir, uSunDirW), 0.0), 5.0);
             gl_FragColor.rgb = mix(gl_FragColor.rgb, fogColor + uScatter * sd, fogFactor);
+            // low ground mist: exponential height fog integrated along the view ray (pools in hollows and over water)
+            float hb = 1.5, h0 = cameraPosition.y - uMistY, bdy = hb * rd.y;
+            float integ = abs(bdy) > 1e-3 ? (1.0 - exp(-bdy)) / bdy : 1.0;
+            float mist = 1.0 - exp(-uMist * exp(-hb * h0) * integ * rl);
+            gl_FragColor.rgb = mix(gl_FragColor.rgb, uMistColor + uScatter * sd * 0.6, clamp(mist, 0.0, 0.55));
           }
           #endif`);
     };

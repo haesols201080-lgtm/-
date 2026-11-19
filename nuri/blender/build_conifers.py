@@ -103,6 +103,8 @@ def make_conifer(name, kind, seed, lod=0):
     rnd = random.Random(seed)
     if kind == 'pine':
         H = rnd.uniform(16, 22); R0 = rnd.uniform(0.3, 0.42); crown0 = rnd.uniform(0.58, 0.68)
+    elif kind == 'snag':
+        H = rnd.uniform(7, 13); R0 = rnd.uniform(0.24, 0.34); crown0 = 2.0
     elif kind == 'fir':
         H = rnd.uniform(10, 14); R0 = rnd.uniform(0.22, 0.32); crown0 = rnd.uniform(0.1, 0.18)
     else:  # sapling
@@ -118,7 +120,8 @@ def make_conifer(name, kind, seed, lod=0):
     nb = rnd.randint(5, 7); ths = [i / nb * 2 * math.pi + rnd.uniform(-0.3, 0.3) for i in range(nb)]
     def rfn(t, th):
         z = t * H
-        r = R0 * (1 - 0.88 * t ** 0.9)
+        r = R0 * (1 - (0.45 if kind == 'snag' else 0.88) * t ** 0.9)
+        if kind == 'snag' and t > 0.97: r *= 0.6 + 0.4 * abs(math.sin(th * 3 + seed))  # splintered break
         if kind != 'sapling':
             fl = math.exp(-z / 0.7)
             b = sum(max(0.0, math.cos(th - a)) ** 8 for a in ths)
@@ -131,10 +134,10 @@ def make_conifer(name, kind, seed, lod=0):
     def trunk_at(h):
         t = min(1, max(0, (h + 0.3) / H)); i = t * (rings - 1); i0 = int(min(rings - 2, i)); f = i - i0
         return spine[i0].lerp(spine[i0 + 1], f), rfn(t, 0)
-    # dead branch stubs low on pines
-    if kind == 'pine' and lod == 0:
+    # dead branch stubs low on pines (and all over standing dead snags)
+    if kind in ('pine', 'snag') and lod == 0:
         for k in range(rnd.randint(8, 14)):
-            h = rnd.uniform(2.5, crown0 * H); p, r = trunk_at(h); a = rnd.uniform(0, 6.28)
+            h = rnd.uniform(2.5, min(crown0, 0.95) * H); p, r = trunk_at(h); a = rnd.uniform(0, 6.28)
             d = Vector((math.cos(a), math.sin(a), rnd.uniform(-0.2, 0.15))).normalized()
             L = rnd.uniform(0.25, 0.9)
             pts = [p + d * (r * 0.8 + L * s) for s in (0, 0.5, 1)]
@@ -163,7 +166,7 @@ def make_conifer(name, kind, seed, lod=0):
             if lod == 0 or kind != 'sapling':
                 tube(bv, bf, buv, pts, lambda tt, th, br=br: br * (1 - 0.85 * tt), 5 if lod == 0 else 4)
             # twig cards along the branch (denser toward the tip), alternating sides
-            ncard = max(2, int(L * (7 if lod == 0 else 3.2) * (1.0 if kind != 'sapling' else 2.2)))
+            ncard = max(2, int(L * (10.5 if lod == 0 else 4.8) * (1.0 if kind != 'sapling' else 2.2)))
             for c in range(ncard):
                 u = 0.15 + 0.85 * (c + rnd.random() * 0.5) / ncard
                 i0 = min(seg - 1, int(u * seg)); f = u * seg - i0
@@ -172,7 +175,7 @@ def make_conifer(name, kind, seed, lod=0):
                 side = 1 if c % 2 else -1
                 sd = bd.cross(Vector((0, 0, 1))).normalized() * side
                 dirc = (bd * 0.55 + sd * 0.8 + Vector((0, 0, rnd.uniform(-0.1, 0.25)))).normalized()
-                clen = (0.35 + 0.5 * rnd.random()) * (0.55 if kind == 'sapling' else 1.0) * min(1.2, 0.5 + L * 0.35)
+                clen = (0.4 + 0.55 * rnd.random()) * (0.55 if kind == 'sapling' else 1.0) * min(1.3, 0.55 + L * 0.38)
                 twig_card(cards, bp, dirc, Vector((0, 0, 1)), clen, rnd.choice(BIG if clen > 0.4 else SMALL), droop=0.18, fold=0.35, rnd=rnd)
             # tip card continues the branch
             twig_card(cards, pts[-1], d + Vector((0, 0, 0.05)), Vector((0, 0, 1)), 0.45 * (0.6 if kind == 'sapling' else 1), rnd.choice(BIG), droop=0.2, rnd=rnd)
@@ -181,7 +184,18 @@ def make_conifer(name, kind, seed, lod=0):
     top = spine[-1]
     twig_card(cards, top - Vector((0, 0, 0.3 if kind != 'sapling' else 0.08)), Vector((0.05, 0.02, 1)), Vector((1, 0, 0)), 0.8 if kind != 'sapling' else 0.25, rnd.choice(BIG), droop=0.02)
     bark = MB(); bark.v, bark.f, bark.uv = bv, bf, buv
-    bo = bark.obj(f'{name}_bark', 'Bark'); co = cards.obj(f'{name}_twigs', 'Twig')
+    bo = bark.obj(f'{name}_bark', 'BarkSnag' if kind == 'snag' else 'Bark')
+    if kind == 'snag':
+        return bo, None, H
+    co = cards.obj(f'{name}_twigs', 'Twig')
+    zs = [v.co.z for v in co.data.vertices]
+    zmid = (min(zs) + max(zs)) / 2 if zs else H * 0.7
+    nrm = []
+    for v in co.data.vertices:
+        d = Vector((v.co.x, v.co.y, (v.co.z - zmid) * 0.55))
+        if d.length < 1e-4: d = Vector((0, 0, 1))
+        nrm.append((d.normalized() + Vector((0, 0, 0.35))).normalized())
+    co.data.normals_split_custom_set_from_vertices(nrm)
     return bo, co, H
 
 def export(objs, path):
@@ -199,7 +213,7 @@ def bake_ao(ob):
     bpy.ops.object.select_all(action='DESELECT'); ob.select_set(True); bpy.context.view_layer.objects.active = ob
     bpy.ops.object.bake(type='AO', target='VERTEX_COLORS', margin=0)
 
-SPECS = [('pine', 11), ('pine', 22), ('pine', 33), ('pine', 44), ('fir', 55), ('fir', 66), ('sapling', 77), ('sapling', 88), ('sapling', 99)]
+SPECS = [('pine', 11), ('pine', 22), ('pine', 33), ('pine', 44), ('fir', 55), ('fir', 66), ('sapling', 77), ('sapling', 88), ('sapling', 99), ('snag', 111), ('snag', 122)]
 for i, (kind, seed) in enumerate(SPECS):
     for lod in ((0, 1) if kind != 'sapling' else (0,)):
         bpy.ops.wm.read_factory_settings(use_empty=True)
@@ -208,6 +222,7 @@ for i, (kind, seed) in enumerate(SPECS):
         b, c, H = make_conifer(f'{kind}{i}', kind, seed, lod)
         if lod == 0: bake_ao(b)
         path = f'{OUT}/{kind}_{i}{"_lod1" if lod else ""}.glb'
-        export([b, c], path)
-        b.data.calc_loop_triangles(); c.data.calc_loop_triangles()
-        print('TREE', os.path.basename(path), 'H=%.1f' % H, 'bark', len(b.data.loop_triangles), 'cards', len(c.data.loop_triangles), round(os.path.getsize(path) / 1e6, 2), 'MB')
+        export([b] + ([c] if c else []), path)
+        b.data.calc_loop_triangles()
+        if c: c.data.calc_loop_triangles()
+        print('TREE', os.path.basename(path), 'H=%.1f' % H, 'bark', len(b.data.loop_triangles), 'cards', len(c.data.loop_triangles) if c else 0, round(os.path.getsize(path) / 1e6, 2), 'MB')

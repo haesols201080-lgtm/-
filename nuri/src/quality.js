@@ -3,11 +3,11 @@ export const isTouch = (('ontouchstart' in window) || navigator.maxTouchPoints >
 export const isMobile = isTouch || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 export const TIERS = {
-  low: { pixelRatio: 1.0, maxDpr: 1.5, shadowMap: 2048, shadowRange: 12, dof: false, grassDensity: 0.35, grassRadius: 12, texSize: 1024,
+  low: { pixelRatio: 1.0, maxDpr: 1.5, shadowMap: 2048, shadowRange: 12, dof: false, pom: 0, grassDensity: 0.35, grassRadius: 12, texSize: 1024,
     post: false, bloom: false, ao: false, treeLod0Dist: 22, fernDensity: 0.5, msaa: 0, antialias: true, farFog: 55, creatures: 0.6 },
-  medium: { pixelRatio: 1.0, maxDpr: 1.75, shadowMap: 2048, shadowRange: 16, dof: true, grassDensity: 0.65, grassRadius: 16, texSize: 1024,
+  medium: { pixelRatio: 1.0, maxDpr: 1.75, shadowMap: 2048, shadowRange: 16, dof: true, pom: 8, grassDensity: 0.65, grassRadius: 16, texSize: 1024,
     post: true, bloom: true, ao: false, treeLod0Dist: 32, fernDensity: 0.8, msaa: 4, antialias: false, farFog: 70, creatures: 1 },
-  high: { pixelRatio: 1.0, maxDpr: 2, shadowMap: 4096, shadowRange: 20, dof: true, grassDensity: 1.0, grassRadius: 20, texSize: 2048,
+  high: { pixelRatio: 1.0, maxDpr: 2, shadowMap: 4096, shadowRange: 20, dof: true, pom: 14, grassDensity: 1.0, grassRadius: 20, texSize: 2048,
     post: true, bloom: true, ao: true, treeLod0Dist: 45, fernDensity: 1, msaa: 4, antialias: false, farFog: 80, creatures: 1 },
 };
 

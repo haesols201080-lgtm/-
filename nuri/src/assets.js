@@ -75,9 +75,12 @@ export const TERRAIN_LAYERS = ['ph_floor', 'ph_path', 'ph_riverbed', 'ph_mud'];
 export const TERRAIN_SCALES = [1 / 1.5, 1 / 3.15, 1 / 2.9, 1 / 1.3]; // metres covered by each scanned set
 export const PH_MODELS = ['rock_moss_set_01', 'rock_moss_set_02', 'boulder_01', 'rock_07', 'rock_09', 'stone_01', 'rock_face_01', 'rock_face_02',
   'tree_stump_01', 'tree_stump_02', 'dead_tree_trunk', 'dead_tree_trunk_02', 'pine_roots', 'root_cluster_02', 'single_root', 'fern_02', 'moss_01',
-  'shrub_03', 'shrub_04', 'nettle_plant', 'dandelion_01', 'weed_plant_02', 'dry_branches_medium_01', 'periwinkle_plant'];
+  'shrub_03', 'shrub_04', 'nettle_plant', 'dandelion_01', 'weed_plant_02', 'dry_branches_medium_01', 'periwinkle_plant',
+  'bark_debris_01', 'namaqualand_stones_01', 'root_cluster_01'];
+export const DEBRIS = ['pinecone_0', 'pinecone_1', 'pinecone_2', 'mush_amanita', 'mush_bolete', 'mush_cluster', 'mush_bracket'];
 export const TREES = ['pine_0', 'pine_1', 'pine_2', 'pine_3', 'fir_4', 'fir_5'];
 export const SAPLINGS = ['sapling_6', 'sapling_7', 'sapling_8'];
+export const SNAGS = ['snag_9', 'snag_10'];
 
 export class Assets {
   constructor(renderer, tier, onProgress) {
@@ -156,7 +159,7 @@ export class Assets {
   async loadAll() {
     const T = this.tex, tier = this.tier, suf = this.suffix(tier.texSize);
     const modelJobs = [['nuri'], ['outcrop'], ['log_hollow'],
-      ...PH_MODELS.map((m) => [`ph/${m}`, m]), ...TREES.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...SAPLINGS.map((t) => [`trees/${t}`, t])];
+      ...PH_MODELS.map((m) => [`ph/${m}`, m]), ...DEBRIS.map((m) => [`debris/${m}`, m]), ...TREES.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...SAPLINGS.map((t) => [`trees/${t}`, t]), ...SNAGS.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']])];
     this.total = 3 + 6 + 1 + modelJobs.length;
     const [alb, nrm, orm] = await Promise.all([
       this.arrayTexture(TERRAIN_LAYERS.map((l) => `${BASE}tex/${l}${suf}_albedo.jpg`), true),
@@ -192,11 +195,16 @@ export class Assets {
     // LOD1 trees and saplings carry no baked-AO vertex colors
     M.barkPlain = new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
       roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.3, 1.3), envMapIntensity: 0.7 });
+    M.barkSnag = patchMaterial(new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
+      vertexColors: true, color: new THREE.Color(0.78, 0.74, 0.7), roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.5, 1.5), envMapIntensity: 0.7 }), { ao: 1, key: 'snag' });
+    M.barkSnagPlain = new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, color: new THREE.Color(0.78, 0.74, 0.7), roughness: 1, metalness: 0 });
     M.twig = patchMaterial(new THREE.MeshStandardMaterial({ map: T.twig.map, normalMap: T.twig.normal, alphaTest: 0.38, side: THREE.DoubleSide,
       roughness: 0.82, metalness: 0, envMapIntensity: 0.55 }), {
       ao: false,
       wind: 'transformed += windOffset(wp0.xyz, 0.05 * smoothstep(0.5, 14.0, wp0.y) + 0.012, wp0.x * 0.3 + wp0.z * 0.2);',
       extraFrag: (sh) => {
+        sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>',
+          THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', '/* foliage keeps crown-shaped normals on both sides */'));
         // foliage translucency: light passing through needles when back-lit, plus a soft canopy self-shadow tint
         sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `
           vec3 vd = normalize(vViewPosition);
