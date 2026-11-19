@@ -162,6 +162,8 @@ export function makeTerrainMaterial(T, tier = {}) {
     tAlb: { value: T.terrainAlb }, tNrm: { value: T.terrainNrm }, tOrm: { value: T.terrainOrm },
     tRockA: { value: T.rock.map }, tRockN: { value: T.rock.normal }, tRockO: { value: T.rock.orm },
     uWet: { value: 0 }, uTime: { value: 0 }, uScales: { value: new THREE.Vector4(...TERRAIN_SCALES) }, uWaterY: { value: WORLD.waterY },
+    tMarks: { value: null }, uMarkOrigin: { value: new THREE.Vector2(-999, -999) }, uMarkSize: { value: 12 }, uMarkTexel: { value: 1 / 1024 },
+    uRobot: { value: new THREE.Vector4(0, -99, 0, 0) }, uFeet: { value: [new THREE.Vector4(0, -99, 0, 0), new THREE.Vector4(0, -99, 0, 0)] },
   };
   mat.userData.uniforms = uniforms;
   mat.onBeforeCompile = (sh) => {
@@ -181,6 +183,8 @@ export function makeTerrainMaterial(T, tier = {}) {
         uniform sampler2DArray tAlb, tNrm, tOrm;
         uniform sampler2D tRockA, tRockN, tRockO;
         uniform float uWet, uTime, uWaterY; uniform vec4 uScales;
+        uniform sampler2D tMarks; uniform vec2 uMarkOrigin; uniform float uMarkSize, uMarkTexel; uniform vec4 uRobot; uniform vec4 uFeet[2];
+        vec4 MK; vec2 MUV; float MSOFT;
         ${CAUSTICS_GLSL}
         varying vec4 vSplat; varying vec2 vAux; varying vec3 vWPos; varying vec3 vWNrm;
         ${SHADER_TRI}
@@ -257,11 +261,20 @@ export function makeTerrainMaterial(T, tier = {}) {
         // wetness near water and when raining: darker, glossier
         float wet = clamp(vAux.y + uWet * 0.6, 0.0, 1.0);
         TA *= mix(1.0, 0.62, wet);
+        // ground marks (footprints, skids) pressed into this very surface
+        MUV = (vWPos.xz - uMarkOrigin) / uMarkSize; MK = vec4(0.0);
+        if (MUV.x > 0.0 && MUV.y > 0.0 && MUV.x < 1.0 && MUV.y < 1.0) MK = texture2D(tMarks, MUV);
+        { vec4 sw = vSplat / max(1e-3, vSplat.x + vSplat.y + vSplat.z + vSplat.w);
+          MSOFT = clamp(sw.y + sw.w + sw.x * 0.5 + sw.z * 0.25, 0.0, 1.0); }
+        TA *= 1.0 - (0.3 * MK.r + 0.08 * MK.a) * MSOFT;
+        TA = mix(TA, TA * vec3(1.18, 1.12, 1.06), clamp(MK.b, 0.0, 1.0) * MSOFT * 0.5);
+        TA *= mix(1.0, 0.6, MK.g);
         diffuseColor = vec4(TA, opacity);
         terrainH = TO.b;
       `)
       .replace('#include <roughnessmap_fragment>', `
-        float roughnessFactor = clamp(TO.g * mix(1.0, 0.45, clamp(vAux.y + uWet*0.7, 0.0, 1.0)), 0.05, 1.0);`)
+        float roughnessFactor = clamp(TO.g * mix(1.0, 0.45, clamp(vAux.y + uWet*0.7, 0.0, 1.0)), 0.05, 1.0);
+        roughnessFactor = mix(roughnessFactor, 0.14, MK.g);`)
       .replace('#include <normal_fragment_maps>', `
         {
           vec3 tn = TN * 2.0 - 1.0;
@@ -273,6 +286,16 @@ export function makeTerrainMaterial(T, tier = {}) {
           if (rockK > 0.001) {
             vec3 rn = triNormal(tRockN, vWPos, wn2, tw, 0.37);
             nW = normalize(mix(nW, rn, rockK));
+          }
+          if (MK.a > 0.001) {
+            // pressed soil is compacted: its own small relief flattens inside the print
+            nW = normalize(mix(nW, wn2, clamp(MK.r * 1.3, 0.0, 1.0) * MSOFT * 0.7));
+            float e = uMarkTexel;
+            float mx = texture2D(tMarks, MUV + vec2(e, 0.0)).r - texture2D(tMarks, MUV - vec2(e, 0.0)).r;
+            float mz = texture2D(tMarks, MUV + vec2(0.0, e)).r - texture2D(tMarks, MUV - vec2(0.0, e)).r;
+            float bx = texture2D(tMarks, MUV + vec2(e, 0.0)).b - texture2D(tMarks, MUV - vec2(e, 0.0)).b;
+            float bz = texture2D(tMarks, MUV + vec2(0.0, e)).b - texture2D(tMarks, MUV - vec2(0.0, e)).b;
+            nW = normalize(nW + (vec3(mx, 0.0, mz) * 2.6 - vec3(bx, 0.0, bz) * 1.2) * MSOFT);
           }
           normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);
         }`)
@@ -289,6 +312,18 @@ export function makeTerrainMaterial(T, tier = {}) {
         #include <opaque_fragment>`)
       .replace('#include <aomap_fragment>', `
         float ambientOcclusion = mix(1.0, TO.r, 0.9);
+        ambientOcclusion *= 1.0 - 0.4 * clamp(MK.r, 0.0, 1.0) * MSOFT;   // pressed hollows see less sky
+        // contact occlusion from the robot standing on this ground (and from each boot)
+        {
+          float dR = length(vWPos.xz - uRobot.xz), hR = max(0.0, uRobot.w), rr = 0.14 + hR * 0.45;
+          float kR = exp(-dR * dR / (rr * rr)) * 0.62 * (1.0 - smoothstep(0.0, 1.0, hR));
+          float kF = 0.0;
+          for (int i = 0; i < 2; i++) { vec2 d = vWPos.xz - uFeet[i].xz; float df = length(d);
+            kF = max(kF, exp(-df * df / 0.0011) * 0.55 * (1.0 - smoothstep(0.02, 0.12, abs(vWPos.y - uFeet[i].y)))); }
+          float cAO = (1.0 - kR) * (1.0 - kF);
+          ambientOcclusion *= cAO;
+          reflectedLight.directDiffuse *= mix(1.0, cAO, 0.4);
+        }
         reflectedLight.indirectDiffuse *= ambientOcclusion;
         reflectedLight.indirectSpecular *= ambientOcclusion;
         reflectedLight.directDiffuse *= mix(1.0, TO.r, 0.35);`);

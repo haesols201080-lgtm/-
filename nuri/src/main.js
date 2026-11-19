@@ -22,6 +22,8 @@ import { START, STREAM, POND, REGIONS } from './layout.js';
 import { WIND } from './shaders.js';
 import { makeDofPass, makeGradePass, makeContactShadow, makeGodRaysPass } from './post.js';
 import { Lighting } from './lighting.js';
+import { Prints } from './prints.js';
+import { GroundMarks } from './marks.js';
 import { DUST, WET } from './nuri.js';
 import { clamp, damp, angleDiff } from './util.js';
 
@@ -132,6 +134,13 @@ async function boot() {
     onDrop: (x, z, r, k) => world.sim.drop(x, z, r, k) });
   const surf = (p) => ({ x: p.x, y: wy, z: p.z });
   fx.initAmbient(tier.post ? 260 : 120);
+  // footprints / skids are pressed into the terrain surface itself (lit and shaded like the scanned ground)
+  const marks = new GroundMarks(renderer, tier.post ? { N: 2048, size: 10 } : { N: 1024, size: 8 });
+  const TU = world.terrain.material.userData.uniforms;
+  // share the terrain material's own uniform objects (its program may already be compiled during loading)
+  for (const k of Object.keys(marks.uniforms)) { TU[k].value = marks.uniforms[k].value; marks.uniforms[k] = TU[k]; }
+  const prints = new Prints(scene, world, marks); world.grassTrample.value = prints.trample;
+  const footWorld = (side) => { const b = nuri.b[`foot.${side}`]; const v = b.getWorldPosition(new THREE.Vector3()); v.x += Math.sin(player.yaw) * 0.012; v.z += Math.cos(player.yaw) * 0.012; return v; };
   const resize = () => {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
@@ -212,12 +221,17 @@ async function boot() {
           const surf = surfaceUnder();
           audio.play('step', { surface: surf, pos: pp, vol: clamp(0.35 + e.speed * 0.25, 0.3, 1), pitch: 0.9 + Math.random() * 0.2 });
           if (e.speed > 1.4 && (surf === 'dirt' || surf === 'leaves')) fx.dust(pp, 3, surf === 'dirt' ? [0.52, 0.44, 0.33] : [0.45, 0.36, 0.24]);
+          { // footprint of the planted boot (the lower one)
+            const L = footWorld('L'), R = footWorld('R'), f = L.y < R.y ? L : R;
+            f.y = player.pos.y; prints.step(f, player.yaw, WET.value, player.groundCollider, 1);
+          }
           if (surf === 'water' || player.wadeDepth > 0.02) { const d = tmpV.set(player.vel.x, 0, player.vel.z).multiplyScalar(0.3); fx.wadeSplash({ x: pp.x, y: wy, z: pp.z }, d, 0.6); world.sim.drop(pp.x, pp.z, 0.07, -0.02); fx.ring({ x: pp.x, y: wy, z: pp.z }, 0.2); }
           break;
         }
         case 'jump': audio.play('jump', { pos: pp }); if (e.water) { fx.waterSplash(surf(pp), 0.55); world.sim.drop(pp.x, pp.z, 0.12, -0.05); audio.play('splash', { pos: pp, vol: 0.5 }); } else fx.dust(pp, 4); break;
         case 'djump': audio.play('djump', { pos: pp }); for (let i = 0; i < 10; i++) fx.exhaust({ x: pp.x, y: pp.y, z: pp.z }); setExpr('excited', 0.8); break;
-        case 'land': if (e.impact > 3) { audio.play('land', { pos: pp, vol: clamp(e.impact / 9, 0.3, 1) }); fx.dust(pp, Math.round(clamp(e.impact, 3, 12))); if (e.impact > 8) orbit.shake = 0.6; }
+        case 'land': for (const sd of ['L', 'R']) { const f = footWorld(sd); f.y = player.pos.y; prints.step(f, player.yaw, WET.value, player.groundCollider, clamp(0.8 + e.impact / 10, 0.8, 1.3)); }
+          if (e.impact > 3) { audio.play('land', { pos: pp, vol: clamp(e.impact / 9, 0.3, 1) }); fx.dust(pp, Math.round(clamp(e.impact, 3, 12))); if (e.impact > 8) orbit.shake = 0.6; }
           else audio.play('step', { surface: surfaceUnder(), pos: pp, vol: 0.5 }); break;
         case 'splash': audio.play('splash', { pos: pp, vol: e.strength }); fx.waterSplash(surf(pp), 0.5 + e.strength); world.sim.drop(pp.x, pp.z, 0.16, -0.06 - e.strength * 0.06); orbit.shake = 0.25 * e.strength; WET.value = 1; setExpr('surprised', 0.8); moodBeep('surprised'); break;
         case 'swimstroke': { audio.play('swim', { pos: pp, vol: 0.6 }); const f = tmpV.set(Math.sin(player.yaw), 0, Math.cos(player.yaw));
@@ -351,6 +365,14 @@ async function boot() {
     }
     // animation + model transform
     nuri.root.position.copy(player.pos);
+    {
+      // boots settle a few millimetres into soft litter / dirt / moss instead of hovering on the surface
+      const onT = !player.groundCollider || player.groundCollider.userData?.kind === 'terrain';
+      const sf = player.grounded && onT && player.state !== 'swim' ? world.terrain.surfaceAt(player.pos.x, player.pos.z) : '';
+      const target = sf === 'dirt' ? 0.007 : sf === 'moss' ? 0.006 : sf === 'leaves' ? 0.005 : sf === 'pebbles' ? 0.002 : 0;
+      G.sink = damp(G.sink || 0, target, 10, dt);
+      nuri.root.position.y -= G.sink;
+    }
     nuri.root.rotation.y = player.yaw;
     const fo = footOffsets();
     const params = player.animParams(G.mode === 'play' ? lookTarget() : null);
@@ -415,11 +437,30 @@ async function boot() {
         }
       }
     }
+    // skid marks while rolling / sliding, drag marks behind pushed crates
+    if (G.mode === 'play' && !G.paused) {
+      if (player.grounded && (player.state === 'roll' || player.state === 'slide')) {
+        const d = tmpV.set(player.vel.x, 0, player.vel.z); if (d.lengthSq() > 0.01) prints.skid(player.pos, d.normalize(), player.groundCollider, WET.value, player.state === 'slide' ? 1.4 : 1.1);
+      }
+      for (const pr of gameplay.props) if (pr.kind === 'crate') {
+        const v = pr.body.linvel(), hs = Math.hypot(v.x, v.z), t = pr.body.translation();
+        if (hs > 0.15 && t.y - pr.size / 2 - world.terrain.heightAt(t.x, t.z) < 0.05) prints.skid(new THREE.Vector3(t.x, 0, t.z), new THREE.Vector3(v.x, 0, v.z).normalize(), null, 0, pr.size / 0.07 * 0.9);
+      }
+    }
+    prints.update(dt);
+    marks.update(dt, player.pos);
     // contact shadow follows the ground under the robot and fades with height
     {
       const gd = player.grounded ? 0 : Math.max(0, player.groundDist ?? 1);
       const gy = player.pos.y - (player.grounded ? 0 : gd);
-      contact.visible = gd < 1.5 && player.state !== 'swim';
+      // on terrain the occlusion is computed inside the terrain shader (robot body + each boot);
+      // the decal is only used on rocks, logs and other props
+      const onTerrain = !player.groundCollider || player.groundCollider.userData?.kind === 'terrain';
+      const swim = player.state === 'swim';
+      TU.uRobot.value.set(player.pos.x, gy, player.pos.z, swim ? 9 : gd);
+      for (const [i, sd] of [[0, 'L'], [1, 'R']]) { const f = footWorld(sd); TU.uFeet.value[i].set(f.x, swim ? -99 : f.y - 0.012, f.z, 0); }
+      nuri.setGround(gy, world.terrain.surfaceAt(player.pos.x, player.pos.z), onTerrain);
+      contact.visible = gd < 1.5 && !swim && !onTerrain;
       contact.position.set(player.pos.x, gy + 0.006, player.pos.z);
       const n = world.terrain.normalAt(player.pos.x, player.pos.z);
       contact.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
@@ -453,7 +494,8 @@ async function boot() {
   }
   frame();
   // debug / test hooks
-  window.__game = { player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, get dof() { return dof; }, get rays() { return rays; } };
+  window.__RAPIER = RAPIER; window.__THREE = THREE;
+  window.__game = { player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, prints, marks, get dof() { return dof; }, get rays() { return rays; } };
 }
 
 function makeRain(scene) {

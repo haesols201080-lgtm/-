@@ -333,11 +333,32 @@ export class World {
     const tier = this.ctx.tier, M = this.ctx.assets.mats;
     this.grassPlayer = { value: new THREE.Vector3(0, -99, 0) };
     const prev = M.grass.onBeforeCompile;
+    this.grassTrample = { value: Array.from({ length: 24 }, () => new THREE.Vector4(0, -99, 0, 0)) };
     M.grass.onBeforeCompile = (sh, r) => {
-      sh.uniforms.uPlayer = this.grassPlayer;
-      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec3 uPlayer;');
+      sh.uniforms.uPlayer = this.grassPlayer; sh.uniforms.uTrample = this.grassTrample;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec3 uPlayer; uniform vec4 uTrample[24];');
       prev(sh, r);
+      // grass stays flattened where the robot has stepped, slowly springing back
+      sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', `
+        {
+          vec4 wq = vec4(transformed, 1.0);
+          #ifdef USE_INSTANCING
+            wq = instanceMatrix * wq;
+          #endif
+          wq = modelMatrix * wq;
+          float flatK = 0.0; vec2 away = vec2(0.0);
+          for (int i = 0; i < 24; i++) {
+            vec2 d = wq.xz - uTrample[i].xz; float dl = length(d);
+            float f = uTrample[i].w * smoothstep(0.11, 0.03, dl);
+            if (f > flatK) { flatK = f; away = d / max(dl, 1e-3); }
+          }
+          float hgt = uv.y;
+          transformed.y *= 1.0 - 0.8 * flatK;
+          transformed.xz += away * flatK * hgt * 0.06;
+        }
+        #include <project_vertex>`);
     };
+    M.grass.customProgramCacheKey = () => 'grassTrample';
     const geos = GRASS_SPRITES.map((spr) => grassCardGeometry(spr));
     const CH = 8, density = 7 * tier.grassDensity;
     const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
