@@ -6,6 +6,50 @@ import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { patchMaterial, makeRockMaterial } from './shaders.js';
 
 const BASE = './';
+
+// Some hosts' content-security policy blocks fetch() of data: and blob: URLs. GLTFLoader decodes embedded images
+// through ImageBitmapLoader, which fetches a blob: URL; load those through an <img> element instead (allowed by img-src).
+{
+  const orig = THREE.ImageBitmapLoader.prototype.load;
+  THREE.ImageBitmapLoader.prototype.load = function (url, onLoad, onProgress, onError) {
+    if (typeof url !== 'string' || !(url.startsWith('blob:') || url.startsWith('data:'))) return orig.call(this, url, onLoad, onProgress, onError);
+    const scope = this; scope.manager.itemStart(url);
+    const img = new Image();
+    img.onload = () => {
+      createImageBitmap(img, Object.assign({}, scope.options || {}))
+        .then((bmp) => { onLoad && onLoad(bmp); scope.manager.itemEnd(url); })
+        .catch((e) => { onError && onError(e); scope.manager.itemError(url); scope.manager.itemEnd(url); });
+    };
+    img.onerror = (e) => { onError && onError(e); scope.manager.itemError(url); scope.manager.itemEnd(url); };
+    img.src = url;
+    return img;
+  };
+}
+
+// glTF JSON whose buffer is a base64 data URI -> in-memory GLB (decoded here, so no fetch of the data: URI is needed)
+function base64ToBytes(b64) {
+  const bin = atob(b64), out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+function jsonToGLB(json) {
+  let bin = new Uint8Array(0);
+  const b = json.buffers && json.buffers[0];
+  if (b && typeof b.uri === 'string' && b.uri.startsWith('data:')) { bin = base64ToBytes(b.uri.slice(b.uri.indexOf(',') + 1)); delete b.uri; }
+  const enc = new TextEncoder();
+  let js = enc.encode(JSON.stringify(json));
+  const jsPad = (4 - (js.length % 4)) % 4, binPad = (4 - (bin.length % 4)) % 4;
+  const total = 12 + 8 + js.length + jsPad + (bin.length ? 8 + bin.length + binPad : 0);
+  const out = new Uint8Array(total), dv = new DataView(out.buffer);
+  dv.setUint32(0, 0x46546c67, true); dv.setUint32(4, 2, true); dv.setUint32(8, total, true);
+  dv.setUint32(12, js.length + jsPad, true); dv.setUint32(16, 0x4e4f534a, true);
+  out.set(js, 20); out.fill(0x20, 20 + js.length, 20 + js.length + jsPad);
+  if (bin.length) {
+    const o = 20 + js.length + jsPad;
+    dv.setUint32(o, bin.length + binPad, true); dv.setUint32(o + 4, 0x004e4942, true); out.set(bin, o + 8);
+  }
+  return out.buffer;
+}
 export const TERRAIN_LAYERS = ['ph_floor', 'ph_path', 'ph_riverbed', 'ph_mud'];
 export const TERRAIN_SCALES = [1 / 1.5, 1 / 3.15, 1 / 2.9, 1 / 1.3]; // metres covered by each scanned set
 export const PH_MODELS = ['rock_moss_set_01', 'rock_moss_set_02', 'boulder_01', 'rock_07', 'rock_09', 'stone_01', 'rock_face_01', 'rock_face_02',
@@ -80,7 +124,12 @@ export class Assets {
   async gltf(path, key) {
     const loader = this.gltfLoader || (this.gltfLoader = new GLTFLoader());
     // production builds ship glTF JSON (.json) because some static hosts don't serve .glb
-    const g = await loader.loadAsync(`${BASE}models/${path}${import.meta.env.PROD ? '.json' : '.glb'}`);
+    let g;
+    if (import.meta.env.PROD) {
+      const res = await fetch(`${BASE}models/${path}.json`);
+      if (!res.ok) throw new Error('missing model ' + path);
+      g = await loader.parseAsync(jsonToGLB(await res.json()), '');
+    } else g = await loader.loadAsync(`${BASE}models/${path}.glb`);
     this.models[key || path] = g; this.step(key || path);
     return g;
   }
