@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mulberry32, smoothstep, distToPolyline, clamp, makeNoise2D, fbm } from './util.js';
 import { WORLD, PATH, PATH2, PATH3, STREAM, POND, OUTCROP, HERO_TREES, BOULDERS, LOGS, STUMPS, START } from './layout.js';
 import { Terrain } from './terrain.js';
-import { patchMaterial, WIND, leafLight } from './shaders.js';
+import { patchMaterial, WIND, leafLight, conformToGround, rootLift, barkRootBlend, ensureRootAttributes } from './shaders.js';
 import { TREES, SAPLINGS, SNAGS } from './assets.js';
 import { WaterSim, makeWaterMaterial } from './water.js';
 
@@ -131,11 +131,57 @@ export class World {
     for (const t of this.treeSpots) t.cs = TREE_CROWN[t.t] || 1;
   }
 
+  // terrain height as a texture (half float, linearly filtered) for shaders that need the ground under a vertex
+  groundTexture() {
+    if (this.ground) return this.ground;
+    const T = this.terrain, N = T.res + 1, data = new Uint16Array(N * N);
+    for (let k = 0; k < N * N; k++) data[k] = THREE.DataUtils.toHalfFloat(T.h[k]);
+    const tex = new THREE.DataTexture(data, N, N, THREE.RedFormat, THREE.HalfFloatType);
+    tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
+    // texel centres sit on the grid vertices
+    const span = T.size + T.cell;
+    this.ground = { tex: { value: tex }, bounds: { value: new THREE.Vector4(-T.half - T.cell / 2, -T.half - T.cell / 2, 1 / span, 1 / span) } };
+    return this.ground;
+  }
+
+  // colliders along the exported centre lines of a tree's surface roots (only where they stand above the soil)
+  rootColliders(roots, t, kind) {
+    const R = this.ctx.RAPIER, T = this.terrain, sxz = t.s * (t.w || 1), sy = t.s;
+    const c = Math.cos(t.rot), sn = Math.sin(t.rot), h0 = T.heightAt(t.x, t.z);
+    const world = (p) => {
+      const x = t.x + (p[0] * c + p[2] * sn) * sxz, z = t.z + (-p[0] * sn + p[2] * c) * sxz;
+      const y = t.y + p[1] * sy + rootLift(p[1], Math.hypot(p[0], p[2]), T.heightAt(x, z) - h0);
+      return new THREE.Vector3(x, y, z);
+    };
+    let n = 0;
+    for (const line of roots) {
+      for (let i = 0; i + 1 < line.length; i++) {
+        const a = world(line[i]), b = world(line[i + 1]), r = (line[i][3] + line[i + 1][3]) * 0.5 * sxz;
+        if (r < 0.02) continue;
+        const mid = a.clone().add(b).multiplyScalar(0.5);
+        if (mid.y + r - T.heightAt(mid.x, mid.z) < 0.03) continue; // buried here
+        const d = b.clone().sub(a), len = d.length(); if (len < 1e-3) continue;
+        const q = new THREE.Quaternion().setFromUnitVectors(UP, d.normalize());
+        this.fixed(R.ColliderDesc.capsule(len / 2, r * 0.9).setTranslation(mid.x, mid.y, mid.z).setRotation({ x: q.x, y: q.y, z: q.z, w: q.w }), { kind, surface: 'wood' });
+        n++;
+      }
+    }
+    return n;
+  }
+
   buildTrees() {
     const { assets } = this.ctx, M = assets.mats, R = this.ctx.RAPIER;
+    const ground = this.groundTexture();
+    for (const m of [M.bark, M.barkPlain, M.barkSnag, M.barkSnagPlain]) if (!m.userData.conformed) { conformToGround(m, ground); barkRootBlend(m); m.userData.conformed = true; }
+    for (const k of [...TREES, ...TREES.map((t) => t + '_lod1'), ...SAPLINGS, ...SNAGS, ...SNAGS.map((t) => t + '_lod1')]) {
+      const g = assets.models[k]; if (g) g.scene.traverse((o) => { if (o.isMesh) ensureRootAttributes(o.geometry); });
+    }
+    // root centre lines are glTF extras on the bark node (a group when the mesh has several primitives)
+    const rootsOf = (key) => { let data = null; assets.models[key].scene.traverse((o) => { if (!data && o.userData && o.userData.roots) data = o.userData.roots; });
+      try { return data ? JSON.parse(data) : null; } catch (e) { return null; } };
+    let rootCols = 0;
     const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
     const byT = {};
-    const roots = this.variants('pine_roots');
     for (const t of this.treeSpots) {
       t.y = this.terrain.heightAt(t.x, t.z) - 0.03;
       // girth varies independently of height (suppressed thin stems next to dominant thick ones)
@@ -151,17 +197,9 @@ export class World {
         }
         grp.position.set(t.x, t.y, t.z); grp.rotation.y = t.rot; grp.scale.set(t.s * t.w, t.s, t.s * t.w);
         this.scene.add(grp); grp.updateMatrixWorld(true);
-        const bark = grp.children.find((c, i) => ms[i].name.includes('bark'));
-        this.trimesh(bark.geometry, bark.matrixWorld, { kind: 'tree', surface: 'wood' }, t.y + 2.5);
-        // scanned pine roots spreading from the base
-        const rv = roots[Math.floor(rnd() * roots.length)];
-        const rs = r0 / 0.32;
-        for (let k = 0; k < 2; k++) {
-          const rm = this.place(rv, null, new THREE.Vector3(t.x, t.y - 0.05, t.z), t.rot + k * Math.PI * 0.9 + rnd(), new THREE.Vector3(rs, rs * (0.9 + rnd() * 0.3), rs));
-          this.trimesh(rv.geo, rm.matrixWorld, { kind: 'root', surface: 'wood' });
-        }
       } else (byT[t.t] = byT[t.t] || []).push(t);
       this.fixed(R.ColliderDesc.cylinder(4, r0 * 0.95).setTranslation(t.x, t.y + 4, t.z), { kind: 'tree', surface: 'wood' });
+      const rl = rootsOf(t.t); if (rl) rootCols += this.rootColliders(rl, t, 'root');
     }
     for (const [key, list] of Object.entries(byT)) {
       for (const o of meshes(assets.models[key + '_lod1'].scene)) {
@@ -182,8 +220,10 @@ export class World {
       m.position.set(x, y, z); m.rotation.set((rnd() - 0.5) * 0.08, rnd() * 6.28, (rnd() - 0.5) * 0.08); m.scale.setScalar(sc);
       m.castShadow = m.receiveShadow = true; this.scene.add(m);
       this.fixed(R.ColliderDesc.cylinder(3, 0.27 * sc).setTranslation(x, y + 3, z), { kind: 'tree', surface: 'wood' });
+      const rl = rootsOf(key); if (rl) rootCols += this.rootColliders(rl, { x, y, z, rot: m.rotation.y, s: sc, w: 1 }, 'root');
       snags++;
     }
+    this.rootColliderCount = rootCols;
     // understory saplings (very visible at robot height)
     const sap = [];
     for (let i = 0; i < 900 && sap.length < 140 * this.ctx.tier.fernDensity + 30; i++) {

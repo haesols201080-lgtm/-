@@ -190,3 +190,90 @@ export function barkMoss(mat, moss) {
   return mat;
 }
 
+// Tree bases and surface roots follow the terrain: vertices near the ground (local height < 0.5 m, fading out by
+// 0.9 m, so a root's whole cross-section moves together) and away from
+// the stem axis are shifted by the terrain height difference between their own position and the tree's origin,
+// so roots hug slopes instead of floating on the downhill side or vanishing uphill. Same rule as rootLift() below.
+export function conformToGround(mat, ground) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    sh.uniforms.tGroundH = ground.tex; sh.uniforms.uGroundB = ground.bounds;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform sampler2D tGroundH; uniform vec4 uGroundB;')
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        {
+          float wk = smoothstep(0.9, 0.5, position.y) * smoothstep(0.15, 0.6, length(position.xz));
+          if (wk > 0.0) {
+            mat4 Mg = modelMatrix;
+            #ifdef USE_INSTANCING
+              Mg = modelMatrix * instanceMatrix;
+            #endif
+            vec3 wpg = (Mg * vec4(position, 1.0)).xyz, og = (Mg * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+            float dh = texture2D(tGroundH, (wpg.xz - uGroundB.xy) * uGroundB.zw).r - texture2D(tGroundH, (og.xz - uGroundB.xy) * uGroundB.zw).r;
+            transformed.y += dh / max(length(Mg[1].xyz), 1e-3) * wk;
+          }
+        }`);
+  };
+  const pk = mat.customProgramCacheKey ? mat.customProgramCacheKey.bind(mat) : null;
+  mat.customProgramCacheKey = () => (pk ? pk() : '') + '|conform';
+  mat.needsUpdate = true;
+  return mat;
+}
+// CPU twin of the shader rule: world-space lift of a point given its local height / radial distance
+export function rootLift(yLocal, rLocal, dh) {
+  const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  return dh * sm(0.9, 0.5, yLocal) * sm(0.15, 0.6, rLocal);
+}
+
+// Bark on surface roots: the tree models carry a second UV set that follows each root (rootUv) and a blend weight
+// (rootW: 0 on the stem, 1 on the roots). Colour, normal and roughness are sampled with both mappings and blended,
+// so the bark runs along the roots instead of being stretched by the stem's mapping, with no seam between them.
+export function barkRootBlend(mat) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 rootUv; attribute vec2 rootW; varying vec2 vRootUv; varying float vRootW;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRootUv = rootUv; vRootW = clamp(rootW.x, 0.0, 1.0);');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vRootUv; varying float vRootW;')
+      .replace('#include <map_fragment>', `
+        #ifdef USE_MAP
+          vec4 sampledDiffuseColor = texture2D(map, vMapUv);
+          if (vRootW > 0.001) sampledDiffuseColor = mix(sampledDiffuseColor, texture2D(map, vRootUv), vRootW);
+          diffuseColor *= sampledDiffuseColor;
+        #endif`)
+      .replace('#include <roughnessmap_fragment>', `
+        float roughnessFactor = roughness;
+        #ifdef USE_ROUGHNESSMAP
+          float rgh = texture2D(roughnessMap, vRoughnessMapUv).g;
+          if (vRootW > 0.001) rgh = mix(rgh, texture2D(roughnessMap, vRootUv).g, vRootW);
+          roughnessFactor *= rgh;
+        #endif`)
+      .replace('#include <normal_fragment_maps>', `
+        #if defined( USE_NORMALMAP_TANGENTSPACE ) && ! defined( USE_TANGENT )
+        {
+          vec3 mapN = texture2D(normalMap, vNormalMapUv).xyz * 2.0 - 1.0; mapN.xy *= normalScale;
+          vec3 nA = tbn * mapN;
+          if (vRootW > 0.001) {
+            mat3 tbnR = getTangentFrame(-vViewPosition, normal, vRootUv);
+            vec3 mR = texture2D(normalMap, vRootUv).xyz * 2.0 - 1.0; mR.xy *= normalScale;
+            nA = mix(nA, tbnR * mR, vRootW);
+          }
+          normal = normalize(nA);
+        }
+        #else
+          #include <normal_fragment_maps>
+        #endif`);
+  };
+  const pk = mat.customProgramCacheKey ? mat.customProgramCacheKey.bind(mat) : null;
+  mat.customProgramCacheKey = () => (pk ? pk() : '') + '|rootBlend';
+  mat.needsUpdate = true;
+  return mat;
+}
+// every geometry drawn with a root-blended bark material needs the two attributes (zeros where there are no roots)
+export function ensureRootAttributes(geo) {
+  if (geo.attributes.rootW) return;
+  const n = geo.attributes.position.count;
+  geo.setAttribute('rootUv', geo.attributes.uv1 || new THREE.BufferAttribute(new Float32Array(n * 2), 2));
+  geo.setAttribute('rootW', geo.attributes.uv2 || new THREE.BufferAttribute(new Float32Array(n * 2), 2));
+}
+

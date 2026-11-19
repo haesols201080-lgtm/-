@@ -3,9 +3,10 @@ Trunk: tapered generalized cylinder with root flare, bark UVs in metres. Crown: 
 each carrying alpha-tested twig cards (sprites detected automatically from the atlas alpha), plus dead stubs.
 Variants: tall pines (high crown), firs (conical), and understory saplings. LOD0 + LOD1.
 usage: python build_conifers.py <polyhaven_dl_dir> <out_dir>"""
-import sys, os, math, random
+import sys, os, math, random, json
+from sdf_roots import RootField, plan_roots
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import bpy
+import bpy, bmesh
 import numpy as np
 from mathutils import Vector, Matrix, Euler, noise
 from PIL import Image
@@ -55,7 +56,7 @@ class MB:
         ob.data.materials.append(bpy.data.materials.get(mat) or bpy.data.materials.new(mat))
         return ob
 
-def tube(mb_v, mb_f, mb_uv, spine, rfn, radial, tile=1.2):
+def tube(mb_v, mb_f, mb_uv, spine, rfn, radial, tile=1.2, v0=0.0, ku=None):
     """append a generalized cylinder to raw lists; UVs in metres / tile"""
     n = len(spine)
     tang = [(spine[min(n - 1, i + 1)] - spine[max(0, i - 1)]).normalized() for i in range(n)]
@@ -67,14 +68,19 @@ def tube(mb_v, mb_f, mb_uv, spine, rfn, radial, tile=1.2):
             if ax.length > 1e-6: nrm = (Matrix.Rotation(tang[i - 1].angle(tang[i]), 3, ax.normalized()) @ nrm).normalized()
         frames.append((nrm.copy(), tang[i].cross(nrm).normalized()))
     base = len(mb_v); L = 0.0
-    r0 = rfn(0, 0); k = max(1, round(2 * math.pi * r0 / tile))
+    r0 = rfn(0, 0); k = ku or max(1, round(2 * math.pi * r0 / tile))
     for i in range(n):
         if i: L += (spine[i] - spine[i - 1]).length
         t = i / (n - 1); N_, Bn = frames[i]
         for j in range(radial + 1):
             th = j / radial * 2 * math.pi
             mb_v.append(spine[i] + (N_ * math.cos(th) + Bn * math.sin(th)) * rfn(t, th))
-            mb_uv.append((j / radial * k, L / tile))
+            if ku is not None and j == 0:
+                q0 = N_ * rfn(t, 0.0)
+                un = ((math.atan2(q0.y, q0.x) - math.pi / 2) % (2 * math.pi)) / (2 * math.pi) * k
+                if i: un += round((uprev - un) / k) * k      # stay continuous from ring to ring (no wrap jumps)
+                uoff = uprev = un
+            mb_uv.append(((uoff if ku is not None else 0.0) + j / radial * k, v0 + L / tile))
     for i in range(n - 1):
         for j in range(radial):
             a = base + i * (radial + 1) + j
@@ -143,14 +149,138 @@ def make_conifer(name, kind, seed, lod=0, opt=None):
         if kind != 'sapling':
             fl = math.exp(-z / 0.7)
             b = sum(max(0.0, math.cos(th - a)) ** 8 for a in ths)
-            r *= 1 + fl * (0.45 + 0.9 * b)
+            r *= 1 + fl * ((0.16 + 0.22 * b) if kind != 'sapling' else (0.45 + 0.9 * b))   # the SDF roots make the real flare
             # not a lathe: slightly oval, with long vertical bark ridges and fissures breaking the silhouette
             r *= 1 + oval * math.cos(2 * (th - ovph))
             r *= 1 + 0.045 * noise.noise(Vector((math.cos(th) * 3.2, math.sin(th) * 3.2, z * 0.3 + seed))) \
                    + 0.022 * noise.noise(Vector((math.cos(th) * 8.0, math.sin(th) * 8.0, z * 0.7 + seed * 2)))
         return max(r, 0.004)
     bv, bf, buv = [], [], []
-    tube(bv, bf, buv, spine, rfn, radial)
+    has_roots = kind != 'sapling'
+    tlin = lambda z: min(1.0, max(0.0, (z + 0.3) / H)) ** 0.8          # ring parameter rfn sees at height z
+    if not has_roots:
+        tube(bv, bf, buv, spine, rfn, radial)
+    else:
+        ku = max(1, round(2 * math.pi * rfn(tlin(1.0), 0) / 1.2))
+        tube(bv, bf, buv, spine, rfn, radial, ku=ku)
+    # fused stem base + root system (signed distance field, marching cubes): see sdf_roots.py
+    roots_out = []; base_obj = None; base_tints = []; base_w = []
+    if has_roots:
+        rr_ = random.Random(seed * 31 + 5)
+        plan = plan_roots(rr_, R0, ths, kind, lod == 0)
+        ext = R0 * 6.4 + 0.12
+        vox = max(0.008, R0 * 0.045) * (1.0 if lod == 0 else 1.7)
+        ztop = R0 * 2.4 + 0.2          # roots and their fillets live below this
+        F = RootField(ext, -0.26, ztop, vox)
+        zs = [p.z for p in spine]
+        def centre_at(z):
+            for k in range(len(spine) - 1):
+                if zs[k + 1] >= z: f = (z - zs[k]) / max(1e-6, zs[k + 1] - zs[k]); p = spine[k].lerp(spine[k + 1], max(0, min(1, f))); return (p.x, p.y)
+            return (spine[-1].x, spine[-1].y)
+        TH = np.linspace(-math.pi, math.pi, 181)
+        def radius_at(z, th):
+            t = tlin(max(z, -0.29))
+            tab = np.array([rfn(t, a - math.pi / 2) for a in TH])
+            return np.interp(th, TH, tab)
+        F.stem(centre_at, radius_at, 0.04 * R0)
+        for r in plan:
+            k = {'buttress': 0.26 * R0, 'surface': 0.08 * R0, 'lateral': 0.03 * R0}[r['type']]
+            F.capsule_chain(r['pts'], r['rads'], r['flat'], k)
+            roots_out.append([[round(p[0], 3), round(p[2], 3), round(-p[1], 3), round(rd * fl, 3)] for p, rd, fl in zip(r['pts'], r['rads'], r['flat'])])
+        V, Fc = F.mesh()
+        # distance of every vertex from the analytic stem surface (oval section, ridges, flare lobes)
+        cxy = np.array([centre_at(float(z)) for z in np.clip(V[:, 2], -0.29, None)])
+        dxv, dyv = V[:, 0] - cxy[:, 0], V[:, 1] - cxy[:, 1]
+        radv = np.hypot(dxv, dyv); angv = np.arctan2(dyv, dxv)
+        rtv = np.zeros(len(V))
+        for zk in np.unique(np.round(V[:, 2], 2)):
+            m = np.round(V[:, 2], 2) == zk
+            rtv[m] = radius_at(max(float(zk), -0.29), angv[m])
+        off = radv - rtv
+        on_stem = off < 0.6 * vox
+        top = V[:, 2] > ztop - 2.5 * vox
+        keep = [f for f in Fc if not (on_stem[f[0]] and on_stem[f[1]] and on_stem[f[2]]) and not (top[f[0]] or top[f[1]] or top[f[2]])
+                and max(V[f[0], 2], V[f[1], 2], V[f[2], 2]) > -0.07]
+        # the fillet edge settles exactly onto the stem surface, so roots grow out of the bark tangentially
+        for i in set(i for f in keep for i in f):
+            if off[i] < 1.2 * vox:
+                k = min(1.0, max(0.0, off[i] / (1.2 * vox)))
+                rn = rtv[i] + max(0.0, off[i]) * k
+                V[i, 0] = cxy[i, 0] + math.cos(angv[i]) * rn; V[i, 1] = cxy[i, 1] + math.sin(angv[i]) * rn
+        bm_ = bpy.data.meshes.new(f'{name}_base'); bm_.from_pydata([tuple(v) for v in V], [], [tuple(int(i) for i in f) for f in keep]); bm_.update()
+        base_obj = bpy.data.objects.new(f'{name}_base', bm_); bpy.context.scene.collection.objects.link(base_obj)
+        bpy.context.view_layer.objects.active = base_obj; base_obj.select_set(True)
+        bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT'); bpy.ops.mesh.delete_loose(); bpy.ops.mesh.remove_doubles(threshold=vox * 0.05)
+        bpy.ops.object.mode_set(mode='OBJECT')
+        target = (5000 + 9000 * R0) if lod == 0 else (1100 + 2600 * R0)
+        if len(base_obj.data.polygons) > target:
+            m_ = base_obj.modifiers.new('dc', 'DECIMATE'); m_.ratio = target / len(base_obj.data.polygons)
+            bpy.ops.object.modifier_apply(modifier='dc')
+        base_obj.select_set(False)
+        me_ = base_obj.data
+        for pgn in me_.polygons: pgn.use_smooth = True
+        # bark UVs continuous with the trunk: u around the stem (scaled by distance so roots keep texel density),
+        # v up the stem and then out along each root, so bark fissures run down the stem and along the roots
+        ul = me_.uv_layers.new(name='UVMap')
+        # the stem radius at this height *in this direction* (oval section, flare lobes), so on the stem surface the
+        # mapping is exactly the trunk tube's: u from the true angle, v from the height
+        cache = {}
+        def rz(z, phi):
+            key = round(z, 2)
+            if key not in cache: cache[key] = (np.linspace(-math.pi, math.pi, 181), radius_at(z, np.linspace(-math.pi, math.pi, 181)))
+            ths_, rs_ = cache[key]
+            return float(np.interp((phi + math.pi) % (2 * math.pi) - math.pi, ths_, rs_))
+        for pgn in me_.polygons:
+            us, vs = [], []
+            for li in pgn.loop_indices:
+                co = me_.vertices[me_.loops[li].vertex_index].co
+                cx, cy = centre_at(max(co.z, -0.29)); dx, dy = co.x - cx, co.y - cy
+                rad = math.hypot(dx, dy); ang = math.atan2(dy, dx); phi = ang - math.pi / 2
+                rt = rz(max(co.z, -0.29), ang)
+                us.append((phi % (2 * math.pi)) / (2 * math.pi) * ku * max(1.0, rad / max(rt, 1e-3)))
+                vs.append((co.z + 0.3 - max(0.0, rad - rt)) / 1.2)   # keeps running down the stem and out along the root
+            if max(us) - min(us) > ku * 0.5:
+                us = [u + ku if u < ku * 0.5 else u for u in us]
+            for li, u, v in zip(pgn.loop_indices, us, vs): ul.data[li].uv = (u, v)
+        # second UV set that follows each root (v along its length, u around it) + per-vertex blend weight:
+        # the game samples the bark with both and blends by weight, so roots never show a stretched stem mapping
+        segs = []   # (a, b, ra, rb, s0) over all roots
+        for r in plan:
+            acc = 0.0
+            for k in range(len(r['pts']) - 1):
+                a_, b_ = np.array(r['pts'][k]), np.array(r['pts'][k + 1]); L_ = float(np.linalg.norm(b_ - a_))
+                segs.append((a_, b_, r['rads'][k] * r['flat'][k], r['rads'][k + 1] * r['flat'][k + 1], acc, len(segs) and r is not None)); acc += L_
+        SA = np.array([q[0] for q in segs]); SB = np.array([q[1] for q in segs]); RA = np.array([q[2] for q in segs]); RB = np.array([q[3] for q in segs]); S0 = np.array([q[4] for q in segs])
+        P = np.array([tuple(v.co) for v in me_.vertices])
+        AB = SB - SA; L2 = np.maximum((AB * AB).sum(1), 1e-9)
+        best_d = np.full(len(P), 1e9); best = np.zeros(len(P), int); best_t = np.zeros(len(P))
+        for k in range(len(segs)):
+            t = np.clip(((P - SA[k]) @ AB[k]) / L2[k], 0, 1)
+            q = P - (SA[k] + np.outer(t, AB[k]))
+            d = np.sqrt((q * q).sum(1)) - (RA[k] + (RB[k] - RA[k]) * t)
+            m = d < best_d; best_d[m] = d[m]; best[m] = k; best_t[m] = t[m]
+        ruv = me_.uv_layers.new(name='RootUV')
+        vu = np.zeros(len(P)); vv = np.zeros(len(P)); vr = np.zeros(len(P))
+        for i in range(len(P)):
+            k = best[i]; t = best_t[i]; dvec = AB[k] / math.sqrt(L2[k])
+            c = SA[k] + AB[k] * t
+            side = np.cross(dvec, [0, 0, 1.0]); n_ = np.linalg.norm(side); side = side / n_ if n_ > 1e-6 else np.array([1.0, 0, 0])
+            upv = np.cross(side, dvec)
+            q = P[i] - c; psi = math.atan2(float(q @ side), float(q @ upv))
+            rl = RA[k] + (RB[k] - RA[k]) * t
+            vr[i] = max(rl, 0.01); vu[i] = psi * vr[i] / 1.2; vv[i] = (S0[k] + t * math.sqrt(L2[k])) / 1.2
+        for pgn in me_.polygons:
+            idx = [me_.loops[li].vertex_index for li in pgn.loop_indices]
+            us_ = [vu[i] for i in idx]
+            if max(us_) - min(us_) > math.pi * max(vr[i] for i in idx) / 1.2:      # wrap seam on the underside
+                us_ = [u + (2 * math.pi * vr[i] / 1.2 if u < 0 else 0) for u, i in zip(us_, idx)]
+            for li, i, u in zip(pgn.loop_indices, idx, us_): ruv.data[li].uv = (u, vv[i])
+        # weight: 0 on the stem surface, 1 once clearly on a root
+        base_w = []
+        for v in me_.vertices:
+            cx, cy = centre_at(max(v.co.z, -0.29)); dx, dy = v.co.x - cx, v.co.y - cy
+            o = math.hypot(dx, dy) - rz(max(v.co.z, -0.29), math.atan2(dy, dx))
+            base_w.append(min(1.0, max(0.0, (o - 0.012) / (0.06 + 0.15 * R0))))
     n_trunk = len(bv)
     cards = MB()
     def trunk_at(h):
@@ -241,6 +371,12 @@ def make_conifer(name, kind, seed, lod=0, opt=None):
     R0_LAST[0] = R0
     bark = MB(); bark.v, bark.f, bark.uv = bv, bf, buv
     bo = bark.obj(f'{name}_bark', 'BarkSnag' if kind == 'snag' else 'Bark')
+    if base_obj is not None: bo.data.uv_layers.new(name='RootUV')
+    if roots_out: bo['roots'] = json.dumps(roots_out)
+    n_bark = len(bo.data.vertices)
+    if base_obj is not None:
+        bpy.ops.object.select_all(action='DESELECT'); bo.select_set(True); base_obj.select_set(True)
+        bpy.context.view_layer.objects.active = bo; bpy.ops.object.join()
     # bark colour by position (multiplies the scanned bark): pines have thick dark grey-brown plates low on the
     # stem and thin orange flaking bark higher up; dead and living branches are weathered grey; snags bleached
     base_t = rnd.choice([(0.86, 0.84, 0.82), (0.8, 0.76, 0.72), (0.9, 0.88, 0.88), (0.76, 0.72, 0.68)])
@@ -250,7 +386,8 @@ def make_conifer(name, kind, seed, lod=0, opt=None):
         k = min(1.0, max(0.0, co.z / 2.5))               # the base is darker (soil splash, damp)
         n = 1 + 0.08 * noise.noise(Vector((co.x * 1.3, co.y * 1.3, co.z * 0.4 + seed)))
         return tuple(base_t[c] * (0.78 + 0.22 * k) * n for c in range(3))
-    bo['tints'] = [c for i, v in enumerate(bo.data.vertices) for c in tint(i, v.co)]
+    bo['tints'] = [c for i, v in enumerate(bo.data.vertices) for c in tint(i if i < n_bark else 0, v.co)]
+    bo['rootw'] = [0.0] * n_bark + (base_w if base_obj is not None else [])
     if kind == 'snag':
         return bo, None, H
     co = cards.obj(f'{name}_twigs', 'Twig')
@@ -269,7 +406,7 @@ def export(objs, path):
     for o in objs: o.select_set(True)
     bpy.context.view_layer.objects.active = objs[0]
     bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=True, export_materials='PLACEHOLDER', export_yup=True, export_normals=True,
-                              export_vertex_color='ACTIVE')
+                              export_vertex_color='ACTIVE', export_extras=True)
 
 def bake_ao(ob):
     sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.device = 'CPU'; sc.cycles.samples = 24
@@ -284,7 +421,9 @@ def bake_ao(ob):
 SPECS = [('pine', 11, {'R0': 0.44, 'H': 23}), ('pine', 22, {'R0': 0.31, 'H': 21}), ('pine', 33, {'R0': 0.21, 'H': 18, 'curve': 0.32, 'crown0': 0.66}),
          ('pine', 44, {'R0': 0.13, 'H': 15, 'curve': 0.5, 'crown0': 0.72}), ('fir', 55, {}), ('fir', 66, {}),
          ('sapling', 77, {}), ('sapling', 88, {}), ('sapling', 99, {}), ('snag', 111, {}), ('snag', 122, {})]
+ONLY = [int(x) for x in sys.argv[3].split(',')] if len(sys.argv) > 3 else None
 for i, (kind, seed, opt) in enumerate(SPECS):
+    if ONLY is not None and i not in ONLY: continue
     for lod in ((0, 1) if kind != 'sapling' else (0,)):
         bpy.ops.wm.read_factory_settings(use_empty=True)
         try: bpy.ops.preferences.addon_enable(module='cycles')
@@ -292,14 +431,19 @@ for i, (kind, seed, opt) in enumerate(SPECS):
         b, c, H = make_conifer(f'{kind}{i}', kind, seed, lod, opt)
         if lod == 0: bake_ao(b)
         # vertex colour = baked AO x bark tint (LOD1 / saplings: tint only)
-        me = b.data; tints = list(b['tints'])
+        me = b.data; tints = list(b['tints']); rootw = list(b['rootw'])
         ca = me.color_attributes.get('AO') or me.color_attributes.new('AO', 'BYTE_COLOR', 'CORNER')
         me.color_attributes.active_color = ca
         for li, loop in enumerate(me.loops):
             vi = loop.vertex_index; ao = ca.data[li].color[0] if lod == 0 else 1.0
             f = 1.0 - 0.6 * (1.0 - ao)   # AO goes into the albedo at partial strength (the game multiplies vertex colour)
             ca.data[li].color = (f * tints[vi * 3], f * tints[vi * 3 + 1], f * tints[vi * 3 + 2], 1)
-        del b['tints']
+        # root blend weight goes to a third UV set (glTF drops vertex colour alpha)
+        if 'RootUV' in me.uv_layers:
+            wl = me.uv_layers.new(name='RootW')
+            for li, loop in enumerate(me.loops): wl.data[li].uv = (rootw[loop.vertex_index] if loop.vertex_index < len(rootw) else 0.0, 0.0)
+        del b['tints']; del b['rootw']
+        if b.get('roots') is None and 'roots' in b: del b['roots']
         path = f'{OUT}/{kind}_{i}{"_lod1" if lod else ""}.glb'
         export([b] + ([c] if c else []), path)
         b.data.calc_loop_triangles()

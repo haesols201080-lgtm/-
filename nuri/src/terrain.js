@@ -193,10 +193,15 @@ export function makeTerrainMaterial(T, tier = {}) {
         vec2 rot2(vec2 p, float a){ float c=cos(a), s=sin(a); return vec2(c*p.x - s*p.y, s*p.x + c*p.y); }
         float vnoise(vec2 p){ vec2 i=floor(p), f=fract(p); f=f*f*(3.-2.*f);
           return mix(mix(hash21(i),hash21(i+vec2(1,0)),f.x), mix(hash21(i+vec2(0,1)),hash21(i+vec2(1,1)),f.x), f.y); }
-        vec3 sampleLayer(sampler2DArray t, vec2 uv, float layer, float blend){
-          vec3 a = texture(t, vec3(uv, layer)).rgb;
-          vec3 b = texture(t, vec3(rot2(uv, 1.7) * 0.83 + 0.37, layer)).rgb;
-          return mix(a, b, blend);
+        // texture bombing without repetition (after I. Quilez): a smooth world-space noise picks, per patch, a random
+        // offset into the scan; neighbouring patches blend along the texture's own contrast, so no grid shows at distance
+        vec3 sampleLayer(sampler2DArray t, vec2 uv, float layer, float k){
+          float l = k * 8.0, ia = floor(l), f = fract(l);
+          vec2 oa = sin(vec2(3.0, 7.0) * ia + layer * 1.7), ob = sin(vec2(3.0, 7.0) * (ia + 1.0) + layer * 1.7);
+          vec2 dx = dFdx(uv), dy = dFdy(uv);
+          vec3 a = textureGrad(t, vec3(uv + oa, layer), dx, dy).rgb;
+          vec3 b = textureGrad(t, vec3(uv + ob, layer), dx, dy).rgb;
+          return mix(a, b, smoothstep(0.2, 0.8, f - 0.1 * (a.x + a.y + a.z - b.x - b.y - b.z)));
         }
         vec3 TA; vec3 TN; vec3 TO; float terrainH;
       `)
@@ -225,7 +230,7 @@ export function makeTerrainMaterial(T, tier = {}) {
           }
         }
         #endif
-        float bl = smoothstep(0.35, 0.65, vnoise(vWPos.xz * 0.23));
+        float bl = vnoise(vWPos.xz * 0.55) * 0.65 + vnoise(vWPos.xz * 1.3 + 17.0) * 0.35;
         vec4 w = vSplat;
         // height-based blending using each layer's height (orm.b)
         float hL[4];

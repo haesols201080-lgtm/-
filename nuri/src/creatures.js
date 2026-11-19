@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { mulberry32, clamp, damp, dampAngle } from './util.js';
 import { START, POND, STREAM } from './layout.js';
+import { furredMesh } from './fur.js';
 
 const rnd = mulberry32(31);
 
@@ -83,26 +84,41 @@ export class Creatures {
   buildSquirrel() {
     const tree = this.world.treeSpots.find((t) => t.hero && Math.hypot(t.x - 5.5, t.z - 16) < 1);
     if (!tree) return;
-    const fur = new THREE.MeshStandardMaterial({ color: 0x8a4a22, roughness: 0.95 });
-    const light = new THREE.MeshStandardMaterial({ color: 0xd9b48a, roughness: 0.95 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x120c08, roughness: 0.4 });
+    // red squirrel modelled in Blender, with shell fur (long, bushy tail and ear tufts)
     const g = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 12), fur); body.scale.set(0.8, 0.85, 1.4); body.position.y = 0.07; g.add(body);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.04, 16, 12), fur); head.position.set(0, 0.12, 0.08); head.scale.set(0.9, 0.9, 1.1); g.add(head);
-    const chest = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 8), light); chest.position.set(0, 0.075, 0.05); g.add(chest);
-    for (const s of [-1, 1]) {
-      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.03, 6), fur); ear.position.set(s * 0.022, 0.16, 0.07); g.add(ear);
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.007, 8, 6), dark); eye.position.set(s * 0.024, 0.128, 0.11); g.add(eye);
+    const model = this.ctx.assets.models.squirrel;
+    let tail = { rotation: { x: 0 } }, furU = null;
+    if (model) {
+      model.scene.updateMatrixWorld(true);
+      model.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        if (o.name.includes('body')) {
+          const shells = this.ctx.tier.post ? (this.ctx.tier.ao ? 22 : 16) : 11;
+          const fm = furredMesh(o, { shells, length: 0.0065, density: 1150 });
+          fm.applyMatrix4(o.matrixWorld); g.add(fm); furU = fm.userData.fur;
+        } else {
+          const glossy = o.name.includes('eye');
+          const m = new THREE.Mesh(o.geometry, new THREE.MeshPhysicalMaterial({ color: glossy ? 0x050404 : 0x1d1512, roughness: glossy ? 0.08 : 0.4,
+            clearcoat: glossy ? 1 : 0.3, clearcoatRoughness: 0.05 }));
+          m.applyMatrix4(o.matrixWorld); g.add(m);
+        }
+      });
+      // whiskers
+      const wp = [];
+      for (const s of [-1, 1]) for (let k = 0; k < 4; k++) {
+        const y = 0.101 + k * 0.0025, z = 0.113 - k * 0.002;
+        wp.push(s * 0.006, y, z, s * (0.035 + k * 0.004), y + (k - 1.5) * 0.006, z - 0.012);
+      }
+      const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3));
+      g.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: 0x1a1410, transparent: true, opacity: 0.55 })));
     }
-    const tailPts = [new THREE.Vector3(0, 0.06, -0.08), new THREE.Vector3(0, 0.14, -0.16), new THREE.Vector3(0, 0.25, -0.12), new THREE.Vector3(0, 0.28, -0.04)];
-    const tail = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(tailPts), 16, 0.035, 8), fur); g.add(tail);
     g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     const r0 = 0.62 * tree.s;
     const a = 0.4;
     const pos = new THREE.Vector3(tree.x + Math.cos(a) * (r0 + 1.6), 0, tree.z + Math.sin(a) * (r0 + 1.6));
     pos.y = this.world.terrain.heightAt(pos.x, pos.z);
     g.position.copy(pos); this.scene.add(g);
-    this.list.push({ type: 'squirrel', mesh: g, tree, r0, state: 'ground', t: 0, home: pos.clone(), tail, climbY: 0, ang: a });
+    this.list.push({ type: 'squirrel', mesh: g, tree, r0, state: 'ground', t: 0, home: pos.clone(), tail, climbY: 0, ang: a, furU });
   }
 
   buildFireflies() {
@@ -188,6 +204,7 @@ export class Creatures {
           m.position.y = T.heightAt(m.position.x, m.position.z) + (moving ? Math.abs(Math.sin(c.t * 14)) * 0.02 : 0);
           m.rotation.set(0, c.ang + Math.PI, 0);
           c.tail.rotation.x = Math.sin(c.t * 3) * 0.1;
+          if (c.furU) { c.furU.uTail.value = Math.sin(c.t * 2.2) * 0.12 + (moving ? Math.sin(c.t * 14) * 0.05 : 0); c.furU.uTime.value = c.t; }
           if (d < 1.4) { c.state = 'climb'; c.climbY = 0; this.audio.play('chitter', { pos: m.position }); }
         } else if (c.state === 'climb') {
           const R = c.r0 * 0.85 + 0.06;
