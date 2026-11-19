@@ -26,6 +26,27 @@ const BASE = './';
   };
 }
 
+// Robust fetch for large static assets: at most 6 requests in flight, each retried with backoff,
+// so one dropped connection on a slow or throttling host does not abort the whole load.
+let inFlight = 0; const waiting = [];
+async function slot() { if (inFlight < 6) { inFlight++; return; } await new Promise((r) => waiting.push(r)); inFlight++; }
+function release() { inFlight--; const n = waiting.shift(); if (n) n(); }
+export async function fetchRetry(url, tries = 5) {
+  let lastErr;
+  for (let i = 0; i < tries; i++) {
+    await slot();
+    try {
+      const res = await fetch(url, { cache: i ? 'reload' : 'default' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      return blob;
+    } catch (e) { lastErr = e; }
+    finally { release(); }
+    await new Promise((r) => setTimeout(r, 400 * 2 ** i));
+  }
+  throw new Error(`파일을 받지 못했어요 (${url.replace(/^\.\//, '')}): ${lastErr?.message || lastErr}`);
+}
+
 // glTF JSON whose buffer is a base64 data URI -> in-memory GLB (decoded here, so no fetch of the data: URI is needed)
 function base64ToBytes(b64) {
   const bin = atob(b64), out = new Uint8Array(bin.length);
@@ -69,10 +90,9 @@ export class Assets {
   suffix(size) { return size >= 2048 ? '' : '_1024'; }
 
   async loadImage(url) {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('missing ' + url);
+    const blob = await fetchRetry(url);
     // keep the image's top row at v=0 (glTF convention) so atlases line up with glTF/Blender UVs
-    return await createImageBitmap(await res.blob(), { imageOrientation: 'none' });
+    return await createImageBitmap(blob, { imageOrientation: 'none' });
   }
   async texture(url, srgb) {
     const t = new THREE.Texture(await this.loadImage(url));
@@ -126,9 +146,8 @@ export class Assets {
     // production builds ship glTF JSON (.json) because some static hosts don't serve .glb
     let g;
     if (import.meta.env.PROD) {
-      const res = await fetch(`${BASE}models/${path}.json`);
-      if (!res.ok) throw new Error('missing model ' + path);
-      g = await loader.parseAsync(jsonToGLB(await res.json()), '');
+      const blob = await fetchRetry(`${BASE}models/${path}.json`);
+      g = await loader.parseAsync(jsonToGLB(JSON.parse(await blob.text())), '');
     } else g = await loader.loadAsync(`${BASE}models/${path}.glb`);
     this.models[key || path] = g; this.step(key || path);
     return g;
