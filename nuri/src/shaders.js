@@ -236,40 +236,60 @@ export function barkRootBlend(mat) {
   mat.onBeforeCompile = (sh, r) => {
     if (prev) prev(sh, r);
     sh.defines = sh.defines || {}; sh.defines.ROOT_BLEND = 1;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 rootUv; attribute vec2 rootW; varying vec2 vRootUv; varying float vRootW;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRootUv = rootUv; vRootW = clamp(rootW.x, 0.0, 1.0);');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vRootUv; varying float vRootW;')
+    // roots and the flare: bark projected from three sides in the tree's own space (no stretching along roots,
+    // fissures stay vertical on the flare), blended in by the model's root weight
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
+        attribute vec2 rootW; varying float vRootW; varying vec3 vRP; varying vec3 vRN; varying vec3 vOV0; varying vec3 vOV1; varying vec3 vOV2;`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>
+        vRootW = clamp(rootW.x, 0.0, 1.0); vRP = position / 1.2; vRN = normal;
+        {
+          mat3 ov = mat3(modelViewMatrix);
+          #ifdef USE_INSTANCING
+            ov = ov * mat3(instanceMatrix);
+          #endif
+          vOV0 = ov[0]; vOV1 = ov[1]; vOV2 = ov[2];
+        }`);
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+        varying float vRootW; varying vec3 vRP; varying vec3 vRN; varying vec3 vOV0; varying vec3 vOV1; varying vec3 vOV2;
+        vec3 rTriW(){ vec3 w = pow(abs(normalize(vRN)), vec3(4.0)); return w / (w.x + w.y + w.z); }
+        vec4 rTri(sampler2D t){ vec3 w = rTriW();
+          return texture2D(t, vRP.zy) * w.x + texture2D(t, vRP.xz) * w.y + texture2D(t, vRP.xy) * w.z; }`)
       .replace('#include <map_fragment>', `
         #ifdef USE_MAP
           vec4 sampledDiffuseColor = texture2D(map, vMapUv);
-          if (vRootW > 0.001) sampledDiffuseColor = mix(sampledDiffuseColor, texture2D(map, vRootUv), vRootW);
+          if (vRootW > 0.001) sampledDiffuseColor = mix(sampledDiffuseColor, rTri(map), vRootW);
           diffuseColor *= sampledDiffuseColor;
         #endif`)
       .replace('#include <roughnessmap_fragment>', `
         float roughnessFactor = roughness;
         #ifdef USE_ROUGHNESSMAP
           float rgh = texture2D(roughnessMap, vRoughnessMapUv).g;
-          if (vRootW > 0.001) rgh = mix(rgh, texture2D(roughnessMap, vRootUv).g, vRootW);
+          if (vRootW > 0.001) rgh = mix(rgh, rTri(roughnessMap).g, vRootW);
           roughnessFactor *= rgh;
         #endif`)
       .replace('#include <normal_fragment_maps>', `
         #if defined( USE_NORMALMAP_TANGENTSPACE ) && ! defined( USE_TANGENT )
         {
           vec3 mapN = texture2D(normalMap, vNormalMapUv).xyz * 2.0 - 1.0; mapN.xy *= normalScale;
-          vec3 nA = tbn * mapN;
+          vec3 nA = normalize(tbn * mapN);
           if (vRootW > 0.001) {
-            mat3 tbnR = getTangentFrame(-vViewPosition, normal, vRootUv);
-            vec3 mR = texture2D(normalMap, vRootUv).xyz * 2.0 - 1.0; mR.xy *= normalScale;
-            nA = mix(nA, tbnR * mR, vRootW);
+            // whiteout-blended triplanar normal in object space, then to view space
+            vec3 n0 = normalize(vRN), w = rTriW();
+            vec3 tx = texture2D(normalMap, vRP.zy).xyz * 2.0 - 1.0, ty = texture2D(normalMap, vRP.xz).xyz * 2.0 - 1.0, tz = texture2D(normalMap, vRP.xy).xyz * 2.0 - 1.0;
+            tx.xy *= normalScale; ty.xy *= normalScale; tz.xy *= normalScale;
+            tx = vec3(tx.xy + n0.zy, abs(tx.z) * n0.x); ty = vec3(ty.xy + n0.xz, abs(ty.z) * n0.y); tz = vec3(tz.xy + n0.xy, abs(tz.z) * n0.z);
+            vec3 nO = normalize(tx.zyx * w.x + ty.xzy * w.y + tz.xyz * w.z);
+            vec3 nV = normalize(mat3(vOV0, vOV1, vOV2) * nO);
+            nA = normalize(mix(nA, nV * (gl_FrontFacing ? 1.0 : -1.0), vRootW));
           }
-          normal = normalize(nA);
+          normal = nA;
         }
         #else
           #include <normal_fragment_maps>
         #endif`);
   };
   const pk = mat.customProgramCacheKey ? mat.customProgramCacheKey.bind(mat) : null;
-  mat.customProgramCacheKey = () => (pk ? pk() : '') + '|rootBlend';
+  mat.customProgramCacheKey = () => (pk ? pk() : '') + '|rootTri';
   mat.needsUpdate = true;
   return mat;
 }

@@ -98,18 +98,18 @@ def plan_roots(rng, R0, lobes, kind, detail):
         return pts, rads, flat
     # buttresses: one per flare lobe, continuing as a surface root (sometimes arching, sometimes forking)
     for a in lobes:
-        L = R0 * rng.uniform(2.3, 3.9)
-        r0 = R0 * rng.uniform(0.42, 0.55)
-        arch = (rng.uniform(0.22, 0.32), rng.uniform(0.4, 0.5)) if rng.random() < 0.15 else None
-        pts, rads, flat = path(a, R0 * 0.35, L, r0, R0 * rng.uniform(0.7, 1.05), 14 if detail else 9, 1.7, 0.12, arch)
+        L = R0 * rng.uniform(1.6, 2.5)
+        r0 = R0 * rng.uniform(0.36, 0.46)
+        arch = None
+        pts, rads, flat = path(a, R0 * 0.35, L, r0, R0 * rng.uniform(0.6, 0.85), 12 if detail else 8, 2.6, 0.12, arch)
         roots.append(dict(pts=pts, rads=rads, flat=flat, type='buttress'))
-        if rng.random() < 0.55:  # Y fork near the middle
+        if rng.random() < 0.2:  # occasional Y fork near the middle
             i = int(len(pts) * rng.uniform(0.45, 0.6)); p = pts[i]
             a2 = math.atan2(p[1], p[0]) + rng.choice([-1, 1]) * rng.uniform(0.35, 0.7)
             fp, fr, ff = path(a2, math.hypot(p[0], p[1]), L * rng.uniform(0.35, 0.55), rads[i] * 0.85, max(p[2], 0.0), 7 if detail else 5, 1.9, 0.2)
             roots.append(dict(pts=fp, rads=fr, flat=ff, type='surface'))
     # smaller surface roots between the buttresses
-    for k in range(rng.randint(2, 4)):
+    for k in range(rng.randint(0, 1)):
         a = rng.uniform(0, 2 * math.pi)
         pts, rads, flat = path(a, R0 * 0.5, R0 * rng.uniform(1.6, 2.8), R0 * rng.uniform(0.2, 0.3), R0 * 0.25, 9 if detail else 6, 1.9, 0.25,
                                (0.25, 0.42) if rng.random() < 0.1 else None)
@@ -118,7 +118,7 @@ def plan_roots(rng, R0, lobes, kind, detail):
     if detail:
         for r in [r for r in roots if r['type'] == 'buttress']:
             low = [i for i in range(3, len(r['pts']) - 2) if r['pts'][i][2] < 0.03]   # only where the root lies on the soil
-            for k in range(rng.randint(1, 3) if low else 0):
+            for k in range(rng.randint(0, 1) if low else 0):
                 i = rng.choice(low); p = r['pts'][i]
                 a = math.atan2(p[1], p[0]) + rng.choice([-1, 1]) * rng.uniform(0.8, 1.5)
                 q = []; rr = []; ff = []
