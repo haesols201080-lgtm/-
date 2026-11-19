@@ -7,7 +7,9 @@ import { clamp, damp, dampAngle, angleDiff, lerp } from './util.js';
 
 const R_CAP = 0.095, HH_STAND = 0.085, HH_CROUCH = 0.012;
 const G = 15.5, JUMP_V = 3.75, DJUMP_V = 3.3;
-const RUN = 2.3, WALK = 0.9, CRAWL = 0.45, SWIM = 1.05, CLIMB = 0.55, PUSH = 0.75;
+// speeds sized for a 35 cm robot with ~10 cm legs (a brisk jog is ~1.4 m/s at this scale, a walk ~0.55 m/s)
+export const RUN = 1.4;
+const WALK = 0.55, CRAWL = 0.3, SWIM = 0.65, CLIMB = 0.45, PUSH = 0.55, ROLL0 = 2.0, ROLL1 = 0.95;
 const SWIM_DEPTH = 0.3; // deeper than this the robot floats and swims; shallower it wades on the bottom
 
 export class Player {
@@ -113,13 +115,13 @@ export class Player {
 
     // roll / slide / crawl
     if (grounded && crouchPressed && !this.carry && !this.grab) {
-      if (speed > 1.6) { this.state = 'slide'; this.slideT = 0.55; this.setCrouch(true); this.emit('slide'); }
-      else if (mag > 0.3) { this.state = 'roll'; this.rollT = 0; this.setCrouch(true); this.vel.x = dir.x * 2.9; this.vel.z = dir.z * 2.9; this.yaw = Math.atan2(dir.x, dir.z); this.emit('roll'); }
+      if (speed > RUN * 0.75) { this.state = 'slide'; this.slideT = 0.55; this.setCrouch(true); this.emit('slide'); }
+      else if (mag > 0.3) { this.state = 'roll'; this.rollT = 0; this.setCrouch(true); this.vel.x = dir.x * ROLL0; this.vel.z = dir.z * ROLL0; this.yaw = Math.atan2(dir.x, dir.z); this.emit('roll'); }
     }
     if (this.state === 'roll') {
       this.rollT += dt / 0.42;
       const f = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
-      const sp = lerp(2.9, 1.3, this.rollT);
+      const sp = lerp(ROLL0, ROLL1, this.rollT);
       this.vel.x = f.x * sp; this.vel.z = f.z * sp;
       if (this.rollT >= 1) { this.state = 'move'; if (!crouchHeld) this.setCrouch(false); }
     } else if (this.state === 'slide') {
@@ -128,13 +130,15 @@ export class Player {
       this.vel.x += n.x * 9 * dt; this.vel.z += n.z * 9 * dt;
       const k = Math.exp(-1.8 * dt); this.vel.x *= k; this.vel.z *= k;
       if (dir.lengthSq() > 0) { this.vel.x += dir.x * 2 * dt; this.vel.z += dir.z * 2 * dt; }
-      if (this.slideT <= 0 || Math.hypot(this.vel.x, this.vel.z) < 0.5) { this.state = crouchHeld ? 'crawl' : 'move'; if (!crouchHeld) this.setCrouch(false); }
+      if (this.slideT <= 0 || Math.hypot(this.vel.x, this.vel.z) < 0.3) { this.state = crouchHeld ? 'crawl' : 'move'; if (!crouchHeld) this.setCrouch(false); }
     } else {
       // crawl when crouch held & slow (or forced by low ceiling)
       if (grounded && crouchHeld && !this.carry) this.setCrouch(true);
       else if (this.crouched && !crouchHeld) this.setCrouch(false);
       const crawling = this.crouched && grounded;
       let maxSp = crawling ? CRAWL : (input.btn.walk ? WALK : RUN);
+      // keep the take-off speed of a jump through the air (no drag back down to run speed mid-jump)
+      if (grounded) this.airMax = 0; else maxSp = Math.max(maxSp, this.airMax || 0);
       if (this.carry) maxSp *= 0.8;
       if (this.wadeDepth > 0.02) maxSp *= 1 - 0.45 * Math.min(1, this.wadeDepth / 0.3);
       if (this.grab) maxSp = PUSH * 0.8;
@@ -167,12 +171,16 @@ export class Player {
         if (this.crouched) this.setCrouch(false);
         if (!this.crouched) {
           this.vel.y = JUMP_V; this.jumpsUsed = 1; this.jumpBuf = -1; this.jumpCut = false; this.lastGround = -1;
+          // a little forward push off the ground so running jumps still clear small gaps at the robot's slower pace
+          if (mag > 0.3 && !this.carry) { const sp = Math.max(speed, 1.6 * mag); this.vel.x = dir.x * sp; this.vel.z = dir.z * sp; }
+          this.airMax = Math.hypot(this.vel.x, this.vel.z);
           this.state = 'jump'; this.emit('jump');
           if (this.platformVel) { this.vel.x += this.platformVel.x; this.vel.z += this.platformVel.z; this.vel.y += Math.max(0, this.platformVel.y); }
         }
       } else if (!grounded && !coyote && this.abilities.booster && this.jumpsUsed < 2 && jumpPressed) {
         this.vel.y = DJUMP_V; this.jumpsUsed = 2; this.jumpBuf = -1; this.jumpCut = true; this.state = 'djump'; this.djT = 0.35;
-        if (mag > 0.1) { this.vel.x = dir.x * Math.max(speed, RUN * 0.8); this.vel.z = dir.z * Math.max(speed, RUN * 0.8); }
+        if (mag > 0.1) { this.vel.x = dir.x * Math.max(speed, 1.5); this.vel.z = dir.z * Math.max(speed, 1.5); }
+        this.airMax = Math.max(this.airMax || 0, Math.hypot(this.vel.x, this.vel.z));
         this.emit('djump');
       }
     }
@@ -379,6 +387,7 @@ export class Player {
     // jump out of the water: strong kick, carries forward momentum, any time near the surface
     if (jumpPressed && this.pos.y > targetY - 0.15) {
       this.vel.y = 3.9; if (mag > 0.1) { this.vel.x += dir.x * 1.1; this.vel.z += dir.z * 1.1; }
+      this.airMax = Math.hypot(this.vel.x, this.vel.z);
       this.state = 'jump'; this.jumpsUsed = 1; this.jumpCut = false; this.emit('jump', { water: true }); this.lastGround = -1; this.wetT = 1;
       return this.integrateFree(dt);
     }

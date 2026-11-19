@@ -273,7 +273,7 @@ async function boot() {
     else if (st === 'hover') e = 'excited';
     else if (G.nearTarget && G.nearTarget.kind === 'creature') e = 'curious';
     else if (G.edgeDanger) e = 'worried';
-    else if (Math.hypot(player.vel.x, player.vel.z) > 1.9) e = 'smile';
+    else if (Math.hypot(player.vel.x, player.vel.z) > 1.25) e = 'smile';
     nuri.setExpression(e);
   }
   const tmpV = new THREE.Vector3();
@@ -471,7 +471,7 @@ async function boot() {
     }
     // dust builds up on dirt and washes off in water
     if (player.state === 'swim') DUST.value = Math.max(0.2, DUST.value - dt * 0.25);
-    else if (player.grounded && Math.hypot(player.vel.x, player.vel.z) > 1) DUST.value = Math.min(1, DUST.value + dt * 0.004);
+    else if (player.grounded && Math.hypot(player.vel.x, player.vel.z) > 0.6) DUST.value = Math.min(1, DUST.value + dt * 0.004);
     if (dof) {
       const head = tmpV.set(player.pos.x, player.pos.y + 0.22, player.pos.z);
       dof.uniforms.uFocus.value = damp(dof.uniforms.uFocus.value, camera.position.distanceTo(head), 8, dt);

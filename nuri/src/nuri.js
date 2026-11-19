@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { clamp, lerp, damp } from './util.js';
 import { patchMaterial } from './shaders.js';
+import { RUN } from './player.js';
 
 // ---------------------------------------------------------------- LED face display
 export const EXPRESSIONS = {
@@ -300,7 +301,7 @@ export class Nuri {
 
   update(dt, p, env) {
     this.t += dt; this.face.update(dt);
-    const st = p.state, speed = p.speed || 0, run = clamp(speed / 2.3, 0, 1);
+    const st = p.state, speed = p.speed || 0, run = clamp(speed / RUN, 0, 1);
     const stride = lerp(0.055, 0.105, run);
     if (p.grounded && ['move', 'push', 'crawl', 'carry'].includes(st)) this.phase += (speed * dt) / (2 * stride);
     const ph = this.phase * Math.PI * 2;
