@@ -20,6 +20,8 @@ import { Audio } from './audio.js';
 import { UI, loadSave, writeSave, loadSettings, writeSettings } from './ui.js';
 import { START, STREAM, POND, REGIONS } from './layout.js';
 import { WIND } from './shaders.js';
+import { makeDofPass, makeGradePass, makeContactShadow } from './post.js';
+import { DUST } from './nuri.js';
 import { clamp, damp, angleDiff } from './util.js';
 
 const DEFAULTS = { master: 0.8, music: 0.45, sfx: 0.85, sens: 1, invertY: false, timeFlow: false, weather: 'clear', quality: null, padMap: null };
@@ -97,9 +99,10 @@ async function boot() {
   ui.bindSettings(S, applySettings, input); applySettings();
 
   // post-processing
-  let composer = null, bloom = null;
+  let composer = null, bloom = null, dof = null, grade = null;
   if (tier.post) {
     const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: tier.msaa });
+    rt.depthTexture = new THREE.DepthTexture(innerWidth, innerHeight);
     composer = new EffectComposer(renderer, rt);
     composer.setPixelRatio(renderer.getPixelRatio());
     composer.addPass(new RenderPass(scene, camera));
@@ -110,12 +113,19 @@ async function boot() {
     }
     bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.32, 0.55, 0.92);
     composer.addPass(bloom);
+    if (tier.dof) { dof = makeDofPass(rt.depthTexture, camera); composer.addPass(dof); }
     composer.addPass(new OutputPass());
-  }
+    grade = makeGradePass(); composer.addPass(grade);
+  } else document.body.classList.add('css-vignette');
+  // soft contact shadow under the robot (grounds it on every quality tier)
+  const contact = makeContactShadow(); scene.add(contact);
   const resize = () => {
     camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
     composer?.setSize(innerWidth, innerHeight);
+    const pr = renderer.getPixelRatio();
+    if (dof) { dof.uniforms.uRes.value.set(innerWidth * pr, innerHeight * pr); dof.uniforms.uMaxR.value = 7 * innerHeight * pr / 1080; }
+    if (grade) grade.uniforms.uRes.value.set(innerWidth * pr, innerHeight * pr);
     fx.setHeight(innerHeight * renderer.getPixelRatio());
   };
   addEventListener('resize', resize); resize();
@@ -372,6 +382,27 @@ async function boot() {
     if (G.mode === 'play' && !G.paused) ui.setPrompt(G.wokeUp ? gameplay.prompt(player) : null, input.usingPad);
     // autosave every 60 s
     if (G.mode === 'play' && G.time - G.lastSaveAt > 60) save();
+    // contact shadow follows the ground under the robot and fades with height
+    {
+      const gd = player.grounded ? 0 : Math.max(0, player.groundDist ?? 1);
+      const gy = player.pos.y - (player.grounded ? 0 : gd);
+      contact.visible = gd < 1.5 && player.state !== 'swim';
+      contact.position.set(player.pos.x, gy + 0.006, player.pos.z);
+      const n = world.terrain.normalAt(player.pos.x, player.pos.z);
+      contact.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), n);
+      const k = 1 - clamp(gd / 1.5, 0, 1);
+      contact.scale.setScalar(0.34 + (1 - k) * 0.25);
+      contact.material.opacity = 0.75 * k;
+    }
+    // dust builds up on dirt and washes off in water
+    if (player.state === 'swim') DUST.value = Math.max(0.2, DUST.value - dt * 0.25);
+    else if (player.grounded && Math.hypot(player.vel.x, player.vel.z) > 1) DUST.value = Math.min(1, DUST.value + dt * 0.004);
+    if (dof) {
+      const head = tmpV.set(player.pos.x, player.pos.y + 0.22, player.pos.z);
+      dof.uniforms.uFocus.value = damp(dof.uniforms.uFocus.value, camera.position.distanceTo(head), 8, dt);
+      dof.uniforms.uStrength.value = G.mode === 'title' ? 1.4 : 1.0;
+    }
+    if (grade) grade.uniforms.uTime.value = G.time;
     if (composer) composer.render(); else renderer.render(scene, camera);
     frames++; fpsT += dt;
     if (fpsT > 1) { window.__fps = frames / fpsT; frames = 0; fpsT = 0; }

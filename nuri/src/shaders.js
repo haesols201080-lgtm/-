@@ -47,7 +47,7 @@ function aoPatch(sh, strength = 1) {
 }
 
 // Standard material with baked-AO vertex colors and optional wind sway.
-export function patchMaterial(mat, { ao = true, wind = null, extraFrag = null } = {}) {
+export function patchMaterial(mat, { ao = true, wind = null, extraFrag = null, key = '' } = {}) {
   const prev = mat.onBeforeCompile;
   mat.onBeforeCompile = (sh, r) => {
     if (prev) prev(sh, r);
@@ -68,7 +68,7 @@ export function patchMaterial(mat, { ao = true, wind = null, extraFrag = null } 
     }
     if (extraFrag) extraFrag(sh);
   };
-  mat.customProgramCacheKey = () => `p${ao}${wind ? wind.length : 0}${extraFrag ? 1 : 0}`;
+  mat.customProgramCacheKey = () => `p${ao}${wind ? wind.length : 0}${extraFrag ? 1 : 0}${key}${mat.uuid.slice(0, extraFrag && !key ? 8 : 0)}`;
   return mat;
 }
 

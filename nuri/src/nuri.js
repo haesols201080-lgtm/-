@@ -98,19 +98,44 @@ class FaceDisplay {
 }
 
 // ---------------------------------------------------------------- materials
+// Weathering shared by the robot's painted/metal parts: dust collects on the boots and lower legs (rest-pose height),
+// plus fine grime mottling, so the robot sits in the same dirty, scanned world instead of looking freshly rendered.
+export const DUST = { value: 0.6 };
+const WEATHER_GLSL = /* glsl */`
+  varying vec3 vRest; uniform float uDust;
+  float wh(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+  float wn(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(mix(wh(i), wh(i + vec3(1,0,0)), f.x), mix(wh(i + vec3(0,1,0)), wh(i + vec3(1,1,0)), f.x), f.y),
+               mix(mix(wh(i + vec3(0,0,1)), wh(i + vec3(1,0,1)), f.x), mix(wh(i + vec3(0,1,1)), wh(i + vec3(1,1,1)), f.x), f.y), f.z); }`;
+function weather(strength) {
+  return (sh) => {
+    sh.uniforms.uDust = DUST;
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRest;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRest = position;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + WEATHER_GLSL)
+      .replace('#include <map_fragment>', `#include <map_fragment>
+        float wnz = wn(vRest * 160.0) * 0.55 + wn(vRest * 38.0) * 0.45;
+        float dust = (smoothstep(0.11, 0.012, vRest.y) * (0.35 + 0.65 * wnz) + smoothstep(0.24, 0.08, vRest.y) * 0.18 * wnz) * uDust * ${strength.toFixed(2)};
+        diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.34, 0.29, 0.22) * (0.8 + 0.4 * wnz), clamp(dust, 0.0, 0.8));
+        diffuseColor.rgb *= 0.9 + 0.1 * wn(vRest * 420.0);`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+        roughnessFactor = mix(roughnessFactor, 0.95, clamp(dust * 1.3, 0.0, 1.0));`);
+  };
+}
+
 function robotMaterials(envMap) {
   const knit = makeKnitNormal();
-  const P = (o) => patchMaterial(new THREE.MeshPhysicalMaterial({ envMapIntensity: 1.0, vertexColors: true, ...o }), { ao: 1 });
+  const P = (o, w = 1) => patchMaterial(new THREE.MeshPhysicalMaterial({ envMapIntensity: 0.85, vertexColors: true, ...o }), { ao: 1, extraFrag: weather(w), key: 'nuri' + w });
   return {
-    Nuri_PaintWhite: P({ color: 0xd9d6ce, roughness: 0.42, metalness: 0.05, clearcoat: 0.25, clearcoatRoughness: 0.25 }),
-    Nuri_PaintTeal: P({ color: 0x0b7c93, roughness: 0.38, metalness: 0.05, clearcoat: 0.3, clearcoatRoughness: 0.2 }),
-    Nuri_FrameGraphite: P({ color: 0x2f343b, roughness: 0.45, metalness: 1.0 }),
-    Nuri_Aluminium: P({ color: 0xc4c8cd, roughness: 0.26, metalness: 1.0 }),
-    Nuri_Rubber: P({ color: 0x17191c, roughness: 0.85, metalness: 0 }),
+    Nuri_PaintWhite: P({ color: 0xc9c4b9, roughness: 0.5, metalness: 0.04, clearcoat: 0.12, clearcoatRoughness: 0.35 }),
+    Nuri_PaintTeal: P({ color: 0x0d6f82, roughness: 0.46, metalness: 0.04, clearcoat: 0.15, clearcoatRoughness: 0.3 }),
+    Nuri_FrameGraphite: P({ color: 0x2c3036, roughness: 0.5, metalness: 1.0 }, 0.7),
+    Nuri_Aluminium: P({ color: 0xb6b9bd, roughness: 0.32, metalness: 1.0 }, 0.6),
+    Nuri_Rubber: P({ color: 0x17191c, roughness: 0.88, metalness: 0 }, 1.2),
     Nuri_LensGlass: P({ color: 0x050607, roughness: 0.03, metalness: 0, clearcoat: 1 }),
     Nuri_Decal: P({ color: 0x3a3f45, roughness: 0.5 }),
-    Nuri_Glow: new THREE.MeshStandardMaterial({ color: 0x0a2a33, emissive: 0x4fe8ff, emissiveIntensity: 3.2, roughness: 0.3 }),
-    Nuri_Scarf: P({ color: 0x2150b8, roughness: 0.85, sheen: 1, sheenColor: new THREE.Color(0x8fb4ff), sheenRoughness: 0.45, side: THREE.DoubleSide,
+    Nuri_Glow: new THREE.MeshStandardMaterial({ color: 0x0a2a33, emissive: 0x4fe8ff, emissiveIntensity: 2.4, roughness: 0.3 }),
+    Nuri_Scarf: P({ color: 0x24479a, roughness: 0.88, sheen: 1, sheenColor: new THREE.Color(0x7d98cc), sheenRoughness: 0.5, side: THREE.DoubleSide,
       normalMap: knit, normalScale: new THREE.Vector2(0.9, 0.9) }),
   };
 }
@@ -340,7 +365,7 @@ export class Nuri {
     this.jetPower = damp(this.jetPower, jets, 14, dt);
     this.jetMat.opacity = this.jetPower * 0.85;
     for (const j of this.jets) { j.visible = this.jetPower > 0.02; j.scale.set(1, 0.6 + this.jetPower * (0.6 + Math.random() * 0.3), 1); }
-    this.mats.Nuri_Glow.emissiveIntensity = 3 + Math.sin(this.t * 2.4) * 0.5 + this.jetPower * 2;
+    this.mats.Nuri_Glow.emissiveIntensity = 2.2 + Math.sin(this.t * 2.4) * 0.4 + this.jetPower * 2;
     this.root.updateMatrixWorld(true);
     this.updateAntenna(dt);
     this.updateScarf(dt, env);

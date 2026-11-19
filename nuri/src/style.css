@@ -101,3 +101,7 @@ body.touch .desk-only { display: none; }
   table.keys { font-size: 12px; }
   .counters { gap: 6px; }
 }
+
+/* cheap vignette for tiers without post-processing */
+body.css-vignette::after { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 5;
+  background: radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(10, 12, 8, 0.35) 100%); }
