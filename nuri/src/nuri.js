@@ -104,9 +104,12 @@ export const DUST = { value: 0.6 };
 export const WET = { value: 0 };
 // ground the robot stands on: height + albedo tint of the surface (for contact occlusion and earth-coloured bounce)
 export const GROUND = { y: { value: 0 }, tint: { value: new THREE.Color(1, 1, 1) } };
+// set while three renders the screen-space refraction image for the water: the parts of the robot above the
+// surface must not show up "under" the water (only its submerged body is refracted)
+export const REFRACT = { pass: { value: 0 }, waterY: { value: -0.32 }, inWater: { value: 0 } };
 const GROUND_TINT = { dirt: [1.16, 0.96, 0.8], leaves: [1.14, 1.0, 0.78], moss: [0.96, 1.1, 0.8], pebbles: [1.04, 1.0, 0.94], rock: [1.0, 1.0, 0.96] };
 const WEATHER_GLSL = /* glsl */`
-  varying vec3 vRest; varying vec3 vWPg; uniform float uDust, uWet, uGroundY; uniform vec3 uGroundTint;
+  varying vec3 vRest; varying vec3 vWPg; uniform float uDust, uWet, uGroundY; uniform vec3 uGroundTint; uniform float uRefrPass, uRefrWaterY, uInWater;
   float wh(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
   float wn(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
     return mix(mix(mix(wh(i), wh(i + vec3(1,0,0)), f.x), mix(wh(i + vec3(0,1,0)), wh(i + vec3(1,1,0)), f.x), f.y),
@@ -114,11 +117,13 @@ const WEATHER_GLSL = /* glsl */`
 function weather(strength) {
   return (sh) => {
     sh.uniforms.uDust = DUST; sh.uniforms.uWet = WET; sh.uniforms.uGroundY = GROUND.y; sh.uniforms.uGroundTint = GROUND.tint;
+    sh.uniforms.uRefrPass = REFRACT.pass; sh.uniforms.uRefrWaterY = REFRACT.waterY; sh.uniforms.uInWater = REFRACT.inWater;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRest; varying vec3 vWPg;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRest = position;')
       .replace('#include <project_vertex>', '#include <project_vertex>\nvWPg = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + WEATHER_GLSL)
       .replace('#include <map_fragment>', `#include <map_fragment>
+        if (uRefrPass > 0.5 && vWPg.y > uRefrWaterY + 0.01) discard;
         float wnz = wn(vRest * 160.0) * 0.55 + wn(vRest * 38.0) * 0.45;
         float dust = (smoothstep(0.11, 0.012, vRest.y) * (0.35 + 0.65 * wnz) + smoothstep(0.24, 0.08, vRest.y) * 0.18 * wnz) * uDust * ${strength.toFixed(2)};
         diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.34, 0.29, 0.22) * (0.8 + 0.4 * wnz), clamp(dust, 0.0, 0.8));
@@ -142,7 +147,14 @@ function weather(strength) {
           reflectedLight.indirectDiffuse *= gAO * mix(vec3(1.0), uGroundTint, clamp(down * 1.2, 0.0, 1.0) * (0.6 + 0.4 * prox));
           reflectedLight.indirectSpecular *= mix(1.0, gAO, 0.8) * mix(vec3(1.0), uGroundTint, down * 0.7);
           reflectedLight.directDiffuse *= 1.0 - prox * down * 0.25;
-        }`);
+        }`)
+      .replace('#include <opaque_fragment>', `
+        // under the surface: light is absorbed (green-blue, darker with depth) - the submerged body is not lit like air
+        {
+          float uw = uInWater * smoothstep(0.0, 0.12, uRefrWaterY - vWPg.y);
+          outgoingLight *= mix(vec3(1.0), vec3(0.34, 0.5, 0.46), uw);
+        }
+        #include <opaque_fragment>`);
   };
 }
 
@@ -204,6 +216,9 @@ export class Nuri {
       if (o.isMesh) {
         const n = o.name;
         if (n.includes('Screen')) {
+          // the exported screen's triangles wind inward (back faces toward the viewer): flip them so the LED face shows
+          const ix = o.geometry.index;
+          if (ix && !o.geometry.userData.flipped) { for (let i = 0; i < ix.count; i += 3) { const t = ix.getX(i + 1); ix.setX(i + 1, ix.getX(i + 2)); ix.setX(i + 2, t); } ix.needsUpdate = true; o.geometry.userData.flipped = true; }
           o.material = new THREE.MeshPhysicalMaterial({ color: 0x010203, roughness: 0.06, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.03,
             emissive: 0xffffff, emissiveMap: this.face.tex, emissiveIntensity: 2.4 });
         } else {
@@ -211,6 +226,8 @@ export class Nuri {
           if (key) o.material = matCache[key] || (matCache[key] = robotMaterial(key, o.material));
         }
         o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
+        // three renders the water's refraction image into a mip-mapped target: flag that pass for the robot shader
+        o.onBeforeRender = (r) => { const rt = r.getRenderTarget(); REFRACT.pass.value = rt && rt.texture.generateMipmaps && rt.texture.minFilter === THREE.LinearMipmapLinearFilter ? 1 : 0; };
       }
     });
     // bones

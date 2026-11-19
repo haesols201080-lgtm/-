@@ -130,3 +130,31 @@ export function makeRockMaterial(T, { moss = 0.55, scale = 0.45 } = {}) {
   mat.customProgramCacheKey = () => 'rockTri';
   return mat;
 }
+
+// Thin-leaf translucency for scanned plants and grass: sunlight shining through leaves seen against the sun, and some
+// ambient light from the far side (leaves are never black from behind). Uses the scene lighting model when present.
+export function leafLight(sh, k = 1) {
+  nearFade(sh);
+  sh.fragmentShader = sh.fragmentShader.replace('#include <opaque_fragment>', `
+    {
+      #ifdef LIT_SKY
+        vec3 wpL = litWorldPos(); float svL = skyVisibility(wpL);
+        float back = pow(clamp(dot(normalize(wpL - cameraPosition), uSunDirW), 0.0, 1.0), 3.0);
+      #else
+        float svL = 1.0; float back = 0.0;
+      #endif
+      outgoingLight += reflectedLight.indirectDiffuse * ${(0.3 * k).toFixed(3)}
+                     + diffuseColor.rgb * vec3(1.0, 1.0, 0.62) * back * ${(0.55 * k).toFixed(3)} * mix(0.15, 1.0, svL);
+    }
+    #include <opaque_fragment>`);
+}
+
+// Foliage right in front of the lens dissolves (screen-door dither) instead of filling the view with giant leaves.
+export function nearFade(sh, r0 = 0.12, r1 = 0.5) {
+  sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+    {
+      float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+      if (length(vViewPosition) < mix(${r0.toFixed(2)}, ${r1.toFixed(2)}, ign)) discard;
+    }`);
+}
+

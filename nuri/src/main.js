@@ -24,7 +24,7 @@ import { makeDofPass, makeGradePass, makeContactShadow, makeGodRaysPass } from '
 import { Lighting } from './lighting.js';
 import { Prints } from './prints.js';
 import { GroundMarks } from './marks.js';
-import { DUST, WET } from './nuri.js';
+import { DUST, WET, REFRACT } from './nuri.js';
 import { clamp, damp, angleDiff } from './util.js';
 
 const DEFAULTS = { master: 0.8, music: 0.45, sfx: 0.85, sens: 1, invertY: false, timeFlow: false, weather: 'clear', quality: null, padMap: null };
@@ -225,7 +225,7 @@ async function boot() {
             const L = footWorld('L'), R = footWorld('R'), f = L.y < R.y ? L : R;
             f.y = player.pos.y; prints.step(f, player.yaw, WET.value, player.groundCollider, 1);
           }
-          if (surf === 'water' || player.wadeDepth > 0.02) { const d = tmpV.set(player.vel.x, 0, player.vel.z).multiplyScalar(0.3); fx.wadeSplash({ x: pp.x, y: wy, z: pp.z }, d, 0.6); world.sim.drop(pp.x, pp.z, 0.07, -0.02); fx.ring({ x: pp.x, y: wy, z: pp.z }, 0.2); }
+          if (surf === 'water' || player.wadeDepth > 0.02) { const d = tmpV.set(player.vel.x, 0, player.vel.z).multiplyScalar(0.3); fx.wadeSplash({ x: pp.x, y: wy, z: pp.z }, d, 0.6); world.sim.drop(pp.x, pp.z, 0.07, -0.02); }
           break;
         }
         case 'jump': audio.play('jump', { pos: pp }); if (e.water) { fx.waterSplash(surf(pp), 0.55); world.sim.drop(pp.x, pp.z, 0.12, -0.05); audio.play('splash', { pos: pp, vol: 0.5 }); } else fx.dust(pp, 4); break;
@@ -422,6 +422,7 @@ async function boot() {
     // wake behind the robot in water, dripping and drying afterwards
     if (G.mode === 'play' && !G.paused) {
       const inW = player.state === 'swim' || (player.wadeDepth || 0) > 0.03;
+      REFRACT.inWater.value = damp(REFRACT.inWater.value, inW || player.pos.y < wy + 0.05 && world.terrain.isWater(player.pos.x, player.pos.z) ? 1 : 0, 6, dt);
       const hs = Math.hypot(player.vel.x, player.vel.z);
       if (inW) {
         WET.value = Math.max(WET.value, player.state === 'swim' ? 1 : Math.min(1, WET.value + dt * 2 * (player.wadeDepth / 0.3)));

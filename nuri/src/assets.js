@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { patchMaterial, makeRockMaterial } from './shaders.js';
+import { patchMaterial, makeRockMaterial, leafLight, nearFade } from './shaders.js';
 
 const BASE = './';
 
@@ -190,19 +190,23 @@ export class Assets {
 
   buildMaterials() {
     const T = this.tex, M = this.mats;
-    M.bark = patchMaterial(new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
-      vertexColors: true, roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.3, 1.3), envMapIntensity: 0.7 }), { ao: 1 });
-    // LOD1 trees and saplings carry no baked-AO vertex colors
+    // tree bark: vertex colour = bark tint by position on the tree (dark grey-brown plates low on pines, thin orange
+    // bark higher up, grey dead branches) x partial baked AO; the colour boost lets the tint warm the scan up
+    M.bark = new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
+      vertexColors: true, color: new THREE.Color(1.3, 1.3, 1.3), roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.3, 1.3), envMapIntensity: 0.7 });
+    M.barkLog = new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
+      vertexColors: true, roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.3, 1.3), envMapIntensity: 0.7 });
     M.barkPlain = new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
-      roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.3, 1.3), envMapIntensity: 0.7 });
-    M.barkSnag = patchMaterial(new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
-      vertexColors: true, color: new THREE.Color(0.78, 0.74, 0.7), roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.5, 1.5), envMapIntensity: 0.7 }), { ao: 1, key: 'snag' });
-    M.barkSnagPlain = new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, color: new THREE.Color(0.78, 0.74, 0.7), roughness: 1, metalness: 0 });
+      vertexColors: true, color: new THREE.Color(1.3, 1.3, 1.3), roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.3, 1.3), envMapIntensity: 0.7 });
+    M.barkSnag = new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
+      vertexColors: true, color: new THREE.Color(1.15, 1.1, 1.05), roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.5, 1.5), envMapIntensity: 0.7 });
+    M.barkSnagPlain = new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, vertexColors: true, color: new THREE.Color(1.15, 1.1, 1.05), roughness: 1, metalness: 0 });
     M.twig = patchMaterial(new THREE.MeshStandardMaterial({ map: T.twig.map, normalMap: T.twig.normal, alphaTest: 0.38, side: THREE.DoubleSide,
       roughness: 0.82, metalness: 0, envMapIntensity: 0.55 }), {
       ao: false,
       wind: 'transformed += windOffset(wp0.xyz, 0.05 * smoothstep(0.5, 14.0, wp0.y) + 0.012, wp0.x * 0.3 + wp0.z * 0.2);',
       extraFrag: (sh) => {
+        nearFade(sh, 0.15, 0.6);
         sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>',
           THREE.ShaderChunk.normal_fragment_begin.replace('normal *= faceDirection;', '/* foliage keeps crown-shaped normals on both sides */'));
         // foliage translucency: light passing through needles when back-lit, plus a soft canopy self-shadow tint

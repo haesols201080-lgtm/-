@@ -256,6 +256,17 @@ export function makeTerrainMaterial(T, tier = {}) {
         // macro color variation breaks repetition at distance
         float macro = vnoise(vWPos.xz * 0.05) * 0.5 + vnoise(vWPos.xz * 0.013) * 0.5;
         TA *= mix(0.86, 1.1, macro);
+        {
+          // forest-floor patchwork: darker reddish needle duff around trees, greenish moss/understory patches,
+          // and the sub-pixel self-shadowing of litter that a mip-mapped texture loses with distance
+          float fw = vSplat.x / max(1e-3, vSplat.x + vSplat.y + vSplat.z + vSplat.w);
+          float m1 = smoothstep(0.42, 0.78, vnoise(vWPos.xz * 0.11 + 7.3) * 0.7 + vnoise(vWPos.xz * 0.37 - 2.1) * 0.3);
+          float m2 = smoothstep(0.52, 0.82, vnoise(vWPos.xz * 0.19 - 3.7) * 0.75 + vnoise(vWPos.xz * 0.6 + 1.3) * 0.25);
+          TA = mix(TA, TA * vec3(0.86, 0.72, 0.6), m1 * 0.55 * fw * (1.0 - rockK));
+          TA = mix(TA, TA * vec3(0.74, 0.86, 0.56), m2 * 0.45 * fw * (1.0 - rockK));
+          float far = smoothstep(5.0, 28.0, length(cameraPosition - vWPos));
+          TA *= mix(1.0, 0.8, far * (1.0 - rockK * 0.5));
+        }
         // grass-covered ground is greener and darker beneath the blades
         TA = mix(TA, TA * vec3(0.85, 0.92, 0.75), vAux.x * 0.35);
         // wetness near water and when raining: darker, glossier

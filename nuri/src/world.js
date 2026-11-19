@@ -5,13 +5,13 @@ import * as THREE from 'three';
 import { mulberry32, smoothstep, distToPolyline, clamp, makeNoise2D, fbm } from './util.js';
 import { WORLD, PATH, PATH2, PATH3, STREAM, POND, OUTCROP, HERO_TREES, BOULDERS, LOGS, STUMPS, START } from './layout.js';
 import { Terrain } from './terrain.js';
-import { patchMaterial, WIND } from './shaders.js';
+import { patchMaterial, WIND, leafLight } from './shaders.js';
 import { TREES, SAPLINGS, SNAGS } from './assets.js';
 import { WaterSim, makeWaterMaterial } from './water.js';
 
 const rnd = mulberry32(2024);
 const nzEco = makeNoise2D(4242);
-const TREE_R0 = { pine_0: 0.36, pine_1: 0.4, pine_2: 0.34, pine_3: 0.38, fir_4: 0.27, fir_5: 0.26 };
+const TREE_R0 = { pine_0: 0.372, pine_1: 0.288, pine_2: 0.386, pine_3: 0.368, fir_4: 0.315, fir_5: 0.263 };
 const GRASS_SPRITES = [[0.207, 0.75, 0.496, 0.904], [0.605, 0.758, 0.826, 0.863], [0.252, 0.891, 0.49, 1.0], [0.598, 0.869, 0.789, 1.0], [0.051, 0.871, 0.18, 1.0]];
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -124,7 +124,9 @@ export class World {
     const roots = this.variants('pine_roots');
     for (const t of this.treeSpots) {
       t.y = this.terrain.heightAt(t.x, t.z) - 0.03;
-      const r0 = TREE_R0[t.t] * t.s;
+      // girth varies independently of height (suppressed thin stems next to dominant thick ones)
+      t.w = 0.82 + 0.4 * (Math.sin(t.x * 12.9898 + t.z * 78.233) * 43758.5453 % 1 + 1) % 1;
+      const r0 = TREE_R0[t.t] * t.s * t.w;
       if (t.hero) {
         const ms = meshes(assets.models[t.t].scene);
         const grp = new THREE.Group();
@@ -133,7 +135,7 @@ export class World {
           const m = new THREE.Mesh(o.geometry, isBark ? M.bark : M.twig);
           m.castShadow = true; m.receiveShadow = true; grp.add(m);
         }
-        grp.position.set(t.x, t.y, t.z); grp.rotation.y = t.rot; grp.scale.setScalar(t.s);
+        grp.position.set(t.x, t.y, t.z); grp.rotation.y = t.rot; grp.scale.set(t.s * t.w, t.s, t.s * t.w);
         this.scene.add(grp); grp.updateMatrixWorld(true);
         const bark = grp.children.find((c, i) => ms[i].name.includes('bark'));
         this.trimesh(bark.geometry, bark.matrixWorld, { kind: 'tree', surface: 'wood' }, t.y + 2.5);
@@ -150,7 +152,7 @@ export class World {
     for (const [key, list] of Object.entries(byT)) {
       for (const o of meshes(assets.models[key + '_lod1'].scene)) {
         const im = new THREE.InstancedMesh(o.geometry, o.name.includes('bark') ? M.barkPlain : M.twig, list.length);
-        list.forEach((t, i) => { q.setFromAxisAngle(UP, t.rot); sc.setScalar(t.s); p.set(t.x, t.y, t.z); mtx.compose(p, q, sc); im.setMatrixAt(i, mtx); });
+        list.forEach((t, i) => { q.setFromAxisAngle(UP, t.rot); sc.set(t.s * t.w, t.s, t.s * t.w); p.set(t.x, t.y, t.z); mtx.compose(p, q, sc); im.setMatrixAt(i, mtx); });
         im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
       }
     }
@@ -245,7 +247,7 @@ export class World {
       const yaw = -Math.atan2(z2 - z1, x2 - x1);
       if (hollow) {
         const g = assets.models.log_hollow.scene; const grp = new THREE.Group();
-        for (const o of meshes(g)) { const mm = new THREE.Mesh(o.geometry, M.bark); mm.castShadow = mm.receiveShadow = true; grp.add(mm); }
+        for (const o of meshes(g)) { const mm = new THREE.Mesh(o.geometry, M.barkLog); mm.castShadow = mm.receiveShadow = true; grp.add(mm); }
         const y = Math.max(this.terrain.heightAt(x1, z1), this.terrain.heightAt(x2, z2)) + r * 0.7;
         grp.position.set(cx, y, cz); grp.rotation.y = yaw; grp.scale.set(len / 5.2, r / 0.36, r / 0.36);
         this.scene.add(grp); grp.updateMatrixWorld(true);
@@ -338,6 +340,7 @@ export class World {
       sh.uniforms.uPlayer = this.grassPlayer; sh.uniforms.uTrample = this.grassTrample;
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec3 uPlayer; uniform vec4 uTrample[24];');
       prev(sh, r);
+      leafLight(sh, 0.8);
       // grass stays flattened where the robot has stepped, slowly springing back
       sh.vertexShader = sh.vertexShader.replace('#include <project_vertex>', `
         {
@@ -422,7 +425,8 @@ export class World {
     const windy = (mat, amt) => {
       const key = mat.uuid + amt; if (windMats.has(key)) return windMats.get(key);
       const m = mat.clone();
-      patchMaterial(m, { ao: false, wind: `transformed += windOffset(wp0.xyz, ${amt.toFixed(3)} * smoothstep(0.0, 0.6, position.y), wp0.x + wp0.z);`, key: 'w' + amt });
+      patchMaterial(m, { ao: false, wind: `transformed += windOffset(wp0.xyz, ${amt.toFixed(3)} * smoothstep(0.0, 0.6, position.y), wp0.x + wp0.z);`, key: 'w' + amt + 'leaf',
+        extraFrag: (sh) => leafLight(sh, 1) });
       windMats.set(key, m); return m;
     };
     const k = tier.fernDensity;
@@ -455,6 +459,9 @@ export class World {
     // ---- plants (scanned)
     add('fern_02', { density: 0.32, scale: [0.4, 0.95], wind: 0.03, radius: 38, align: 0.35,
       rule: (x, z) => offPath(x, z, 0.9) ? smoothstep(0.25, 0.65, shade(x, z)) * this.patch(x, z, 0.09, 1) * 1.4 : 0 });
+    // bracken and fern on the open, sunny slopes too (otherwise the hillsides read as bare sand)
+    add('fern_02', { density: 0.16, scale: [0.55, 1.1], wind: 0.03, radius: 42, align: 0.35,
+      rule: (x, z) => offPath(x, z, 1.2) ? smoothstep(0.4, 0.08, shade(x, z)) * this.patch(x, z, 0.08, 11) * 1.3 : 0 });
     add('nettle_plant', { density: 0.22, scale: [0.8, 1.6], wind: 0.02, radius: 26, align: 0.3,
       rule: (x, z) => { const w = this.waterDist(x, z); return offPath(x, z, 0.6) ? (smoothstep(5, 1.2, w) * 0.9 + 0.15 * smoothstep(0.4, 0.1, shade(x, z))) * this.patch(x, z, 0.15, 2) : 0; } });
     add('periwinkle_plant', { density: 0.1, scale: [0.6, 1.1], wind: 0.02, radius: 24, align: 0.4,
@@ -470,7 +477,7 @@ export class World {
     // ---- forest floor detail (dense near the camera; this is what a 35 cm robot sees)
     add([this.variants('pinecone_0')[0], this.variants('pinecone_1')[0], this.variants('pinecone_2')[0]], { density: 1.4, scale: [0.85, 1.25], radius: 12, align: 1, sink: 0.05, tilt: 0.8,
       rule: (x, z) => offPath(x, z, 0.35) ? nearPine(x, z, 4.5) * (0.4 + 0.6 * this.patch(x, z, 0.5, 8)) : 0 });
-    add('dry_branches_medium_01', { density: 0.05, scale: [0.45, 1.0], radius: 26, align: 1, sink: 0.1, rule: (x, z) => offPath(x, z, 0.5) ? 0.2 + 0.8 * shade(x, z) : 0 });
+    add('dry_branches_medium_01', { density: 0.08, scale: [0.45, 1.0], radius: 26, align: 1, sink: 0.1, rule: (x, z) => offPath(x, z, 0.5) ? 0.2 + 0.8 * shade(x, z) : 0 });
     add('bark_debris_01', { density: 0.12, scale: [0.7, 1.3], radius: 14, align: 1, sink: 0.05, cast: false, rule: (x, z) => offPath(x, z, 0.4) ? nearPine(x, z, 2.6) : 0 });
     add('moss_01', { density: 0.9, scale: [1.2, 2.2], radius: 14, align: 1, sink: 0.1, cast: false,
       rule: (x, z) => { const n = this.nearestTrunk(x, z); return (n.d < 1.6 ? 1 - n.d / 1.6 : 0) * 0.8 + smoothstep(3, 0.8, this.waterDist(x, z)) * 0.3 * shade(x, z); } });

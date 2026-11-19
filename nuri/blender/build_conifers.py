@@ -99,10 +99,11 @@ def twig_card(mb, base, direction, side_hint, length, sprite, droop=0.15, fold=0
     mb.quad(lb, mid_b, mid_t, lt, [(u0, vb), (uc, vb), (uc, vt), (u0, vt)])
     mb.quad(mid_b, rb, rt, mid_t, [(uc, vb), (u1, vb), (u1, vt), (uc, vt)])
 
+R0_LAST = [0.0]
 def make_conifer(name, kind, seed, lod=0):
     rnd = random.Random(seed)
     if kind == 'pine':
-        H = rnd.uniform(16, 22); R0 = rnd.uniform(0.3, 0.42); crown0 = rnd.uniform(0.58, 0.68)
+        H = rnd.uniform(16, 24); R0 = rnd.uniform(0.26, 0.46); crown0 = rnd.uniform(0.55, 0.7)
     elif kind == 'snag':
         H = rnd.uniform(7, 13); R0 = rnd.uniform(0.24, 0.34); crown0 = 2.0
     elif kind == 'fir':
@@ -111,16 +112,25 @@ def make_conifer(name, kind, seed, lod=0):
         H = rnd.uniform(0.9, 2.6); R0 = H * 0.012 + 0.008; crown0 = 0.02
     rings = [40, 14][lod] if kind != 'sapling' else [10, 6][lod]
     radial = [18, 9][lod] if kind != 'sapling' else 6
-    lean = Vector((rnd.uniform(-1, 1), rnd.uniform(-1, 1), 0)) * (0.012 * H)
+    # real stems are never plumb lines: a lean (up to ~2.5 deg), a butt sweep near the ground that bends back
+    # toward vertical, and small kinks along the bole
+    la = rnd.uniform(0, 6.28)
+    lean = Vector((math.cos(la), math.sin(la), 0)) * (rnd.uniform(0.01, 0.045) * H if kind != 'sapling' else 0.012 * H)
+    sweep = -lean.normalized() * (rnd.uniform(0.05, 0.16) if kind in ('pine', 'snag') else 0.03) if kind != 'sapling' else Vector()
     spine = []
     for i in range(rings):
         t = (i / (rings - 1)) ** 1.25
-        wob = Vector((noise.noise(Vector((t * 3, seed, 0))), noise.noise(Vector((0, t * 3, seed))), 0)) * 0.08 * H * t * 0.2
-        spine.append(Vector((0, 0, t * H - (0.3 if kind != 'sapling' else 0.02))) + lean * t * t + wob)
+        z = t * H
+        kink = 0.03 + 0.004 * z if kind != 'sapling' else 0.01 * H
+        wob = Vector((noise.noise(Vector((t * 5.0, seed, 0))), noise.noise(Vector((0, t * 5.0, seed))), 0)) * kink
+        spine.append(Vector((0, 0, z - (0.3 if kind != 'sapling' else 0.02))) + lean * t ** 1.5 + sweep * (1 - math.exp(-z / 1.6)) + wob)
     nb = rnd.randint(5, 7); ths = [i / nb * 2 * math.pi + rnd.uniform(-0.3, 0.3) for i in range(nb)]
     def rfn(t, th):
         z = t * H
-        r = R0 * (1 - (0.45 if kind == 'snag' else 0.88) * t ** 0.9)
+        if kind == 'pine':  # slow taper along the clear bole, faster inside the crown
+            r = R0 * ((1 - 0.42 * t) if t < crown0 else (1 - 0.42 * crown0) * (1 - 0.92 * ((t - crown0) / (1 - crown0)) ** 0.85))
+        else:
+            r = R0 * (1 - (0.45 if kind == 'snag' else 0.88) * t ** 0.9)
         if kind == 'snag' and t > 0.97: r *= 0.6 + 0.4 * abs(math.sin(th * 3 + seed))  # splintered break
         if kind != 'sapling':
             fl = math.exp(-z / 0.7)
@@ -130,18 +140,38 @@ def make_conifer(name, kind, seed, lod=0):
         return max(r, 0.004)
     bv, bf, buv = [], [], []
     tube(bv, bf, buv, spine, rfn, radial)
+    n_trunk = len(bv)
     cards = MB()
     def trunk_at(h):
         t = min(1, max(0, (h + 0.3) / H)); i = t * (rings - 1); i0 = int(min(rings - 2, i)); f = i - i0
         return spine[i0].lerp(spine[i0 + 1], f), rfn(t, 0)
-    # dead branch stubs low on pines (and all over standing dead snags)
-    if kind in ('pine', 'snag') and lod == 0:
-        for k in range(rnd.randint(8, 14)):
-            h = rnd.uniform(2.5, min(crown0, 0.95) * H); p, r = trunk_at(h); a = rnd.uniform(0, 6.28)
-            d = Vector((math.cos(a), math.sin(a), rnd.uniform(-0.2, 0.15))).normalized()
-            L = rnd.uniform(0.25, 0.9)
-            pts = [p + d * (r * 0.8 + L * s) for s in (0, 0.5, 1)]
-            tube(bv, bf, buv, pts, lambda t, th, rr=rnd.uniform(0.018, 0.035): rr * (1 - 0.7 * t), 5)
+    # self-pruned lower bole: whorls of dead branches (longer and more complete toward the crown, broken to
+    # stubs and knots lower down) with bare side twigs; every LOD keeps them, they are what the eye reads
+    if kind in ('pine', 'snag'):
+        z = rnd.uniform(1.0, 1.8); top = min(crown0, 0.95) * H
+        while z < top:
+            p, r = trunk_at(z); u = z / top
+            nw = rnd.randint(2, 5) if lod == 0 else rnd.randint(2, 4)
+            a0 = rnd.uniform(0, 6.28)
+            for k in range(nw):
+                a = a0 + k / nw * 6.28 + rnd.uniform(-0.4, 0.4)
+                stub = rnd.random() > 0.25 + 0.6 * u            # low on the stem most have snapped off
+                up = rnd.uniform(0.05, 0.4) if stub else rnd.uniform(-0.15, 0.3)
+                d = Vector((math.cos(a), math.sin(a), up)).normalized()
+                L = rnd.uniform(0.05, 0.28) if stub else rnd.uniform(0.45, 0.8 + 1.2 * u)
+                br = rnd.uniform(0.02, 0.034) + 0.014 * u
+                seg = 2 if (stub or lod) else 4
+                pts = [p + d * (r * 0.85 + L * (i / seg)) - Vector((0, 0, 0.12 * L * (i / seg) ** 2)) for i in range(seg + 1)]
+                tube(bv, bf, buv, pts, lambda t, th, br=br, stub=stub: br * (1 - (0.35 if stub else 0.88) * t), 5 if lod == 0 else 4, tile=0.5)
+                if not stub:
+                    for tw in range(rnd.randint(4, 8) if lod == 0 else rnd.randint(1, 2)):
+                        f = rnd.uniform(0.3, 0.9); i0 = min(seg - 1, int(f * seg)); bp = pts[i0].lerp(pts[i0 + 1], f * seg - i0)
+                        side = d.cross(Vector((0, 0, 1))).normalized() * (1 if tw % 2 else -1)
+                        td = (d * 0.6 + side * 0.8 + Vector((0, 0, rnd.uniform(-0.3, 0.2)))).normalized()
+                        tl = rnd.uniform(0.12, 0.42) * (1.25 - f) * (1 if lod == 0 else 1.3)
+                        tube(bv, bf, buv, [bp, bp + td * tl * 0.5, bp + td * tl - Vector((0, 0, 0.03 * tl))],
+                             lambda t, th, tr=br * 0.4: max(0.003, tr * (1 - 0.8 * t)), 3, tile=0.4)
+            z += rnd.uniform(0.3, 0.6)
     # living crown: whorls
     z = crown0 * H
     step = 0.55 if kind != 'sapling' else 0.16 * H / 1.5
@@ -183,8 +213,21 @@ def make_conifer(name, kind, seed, lod=0):
     # leader at the top
     top = spine[-1]
     twig_card(cards, top - Vector((0, 0, 0.3 if kind != 'sapling' else 0.08)), Vector((0.05, 0.02, 1)), Vector((1, 0, 0)), 0.8 if kind != 'sapling' else 0.25, rnd.choice(BIG), droop=0.02)
+    R0_LAST[0] = R0
     bark = MB(); bark.v, bark.f, bark.uv = bv, bf, buv
     bo = bark.obj(f'{name}_bark', 'BarkSnag' if kind == 'snag' else 'Bark')
+    # bark colour by position (multiplies the scanned bark): pines have thick dark grey-brown plates low on the
+    # stem and thin orange flaking bark higher up; dead and living branches are weathered grey; snags bleached
+    def tint(i, co):
+        if kind == 'snag': return (0.8, 0.79, 0.78)
+        if i >= n_trunk: return (0.7, 0.68, 0.67)
+        if kind == 'pine':
+            k = min(1.0, max(0.0, (co.z - 3.0 - 2.0 * noise.noise(Vector((co.x * 0.7, co.y * 0.7, co.z * 0.25 + seed)))) / 6.5))
+            k = k * k * (3 - 2 * k)
+            low, high = (0.62, 0.6, 0.58), (0.92, 0.64, 0.44)
+            return tuple(low[c] + (high[c] - low[c]) * k for c in range(3))
+        return (0.72, 0.68, 0.64)
+    bo['tints'] = [c for i, v in enumerate(bo.data.vertices) for c in tint(i, v.co)]
     if kind == 'snag':
         return bo, None, H
     co = cards.obj(f'{name}_twigs', 'Twig')
@@ -202,7 +245,8 @@ def export(objs, path):
     bpy.ops.object.select_all(action='DESELECT')
     for o in objs: o.select_set(True)
     bpy.context.view_layer.objects.active = objs[0]
-    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=True, export_materials='PLACEHOLDER', export_yup=True, export_normals=True)
+    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=True, export_materials='PLACEHOLDER', export_yup=True, export_normals=True,
+                              export_vertex_color='ACTIVE')
 
 def bake_ao(ob):
     sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.device = 'CPU'; sc.cycles.samples = 24
@@ -221,8 +265,17 @@ for i, (kind, seed) in enumerate(SPECS):
         except Exception: pass
         b, c, H = make_conifer(f'{kind}{i}', kind, seed, lod)
         if lod == 0: bake_ao(b)
+        # vertex colour = baked AO x bark tint (LOD1 / saplings: tint only)
+        me = b.data; tints = list(b['tints'])
+        ca = me.color_attributes.get('AO') or me.color_attributes.new('AO', 'BYTE_COLOR', 'CORNER')
+        me.color_attributes.active_color = ca
+        for li, loop in enumerate(me.loops):
+            vi = loop.vertex_index; ao = ca.data[li].color[0] if lod == 0 else 1.0
+            f = 1.0 - 0.6 * (1.0 - ao)   # AO goes into the albedo at partial strength (the game multiplies vertex colour)
+            ca.data[li].color = (f * tints[vi * 3], f * tints[vi * 3 + 1], f * tints[vi * 3 + 2], 1)
+        del b['tints']
         path = f'{OUT}/{kind}_{i}{"_lod1" if lod else ""}.glb'
         export([b] + ([c] if c else []), path)
         b.data.calc_loop_triangles()
         if c: c.data.calc_loop_triangles()
-        print('TREE', os.path.basename(path), 'H=%.1f' % H, 'bark', len(b.data.loop_triangles), 'cards', len(c.data.loop_triangles) if c else 0, round(os.path.getsize(path) / 1e6, 2), 'MB')
+        print('TREE', os.path.basename(path), 'H=%.1f' % H, 'R0=%.3f' % R0_LAST[0], 'bark', len(b.data.loop_triangles), 'cards', len(c.data.loop_triangles) if c else 0, round(os.path.getsize(path) / 1e6, 2), 'MB')

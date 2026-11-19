@@ -96,6 +96,7 @@ export class Lighting {
       Object.assign(sh.uniforms, U);
       sh.fragmentShader = sh.fragmentShader
         .replace('#include <common>', `#include <common>
+          #define LIT_SKY 1
           uniform sampler2D tSkyOcc; uniform vec4 uOccB; uniform float uOccK; uniform vec3 uSunDirW; uniform vec3 uScatter; uniform float uMist, uMistY; uniform vec3 uMistColor;
           vec3 litWorldPos(){ vec3 mv = -vViewPosition; return transpose(mat3(viewMatrix)) * (mv - viewMatrix[3].xyz); }
           float skyVisibility(vec3 wp){

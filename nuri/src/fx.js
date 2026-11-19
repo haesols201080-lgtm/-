@@ -91,8 +91,6 @@ export class FX {
       this.spawn({ x: pos.x, y: pos.y + 0.05, z: pos.z, vx: Math.cos(a) * 0.6, vy: 0.8 + Math.random() * 1.2, vz: Math.sin(a) * 0.6, g: 1.5, drag: 2.2,
         max: 0.7 + Math.random() * 0.4, s0: 0.03, s1: 0.12, c: [0.9, 0.95, 0.97], a: 0.16 });
     }
-    this.foam(pos, 0.25 + k * 0.25);
-    this.ring(pos, 0.4 * k + 0.25, 0.3);
   }
   // little kick-up of water at the feet when wading or swimming
   wadeSplash(pos, dir, k = 0.5) {
@@ -142,7 +140,6 @@ export class FX {
       const W = this.water;
       if (W && d.vy < 0 && d.y <= W.y && W.isWater(d.x, d.z)) {
         W.onDrop(d.x, d.z, Math.max(0.03, d.r * 5), -d.r * 0.9);
-        if (d.r > 0.005 && Math.random() < 0.15) this.ring({ x: d.x, y: W.y, z: d.z }, 0.05 + d.r * 5, 0.18);
         this.drops.splice(i, 1); continue;
       }
       if (d.t > 3 || d.y < (W ? W.ground(d.x, d.z) : -10)) { this.drops.splice(i, 1); continue; }
