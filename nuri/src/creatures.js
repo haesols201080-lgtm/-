@@ -53,31 +53,39 @@ export class Creatures {
   }
 
   buildBirds(n) {
-    const bodyM = new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 0.85 });
-    const bellyM = new THREE.MeshStandardMaterial({ color: 0xc9b08a, roughness: 0.9 });
-    const darkM = new THREE.MeshStandardMaterial({ color: 0x1b1612, roughness: 0.5 });
+    // European robins modelled in Blender: plumage as short shell feathers, real feather blades for the tail and
+    // the wings (folded on the ground, spread in flight), beak, eyes and thin legs
+    const model = this.ctx.assets.models.robin;
+    if (!model) return;
+    model.scene.updateMatrixWorld(true);
+    const parts = {}; model.scene.traverse((o) => { if (o.isMesh) parts[o.name.replace(/_\d+$/, '')] = o; });
+    const featherM = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.72, side: THREE.DoubleSide, envMapIntensity: 0.6 });
+    const beakM = new THREE.MeshPhysicalMaterial({ color: 0x1c1712, roughness: 0.35, clearcoat: 0.5 });
+    const legM = new THREE.MeshStandardMaterial({ color: 0x5a4434, roughness: 0.55 });
+    const eyeM = new THREE.MeshPhysicalMaterial({ color: 0x050404, roughness: 0.06, clearcoat: 1, clearcoatRoughness: 0.03 });
+    const shells = this.ctx.tier.post ? 10 : 7;
+    const clone = (o, mat) => { const m = new THREE.Mesh(o.geometry, mat); m.position.copy(o.position); m.quaternion.copy(o.quaternion); m.castShadow = true; return m; };
     for (let i = 0; i < n; i++) {
       const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.SphereGeometry(0.04, 16, 12), bodyM); body.scale.set(0.85, 0.8, 1.25); body.position.y = 0.045; g.add(body);
-      const belly = new THREE.Mesh(new THREE.SphereGeometry(0.036, 14, 10), bellyM); belly.scale.set(0.8, 0.7, 1.1); belly.position.set(0, 0.038, 0.008); g.add(belly);
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.024, 14, 10), bodyM); head.position.set(0, 0.078, 0.04); g.add(head);
-      const beak = new THREE.Mesh(new THREE.ConeGeometry(0.006, 0.018, 6), darkM); beak.rotation.x = Math.PI / 2; beak.position.set(0, 0.076, 0.068); g.add(beak);
-      for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.SphereGeometry(0.004, 6, 4), darkM); e.position.set(s * 0.016, 0.083, 0.055); g.add(e); }
-      const tail = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.005, 0.05), bodyM); tail.position.set(0, 0.05, -0.06); tail.rotation.x = -0.4; g.add(tail);
-      const wings = [];
-      for (const s of [-1, 1]) {
-        const wh = new THREE.Group(); wh.position.set(s * 0.028, 0.06, 0);
-        const w = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.004, 0.045), bodyM); w.position.x = s * 0.03; wh.add(w); g.add(wh); wings.push(wh);
+      const body = furredMesh(parts.bird_body, { shells, length: 0.0028, density: 1400, rootDark: 0.72, clump: 0.08 }); body.position.copy(parts.bird_body.position); g.add(body);
+      // head pivots at the neck (pecking, looking around)
+      const head = new THREE.Group(); head.position.copy(parts.bird_head.position); g.add(head);
+      const hf = furredMesh(parts.bird_head, { shells, length: 0.0022, density: 1600, rootDark: 0.72, clump: 0.08 }); head.add(hf);
+      for (const [k, mat] of [['bird_beak', beakM], ['bird_eyes', eyeM]]) {
+        const m = clone(parts[k], mat); m.position.sub(parts.bird_head.position); head.add(m);
       }
-      for (const s of [-1, 1]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.002, 0.02, 4), darkM); leg.position.set(s * 0.01, 0.01, 0); g.add(leg); }
-      g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+      g.add(clone(parts.bird_legs, legM), clone(parts.bird_tail, featherM));
+      const fold = clone(parts.bird_wingfold, featherM); g.add(fold);
+      const wings = [];
+      for (const k of ['bird_wing_L', 'bird_wing_R']) { const w = clone(parts[k], featherM); w.visible = false; g.add(w); wings.push(w); }
+      const furs = [body.userData.fur, hf.userData.fur];
       const spots = [[START.x + 3, START.z - 2], [START.x - 4, START.z + 1], [-1, 6], [3, 3.5], [-6, -1], [10, -2]];
       const sp = spots[i % spots.length];
       const home = new THREE.Vector3(sp[0] + (rnd() - 0.5) * 2, 0, sp[1] + (rnd() - 0.5) * 2);
       home.y = this.world.terrain.heightAt(home.x, home.z);
-      g.position.copy(home); g.scale.setScalar(0.9 + rnd() * 0.3);
+      g.position.copy(home); g.scale.setScalar(0.92 + rnd() * 0.16);
       this.scene.add(g);
-      this.list.push({ type: 'bird', mesh: g, head, wings, home, state: 'ground', t: rnd() * 5, hopT: 0, vel: new THREE.Vector3(), yaw: rnd() * 6 });
+      this.list.push({ type: 'bird', mesh: g, head, wings, fold, furs, home, state: 'ground', t: rnd() * 5, hopT: 0, vel: new THREE.Vector3(), yaw: rnd() * 6 });
     }
   }
 
@@ -93,8 +101,8 @@ export class Creatures {
       model.scene.traverse((o) => {
         if (!o.isMesh) return;
         if (o.name.includes('body')) {
-          const shells = this.ctx.tier.post ? (this.ctx.tier.ao ? 22 : 16) : 11;
-          const fm = furredMesh(o, { shells, length: 0.0065, density: 1150 });
+          const shells = this.ctx.tier.post ? (this.ctx.tier.ao ? 24 : 18) : 12;
+          const fm = furredMesh(o, { shells, length: 0.006, density: 1250 });
           fm.applyMatrix4(o.matrixWorld); g.add(fm); furU = fm.userData.fur;
         } else {
           const glossy = o.name.includes('eye');
@@ -106,8 +114,8 @@ export class Creatures {
       // whiskers
       const wp = [];
       for (const s of [-1, 1]) for (let k = 0; k < 4; k++) {
-        const y = 0.101 + k * 0.0025, z = 0.113 - k * 0.002;
-        wp.push(s * 0.006, y, z, s * (0.035 + k * 0.004), y + (k - 1.5) * 0.006, z - 0.012);
+        const y = 0.099 + k * 0.0022, z = 0.112 - k * 0.0018;
+        wp.push(s * 0.008, y, z, s * (0.04 + k * 0.004), y + (k - 1.5) * 0.007, z - 0.016);
       }
       const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute(wp, 3));
       g.add(new THREE.LineSegments(wg, new THREE.LineBasicMaterial({ color: 0x1a1410, transparent: true, opacity: 0.55 })));
@@ -167,9 +175,11 @@ export class Creatures {
             const gy = T.heightAt(m.position.x, m.position.z);
             m.position.y = gy + Math.sin((0.18 - c.hop) / 0.18 * Math.PI) * 0.025;
           }
-          if (c.peck > 0) { c.peck -= dt; c.head.position.y = 0.078 - Math.max(0, Math.sin(c.peck * 20)) * 0.02; } else c.head.position.y = 0.078;
+          if (c.peck > 0) { c.peck -= dt; c.head.rotation.x = Math.max(0, Math.sin(c.peck * 20)) * 0.9; } else c.head.rotation.x = 0;
+          c.head.rotation.y = Math.sin(c.t * 1.7 + c.hopT * 3) * 0.35 * (c.hop > 0 ? 0 : 1);
           m.rotation.y = dampAngle(m.rotation.y, c.yaw, 12, dt);
-          for (const w of c.wings) w.rotation.z = 0;
+          for (const w of c.wings) { w.rotation.z = 0; w.visible = false; }
+          if (c.fold) c.fold.visible = true;
           if (d < 1.0 || (player.state === 'jump' && d < 1.8)) {
             c.state = 'fly'; c.t = 0; this.audio.play('flap', { pos: m.position });
             const tr = this.world.treeSpots[Math.floor(rnd() * this.world.treeSpots.length)];
@@ -180,7 +190,9 @@ export class Creatures {
           c.vel.lerp(want.normalize().multiplyScalar(4), Math.min(1, dt * 3));
           m.position.addScaledVector(c.vel, dt);
           m.rotation.y = Math.atan2(c.vel.x, c.vel.z);
-          const flap = Math.sin(time * 40) * 1.2; c.wings[0].rotation.z = flap; c.wings[1].rotation.z = -flap;
+          const flap = Math.sin(time * 40) * 1.0; c.wings[0].rotation.z = flap; c.wings[1].rotation.z = -flap;
+          for (const w of c.wings) w.visible = true;
+          if (c.fold) c.fold.visible = false;
           if (dist < 0.5) { c.state = 'perched'; c.t = 0; }
         } else if (c.state === 'perched') {
           for (const w of c.wings) w.rotation.z = 0.1;
@@ -190,7 +202,9 @@ export class Creatures {
           const want = c.home.clone().sub(m.position); const dist = want.length();
           c.vel.lerp(want.normalize().multiplyScalar(3), Math.min(1, dt * 3)); m.position.addScaledVector(c.vel, dt);
           m.rotation.y = Math.atan2(c.vel.x, c.vel.z);
-          const flap = Math.sin(time * 40) * 1.2; c.wings[0].rotation.z = flap; c.wings[1].rotation.z = -flap;
+          const flap = Math.sin(time * 40) * 1.0; c.wings[0].rotation.z = flap; c.wings[1].rotation.z = -flap;
+          for (const w of c.wings) w.visible = true;
+          if (c.fold) c.fold.visible = false;
           if (dist < 0.1) { c.state = 'ground'; m.position.copy(c.home); }
         }
       } else if (c.type === 'squirrel') {

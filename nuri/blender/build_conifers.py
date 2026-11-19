@@ -115,7 +115,7 @@ def make_conifer(name, kind, seed, lod=0, opt=None):
     elif kind == 'snag':
         H = rnd.uniform(7, 13); R0 = rnd.uniform(0.24, 0.34); crown0 = 2.0
     elif kind == 'fir':
-        H = rnd.uniform(10, 14); R0 = rnd.uniform(0.22, 0.32); crown0 = rnd.uniform(0.1, 0.18)
+        H = rnd.uniform(10, 14); R0 = rnd.uniform(0.22, 0.32); crown0 = rnd.uniform(0.24, 0.32)   # lower branches shed in a stand
     else:  # sapling
         H = rnd.uniform(0.9, 2.6); R0 = H * 0.012 + 0.008; crown0 = 0.02
     rings = [56, 24][lod] if kind != 'sapling' else [10, 6][lod]
@@ -288,7 +288,7 @@ def make_conifer(name, kind, seed, lod=0, opt=None):
         return spine[i0].lerp(spine[i0 + 1], f), rfn(t, 0)
     # self-pruned lower bole: whorls of dead branches (longer and more complete toward the crown, broken to
     # stubs and knots lower down) with bare side twigs; every LOD keeps them, they are what the eye reads
-    if kind in ('pine', 'snag'):
+    if kind in ('pine', 'snag', 'fir'):
         # as in a real stand: the lower bole is nearly clean (a few knots and short snapped stubs); dead branches
         # gather in the zone below the living crown, droop, and carry a clutter of fine dead twigs
         z = rnd.uniform(0.9, 1.6); top = min(crown0, 0.95) * H
@@ -335,23 +335,26 @@ def make_conifer(name, kind, seed, lod=0, opt=None):
         p, r = trunk_at(z)
         nwh = rnd.randint(4, 6) if kind != 'sapling' else rnd.randint(3, 5)
         if kind == 'pine': L = (0.6 + 2.4 * math.sin(math.pi * min(1, (t - crown0) / (1 - crown0) * 0.9 + 0.1))) * rnd.uniform(0.8, 1.1)
-        else: L = (1 - t) * (0.42 * H if kind == 'fir' else 0.45 * H) + 0.1 * H * 0.1
+        else: L = (1 - t) * (0.3 * H if kind == 'fir' else 0.45 * H) + 0.1 * H * 0.1
         rot0 = rnd.uniform(0, 6.28)
         for k in range(nwh):
             a = rot0 + k / nwh * 2 * math.pi + rnd.uniform(-0.25, 0.25)
             up_ang = (0.12 if kind == 'pine' else -0.05) + rnd.uniform(-0.1, 0.1)
             d = Vector((math.cos(a), math.sin(a), up_ang)).normalized()
-            seg = 6 if lod == 0 else 3
+            seg = 7 if lod == 0 else 4
             pts = []
             for s in range(seg + 1):
                 u = s / seg
-                droop = (0.22 if kind != 'pine' else 0.12) * L * u * u
-                pts.append(p + d * (r * 0.7 + L * u) - Vector((0, 0, droop)))
-            br = max(0.006, (0.05 if kind == 'pine' else 0.035) * (L / 2.5)) if kind != 'sapling' else 0.004 + 0.006 * L
+                if kind == 'pine': droop = 0.12 * L * u * u
+                else:   # spruce/fir: the branch sags from its own weight and turns up again toward the tip
+                    droop = 0.26 * L * u ** 1.5 - 0.13 * L * u ** 4
+                side = d.cross(Vector((0, 0, 1))).normalized() * (0.04 * L * math.sin(u * 3.0 + k) * u)
+                pts.append(p + d * (r * 0.7 + L * u) - Vector((0, 0, droop)) + side)
+            br = max(0.006, (0.04 if kind == 'pine' else 0.022) * (L / 2.5) + (0 if kind == 'pine' else 0.005)) if kind != 'sapling' else 0.004 + 0.006 * L
             if lod == 0 or kind != 'sapling':
-                tube(bv, bf, buv, pts, lambda tt, th, br=br: br * (1 - 0.85 * tt), 5 if lod == 0 else 4)
+                tube(bv, bf, buv, pts, lambda tt, th, br=br: br * (1 - 0.85 * tt), 6 if lod == 0 else 5)
             # twig cards along the branch (denser toward the tip), alternating sides
-            ncard = max(2, int(L * (10.5 if lod == 0 else 4.8) * (1.0 if kind != 'sapling' else 2.2)))
+            ncard = max(2, int(L * (10.5 if lod == 0 else 6.0) * (1.0 if kind == 'pine' else 1.35 if kind == 'fir' else 2.2)))
             for c in range(ncard):
                 u = 0.15 + 0.85 * (c + rnd.random() * 0.5) / ncard
                 i0 = min(seg - 1, int(u * seg)); f = u * seg - i0

@@ -147,7 +147,7 @@ export class World {
   // colliders along the exported centre lines of a tree's surface roots (only where they stand above the soil)
   rootColliders(roots, t, kind) {
     const R = this.ctx.RAPIER, T = this.terrain, sxz = t.s * (t.w || 1), sy = t.s;
-    const c = Math.cos(t.rot), sn = Math.sin(t.rot), h0 = T.heightAt(t.x, t.z);
+    const c = Math.cos(t.rot), sn = Math.sin(t.rot), h0 = t.y + 0.03;
     const world = (p) => {
       const x = t.x + (p[0] * c + p[2] * sn) * sxz, z = t.z + (-p[0] * sn + p[2] * c) * sxz;
       const y = t.y + p[1] * sy + rootLift(p[1], Math.hypot(p[0], p[2]), T.heightAt(x, z) - h0);
@@ -183,7 +183,13 @@ export class World {
     const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3();
     const byT = {};
     for (const t of this.treeSpots) {
-      t.y = this.terrain.heightAt(t.x, t.z) - 0.03;
+      // on a slope the stem stands at the downhill edge of its base (soil banks up against the uphill side);
+      // roots are then only pulled down to follow the falling ground, never stretched up the slope
+      {
+        const rr = (TREE_R0[t.t] || 0.3) * t.s * 1.2; let lo = this.terrain.heightAt(t.x, t.z);
+        for (let k = 0; k < 8; k++) lo = Math.min(lo, this.terrain.heightAt(t.x + Math.cos(k * 0.785) * rr, t.z + Math.sin(k * 0.785) * rr));
+        t.y = lo - 0.03;
+      }
       // girth varies independently of height (suppressed thin stems next to dominant thick ones)
       t.w = 0.82 + 0.4 * (Math.sin(t.x * 12.9898 + t.z * 78.233) * 43758.5453 % 1 + 1) % 1;
       const r0 = TREE_R0[t.t] * t.s * t.w;
@@ -201,13 +207,20 @@ export class World {
       this.fixed(R.ColliderDesc.cylinder(4, r0 * 0.95).setTranslation(t.x, t.y + 4, t.z), { kind: 'tree', surface: 'wood' });
       const rl = rootsOf(t.t); if (rl) rootCols += this.rootColliders(rl, t, 'root');
     }
+    // instanced trees with a distance LOD: the detailed model (roots, dead branches, dense twigs) near the camera,
+    // the light one further away; instances are re-sorted between the two a few times per second
+    this.treeLods = [];
     for (const [key, list] of Object.entries(byT)) {
-      for (const o of meshes(assets.models[key + '_lod1'].scene)) {
-        const im = new THREE.InstancedMesh(o.geometry, o.name.includes('bark') ? M.barkPlain : M.twig, list.length);
-        list.forEach((t, i) => { q.setFromAxisAngle(UP, t.rot); sc.set(t.s * t.w, t.s, t.s * t.w); p.set(t.x, t.y, t.z); mtx.compose(p, q, sc); im.setMatrixAt(i, mtx); });
-        im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
-      }
+      const mats = new Float32Array(list.length * 16);
+      list.forEach((t, i) => { q.setFromAxisAngle(UP, t.rot); sc.set(t.s * t.w, t.s, t.s * t.w); p.set(t.x, t.y, t.z); mtx.compose(p, q, sc); mtx.toArray(mats, i * 16); });
+      const mk = (k, mat0) => meshes(assets.models[k].scene).map((o) => {
+        const im = new THREE.InstancedMesh(o.geometry, o.name.includes('bark') ? mat0 : M.twig, list.length);
+        im.instanceMatrix.array.set(mats); im.instanceMatrix.needsUpdate = true;
+        im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im); return im;
+      });
+      this.treeLods.push({ list, mats, lod0: mk(key, M.bark), lod1: mk(key + '_lod1', M.barkPlain) });
     }
+    this.lodT = 1e9;
     // standing dead snags scattered through the stand
     let snags = 0;
     for (let i = 0; i < 400 && snags < 12; i++) {
@@ -586,8 +599,27 @@ export class World {
     }
   }
 
+  updateTreeLods(camPos) {
+    const R = this.ctx.tier.treeLod0Dist, R2 = R * R;
+    for (const g of this.treeLods) {
+      let n0 = 0, n1 = 0;
+      const a0 = g.lod0.map((m) => m.instanceMatrix.array), a1 = g.lod1.map((m) => m.instanceMatrix.array);
+      g.list.forEach((t, i) => {
+        const near = (t.x - camPos.x) ** 2 + (t.z - camPos.z) ** 2 < R2;
+        const src = g.mats.subarray(i * 16, i * 16 + 16);
+        if (near) { for (const a of a0) a.set(src, n0 * 16); n0++; } else { for (const a of a1) a.set(src, n1 * 16); n1++; }
+      });
+      for (const m of g.lod0) { m.count = n0; m.instanceMatrix.needsUpdate = true; }
+      for (const m of g.lod1) { m.count = n1; m.instanceMatrix.needsUpdate = true; }
+    }
+  }
+
   update(dt, time, camPos, playerPos) {
     WIND.time.value = time;
+    if (this.treeLods && camPos) {
+      this.lodT += dt;
+      if (this.lodT > 0.3 || !this.lodCam || this.lodCam.distanceToSquared(camPos) > 4) { this.lodT = 0; this.lodCam = (this.lodCam || new THREE.Vector3()).copy(camPos); this.updateTreeLods(camPos); }
+    }
     if (this.waterU) this.waterU.uTime.value = time;
     if (this.sim && playerPos) {
       // the waterfall keeps churning the pool when it is inside the simulated window

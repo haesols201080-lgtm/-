@@ -150,7 +150,7 @@ export function leafLight(sh, k = 1) {
 }
 
 // Foliage right in front of the lens dissolves (screen-door dither) instead of filling the view with giant leaves.
-export function nearFade(sh, r0 = 0.12, r1 = 0.5) {
+export function nearFade(sh, r0 = 0.03, r1 = 0.09) {
   sh.fragmentShader = sh.fragmentShader.replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
     {
       float ign = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
@@ -180,8 +180,11 @@ export function barkMoss(mat, moss) {
           float side = smoothstep(-0.5, 0.7, dot(nWm, normalize(vec3(-0.35, 0.0, -1.0))));
           float edge = 0.35 + 0.75 * side + 0.45 * (bmN(vBP * vec3(4.0, 1.2, 4.0)) - 0.5) + 0.25 * (bmN(vBP * 13.0) - 0.5);
           float mk = smoothstep(edge, edge - 0.3, vBP.y + 0.3) * step(length(vBP.xz), 1.2);
+          #ifdef ROOT_BLEND
+            mk *= 1.0 - smoothstep(0.1, 0.5, vRootW);
+          #endif
           vec3 mc = texture2D(tMossA, vMapUv * 1.7).rgb;
-          diffuseColor.rgb = mix(diffuseColor.rgb, mc * vec3(0.95, 1.08, 0.82), clamp(mk, 0.0, 1.0) * 0.9);
+          diffuseColor.rgb = mix(diffuseColor.rgb, mc * vec3(0.9, 0.98, 0.8), clamp(mk, 0.0, 1.0) * 0.6);
         }
         #endif`);
   };
@@ -202,15 +205,15 @@ export function conformToGround(mat, ground) {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform sampler2D tGroundH; uniform vec4 uGroundB;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         {
-          float wk = smoothstep(0.9, 0.5, position.y) * smoothstep(0.15, 0.6, length(position.xz));
+          float wk = smoothstep(0.9, 0.5, position.y) * smoothstep(0.2, 1.7, length(position.xz));
           if (wk > 0.0) {
             mat4 Mg = modelMatrix;
             #ifdef USE_INSTANCING
               Mg = modelMatrix * instanceMatrix;
             #endif
             vec3 wpg = (Mg * vec4(position, 1.0)).xyz, og = (Mg * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
-            float dh = texture2D(tGroundH, (wpg.xz - uGroundB.xy) * uGroundB.zw).r - texture2D(tGroundH, (og.xz - uGroundB.xy) * uGroundB.zw).r;
-            transformed.y += dh / max(length(Mg[1].xyz), 1e-3) * wk;
+            float dh = texture2D(tGroundH, (wpg.xz - uGroundB.xy) * uGroundB.zw).r - (og.y + 0.03);
+            transformed.y += min(dh, 0.0) / max(length(Mg[1].xyz), 1e-3) * wk;
           }
         }`);
   };
@@ -222,7 +225,7 @@ export function conformToGround(mat, ground) {
 // CPU twin of the shader rule: world-space lift of a point given its local height / radial distance
 export function rootLift(yLocal, rLocal, dh) {
   const sm = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
-  return dh * sm(0.9, 0.5, yLocal) * sm(0.15, 0.6, rLocal);
+  return Math.min(dh, 0) * sm(0.9, 0.5, yLocal) * sm(0.2, 1.7, rLocal);
 }
 
 // Bark on surface roots: the tree models carry a second UV set that follows each root (rootUv) and a blend weight
@@ -232,6 +235,7 @@ export function barkRootBlend(mat) {
   const prev = mat.onBeforeCompile;
   mat.onBeforeCompile = (sh, r) => {
     if (prev) prev(sh, r);
+    sh.defines = sh.defines || {}; sh.defines.ROOT_BLEND = 1;
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec2 rootUv; attribute vec2 rootW; varying vec2 vRootUv; varying float vRootW;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRootUv = rootUv; vRootW = clamp(rootW.x, 0.0, 1.0);');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec2 vRootUv; varying float vRootW;')
