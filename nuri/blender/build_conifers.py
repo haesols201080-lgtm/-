@@ -100,30 +100,38 @@ def twig_card(mb, base, direction, side_hint, length, sprite, droop=0.15, fold=0
     mb.quad(mid_b, rb, rt, mid_t, [(uc, vb), (u1, vb), (u1, vt), (uc, vt)])
 
 R0_LAST = [0.0]
-def make_conifer(name, kind, seed, lod=0):
+def make_conifer(name, kind, seed, lod=0, opt=None):
+    opt = opt or {}
     rnd = random.Random(seed)
     if kind == 'pine':
         H = rnd.uniform(16, 24); R0 = rnd.uniform(0.26, 0.46); crown0 = rnd.uniform(0.55, 0.7)
+        H = opt.get('H', H); R0 = opt.get('R0', R0); crown0 = opt.get('crown0', crown0)
     elif kind == 'snag':
         H = rnd.uniform(7, 13); R0 = rnd.uniform(0.24, 0.34); crown0 = 2.0
     elif kind == 'fir':
         H = rnd.uniform(10, 14); R0 = rnd.uniform(0.22, 0.32); crown0 = rnd.uniform(0.1, 0.18)
     else:  # sapling
         H = rnd.uniform(0.9, 2.6); R0 = H * 0.012 + 0.008; crown0 = 0.02
-    rings = [40, 14][lod] if kind != 'sapling' else [10, 6][lod]
-    radial = [18, 9][lod] if kind != 'sapling' else 6
+    rings = [56, 24][lod] if kind != 'sapling' else [10, 6][lod]
+    radial = [24, 12][lod] if kind != 'sapling' else 6
     # real stems are never plumb lines: a lean (up to ~2.5 deg), a butt sweep near the ground that bends back
     # toward vertical, and small kinks along the bole
     la = rnd.uniform(0, 6.28)
     lean = Vector((math.cos(la), math.sin(la), 0)) * (rnd.uniform(0.01, 0.045) * H if kind != 'sapling' else 0.012 * H)
     sweep = -lean.normalized() * (rnd.uniform(0.05, 0.16) if kind in ('pine', 'snag') else 0.03) if kind != 'sapling' else Vector()
+    curve = opt.get('curve', rnd.uniform(0.04, 0.14)); cph = rnd.uniform(0, 6.28)
+    perp = Vector((-lean.y, lean.x, 0)).normalized() if lean.length > 1e-6 else Vector((1, 0, 0))
+    perp = (perp + lean.normalized() * rnd.uniform(-0.6, 0.6)).normalized()
+    oval, ovph = rnd.uniform(0.03, 0.08), rnd.uniform(0, 3.14)
     spine = []
     for i in range(rings):
         t = (i / (rings - 1)) ** 1.25
         z = t * H
         kink = 0.03 + 0.004 * z if kind != 'sapling' else 0.01 * H
         wob = Vector((noise.noise(Vector((t * 5.0, seed, 0))), noise.noise(Vector((0, t * 5.0, seed))), 0)) * kink
-        spine.append(Vector((0, 0, z - (0.3 if kind != 'sapling' else 0.02))) + lean * t ** 1.5 + sweep * (1 - math.exp(-z / 1.6)) + wob)
+        # slender stems wander more: a slow S-bend grown in toward the light
+        bend = perp * (curve * math.sin(math.pi * t * 1.4 + cph) * min(1.0, z / 3.0)) if kind in ('pine', 'snag') else Vector()
+        spine.append(Vector((0, 0, z - (0.3 if kind != 'sapling' else 0.02))) + lean * t ** 1.5 + sweep * (1 - math.exp(-z / 1.6)) + wob + bend)
     nb = rnd.randint(5, 7); ths = [i / nb * 2 * math.pi + rnd.uniform(-0.3, 0.3) for i in range(nb)]
     def rfn(t, th):
         z = t * H
@@ -136,7 +144,10 @@ def make_conifer(name, kind, seed, lod=0):
             fl = math.exp(-z / 0.7)
             b = sum(max(0.0, math.cos(th - a)) ** 8 for a in ths)
             r *= 1 + fl * (0.45 + 0.9 * b)
-            r *= 1 + 0.035 * noise.noise(Vector((math.cos(th) * 2.5, math.sin(th) * 2.5, z * 1.3 + seed)))
+            # not a lathe: slightly oval, with long vertical bark ridges and fissures breaking the silhouette
+            r *= 1 + oval * math.cos(2 * (th - ovph))
+            r *= 1 + 0.045 * noise.noise(Vector((math.cos(th) * 3.2, math.sin(th) * 3.2, z * 0.3 + seed))) \
+                   + 0.022 * noise.noise(Vector((math.cos(th) * 8.0, math.sin(th) * 8.0, z * 0.7 + seed * 2)))
         return max(r, 0.004)
     bv, bf, buv = [], [], []
     tube(bv, bf, buv, spine, rfn, radial)
@@ -148,30 +159,44 @@ def make_conifer(name, kind, seed, lod=0):
     # self-pruned lower bole: whorls of dead branches (longer and more complete toward the crown, broken to
     # stubs and knots lower down) with bare side twigs; every LOD keeps them, they are what the eye reads
     if kind in ('pine', 'snag'):
-        z = rnd.uniform(1.0, 1.8); top = min(crown0, 0.95) * H
+        # as in a real stand: the lower bole is nearly clean (a few knots and short snapped stubs); dead branches
+        # gather in the zone below the living crown, droop, and carry a clutter of fine dead twigs
+        z = rnd.uniform(0.9, 1.6); top = min(crown0, 0.95) * H
         while z < top:
-            p, r = trunk_at(z); u = z / top
-            nw = rnd.randint(2, 5) if lod == 0 else rnd.randint(2, 4)
-            a0 = rnd.uniform(0, 6.28)
-            for k in range(nw):
-                a = a0 + k / nw * 6.28 + rnd.uniform(-0.4, 0.4)
-                stub = rnd.random() > 0.25 + 0.6 * u            # low on the stem most have snapped off
-                up = rnd.uniform(0.05, 0.4) if stub else rnd.uniform(-0.15, 0.3)
-                d = Vector((math.cos(a), math.sin(a), up)).normalized()
-                L = rnd.uniform(0.05, 0.28) if stub else rnd.uniform(0.45, 0.8 + 1.2 * u)
-                br = rnd.uniform(0.02, 0.034) + 0.014 * u
-                seg = 2 if (stub or lod) else 4
-                pts = [p + d * (r * 0.85 + L * (i / seg)) - Vector((0, 0, 0.12 * L * (i / seg) ** 2)) for i in range(seg + 1)]
-                tube(bv, bf, buv, pts, lambda t, th, br=br, stub=stub: br * (1 - (0.35 if stub else 0.88) * t), 5 if lod == 0 else 4, tile=0.5)
-                if not stub:
-                    for tw in range(rnd.randint(4, 8) if lod == 0 else rnd.randint(1, 2)):
-                        f = rnd.uniform(0.3, 0.9); i0 = min(seg - 1, int(f * seg)); bp = pts[i0].lerp(pts[i0 + 1], f * seg - i0)
-                        side = d.cross(Vector((0, 0, 1))).normalized() * (1 if tw % 2 else -1)
-                        td = (d * 0.6 + side * 0.8 + Vector((0, 0, rnd.uniform(-0.3, 0.2)))).normalized()
-                        tl = rnd.uniform(0.12, 0.42) * (1.25 - f) * (1 if lod == 0 else 1.3)
-                        tube(bv, bf, buv, [bp, bp + td * tl * 0.5, bp + td * tl - Vector((0, 0, 0.03 * tl))],
-                             lambda t, th, tr=br * 0.4: max(0.003, tr * (1 - 0.8 * t)), 3, tile=0.4)
-            z += rnd.uniform(0.3, 0.6)
+            u = z / top
+            if rnd.random() < 0.2 + 0.8 * u * u:
+                p, r = trunk_at(z)
+                nw = rnd.randint(1, 2) if u < 0.5 else rnd.randint(2, 4)
+                a0 = rnd.uniform(0, 6.28)
+                for k in range(nw):
+                    a = a0 + k / nw * 6.28 + rnd.uniform(-0.6, 0.6)
+                    stub = u < 0.45 or rnd.random() > 0.15 + 0.85 * (u - 0.45) / 0.55
+                    if stub:
+                        L = rnd.uniform(0.02, 0.1) if u < 0.45 else rnd.uniform(0.06, 0.25)
+                        d = Vector((math.cos(a), math.sin(a), rnd.uniform(-0.05, 0.25))).normalized()
+                        br = rnd.uniform(0.012, 0.022)
+                        pts = [p + d * (r * 0.85 + L * s) for s in (0, 0.5, 1)]
+                        tube(bv, bf, buv, pts, lambda t, th, br=br: br * (1 - 0.4 * t), 5 if lod == 0 else 4, tile=0.5)
+                        continue
+                    L = rnd.uniform(0.35, 0.6) + 1.3 * (u - 0.45) / 0.55 * rnd.uniform(0.6, 1.0)
+                    d = Vector((math.cos(a), math.sin(a), rnd.uniform(-0.45, 0.05))).normalized()
+                    br = rnd.uniform(0.011, 0.02) + 0.01 * u
+                    seg = 4 if lod == 0 else 3
+                    side0 = d.cross(Vector((0, 0, 1))).normalized()
+                    pts = []
+                    for si in range(seg + 1):
+                        f = si / seg
+                        jit = side0 * (rnd.uniform(-0.04, 0.04) * L * f) + Vector((0, 0, rnd.uniform(-0.03, 0.03) * L * f))
+                        pts.append(p + d * (r * 0.85 + L * f) - Vector((0, 0, 0.28 * L * f * f)) + jit)
+                    tube(bv, bf, buv, pts, lambda t, th, br=br: br * (1 - 0.85 * t), 5 if lod == 0 else 4, tile=0.5)
+                    for tw in range(rnd.randint(4, 9) if lod == 0 else rnd.randint(1, 3)):
+                        f = rnd.uniform(0.25, 0.95); i0 = min(seg - 1, int(f * seg)); bp = pts[i0].lerp(pts[i0 + 1], f * seg - i0)
+                        side = side0 * (1 if tw % 2 else -1)
+                        td = (d * 0.5 + side * 0.8 + Vector((0, 0, rnd.uniform(-0.6, 0.15)))).normalized()
+                        tl = rnd.uniform(0.1, 0.35) * (1.2 - f * 0.6)
+                        tube(bv, bf, buv, [bp, bp + td * tl * 0.5 + Vector((0, 0, rnd.uniform(-0.02, 0.02))), bp + td * tl - Vector((0, 0, 0.08 * tl))],
+                             lambda t, th, tr=br * 0.35: max(0.0025, tr * (1 - 0.8 * t)), 3, tile=0.4)
+            z += rnd.uniform(0.35, 0.75)
     # living crown: whorls
     z = crown0 * H
     step = 0.55 if kind != 'sapling' else 0.16 * H / 1.5
@@ -218,15 +243,13 @@ def make_conifer(name, kind, seed, lod=0):
     bo = bark.obj(f'{name}_bark', 'BarkSnag' if kind == 'snag' else 'Bark')
     # bark colour by position (multiplies the scanned bark): pines have thick dark grey-brown plates low on the
     # stem and thin orange flaking bark higher up; dead and living branches are weathered grey; snags bleached
+    base_t = rnd.choice([(0.86, 0.84, 0.82), (0.8, 0.76, 0.72), (0.9, 0.88, 0.88), (0.76, 0.72, 0.68)])
     def tint(i, co):
-        if kind == 'snag': return (0.8, 0.79, 0.78)
-        if i >= n_trunk: return (0.7, 0.68, 0.67)
-        if kind == 'pine':
-            k = min(1.0, max(0.0, (co.z - 3.0 - 2.0 * noise.noise(Vector((co.x * 0.7, co.y * 0.7, co.z * 0.25 + seed)))) / 6.5))
-            k = k * k * (3 - 2 * k)
-            low, high = (0.62, 0.6, 0.58), (0.92, 0.64, 0.44)
-            return tuple(low[c] + (high[c] - low[c]) * k for c in range(3))
-        return (0.72, 0.68, 0.64)
+        if kind == 'snag': return (0.92, 0.9, 0.88)
+        if i >= n_trunk: return (0.95, 0.94, 0.93)     # dead branches: weathered silver-grey
+        k = min(1.0, max(0.0, co.z / 2.5))               # the base is darker (soil splash, damp)
+        n = 1 + 0.08 * noise.noise(Vector((co.x * 1.3, co.y * 1.3, co.z * 0.4 + seed)))
+        return tuple(base_t[c] * (0.78 + 0.22 * k) * n for c in range(3))
     bo['tints'] = [c for i, v in enumerate(bo.data.vertices) for c in tint(i, v.co)]
     if kind == 'snag':
         return bo, None, H
@@ -257,13 +280,16 @@ def bake_ao(ob):
     bpy.ops.object.select_all(action='DESELECT'); ob.select_set(True); bpy.context.view_layer.objects.active = ob
     bpy.ops.object.bake(type='AO', target='VERTEX_COLORS', margin=0)
 
-SPECS = [('pine', 11), ('pine', 22), ('pine', 33), ('pine', 44), ('fir', 55), ('fir', 66), ('sapling', 77), ('sapling', 88), ('sapling', 99), ('snag', 111), ('snag', 122)]
-for i, (kind, seed) in enumerate(SPECS):
+# girth classes as in a real stand: dominant, co-dominant, intermediate and a slender suppressed pole
+SPECS = [('pine', 11, {'R0': 0.44, 'H': 23}), ('pine', 22, {'R0': 0.31, 'H': 21}), ('pine', 33, {'R0': 0.21, 'H': 18, 'curve': 0.32, 'crown0': 0.66}),
+         ('pine', 44, {'R0': 0.13, 'H': 15, 'curve': 0.5, 'crown0': 0.72}), ('fir', 55, {}), ('fir', 66, {}),
+         ('sapling', 77, {}), ('sapling', 88, {}), ('sapling', 99, {}), ('snag', 111, {}), ('snag', 122, {})]
+for i, (kind, seed, opt) in enumerate(SPECS):
     for lod in ((0, 1) if kind != 'sapling' else (0,)):
         bpy.ops.wm.read_factory_settings(use_empty=True)
         try: bpy.ops.preferences.addon_enable(module='cycles')
         except Exception: pass
-        b, c, H = make_conifer(f'{kind}{i}', kind, seed, lod)
+        b, c, H = make_conifer(f'{kind}{i}', kind, seed, lod, opt)
         if lod == 0: bake_ao(b)
         # vertex colour = baked AO x bark tint (LOD1 / saplings: tint only)
         me = b.data; tints = list(b['tints'])

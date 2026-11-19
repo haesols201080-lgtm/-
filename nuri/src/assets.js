@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
-import { patchMaterial, makeRockMaterial, leafLight, nearFade } from './shaders.js';
+import { patchMaterial, makeRockMaterial, leafLight, nearFade, barkMoss } from './shaders.js';
 
 const BASE = './';
 
@@ -192,12 +192,12 @@ export class Assets {
     const T = this.tex, M = this.mats;
     // tree bark: vertex colour = bark tint by position on the tree (dark grey-brown plates low on pines, thin orange
     // bark higher up, grey dead branches) x partial baked AO; the colour boost lets the tint warm the scan up
-    M.bark = new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
-      vertexColors: true, color: new THREE.Color(1.3, 1.3, 1.3), roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.3, 1.3), envMapIntensity: 0.7 });
+    M.bark = barkMoss(new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
+      vertexColors: true, color: new THREE.Color(1.25, 1.25, 1.25), roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.6, 1.6), envMapIntensity: 0.7 }), T.moss);
     M.barkLog = new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
       vertexColors: true, roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.3, 1.3), envMapIntensity: 0.7 });
-    M.barkPlain = new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
-      vertexColors: true, color: new THREE.Color(1.3, 1.3, 1.3), roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.3, 1.3), envMapIntensity: 0.7 });
+    M.barkPlain = barkMoss(new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
+      vertexColors: true, color: new THREE.Color(1.25, 1.25, 1.25), roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.6, 1.6), envMapIntensity: 0.7 }), T.moss);
     M.barkSnag = new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, roughnessMap: T.bark.orm, aoMap: T.bark.orm,
       vertexColors: true, color: new THREE.Color(1.15, 1.1, 1.05), roughness: 1, metalness: 0, normalScale: new THREE.Vector2(1.5, 1.5), envMapIntensity: 0.7 });
     M.barkSnagPlain = new THREE.MeshStandardMaterial({ map: T.bark.map, normalMap: T.bark.normal, vertexColors: true, color: new THREE.Color(1.15, 1.1, 1.05), roughness: 1, metalness: 0 });

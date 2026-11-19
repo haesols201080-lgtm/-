@@ -11,7 +11,9 @@ import { WaterSim, makeWaterMaterial } from './water.js';
 
 const rnd = mulberry32(2024);
 const nzEco = makeNoise2D(4242);
-const TREE_R0 = { pine_0: 0.372, pine_1: 0.288, pine_2: 0.386, pine_3: 0.368, fir_4: 0.315, fir_5: 0.263 };
+const TREE_R0 = { pine_0: 0.44, pine_1: 0.31, pine_2: 0.21, pine_3: 0.13, fir_4: 0.315, fir_5: 0.263 };
+// crown size relative to the generic pine crown (slender, suppressed stems carry small crowns)
+const TREE_CROWN = { pine_0: 1.15, pine_1: 1.0, pine_2: 0.75, pine_3: 0.5, fir_4: 1, fir_5: 1 };
 const GRASS_SPRITES = [[0.207, 0.75, 0.496, 0.904], [0.605, 0.758, 0.826, 0.863], [0.252, 0.891, 0.49, 1.0], [0.598, 0.869, 0.789, 1.0], [0.051, 0.871, 0.18, 1.0]];
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -115,6 +117,18 @@ export class World {
       if (inner && rnd() < 0.35) continue;
       this.treeSpots.push({ x, z, s: 0.8 + rnd() * 0.45, t: TREES[Math.floor(rnd() * TREES.length)], rot: rnd() * 6.28, hero: false });
     }
+    // a real stand mixes thick dominant trees with many slender suppressed poles squeezed in between them
+    const extra = Math.round(110 * Math.min(1, this.ctx.tier.fernDensity + 0.2));
+    for (let n = 0, k = 0; n < extra && k < 8000; k++) {
+      const x = (rnd() - 0.5) * 92, z = (rnd() - 0.5) * 92;
+      if (Math.hypot(x - START.x, z - START.z) < 7.5) continue;
+      if (Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d) < 2.0) continue;
+      if (distToPolyline(x, z, STREAM).d < 2.2 || Math.hypot(x - POND.x, z - POND.z) < POND.r + 2.0 || Math.hypot(x - OUTCROP.x, z - OUTCROP.z) < 8.5) continue;
+      if (this.treeSpots.some((t) => Math.hypot(t.x - x, t.z - z) < (t.hero ? 4 : 1.7))) continue;
+      this.treeSpots.push({ x, z, s: 0.75 + rnd() * 0.4, t: rnd() < 0.6 ? 'pine_3' : 'pine_2', rot: rnd() * 6.28, hero: false });
+      n++;
+    }
+    for (const t of this.treeSpots) t.cs = TREE_CROWN[t.t] || 1;
   }
 
   buildTrees() {

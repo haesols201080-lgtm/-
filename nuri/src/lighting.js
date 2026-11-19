@@ -20,7 +20,7 @@ export class Lighting {
     const keep = new Float32Array(N * N).fill(1);
     for (const t of world.treeSpots) {
       const c = t.t.startsWith('fir') ? CROWN.fir : CROWN.pine;
-      const R = c.r * t.s, bottom = t.y + c.bottom * t.s;
+      const R = c.r * t.s * (t.cs || 1), bottom = t.y + c.bottom * t.s;
       const i0 = Math.max(0, Math.floor((t.x - R + this.half) / cell)), i1 = Math.min(N - 1, Math.ceil((t.x + R + this.half) / cell));
       const j0 = Math.max(0, Math.floor((t.z - R + this.half) / cell)), j1 = Math.min(N - 1, Math.ceil((t.z + R + this.half) / cell));
       for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {

@@ -158,3 +158,35 @@ export function nearFade(sh, r0 = 0.12, r1 = 0.5) {
     }`);
 }
 
+// Moss climbing the base of tree trunks (scanned moss texture), thicker on one side, ragged upper edge;
+// local height comes from the untransformed vertex position (trees are modelled with the ground at y = 0).
+export function barkMoss(mat, moss) {
+  const prev = mat.onBeforeCompile;
+  mat.onBeforeCompile = (sh, r) => {
+    if (prev) prev(sh, r);
+    sh.uniforms.tMossA = { value: moss.map };
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vBP;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBP = position;');
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
+        varying vec3 vBP; uniform sampler2D tMossA;
+        float bmH(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+        float bmN(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(mix(bmH(i), bmH(i + vec3(1,0,0)), f.x), mix(bmH(i + vec3(0,1,0)), bmH(i + vec3(1,1,0)), f.x), f.y),
+                     mix(mix(bmH(i + vec3(0,0,1)), bmH(i + vec3(1,0,1)), f.x), mix(bmH(i + vec3(0,1,1)), bmH(i + vec3(1,1,1)), f.x), f.y), f.z); }`)
+      .replace('#include <color_fragment>', `#include <color_fragment>
+        #ifdef USE_MAP
+        {
+          vec3 nWm = normalize((vec4(vNormal, 0.0) * viewMatrix).xyz);
+          float side = smoothstep(-0.5, 0.7, dot(nWm, normalize(vec3(-0.35, 0.0, -1.0))));
+          float edge = 0.35 + 0.75 * side + 0.45 * (bmN(vBP * vec3(4.0, 1.2, 4.0)) - 0.5) + 0.25 * (bmN(vBP * 13.0) - 0.5);
+          float mk = smoothstep(edge, edge - 0.3, vBP.y + 0.3) * step(length(vBP.xz), 1.2);
+          vec3 mc = texture2D(tMossA, vMapUv * 1.7).rgb;
+          diffuseColor.rgb = mix(diffuseColor.rgb, mc * vec3(0.95, 1.08, 0.82), clamp(mk, 0.0, 1.0) * 0.9);
+        }
+        #endif`);
+  };
+  const pk = mat.customProgramCacheKey ? mat.customProgramCacheKey.bind(mat) : null;
+  mat.customProgramCacheKey = () => (pk ? pk() : '') + '|barkMoss';
+  return mat;
+}
+
