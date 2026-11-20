@@ -538,7 +538,10 @@ export class World {
       const v = rockVars[seed % rockVars.length];
       const w = Math.max(v.size.x, v.size.z);
       const s = (r * 2) / w, sy = s * (0.55 + 0.5 * squash);
-      const y = this.terrain.heightAt(x, z) - 0.04 * r;
+      // seat on the lowest point under the footprint (slopes bury the uphill side), sunk a little
+      let gy = this.terrain.heightAt(x, z);
+      for (let a = 0; a < 6.28; a += 0.785) gy = Math.min(gy, this.terrain.heightAt(x + Math.cos(a) * r * 0.75, z + Math.sin(a) * r * 0.75));
+      const y = gy - 0.1 * v.size.y * sy;
       const m = this.place(v, this.ctx.assets.mats.rockOutcrop, new THREE.Vector3(x, y, z), seed * 1.7, new THREE.Vector3(s, sy, s));
       this.hull(v.geo, m.matrixWorld, { kind: 'rock', surface: 'rock' });
       this.rocks.push({ x, z, r, top: y + v.size.y * sy, mesh: m });

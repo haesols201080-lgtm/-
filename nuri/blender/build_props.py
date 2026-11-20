@@ -89,8 +89,7 @@ def export(obs, name):
     for o in obs: o.select_set(True)
     bpy.context.view_layer.objects.active = obs[0]
     path = f'{OUT}/{name}.glb'
-    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=True, export_materials='EXPORT', export_image_format='JPEG',
-                              export_image_quality=85, export_yup=True, export_normals=True, export_apply=True)
+    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', use_selection=True, export_materials='EXPORT', export_image_format='NONE', export_yup=True, export_normals=True, export_apply=True)
     print('PROP', name, len(obs), 'objects', round(os.path.getsize(path) / 1e3), 'kB')
 
 def by_mat(obs, mname):
@@ -475,26 +474,62 @@ def build_lift2():
     smooth_all(C, 0.7); export([join(C, 'counterweight')], 'lift_counter')
 
 # ------------------------------------------------------------------ dry-stone wall, 1.2 m segment, ~0.95 m high
+def rubble_stone(name, size, loc, pid='rock_face_03', seed=0, rot=(0, 0, 0)):
+    """a field stone: rounded superellipsoid block, lumpy fbm surface, one or two broken faces"""
+    from mathutils import noise, Euler
+    rr = random.Random(seed); off = Vector((rr.random() * 90, rr.random() * 90, rr.random() * 90))
+    bm = bmesh.new(); bmesh.ops.create_cube(bm, size=2.0)
+    bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=3, use_grid_fill=True)
+    e = rr.uniform(2.6, 4.0)
+    pls = [(Vector((rr.uniform(-1, 1), rr.uniform(-1, 1), rr.uniform(-1, 1))).normalized(), rr.uniform(0.72, 0.92)) for _ in range(rr.randint(1, 3))]
+    for v in bm.verts:
+        d = v.co.normalized()
+        r = (abs(d.x) ** e + abs(d.y) ** e + abs(d.z) ** e) ** (-1 / e)
+        p = d * r
+        p += d * (0.1 * noise.noise(p * 1.4 + off) + 0.035 * noise.noise(p * 4.0 + off))
+        for n_, dd in pls:
+            k = p.dot(n_) - dd
+            if k > 0: p -= n_ * k
+        v.co = Vector((p.x * size[0] / 2, p.y * size[1] / 2, p.z * size[2] / 2))
+    bm.transform(Matrix.Translation(loc) @ Euler(rot).to_matrix().to_4x4())
+    ob = obj_from_bm(name, bm, tex_mat(pid)); box_uv(ob, TEX_M[pid], off=(rr.random(), rr.random()))
+    for f in ob.data.polygons: f.use_smooth = True
+    return ob
+
 def build_wall():
+    """1.2 m dry-stone wall segment ~0.95 m high: random rubble in rough courses, battered (0.5 m wide at the foot,
+    0.34 m at the top), occasional through-stones and pinning stones, and a cope of upright stones on edge"""
     for var in range(2):
         reset(); S = []; rr = random.Random(40 + var)
-        z = 0.0; row = 0
-        while z < 0.86:
-            h = rr.uniform(0.13, 0.2); z1 = min(0.86, z + h); x = -0.6 + (0.12 if row % 2 else 0.0) * rr.random()
+        z = 0.0; row = 0; H = 0.74
+        while z < H - 0.05:
+            hrow = rr.uniform(0.11, 0.22); x = -0.6 - rr.uniform(0, 0.12)
             while x < 0.6:
-                L = rr.uniform(0.22, 0.42); x1 = min(0.6, x + L)
-                if x1 - x > 0.06:
-                    S.append(stone_block('stone', (x1 - x - 0.014, 0.36 - 0.03 * row / 6, z1 - z - 0.012), ((x + x1) / 2, rr.uniform(-0.01, 0.01), (z + z1) / 2), seed=var * 1000 + len(S)))
+                L = rr.uniform(0.18, 0.46) * (1.25 if row == 0 else 1.0); x1 = min(0.66, x + L)
+                h = min(hrow * rr.uniform(0.75, 1.05), H - z + 0.02)
+                if h > 0.05 and x1 - x > 0.07:
+                    zc = z + h / 2; wd = 0.5 - 0.16 * zc / H
+                    through = rr.random() < 0.12
+                    pid = 'mossy_rock' if rr.random() < 0.28 else 'rock_face_03'
+                    S.append(rubble_stone('stone', (x1 - x - 0.01, wd * (1.12 if through else rr.uniform(0.86, 1.0)), h),
+                                          ((x + x1) / 2, rr.uniform(-0.025, 0.025), zc), pid, seed=var * 1000 + len(S),
+                                          rot=(rr.uniform(-0.04, 0.04), rr.uniform(-0.07, 0.07), rr.uniform(-0.05, 0.05))))
+                    if rr.random() < 0.3 and h > 0.12:                     # pinning stone wedged into the joint
+                        for sy in (-1, 1):
+                            S.append(rubble_stone('pin', (0.07, 0.08, 0.05), (x1, sy * (wd / 2 - 0.03), z + h * rr.uniform(0.25, 0.75)), 'rock_face_03', seed=var * 3000 + len(S)))
                 x = x1
-            z = z1; row += 1
+            z += hrow; row += 1
         x = -0.6
-        while x < 0.6:                                   # mossy cope stones on edge
-            L = rr.uniform(0.16, 0.26); x1 = min(0.6, x + L)
-            S.append(stone_block('cope', (x1 - x - 0.01, 0.38, 0.11), ((x + x1) / 2, 0, 0.9), pid='mossy_rock', seed=var * 2000 + len(S)))
+        while x < 0.6:                                   # cope: upright stones on edge, leaning a little
+            t = rr.uniform(0.07, 0.13); x1 = min(0.6, x + t)
+            hc = rr.uniform(0.17, 0.25)
+            S.append(rubble_stone('cope', (x1 - x - 0.008, 0.36, hc), ((x + x1) / 2, rr.uniform(-0.02, 0.02), z + hc / 2 - 0.02), 'mossy_rock',
+                                  seed=var * 2000 + len(S), rot=(0, rr.uniform(-0.18, 0.18), rr.uniform(-0.05, 0.05))))
             x = x1
-        S.append(box('core', (1.18, 0.3, 0.86), (0, 0, 0.43), mat=tex_mat('rock_face_03'), bevel=0.0)); box_uv(S[-1], 2.0)
-        smooth_all(S, 0.7)
+        # hearting: a dark recessed core so no light shows between stones
+        S.append(box('core', (1.2, 0.28, z), (0, 0, z / 2), mat=tex_mat('rock_face_03'), bevel=0.0)); box_uv(S[-1], 2.0)
         A_, C_ = by_mat(S, 'rock_face_03'), by_mat(S, 'mossy_rock')
+        print('wall', var, len(S), 'stones')
         export([join(A_, 'wall_stone'), join(C_, 'wall_cope')], f'wall_{var}')
 
 ONLY = sys.argv[3:]
