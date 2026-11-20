@@ -241,30 +241,54 @@ export class Gameplay {
     // a little sign of rust flakes... and the reward behind the gate (glade)
   }
 
-  // an old dry-stone wall around the glade, from one gate boulder round to the other: the gate is the only way in
+  // a ridge of tumbled, mossy boulders round the glade, from one gate boulder to the other: the gate is the only way in
   buildGladeWall(a, b) {
     const pts = [[a.x, a.z], [-20, -13.6], [-25, -16.4], [-27.4, -22], [-25.4, -28], [-19.5, -30.4], [-13.6, -28.4], [-10.6, -23.6], [-9.4, -19], [b.x, b.z]];
+    const segs = []; let total = 0;
+    for (let i = 0; i + 1 < pts.length; i++) { const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); segs.push({ i, L, t0: total }); total += L; }
+    const at = (t) => { const g = segs.find((q) => t <= q.t0 + q.L) || segs[segs.length - 1]; const f = (t - g.t0) / g.L, [x0, z0] = pts[g.i], [x1, z1] = pts[g.i + 1];
+      return { x: x0 + (x1 - x0) * f, z: z0 + (z1 - z0) * f, tx: (x1 - x0) / g.L, tz: (z1 - z0) / g.L }; };
+    const vars = [0, 1, 2, 3].map((i) => this.world.variants('boulder_field_lo_' + i)[0]);
+    const lists = vars.map(() => []);
+    const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+    const stone = (x, z, D, H, sink, tilt = 0.22) => {
+      const k = Math.floor(rnd() * vars.length), v = vars[k];
+      const s = D / Math.max(v.size.x, v.size.z), sy = H / v.size.y;
+      let gy = this.groundY(x, z);
+      for (let a2 = 0; a2 < 6.28; a2 += 1.57) gy = Math.min(gy, this.groundY(x + Math.cos(a2) * D * 0.35, z + Math.sin(a2) * D * 0.35));
+      e.set((rnd() - 0.5) * tilt, rnd() * 6.28, (rnd() - 0.5) * tilt); q.setFromEuler(e);
+      p.set(x, gy - H * sink, z); sc.set(s, sy, s * (0.8 + rnd() * 0.3));
+      mtx.compose(p, q, sc); lists[k].push(mtx.clone());
+      this.world.hull(v.geo, mtx, { kind: 'rock', surface: 'rock' });
+    };
+    let t = segs[0].L * 0.12, prev = null;
+    const tEnd = total - segs[segs.length - 1].L * 0.12;
+    while (t < tEnd) {
+      const c = at(t), nx = -c.tz, nz = c.tx, off = (rnd() - 0.5) * 0.6;
+      const D = 1.5 + rnd() * 1.1;
+      stone(c.x + nx * off, c.z + nz * off, D, D * (0.75 + rnd() * 0.3) + 0.35, 0.2);
+      // a smaller stone wedged in the dip between two big ones keeps the ridge line unbroken
+      if (prev) { const m = at((prev + t) / 2); stone(m.x + nx * (rnd() - 0.5) * 0.4, m.z + nz * (rnd() - 0.5) * 0.4, 0.9 + rnd() * 0.4, 1.0 + rnd() * 0.35, 0.12); }
+      // tumbled stones at the foot, on either side
+      if (rnd() < 0.5) { const sd = rnd() < 0.5 ? -1 : 1, d2 = D * 0.5 + 0.25; stone(c.x + nx * sd * d2 + c.tx * (rnd() - 0.5), c.z + nz * sd * d2 + c.tz * (rnd() - 0.5), 0.45 + rnd() * 0.5, 0.35 + rnd() * 0.3, 0.3, 0.6); }
+      prev = t; t += D * (0.55 + rnd() * 0.15);
+    }
+    vars.forEach((v, k) => {
+      if (!lists[k].length) return;
+      const im = new THREE.InstancedMesh(v.geo, this.ctx.assets.mats.rockOutcrop, lists[k].length);
+      lists[k].forEach((m, i) => im.setMatrixAt(i, m));
+      im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
+    });
+    // a sealed band along the ridge line, inside the stones (no squeezing through between them)
     for (let i = 0; i + 1 < pts.length; i++) {
       const [x0, z0] = pts[i], [x1, z1] = pts[i + 1];
-      const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(L / 1.15)), yaw = -Math.atan2(z1 - z0, x1 - x0);
-      // start/end inside the boulders so no gap is left there
       const f0 = i === 0 ? 0.12 : 0, f1 = i === pts.length - 2 ? 0.88 : 1;
-      for (let k = 0; k < n; k++) {
-        const t0 = f0 + (f1 - f0) * k / n, t1 = f0 + (f1 - f0) * (k + 1) / n;
-        const xa = x0 + (x1 - x0) * t0, za = z0 + (z1 - z0) * t0, xb = x0 + (x1 - x0) * t1, zb = z0 + (z1 - z0) * t1;
-        const cx = (xa + xb) / 2, cz = (za + zb) / 2, len = Math.hypot(xb - xa, zb - za);
-        const y = Math.min(this.groundY(xa, za), this.groundY(xb, zb), this.groundY(cx, cz)) - 0.06;
-        if (this.wallMat === undefined) {                // cooler, greyer field stone than the warm scan
-          this.wallMat = null; this.ctx.assets.models.prop_wall_0?.scene.traverse((o) => { if (o.isMesh && o.name.startsWith('wall_stone')) this.wallMat = o.material.clone(); });
-          this.wallMat?.color.set(0xa9b0b4);
-        }
-        const w = this.prop(rnd() < 0.5 ? 'wall_0' : 'wall_1', this.wallMat ? { wall_stone: this.wallMat } : {});
-        w.position.set(cx, y, cz); w.rotation.y = yaw + (rnd() - 0.5) * 0.04; w.scale.set(len / 1.2 * 1.04, 0.95 + rnd() * 0.12, 1);
-        this.scene.add(w);
-        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-        const c = this.W.createCollider(this.R.ColliderDesc.cuboid(len / 2 + 0.05, 0.62, 0.2).setTranslation(cx, y + 0.62, cz).setRotation(q));
-        c.userData = { kind: 'static', surface: 'rock' };
-      }
+      const xa = x0 + (x1 - x0) * f0, za = z0 + (z1 - z0) * f0, xb = x0 + (x1 - x0) * f1, zb = z0 + (z1 - z0) * f1;
+      const cx = (xa + xb) / 2, cz = (za + zb) / 2, len = Math.hypot(xb - xa, zb - za), yaw = -Math.atan2(z1 - z0, x1 - x0);
+      const y = Math.min(this.groundY(xa, za), this.groundY(xb, zb), this.groundY(cx, cz)) - 0.06;
+      const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+      const c = this.W.createCollider(this.R.ColliderDesc.cuboid(len / 2 + 0.05, 0.65, 0.15).setTranslation(cx, y + 0.65, cz).setRotation(q2));
+      c.userData = { kind: 'static', surface: 'rock' };
     }
   }
 

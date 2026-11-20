@@ -83,9 +83,9 @@ export const PH_MODELS = ['rock_07', 'rock_09', 'stone_01', 'rock_face_01', 'roc
   'flower_empodium', 'flower_stinkkruid', 'leipoldtia_schultzei', 'flower_ursinia', 'pine_sapling_small', 'fir_sapling'];
 export const DEBRIS = ['pinecone_0', 'pinecone_1', 'pinecone_2', 'mush_amanita', 'mush_bolete', 'mush_cluster', 'mush_bracket'];
 export const TREES = ['pine_0', 'pine_1', 'pine_2', 'pine_3', 'fir_4', 'fir_5', 'pine_11', 'pine_12', 'pine_13', 'fir_14', 'fir_15'];
-export const SAPLINGS = ['sapling_6', 'sapling_7', 'sapling_8'];
+export const SAPLINGS = []; // (the Blender saplings read as stacked card tiers; scanned saplings are used instead)
 export const SNAGS = ['snag_9', 'snag_10'];
-export const PROPS = ['crate', 'fence_picket', 'fence_rail', 'gate_pillar', 'gate_leaf', 'wall_0', 'wall_1', 'plate_sf_base', 'plate_sf_top', 'lift_deck', 'lift_head', 'lift_counter', 'ibeam', 'socket', 'cell', 'shard', 'booster', 'ball'];
+export const PROPS = ['crate', 'fence_picket', 'fence_rail', 'gate_pillar', 'gate_leaf', 'plate_sf_base', 'plate_sf_top', 'lift_deck', 'lift_head', 'lift_counter', 'ibeam', 'socket', 'cell', 'shard', 'booster', 'ball'];
 
 export class Assets {
   constructor(renderer, tier, onProgress) {
@@ -174,7 +174,7 @@ export class Assets {
   async loadAll() {
     const T = this.tex, tier = this.tier, suf = this.suffix(tier.texSize);
     const modelJobs = [['nuri'], ['outcrop'], ['log_hollow'],
-      ...PH_MODELS.map((m) => [`ph/${m}`, m]), ...DEBRIS.map((m) => [`debris/${m}`, m]), ...TREES.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...SAPLINGS.map((t) => [`trees/${t}`, t]), ...SNAGS.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...[0, 1, 2, 3].map((i) => [`rocks/boulder_${i}`, 'boulder_field_' + i]), ['creatures/squirrel', 'squirrel'], ['creatures/robin', 'robin'], ...PROPS.map((m) => [`props/${m}`, 'prop_' + m]), ...['toto', 'bori', 'mina'].map((m) => [`companions/${m}`, 'comp_' + m])];
+      ...PH_MODELS.map((m) => [`ph/${m}`, m]), ...DEBRIS.map((m) => [`debris/${m}`, m]), ...TREES.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...SAPLINGS.map((t) => [`trees/${t}`, t]), ...SNAGS.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...[0, 1, 2, 3].flatMap((i) => [[`rocks/boulder_${i}`, 'boulder_field_' + i], [`rocks/boulder_${i}_lo`, 'boulder_field_lo_' + i]]), ['creatures/squirrel', 'squirrel'], ['creatures/robin', 'robin'], ...PROPS.map((m) => [`props/${m}`, 'prop_' + m]), ...['toto', 'bori', 'mina'].map((m) => [`companions/${m}`, 'comp_' + m])];
     this.total = 3 + 6 + 1 + modelJobs.length + 8;
     const [alb, nrm, orm] = await Promise.all([
       this.arrayTexture(TERRAIN_LAYERS.map((l) => `${BASE}tex/${l}${suf}_albedo.jpg`), true),

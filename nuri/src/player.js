@@ -92,6 +92,12 @@ export class Player {
     let speed = hv.length();
     let st = this.state;
     if (mag > 0.05 || jumpPressed) this.idleT = 0; else this.idleT += dt;
+    // failsafe: a body that ends up inside geometry (log, rock, a platform moving into it) is lifted out to the
+    // nearest free spot instead of staying wedged
+    if (st !== 'climbup' && st !== 'climb') {
+      this.stuckT = this.overlapping() ? (this.stuckT || 0) + dt : 0;
+      if (this.stuckT > 0.2) { this.stuckT = 0; if (this.unstick()) st = this.state; }
+    }
 
     // ---- timed action overlays
     if (this.act) { this.actT += dt / this.act.dur; if (this.actT >= 1) { this.act = null; this.actT = 0; } }
@@ -327,14 +333,29 @@ export class Player {
     this.climbT += dt / 0.45;
     const h = this.hangInfo;
     const t = Math.min(1, this.climbT);
-    const target = new THREE.Vector3(h.top.x - h.wallN.x * 0.08, h.ledgeY + 0.01, h.top.z - h.wallN.z * 0.08);
+    if (!h.target) {
+      // ledge climb: settle on a free spot just past the edge (round tops can't take the whole body at the very rim)
+      let tx = h.top.x - h.wallN.x * 0.08, tz = h.top.z - h.wallN.z * 0.08, ty = h.ledgeY;
+      for (const k of [0, 0.06, 0.12, -0.04]) {
+        const x = tx - h.wallN.x * k, z = tz - h.wallN.z * k, y = this.standAt(x, z, h.ledgeY + 0.4);
+        if (y !== null) { tx = x; tz = z; ty = y; break; }
+      }
+      h.target = new THREE.Vector3(tx, ty, tz);
+    }
+    const target = new THREE.Vector3(h.target.x, h.target.y + 0.01, h.target.z);
     const p = this.climbFrom.clone();
     // up first, then over the edge
     const up = Math.min(1, t / 0.6), over = Math.max(0, (t - 0.45) / 0.55);
     p.y = lerp(this.climbFrom.y, target.y + 0.04, up * up * (3 - 2 * up));
     p.x = lerp(this.climbFrom.x, target.x, over); p.z = lerp(this.climbFrom.z, target.z, over);
     this.teleport(p.x, p.y, p.z);
-    if (t >= 1) { this.state = 'idle'; this.hangInfo = null; this.vel.set(0, 0, 0); this.grounded = true; }
+    if (t >= 1) {
+      // never finish inside something: rise to the first free height, or fall back to where we started
+      let y = p.y, ok = !this.blocked(p.x, y, p.z);
+      for (let i = 1; !ok && i <= 12; i++) { y = p.y + i * 0.025; ok = !this.blocked(p.x, y, p.z); }
+      if (ok) this.teleport(p.x, y, p.z); else this.teleport(this.climbFrom.x, this.climbFrom.y, this.climbFrom.z);
+      this.state = ok ? 'idle' : 'fall'; this.hangInfo = null; this.vel.set(0, 0, 0); this.grounded = ok;
+    }
   }
 
   updateClimb(dt, input, dir, mag, jumpPressed, camYaw) {
@@ -417,25 +438,64 @@ export class Player {
     this.grounded = false;
   }
 
-  // find a surface just above the water ahead (bank, stone, log) and vault onto it
+  // is the standing capsule at (x, y, z) (feet) overlapping anything solid?
+  blocked(x, y, z) {
+    const R = this.ctx.RAPIER;
+    if (!this._fitShape) this._fitShape = new R.Capsule(HH_STAND, R_CAP);
+    let hit = false;
+    this.ctx.physics.intersectionsWithShape({ x, y: y + R_CAP + HH_STAND + 0.03, z }, { x: 0, y: 0, z: 0, w: 1 }, this._fitShape, () => { hit = true; return false; },
+      undefined, undefined, this.col, this.body, (c) => !c.isSensor() && !['item-held', 'item', 'player', 'creature'].includes(c.userData?.kind));
+    return hit;
+  }
+  overlapping() {
+    const R = this.ctx.RAPIER, t = this.body.translation(), hh = this.crouched ? HH_CROUCH : HH_STAND;
+    const key = this.crouched ? '_ovC' : '_ovS';
+    if (!this[key]) this[key] = new R.Capsule(hh, R_CAP - 0.02);
+    let hit = false;
+    this.ctx.physics.intersectionsWithShape(t, { x: 0, y: 0, z: 0, w: 1 }, this[key], () => { hit = true; return false; },
+      undefined, undefined, this.col, this.body, (c) => !c.isSensor() && !['item-held', 'item', 'player', 'creature'].includes(c.userData?.kind));
+    return hit;
+  }
+  unstick() {
+    const p = this.pos;
+    const tries = [];
+    for (let k = 1; k <= 10; k++) tries.push([0, k * 0.05, 0]);
+    for (const r of [0.15, 0.3, 0.45]) for (let a = 0; a < 8; a++) tries.push([Math.cos(a * 0.785) * r, 0.08, Math.sin(a * 0.785) * r]);
+    for (const [dx, dy, dz] of tries) {
+      if (this.blocked(p.x + dx, p.y + dy, p.z + dz)) continue;
+      this.setCrouch?.(false);
+      this.teleport(p.x + dx, p.y + dy, p.z + dz); this.vel.set(0, 0, 0);
+      if (this.state !== 'swim') this.state = 'fall';
+      return true;
+    }
+    return false;
+  }
+  // a free standing spot on a fairly flat surface under (x, z), searched down from yTop
+  standAt(x, z, yTop) {
+    const top = this.ray({ x, y: yTop, z }, { x: 0, y: -1, z: 0 }, 1.2);
+    if (!top || top.normal.y < 0.72) return null;
+    const y = yTop - top.toi;
+    return this.blocked(x, y, z) ? null : y;
+  }
+
+  // find a surface just above the water ahead (bank, stone, log) and vault onto it; the landing spot must be flat
+  // enough and leave room for the whole body (on a round log only the crown qualifies), otherwise keep swimming
   tryClimbOut(dir, waterY) {
     const d = dir.clone().setY(0).normalize();
     const o = { x: this.pos.x, y: waterY - 0.05, z: this.pos.z };
     const wall = this.ray(o, { x: d.x, y: 0, z: d.z }, 0.42);
-    let probe;
-    if (wall) probe = { x: o.x + d.x * (wall.toi + 0.14), z: o.z + d.z * (wall.toi + 0.14) };
-    else probe = { x: o.x + d.x * 0.32, z: o.z + d.z * 0.32 }; // gentle bank without a wall in front
-    const top = this.ray({ x: probe.x, y: waterY + 0.75, z: probe.z }, { x: 0, y: -1, z: 0 }, 1.1);
-    if (!top || top.normal.y < 0.55) return false;
-    const ledgeY = waterY + 0.75 - top.toi;
-    if (ledgeY < waterY - 0.08 || ledgeY > waterY + 0.62) return false;
-    if (this.ctx.terrain.isWater(probe.x, probe.z) && ledgeY < waterY + 0.02) return false; // still water there
-    // head room
-    if (this.ray({ x: probe.x, y: ledgeY + 0.02, z: probe.z }, { x: 0, y: 1, z: 0 }, 0.36)) return false;
-    this.hangInfo = { ledgeY, wallN: d.clone().negate(), top: new THREE.Vector3(probe.x + d.x * 0.06, ledgeY, probe.z + d.z * 0.06) };
-    this.state = 'climbup'; this.climbT = 0; this.climbFrom = this.pos.clone(); this.vel.set(0, 0, 0); this.wetT = 1;
-    this.emit('climbout');
-    return true;
+    const start = wall ? wall.toi : 0.14;
+    for (const k of [0.2, 0.27, 0.14, 0.34, 0.42]) {
+      const x = o.x + d.x * (start + k), z = o.z + d.z * (start + k);
+      const y = this.standAt(x, z, waterY + 0.75);
+      if (y === null || y < waterY - 0.08 || y > waterY + 0.62) continue;
+      if (this.ctx.terrain.isWater(x, z) && y < waterY + 0.02) continue; // still water there
+      this.hangInfo = { ledgeY: y, wallN: d.clone().negate(), top: new THREE.Vector3(x, y, z), target: new THREE.Vector3(x, y, z) };
+      this.state = 'climbup'; this.climbT = 0; this.climbFrom = this.pos.clone(); this.vel.set(0, 0, 0); this.wetT = 1;
+      this.emit('climbout');
+      return true;
+    }
+    return false;
   }
 
   teleport(x, y, z) {

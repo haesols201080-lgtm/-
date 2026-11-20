@@ -453,6 +453,9 @@ def build_boulders():
         bake_ao_vcol([ob], dist=0.45, samples=64)
         print('boulder', i, len(ob.data.polygons), 'faces')
         export_glb([ob], os.path.join(OUT, 'rocks', f'boulder_{i}.glb'))
+        # light version for the boulder ridge (dozens of instances)
+        decimate(ob, 1400 / len(ob.data.polygons))
+        export_glb([ob], os.path.join(OUT, 'rocks', f'boulder_{i}_lo.glb'))
 
 BUILDERS = {'boulders': build_boulders, 'rocks': build_rocks, 'trees': build_trees, 'logs': build_logs, 'outcrop': build_outcrop, 'mushrooms': build_mushrooms}
 for k, f in BUILDERS.items():
