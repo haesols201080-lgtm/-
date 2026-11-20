@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { clamp, damp, dampAngle, angleDiff, lerp } from './util.js';
 
 const R_CAP = 0.095, HH_STAND = 0.085, HH_CROUCH = 0.012;
-const G = 15.5, JUMP_V = 3.75, DJUMP_V = 3.3;
+const G = 15.5, JUMP_V = 3.55, DJUMP_V = 3.1;
 // speeds sized for a 35 cm robot with ~10 cm legs (a brisk jog is ~1.4 m/s at this scale, a walk ~0.55 m/s)
 export const RUN = 1.4;
 const WALK = 0.55, CRAWL = 0.3, SWIM = 0.65, CLIMB = 0.45, PUSH = 0.55, ROLL0 = 2.0, ROLL1 = 0.95;

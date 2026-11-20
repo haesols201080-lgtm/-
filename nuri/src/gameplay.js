@@ -298,9 +298,13 @@ export class Gameplay {
       const f0 = i === 0 ? 0.12 : 0, f1 = i === pts.length - 2 ? 0.88 : 1;
       const xa = x0 + (x1 - x0) * f0, za = z0 + (z1 - z0) * f0, xb = x0 + (x1 - x0) * f1, zb = z0 + (z1 - z0) * f1;
       const cx = (xa + xb) / 2, cz = (za + zb) / 2, len = Math.hypot(xb - xa, zb - za), yaw = -Math.atan2(z1 - z0, x1 - x0);
-      const y = Math.min(this.T.heightAt(xa, za), this.T.heightAt(xb, zb), this.T.heightAt(cx, cz)) - 0.3;
+      // from below the lowest ground on the line to 2.3 m above its highest point (stones on the crest + a double
+      // jump + hover must not get over it)
+      let lo = Infinity, hi = -Infinity;
+      for (let k = 0; k <= 12; k++) { const f = k / 12, h = this.T.heightAt(xa + (xb - xa) * f, za + (zb - za) * f); lo = Math.min(lo, h); hi = Math.max(hi, h); }
+      const y0 = lo - 0.3, y1 = hi + 2.3, hh = (y1 - y0) / 2;
       const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-      const c = this.W.createCollider(this.R.ColliderDesc.cuboid(len / 2 + 0.05, 0.85, 0.15).setTranslation(cx, y + 0.85, cz).setRotation(q2));
+      const c = this.W.createCollider(this.R.ColliderDesc.cuboid(len / 2 + 0.05, hh, 0.15).setTranslation(cx, y0 + hh, cz).setRotation(q2));
       c.userData = { kind: 'static', surface: 'rock' };
     }
   }

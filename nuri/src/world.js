@@ -307,7 +307,10 @@ export class World {
     if (!this.mossChunks) return;
     for (const k of this.mossChunks) {
       const d = Math.hypot(k.c.x - cam.x, k.c.z - cam.z);
-      k.m.count = this.ctx.tier.rich ? (d < 14 ? k.full : d < 26 ? Math.ceil(k.full / 2) : d < 45 ? 3 : 1) : (d < 9 ? k.full : d < 16 ? Math.ceil(k.full / 2) : 1);
+      // shell count falls off smoothly with distance (a step change reads as moss flashing in and out)
+      const [n0, n1] = this.ctx.tier.rich ? [14, 45] : [10, 26];
+      const f = Math.min(1, Math.max(0, (d - n0) / (n1 - n0)));
+      k.m.count = Math.max(2, Math.round(k.full - (k.full - 2) * f));
     }
   }
 

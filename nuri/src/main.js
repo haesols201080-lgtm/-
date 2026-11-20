@@ -241,9 +241,9 @@ async function boot() {
         case 'jump': audio.play('jump', { pos: pp }); if (e.water) { fx.waterSplash(surf(pp), 0.55); world.sim.drop(pp.x, pp.z, 0.12, -0.05); audio.play('splash', { pos: pp, vol: 0.5 }); } else fx.dust(pp, 4); break;
         case 'djump': audio.play('djump', { pos: pp }); for (let i = 0; i < 10; i++) fx.exhaust({ x: pp.x, y: pp.y, z: pp.z }); setExpr('excited', 0.8); break;
         case 'dash': audio.play('djump', { pos: pp, pitch: 1.25 }); for (let i = 0; i < 16; i++) fx.exhaust({ x: pp.x, y: pp.y + 0.15, z: pp.z }); orbit.shake = Math.max(orbit.shake, 0.18); setExpr('excited', 0.8); break;
-        case 'land': if (e.impact > 3.2) { orbit.shake = Math.max(orbit.shake, Math.min(0.55, (e.impact - 3.2) * 0.14)); fx.dust(pp, 10); fx.ring?.(pp, 0.35, 0.35); }
+        case 'land': if (e.impact > 5.5) { orbit.shake = Math.max(orbit.shake, Math.min(0.4, (e.impact - 5.5) * 0.1)); fx.dust(pp, 10); }
           for (const sd of ['L', 'R']) { const f = footWorld(sd); f.y = player.pos.y; prints.step(f, player.yaw, WET.value, player.groundCollider, clamp(0.8 + e.impact / 10, 0.8, 1.3)); }
-          if (e.impact > 3) { audio.play('land', { pos: pp, vol: clamp(e.impact / 9, 0.3, 1) }); fx.dust(pp, Math.round(clamp(e.impact, 3, 12))); if (e.impact > 8) orbit.shake = 0.6; }
+          if (e.impact > 3) { audio.play('land', { pos: pp, vol: clamp(e.impact / 9, 0.3, 1) }); fx.dust(pp, Math.round(clamp(e.impact, 3, 12))); if (e.impact > 8) orbit.shake = Math.max(orbit.shake, 0.45); }
           else audio.play('step', { surface: surfaceUnder(), pos: pp, vol: 0.5 }); break;
         case 'splash': audio.play('splash', { pos: pp, vol: e.strength }); fx.waterSplash(surf(pp), 0.5 + e.strength); world.sim.drop(pp.x, pp.z, 0.16, -0.06 - e.strength * 0.06); orbit.shake = 0.25 * e.strength; WET.value = 1; setExpr('surprised', 0.8); moodBeep('surprised'); break;
         case 'swimstroke': { audio.play('swim', { pos: pp, vol: 0.6 }); const f = tmpV.set(Math.sin(player.yaw), 0, Math.cos(player.yaw));
