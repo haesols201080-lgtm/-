@@ -73,7 +73,7 @@ function jsonToGLB(json) {
 }
 export const TERRAIN_LAYERS = ['ph_floor', 'ph_path', 'ph_riverbed', 'ph_mud'];
 export const TERRAIN_SCALES = [1 / 1.5, 1 / 1.67, 1 / 2.9, 1 / 1.3]; // metres covered by each scanned set
-export const PH_MODELS = ['rock_moss_set_01', 'rock_moss_set_02', 'boulder_01', 'rock_07', 'rock_09', 'stone_01', 'rock_face_01', 'rock_face_02',
+export const PH_MODELS = ['rock_07', 'rock_09', 'stone_01', 'rock_face_01', 'rock_face_02',
   'tree_stump_01', 'tree_stump_02', 'dead_tree_trunk', 'dead_tree_trunk_02', 'root_cluster_02', 'single_root', 'fern_02', 'moss_01',
   'shrub_03', 'shrub_04', 'nettle_plant', 'dandelion_01', 'weed_plant_02', 'dry_branches_medium_01', 'periwinkle_plant',
   'bark_debris_01', 'namaqualand_stones_01', 'root_cluster_01',
@@ -84,6 +84,7 @@ export const DEBRIS = ['pinecone_0', 'pinecone_1', 'pinecone_2', 'mush_amanita',
 export const TREES = ['pine_0', 'pine_1', 'pine_2', 'pine_3', 'fir_4', 'fir_5', 'pine_11', 'pine_12', 'pine_13', 'fir_14', 'fir_15'];
 export const SAPLINGS = ['sapling_6', 'sapling_7', 'sapling_8'];
 export const SNAGS = ['snag_9', 'snag_10'];
+export const PROPS = ['crate', 'fence_picket', 'fence_rail', 'gate_pillar', 'gate_leaf', 'wall_0', 'wall_1', 'plate_sf_base', 'plate_sf_top', 'lift_deck', 'lift_head', 'lift_counter', 'ibeam', 'socket', 'cell', 'shard', 'booster', 'ball'];
 
 export class Assets {
   constructor(renderer, tier, onProgress) {
@@ -162,7 +163,7 @@ export class Assets {
   async loadAll() {
     const T = this.tex, tier = this.tier, suf = this.suffix(tier.texSize);
     const modelJobs = [['nuri'], ['outcrop'], ['log_hollow'],
-      ...PH_MODELS.map((m) => [`ph/${m}`, m]), ...DEBRIS.map((m) => [`debris/${m}`, m]), ...TREES.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...SAPLINGS.map((t) => [`trees/${t}`, t]), ...SNAGS.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ['creatures/squirrel', 'squirrel'], ['creatures/robin', 'robin']];
+      ...PH_MODELS.map((m) => [`ph/${m}`, m]), ...DEBRIS.map((m) => [`debris/${m}`, m]), ...TREES.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...SAPLINGS.map((t) => [`trees/${t}`, t]), ...SNAGS.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...[0, 1, 2, 3].map((i) => [`rocks/boulder_${i}`, 'boulder_field_' + i]), ['creatures/squirrel', 'squirrel'], ['creatures/robin', 'robin'], ...PROPS.map((m) => [`props/${m}`, 'prop_' + m]), ...['toto', 'bori', 'mina'].map((m) => [`companions/${m}`, 'comp_' + m])];
     this.total = 3 + 6 + 1 + modelJobs.length;
     const [alb, nrm, orm] = await Promise.all([
       this.arrayTexture(TERRAIN_LAYERS.map((l) => `${BASE}tex/${l}${suf}_albedo.jpg`), true),

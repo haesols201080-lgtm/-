@@ -406,7 +406,55 @@ def build_mushrooms():
         export_glb([o], os.path.join(OUT, f'mushroom_{i}.glb'))
         bpy.data.objects.remove(o)
 
-BUILDERS = {'rocks': build_rocks, 'trees': build_trees, 'logs': build_logs, 'outcrop': build_outcrop, 'mushrooms': build_mushrooms}
+# ------------------------------------------------------------------ rounded field boulders
+def build_boulders():
+    """weathered field boulders: a lumpy ellipsoid cut by a few broad, softly rounded fracture planes, voxel-remeshed
+    to an even surface, then given knobbly mid-frequency relief; the bottom sinks below grade"""
+    os.makedirs(os.path.join(OUT, 'rocks'), exist_ok=True)
+    specs = [(3, (1.0, 0.82, 0.7), 9), (11, (1.15, 0.9, 0.62), 10), (19, (0.95, 0.9, 0.8), 8), (27, (1.2, 0.78, 0.58), 11)]
+    for i, (seed, size, nplanes) in enumerate(specs):
+        reset_scene()
+        rnd = random.Random(seed)
+        bpy.ops.mesh.primitive_ico_sphere_add(subdivisions=6, radius=1)
+        ob = bpy.context.active_object; ob.name = f'boulder_{i}'
+        pls = []
+        for _ in range(nplanes):
+            n_ = Vector((rnd.uniform(-1, 1), rnd.uniform(-1, 1), rnd.uniform(-0.3, 0.9))).normalized()
+            pls.append((n_, rnd.uniform(0.7, 0.9)))
+        for v in ob.data.vertices:
+            p = v.co.copy()
+            p *= 1 + 0.16 * fbm3(p * 0.9, 4, seed=seed) + 0.05 * fbm3(p * 2.6, 3, seed=seed + 4)
+            for n_, d in pls:
+                k = p.dot(n_) - d
+                if k > 0: p -= n_ * k * (0.92 + 0.08 * fbm3(p * 3, 2, seed=seed + 5))
+            v.co = Vector((p.x * size[0], p.y * size[1], p.z * size[2]))
+        m = ob.modifiers.new('Remesh', 'REMESH'); m.mode = 'VOXEL'; m.voxel_size = 0.026
+        apply_all(ob)
+        m = ob.modifiers.new('Sm', 'SMOOTH'); m.factor = 0.5; m.iterations = 2
+        apply_all(ob)
+        ob.data.update()
+        for v in ob.data.vertices:
+            p = v.co.copy()
+            d = 0.05 * fbm3(p * 2.6, 4, seed=seed + 7) + 0.016 * fbm3(p * 8.0, 3, seed=seed + 9)
+            # hairline joints: thin valleys where a noise field crosses zero
+            d -= 0.035 * (1 - min(1.0, abs(fbm3(p * 1.3, 3, seed=seed + 21)) * 9)) ** 2
+            # shallow weathering pits and a few lamination grooves
+            d -= 0.012 * max(0.0, fbm3(p * 7.0, 2, seed=seed + 13) - 0.3) * 4
+            d += 0.022 * (1 - abs(fbm3(p * 2.2, 3, seed=seed + 17))) ** 3
+            d += 0.006 * math.sin((p.z + 0.25 * fbm3(p * 1.5, 2, seed=seed + 2)) * 38)
+            v.co = p + v.normal * d
+        despike(ob, passes=2)
+        decimate(ob, 0.14)
+        despike(ob, passes=1)
+        smooth(ob)
+        zmin = min(v.co.z for v in ob.data.vertices)
+        for v in ob.data.vertices: v.co.z -= zmin + 0.12 * size[2]
+        ob.data.materials.append(named_mat('Rock'))
+        bake_ao_vcol([ob], dist=0.45, samples=64)
+        print('boulder', i, len(ob.data.polygons), 'faces')
+        export_glb([ob], os.path.join(OUT, 'rocks', f'boulder_{i}.glb'))
+
+BUILDERS = {'boulders': build_boulders, 'rocks': build_rocks, 'trees': build_trees, 'logs': build_logs, 'outcrop': build_outcrop, 'mushrooms': build_mushrooms}
 for k, f in BUILDERS.items():
     if ONLY and k not in ONLY: continue
     f()

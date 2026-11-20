@@ -2,7 +2,7 @@
 // terrain with scanned ground layers, conifers with scanned bark/twigs + scanned pine roots, mossy boulders,
 // stumps, dead trunks, rock faces, ferns and ground plants, grass cards, water + waterfall, and physics colliders.
 import * as THREE from 'three';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { mergeGeometries, toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { furredMesh } from './fur.js';
 import { mulberry32, smoothstep, distToPolyline, clamp, makeNoise2D, fbm } from './util.js';
 import { WORLD, PATH, PATH2, PATH3, STREAM, POND, OUTCROP, HERO_TREES, BOULDERS, LOGS, STUMPS, START } from './layout.js';
@@ -48,7 +48,9 @@ export class World {
       const o = list.length === 1 ? list[0] : { name: list[0].parent.name, matrixWorld: new THREE.Matrix4(),
         geometry: mergeGeometries(list.map((m) => { const q = m.geometry.clone().applyMatrix4(m.matrixWorld); for (const k of Object.keys(q.attributes)) if (!['position', 'normal', 'uv'].includes(k)) q.deleteAttribute(k); return q; }), true),
         material: list.map((m) => m.material) };
-      const geo = o.geometry.clone().applyMatrix4(o.matrixWorld);
+      let geo = o.geometry.clone().applyMatrix4(o.matrixWorld);
+      // decimated rock scans keep split normals per triangle (faceted look): smooth them below a 60 degree crease
+      if (/rock|stone/.test(key)) geo = toCreasedNormals(geo, Math.PI / 3);
       geo.computeBoundingBox();
       const bb = geo.boundingBox, c = bb.getCenter(new THREE.Vector3());
       geo.translate(-c.x, -bb.min.y, -c.z);
@@ -530,16 +532,16 @@ export class World {
 
   // ---------------------------------------------------------------- rocks
   buildRocks() {
-    const rockVars = [...this.variants('rock_moss_set_01'), ...this.variants('rock_moss_set_02')];
-    const boulder = this.variants('boulder_01')[0];
+    // Blender-built field boulders (voxel-remeshed, jointed, AO in vertex colours) under the world-space rock + moss material
+    const rockVars = [0, 1, 2, 3].map((i) => this.variants('boulder_field_' + i)[0]);
     BOULDERS.forEach(([x, z, r, squash, seed], i) => {
-      const v = r > 1.25 ? boulder : rockVars[seed % rockVars.length];
+      const v = rockVars[seed % rockVars.length];
       const w = Math.max(v.size.x, v.size.z);
-      const s = (r * 2) / w;
-      const y = this.terrain.heightAt(x, z) - 0.06 * r;
-      const m = this.place(v, null, new THREE.Vector3(x, y, z), seed * 1.7, new THREE.Vector3(s, s * squash * 1.1, s));
+      const s = (r * 2) / w, sy = s * (0.55 + 0.5 * squash);
+      const y = this.terrain.heightAt(x, z) - 0.04 * r;
+      const m = this.place(v, this.ctx.assets.mats.rockOutcrop, new THREE.Vector3(x, y, z), seed * 1.7, new THREE.Vector3(s, sy, s));
       this.hull(v.geo, m.matrixWorld, { kind: 'rock', surface: 'rock' });
-      this.rocks.push({ x, z, r, top: y + v.size.y * s * squash * 1.1, mesh: m });
+      this.rocks.push({ x, z, r, top: y + v.size.y * sy, mesh: m });
     });
     // scattered stones (instanced)
     const small = [...this.variants('rock_07'), ...this.variants('rock_09'), ...this.variants('stone_01')];
@@ -864,8 +866,7 @@ export class World {
       rule: (x, z) => offPath(x, z, 0.35) ? nearPine(x, z, 4.5) * (0.4 + 0.6 * this.patch(x, z, 0.5, 8)) : 0 });
     add('dry_branches_medium_01', { density: 0.08, scale: [0.45, 1.0], radius: 26, align: 1, sink: 0.1, rule: (x, z) => offPath(x, z, 0.5) ? 0.2 + 0.8 * shade(x, z) : 0 });
     add('bark_debris_01', { density: 0.12, scale: [0.7, 1.3], radius: 14, align: 1, sink: 0.05, cast: false, rule: (x, z) => offPath(x, z, 0.4) ? nearPine(x, z, 2.6) : 0 });
-    add('moss_01', { density: 0.9, scale: [1.2, 2.2], radius: 14, align: 1, sink: 0.1, cast: false,
-      rule: (x, z) => { const n = this.nearestTrunk(x, z); return (n.d < 1.6 ? 1 - n.d / 1.6 : 0) * 0.8 + smoothstep(3, 0.8, this.waterDist(x, z)) * 0.3 * shade(x, z); } });
+    // (the scanned moss cards read as flat rectangles; living moss is drawn by buildMoss)
     add([...this.variants('namaqualand_stones_01'), ...this.variants('rock_09')], { density: 0.06, scale: [0.6, 1.5], radius: 16, align: 1, sink: 0.25, cast: false,
       rule: (x, z) => (distToPolyline(x, z, PATH).d < 1.3 ? 0.9 : 0.15) + smoothstep(3, 1, this.waterDist(x, z)) * 0.8 });
     add('root_cluster_01', { density: 0.004, scale: [0.6, 1.0], radius: 30, align: 1, sink: 0.05, rule: (x, z) => { const n = this.nearestTrunk(x, z); return n.d < 2.2 && n.d > 0.5 ? 1 : 0; } });

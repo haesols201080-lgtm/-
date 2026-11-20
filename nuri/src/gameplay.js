@@ -30,6 +30,20 @@ export class Gameplay {
     return { wood, rust, paint, steel, stone, shard, cellGlow, rubber };
   }
 
+  // a modelled prop (Blender, scanned materials) as a new group; `over` maps mesh-name prefixes to materials
+  prop(name, over = {}) {
+    const g = new THREE.Group(), src = this.ctx.assets.models['prop_' + name];
+    if (!src) return g;
+    src.scene.updateMatrixWorld(true);
+    src.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const k = Object.keys(over).find((p) => o.name.startsWith(p));
+      const m = new THREE.Mesh(o.geometry, k ? over[k] : o.material); m.name = o.name;
+      m.applyMatrix4(o.matrixWorld); m.castShadow = true; m.receiveShadow = true; g.add(m);
+    });
+    return g;
+  }
+
   groundY(x, z) {
     const hit = this.W.castRay(new this.R.Ray({ x, y: 30, z }, { x: 0, y: -1, z: 0 }), 60, true, this.R.QueryFilterFlags.EXCLUDE_SENSORS, undefined, undefined, undefined,
       (c) => c.userData?.kind !== 'player' && c.userData?.kind !== 'item' && c.userData?.kind !== 'item-held');
@@ -48,7 +62,8 @@ export class Gameplay {
 
   // ---------------------------------------------------------------- shards
   buildShards() {
-    const geo = new THREE.OctahedronGeometry(0.045, 0); geo.scale(0.75, 1.3, 0.75);
+    let geo = new THREE.OctahedronGeometry(0.045, 0); geo.scale(0.75, 1.3, 0.75);
+    { const sm = this.prop('shard').children[0]; if (sm) { geo = sm.geometry.clone().applyMatrix4(sm.matrix); geo.computeVertexNormals(); } }
     const spots = [];
     const onPath = [[0.2, 21], [-0.8, 18.5], [-2, 15.5], [-2.6, 12.5], [-2.2, 9], [-1.9, 6.5], [-2.1, 1.0], [-3.6, -3.5], [-6.8, -7.8], [2.2, -2.2], [6, -3.2], [10, -4]];
     onPath.forEach(([x, z]) => spots.push([x, null, z]));
@@ -103,25 +118,16 @@ export class Gameplay {
 
   // ---------------------------------------------------------------- crates / props
   makeCrate(x, z, size = 0.3) {
-    const g = new THREE.Group();
-    const s = size, t = s * 0.08;
-    const plank = new THREE.BoxGeometry(s, s / 3 - 0.004, t);
-    for (const face of [0, 1, 2, 3]) for (let k = 0; k < 3; k++) {
-      const m = new THREE.Mesh(plank, this.mats.wood);
-      const y = -s / 2 + s / 6 + k * s / 3;
-      m.position.set(0, y, s / 2 - t / 2); m.rotation.z = (rnd() - 0.5) * 0.02;
-      const holder = new THREE.Group(); holder.rotation.y = face * Math.PI / 2; holder.add(m); g.add(holder);
-    }
-    for (const yy of [-1, 1]) { const top = new THREE.Mesh(new THREE.BoxGeometry(s - 0.002, t, s - 0.002), this.mats.wood); top.position.y = yy * (s / 2 - t / 2); g.add(top); }
-    for (const cx of [-1, 1]) for (const cz of [-1, 1]) { const post = new THREE.Mesh(new THREE.BoxGeometry(t * 1.2, s + 0.004, t * 1.2), this.mats.rust); post.position.set(cx * (s / 2 - t * 0.4), 0, cz * (s / 2 - t * 0.4)); g.add(post); }
-    g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    const s = size;
+    const g = this.prop('crate'); g.scale.setScalar(s / 0.3); g.rotation.y = (rnd() - 0.5) * 0.1;
+    const outer = new THREE.Group(); outer.add(g);
     const y = this.groundY(x, z) + s / 2 + 0.02;
     const body = this.W.createRigidBody(this.R.RigidBodyDesc.dynamic().setTranslation(x, y, z).setLinearDamping(2.5).setAngularDamping(4).setCcdEnabled(true));
     body.setEnabledRotations(false, true, false, true);
     const col = this.W.createCollider(this.R.ColliderDesc.cuboid(s / 2, s / 2, s / 2).setMass(18).setFriction(0.7), body);
     col.userData = { kind: 'crate', surface: 'wood', weight: 18 };
-    this.scene.add(g);
-    const p = { kind: 'crate', body, col, mesh: g, size: s };
+    this.scene.add(outer);
+    const p = { kind: 'crate', body, col, mesh: outer, size: s };
     this.props.push(p);
     return p;
   }
@@ -135,20 +141,17 @@ export class Gameplay {
       const w = Math.max(v.size.x, v.size.z); r = 0.05 + rnd() * 0.02; mesh.scale.setScalar(r * 2 / w);
       desc = this.R.ColliderDesc.ball(r * 0.9); mass = 1.2;
     } else if (kind === 'ball') {
-      r = 0.075; mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 32, 16), this.mats.rubber);
+      r = 0.075; mesh = this.prop('ball', { ball: this.mats.rubber });
       desc = this.R.ColliderDesc.ball(r).setRestitution(0.65); mass = 0.25;
     } else if (kind === 'cell') {
-      r = 0.05; mesh = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.11, 20), this.mats.steel);
-      const glow = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.07, 20), this.mats.cellGlow);
-      const cap1 = new THREE.Mesh(new THREE.CylinderGeometry(0.043, 0.043, 0.015, 20), this.mats.paint); cap1.position.y = 0.05;
-      const cap2 = cap1.clone(); cap2.position.y = -0.05;
-      glow.scale.set(1.05, 1, 1.05);
-      mesh.add(body, glow, cap1, cap2);
+      r = 0.05; mesh = this.cellModel();
       const pl = new THREE.PointLight(0x8cff6a, 0.4, 1, 2); mesh.add(pl);
       desc = this.R.ColliderDesc.cylinder(0.055, 0.042); mass = 1;
     } else if (kind === 'pinecone') {
-      r = 0.035; mesh = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.07, 10, 4), new THREE.MeshStandardMaterial({ color: 0x5b3b22, roughness: 0.9 }));
+      r = 0.035;
+      const v = this.world.variants('pinecone_' + Math.floor(rnd() * 3))[0];
+      const pg = v.geo.clone(); pg.translate(0, -v.size.y / 2, 0);
+      mesh = new THREE.Mesh(pg, v.mat); mesh.scale.setScalar(0.075 / Math.max(v.size.x, v.size.y, v.size.z));
       desc = this.R.ColliderDesc.ball(r); mass = 0.2;
     }
     mesh.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
@@ -160,6 +163,10 @@ export class Gameplay {
     const p = { kind, body, col, mesh, r, carry: true };
     this.props.push(p);
     return p;
+  }
+
+  cellModel() {
+    return this.prop('cell', { core: this.mats.cellGlow, window: new THREE.MeshPhysicalMaterial({ color: 0xcfe9dc, roughness: 0.05, transmission: 0.0, transparent: true, opacity: 0.35, depthWrite: false }) });
   }
 
   buildProps() {
@@ -181,14 +188,17 @@ export class Gameplay {
     const gy = this.groundY(gateC.x, gateC.z);
     const width = len - 2.0, height = 0.95;
     const gate = new THREE.Group();
-    const bar = new THREE.CylinderGeometry(0.012, 0.012, height, 8);
-    const nb = Math.floor(width / 0.075);
-    for (let i = 0; i <= nb; i++) {
-      const m = new THREE.Mesh(bar, this.mats.rust); m.position.set(-width / 2 + i * width / nb, height / 2, 0); gate.add(m);
-      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.05, 6), this.mats.rust); tip.position.set(m.position.x, height + 0.025, 0); gate.add(tip);
-    }
-    for (const yy of [0.12, height * 0.55, height - 0.06]) {
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(width + 0.04, 0.025, 0.02), this.mats.rust); rail.position.y = yy; gate.add(rail);
+    const leafW = width / 2 - 0.02, leaves = [];
+    for (const sd of [-1, 1]) {
+      const pil = this.prop('gate_pillar'); pil.position.set(sd * (width / 2 + 0.19), -0.04, 0); pil.rotation.y = sd > 0 ? Math.PI : 0; gate.add(pil);
+      // stones stacked from the pillar up against the boulder so the gate is part of a wall
+      for (let k = 0; k < 2; k++) {
+        const st = this.prop('gate_pillar'); st.position.set(sd * (width / 2 + 0.55 + k * 0.33), -0.5 - k * 0.25, (rnd() - 0.5) * 0.06);
+        st.rotation.y = rnd() * 0.3; st.scale.set(1.0, 0.9, 0.95); gate.add(st);
+      }
+      const hinge = new THREE.Group(); hinge.position.set(sd * width / 2, 0, 0); gate.add(hinge);
+      const leaf = this.prop('gate_leaf'); leaf.scale.set(leafW * -sd, height / 0.95, 1); hinge.add(leaf);
+      hinge.userData.sd = sd; leaves.push(hinge);
     }
     gate.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     gate.position.set(gateC.x, gy - 0.05, gateC.z); gate.rotation.y = -Math.atan2(dir.z, dir.x);
@@ -203,15 +213,24 @@ export class Gameplay {
       const c = this.W.createCollider(this.R.ColliderDesc.cuboid(0.6, 1.2, 0.08).setTranslation(p.x, gy + 1.0, p.z).setRotation(q));
       c.userData = { kind: 'static', surface: 'rock' };
     }
-    this.gate = { mesh: gate, body, y0: gy, open: this.save.gateOpen ? 1 : 0, height, center: gateC };
+    this.gate = { mesh: gate, leaves, body, y0: gy, open: this.save.gateOpen ? 1 : 0, height, center: gateC };
+    this.buildGladeWall(a, b);
     // pressure plate on the near (south-east) side
     const nrm = new THREE.Vector3(-dir.z, 0, dir.x); if (nrm.z < 0) nrm.negate();
     const pp = gateC.clone().addScaledVector(nrm, 2.2).addScaledVector(dir, 0.6);
     const py = this.groundY(pp.x, pp.z);
     const plate = new THREE.Group();
-    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.37, 0.06, 32), this.mats.stone); base.position.y = 0.0; plate.add(base);
-    const top = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.04, 32), this.mats.paint); top.position.y = 0.04; plate.add(top);
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.01, 8, 40), this.mats.cellGlow.clone()); ring.rotation.x = Math.PI / 2; ring.position.y = 0.05; plate.add(ring);
+    // pressure pad in the robots' design language (white painted panels, graphite housing, rubber treads, a light ring)
+    const ringM = new THREE.MeshStandardMaterial({ color: 0x0a2a33, emissive: 0x4fe8ff, emissiveIntensity: 0.3, roughness: 0.3 });
+    const padM = { shell: new THREE.MeshPhysicalMaterial({ color: 0xc9c4b9, roughness: 0.48, metalness: 0.04, clearcoat: 0.15, clearcoatRoughness: 0.35, vertexColors: true }),
+      dark: new THREE.MeshStandardMaterial({ color: 0x2c3036, roughness: 0.5, metalness: 0.9, vertexColors: true }),
+      rubber: new THREE.MeshStandardMaterial({ color: 0x17191c, roughness: 0.88, vertexColors: true }), eye: ringM };
+    const byName = (g) => { g.traverse((o) => { if (o.isMesh) { const k = (o.material.name || '').split('.')[0]; if (padM[k]) o.material = padM[k]; } }); return g; };
+    const base = byName(this.prop('plate_sf_base')); base.position.y = 0.035; plate.add(base);
+    const top = new THREE.Group(); top.add(byName(this.prop('plate_sf_top'))); top.position.y = 0.04; plate.add(top);
+    top.children[0].position.y = 0.035 - 0.04 + 0.05;
+    plate.rotation.y = gate.rotation.y + Math.PI / 2;
+    const ring = { material: ringM };
     plate.position.set(pp.x, py, pp.z); plate.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = true; } });
     this.scene.add(plate);
     const pc = this.W.createCollider(this.R.ColliderDesc.cylinder(0.03, 0.28).setTranslation(pp.x, py + 0.035, pp.z));
@@ -220,6 +239,29 @@ export class Gameplay {
     // crate placed a few metres away
     this.gateCrate = this.makeCrate(pp.x + nrm.x * 1.6 + dir.x * 1.2, pp.z + nrm.z * 1.6 + dir.z * 1.2);
     // a little sign of rust flakes... and the reward behind the gate (glade)
+  }
+
+  // an old dry-stone wall around the glade, from one gate boulder round to the other: the gate is the only way in
+  buildGladeWall(a, b) {
+    const pts = [[a.x, a.z], [-20, -13.6], [-25, -16.4], [-27.4, -22], [-25.4, -28], [-19.5, -30.4], [-13.6, -28.4], [-10.6, -23.6], [-9.4, -19], [b.x, b.z]];
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const [x0, z0] = pts[i], [x1, z1] = pts[i + 1];
+      const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(L / 1.15)), yaw = -Math.atan2(z1 - z0, x1 - x0);
+      // start/end inside the boulders so no gap is left there
+      const f0 = i === 0 ? 0.12 : 0, f1 = i === pts.length - 2 ? 0.88 : 1;
+      for (let k = 0; k < n; k++) {
+        const t0 = f0 + (f1 - f0) * k / n, t1 = f0 + (f1 - f0) * (k + 1) / n;
+        const xa = x0 + (x1 - x0) * t0, za = z0 + (z1 - z0) * t0, xb = x0 + (x1 - x0) * t1, zb = z0 + (z1 - z0) * t1;
+        const cx = (xa + xb) / 2, cz = (za + zb) / 2, len = Math.hypot(xb - xa, zb - za);
+        const y = Math.min(this.groundY(xa, za), this.groundY(xb, zb), this.groundY(cx, cz)) - 0.06;
+        const w = this.prop(rnd() < 0.5 ? 'wall_0' : 'wall_1');
+        w.position.set(cx, y, cz); w.rotation.y = yaw + (rnd() - 0.5) * 0.04; w.scale.set(len / 1.2 * 1.04, 0.95 + rnd() * 0.12, 1);
+        this.scene.add(w);
+        const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+        const c = this.W.createCollider(this.R.ColliderDesc.cuboid(len / 2 + 0.05, 0.62, 0.2).setTranslation(cx, y + 0.62, cz).setRotation(q));
+        c.userData = { kind: 'static', surface: 'rock' };
+      }
+    }
   }
 
   plateLoad() {
@@ -237,8 +279,9 @@ export class Gameplay {
     this.booster = null;
     if (!this.save.booster) {
       const g = new THREE.Group();
-      const core = new THREE.Mesh(new THREE.TorusKnotGeometry(0.035, 0.012, 64, 8), new THREE.MeshStandardMaterial({ color: 0x103040, emissive: 0x47e3ff, emissiveIntensity: 2.5, metalness: 0.4, roughness: 0.3 }));
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.006, 8, 40), this.mats.steel);
+      const core = this.prop('booster', { core: new THREE.MeshStandardMaterial({ color: 0x103040, emissive: 0x47e3ff, emissiveIntensity: 2.5, metalness: 0.4, roughness: 0.3 }) });
+      core.scale.setScalar(1.2);
+      const ring = new THREE.Group();
       g.add(core, ring); g.position.set(s.x, s.top + 0.18, s.z);
       const l = new THREE.PointLight(0x47e3ff, 0.8, 2.5, 2); g.add(l);
       this.scene.add(g); this.booster = { mesh: g, core, ring };
@@ -271,7 +314,7 @@ export class Gameplay {
     const pondDir = Math.atan2(-7 - OUTCROP.z, 17.5 - OUTCROP.x);
     const ang = (c, t) => Math.abs(Math.atan2(Math.sin(c.a - t), Math.cos(c.a - t)));
     const liftC = cands.filter((c) => ang(c, pondDir - 0.5) < 0.9 && !this.T.isWater(c.x, c.z) && c.H - c.g > 2).sort((p, q) => q.H - p.H)[0] || cands.sort((p, q) => q.H - p.H)[0];
-    const vineC = cands.filter((c) => ang(c, pondDir + Math.PI * 0.6) < 1.0 && c.H - c.g > 1.5).sort((p, q) => q.H - p.H)[0];
+    const vineC = cands.filter((c) => ang(c, pondDir + Math.PI * 0.6) < 1.0 && c.H - c.g > 1.5 && (!liftC || Math.hypot(c.x - liftC.x, c.z - liftC.z) > 4.5)).sort((p, q) => q.H - p.H)[0];
     this.summit = liftC ? new THREE.Vector3(liftC.xi, liftC.H, liftC.zi) : new THREE.Vector3(OUTCROP.x, top, OUTCROP.z);
     if (liftC) this.buildLift(liftC);
     if (vineC) this.buildVines(vineC);
@@ -282,25 +325,34 @@ export class Gameplay {
     const px = c.x + out.x * 0.25, pz = c.z + out.y * 0.25;
     const y0 = this.groundY(px, pz) + 0.02, y1 = c.H + 0.02;
     const g = new THREE.Group();
-    const deck = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.7), this.mats.paint); g.add(deck);
-    for (let i = -2; i <= 2; i++) { const s = new THREE.Mesh(new THREE.BoxGeometry(0.66, 0.008, 0.03), this.mats.steel); s.position.set(0, 0.03, i * 0.13); g.add(s); }
-    const rail = new THREE.Mesh(new THREE.TorusGeometry(0.33, 0.01, 6, 4), this.mats.rust); rail.rotation.x = Math.PI / 2; rail.rotation.z = Math.PI / 4; rail.scale.set(1.35, 1.35, 1); rail.position.y = 0.3; g.add(rail);
+    const deck = this.prop('lift_deck'); deck.rotation.y = Math.atan2(out.x, out.y); g.add(deck);
     g.position.set(px, y0, pz); g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
     this.scene.add(g);
     // tower rails (two steel columns)
     const towerH = y1 - y0 + 0.6;
     const side = new THREE.Vector2(-out.y, out.x);
     for (const s of [-1, 1]) {
-      const col = new THREE.Mesh(new THREE.BoxGeometry(0.06, towerH, 0.06), this.mats.rust);
-      col.position.set(px + side.x * s * 0.42, y0 + towerH / 2 - 0.1, pz + side.y * s * 0.42); col.castShadow = true; this.scene.add(col);
+      const col = this.prop('ibeam'); col.scale.set(1, towerH, 1); col.rotation.y = -Math.atan2(side.y, side.x);
+      col.position.set(px + side.x * s * 0.42, y0 - 0.1, pz + side.y * s * 0.42); this.scene.add(col);
+      col.position.y += towerH / 2;   // collider below uses the centre
       const cc = this.W.createCollider(this.R.ColliderDesc.cuboid(0.03, towerH / 2, 0.03).setTranslation(col.position.x, col.position.y, col.position.z)); cc.userData = { kind: 'static', surface: 'metal' };
+      col.position.y -= towerH / 2;
     }
-    const beam = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.06), this.mats.rust); beam.position.set(px, y0 + towerH - 0.1, pz); beam.rotation.y = -Math.atan2(side.y, side.x); this.scene.add(beam);
+    const head = this.prop('lift_head'); head.rotation.y = Math.atan2(-side.y, side.x);
+    const headY = y0 + towerH - 0.14; head.position.set(px, headY, pz); this.scene.add(head);
+    // footings under the columns
+    for (const s of [-1, 1]) { const ft = this.prop('gate_pillar'); ft.scale.set(0.45, 0.12, 0.45); ft.position.set(px + side.x * s * 0.42, y0 - 0.12, pz + side.y * s * 0.42); this.scene.add(ft); }
+    const steel = new THREE.MeshStandardMaterial({ color: 0x3a3d40, roughness: 0.45, metalness: 0.9 });
+    const cable = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 1, 6), steel); cable.castShadow = true; this.scene.add(cable);
+    const cwCable = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.005, 1, 6), steel); cwCable.castShadow = true; this.scene.add(cwCable);
+    const counter = this.prop('lift_counter'); counter.rotation.y = head.rotation.y; this.scene.add(counter);
+    const cwX = px - side.x * 0.48, cwZ = pz - side.y * 0.48;
     // socket box at the base
     const sock = new THREE.Group();
-    const box = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.22, 0.12), this.mats.paint); sock.add(box);
-    const slot = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.046, 0.02, 16), this.mats.steel); slot.position.y = 0.11; sock.add(slot);
-    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.015, 12, 8), new THREE.MeshStandardMaterial({ color: 0x300000, emissive: 0xff3a2a, emissiveIntensity: 2 })); lamp.position.set(0, 0.05, 0.062); sock.add(lamp);
+    const lampM = new THREE.MeshStandardMaterial({ color: 0x300000, emissive: 0xff3a2a, emissiveIntensity: 2, roughness: 0.2 });
+    const sbox = this.prop('socket', { lamp: lampM }); sock.add(sbox);
+    sbox.rotation.y = Math.atan2(out.x, out.y);
+    const lamp = { material: lampM };
     const sp = new THREE.Vector3(px + out.x * 0.62 + side.x * 0.45, 0, pz + out.y * 0.62 + side.y * 0.45);
     sock.position.set(sp.x, this.groundY(sp.x, sp.z) + 0.11, sp.z); sock.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     this.scene.add(sock);
@@ -308,7 +360,8 @@ export class Gameplay {
     const body = this.W.createRigidBody(this.R.RigidBodyDesc.kinematicPositionBased().setTranslation(px, y0 - 0.025, pz));
     body.userData = { platform: true };
     const col = this.W.createCollider(this.R.ColliderDesc.cuboid(0.35, 0.025, 0.35), body); col.userData = { kind: 'lift', surface: 'metal' };
-    this.lift = { mesh: g, body, y0, y1, t: 0, dir: 0, powered: this.save.liftPowered, socket: sock, lamp, socketPos: sock.position.clone(), wait: 0 };
+    this.lift = { mesh: g, body, y0, y1, t: 0, dir: 0, powered: this.save.liftPowered, socket: sock, lamp, socketPos: sock.position.clone(), wait: 0,
+      cable, cwCable, counter, headY, cw: new THREE.Vector2(cwX, cwZ) };
     if (this.lift.powered) this.powerLift(true);
     this.interactables.push({ pos: this.lift.socketPos, r: 0.45, label: () => (this.player.carry?.kind === 'cell' ? '전력 셀 끼우기' : (this.lift.powered ? '승강기 작동' : '전원 장치 (전력 셀 필요)')), act: () => this.useSocket() });
   }
@@ -317,10 +370,7 @@ export class Gameplay {
     const L = this.lift; L.powered = true; this.save.liftPowered = true;
     L.lamp.material.emissive.set(0x5bff6a);
     if (!L.cellMesh) {
-      const cell = new THREE.Group();
-      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.11, 20), this.mats.steel);
-      const gl = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.07, 20), this.mats.cellGlow); gl.scale.set(1.05, 1, 1.05);
-      cell.add(b, gl); cell.position.y = 0.15; L.socket.add(cell); L.cellMesh = cell;
+      const cell = this.cellModel(); cell.position.y = 0.16; L.socket.add(cell); L.cellMesh = cell;
     }
     if (!silent) { this.audio.play('power'); this.ui.toast('승강기에 전원이 들어왔어요!'); this.player.emit('solved'); this.persist(); }
   }
@@ -510,7 +560,7 @@ export class Gameplay {
     for (const s of spots) {
       const pos = s.at ? s.at.clone() : new THREE.Vector3(s.x, this.groundY(s.x, s.z), s.z);
       if (s.at) pos.y = this.groundY(pos.x + 0.001, pos.z) <= pos.y + 0.5 ? pos.y : pos.y;
-      const mesh = makeCompanion(s.kind, this.mats);
+      const mesh = makeCompanion(s.kind, this.mats, this.ctx.assets.models);
       mesh.position.copy(pos); mesh.position.y += s.kind === 2 ? 0.25 : 0;
       this.scene.add(mesh);
       const found = this.save.companions.includes(s.id);
@@ -533,11 +583,11 @@ export class Gameplay {
     const fence = new THREE.Group();
     for (let i = -14; i <= 14; i++) {
       if (i === 0 || i === 1) continue; // a gap where a picket is missing
-      const p = new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.05, 0.025), this.mats.wood);
+      const p = this.prop('fence_picket');
       const x = 0.5 + i * 0.14;
-      p.position.set(x, this.groundY(x, z) + 0.5, z); p.rotation.z = (rnd() - 0.5) * 0.05; p.castShadow = true; fence.add(p);
+      p.position.set(x, this.groundY(x, z) - 0.03, z); p.rotation.set(0, (rnd() - 0.5) * 0.06, (rnd() - 0.5) * 0.05); p.scale.y = 0.94 + rnd() * 0.1; fence.add(p);
     }
-    for (const yy of [0.25, 0.75]) { const r = new THREE.Mesh(new THREE.BoxGeometry(4.1, 0.06, 0.03), this.mats.wood); r.position.set(0.5, y0 + yy, z - 0.03); r.castShadow = true; fence.add(r); }
+    for (const yy of [0.25, 0.75]) { const r = this.prop('fence_rail'); r.position.set(0.5, y0 + yy, z + 0.027); r.scale.x = 4.1; r.rotation.z = (rnd() - 0.5) * 0.01; fence.add(r); }
     this.scene.add(fence);
     const c = this.W.createCollider(this.R.ColliderDesc.cuboid(2.1, 1.0, 0.05).setTranslation(0.5, y0 + 0.5, z - 0.25)); c.userData = { kind: 'static', surface: 'wood' };
     this.edgeZ = z;
@@ -584,17 +634,19 @@ export class Gameplay {
     const press = clamp(load / 15, 0, 1);
     this.plate.press = damp(this.plate.press, press, 10, dt);
     this.plate.top.position.y = 0.04 - this.plate.press * 0.025;
-    this.plate.ring.material.emissiveIntensity = 0.2 + this.plate.press * 2.5;
+    this.plate.ring.material.emissiveIntensity = 0.3 + this.plate.press * 3.0;
     if (!this.save.gateOpen && load >= 15) { this.save.gateOpen = true; this.audio.play('gate'); this.ui.toast('철컥— 녹슨 문이 열렸어요!'); P.emit('solved'); this.persist(); }
     if (load > 0 && load < 15 && !this.save.gateOpen && !this.plateHintShown) { this.plateHintShown = true; this.ui.toast('발판이 살짝 눌렸지만… 더 무거운 게 필요해 보여요.'); P.emit('worried'); }
     const G = this.gate;
     const tgt = this.save.gateOpen ? 1 : press * 0.06;
     G.open = damp(G.open, tgt, this.save.gateOpen ? 1.2 : 6, dt);
-    G.mesh.position.y = G.y0 - 0.05 + G.open * (G.height + 0.05);
+    // the leaves swing open on their hinges (away from the plate side); a pressed plate makes them rattle ajar
+    G.mesh.position.y = G.y0 - 0.02;
+    for (const h of G.leaves) h.rotation.y = h.userData.sd * G.open * 1.75;
     G.body.setNextKinematicTranslation({ x: G.center.x, y: G.y0 + G.height / 2 + G.open * (G.height + 0.7), z: G.center.z });
     // booster pickup
     if (this.booster) {
-      const b = this.booster; b.core.rotation.y = time * 2; b.ring.rotation.x = time; b.mesh.position.y += Math.sin(time * 2) * 0.0005;
+      const b = this.booster; b.core.rotation.y = time * 0.8; b.core.rotation.z = Math.sin(time * 1.3) * 0.15; b.mesh.position.y += Math.sin(time * 2) * 0.0005;
       if (b.mesh.position.distanceTo(new THREE.Vector3(P.pos.x, P.pos.y + 0.2, P.pos.z)) < 0.3) {
         this.scene.remove(b.mesh); this.booster = null; this.save.booster = true; P.abilities.booster = true;
         this.audio.play('ability'); this.ui.ability('호버 부스터 획득!', '공중에서 점프를 한 번 더 누르면 2단 점프, 계속 누르고 있으면 호버링해요.');
@@ -617,6 +669,14 @@ export class Gameplay {
       const y = L.y0 + (L.y1 - L.y0) * e;
       L.body.setNextKinematicTranslation({ x: L.mesh.position.x, y: y - 0.025, z: L.mesh.position.z });
       L.mesh.position.y = y;
+      // hoist rope from the sheave to the bridle eye; the counterweight rises as the deck goes down
+      {
+        const top = L.headY - 0.18, eye = y + 0.64, m = L.mesh.position;
+        L.cable.scale.y = Math.max(0.01, top - eye); L.cable.position.set(m.x, (top + eye) / 2, m.z);
+        const cy = Math.min(top - 0.3, L.y0 + 0.35 + (L.y1 - y));
+        L.counter.position.set(L.cw.x, cy, L.cw.y);
+        L.cwCable.scale.y = Math.max(0.01, L.headY - cy); L.cwCable.position.set(L.cw.x, (L.headY + cy) / 2, L.cw.y);
+      }
       this.audio.setLoop('lift', L.dir !== 0 ? 0.5 : 0, L.mesh.position);
     }
     // companions idle
@@ -668,35 +728,31 @@ export class Gameplay {
 }
 
 // ---------------------------------------------------------------- companion robot designs (original)
-function makeCompanion(kind, mats) {
-  const g = new THREE.Group();
-  const shell = new THREE.MeshPhysicalMaterial({ color: [0xe7b04a, 0x8fa7b5, 0xe8e1d5][kind], roughness: 0.4, metalness: 0.1, clearcoat: 0.3 });
-  const dark = new THREE.MeshStandardMaterial({ color: 0x23272d, roughness: 0.45, metalness: 0.9 });
+function makeCompanion(kind, mats, models) {
+  // modelled in Blender (blender/build_companions.py): materials are chosen by the model's material names
+  const shell = new THREE.MeshPhysicalMaterial({ color: [0xd9a04a, 0x6f8797, 0xe4ded2][kind], roughness: 0.42, metalness: 0.05, clearcoat: 0.25, clearcoatRoughness: 0.35, vertexColors: true });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x24282e, roughness: 0.42, metalness: 0.85, vertexColors: true });
+  const rubber = new THREE.MeshStandardMaterial({ color: 0x17191b, roughness: 0.9, metalness: 0, vertexColors: true });
+  const glass = new THREE.MeshPhysicalMaterial({ color: 0x0b0f12, roughness: 0.04, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.02 });
   const eyeM = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: [0xffb347, 0x9effc0, 0xff7ad9][kind], emissiveIntensity: 2.5 });
-  if (kind === 0) { // Toto: barrel body on a single wheel, one big camera eye
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.12, 24), shell); body.position.y = 0.11; g.add(body);
-    const wheel = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.014, 10, 20), dark); wheel.rotation.y = Math.PI / 2; wheel.position.y = 0.04; g.add(wheel);
-    const eye = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.02, 20), dark); eye.rotation.x = Math.PI / 2; eye.position.set(0, 0.13, 0.065); g.add(eye);
-    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.018, 20), eyeM); lens.position.set(0, 0.13, 0.076); g.add(lens);
-    g.userData.eye = lens;
-  } else if (kind === 1) { // Bori: boxy lantern bot with two slot eyes and a handle
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.1), shell); body.position.y = 0.1; g.add(body);
-    for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.008, 0.005), eyeM); e.position.set(s * 0.025, 0.115, 0.052); g.add(e); }
-    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.005, 6, 16, Math.PI), dark); handle.position.y = 0.16; g.add(handle);
-    for (const s of [-1, 1]) { const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 0.012, 0.05, 8), dark); leg.position.set(s * 0.035, 0.025, 0); g.add(leg); }
-    const lamp = new THREE.PointLight(0x9effc0, 0.6, 1.6, 2); lamp.position.y = 0.1; g.add(lamp);
-    g.userData.eye = eyeM;
-  } else { // Mina: little hovering drone with two rotors
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.055, 24, 16), shell); body.scale.y = 0.75; g.add(body);
-    const visor = new THREE.Mesh(new THREE.SphereGeometry(0.04, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2.5), dark); visor.rotation.x = Math.PI / 2; visor.position.z = 0.03; g.add(visor);
-    for (const s of [-1, 1]) { const e = new THREE.Mesh(new THREE.CircleGeometry(0.008, 12), eyeM); e.position.set(s * 0.014, 0.004, 0.066); g.add(e); }
-    g.userData.rotors = [];
-    for (const s of [-1, 1]) {
-      const arm = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.006, 0.012), dark); arm.position.set(s * 0.07, 0.02, 0); g.add(arm);
-      const rotor = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.002, 0.01), dark); rotor.position.set(s * 0.1, 0.03, 0); g.add(rotor); g.userData.rotors.push(rotor);
-    }
+  const byMat = { shell, dark, rubber, glass, eye: eyeM };
+  const g = new THREE.Group();
+  const src = models['comp_' + ['toto', 'bori', 'mina'][kind]];
+  g.userData.rotors = []; g.userData.eye = eyeM;
+  src.scene.updateMatrixWorld(true);
+  for (const node of src.scene.children) {
+    const holder = new THREE.Group(); holder.position.copy(node.position); holder.quaternion.copy(node.quaternion); g.add(holder);
+    node.traverse((o) => {
+      if (!o.isMesh) return;
+      const base = (o.material.name || '').split('.')[0];
+      const m = new THREE.Mesh(o.geometry, byMat[base] || dark);
+      if (o !== node) { m.position.copy(o.position); m.quaternion.copy(o.quaternion); }
+      m.castShadow = true; m.receiveShadow = true; holder.add(m);
+    });
+    if (node.name.startsWith('mina_rotor')) g.userData.rotors.push(holder);
+    if (node.name.startsWith('toto_wheel')) g.userData.wheel = holder;
   }
-  g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  if (kind === 1) { const lamp = new THREE.PointLight(0x9effc0, 0.6, 1.6, 2); lamp.position.y = 0.1; g.add(lamp); }
   return g;
 }
 function animateCompanion(c, dt, P, camera) {
@@ -706,6 +762,7 @@ function animateCompanion(c, dt, P, camera) {
   const want = near ? Math.atan2(toP.x, toP.z) : Math.sin(t * 0.3) * 1.2;
   m.rotation.y += (((want - m.rotation.y + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI) * Math.min(1, dt * 4);
   if (c.kind === 2) { m.position.y = c.pos.y + 0.25 + Math.sin(t * 2) * 0.03; for (const r of m.userData.rotors) r.rotation.y += dt * 40; }
+  if (m.userData.wheel && c.found && near) m.userData.wheel.rotation.x += dt * 6;
   else if (c.found) m.position.y = c.pos.y + Math.abs(Math.sin(t * 5)) * 0.015 * (near ? 1 : 0);
   if (!c.found) m.rotation.z = Math.sin(t * 1.3) * 0.05; else m.rotation.z = 0;
 }
