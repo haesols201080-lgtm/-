@@ -64,7 +64,7 @@ export class Quests {
     this.progKey = progKey;
     this.ui.setQuest({ title: q.title, text: q.text(this.g), prog: pr, step: QUESTS.indexOf(q) + 1, total: QUESTS.length }, isNew);
     // Nuri thinks out loud as each new goal begins (after the completion banner has had its moment)
-    if (isNew && LOG[q.id]) setTimeout(() => { if (!this.ui.dlg) this.ui.bubble('누리', LOG[q.id]); }, 2600);
+    if (isNew && LOG[q.id]) { const L = (this.g.save.logs = this.g.save.logs || []); if (!L.includes(q.id)) L.push(q.id); setTimeout(() => { if (!this.ui.dlg) this.ui.bubble('누리', LOG[q.id]); }, 2600); }
     this.shownId = q.id;
   }
   update(dt, playerPos, playing) {

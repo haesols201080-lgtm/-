@@ -19,6 +19,9 @@ import { Minimap } from './minimap.js';
 import { Trials } from './trials.js';
 import { INTRO, LOG, CHAPTER, MEMORY } from './story.js';
 import { Director } from './cutscene.js';
+import { Relics, RELICS } from './relics.js';
+import { Squad } from './squad.js';
+import { MEMORY as MEM } from './story.js';
 import { Creatures } from './creatures.js';
 import { FX } from './fx.js';
 import { Audio } from './audio.js';
@@ -179,6 +182,39 @@ async function boot() {
   gameplay.onBooster = () => CS.booster();
   quests.onCharged = () => CS.ending(() => ui.story(CHAPTER, () => gameplay.openFence()));
   quests.mapOpen = () => minimap.open;
+  const relics = new Relics({ ctx, gameplay, world, player, ui, audio, fx });
+  const squad = new Squad({ ctx, gameplay, player, ui, audio, fx, world });
+  gameplay.extraPlateWeight = (p) => squad.plateWeight(p);
+  // dark crystals: under the big roots of the hero trees, and at the back of the cave — only Bori's light shows them
+  {
+    const ds = [];
+    world.treeSpots.filter((t) => t.hero).slice(0, 5).forEach((t, i) => { const a = i * 2.3 + 0.7, x = t.x + Math.cos(a) * 1.15, z = t.z + Math.sin(a) * 1.15; ds.push([x, gameplay.groundY(x, z) + 0.12, z]); });
+    if (gameplay.caveCenter) for (const [dx, dz] of [[0.5, 0.3], [-0.4, -0.5]]) { const x = gameplay.caveCenter.x + dx, z = gameplay.caveCenter.z + dz; ds.push([x, gameplay.groundY(x, z) + 0.12, z]); }
+    squad.addDark(ds);
+  }
+  // Mina's flights: to any discovered place (fade, fly, land with the squad)
+  gameplay.onMinaFlight = () => {
+    const opts = REGIONS.filter((r) => gameplay.save.regions.includes(r.id) && r.id !== 'summit').map((r) => [r.name, r]);
+    ui.choose('미나 · 어디로 날아갈까?', opts, (r) => {
+      if (!r) return;
+      audio.play('djump', { pitch: 0.7 });
+      ui.fadeOut(900, () => {
+        const y = gameplay.groundY(r.x, r.z); player.teleport(r.x, y + 0.05, r.z); player.vel.set(0, 0, 0);
+        for (const c of squad.members()) { c.state = 'follow'; c.mesh.position.set(r.x + 0.4, y, r.z + 0.4); }
+        squad.trail.length = 0; ui.discover(r.name);
+      });
+    });
+  };
+  ui.on('journal', () => {
+    const sv = gameplay.save;
+    ui.openJournal({
+      relics: RELICS.map((r) => sv.relics.includes(r.id) ? { title: r.name, text: r.desc } : { title: '???', text: '아직 발견하지 못한 유물', unknown: true }),
+      logs: [...(sv.logs || []).map((id) => ({ title: '', text: LOG[id] })), ...(sv.memories || []).map((n) => ({ title: '복구된 기록', text: MEM[n].slice(1).join(' ') }))],
+      stats: [{ title: `동력 결정 ${sv.shards.length} / ${gameplay.totalShards}` }, { title: `거인의 유물 ${sv.relics.length} / ${relics.items.length}` },
+        { title: `찾은 동료 ${sv.companions.length} / 3` }, { title: `탐험한 숲 ${Math.round(minimap.explored() * 100)}%` },
+        ...Object.entries(sv.trials || {}).map(([k, v]) => ({ title: `${k === 'trail' ? '숲길 질주' : '바람 타기'} 최고 기록 ${v.t.toFixed(2)}초` }))],
+    });
+  });
   gameplay.onMemory = (n) => { if (!director.active) ui.story(MEMORY[n], null, { memory: true, hold: 3800 }); };
   input.on('map', () => { if (G.mode === 'play' && !G.paused) minimap.show(!minimap.open); });
   // cut-out foliage (needles, leaves, grass, ferns) resolves its edges with MSAA alpha-to-coverage: smooth, thin
@@ -450,7 +486,10 @@ async function boot() {
       }
       if (ui.dlg) { if (input.consume('interact') || input.consume('jump')) ui.dlg.next(); }
       else if (G.wokeUp) {
-        if (input.consume('interact')) gameplay.interact(player);
+        if (input.consume('interact')) {
+          if (squad.holding) squad.throwHeld();
+          else { const fr = !player.carry && squad.near(); if (fr) squad.pickUp(fr); else gameplay.interact(player); }
+        }
         if (input.consume('emote')) { player.playAction('wave', 1.2); setExpr('smile', 1.4); moodBeep('happy'); }
       }
       acc += dt;
@@ -467,6 +506,8 @@ async function boot() {
       quests.update(dt, player.pos, G.wokeUp && !orbit.cine && !director.active);
       minimap.update(dt);
       trials.update(dt, G.time);
+      relics.update(dt, G.time);
+      if (!director.active) squad.update(dt, G.time);
       handleEvents();
       edgeCheck();
       baseExpression(dt);
@@ -615,7 +656,7 @@ async function boot() {
   frame();
   // debug / test hooks
   window.__RAPIER = RAPIER; window.__THREE = THREE;
-  window.__game = { WET, quests, minimap, trials, director, CS, player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, prints, marks, creatures, get dof() { return dof; }, get rays() { return rays; } };
+  window.__game = { WET, quests, minimap, trials, director, CS, relics, squad, player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, prints, marks, creatures, get dof() { return dof; }, get rays() { return rays; } };
 }
 
 function makeRain(scene) {

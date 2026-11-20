@@ -227,3 +227,31 @@ body.cutscene #dlg { bottom: calc(11vh + 14px); }
 #story.memory::before { content: '기억 조각'; position: absolute; top: 18%; font-size: 12px; letter-spacing: .6em; color: #e9c27a; }
 
 #quest.tucked { opacity: 0; transform: translateX(-14px); pointer-events: none; }
+
+/* ---- relics & journal ---- */
+#relic { position: absolute; left: calc(18px + var(--safe-l)); bottom: calc(26% + var(--safe-b)); width: min(360px, 74vw); padding: 14px 18px 14px;
+  background: linear-gradient(180deg, rgba(40, 32, 20, .88), rgba(22, 18, 12, .9)); border: 1px solid rgba(233, 194, 122, .45); border-radius: 14px;
+  backdrop-filter: blur(8px); animation: relicin 8s ease forwards; color: #f3e6c9; }
+@keyframes relicin { 0% { opacity: 0; transform: translateX(-16px); } 6%, 88% { opacity: 1; transform: none; } 100% { opacity: 0; } }
+#relic small { letter-spacing: .4em; font-size: 10px; color: #e9c27a; }
+#relic b { display: block; font-size: 17px; margin: 4px 0 6px; }
+#relic p { margin: 0; font-size: 13px; line-height: 1.6; color: #e6d8b8; }
+#relic em { display: block; margin-top: 8px; font-style: normal; font-size: 11px; color: #e9c27a; }
+#journal { background: rgba(4, 8, 6, .55); z-index: 31; }
+.jr-tabs { display: flex; gap: 6px; margin: 10px 0 14px; } .jr-tabs button { padding: 7px 14px; font-size: 13px; } .jr-tabs button.on { background: rgba(95, 230, 255, .18); border-color: rgba(95, 230, 255, .5); }
+#jr-body { display: grid; gap: 10px; max-height: 56vh; overflow: auto; }
+.jr-item { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: rgba(255, 255, 255, .03); }
+.jr-item b { font-size: 14px; } .jr-item p { margin: 4px 0 0; font-size: 13px; line-height: 1.6; color: var(--dim); }
+.jr-item.unknown b { color: rgba(244, 241, 232, .35); }
+/* ---- squad portraits ---- */
+#squad { position: absolute; left: calc(14px + var(--safe-l)); top: 42%; display: flex; flex-direction: column; gap: 8px; pointer-events: auto; z-index: 13; }
+#squad button { width: 46px; height: 46px; padding: 0; border-radius: 14px; position: relative; display: grid; place-items: center; font-size: 11px; font-weight: 700;
+  background: rgba(12, 18, 16, .55); border: 1.5px solid rgba(255, 255, 255, .22); backdrop-filter: blur(6px); }
+#squad button i { width: 22px; height: 18px; border-radius: 5px; display: block; }
+#squad button span { position: absolute; bottom: -1px; font-size: 9px; color: var(--dim); }
+#squad button.on { border-color: var(--accent); box-shadow: 0 0 14px rgba(95, 230, 255, .45); }
+#squad button.cool::after { content: ''; position: absolute; inset: 0; border-radius: 14px; background: rgba(0, 0, 0, .45); }
+body.cutscene #squad, body.menu-open #squad { display: none; }
+
+#choice { background: rgba(4, 8, 6, .5); z-index: 33; }
+#fader { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .6s; z-index: 39; }

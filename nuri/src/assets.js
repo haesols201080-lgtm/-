@@ -174,7 +174,8 @@ export class Assets {
   async loadAll() {
     const T = this.tex, tier = this.tier, suf = this.suffix(tier.texSize);
     const modelJobs = [['nuri'], ['outcrop'], ['log_hollow'],
-      ...PH_MODELS.map((m) => [`ph/${m}`, m]), ...DEBRIS.map((m) => [`debris/${m}`, m]), ...TREES.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...SAPLINGS.map((t) => [`trees/${t}`, t]), ...SNAGS.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...['boulder_01', 'rock_moss_set_01', 'rock_moss_set_02', 'rock_07', 'rock_09'].map((k) => [`rocks2/${k}`, 'rk_' + k]), ['creatures/squirrel', 'squirrel'], ['creatures/robin', 'robin'], ...PROPS.map((m) => [`props/${m}`, 'prop_' + m]), ...['toto', 'bori', 'mina'].map((m) => [`companions/${m}`, 'comp_' + m])];
+      ...PH_MODELS.map((m) => [`ph/${m}`, m]), ...DEBRIS.map((m) => [`debris/${m}`, m]), ...TREES.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...SAPLINGS.map((t) => [`trees/${t}`, t]), ...SNAGS.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...['boulder_01', 'rock_moss_set_01', 'rock_moss_set_02', 'rock_07', 'rock_09'].map((k) => [`rocks2/${k}`, 'rk_' + k]), ['creatures/squirrel', 'squirrel'], ['creatures/robin', 'robin'], ...PROPS.map((m) => [`props/${m}`, 'prop_' + m]), ...['toto', 'bori', 'mina'].map((m) => [`companions/${m}`, 'comp_' + m]),
+      ...['pocket_watch', 'seadogs_compass', 'rubber_duck_toy', 'can_rusted', 'garden_gloves_01', 'digital_wrist_watch', 'baseball_01', 'measuring_tape_01', 'screwdriver', 'Camera_01'].map((m) => [`relics/${m}`, 'relic_' + m])];
     this.total = 3 + 6 + 1 + modelJobs.length + 8;
     const [alb, nrm, orm] = await Promise.all([
       this.arrayTexture(TERRAIN_LAYERS.map((l) => `${BASE}tex/${l}${suf}_albedo.jpg`), true),

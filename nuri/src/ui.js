@@ -97,6 +97,31 @@ export class UI {
     el.ontouchstart = (e) => { e.preventDefault(); clearTimeout(t); step(); };
     step();
   }
+  // a short list of choices (Mina's flights)
+  choose(title, options, cb) {
+    let el = $('choice'); if (!el) { el = document.createElement('div'); el.id = 'choice'; el.className = 'screen'; document.body.appendChild(el); }
+    el.innerHTML = ''; el.classList.remove('hidden');
+    const pn = document.createElement('div'); pn.className = 'panel'; const h = document.createElement('h2'); h.textContent = title; pn.appendChild(h);
+    const mn = document.createElement('div'); mn.className = 'menu';
+    for (const [label, v] of options) { const b = document.createElement('button'); b.textContent = label; b.onclick = () => { el.classList.add('hidden'); cb(v); }; mn.appendChild(b); }
+    const x = document.createElement('button'); x.textContent = '그만두기'; x.onclick = () => { el.classList.add('hidden'); cb(null); }; mn.appendChild(x);
+    pn.appendChild(mn); el.appendChild(pn); this.choiceOpen = () => !el.classList.contains('hidden');
+  }
+  fadeOut(ms, then) { let f = $('fader'); if (!f) { f = document.createElement('div'); f.id = 'fader'; document.body.appendChild(f); } f.style.opacity = '1'; setTimeout(() => { then?.(); setTimeout(() => { f.style.opacity = '0'; }, 250); }, ms); }
+  // ---- relics & journal
+  relic(name, desc, foot) { $('relic-name').textContent = name; $('relic-desc').textContent = desc; $('relic-foot').textContent = foot; const el = $('relic'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 8000); }
+  openJournal(data) {
+    const body = $('jr-body'), el = $('journal');
+    const render = (tab) => {
+      for (const b of el.querySelectorAll('.jr-tabs button')) b.classList.toggle('on', b.dataset.tab === tab);
+      body.innerHTML = '';
+      for (const e of data[tab]) { const d = document.createElement('div'); d.className = 'jr-item' + (e.unknown ? ' unknown' : ''); const b = document.createElement('b'); b.textContent = e.title; d.appendChild(b);
+        if (e.text) { const p = document.createElement('p'); p.textContent = e.text; d.appendChild(p); } body.appendChild(d); }
+    };
+    for (const b of el.querySelectorAll('.jr-tabs button')) b.onclick = () => render(b.dataset.tab);
+    $('jr-close').onclick = () => el.classList.add('hidden');
+    el.classList.remove('hidden'); render('relics');
+  }
   // ---- ring trials
   trialShow(name, n) { $('tr-name').textContent = name; $('tr-count').textContent = `고리 0 / ${n}`; $('trial').classList.remove('hidden'); this._trN = n; }
   trialTime(t, i) { $('tr-time').textContent = t.toFixed(2); $('tr-count').textContent = `고리 ${i} / ${this._trN}`; }
@@ -134,11 +159,12 @@ export class UI {
     $('p-save').onclick = () => this.fire('save');
     $('p-load').onclick = () => this.fire('load');
     $('p-settings').onclick = () => this.openSettings();
+    $('p-journal').onclick = () => this.fire('journal');
     $('p-help').onclick = () => $('help').classList.remove('hidden');
     $('p-title').onclick = () => this.fire('title');
     $('h-close').onclick = () => $('help').classList.add('hidden');
   }
-  hidePause() { $('pause').classList.add('hidden'); $('settings').classList.add('hidden'); $('help').classList.add('hidden'); document.body.classList.remove('menu-open'); }
+  hidePause() { $('pause').classList.add('hidden'); $('settings').classList.add('hidden'); $('help').classList.add('hidden'); $('journal').classList.add('hidden'); document.body.classList.remove('menu-open'); }
   pauseOpen() { return !$('pause').classList.contains('hidden'); }
   setSaveInfo(t) { $('save-info').textContent = t; }
 

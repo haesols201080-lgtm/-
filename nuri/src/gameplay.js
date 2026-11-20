@@ -458,7 +458,7 @@ export class Gameplay {
     this.W.intersectionsWithShape({ x: p.x, y: p.y + 0.14, z: p.z }, { x: 0, y: 0, z: 0, w: 1 }, new this.R.Cylinder(0.08, 0.3), (c) => {
       const u = c.userData; if (u?.weight) w += u.weight; if (u?.kind === 'player') w += 3; return true;
     });
-    return w;
+    return w + (this.extraPlateWeight?.(p) || 0);
   }
 
   // ---------------------------------------------------------------- glade: crate-stacking up to the booster module
@@ -764,6 +764,7 @@ export class Gameplay {
     if (first) { c.found = true; this.save.companions.push(c.id); this.audio.play('friend'); this.player.emit('friend'); this.persist(); this.ui.setFriends(this.save.companions.length, this.companions.length); }
     else this.audio.play('beep');
     const T = TALK[c.id];
+    if (!first && c.kind === 2 && this.save.shards.length >= 20 && this.onMinaFlight) { this.onMinaFlight(); return; }
     if (!T || this.ui.dlg) { this.ui.bubble(c.name, c.line); return; }
     c.talkN = (c.talkN || 0) + 1;
     // later chatter follows the progress: only lines whose condition holds, newest-relevant first
@@ -826,7 +827,7 @@ export class Gameplay {
     }
     // shards
     for (const s of this.shards) {
-      if (s.got) continue;
+      if (s.got || s.hidden) continue;
       s.mesh.rotation.y = time * 1.6; s.mesh.position.y = s.base + Math.sin(time * 2.2 + s.base * 5) * 0.015;
       const tp = new THREE.Vector3(P.pos.x, P.pos.y + 0.18, P.pos.z);
       const d = s.mesh.position.distanceTo(tp);
@@ -889,6 +890,7 @@ export class Gameplay {
     // companions idle
     for (const c of this.companions) {
       c.t += dt;
+      if (c.state && c.kind !== 2) continue;         // friends in the squad are moved by the squad
       animateCompanion(c, dt, P, this.ctx.camera);
     }
     // regions
