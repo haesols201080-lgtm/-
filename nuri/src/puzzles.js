@@ -97,9 +97,10 @@ export class Puzzles {
   buildBeacons() {
     const gp = this.gameplay, W = this.world, spots = [];
     if (gp.summit) spots.push(gp.summit.clone().add(new THREE.Vector3(0.6, 0, -0.5)));
-    if (gp.stash) spots.push(gp.stash.clone().add(new THREE.Vector3(-0.15, 0, 0.2)));
+    // spread over the map: the lookout, the glade stump, a boulder east of the path, a boulder by the north path
     const st = W.stumps[0]; if (st) spots.push(new THREE.Vector3(st.x + 0.25, st.top, st.z - 0.15));
-    const big = W.rocks.filter((r) => !r.small).sort((a, b) => b.r - a.r)[1]; if (big) spots.push(new THREE.Vector3(big.x, big.top, big.z));
+    const rockNear = (x, z) => W.rocks.filter((r) => !r.small).sort((a, b) => Math.hypot(a.x - x, a.z - z) - Math.hypot(b.x - x, b.z - z))[0];
+    for (const [x, z] of [[9.5, 6], [3, -27]]) { const r = rockNear(x, z); if (r) spots.push(new THREE.Vector3(r.x, r.top, r.z)); }
     this.beacons = spots.slice(0, 4).map((p, i) => {
       const y = gp.groundY(p.x + 0.0001, p.z);
       const g = new THREE.Group(); g.position.set(p.x, y, p.z);
