@@ -378,8 +378,10 @@ export class World {
       || Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d) < path
       || distToPolyline(x, z, STREAM).d < stream || Math.hypot(x - POND.x, z - POND.z) < POND.r + pond || Math.hypot(x - OUTCROP.x, z - OUTCROP.z) < out
       || Math.abs(x) > 47 || Math.abs(z) > 47 || TRAILS.some((tr) => distToPolyline(x, z, tr).d < path * 0.45) || !clearOf(x, z));
+    // (the basin and the slopes have separate budgets, so the thick stand on the slopes does not thin the basin)
     let tries = 0;
-    while (this.treeSpots.length < 255 && tries++ < 24000) {
+    let nIn = this.treeSpots.length, nRim = 0;
+    while ((nIn < 215 || nRim < 95) && tries++ < 30000) {
       let x, z;
       const parents = this.treeSpots.filter((t) => !t.hero);
       if (parents.length > 20 && rnd() < 0.45) {                // seed fall: a few metres from an older tree
@@ -388,12 +390,14 @@ export class World {
       } else { x = (rnd() - 0.5) * 94; z = (rnd() - 0.5) * 94; }
       const D = dens(x, z);
       if (rnd() > 0.12 + 0.88 * D) continue;                       // gaps stay open, thickets fill up
+      const rimSpot = this.terrain.rimAt(x, z) > 0.06; if (rimSpot ? nRim >= 95 : nIn >= 215) continue;
       if (!baseOk(x, z, 2.4, 2.6, 2.5, 9)) continue;
       const sp = 4.3 - 1.9 * D;
       if (this.treeSpots.some((t) => Math.hypot(t.x - x, t.z - z) < (t.hero ? 5 : sp))) continue;
       const inner = Math.max(Math.abs(x), Math.abs(z)) < 28;
       if (inner && rnd() < 0.3) continue;
       this.treeSpots.push({ x, z, s: 0.78 + rnd() * 0.5 * (0.6 + 0.4 * (1 - D)), t: pickType(x, z), rot: rnd() * 6.28, hero: false });
+      if (rimSpot) nRim++; else nIn++;
     }
     // a real stand mixes thick dominant trees with many slender suppressed poles squeezed in between them —
     // most of them in the thickets, a few young ones out in the gaps
