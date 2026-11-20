@@ -95,8 +95,14 @@ export class Squad {
         return;
       }
       // follow: a point on the trail ~0.55 m per place in the line, eased; jump back in when far behind
-      const idx = Math.min(this.trail.length - 1, Math.round((0.55 + k * 0.5) / this.trailStep));
-      const tgt = this.trail[idx] || P.pos;
+      // walk back along the trail by the place's spacing; a jump in the trail (teleport, lift) ends it there
+      const want = 0.55 + k * 0.5; let acc = 0, tgt = this.trail[0] || P.pos;
+      for (let i = 1; i < this.trail.length; i++) {
+        const seg = this.trail[i].distanceTo(this.trail[i - 1]);
+        if (seg > 1.0) break;
+        acc += seg; tgt = this.trail[i];
+        if (acc >= want) break;
+      }
       const d = m.position.distanceTo(tgt);
       if (d > 6) { m.position.copy(tgt); }
       else {
