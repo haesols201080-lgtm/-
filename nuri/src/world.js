@@ -3,12 +3,12 @@
 // stumps, dead trunks, rock faces, ferns and ground plants, grass cards, water + waterfall, and physics colliders.
 import * as THREE from 'three';
 import { mergeGeometries, toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { furredMesh } from './fur.js';
 import { mulberry32, smoothstep, distToPolyline, clamp, makeNoise2D, fbm } from './util.js';
-import { WORLD, PATH, PATH2, PATH3, STREAM, POND, OUTCROP, HERO_TREES, BOULDERS, LOGS, STUMPS, START } from './layout.js';
+import { WORLD, PATH, PATH2, PATH3, STREAM, POND, OUTCROP, HERO_TREES, BOULDERS, LOGS, STUMPS, START, GLADE_RIDGE, ridgeEnds } from './layout.js';
 import { Terrain } from './terrain.js';
 import { patchMaterial, WIND, leafLight, conformToGround, rootLift, barkRootBlend, ensureRootAttributes } from './shaders.js';
 import { TREES, SAPLINGS, SNAGS } from './assets.js';
+import { mossFromSurface, mossGround, buildMossMeshes } from './moss.js';
 import { WaterSim, makeWaterMaterial } from './water.js';
 
 const rnd = mulberry32(2024);
@@ -248,86 +248,32 @@ export class World {
   // Living moss rendered as shell fur: cushion moss domes (pale grey-green) at trunk bases and on boulders,
   // feather-moss carpets (yellow-green, flat) on the ground and along logs, haircap moss (dark, longer) by the water.
   // Each patch is a small mesh draped onto whatever it grows on; all patches share one shell-fur draw.
-  buildMoss() {
-    const T = this.terrain, rr = mulberry32(77), rc = new THREE.Raycaster();
-    const chunks = new Map(), CH = 12;
-    const chunkOf = (x, z) => { const k = Math.floor(x / CH) + ',' + Math.floor(z / CH);
-      if (!chunks.has(k)) chunks.set(k, { pos: [], col: [], uv: [], fur: [], cxy: [], cz: [], idx: [] }); return chunks.get(k); };
-    const TYPES = {
-      cushion: { len: 1.0, cols: [[0.55, 0.62, 0.42], [0.5, 0.58, 0.38], [0.6, 0.66, 0.48]], dome: 0.6 },
-      feather: { len: 1.35, cols: [[0.38, 0.43, 0.17], [0.33, 0.39, 0.15], [0.42, 0.44, 0.2]], dome: 0.12 },
-      haircap: { len: 2.1, cols: [[0.2, 0.3, 0.08], [0.24, 0.34, 0.1], [0.18, 0.27, 0.07]], dome: 0.18 },
+  // Moss layer (src/moss.js): Blender-modelled moss grown as shells over the actual surfaces — boulder crowns, logs,
+  // stump tops, the glade bank's stones — and as carpets on damp, shaded ground along the stream
+  buildMoss(extra = []) {
+    const T = this.terrain, pieces = [];
+    const dampAt = (x, z) => {
+      if (T.isWater(x, z)) return 0;
+      const w = this.waterDist(x, z), sh = this.canopy(x, z);
+      const pd = Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d);
+      if (pd < 0.6) return 0;
+      return Math.max(smoothstep(2.4, 0.5, w), smoothstep(0.5, 0.85, sh) * 0.55);
     };
-    const lin = (c) => c.map((v) => v ** 2.2);
-    const LITTER = lin([0.3, 0.23, 0.15]);
-    // on rocks and logs the patch only covers the upward-facing crown it was dropped on: rays that miss the object or hit
-    // its steep flanks mark the vertex as outside, so a patch never drapes down the sides into a curtain
-    const nrm = new THREE.Vector3();
-    const ground = (x, z, under) => {
-      if (under && under.length) {
-        rc.set(new THREE.Vector3(x, 60, z), new THREE.Vector3(0, -1, 0)); const h = rc.intersectObjects(under, true)[0];
-        if (!h) return { y: T.heightAt(x, z), ok: false };
-        nrm.copy(h.face.normal).transformDirection(h.object.matrixWorld);
-        return { y: h.point.y, ok: nrm.y > 0.6 };
-      }
-      return { y: T.heightAt(x, z), ok: true };
-    };
-    const patch = (x, z, R, type, under) => {
-      const C = chunkOf(x, z), { pos, col, uv, fur, cxy, cz, idx } = C;
-      const tp = TYPES[type], ring = 5, seg = 11, base = pos.length / 3, c = lin(tp.cols[Math.floor(rr() * 3)]);
-      const lobes = [rr() * 6.28, rr() * 6.28, rr() * 6.28];
-      const okv = [], ys = [];
-      for (let i = 0; i <= ring; i++) for (let j = 0; j < (i ? seg : 1); j++) {
-        const a = j / seg * Math.PI * 2, f = i / ring;
-        const wob = 1 + 0.22 * Math.sin(a * 2 + lobes[0]) + 0.15 * Math.sin(a * 3 + lobes[1]) + 0.1 * Math.sin(a * 5 + lobes[2]);
-        const x1 = x + Math.cos(a) * R * f * wob, z1 = z + Math.sin(a) * R * f * wob;
-        const gr = ground(x1, z1, under); okv.push(gr.ok); ys.push(gr.y);
-        const y = gr.y + (under ? 0.15 : 1) * tp.dome * R * Math.sqrt(Math.max(0, 1 - f * f)) * 0.5 + 0.004;
-        pos.push(x1, y, z1);
-        // the rim thins out and takes the litter's colour, so a patch never ends in a hard-edged green disc
-        const k = 0.85 + 0.3 * rr(), e = Math.min(1, Math.max(0, (f - 0.45) / 0.55)) ** 1.5 * (under ? 0.4 : 0.9);
-        col.push((c[0] * (1 - e) + LITTER[0] * e) * k, (c[1] * (1 - e) + LITTER[1] * e) * k, (c[2] * (1 - e) + LITTER[2] * e) * k);
-        uv.push(x1 * 1.0, z1 * 1.0);
-        fur.push(tp.len * (1 - 0.95 * Math.min(1, Math.max(0, (f - 0.4) / 0.6)) ** 1.2) * (0.65 + 0.35 * rr()), 0); cxy.push((rr() - 0.5) * 0.3, 1); cz.push((rr() - 0.5) * 0.3, 0);
-      }
-      if (!okv[0]) { pos.length = base * 3; col.length = base * 3; uv.length = base * 2; fur.length = base * 2; cxy.length = base * 2; cz.length = base * 2; return; }
-      // keep only triangles fully on the surface it was dropped on, without big height jumps; vertices next to a
-      // dropped one get short fur so the remaining edge tapers instead of ending in a wall
-      const tri = (p, q, r) => {
-        const L = [p - base, q - base, r - base];
-        if (!L.every((k) => okv[k])) { for (const k of L) if (okv[k]) fur[(base + k) * 2] *= 0.15; return; }
-        if (Math.max(ys[L[0]], ys[L[1]], ys[L[2]]) - Math.min(ys[L[0]], ys[L[1]], ys[L[2]]) > 0.08) return;
-        idx.push(p, q, r);
-      };
-      for (let j = 0; j < seg; j++) tri(base, base + 1 + (j + 1) % seg, base + 1 + j);
-      for (let i = 1; i < ring; i++) for (let j = 0; j < seg; j++) {
-        const a0 = base + 1 + (i - 1) * seg + j, a1 = base + 1 + (i - 1) * seg + (j + 1) % seg, b0 = a0 + seg, b1 = a1 + seg;
-        tri(a0, a1, b1); tri(a0, b1, b0);
-      }
-    };
-    // trunk bases (on the uphill / shaded side), boulders (tops), logs (along the top), ground near water, shady ground
-    // (ground moss is painted into the terrain's moss layer; fur moss only grows as cushions on rock and log crowns)
-    for (const r of this.rocks) {
-      if (!r.mesh) continue;
-      for (let k = 0; k < 2 + Math.floor(rr() * 3); k++) { const a = rr() * 6.28, d = r.r * rr() * 0.5; patch(r.x + Math.cos(a) * d, r.z + Math.sin(a) * d, 0.1 + rr() * 0.2 * r.r, rr() < 0.7 ? 'cushion' : 'feather', [r.mesh]); }
+    const meshDamp = (m) => { const p = new THREE.Vector3().setFromMatrixPosition(m.matrixWorld); return dampAt(p.x, p.z) * 0.6 + this.canopy(p.x, p.z) * 0.4; };
+    const fromObj = (obj, kind) => { obj.updateMatrixWorld(true); obj.traverse((o) => { if (o.isMesh && !o.isInstancedMesh) pieces.push(mossFromSurface(o.geometry, o.matrixWorld, kind, meshDamp(o))); }); };
+    for (const r of this.rocks) if (r.mesh) fromObj(r.mesh, 'rock');
+    for (const l of this.logs) fromObj(l.group || l.mesh, 'log');
+    for (const st of this.stumps) if (st.mesh) fromObj(st.mesh, 'stump');
+    for (const e of extra) { const c = new THREE.Vector3().setFromMatrixPosition(e.matrix); pieces.push(mossFromSurface(e.geo, e.matrix, e.kind, dampAt(c.x, c.z) * 0.5 + 0.3)); }
+    // ground carpets in 6 m tiles where it is damp
+    for (let x = -42; x < 42; x += 6) for (let z = -42; z < 42; z += 6) {
+      let any = false;
+      for (let i = 0; i < 4 && !any; i++) for (let j = 0; j < 4 && !any; j++) if (dampAt(x + i * 2, z + j * 2) > 0.3) any = true;
+      if (any) pieces.push(mossGround(T, x, z, x + 6, z + 6, 0.16, dampAt));
     }
-    for (const l of this.logs) {
-      const obj = l.group || l.mesh; if (!obj) continue;
-      for (let k = 0; k < 4; k++) { const f = 0.15 + rr() * 0.7; patch(l.x1 + (l.x2 - l.x1) * f, l.z1 + (l.z2 - l.z1) * f, 0.12 + rr() * 0.15, 'feather', [obj]); }
-    }
-    const shells = this.ctx.tier.rich ? 12 : 7;
-    this.mossChunks = [];
-    for (const C of chunks.values()) {
-      if (!C.idx.length) continue;
-      const geo = new THREE.BufferGeometry();
-      geo.setAttribute('position', new THREE.Float32BufferAttribute(C.pos, 3)); geo.setAttribute('color', new THREE.Float32BufferAttribute(C.col, 3));
-      geo.setAttribute('uv', new THREE.Float32BufferAttribute(C.uv, 2)); geo.setAttribute('uv1', new THREE.Float32BufferAttribute(C.fur, 2));
-      geo.setAttribute('uv2', new THREE.Float32BufferAttribute(C.cxy, 2)); geo.setAttribute('uv3', new THREE.Float32BufferAttribute(C.cz, 2));
-      geo.setIndex(C.idx); geo.computeVertexNormals(); geo.computeBoundingSphere();
-      const m = furredMesh({ geometry: geo }, { shells, length: 0.011, density: 650, rootDark: 0.42, clump: 0.32, sheen: 0.1 });
-      m.castShadow = false; m.computeBoundingSphere(); m.frustumCulled = true;
-      this.scene.add(m); this.mossChunks.push({ m, c: geo.boundingSphere.center.clone(), full: shells + 1 });
-    }
+    const shells = this.ctx.tier.rich ? 14 : 9;
+    this.mossChunks = buildMossMeshes(this.scene, pieces, this.ctx.assets.tex.mossTile, shells);
+    this.mossTris = this.mossChunks.reduce((a, k) => a + k.tris, 0);
   }
 
   // moss: full shell count near the camera, fewer further away (the fur is sub-pixel there anyway)
@@ -335,7 +281,7 @@ export class World {
     if (!this.mossChunks) return;
     for (const k of this.mossChunks) {
       const d = Math.hypot(k.c.x - cam.x, k.c.z - cam.z);
-      k.m.count = d < 14 ? k.full : d < 26 ? Math.ceil(k.full / 2) : 2;
+      k.m.count = d < 12 ? k.full : d < 22 ? Math.ceil(k.full / 2) : d < 40 ? 3 : 1;
     }
   }
 
@@ -611,7 +557,7 @@ export class World {
       const y = this.terrain.heightAt(x, z) - 0.04;
       const m = this.place(v, null, new THREE.Vector3(x, y, z), i * 2.1, s);
       this.trimesh(v.geo, m.matrixWorld, { kind: 'stump', surface: 'wood' });
-      this.stumps.push({ x, z, r, top: y + v.size.y * s });
+      this.stumps.push({ x, z, r, top: y + v.size.y * s, mesh: m });
     });
   }
 
@@ -814,6 +760,11 @@ export class World {
       });
     };
     const sun = (x, z) => 1 - shade(x, z);
+    // the glade's earth bank is overgrown: shrubs and ferns along the slopes, young firs on and behind the crest
+    const bank = (x, z) => smoothstep(2.9, 0.6, distToPolyline(x, z, GLADE_RIDGE).d) * smoothstep(1.0, 2.6, ridgeEnds(x, z));
+    add(['shrub_01', 'shrub_02', 'shrub_03', 'shrub_04'].flatMap((k) => this.variants(k)), { density: 0.5, scale: [0.9, 1.7], wind: 0.03, radius: 45, cast: true, align: 0.3, sink: 0.05, rule: (x, z) => bank(x, z) * 0.9 });
+    add('fern_02', { density: 0.45, scale: [0.8, 1.4], wind: 0.05, radius: 35, cast: false, align: 0.6, sink: 0.02, rule: (x, z) => bank(x, z) * 0.8 });
+    add('fir_sapling', { density: 0.05, scale: [1.2, 2.2], wind: 0.02, radius: 45, cast: true, align: 0.1, sink: 0.05, rule: (x, z) => bank(x, z) });
     // ferns: big stands in the half shade, smaller ones on the sunny slopes
     colony('fern_02', { per100: 0.5, r: [1.2, 4.5], fill: 1.4, scale: [0.5, 1.1], wind: 0.03, radius: 40, align: 0.35, cast: true,
       habitat: (x, z) => offPath(x, z, 0.9) ? smoothstep(0.15, 0.55, shade(x, z)) * (0.3 + this.patch(x, z, 0.09, 1)) : 0 });
@@ -857,7 +808,7 @@ export class World {
       habitat: (x, z) => offPath(x, z, 1.5) ? smoothstep(0.5, 0.15, shade(x, z)) * this.patch(x, z, 0.08, 43) : 0 });
     colony('fir_sapling', { per100: 0.09, r: [1.0, 2.5], fill: 0.6, scale: [0.8, 2.1], wind: 0.02, radius: 40, align: 0.1, cast: true,
       habitat: (x, z) => offPath(x, z, 1.5) ? smoothstep(0.2, 0.6, shade(x, z)) * this.patch(x, z, 0.08, 44) : 0 });
-    this.buildMoss();
+    // (the moss layer is grown once the gameplay props exist: World.buildMoss)
 
     // ---- forest floor detail (dense near the camera; this is what a 35 cm robot sees)
     add([this.variants('pinecone_0')[0], this.variants('pinecone_1')[0], this.variants('pinecone_2')[0]], { density: 1.4, scale: [0.85, 1.25], radius: 12, align: 1, sink: 0.05, tilt: 0.8,

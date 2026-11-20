@@ -3,7 +3,7 @@
 // region discovery, checkpoints and save data.
 import * as THREE from 'three';
 import { mulberry32, clamp, damp, smoothstep } from './util.js';
-import { REGIONS, START, OUTCROP, STUMPS, LOGS, WORLD } from './layout.js';
+import { REGIONS, START, OUTCROP, STUMPS, LOGS, WORLD, GLADE_RIDGE } from './layout.js';
 
 const rnd = mulberry32(99);
 
@@ -11,7 +11,7 @@ export class Gameplay {
   constructor(ctx, world, player, ui, audio, fx) {
     Object.assign(this, { ctx, world, player, ui, audio, fx });
     this.scene = ctx.scene; this.R = ctx.RAPIER; this.W = ctx.physics; this.T = world.terrain;
-    this.shards = []; this.props = []; this.companions = []; this.zones = []; this.interactables = [];
+    this.shards = []; this.props = []; this.companions = []; this.zones = []; this.interactables = []; this.mossSources = [];
     this.save = { shards: [], companions: [], regions: [], gateOpen: false, liftPowered: false, booster: false, cellPlaced: false };
     this.time = 0;
     this.mats = this.makeMats();
@@ -214,7 +214,7 @@ export class Gameplay {
       c.userData = { kind: 'static', surface: 'rock' };
     }
     this.gate = { mesh: gate, leaves, body, y0: gy, open: this.save.gateOpen ? 1 : 0, height, center: gateC };
-    this.buildGladeWall(a, b);
+    this.buildGladeWall();
     // pressure plate on the near (south-east) side
     const nrm = new THREE.Vector3(-dir.z, 0, dir.x); if (nrm.z < 0) nrm.negate();
     const pp = gateC.clone().addScaledVector(nrm, 2.2).addScaledVector(dir, 0.6);
@@ -236,14 +236,17 @@ export class Gameplay {
     const pc = this.W.createCollider(this.R.ColliderDesc.cylinder(0.03, 0.28).setTranslation(pp.x, py + 0.035, pp.z));
     pc.userData = { kind: 'plate', surface: 'metal' };
     this.plate = { mesh: plate, top, ring, pos: new THREE.Vector3(pp.x, py, pp.z), press: 0 };
+    this.plateFx = this.buildPlateFx(new THREE.Vector3(pp.x, py, pp.z), gateC.clone().addScaledVector(dir, -(width / 2 + 0.19)), gy);
     // crate placed a few metres away
     this.gateCrate = this.makeCrate(pp.x + nrm.x * 1.6 + dir.x * 1.2, pp.z + nrm.z * 1.6 + dir.z * 1.2);
     // a little sign of rust flakes... and the reward behind the gate (glade)
   }
 
-  // a ridge of tumbled, mossy boulders round the glade, from one gate boulder to the other: the gate is the only way in
-  buildGladeWall(a, b) {
-    const pts = [[a.x, a.z], [-20, -13.6], [-25, -16.4], [-27.4, -22], [-25.4, -28], [-19.5, -30.4], [-13.6, -28.4], [-10.6, -23.6], [-9.4, -19], [b.x, b.z]];
+  // the glade is closed by a rocky earth bank (raised in the terrain, planted with shrubs, ferns and young firs by the
+  // world): stones of every size sit half-buried in its crest — boulders, tilted slabs, rubble — with gaps the
+  // undergrowth fills, the way a moraine or an old field bank looks; a sealed band inside the crest keeps it closed
+  buildGladeWall() {
+    const pts = GLADE_RIDGE;
     const segs = []; let total = 0;
     for (let i = 0; i + 1 < pts.length; i++) { const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); segs.push({ i, L, t0: total }); total += L; }
     const at = (t) => { const g = segs.find((q) => t <= q.t0 + q.L) || segs[segs.length - 1]; const f = (t - g.t0) / g.L, [x0, z0] = pts[g.i], [x1, z1] = pts[g.i + 1];
@@ -251,27 +254,32 @@ export class Gameplay {
     const vars = [0, 1, 2, 3].map((i) => this.world.variants('boulder_field_lo_' + i)[0]);
     const lists = vars.map(() => []);
     const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
-    const stone = (x, z, D, H, sink, tilt = 0.22) => {
+    const stone = (x, z, D, H, sink, tilt, flat = 1) => {
       const k = Math.floor(rnd() * vars.length), v = vars[k];
       const s = D / Math.max(v.size.x, v.size.z), sy = H / v.size.y;
-      let gy = this.groundY(x, z);
-      for (let a2 = 0; a2 < 6.28; a2 += 1.57) gy = Math.min(gy, this.groundY(x + Math.cos(a2) * D * 0.35, z + Math.sin(a2) * D * 0.35));
+      let gy = this.T.heightAt(x, z);
+      for (let a2 = 0; a2 < 6.28; a2 += 1.57) gy = Math.min(gy, this.T.heightAt(x + Math.cos(a2) * D * 0.3, z + Math.sin(a2) * D * 0.3));
       e.set((rnd() - 0.5) * tilt, rnd() * 6.28, (rnd() - 0.5) * tilt); q.setFromEuler(e);
-      p.set(x, gy - H * sink, z); sc.set(s, sy, s * (0.8 + rnd() * 0.3));
+      p.set(x, gy - H * sink, z); sc.set(s, sy, s * flat);
       mtx.compose(p, q, sc); lists[k].push(mtx.clone());
       this.world.hull(v.geo, mtx, { kind: 'rock', surface: 'rock' });
+      this.mossSources.push({ geo: v.geo, matrix: mtx.clone(), kind: 'rock' });
     };
-    let t = segs[0].L * 0.12, prev = null;
-    const tEnd = total - segs[segs.length - 1].L * 0.12;
+    let t = segs[0].L * 0.18;
+    const tEnd = total - segs[segs.length - 1].L * 0.18;
     while (t < tEnd) {
-      const c = at(t), nx = -c.tz, nz = c.tx, off = (rnd() - 0.5) * 0.6;
-      const D = 1.5 + rnd() * 1.1;
-      stone(c.x + nx * off, c.z + nz * off, D, D * (0.75 + rnd() * 0.3) + 0.35, 0.2);
-      // a smaller stone wedged in the dip between two big ones keeps the ridge line unbroken
-      if (prev) { const m = at((prev + t) / 2); stone(m.x + nx * (rnd() - 0.5) * 0.4, m.z + nz * (rnd() - 0.5) * 0.4, 0.9 + rnd() * 0.4, 1.0 + rnd() * 0.35, 0.12); }
-      // tumbled stones at the foot, on either side
-      if (rnd() < 0.5) { const sd = rnd() < 0.5 ? -1 : 1, d2 = D * 0.5 + 0.25; stone(c.x + nx * sd * d2 + c.tx * (rnd() - 0.5), c.z + nz * sd * d2 + c.tz * (rnd() - 0.5), 0.45 + rnd() * 0.5, 0.35 + rnd() * 0.3, 0.3, 0.6); }
-      prev = t; t += D * (0.55 + rnd() * 0.15);
+      const c = at(t), nx = -c.tz, nz = c.tx, r = rnd();
+      const off = (rnd() - 0.5) * 0.9, x = c.x + nx * off, z = c.z + nz * off;
+      let step;
+      if (r < 0.45) { const D = 0.9 + rnd() * 1.2; stone(x, z, D, D * (0.55 + rnd() * 0.35), 0.35 + rnd() * 0.15, 0.3); step = D * (0.5 + rnd() * 0.4); }
+      else if (r < 0.72) { const D = 1.1 + rnd() * 0.9; stone(x, z, D, 0.35 + rnd() * 0.3, 0.25, 0.9, 0.55 + rnd() * 0.3); step = D * 0.6; }   // tilted slab
+      else if (r < 0.88) {                                                      // rubble pile
+        for (let k = 0; k < 3; k++) { const D = 0.35 + rnd() * 0.4; stone(x + (rnd() - 0.5) * 0.8, z + (rnd() - 0.5) * 0.8, D, D * 0.7, 0.3, 0.8); }
+        step = 0.9;
+      } else step = 0.8 + rnd() * 0.8;                                           // a gap the shrubs fill
+      // loose stones down the slopes
+      if (rnd() < 0.5) { const sd = rnd() < 0.5 ? -1 : 1, d = 1.0 + rnd() * 0.9, D = 0.25 + rnd() * 0.35; stone(c.x + nx * sd * d, c.z + nz * sd * d, D, D * 0.6, 0.35, 0.8); }
+      t += step;
     }
     vars.forEach((v, k) => {
       if (!lists[k].length) return;
@@ -279,16 +287,147 @@ export class Gameplay {
       lists[k].forEach((m, i) => im.setMatrixAt(i, m));
       im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
     });
-    // a sealed band along the ridge line, inside the stones (no squeezing through between them)
+    // sealed band along the crest
     for (let i = 0; i + 1 < pts.length; i++) {
       const [x0, z0] = pts[i], [x1, z1] = pts[i + 1];
       const f0 = i === 0 ? 0.12 : 0, f1 = i === pts.length - 2 ? 0.88 : 1;
       const xa = x0 + (x1 - x0) * f0, za = z0 + (z1 - z0) * f0, xb = x0 + (x1 - x0) * f1, zb = z0 + (z1 - z0) * f1;
       const cx = (xa + xb) / 2, cz = (za + zb) / 2, len = Math.hypot(xb - xa, zb - za), yaw = -Math.atan2(z1 - z0, x1 - x0);
-      const y = Math.min(this.groundY(xa, za), this.groundY(xb, zb), this.groundY(cx, cz)) - 0.06;
+      const y = Math.min(this.T.heightAt(xa, za), this.T.heightAt(xb, zb), this.T.heightAt(cx, cz)) - 0.3;
       const q2 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
-      const c = this.W.createCollider(this.R.ColliderDesc.cuboid(len / 2 + 0.05, 0.65, 0.15).setTranslation(cx, y + 0.65, cz).setRotation(q2));
+      const c = this.W.createCollider(this.R.ColliderDesc.cuboid(len / 2 + 0.05, 0.85, 0.15).setTranslation(cx, y + 0.85, cz).setRotation(q2));
       c.userData = { kind: 'static', surface: 'rock' };
+    }
+  }
+
+  // the pad is alive: neon ring + its halo on the ground, a light, a scanning beam with a hologram crate that says
+  // "put weight here", sparks, and a power line that runs to the gate pillar and pulses toward it
+  buildPlateFx(pos, pillar, gy) {
+    const add = (o) => { this.scene.add(o); return o; };
+    const C = new THREE.Color(0x0aa8ff);
+    const mkMat = (tex, op) => new THREE.MeshBasicMaterial({ map: tex, color: C.clone(), transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+    const halo = add(new THREE.Mesh(new THREE.PlaneGeometry(2.2, 2.2), mkMat(glowTex('disc'), 0.8)));
+    halo.rotation.x = -Math.PI / 2; halo.position.set(pos.x, pos.y + 0.012, pos.z); halo.renderOrder = 2;
+    const neon = add(new THREE.Mesh(new THREE.PlaneGeometry(0.87, 0.87), mkMat(glowTex('ring'), 0.9)));
+    neon.rotation.x = -Math.PI / 2; neon.position.set(pos.x, pos.y + 0.093, pos.z); neon.renderOrder = 3;
+    // volumetric light shaft: soft camera-facing sheets (a narrow bright core inside a wide faint glow) with slow
+    // drifting density, plus a flare where the light leaves the pad; no hard geometry edges anywhere
+    const beamU = { uT: { value: 0 }, uC: { value: C.clone() }, uK: { value: 1 } };
+    const shaftMat = (w, k) => new THREE.ShaderMaterial({
+      uniforms: { ...beamU, uW: { value: w }, uI: { value: k } }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `uniform float uT, uK, uW, uI; uniform vec3 uC; varying vec2 vUv;
+        float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+        void main(){ float x = vUv.x - 0.5, y = vUv.y;
+          float prof = exp(-x * x / uW);
+          float fall = pow(1.0 - y, 1.35) * smoothstep(0.0, 0.05, y);
+          float n = 0.55 * vn(vec2(x * 5.0, y * 3.0 - uT * 0.35)) + 0.45 * vn(vec2(x * 11.0 + 3.0, y * 7.0 - uT * 0.6));
+          float a = prof * fall * (0.45 + 0.75 * n) * uI * uK;
+          gl_FragColor = vec4(uC * a, 1.0); }` });
+    const beam = new THREE.Group(); add(beam);
+    const core = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.5), shaftMat(0.012, 0.55)); core.position.y = 0.75;
+    const wide = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.7), shaftMat(0.06, 0.22)); wide.position.y = 0.85;
+    beam.add(wide, core); beam.position.set(pos.x, pos.y + 0.06, pos.z);
+    const flare = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex('soft'), color: C.clone(), transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
+    flare.scale.set(0.9, 0.55, 1); flare.position.set(pos.x, pos.y + 0.16, pos.z); add(flare);
+    // hologram crate: glowing edges + faint faces, and chevrons pointing down at the pad
+    const holo = new THREE.Group(); add(holo);
+    const box = new THREE.BoxGeometry(0.26, 0.26, 0.26);
+    const edgeM = new THREE.LineBasicMaterial({ color: C.clone(), transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+    holo.add(new THREE.LineSegments(new THREE.EdgesGeometry(box), edgeM));
+    const faceM = new THREE.MeshBasicMaterial({ color: C.clone(), transparent: true, opacity: 0.1, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
+    holo.add(new THREE.Mesh(box, faceM));
+    // plank lines on the faces so it reads as "a crate"
+    const pl = [];
+    for (const z of [-0.131, 0.131]) for (const y of [-0.043, 0.043]) pl.push(-0.13, y, z, 0.13, y, z);
+    for (const x of [-0.131, 0.131]) for (const y of [-0.043, 0.043]) pl.push(x, y, -0.13, x, y, 0.13);
+    const plG = new THREE.BufferGeometry(); plG.setAttribute('position', new THREE.Float32BufferAttribute(pl, 3));
+    holo.add(new THREE.LineSegments(plG, edgeM));
+    const chev = [];
+    for (let k = 0; k < 2; k++) { const y = -0.2 - k * 0.07; chev.push(-0.06, y + 0.04, 0, 0, y, 0, 0, y, 0, 0.06, y + 0.04, 0); }
+    const chG = new THREE.BufferGeometry(); chG.setAttribute('position', new THREE.Float32BufferAttribute(chev, 3));
+    const chevL = new THREE.LineSegments(chG, edgeM); holo.add(chevL);
+    holo.position.set(pos.x, pos.y + 0.72, pos.z);
+    const light = add(new THREE.PointLight(0x0aa8ff, 3.0, 2.6, 2)); light.position.set(pos.x, pos.y + 0.28, pos.z);
+    // power line to the gate pillar: a cable snaking over the ground with energy pulses running along it
+    const pts = [], n = 18, from = pos.clone(), to = pillar.clone();
+    const side = new THREE.Vector3(-(to.z - from.z), 0, to.x - from.x).normalize();
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, x = from.x + (to.x - from.x) * t + side.x * Math.sin(t * Math.PI * 2.2) * 0.18 * (1 - t) * t * 4,
+        z = from.z + (to.z - from.z) * t + side.z * Math.sin(t * Math.PI * 2.2) * 0.18 * (1 - t) * t * 4;
+      const yy = (i === n ? gy : this.groundY(x, z)) + 0.012;
+      pts.push(new THREE.Vector3(x, yy, z));
+    }
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const cable = add(new THREE.Mesh(new THREE.TubeGeometry(curve, 90, 0.011, 6), new THREE.MeshStandardMaterial({ color: 0x1b1e22, roughness: 0.6, metalness: 0.3 })));
+    cable.receiveShadow = true;
+    const flowU = { uT: { value: 0 }, uC: { value: C.clone() }, uK: { value: 0.5 }, uSpd: { value: 0.4 } };
+    const flow = add(new THREE.Mesh(new THREE.TubeGeometry(curve, 90, 0.016, 6), new THREE.ShaderMaterial({
+      uniforms: flowU, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `uniform float uT, uK, uSpd; uniform vec3 uC; varying vec2 vUv;
+        void main(){ float x = vUv.x * 9.0 - uT * uSpd * 9.0; float d = fract(x);
+          float a = smoothstep(0.0, 0.08, d) * smoothstep(0.45, 0.1, d);
+          gl_FragColor = vec4(uC * (0.12 + a) * uK, 1.0); }` })));
+    return { halo, neon, beam, beamU, flare, holo, edgeM, faceM, chevL, light, flowU, solvedT: this.save.gateOpen ? 9 : -1, sparkT: 0, moteT: 0 };
+  }
+  updatePlateFx(dt, time, press, solved) {
+    const F = this.plateFx; if (!F) return;
+    const P = this.plate.pos;
+    const idle = new THREE.Color(0x0aa8ff), warn = new THREE.Color(0xff9a1a), ok = new THREE.Color(0x22ff7a);
+    if (solved && F.solvedT < 0) {
+      F.solvedT = 0;
+      this.fx.burst(new THREE.Vector3(P.x, P.y + 0.15, P.z), 0x7dffb0, 46);
+      this.fx.ring?.(new THREE.Vector3(P.x, P.y + 0.05, P.z), 0.9, 0.7);
+    }
+    if (F.solvedT >= 0) F.solvedT += dt;
+    const sT = F.solvedT;
+    const pulse = 0.5 + 0.5 * Math.sin(time * 3.2);
+    const col = solved ? ok : press > 0.02 ? warn : idle;
+    const flick = press > 0.02 && !solved ? 0.7 + 0.3 * Math.sin(time * 37) * Math.sin(time * 13) : 1;
+    for (const m of [F.halo.material, F.neon.material, F.edgeM, F.faceM]) m.color.copy(col);
+    F.beamU.uC.value.copy(col); F.flowU.uC.value.copy(col); F.light.color.copy(col);
+    this.plate.ring.material.emissive.copy(col);
+    this.plate.ring.material.emissiveIntensity = solved ? 3.2 : 1.6 + pulse * 1.2 + press * 2;
+    F.neon.material.opacity = (solved ? 0.95 : 0.6 + pulse * 0.35) * flick;
+    F.halo.material.opacity = (solved ? 0.6 : 0.32 + pulse * 0.18 + press * 0.3) * flick;
+    F.neon.position.y = P.y + 0.093;
+    F.light.intensity = (solved ? 4.0 : 2.2 + pulse * 1.4 + press * 2) * flick;
+    // beam + hologram: shown while the pad waits for weight; on success the beam shoots up and the hologram dissolves
+    const waitK = solved ? Math.max(0, 1 - sT * 1.4) : 1;
+    F.beamU.uT.value = time; F.beamU.uK.value = waitK * (solved ? 1 + sT * 3 : 0.85 + pulse * 0.3) * flick;
+    for (const m of F.beam.children) { m.material.uniforms.uT.value = time; m.material.uniforms.uK.value = F.beamU.uK.value; m.material.uniforms.uC.value.copy(col); }
+    // the sheets always face the camera (turning about the vertical axis only)
+    const cam = this.ctx.camera; F.beam.rotation.y = Math.atan2(cam.position.x - P.x, cam.position.z - P.z);
+    F.beam.scale.set(1 + (solved ? sT * 0.5 : 0), 1 + (solved ? sT * 2.2 : 0), 1);
+    F.beam.visible = F.holo.visible = waitK > 0.01;
+    F.flare.material.color.copy(col); F.flare.material.opacity = (solved ? 1 : 0.55 + pulse * 0.3) * flick;
+    F.flare.scale.set(0.9 + pulse * 0.12 + (solved ? sT : 0), 0.5 + pulse * 0.06, 1);
+    // dust motes drifting up through the light
+    F.moteT -= dt;
+    if (F.moteT < 0 && waitK > 0.2) {
+      F.moteT = 0.07;
+      const a = Math.random() * 6.28, r = Math.sqrt(Math.random()) * 0.2;
+      this.fx.spawn({ x: P.x + Math.cos(a) * r, y: P.y + 0.12 + Math.random() * 0.3, z: P.z + Math.sin(a) * r, vx: (Math.random() - 0.5) * 0.04, vy: 0.07 + Math.random() * 0.08, vz: (Math.random() - 0.5) * 0.04,
+        g: 0, drag: 0.05, max: 2.5 + Math.random() * 2, s0: 0.006, s1: 0.004, c: [col.r * 0.6 + 0.4, col.g * 0.6 + 0.4, col.b * 0.6 + 0.4], a: 0.85, add: true });
+    }
+    F.holo.rotation.y = time * 0.9; F.holo.position.y = P.y + 0.72 + Math.sin(time * 1.8) * 0.03 + (solved ? sT * 0.5 : 0);
+    F.holo.scale.setScalar(1 + (solved ? sT * 0.8 : 0) - press * 0.25);
+    // the hologram flickers like a projection (scan-line dropouts)
+    const holoFl = (Math.sin(time * 23) > 0.93 ? 0.35 : 1) * (0.8 + 0.2 * Math.sin(time * 61));
+    F.edgeM.opacity = 0.7 * waitK * flick * holoFl; F.faceM.opacity = 0.07 * waitK * flick * holoFl;
+    F.chevL.position.y = -((time * 0.12) % 0.07);
+    // power line: slow idle pulses, bright fast flow to the gate once solved
+    F.flowU.uT.value = time; F.flowU.uSpd.value = solved ? 1.4 : 0.35 + press; F.flowU.uK.value = solved ? 1.6 : 0.45 + press * 0.8;
+    // sparks rising off the ring
+    F.sparkT -= dt;
+    if (F.sparkT < 0 && waitK > 0.2) {
+      F.sparkT = solved ? 0.03 : 0.11;
+      const a = Math.random() * 6.28, r = 0.3 + Math.random() * 0.04;
+      this.fx.spawn({ x: P.x + Math.cos(a) * r, y: P.y + 0.09, z: P.z + Math.sin(a) * r, vx: 0, vy: 0.25 + Math.random() * 0.25, vz: 0, g: 0, drag: 0.2,
+        max: 0.9 + Math.random() * 0.6, s0: 0.012, s1: 0.0, c: [col.r, col.g, col.b], a: 0.9, add: true });
     }
   }
 
@@ -662,7 +801,7 @@ export class Gameplay {
     const press = clamp(load / 15, 0, 1);
     this.plate.press = damp(this.plate.press, press, 10, dt);
     this.plate.top.position.y = 0.04 - this.plate.press * 0.025;
-    this.plate.ring.material.emissiveIntensity = 0.3 + this.plate.press * 3.0;
+    this.updatePlateFx(dt, time, press, this.save.gateOpen);
     if (!this.save.gateOpen && load >= 15) { this.save.gateOpen = true; this.audio.play('gate'); this.ui.toast('철컥— 녹슨 문이 열렸어요!'); P.emit('solved'); this.persist(); }
     if (load > 0 && load < 15 && !this.save.gateOpen && !this.plateHintShown) { this.plateHintShown = true; this.ui.toast('발판이 살짝 눌렸지만… 더 무거운 게 필요해 보여요.'); P.emit('worried'); }
     const G = this.gate;
@@ -811,3 +950,26 @@ function ivyLeafTexture() {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; _ivy = t; return t;
 }
 
+
+// soft additive glow sprites drawn once into canvases: 'disc' = radial falloff, 'ring' = a neon ring with its halo
+const _glow = {};
+function glowTex(kind) {
+  if (_glow[kind]) return _glow[kind];
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+  if (kind === 'soft') {
+    const r = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    r.addColorStop(0, 'rgba(255,255,255,1)'); r.addColorStop(0.2, 'rgba(255,255,255,0.5)'); r.addColorStop(0.5, 'rgba(255,255,255,0.12)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = r; g.fillRect(0, 0, 256, 256);
+  } else if (kind === 'disc') {
+    const r = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    r.addColorStop(0, 'rgba(255,255,255,0.0)'); r.addColorStop(0.28, 'rgba(255,255,255,0.55)'); r.addColorStop(0.42, 'rgba(255,255,255,0.35)'); r.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = r; g.fillRect(0, 0, 256, 256);
+  } else {
+    const R = 128 * 0.62;
+    for (const [w, a] of [[26, 0.12], [14, 0.25], [6, 0.6], [2.2, 1.0]]) { g.strokeStyle = `rgba(255,255,255,${a})`; g.lineWidth = w; g.beginPath(); g.arc(128, 128, R, 0, Math.PI * 2); g.stroke(); }
+    // six tick marks, like the robots' light details
+    g.lineWidth = 3; g.strokeStyle = 'rgba(255,255,255,0.85)';
+    for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3 + Math.PI / 6; g.beginPath(); g.moveTo(128 + Math.cos(a) * (R + 9), 128 + Math.sin(a) * (R + 9)); g.lineTo(128 + Math.cos(a) * (R + 18), 128 + Math.sin(a) * (R + 18)); g.stroke(); }
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; _glow[kind] = t; return t;
+}

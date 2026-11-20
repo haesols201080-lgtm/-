@@ -187,6 +187,9 @@ export class Assets {
       this.set('ph_grass', { alpha: true, size: 1024 }), this.set('ph_lichen'),
     ]);
     Object.assign(T, { rock, moss, bark, twig, grass, lichen });
+    // moss tile modelled in Blender (blender/build_moss.py): albedo + height in alpha, and its normal map
+    const [mossMap, mossNrm] = await Promise.all([this.texture(`${BASE}tex/moss_tile_albedo.png`, true), this.texture(`${BASE}tex/moss_tile_normal.png`, false)]);
+    T.mossTile = { map: mossMap, normal: mossNrm };
     T.water = makeWaterNormal();
     // HDRI: Poly Haven "forest_slope" (CC0)
     const hname = `${BASE}hdri/forest_slope_${tier.texSize >= 2048 ? '2k' : '1k'}`;

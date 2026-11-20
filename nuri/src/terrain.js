@@ -2,7 +2,7 @@
 // a PBR splat material blending the Blender-baked texture sets, and a Rapier heightfield collider.
 import * as THREE from 'three';
 import { makeNoise2D, fbm, smoothstep, clamp, lerp, distToPolyline } from './util.js';
-import { WORLD, PATH, PATH2, PATH3, STREAM, POND, START, OUTCROP } from './layout.js';
+import { WORLD, PATH, PATH2, PATH3, STREAM, POND, START, OUTCROP, GLADE_RIDGE, ridgeEnds } from './layout.js';
 import { SHADER_TRI } from './shaders.js';
 import { TERRAIN_SCALES } from './assets.js';
 import { CAUSTICS_GLSL } from './water.js';
@@ -32,6 +32,14 @@ export class Terrain {
     h += smoothstep(36, 47, e) * 5.5;
     // north ridge behind the outcrop
     h += smoothstep(-24, -40, z) * 2.2 * (0.6 + 0.4 * fbm(n3, x * 0.05, 3.3, 2));
+    // the glade's rocky earth bank: a raised, uneven berm the stones sit in (it fades out into the gate boulders)
+    {
+      const dr = distToPolyline(x, z, GLADE_RIDGE).d + 0.45 * fbm(n4, x * 0.45, z * 0.45, 2);
+      if (dr < 3.2) {
+        const H = (1.0 + 0.45 * fbm(n3, x * 0.16 + 7, z * 0.16, 2)) * smoothstep(1.0, 3.0, ridgeEnds(x, z));
+        h += H * Math.pow(1 - smoothstep(0.2, 2.8, dr), 1.5);
+      }
+    }
     // clearing: gentle bowl, flattened
     const dc = Math.hypot(x - START.x, z - (START.z - 1.5));
     h = lerp(h, 0.35 + 0.05 * fbm(n4, x * 0.3, z * 0.3, 2), smoothstep(7.5, 3.5, dc));

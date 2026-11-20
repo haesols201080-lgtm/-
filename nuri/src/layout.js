@@ -17,6 +17,10 @@ export const POND = { x: 17.5, z: -7, r: 5.2 };
 // rock outcrop with tunnel cave & waterfall
 export const OUTCROP = { x: 22.5, z: -18, yaw: -Math.PI / 2, base: 0.35 };
 
+// rocky earth bank closing the stump glade, from one gate boulder round to the other (the gate is the way in)
+export const GLADE_RIDGE = [[-15.6, -14.2], [-20, -13.6], [-25, -16.4], [-27.4, -22], [-25.4, -28], [-19.5, -30.4], [-13.6, -28.4], [-10.6, -23.6], [-9.4, -19], [-10.4, -16.6]];
+export const ridgeEnds = (x, z) => Math.min(Math.hypot(x + 15.6, z + 14.2), Math.hypot(x + 10.4, z + 16.6));
+
 export const REGIONS = [
   { id: 'clearing', name: '깨어난 공터', x: 0, z: 23, r: 6 },
   { id: 'roots', name: '뿌리 언덕', x: -4.5, z: 13, r: 5 },

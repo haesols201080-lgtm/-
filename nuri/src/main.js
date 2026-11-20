@@ -91,6 +91,7 @@ async function boot() {
   physics.step(); // register the new colliders with the query pipeline before gameplay probes the world
   const gameplay = new Gameplay(ctx, world, player, ui, audio, fx);
   gameplay.build();
+  world.buildMoss(gameplay.mossSources);
   const creatures = new Creatures(ctx, world, audio);
   // lighting model: sky occlusion under canopy / in the cave, sun in-scattering, eye adaptation
   const lighting = new Lighting(ctx, world);
