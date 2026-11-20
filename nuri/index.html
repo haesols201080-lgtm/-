@@ -38,22 +38,13 @@
   </div>
 
   <div id="hud" class="hidden">
-    <div class="counters">
-      <div class="ct"><i class="ico shard"></i><b id="shards">0</b><small id="shards-total">/0</small></div>
-      <div class="ct"><i class="ico friend"></i><b id="friends">0</b><small id="friends-total">/3</small></div>
-    </div>
     <div id="prompt" class="hidden"><kbd id="prompt-key">E</kbd><span id="prompt-text"></span></div>
     <div id="discover" class="hidden"><small>새로운 장소</small><div id="discover-name"></div></div>
     <div id="toast" class="hidden"></div>
     <div id="bubble" class="hidden"><b id="bubble-name"></b><span id="bubble-text"></span></div>
     <div id="ability" class="hidden"><div class="ab-title" id="ability-title"></div><div class="ab-desc" id="ability-desc"></div></div>
-    <button id="pause-btn" class="desk-only" aria-label="일시정지"><i class="pz"></i></button>
-    <div id="quest" class="hidden">
-      <div class="q-head"><small id="q-step"></small><b id="q-title"></b></div>
-      <div class="q-obj"><i class="q-box"></i><span id="q-text"></span><em id="q-prog"></em></div>
-    </div>
     <div id="qmarker" class="hidden"><i class="qm-dia"></i><i class="qm-arrow"></i><span id="qmarker-d"></span></div>
-    <div id="qdone" class="hidden"><small>목표 달성</small><b id="qdone-title"></b><span id="qdone-reward"></span></div>
+    <div id="qdone" class="hidden"><small>완료</small><b id="qdone-title"></b><span id="qdone-reward"></span></div>
     <div id="combo" class="hidden"></div>
     <div id="relic" class="hidden"><small>거인의 유물</small><b id="relic-name"></b><p id="relic-desc"></p><em id="relic-foot"></em></div>
     <div id="squad"></div>
@@ -62,22 +53,34 @@
     <div id="trialres" class="hidden"><small id="trr-name"></small><div id="trr-medal"></div><b id="trr-time"></b><span id="trr-best"></span></div>
     <div id="flash"></div>
   </div>
-  <canvas id="minimap" width="256" height="256" aria-label="지도 열기"></canvas>
+  <div id="nb" role="button" tabindex="0" aria-label="탐사 수첩 펼치기 (일시정지)">
+    <div id="quest" class="hidden">
+      <div class="q-head"><small id="q-step"></small><b id="q-title"></b></div>
+      <div class="q-obj"><i class="q-box"></i><span id="q-text"></span><em id="q-prog"></em></div>
+    </div>
+    <div class="counters">
+      <div class="ct"><i class="ico shard"></i><b id="shards">0</b><small id="shards-total">/0</small></div>
+      <div class="ct"><i class="ico friend"></i><b id="friends">0</b><small id="friends-total">/3</small></div>
+    </div>
+  </div>
+  <canvas id="minimap" width="256" height="256" aria-label="지도 열기"></canvas><div id="mm-ring"></div>
   <div id="letterbox"><i></i><i></i></div>
   <button id="cs-skip">건너뛰기</button>
   <div id="dlg" class="hidden"><b id="dlg-name"></b><p id="dlg-text"></p><i class="dlg-next"></i></div>
   <div id="story" class="screen hidden"><div id="story-text"></div><div class="story-skip">화면을 누르면 넘어가요</div></div>
   <div id="bigmap" class="screen hidden">
-    <div class="bm-panel">
-      <canvas id="bigmap-c" width="768" height="768"></canvas>
-      <div class="bm-side">
-        <h2>숲 지도</h2>
-        <div id="bm-explored"></div>
+    <div class="book">
+      <div class="pg pg-l pg-map"><canvas id="bigmap-c" width="768" height="768"></canvas></div>
+      <div class="pg pg-r">
+        <h2 class="pg-h">숲 지도</h2>
+        <p class="hand" id="bm-explored"></p>
         <ul class="bm-legend">
-          <li><i class="lg target"></i>목표</li><li><i class="lg you"></i>세븐</li><li><i class="lg friend"></i>찾은 친구</li><li><i class="lg shard"></i>근처 동력 결정</li>
+          <li><i class="lg target"></i>지금 목표</li><li><i class="lg you"></i>세븐 (현재 위치)</li><li><i class="lg friend"></i>찾은 동료</li><li><i class="lg shard"></i>근처 동력 결정</li>
         </ul>
-        <button id="bm-close">닫기</button>
+        <p class="hand dim">가 본 곳만 지도에 그려진다.</p>
+        <div class="menu row"><button id="bm-close">덮기</button></div>
       </div>
+      <nav class="tabs"><button data-go="toc">목차</button><button data-go="journal">일지</button><button data-go="map">지도</button><button data-go="settings">설정</button><button data-go="help">조작</button></nav>
     </div>
   </div>
 
@@ -89,73 +92,103 @@
       <button data-btn="jump" class="tb jump">점프</button>
       <button data-btn="emote" class="tb emote">인사</button>
     </div>
-    <button data-act="pause" class="tpause" aria-label="일시정지"><i class="pz"></i></button>
+    <button data-act="pause" class="tpause" aria-label="일시정지"></button>
   </div>
 
   <div id="pause" class="screen hidden">
-    <div class="panel">
-      <h2>일시정지</h2>
-      <div class="menu">
-        <button id="p-resume">계속하기</button>
-        <button id="p-save">저장하기</button>
-        <button id="p-load">마지막 저장 불러오기</button>
-        <button id="p-journal">탐사 일지</button>
-        <button id="p-settings">설정</button>
-        <button id="p-help">조작법</button>
-        <button id="p-title">타이틀로</button>
+    <div class="book">
+      <div class="pg pg-l">
+        <h2 class="pg-h">오늘의 기록</h2>
+        <div id="ps-status" class="entries"></div>
+        <p class="hand dim" id="save-info"></p>
       </div>
-      <div id="save-info"></div>
+      <div class="pg pg-r">
+        <h2 class="pg-h">목차</h2>
+        <div class="menu toc">
+          <button id="p-resume">계속 탐사하기</button>
+          <button id="p-journal">탐사 일지</button>
+          <button id="p-map">숲 지도</button>
+          <button id="p-settings">설정</button>
+          <button id="p-help">조작법</button>
+          <button id="p-save">지금 저장하기</button>
+          <button id="p-load">마지막 저장 불러오기</button>
+          <button id="p-title">타이틀로</button>
+        </div>
+      </div>
+      <nav class="tabs"><button data-go="toc">목차</button><button data-go="journal">일지</button><button data-go="map">지도</button><button data-go="settings">설정</button><button data-go="help">조작</button></nav>
     </div>
   </div>
 
   <div id="journal" class="screen hidden">
-    <div class="panel wide">
-      <h2>탐사 일지</h2>
-      <div class="jr-tabs"><button data-tab="relics" class="on">거인의 유물</button><button data-tab="logs">탐사 기록</button><button data-tab="stats">현황</button></div>
-      <div id="jr-body"></div>
-      <div class="menu row"><button id="jr-close">닫기</button></div>
+    <div class="book">
+      <div class="pg pg-l">
+        <h2 class="pg-h">탐사 일지</h2>
+        <div class="jr-tabs"><button data-tab="relics" class="on">유물</button><button data-tab="logs">기록</button><button data-tab="stats">현황</button></div>
+        <div id="jr-body"></div>
+      </div>
+      <div class="pg pg-r">
+        <div id="jr-detail"></div>
+        <div class="menu row"><button id="jr-close">덮기</button></div>
+      </div>
+      <nav class="tabs"><button data-go="toc">목차</button><button data-go="journal">일지</button><button data-go="map">지도</button><button data-go="settings">설정</button><button data-go="help">조작</button></nav>
     </div>
   </div>
 
   <div id="settings" class="screen hidden">
-    <div class="panel wide">
-      <h2>설정</h2>
-      <div class="grid">
-        <label>전체 볼륨<input type="range" id="s-master" min="0" max="1" step="0.05"></label>
-        <label>음악<input type="range" id="s-music" min="0" max="1" step="0.05"></label>
-        <label>효과음<input type="range" id="s-sfx" min="0" max="1" step="0.05"></label>
-        <label>카메라 감도<input type="range" id="s-sens" min="0.3" max="2.5" step="0.05"></label>
+    <div class="book">
+      <div class="pg pg-l">
+        <h2 class="pg-h">소리와 카메라</h2>
+        <label class="row">전체 볼륨<input type="range" id="s-master" min="0" max="1" step="0.05"></label>
+        <label class="row">음악<input type="range" id="s-music" min="0" max="1" step="0.05"></label>
+        <label class="row">효과음<input type="range" id="s-sfx" min="0" max="1" step="0.05"></label>
+        <label class="row">카메라 감도<input type="range" id="s-sens" min="0.3" max="2.5" step="0.05"></label>
         <label class="chk"><input type="checkbox" id="s-invert">카메라 상하 반전</label>
+      </div>
+      <div class="pg pg-r">
+        <h2 class="pg-h">화면과 조작</h2>
         <label class="chk"><input type="checkbox" id="s-tod">시간 흐름 (해가 움직임)</label>
-        <label class="chk"><input type="checkbox" id="s-guide">길 안내 표시 (목표 방향 표시)</label>
-        <label>날씨<select id="s-weather"><option value="clear">맑음</option><option value="rain">비</option></select></label>
-        <label>그래픽 품질<select id="s-quality"><option value="low">낮음 (모바일)</option><option value="medium">중간</option><option value="high">높음</option></select></label>
+        <label class="chk"><input type="checkbox" id="s-guide">목표 방향 표시</label>
+        <label class="row inline">날씨<select id="s-weather"><option value="clear">맑음</option><option value="rain">비</option></select></label>
+        <label class="row inline">그래픽 품질<select id="s-quality"><option value="low">낮음 (모바일)</option><option value="medium">중간</option><option value="high">높음</option></select></label>
+        <h3>게임패드 버튼</h3>
+        <div class="pad-map" id="pad-map"></div>
+        <p class="hand dim" id="quality-note"></p>
+        <div class="menu row"><button id="s-close">덮기</button></div>
       </div>
-      <h3>게임패드 버튼</h3>
-      <div class="pad-map" id="pad-map"></div>
-      <div class="note" id="quality-note"></div>
-      <div class="menu row">
-        <button id="s-close">닫기</button>
-      </div>
+      <nav class="tabs"><button data-go="toc">목차</button><button data-go="journal">일지</button><button data-go="map">지도</button><button data-go="settings">설정</button><button data-go="help">조작</button></nav>
     </div>
   </div>
 
   <div id="help" class="screen hidden">
-    <div class="panel wide">
-      <h2>조작법</h2>
-      <table class="keys">
-        <tr><th></th><th>키보드·마우스</th><th>게임패드</th><th>터치</th></tr>
-        <tr><td>이동</td><td>W A S D (Shift: 걷기)</td><td>왼쪽 스틱</td><td>왼쪽 화면 드래그</td></tr>
-        <tr><td>카메라</td><td>마우스 (클릭해서 고정), 휠: 거리</td><td>오른쪽 스틱, LB/RB: 거리</td><td>오른쪽 화면 드래그</td></tr>
-        <tr><td>점프 / 2단 점프 / 호버</td><td>Space (길게: 더 높이)</td><td>A</td><td>점프</td></tr>
-        <tr><td>구르기 · 슬라이딩 · 기기</td><td>C 또는 Ctrl</td><td>B</td><td>숙이기</td></tr>
-        <tr><td>들기 · 던지기 · 잡고 당기기 · 조작</td><td>E</td><td>X</td><td>행동</td></tr>
-        <tr><td>인사</td><td>Q</td><td>Y</td><td>인사</td></tr>
-        <tr><td>일시정지</td><td>Esc / P</td><td>Start</td><td>II</td></tr>
-        <tr><td>제자리로</td><td>R</td><td>—</td><td>메뉴</td></tr>
-      </table>
-      <p class="note">벽에 붙은 덩굴은 벽 쪽으로 이동하면 기어오를 수 있고, 낙하 중 턱에 닿으면 매달립니다. 나무 상자는 밀어서 옮기거나 E로 잡고 당길 수 있어요.</p>
-      <div class="menu row"><button id="h-close">닫기</button></div>
+    <div class="book">
+      <div class="pg pg-l">
+        <h2 class="pg-h">조작법 <span class="hand dim">키보드 · 마우스</span></h2>
+        <dl class="keys">
+          <dt>이동</dt><dd>W A S D · Shift 걷기</dd>
+          <dt>카메라</dt><dd>마우스 (클릭해서 고정) · 휠 거리</dd>
+          <dt>점프</dt><dd>Space · 공중에서 한 번 더 · 길게 누르면 호버</dd>
+          <dt>구르기·기기</dt><dd>C 또는 Ctrl</dd>
+          <dt>들기·던지기·조작</dt><dd>E</dd>
+          <dt>인사</dt><dd>Q</dd>
+          <dt>지도</dt><dd>M</dd>
+          <dt>수첩 (일시정지)</dt><dd>Esc · P</dd>
+          <dt>제자리로</dt><dd>R</dd>
+        </dl>
+      </div>
+      <div class="pg pg-r">
+        <h2 class="pg-h">게임패드 · 터치</h2>
+        <dl class="keys">
+          <dt>이동</dt><dd>왼쪽 스틱 · 왼쪽 화면 드래그</dd>
+          <dt>카메라</dt><dd>오른쪽 스틱 · 오른쪽 화면 드래그</dd>
+          <dt>점프</dt><dd>A · 점프 버튼</dd>
+          <dt>구르기·기기</dt><dd>B · 숙이기 버튼</dd>
+          <dt>들기·던지기·조작</dt><dd>X · 행동 버튼</dd>
+          <dt>수첩</dt><dd>Start · 왼쪽 위 수첩</dd>
+        </dl>
+        <p class="hand dim">덩굴은 벽 쪽으로 밀면 기어오른다. 떨어지다 턱에 닿으면 매달린다. 상자는 밀거나 E로 잡고 끌 수 있다.</p>
+        <div class="menu row"><button id="h-close">덮기</button></div>
+      </div>
+      <nav class="tabs"><button data-go="toc">목차</button><button data-go="journal">일지</button><button data-go="map">지도</button><button data-go="settings">설정</button><button data-go="help">조작</button></nav>
     </div>
   </div>
 

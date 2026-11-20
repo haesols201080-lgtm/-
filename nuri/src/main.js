@@ -361,12 +361,23 @@ async function boot() {
   const togglePause = () => {
     if (G.mode !== 'play') return;
     G.paused = !G.paused;
-    if (G.paused) { document.exitPointerLock?.(); const sv = loadSave(); ui.showPause(sv?.savedAt ? `마지막 저장: ${new Date(sv.savedAt).toLocaleString()}` : '저장된 기록 없음'); }
+    if (G.paused) {
+      document.exitPointerLock?.(); const sv = loadSave(), g = gameplay.save, q = document.getElementById('quest');
+      const status = {
+        quest: q.classList.contains('hidden') ? null : { title: document.getElementById('q-title').textContent, text: document.getElementById('q-text').textContent, prog: document.getElementById('q-prog').textContent },
+        lines: [['동력 결정', `${g.shards.length} / ${gameplay.totalShards}`], ['찾은 동료', `${g.companions.length} / 3`], ['거인의 유물', `${g.relics.length} / ${relics.items.length}`],
+          ['측량 비콘', `${(g.beacons || []).length} / ${puzzles.beacons.length}`], ['탐험한 숲', `${Math.round(minimap.explored() * 100)}%`], ['탐사 시간', `${Math.floor(G.playTime / 60)}분`]],
+      };
+      ui.showPause(sv?.savedAt ? `마지막 저장 ${new Date(sv.savedAt).toLocaleString()}` : '아직 저장한 적 없음', status);
+    }
     else ui.hidePause();
   };
   input.on('pause', togglePause);
   input.on('respawn', () => { if (G.mode === 'play' && !G.paused) player.respawn(); });
   ui.on('resume', togglePause);
+  ui.on('nbpause', () => { if (G.mode === 'play' && !G.paused && !director.active) togglePause(); });
+  ui.on('openmap', () => minimap.show(true));
+  ui.on('closemap', () => { if (minimap.open) minimap.show(false); });
   ui.on('save', () => { ui.setSaveInfo(save() ? `저장했어요 · ${new Date().toLocaleTimeString()}` : '저장할 수 없어요 (브라우저 저장소가 막혀 있어요)'); });
   ui.on('load', () => { if (loadSave()) location.reload(); else ui.setSaveInfo('불러올 저장 기록이 없어요'); });
   ui.on('title', () => { save(); location.reload(); });

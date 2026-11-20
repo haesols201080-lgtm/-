@@ -19,6 +19,20 @@ export class UI {
   constructor() {
     if (isTouch) document.body.classList.add('touch');
     for (const m of document.querySelectorAll('.mark')) mountLogo(m);
+    // the pocket notebook in the corner opens the notebook (pause)
+    const nb = $('nb');
+    const openNb = (e) => { e.preventDefault(); e.stopPropagation(); this.fire('nbpause'); };
+    nb.addEventListener('click', openNb); nb.addEventListener('touchstart', openNb, { passive: false });
+    nb.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') openNb(e); });
+    // index tabs on the edge of every spread: jump between sections of the notebook
+    const SECTION = { pause: 'toc', journal: 'journal', bigmap: 'map', settings: 'settings', help: 'help' };
+    for (const nav of document.querySelectorAll('.book .tabs')) {
+      const here = SECTION[nav.closest('.screen').id];
+      for (const b of nav.querySelectorAll('button')) {
+        b.classList.toggle('on', b.dataset.go === here);
+        b.onclick = () => this.go(b.dataset.go);
+      }
+    }
     this.handlers = {};
   }
   on(name, fn) { this.handlers[name] = fn; }
@@ -130,12 +144,29 @@ export class UI {
   // ---- relics & journal
   relic(name, desc, foot) { $('relic-name').textContent = name; $('relic-desc').textContent = desc; $('relic-foot').textContent = foot; const el = $('relic'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 8000); }
   openJournal(data) {
-    const body = $('jr-body'), el = $('journal');
+    const body = $('jr-body'), el = $('journal'), det = $('jr-detail');
+    const show = (tab, e) => {
+      det.innerHTML = '';
+      const h = document.createElement('h3'); const p = document.createElement('div'); p.className = 'jr-text';
+      if (tab === 'stats') { h.textContent = '지금까지의 현황'; for (const s2 of data.stats) { const r = document.createElement('p'); r.textContent = s2.title; p.appendChild(r); } }
+      else if (!e) { h.textContent = '빈 면'; const r = document.createElement('p'); r.textContent = '아직 적은 것이 없다.'; p.appendChild(r); }
+      else { h.textContent = e.unknown ? '???' : (e.title || '탐사 기록'); const r = document.createElement('p'); r.textContent = e.text; p.appendChild(r); if (e.unknown) det.classList.add('unknown'); }
+      det.classList.toggle('unknown', !!e?.unknown);
+      det.append(h, p);
+    };
     const render = (tab) => {
       for (const b of el.querySelectorAll('.jr-tabs button')) b.classList.toggle('on', b.dataset.tab === tab);
       body.innerHTML = '';
-      for (const e of data[tab]) { const d = document.createElement('div'); d.className = 'jr-item' + (e.unknown ? ' unknown' : ''); const b = document.createElement('b'); b.textContent = e.title; d.appendChild(b);
-        if (e.text) { const p = document.createElement('p'); p.textContent = e.text; d.appendChild(p); } body.appendChild(d); }
+      const items = data[tab];
+      items.forEach((e, i) => {
+        const d = document.createElement('button'); d.className = 'jr-item' + (e.unknown ? ' unknown' : '');
+        const label = e.title || (e.text.length > 20 ? e.text.slice(0, 20) + '…' : e.text);
+        const n = document.createElement('i'); n.textContent = String(i + 1).padStart(2, '0'); const b = document.createElement('span'); b.textContent = label;
+        d.append(n, b); d.onclick = () => { for (const x of body.children) x.classList.remove('on'); d.classList.add('on'); show(tab, e); };
+        body.appendChild(d);
+      });
+      if (tab === 'stats') show('stats');
+      else { const first = items.findIndex((e) => !e.unknown); if (first >= 0) body.children[first].click(); else show(tab, null); }
     };
     for (const b of el.querySelectorAll('.jr-tabs button')) b.onclick = () => render(b.dataset.tab);
     $('jr-close').onclick = () => el.classList.add('hidden');
@@ -171,19 +202,43 @@ export class UI {
   bubble(name, text) { $('bubble-name').textContent = name + (CODES[name] ? ' · ' + CODES[name] : ''); $('bubble-text').textContent = text; const el = $('bubble'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 5100); }
   ability(title, desc) { $('ability-title').textContent = title; $('ability-desc').textContent = desc; const el = $('ability'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 6100); }
 
-  showPause(info) {
-    $('pause').classList.remove('hidden'); document.body.classList.add('menu-open');
+  showPause(info, status) {
+    $('pause').classList.remove('hidden'); document.body.classList.add('menu-open', 'paused');
     $('save-info').textContent = info || '';
+    // today's record: what the robot is doing now, then the tallies, written as notebook lines
+    const box = $('ps-status'); box.innerHTML = '';
+    if (status?.quest) {
+      const q = document.createElement('div'); q.className = 'entry-now';
+      const h = document.createElement('small'); h.textContent = '지금 할 일'; q.appendChild(h);
+      const t = document.createElement('b'); t.textContent = status.quest.title; q.appendChild(t);
+      const x = document.createElement('p'); x.textContent = status.quest.text + (status.quest.prog ? `  (${status.quest.prog})` : ''); q.appendChild(x);
+      box.appendChild(q);
+    }
+    for (const [k, v] of status?.lines || []) {
+      const row = document.createElement('div'); row.className = 'entry';
+      const a = document.createElement('span'); a.textContent = k; const b = document.createElement('em'); b.textContent = v;
+      row.append(a, b); box.appendChild(row);
+    }
     $('p-resume').onclick = () => this.fire('resume');
     $('p-save').onclick = () => this.fire('save');
     $('p-load').onclick = () => this.fire('load');
-    $('p-settings').onclick = () => this.openSettings();
-    $('p-journal').onclick = () => this.fire('journal');
-    $('p-help').onclick = () => $('help').classList.remove('hidden');
+    $('p-settings').onclick = () => this.go('settings');
+    $('p-journal').onclick = () => this.go('journal');
+    $('p-help').onclick = () => this.go('help');
+    $('p-map').onclick = () => this.go('map');
     $('p-title').onclick = () => this.fire('title');
     $('h-close').onclick = () => $('help').classList.add('hidden');
   }
-  hidePause() { $('pause').classList.add('hidden'); $('settings').classList.add('hidden'); $('help').classList.add('hidden'); $('journal').classList.add('hidden'); document.body.classList.remove('menu-open'); }
+  // move to a section of the notebook (from the contents page or an index tab)
+  go(where) {
+    for (const id of ['journal', 'settings', 'help']) $(id).classList.add('hidden');
+    if (where !== 'map') this.fire('closemap');
+    if (where === 'journal') this.fire('journal');
+    else if (where === 'map') this.fire('openmap');
+    else if (where === 'settings') this.openSettings();
+    else if (where === 'help') $('help').classList.remove('hidden');
+  }
+  hidePause() { $('pause').classList.add('hidden'); $('settings').classList.add('hidden'); $('help').classList.add('hidden'); $('journal').classList.add('hidden'); this.fire('closemap'); document.body.classList.remove('menu-open', 'paused'); }
   pauseOpen() { return !$('pause').classList.contains('hidden'); }
   setSaveInfo(t) { $('save-info').textContent = t; }
 
