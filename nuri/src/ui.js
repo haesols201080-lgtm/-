@@ -202,7 +202,7 @@ export class UI {
   }
   renderPadMap() {
     const box = $('pad-map'); box.innerHTML = '';
-    const names = { jump: '점프', crouch: '숙이기', interact: '행동', emote: '손 흔들기' };
+    const names = { jump: '점프', crouch: '숙이기', interact: '행동', emote: '인사' };
     for (const [k, label] of Object.entries(names)) {
       const b = document.createElement('button');
       b.textContent = `${label}: 버튼 ${this.input.padMap[k]}`;

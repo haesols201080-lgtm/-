@@ -131,7 +131,7 @@ body.touch kbd { font-family: var(--f-ui); }
 #discover-name { font: 500 clamp(28px, 4.8vw, 46px)/1.15 var(--f-display); margin-top: 6px; text-shadow: 0 2px 24px rgba(0, 0, 0, .6), 0 0 2px rgba(0, 0, 0, .5); }
 #discover-name::after { content: ''; display: block; width: 44px; height: 1px; margin: 14px auto 0; background: var(--ink-2); }
 @keyframes disc { 0% { opacity: 0; transform: translate(-50%, 6px); } 12%, 75% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
-#toast { position: absolute; left: 50%; top: calc(24% + 20px); transform: translateX(-50%); background: var(--plate); border: 1px solid var(--rule); border-radius: var(--r);
+#toast { position: absolute; left: 50%; top: 33%; transform: translateX(-50%); background: var(--plate); border: 1px solid var(--rule); border-radius: var(--r);
   padding: 9px 16px; font-size: 14.5px; line-height: 1.55; max-width: min(540px, 90vw); text-align: center; animation: fade 4s ease forwards; }
 @keyframes fade { 0% { opacity: 0; } 8%, 80% { opacity: 1; } 100% { opacity: 0; } }
 /* Nuri thinking aloud: a subtitle, not a speech balloon */
@@ -286,7 +286,7 @@ body.cutscene #dlg { bottom: calc(11vh + 14px); }
 #relic small { font-size: 11.5px; font-weight: 600; color: var(--tag-dim); }
 #relic b { display: block; font: 600 20px/1.25 var(--f-display); margin: 2px 0 7px; }
 #relic p { margin: 0; font-size: 13.5px; line-height: 1.6; color: #3A3B36; }
-#relic em { display: block; margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(29, 31, 28, .28); font: 500 11.5px var(--f-data); font-style: normal; color: var(--tag-dim); }
+#relic em { display: block; margin-top: 10px; padding-top: 8px; border-top: 1px dashed rgba(29, 31, 28, .28); font: 500 12px var(--f-ui); font-variant-numeric: tabular-nums; font-style: normal; color: var(--tag-dim); }
 
 /* ---- journal ---- */
 .jr-tabs { display: flex; gap: 24px; margin: 14px 0 4px; border-bottom: 1px solid var(--rule); }
