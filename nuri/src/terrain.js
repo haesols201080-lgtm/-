@@ -83,6 +83,34 @@ export class Terrain {
 
   idx(i, j) { return j * (this.res + 1) + i; }
 
+  // The forest floor at a robot's scale (Nuri is 35 cm tall): soil heaves up round big trunks over their root
+  // flares, and where a tree was thrown by wind long ago its root plate tore out a pit with a mound of earth beside
+  // it (pit-and-mound) — now mossed over. Applied before the mesh and the collider are built.
+  microRelief(trees, pits) {
+    const N = this.res + 1, c = this.cell, H = this.h;
+    const each = (x, z, R, f) => {
+      const i0 = Math.max(0, Math.floor((x - R + this.half) / c)), i1 = Math.min(this.res, Math.ceil((x + R + this.half) / c));
+      const j0 = Math.max(0, Math.floor((z - R + this.half) / c)), j1 = Math.min(this.res, Math.ceil((z + R + this.half) / c));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const k = j * N + i; if (this.water[k] || this.pathM[k] > 0.3) continue;
+        const dx = -this.half + i * c - x, dz = -this.half + j * c - z; H[k] += f(dx, dz) * (1 - this.pathM[k] * 3);
+      }
+    };
+    for (const t of trees) {
+      if (!(t.hero || t.s > 0.95)) continue;
+      const R = 0.75 + 0.6 * t.s, A = 0.045 + 0.05 * (t.hero ? 1 : 0) * t.s;
+      each(t.x, t.z, R, (dx, dz) => { const d = Math.hypot(dx, dz) / R; return d < 1 ? A * (1 - d) * (1 - d) * (1 + 0.5 * Math.min(1, d * 3) * Math.sin(Math.atan2(dz, dx) * 5 + t.rot)) : 0; });
+    }
+    for (const q of pits) {
+      const ca = Math.cos(q.a), sa = Math.sin(q.a), L = q.size;
+      each(q.x, q.z, 1.6 * L, (dx, dz) => {
+        const u = (dx * ca + dz * sa) / L, v = (-dx * sa + dz * ca) / L;   // u along the fall, v across
+        const pit = Math.exp(-((u + 0.45) ** 2 / 0.16 + v * v / 0.3)), mound = Math.exp(-((u - 0.35) ** 2 / 0.07 + v * v / 0.42));
+        return (-0.16 * pit + 0.2 * mound) * L;
+      });
+    }
+  }
+
   heightAt(x, z) {
     const fx = clamp((x + this.half) / this.cell, 0, this.res - 1e-4), fz = clamp((z + this.half) / this.cell, 0, this.res - 1e-4);
     const i = Math.floor(fx), j = Math.floor(fz), tx = fx - i, tz = fz - j;

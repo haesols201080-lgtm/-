@@ -66,7 +66,9 @@ export class World {
     const { assets } = this.ctx;
     this.terrain = new Terrain();
     this.planTrees();
+    this.terrain.microRelief(this.treeSpots, this.pits);
     const mossSources = [
+      ...this.pits.map((q) => ({ x: q.x + Math.cos(q.a) * 0.35 * q.size, z: q.z + Math.sin(q.a) * 0.35 * q.size, r: 1.6 * q.size })),
       ...BOULDERS.map(([x, z, r]) => ({ x, z, r: r * 2.2 })),
       ...this.treeSpots.filter((t) => t.hero).map((t) => ({ x: t.x, z: t.z, r: 2.4 })),
     ];
@@ -401,6 +403,14 @@ export class World {
       if (this.treeSpots.some((t) => Math.hypot(t.x - x, t.z - z) < (t.hero ? 4 : 1.5 + 0.6 * (1 - D)))) continue;
       { const u = rnd(); this.treeSpots.push({ x, z, s: 0.75 + rnd() * 0.4, t: u < 0.4 ? 'pine_3' : u < 0.7 ? 'pine_13' : 'pine_2', rot: rnd() * 6.28, hero: false }); }
       n++;
+    }
+    // windthrow: in the gaps (where a big tree came down) the pit-and-mound its root plate left behind
+    this.pits = [];
+    for (let k = 0; k < 4000 && this.pits.length < 16; k++) {
+      const x = (rnd() - 0.5) * 80, z = (rnd() - 0.5) * 80;
+      if (dens(x, z) > 0.35 || !baseOk(x, z, 2.2, 2.6, 2.5, 9)) continue;
+      if (this.terrain.heightAt(x, z) < this.terrain.waterY + 0.25 || this.treeSpots.some((t) => Math.hypot(t.x - x, t.z - z) < 2.2) || this.pits.some((q) => Math.hypot(q.x - x, q.z - z) < 6)) continue;
+      this.pits.push({ x, z, a: rnd() * 6.28, size: 0.9 + rnd() * 0.6 });
     }
     // a stand is not a plantation: heights vary independently of girth, trees in the shadow of a bigger
     // neighbour stay smaller, and stems lean a little in different directions
