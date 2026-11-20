@@ -27,8 +27,8 @@ export class UI {
   }
   rotateTips() {
     const tips = ['숙이기 버튼으로 구르면 좁은 틈도 지나갈 수 있어요.', '물에 들어갔다 나오면 누리가 흠뻑 젖어요.', '무거운 상자는 발판 위에 올려 보세요.',
-      '덩굴은 벽 쪽으로 밀면 기어오를 수 있어요.', '빛 조각은 바위 위나 그루터기 근처에 숨어 있곤 해요.', '친구 로봇 셋이 숲 어딘가에서 기다리고 있어요.',
-      '미니맵을 누르면 숲 지도가 열려요.', '빛 조각을 연달아 모으면 연속 보너스 소리가 높아져요.'];
+      '덩굴은 벽 쪽으로 밀면 기어오를 수 있어요.', '동력 결정은 바위 위나 그루터기 근처에 숨어 있곤 해요.', '친구 로봇 셋이 숲 어딘가에서 기다리고 있어요.',
+      '미니맵을 누르면 숲 지도가 열려요.', '동력 결정을 연달아 모으면 회수음이 점점 높아져요.'];
     let i = Math.floor(Math.random() * tips.length);
     const show = () => { const el = $('loadtip'); el.parentElement.classList.add('out'); setTimeout(() => { el.textContent = tips[i++ % tips.length]; el.parentElement.classList.remove('out'); }, 450); };
     $('loadtip').textContent = tips[i++ % tips.length];
@@ -143,10 +143,10 @@ export class UI {
   trialResult(name, t, m, isBest, prev) {
     $('trr-name').textContent = `${name} 완주`; $('trr-time').textContent = t.toFixed(2) + '초';
     const md = $('trr-medal'); md.className = m >= 0 ? 'm' + m : 'none'; md.textContent = ['금', '은', '동'][m] || '';
-    $('trr-best').textContent = isBest ? (prev ? `최고 기록 경신! (이전 ${prev.toFixed(2)}초)` : '첫 기록!') : `최고 기록 ${prev.toFixed(2)}초`;
+    $('trr-best').textContent = isBest ? (prev ? `최고 기록 경신 · 이전 ${prev.toFixed(2)}초` : '첫 기록') : `최고 기록 ${prev.toFixed(2)}초`;
     const el = $('trialres'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 5500);
   }
-  trialFail(name) { this.toast(`${name} — 시간 초과! 출발 지점에서 다시 도전해 보세요.`); }
+  trialFail(name) { this.toast(`${name} 시간 초과. 출발 지점에서 다시 시작할 수 있어요.`); }
   combo(n) { const el = $('combo'); el.textContent = `연속 회수 ×${n}`; this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 900); }
   flash() { const el = $('flash'); el.classList.remove('go'); void el.offsetWidth; el.classList.add('go'); }
 
