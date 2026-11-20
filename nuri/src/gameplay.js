@@ -254,7 +254,11 @@ export class Gameplay {
         const xa = x0 + (x1 - x0) * t0, za = z0 + (z1 - z0) * t0, xb = x0 + (x1 - x0) * t1, zb = z0 + (z1 - z0) * t1;
         const cx = (xa + xb) / 2, cz = (za + zb) / 2, len = Math.hypot(xb - xa, zb - za);
         const y = Math.min(this.groundY(xa, za), this.groundY(xb, zb), this.groundY(cx, cz)) - 0.06;
-        const w = this.prop(rnd() < 0.5 ? 'wall_0' : 'wall_1');
+        if (this.wallMat === undefined) {                // cooler, greyer field stone than the warm scan
+          this.wallMat = null; this.ctx.assets.models.prop_wall_0?.scene.traverse((o) => { if (o.isMesh && o.name.startsWith('wall_stone')) this.wallMat = o.material.clone(); });
+          this.wallMat?.color.set(0xa9b0b4);
+        }
+        const w = this.prop(rnd() < 0.5 ? 'wall_0' : 'wall_1', this.wallMat ? { wall_stone: this.wallMat } : {});
         w.position.set(cx, y, cz); w.rotation.y = yaw + (rnd() - 0.5) * 0.04; w.scale.set(len / 1.2 * 1.04, 0.95 + rnd() * 0.12, 1);
         this.scene.add(w);
         const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
