@@ -18,10 +18,11 @@ export class Terrain {
     this.h = new Float32Array(N * N);
     this.water = new Float32Array(N * N); // 1 inside stream/pond
     this.pathM = new Float32Array(N * N);
+    this.rim = new Float32Array(N * N);   // 0 in the basin -> 1 high on the enclosing slopes
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
       const x = -this.half + i * this.cell, z = -this.half + j * this.cell;
       const r = this.heightFn(x, z);
-      this.h[j * N + i] = r.h; this.water[j * N + i] = r.w; this.pathM[j * N + i] = r.p;
+      this.h[j * N + i] = r.h; this.water[j * N + i] = r.w; this.pathM[j * N + i] = r.p; this.rim[j * N + i] = r.rim;
     }
   }
 
@@ -31,6 +32,7 @@ export class Terrain {
     // a square wall), its foot wandering between ~31 and ~41 m from the middle; the north ridge behind the outcrop
     // has a wandering foot and shallow gullies. Around the garden fence at the end of the forest the old smooth
     // profile is kept, so the fence and the way through it sit where they were built.
+    let rim = 0;
     {
       const sq = Math.pow(Math.pow(Math.abs(x), 3.2) + Math.pow(Math.abs(z), 3.2), 1 / 3.2);
       const a = Math.atan2(z, x), wob = 4.2 * fbm(n2, Math.cos(a) * 1.6 + 5, Math.sin(a) * 1.6 - 3, 3) + 1.6 * fbm(n4, x * 0.06, z * 0.06, 2);
@@ -39,7 +41,8 @@ export class Terrain {
       const zr = z + 4.5 * fbm(n2, x * 0.035 + 2, 7.1, 2);
       hn += smoothstep(-22, -42, zr) * (2.2 + 0.9 * fbm(n3, x * 0.05, 3.3, 2)) * (1 - 0.35 * Math.pow(Math.abs(Math.sin(x * 0.19 + 2 * fbm(n4, x * 0.05, z * 0.05, 2))), 6));
       const ho = smoothstep(36, 47, Math.max(Math.abs(x), Math.abs(z))) * 5.5 + smoothstep(-24, -40, z) * 2.2 * (0.6 + 0.4 * fbm(n3, x * 0.05, 3.3, 2));
-      h += lerp(ho, hn, smoothstep(3, 9, Math.hypot(x - 0.5, (z + 35) * 0.8)));
+      const kE = smoothstep(3, 9, Math.hypot(x - 0.5, (z + 35) * 0.8));
+      h += lerp(ho, hn, kE); rim = rise * kE;
     }
     // the glade's rocky earth bank: a raised, uneven berm the stones sit in (it fades out into the gate boulders)
     {
@@ -78,7 +81,7 @@ export class Terrain {
     const bowl = smoothstep(POND.r + 1.4, POND.r - 2.2, dpd);
     h = lerp(h, wy - 1.15, bowl);
     const w = Math.max(chan > 0.55 ? 1 : 0, bowl > 0.45 ? 1 : 0);
-    return { h, w, p };
+    return { h, w, p, rim };
   }
 
   idx(i, j) { return j * (this.res + 1) + i; }
@@ -125,6 +128,10 @@ export class Terrain {
     const hx = this.heightAt(x + e, z) - this.heightAt(x - e, z), hz = this.heightAt(x, z + e) - this.heightAt(x, z - e);
     return new THREE.Vector3(-hx, 2 * e, -hz).normalize();
   }
+  rimAt(x, z) {
+    const i = clamp(Math.round((x + this.half) / this.cell), 0, this.res), j = clamp(Math.round((z + this.half) / this.cell), 0, this.res);
+    return this.rim[this.idx(i, j)];
+  }
   isWater(x, z) { return this.heightAt(x, z) < this.waterY - 0.05; }
 
   // surface type for footsteps: 'dirt'|'leaves'|'pebbles'|'moss'|'rock'
@@ -158,8 +165,10 @@ export class Terrain {
       let moss = 0;
       for (const m of mossSources) { const d = Math.hypot(x - m.x, z - m.z); if (d < m.r) moss = Math.max(moss, smoothstep(m.r, m.r * 0.35, d)); }
       moss *= 0.5 + 0.5 * smoothstep(-0.2, 0.4, fbm(n3, x * 0.25, z * 0.25, 3));
-      const pebbles = smoothstep(0.55, 0.95, wet);
-      moss = Math.max(moss * 0.6, smoothstep(0.15, 0.6, wet) * (1 - pebbles));
+      // the enclosing slopes: mossed over in drifts, with scree where they are steep (not one bare sweep of litter)
+      const rim = this.rim[k], slope = Math.hypot(this.h[this.idx(Math.min(i + 1, this.res), j)] - this.h[this.idx(Math.max(i - 1, 0), j)], this.h[this.idx(i, Math.min(j + 1, this.res))] - this.h[this.idx(i, Math.max(j - 1, 0))]) / (2 * this.cell);
+      const pebbles = Math.max(smoothstep(0.55, 0.95, wet), smoothstep(0.35, 0.8, slope) * smoothstep(0.1, 0.4, rim) * 0.75 * smoothstep(-0.2, 0.25, fbm(n4, x * 0.2 + 3, z * 0.2, 2)));
+      moss = Math.max(moss * 0.6, smoothstep(0.15, 0.6, wet) * (1 - pebbles), smoothstep(0.08, 0.45, rim) * (0.3 + 0.45 * smoothstep(-0.25, 0.3, fbm(n2, x * 0.16, z * 0.16 + 5, 3))) * (1 - pebbles));
       const dirt = Math.max(path, 0.25 * smoothstep(0.1, 0.5, fbm(n2, x * 0.11 + 7, z * 0.11, 3))) * (1 - pebbles);
       const litter = Math.max(0, 1 - dirt - pebbles - moss * 0.8);
       const sum = litter + dirt + pebbles + moss || 1;

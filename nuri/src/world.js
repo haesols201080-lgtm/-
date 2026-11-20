@@ -76,6 +76,7 @@ export class World {
     this.terrain.buildCollider(this.ctx.RAPIER, this.ctx.physics);
     this.buildTrees();
     this.buildRocks();
+    this.buildRimRocks();
     this.buildLogsStumps();
     this.buildOutcrop();
     this.buildRockFaces();
@@ -361,7 +362,8 @@ export class World {
     // A forest is not evenly sown: a slow "stand density" field makes thickets, ordinary stands and open gaps where
     // an old tree fell, young trees come up near their parents (seed fall), and pines take the drier rises while
     // firs keep to the damp ground near water. Trees also keep clear of boulders, logs, stumps and puzzle sites.
-    const dens = (x, z) => smoothstep(-0.5, 0.45, fbm(nzEco, x * 0.042 + 3.1, z * 0.042 - 1.7, 3));
+    // (the slopes that close the basin carry a thick, unbroken stand: the forest goes on up the hill)
+    const dens = (x, z) => Math.max(smoothstep(-0.5, 0.45, fbm(nzEco, x * 0.042 + 3.1, z * 0.042 - 1.7, 3)), 0.95 * smoothstep(0.06, 0.35, this.terrain.rimAt(x, z)));
     const damp = (x, z) => smoothstep(9, 2.5, Math.min(distToPolyline(x, z, STREAM).d, Math.hypot(x - POND.x, z - POND.z) - POND.r)) * 0.6 + 0.4 * smoothstep(0.2, -0.4, this.terrain.heightAt(x, z));
     const PINES = TREES.filter((t) => t.startsWith('pine')), FIRS = TREES.filter((t) => t.startsWith('fir'));
     const pickType = (x, z) => { const L = rnd() < 0.15 + 0.7 * damp(x, z) ? FIRS : PINES; return L[Math.floor(rnd() * L.length)]; };
@@ -377,7 +379,7 @@ export class World {
       || distToPolyline(x, z, STREAM).d < stream || Math.hypot(x - POND.x, z - POND.z) < POND.r + pond || Math.hypot(x - OUTCROP.x, z - OUTCROP.z) < out
       || Math.abs(x) > 47 || Math.abs(z) > 47 || TRAILS.some((tr) => distToPolyline(x, z, tr).d < path * 0.45) || !clearOf(x, z));
     let tries = 0;
-    while (this.treeSpots.length < 230 && tries++ < 20000) {
+    while (this.treeSpots.length < 255 && tries++ < 24000) {
       let x, z;
       const parents = this.treeSpots.filter((t) => !t.hero);
       if (parents.length > 20 && rnd() < 0.45) {                // seed fall: a few metres from an older tree
@@ -609,6 +611,20 @@ export class World {
       });
       im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
     });
+  }
+
+  // the slopes round the basin: big stones bedded in the hillside (kept out of this.rocks, which gameplay uses)
+  buildRimRocks() {
+    const L = this.rockLib(), T = this.terrain, spots = [];
+    for (let k = 0; k < 3000 && spots.length < 30; k++) {
+      const x = (rnd() - 0.5) * 92, z = (rnd() - 0.5) * 92, r = T.rimAt(x, z);
+      if (r < 0.12 || r > 0.85 || spots.some(([a, b]) => Math.hypot(a - x, b - z) < 4.5) || this.treeSpots.some((t) => Math.hypot(t.x - x, t.z - z) < 1.4)) continue;
+      if (Math.hypot(x - OUTCROP.x, z - OUTCROP.z) < 10 || Math.hypot(x - 0.5, z + 36) < 8) continue;
+      spots.push([x, z]);
+      const D = 0.7 + rnd() * 1.5, v = D > 1.4 ? L.big[Math.floor(rnd() * L.big.length)] : L.mid[Math.floor(rnd() * L.mid.length)];
+      this.bedRock(v, x, z, D, { sink: 0.35 + rnd() * 0.15, yaw: rnd() * 6.28, tilt: 0.25, hull: D > 1.0 });
+    }
+    this.rimRocks = spots;
   }
 
   buildRockFaces() {
