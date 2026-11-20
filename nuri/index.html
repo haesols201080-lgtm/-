@@ -42,6 +42,28 @@
     <div id="bubble" class="hidden"><b id="bubble-name"></b><span id="bubble-text"></span></div>
     <div id="ability" class="hidden"><div class="ab-title" id="ability-title"></div><div class="ab-desc" id="ability-desc"></div></div>
     <button id="pause-btn" class="desk-only" aria-label="일시정지">II</button>
+    <div id="quest" class="hidden">
+      <div class="q-head"><small id="q-step"></small><b id="q-title"></b></div>
+      <div class="q-obj"><i class="q-box"></i><span id="q-text"></span><em id="q-prog"></em></div>
+    </div>
+    <div id="qmarker" class="hidden"><i class="qm-dia"></i><i class="qm-arrow"></i><span id="qmarker-d"></span></div>
+    <div id="qdone" class="hidden"><small>퀘스트 완료</small><b id="qdone-title"></b><span id="qdone-reward"></span></div>
+    <div id="combo" class="hidden"></div>
+    <div id="flash"></div>
+  </div>
+  <canvas id="minimap" width="256" height="256" aria-label="지도 열기"></canvas>
+  <div id="bigmap" class="screen hidden">
+    <div class="bm-panel">
+      <canvas id="bigmap-c" width="768" height="768"></canvas>
+      <div class="bm-side">
+        <h2>숲 지도</h2>
+        <div id="bm-explored"></div>
+        <ul class="bm-legend">
+          <li><i class="lg target"></i>목표</li><li><i class="lg you"></i>누리</li><li><i class="lg friend"></i>찾은 친구</li><li><i class="lg shard"></i>근처 빛 조각</li>
+        </ul>
+        <button id="bm-close">닫기</button>
+      </div>
+    </div>
   </div>
 
   <div id="touch">

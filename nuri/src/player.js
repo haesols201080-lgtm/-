@@ -31,7 +31,7 @@ export class Player {
     this.vel = new THREE.Vector3();
     this.yaw = spawn.yaw || 0; this.state = 'idle'; this.grounded = true;
     this.lastGround = 0; this.jumpBuf = -1; this.time = 0; this.jumpsUsed = 0; this.jumpCut = false;
-    this.abilities = { booster: false };
+    this.abilities = { booster: false, dash: false };
     this.hoverT = 0; this.rollT = 0; this.slideT = 0; this.landK = 0; this.actT = 0; this.act = null;
     this.crouched = false; this.hangInfo = null; this.climbInfo = null; this.climbT = 0;
     this.carry = null; this.grab = null; this.pushBody = null; this.pushT = 0;
@@ -189,6 +189,14 @@ export class Player {
         this.airMax = Math.max(this.airMax || 0, Math.hypot(this.vel.x, this.vel.z));
         this.emit('djump');
       }
+    }
+    // air dash (milestone reward): the crouch button in the air bursts forward once per jump
+    if (grounded) this.dashUsed = false;
+    else if (crouchPressed && this.abilities.dash && !this.dashUsed && !this.carry && !['swim', 'climb', 'hang', 'climbup'].includes(this.state)) {
+      const f = mag > 0.1 ? dir : new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
+      this.vel.x = f.x * 3.3; this.vel.z = f.z * 3.3; this.vel.y = Math.max(this.vel.y, 0.9);
+      this.airMax = 3.3; this.dashUsed = true; this.jumpCut = true; this.state = 'djump'; this.djT = 0.25;
+      this.yaw = Math.atan2(f.x, f.z); this.emit('dash');
     }
     // variable jump height
     if (!grounded && this.vel.y > 0 && !jumpHeld && !this.jumpCut && this.jumpsUsed === 1) { this.vel.y *= 0.5; this.jumpCut = true; }

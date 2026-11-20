@@ -39,6 +39,7 @@ export class Input {
       if (keymap[e.code]) { this.press(keymap[e.code]); if (e.code === 'Space') e.preventDefault(); }
       if (e.code === 'Escape' || e.code === 'KeyP' || e.code === 'Tab') { e.preventDefault(); this.emit('pause'); }
       if (e.code === 'KeyR') this.emit('respawn');
+      if (e.code === 'KeyM') this.emit('map');
       this.usingPad = false;
     });
     addEventListener('keyup', (e) => { this.keys.delete(e.code); if (keymap[e.code]) this.release(keymap[e.code]); });

@@ -14,6 +14,8 @@ import { Nuri } from './nuri.js';
 import { Player } from './player.js';
 import { OrbitCam } from './camera.js';
 import { Gameplay } from './gameplay.js';
+import { Quests } from './quests.js';
+import { Minimap } from './minimap.js';
 import { Creatures } from './creatures.js';
 import { FX } from './fx.js';
 import { Audio } from './audio.js';
@@ -92,6 +94,10 @@ async function boot() {
   const gameplay = new Gameplay(ctx, world, player, ui, audio, fx);
   gameplay.build();
   world.buildMoss(gameplay.mossSources);
+  const quests = new Quests(gameplay, ui, audio, camera);
+  const minimap = new Minimap({ world, gameplay, player, orbit, quests, ui });
+  gameplay.onCinematic = (target, dur) => orbit.focus(target, dur);
+  input.on('map', () => { if (G.mode === 'play' && !G.paused) minimap.show(!minimap.open); });
   // cut-out foliage (needles, leaves, grass, ferns) resolves its edges with MSAA alpha-to-coverage: smooth, thin
   // edges instead of jagged alpha-test stairs
   if (tier.msaa) scene.traverse((o) => { for (const m of [o.material].flat()) if (m && m.alphaTest > 0 && !m.transparent) { m.alphaToCoverage = true; m.needsUpdate = true; } });
@@ -182,6 +188,7 @@ async function boot() {
       G.wokeUp = false; G.introT = 0;
     }
     orbit.set(player.yaw + Math.PI, 0.25);
+    minimap.loadFog(gameplay.save.explored); quests.init();
     G.mode = 'play'; ui.startPlay();
     ui.setShards(gameplay.save.shards.length, gameplay.totalShards); ui.setFriends(gameplay.save.companions.length, gameplay.companions.length);
     // water ambience along the stream + waterfall roar
@@ -233,7 +240,9 @@ async function boot() {
         }
         case 'jump': audio.play('jump', { pos: pp }); if (e.water) { fx.waterSplash(surf(pp), 0.55); world.sim.drop(pp.x, pp.z, 0.12, -0.05); audio.play('splash', { pos: pp, vol: 0.5 }); } else fx.dust(pp, 4); break;
         case 'djump': audio.play('djump', { pos: pp }); for (let i = 0; i < 10; i++) fx.exhaust({ x: pp.x, y: pp.y, z: pp.z }); setExpr('excited', 0.8); break;
-        case 'land': for (const sd of ['L', 'R']) { const f = footWorld(sd); f.y = player.pos.y; prints.step(f, player.yaw, WET.value, player.groundCollider, clamp(0.8 + e.impact / 10, 0.8, 1.3)); }
+        case 'dash': audio.play('djump', { pos: pp, pitch: 1.25 }); for (let i = 0; i < 16; i++) fx.exhaust({ x: pp.x, y: pp.y + 0.15, z: pp.z }); orbit.shake = Math.max(orbit.shake, 0.18); setExpr('excited', 0.8); break;
+        case 'land': if (e.impact > 3.2) { orbit.shake = Math.max(orbit.shake, Math.min(0.55, (e.impact - 3.2) * 0.14)); fx.dust(pp, 10); fx.ring?.(pp, 0.35, 0.35); }
+          for (const sd of ['L', 'R']) { const f = footWorld(sd); f.y = player.pos.y; prints.step(f, player.yaw, WET.value, player.groundCollider, clamp(0.8 + e.impact / 10, 0.8, 1.3)); }
           if (e.impact > 3) { audio.play('land', { pos: pp, vol: clamp(e.impact / 9, 0.3, 1) }); fx.dust(pp, Math.round(clamp(e.impact, 3, 12))); if (e.impact > 8) orbit.shake = 0.6; }
           else audio.play('step', { surface: surfaceUnder(), pos: pp, vol: 0.5 }); break;
         case 'splash': audio.play('splash', { pos: pp, vol: e.strength }); fx.waterSplash(surf(pp), 0.5 + e.strength); world.sim.drop(pp.x, pp.z, 0.16, -0.06 - e.strength * 0.06); orbit.shake = 0.25 * e.strength; WET.value = 1; setExpr('surprised', 0.8); moodBeep('surprised'); break;
@@ -327,13 +336,14 @@ async function boot() {
   const clock = new THREE.Clock();
   let acc = 0, fpsT = 0, frames = 0;
   const STEP = 1 / 60;
+  const FROZEN = { getMove: () => ({ x: 0, y: 0 }), wasPressed: () => false, btn: {}, pressed: new Set() };
   const hints = [[3, '이동: ' + (isTouch ? '왼쪽 화면을 드래그' : 'WASD · 카메라: 마우스')], [9, '점프: ' + (isTouch ? '점프 버튼' : 'Space (길게 누르면 더 높이)')], [16, '숙이기 버튼으로 구르기 · 낮은 곳 기어가기']];
   function frame() {
     requestAnimationFrame(frame);
     let dt = Math.min(clock.getDelta(), 0.1);
     G.time += dt;
     input.update(dt);
-    const playing = G.mode === 'play' && !G.paused;
+    const playing = G.mode === 'play' && !G.paused && !minimap.open;
     if (!playing) input.pressed.clear();      // presses made in menus never leak into play
     if (playing) {
       G.playTime += dt;
@@ -355,7 +365,7 @@ async function boot() {
       acc += dt;
       let steps = 0;
       while (acc >= STEP && steps < 4) {
-        if (G.wokeUp) player.update(STEP, input, orbit.yaw, gameplay);
+        if (G.wokeUp) player.update(STEP, orbit.cine ? FROZEN : input, orbit.yaw, gameplay);
         else { player.vel.set(0, 0, 0); }
         physics.step();
         input.pressed.clear();
@@ -363,6 +373,8 @@ async function boot() {
       }
       if (steps === 4) acc = 0;
       gameplay.update(dt, G.time);
+      quests.update(dt, player.pos, G.wokeUp && !orbit.cine);
+      minimap.update(dt);
       handleEvents();
       edgeCheck();
       baseExpression(dt);
@@ -510,7 +522,7 @@ async function boot() {
   frame();
   // debug / test hooks
   window.__RAPIER = RAPIER; window.__THREE = THREE;
-  window.__game = { WET, player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, prints, marks, creatures, get dof() { return dof; }, get rays() { return rays; } };
+  window.__game = { WET, quests, minimap, player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, prints, marks, creatures, get dof() { return dof; }, get rays() { return rays; } };
 }
 
 function makeRain(scene) {

@@ -13,6 +13,8 @@ export class OrbitCam {
     this.shape = null;
   }
   set(yaw, pitch) { this.yaw = yaw; this.pitch = pitch; }
+  // short cinematic: swing the camera to show something happening (a gate opening), then hand back
+  focus(target, dur = 2.6) { this.cine = { target: target.clone(), t: 0, dur }; this.shake = Math.max(this.shake, 0.35); }
 
   update(dt, input, player) {
     const R = this.ctx.RAPIER, W = this.ctx.physics;
@@ -62,6 +64,21 @@ export class OrbitCam {
     if (this.shake > 0) { this.shake = Math.max(0, this.shake - dt * 3); pos.x += (Math.random() - 0.5) * this.shake * 0.02; pos.y += (Math.random() - 0.5) * this.shake * 0.02; }
     this.cam.position.copy(pos);
     this.cam.lookAt(this.pivot.x, this.pivot.y - 0.04, this.pivot.z);
+    if (this.cine) {
+      const c = this.cine; c.t += dt; const k = c.t / c.dur;
+      if (k >= 1) this.cine = null;
+      else {
+        const sm = (x) => x * x * (3 - 2 * x);
+        const e = k < 0.22 ? sm(k / 0.22) : k > 0.8 ? 1 - sm((k - 0.8) / 0.2) : 1;
+        const toP = new THREE.Vector3(player.pos.x - c.target.x, 0, player.pos.z - c.target.z);
+        if (toP.lengthSq() < 1e-4) toP.set(1, 0, 0); toP.normalize();
+        const side = new THREE.Vector3(-toP.z, 0, toP.x);
+        const vp = c.target.clone().addScaledVector(toP, 2.6).addScaledVector(side, 0.9 + k * 0.4).add(new THREE.Vector3(0, 0.9, 0));
+        this.cam.position.lerp(vp, e);
+        const look = this.pivot.clone().lerp(c.target, e);
+        this.cam.lookAt(look);
+      }
+    }
     const fovT = 58 + clamp(hs - 1.0, 0, 1.0) * 4;
     this.fov = damp(this.fov, fovT, 3, dt);
     if (Math.abs(this.cam.fov - this.fov) > 0.01) { this.cam.fov = this.fov; this.cam.updateProjectionMatrix(); }

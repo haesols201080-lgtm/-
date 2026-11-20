@@ -38,7 +38,32 @@ export class UI {
     $('btn-help').onclick = () => $('help').classList.remove('hidden');
     $('h-close').onclick = () => $('help').classList.add('hidden');
   }
-  startPlay() { $('title').classList.add('hidden'); $('hud').classList.remove('hidden'); document.body.classList.remove('menu-open'); }
+  startPlay() { $('title').classList.add('hidden'); $('hud').classList.remove('hidden'); document.body.classList.remove('menu-open'); document.body.classList.add('playing'); }
+
+  // ---- quests
+  setQuest(q, animate) {
+    const el = $('quest');
+    if (!q) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    $('q-step').textContent = `메인 퀘스트 ${q.step} / ${q.total}`;
+    $('q-title').textContent = q.title; $('q-text').textContent = q.text;
+    $('q-prog').textContent = q.prog ? `${q.prog[0]} / ${q.prog[1]}` : '';
+    if (animate) { el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); }
+  }
+  questDone(title, reward) {
+    $('qdone-title').textContent = title; $('qdone-reward').textContent = reward ? '보상 · ' + reward : '';
+    const el = $('qdone'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 3600);
+  }
+  // ---- juice
+  flyShard(x, y, onArrive) {
+    const target = $('shards').closest('.ct').getBoundingClientRect();
+    const d = document.createElement('i'); d.className = 'flyshard'; d.style.transform = `translate(${x}px, ${y}px)`;
+    document.body.appendChild(d);
+    requestAnimationFrame(() => requestAnimationFrame(() => { d.style.transform = `translate(${target.left + 16}px, ${target.top + target.height / 2}px) scale(.7)`; }));
+    setTimeout(() => { d.remove(); onArrive?.(); const ct = $('shards').closest('.ct'); ct.classList.remove('bump'); void ct.offsetWidth; ct.classList.add('bump'); }, 640);
+  }
+  combo(n) { const el = $('combo'); el.textContent = `연속 ×${n}`; this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 900); }
+  flash() { const el = $('flash'); el.classList.remove('go'); void el.offsetWidth; el.classList.add('go'); }
 
   setShards(n, t) { $('shards').textContent = n; $('shards-total').textContent = '/' + t; }
   setFriends(n, t) { $('friends').textContent = n; $('friends-total').textContent = '/' + t; }

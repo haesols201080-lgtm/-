@@ -93,6 +93,7 @@ export class Audio {
       case 'swim': this.noise(d, t, 0.3, { f: 900, f2: 500, q: 1.2, gain: 0.2 }); break;
       case 'collect': [0, 0.07, 0.14].forEach((k, i) => this.tone(d, t + k, 0.35, { f: [1320, 1760, 2637][i] * p, type: 'sine', gain: 0.12 })); this.tone(d, t, 0.6, { f: 3520 * p, gain: 0.03 }); break;
       case 'discover': [0, 0.12, 0.24, 0.36].forEach((k, i) => this.tone(d, t + k, 0.9, { f: [523, 659, 784, 1047][i], type: 'triangle', gain: 0.08 })); break;
+      case 'quest': [0, 0.11, 0.22, 0.4].forEach((k, i) => this.tone(d, t + k, 0.7, { f: [659, 784, 988, 1319][i], type: 'triangle', gain: 0.09 })); this.tone(d, t + 0.4, 1.2, { f: 1976, gain: 0.025 }); break;
       case 'ability': [0, 0.1, 0.2, 0.3, 0.45].forEach((k, i) => this.tone(d, t + k, 1.0, { f: [392, 523, 659, 784, 1047][i], type: 'triangle', gain: 0.1 })); this.noise(d, t, 1.2, { f: 300, f2: 3000, q: 3, gain: 0.08 }); break;
       case 'friend': [0, 0.09, 0.18].forEach((k, i) => this.tone(d, t + k, 0.18, { f: [880, 1175, 1568][i], type: 'square', gain: 0.03 })); break;
       case 'beep': this.tone(d, t, 0.08, { f: 1200 * p, type: 'square', gain: 0.025 }); this.tone(d, t + 0.1, 0.08, { f: 1600 * p, type: 'square', gain: 0.025 }); break;

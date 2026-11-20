@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { mulberry32, clamp, damp, smoothstep } from './util.js';
 import { REGIONS, START, OUTCROP, STUMPS, LOGS, WORLD, GLADE_RIDGE } from './layout.js';
+import { MILESTONES } from './quests.js';
 
 const rnd = mulberry32(99);
 
@@ -12,7 +13,8 @@ export class Gameplay {
     Object.assign(this, { ctx, world, player, ui, audio, fx });
     this.scene = ctx.scene; this.R = ctx.RAPIER; this.W = ctx.physics; this.T = world.terrain;
     this.shards = []; this.props = []; this.companions = []; this.zones = []; this.interactables = []; this.mossSources = [];
-    this.save = { shards: [], companions: [], regions: [], gateOpen: false, liftPowered: false, booster: false, cellPlaced: false };
+    this.save = { shards: [], companions: [], regions: [], gateOpen: false, liftPowered: false, booster: false, cellPlaced: false, unlocks: [], explored: '' };
+    this.comboN = 0; this.lastCollect = -9;
     this.time = 0;
     this.mats = this.makeMats();
   }
@@ -542,7 +544,7 @@ export class Gameplay {
     if (!L.cellMesh) {
       const cell = this.cellModel(); cell.position.y = 0.16; L.socket.add(cell); L.cellMesh = cell;
     }
-    if (!silent) { this.audio.play('power'); this.ui.toast('승강기에 전원이 들어왔어요!'); this.player.emit('solved'); this.persist(); }
+    if (!silent) { this.audio.play('power'); this.ui.toast('승강기에 전원이 들어왔어요!'); this.player.emit('solved'); this.onCinematic?.(L.mesh.position.clone().setY(L.mesh.position.y + 0.8), 2.4); this.persist(); }
   }
 
   useSocket() {
@@ -796,7 +798,11 @@ export class Gameplay {
     for (const s of this.shards) {
       if (s.got) continue;
       s.mesh.rotation.y = time * 1.6; s.mesh.position.y = s.base + Math.sin(time * 2.2 + s.base * 5) * 0.015;
-      const d = s.mesh.position.distanceTo(new THREE.Vector3(P.pos.x, P.pos.y + 0.18, P.pos.z));
+      const tp = new THREE.Vector3(P.pos.x, P.pos.y + 0.18, P.pos.z);
+      const d = s.mesh.position.distanceTo(tp);
+      // light magnet: shards close by fly to the robot (further once the magnet is unlocked)
+      const magR = this.unlocked('magnet') ? 1.3 : 0.55;
+      if (d < magR || s.pull) { s.pull = true; s.mesh.position.lerp(tp, Math.min(1, dt * (7 + 10 / Math.max(0.1, d)))); s.mesh.rotation.y += dt * 12; }
       if (d < 0.22) this.collect(s);
     }
     // pressure plate + gate
@@ -806,7 +812,7 @@ export class Gameplay {
     this.plate.top.position.y = 0.04 - this.plate.press * 0.025;
     this.plate.padBody.setNextKinematicTranslation({ x: this.plate.pos.x, y: this.plate.pos.y + 0.108 - this.plate.press * 0.025, z: this.plate.pos.z });
     this.updatePlateFx(dt, time, press, this.save.gateOpen);
-    if (!this.save.gateOpen && load >= 15) { this.save.gateOpen = true; this.audio.play('gate'); this.ui.toast('철컥— 녹슨 문이 열렸어요!'); P.emit('solved'); this.persist(); }
+    if (!this.save.gateOpen && load >= 15) { this.save.gateOpen = true; this.audio.play('gate'); this.ui.toast('철컥— 녹슨 문이 열렸어요!'); P.emit('solved'); this.onCinematic?.(this.gate.center.clone().setY(this.gate.y0 + 0.5), 2.8); this.persist(); }
     if (load > 0 && load < 15 && !this.save.gateOpen && !this.plateHintShown) { this.plateHintShown = true; this.ui.toast('발판이 살짝 눌렸지만… 더 무거운 게 필요해 보여요.'); P.emit('worried'); }
     const G = this.gate;
     const tgt = this.save.gateOpen ? 1 : press * 0.06;
@@ -871,14 +877,28 @@ export class Gameplay {
     if (P.pos.z > this.edgeZ + 3) this.edgeShown = false;
   }
 
+  unlocked(id) { return this.save.unlocks.includes(id); }
   collect(s) {
     s.got = true; this.scene.remove(s.mesh);
     this.save.shards.push(s.id);
     this.fx.burst(s.mesh.position, 0x7ff0ff, 18);
-    this.audio.play('collect', { pitch: 1 + (this.save.shards.length % 5) * 0.06 });
-    this.ui.setShards(this.save.shards.length, this.totalShards);
+    // chain pickups: each shard within 2.5 s of the last raises the chime and the combo count
+    this.comboN = this.time - this.lastCollect < 2.5 ? this.comboN + 1 : 1; this.lastCollect = this.time;
+    this.audio.play('collect', { pitch: 1 + Math.min(8, this.comboN - 1) * 0.07 });
+    if (this.comboN >= 2) this.ui.combo(this.comboN);
+    // the shard flies into the counter, which ticks when it arrives
+    const v = s.mesh.position.clone().project(this.ctx.camera), n = this.save.shards.length;
+    if (v.z < 1) this.ui.flyShard((v.x * 0.5 + 0.5) * innerWidth, (-v.y * 0.5 + 0.5) * innerHeight, () => this.ui.setShards(n, this.totalShards));
+    else this.ui.setShards(n, this.totalShards);
     this.player.emit('collect');
+    for (const m of MILESTONES) if (n === m.n && !this.unlocked(m.id)) this.unlock(m);
     this.persistSoon();
+  }
+  unlock(m, silent = false) {
+    if (!this.save.unlocks.includes(m.id)) this.save.unlocks.push(m.id);
+    if (m.id === 'dash') this.player.abilities.dash = true;
+    if (silent) return;
+    setTimeout(() => { this.ui.ability(`${m.title} 해금!`, `빛 조각 ${m.n}개 · ${m.desc}`); this.ui.flash(); this.audio.play('ability'); this.player.emit('ability'); }, 700);
   }
 
   // apply loaded progress
@@ -888,6 +908,8 @@ export class Gameplay {
     for (const c of this.companions) c.found = sv.companions?.includes(c.id);
     if (sv.booster && this.booster) { this.scene.remove(this.booster.mesh); this.booster = null; }
     this.player.abilities.booster = !!sv.booster;
+    this.save.unlocks = sv.unlocks || [];
+    for (const m of MILESTONES) if (this.save.unlocks.includes(m.id)) this.unlock(m, true);
     if (sv.gateOpen) this.gate.open = 1;
     if (sv.liftPowered && this.lift && !this.lift.powered) this.powerLift(true);
     if (sv.cellPlaced && this.cell) { this.W.removeRigidBody(this.cell.body); this.scene.remove(this.cell.mesh); this.props.splice(this.props.indexOf(this.cell), 1); this.cell = null; }
