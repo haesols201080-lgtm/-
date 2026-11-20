@@ -2,7 +2,7 @@
 // a PBR splat material blending the Blender-baked texture sets, and a Rapier heightfield collider.
 import * as THREE from 'three';
 import { makeNoise2D, fbm, smoothstep, clamp, lerp, distToPolyline } from './util.js';
-import { WORLD, PATH, PATH2, PATH3, STREAM, POND, START, OUTCROP, GLADE_RIDGE, ridgeEnds } from './layout.js';
+import { WORLD, PATH, PATH2, PATH3, TRAILS, STREAM, POND, START, OUTCROP, GLADE_RIDGE, ridgeEnds } from './layout.js';
 import { SHADER_TRI } from './shaders.js';
 import { TERRAIN_SCALES } from './assets.js';
 import { CAUSTICS_GLSL } from './water.js';
@@ -27,11 +27,20 @@ export class Terrain {
 
   heightFn(x, z) {
     let h = 1.25 * fbm(n2, x * 0.022, z * 0.022, 4) + 0.4 * fbm(n3, x * 0.07, z * 0.07, 3) + 0.07 * fbm(n4, x * 0.5, z * 0.5, 3) + 0.035 * fbm(n2, x * 1.1 + 31, z * 1.1, 2);
-    // rising rim near the world edge (natural boundary)
-    const e = Math.max(Math.abs(x), Math.abs(z));
-    h += smoothstep(36, 47, e) * 5.5;
-    // north ridge behind the outcrop
-    h += smoothstep(-24, -40, z) * 2.2 * (0.6 + 0.4 * fbm(n3, x * 0.05, 3.3, 2));
+    // the forest climbs out of the basin on every side: an uneven rim (spurs, saddles and side valleys rather than
+    // a square wall), its foot wandering between ~31 and ~41 m from the middle; the north ridge behind the outcrop
+    // has a wandering foot and shallow gullies. Around the garden fence at the end of the forest the old smooth
+    // profile is kept, so the fence and the way through it sit where they were built.
+    {
+      const sq = Math.pow(Math.pow(Math.abs(x), 3.2) + Math.pow(Math.abs(z), 3.2), 1 / 3.2);
+      const a = Math.atan2(z, x), wob = 4.2 * fbm(n2, Math.cos(a) * 1.6 + 5, Math.sin(a) * 1.6 - 3, 3) + 1.6 * fbm(n4, x * 0.06, z * 0.06, 2);
+      const rise = smoothstep(31, 47, sq + wob);
+      let hn = rise * rise * (4.2 + 2.4 * fbm(n3, x * 0.04 + 9, z * 0.04, 2)) + rise * 1.2 * Math.abs(fbm(n4, x * 0.11, z * 0.11, 3));
+      const zr = z + 4.5 * fbm(n2, x * 0.035 + 2, 7.1, 2);
+      hn += smoothstep(-22, -42, zr) * (2.2 + 0.9 * fbm(n3, x * 0.05, 3.3, 2)) * (1 - 0.35 * Math.pow(Math.abs(Math.sin(x * 0.19 + 2 * fbm(n4, x * 0.05, z * 0.05, 2))), 6));
+      const ho = smoothstep(36, 47, Math.max(Math.abs(x), Math.abs(z))) * 5.5 + smoothstep(-24, -40, z) * 2.2 * (0.6 + 0.4 * fbm(n3, x * 0.05, 3.3, 2));
+      h += lerp(ho, hn, smoothstep(3, 9, Math.hypot(x - 0.5, (z + 35) * 0.8)));
+    }
     // the glade's rocky earth bank: a raised, uneven berm the stones sit in (it fades out into the gate boulders)
     {
       const dr = distToPolyline(x, z, GLADE_RIDGE).d + 0.45 * fbm(n4, x * 0.45, z * 0.45, 2);
@@ -41,16 +50,22 @@ export class Terrain {
       }
     }
     // clearing: gentle bowl, flattened
-    const dc = Math.hypot(x - START.x, z - (START.z - 1.5));
-    h = lerp(h, 0.35 + 0.05 * fbm(n4, x * 0.3, z * 0.3, 2), smoothstep(7.5, 3.5, dc));
+    // (an irregular opening, not a disc, and the ground in it still rolls a little)
+    const dc = Math.hypot(x - START.x, z - (START.z - 1.5)) * (1 + 0.22 * fbm(n3, x * 0.12 + 4, z * 0.12, 2));
+    h = lerp(h, 0.35 + 0.09 * fbm(n4, x * 0.22, z * 0.22, 2), smoothstep(7.5, 3.0, dc) * 0.92);
     // paths: flattened and very slightly sunk
+    // (a worn trail is wider in some places and narrower in others)
     const dp = Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d);
-    const p = smoothstep(1.1, 0.35, dp + 0.25 * fbm(n4, x * 0.4, z * 0.4, 2));
+    const wv = 1 + 0.28 * fbm(n2, x * 0.09 + 17, z * 0.09, 2);
+    let p = smoothstep(1.1 * wv, 0.35 * wv, dp + 0.25 * fbm(n4, x * 0.4, z * 0.4, 2));
     h -= p * 0.06;
+    // animal tracks: a narrow, broken line of bare litter, hardly sunk
+    let dt = 9; for (const tr of TRAILS) dt = Math.min(dt, distToPolyline(x, z, tr).d);
+    if (dt < 1) { const pt = smoothstep(0.42, 0.12, dt + 0.12 * fbm(n4, x * 0.6, z * 0.6, 2)) * (0.45 + 0.35 * smoothstep(-0.3, 0.3, fbm(n3, x * 0.35, z * 0.35, 2))); h -= pt * 0.02; p = Math.max(p, pt); }
     // outcrop footprint flattened to its base height
     const dox = x - OUTCROP.x, doz = z - OUTCROP.z;
-    const dO = Math.hypot(dox * 0.85, doz);
-    h = lerp(h, OUTCROP.base, smoothstep(9.5, 6.0, dO));
+    const dO = Math.hypot(dox * 0.85, doz) + 1.2 * fbm(n2, x * 0.15, z * 0.15 + 3, 2);
+    h = lerp(h, OUTCROP.base + 0.06 * fbm(n4, x * 0.3, z * 0.3, 2), smoothstep(9.5, 6.0, dO));
     // keep dry land above the water line
     const wy = this.waterY;
     h = Math.max(h, wy + 0.16 + 0.05 * fbm(n4, x * 0.5, z * 0.5, 2));
@@ -123,7 +138,7 @@ export class Terrain {
       const o = v * 4;
       splat[o] = litter / sum; splat[o + 1] = dirt / sum; splat[o + 2] = pebbles / sum; splat[o + 3] = moss / sum;
       // grass coverage: open sunny clearing and path sides, none on paths/water
-      const clearing = smoothstep(9, 3, Math.hypot(x - START.x, z - START.z + 1.5));
+      const clearing = smoothstep(9, 3, Math.hypot(x - START.x, z - START.z + 1.5) * (1 + 0.25 * fbm(n3, x * 0.12 + 4, z * 0.12, 2)));
       const g = clamp((0.25 + 0.55 * smoothstep(-0.15, 0.35, fbm(n4, x * 0.08, z * 0.08, 3)) + clearing * 0.6) * (1 - path * 1.2) * (1 - wet * 1.5), 0, 1);
       aux[v * 2] = g; aux[v * 2 + 1] = wet;
     }

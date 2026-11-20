@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { mergeGeometries, toCreasedNormals } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { mulberry32, smoothstep, distToPolyline, clamp, makeNoise2D, fbm } from './util.js';
-import { WORLD, PATH, PATH2, PATH3, STREAM, POND, OUTCROP, HERO_TREES, BOULDERS, LOGS, STUMPS, START, GLADE_RIDGE, ridgeEnds } from './layout.js';
+import { WORLD, PATH, PATH2, PATH3, TRAILS, STREAM, POND, OUTCROP, HERO_TREES, BOULDERS, LOGS, STUMPS, START, GLADE_RIDGE, ridgeEnds, HOLLOW } from './layout.js';
 import { Terrain } from './terrain.js';
 import { patchMaterial, WIND, leafLight, conformToGround, rootLift, barkRootBlend, ensureRootAttributes } from './shaders.js';
 import { TREES, SAPLINGS, SNAGS } from './assets.js';
@@ -356,25 +356,49 @@ export class World {
   // ---------------------------------------------------------------- trees
   planTrees() {
     HERO_TREES.forEach(([x, z, s], i) => this.treeSpots.push({ x, z, s: 0.85 + (s - 1) * 0.6, t: TREES[i % TREES.length], rot: rnd() * 6.28, hero: true }));
+    // A forest is not evenly sown: a slow "stand density" field makes thickets, ordinary stands and open gaps where
+    // an old tree fell, young trees come up near their parents (seed fall), and pines take the drier rises while
+    // firs keep to the damp ground near water. Trees also keep clear of boulders, logs, stumps and puzzle sites.
+    const dens = (x, z) => smoothstep(-0.5, 0.45, fbm(nzEco, x * 0.042 + 3.1, z * 0.042 - 1.7, 3));
+    const damp = (x, z) => smoothstep(9, 2.5, Math.min(distToPolyline(x, z, STREAM).d, Math.hypot(x - POND.x, z - POND.z) - POND.r)) * 0.6 + 0.4 * smoothstep(0.2, -0.4, this.terrain.heightAt(x, z));
+    const PINES = TREES.filter((t) => t.startsWith('pine')), FIRS = TREES.filter((t) => t.startsWith('fir'));
+    const pickType = (x, z) => { const L = rnd() < 0.15 + 0.7 * damp(x, z) ? FIRS : PINES; return L[Math.floor(rnd() * L.length)]; };
+    const clearOf = (x, z) => {
+      for (const [bx, bz, r] of BOULDERS) if (Math.hypot(x - bx, z - bz) < r + 1.1) return false;
+      for (const [x1, z1, x2, z2, r] of LOGS) if (distToPolyline(x, z, [[x1, z1], [x2, z2]]).d < r + 1.0) return false;
+      for (const [sx, sz, r] of STUMPS) if (Math.hypot(x - sx, z - sz) < r + 1.0) return false;
+      if (Math.hypot(x - HOLLOW.x, z - HOLLOW.z) < 3.4 || Math.hypot(x + 13, z + 15.4) < 3.2) return false;
+      return true;
+    };
+    const baseOk = (x, z, path, stream, pond, out) => !(Math.hypot(x - START.x, z - START.z) < 8.5 * (0.85 + 0.3 * rnd())
+      || Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d) < path
+      || distToPolyline(x, z, STREAM).d < stream || Math.hypot(x - POND.x, z - POND.z) < POND.r + pond || Math.hypot(x - OUTCROP.x, z - OUTCROP.z) < out
+      || Math.abs(x) > 47 || Math.abs(z) > 47 || TRAILS.some((tr) => distToPolyline(x, z, tr).d < path * 0.45) || !clearOf(x, z));
     let tries = 0;
-    while (this.treeSpots.length < 230 && tries++ < 12000) {
-      const x = (rnd() - 0.5) * 94, z = (rnd() - 0.5) * 94;
-      if (Math.hypot(x - START.x, z - START.z) < 8.5) continue;
-      if (Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d) < 2.4) continue;
-      if (distToPolyline(x, z, STREAM).d < 2.6 || Math.hypot(x - POND.x, z - POND.z) < POND.r + 2.5 || Math.hypot(x - OUTCROP.x, z - OUTCROP.z) < 9) continue;
-      if (this.treeSpots.some((t) => Math.hypot(t.x - x, t.z - z) < (t.hero ? 5 : 3.2))) continue;
+    while (this.treeSpots.length < 230 && tries++ < 20000) {
+      let x, z;
+      const parents = this.treeSpots.filter((t) => !t.hero);
+      if (parents.length > 20 && rnd() < 0.45) {                // seed fall: a few metres from an older tree
+        const p = parents[Math.floor(rnd() * parents.length)], a = rnd() * 6.28, d = 2.3 + rnd() * 2.8;
+        x = p.x + Math.cos(a) * d; z = p.z + Math.sin(a) * d;
+      } else { x = (rnd() - 0.5) * 94; z = (rnd() - 0.5) * 94; }
+      const D = dens(x, z);
+      if (rnd() > 0.12 + 0.88 * D) continue;                       // gaps stay open, thickets fill up
+      if (!baseOk(x, z, 2.4, 2.6, 2.5, 9)) continue;
+      const sp = 4.3 - 1.9 * D;
+      if (this.treeSpots.some((t) => Math.hypot(t.x - x, t.z - z) < (t.hero ? 5 : sp))) continue;
       const inner = Math.max(Math.abs(x), Math.abs(z)) < 28;
-      if (inner && rnd() < 0.35) continue;
-      this.treeSpots.push({ x, z, s: 0.8 + rnd() * 0.45, t: TREES[Math.floor(rnd() * TREES.length)], rot: rnd() * 6.28, hero: false });
+      if (inner && rnd() < 0.3) continue;
+      this.treeSpots.push({ x, z, s: 0.78 + rnd() * 0.5 * (0.6 + 0.4 * (1 - D)), t: pickType(x, z), rot: rnd() * 6.28, hero: false });
     }
-    // a real stand mixes thick dominant trees with many slender suppressed poles squeezed in between them
+    // a real stand mixes thick dominant trees with many slender suppressed poles squeezed in between them —
+    // most of them in the thickets, a few young ones out in the gaps
     const extra = Math.round(110 * Math.min(1, this.ctx.tier.fernDensity + 0.2));
-    for (let n = 0, k = 0; n < extra && k < 8000; k++) {
-      const x = (rnd() - 0.5) * 92, z = (rnd() - 0.5) * 92;
-      if (Math.hypot(x - START.x, z - START.z) < 7.5) continue;
-      if (Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d) < 2.0) continue;
-      if (distToPolyline(x, z, STREAM).d < 2.2 || Math.hypot(x - POND.x, z - POND.z) < POND.r + 2.0 || Math.hypot(x - OUTCROP.x, z - OUTCROP.z) < 8.5) continue;
-      if (this.treeSpots.some((t) => Math.hypot(t.x - x, t.z - z) < (t.hero ? 4 : 1.7))) continue;
+    for (let n = 0, k = 0; n < extra && k < 9000; k++) {
+      const x = (rnd() - 0.5) * 92, z = (rnd() - 0.5) * 92, D = dens(x, z);
+      if (rnd() > 0.15 + 0.85 * D * D) continue;
+      if (!baseOk(x, z, 2.0, 2.2, 2.0, 8.5)) continue;
+      if (this.treeSpots.some((t) => Math.hypot(t.x - x, t.z - z) < (t.hero ? 4 : 1.5 + 0.6 * (1 - D)))) continue;
       { const u = rnd(); this.treeSpots.push({ x, z, s: 0.75 + rnd() * 0.4, t: u < 0.4 ? 'pine_3' : u < 0.7 ? 'pine_13' : 'pine_2', rot: rnd() * 6.28, hero: false }); }
       n++;
     }

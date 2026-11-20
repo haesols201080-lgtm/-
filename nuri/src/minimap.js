@@ -2,7 +2,7 @@
 // paths, tree crowns, rocks, logs, the outcrop and the glade bank); the minimap turns with the camera, and a fog of
 // war clears where the robot has been (saved with the game). Markers: the current objective (pinned to the rim when
 // it is off the map), friends already found, the robot, and — once the light scanner is unlocked — nearby shards.
-import { WORLD, PATH, PATH2, PATH3, REGIONS, GLADE_RIDGE, OUTCROP } from './layout.js';
+import { WORLD, PATH, PATH2, PATH3, TRAILS, REGIONS, GLADE_RIDGE, OUTCROP } from './layout.js';
 
 const PX = 4;                    // base map pixels per metre
 const HALF = WORLD.size / 2;
@@ -46,6 +46,7 @@ export class Minimap {
     const P = (x, z) => [(x + HALF) * PX, (z + HALF) * PX];
     const line = (pts, w, col) => { g.beginPath(); pts.forEach(([x, z], k) => { const [px, pz] = P(x, z); k ? g.lineTo(px, pz) : g.moveTo(px, pz); });
       g.lineWidth = w * PX; g.strokeStyle = col; g.lineCap = g.lineJoin = 'round'; g.stroke(); };
+    for (const p of TRAILS) { g.setLineDash([3, 4]); line(p, 0.35, 'rgba(176,150,108,.55)'); g.setLineDash([]); }
     for (const p of [PATH, PATH2, PATH3]) { line(p, 1.6, 'rgba(40,30,20,.55)'); line(p, 1.1, 'rgba(196,170,124,.95)'); }
     // tree crowns
     for (const t of this.world.treeSpots) {

@@ -21,6 +21,7 @@ import { INTRO, LOG, CHAPTER, MEMORY } from './story.js';
 import { Director } from './cutscene.js';
 import { Relics, RELICS } from './relics.js';
 import { Squad } from './squad.js';
+import { Puzzles } from './puzzles.js';
 import { MEMORY as MEM } from './story.js';
 import { Creatures } from './creatures.js';
 import { FX } from './fx.js';
@@ -217,6 +218,11 @@ async function boot() {
     if (gameplay.caveCenter) for (const [dx, dz] of [[0.5, 0.3], [-0.4, -0.5]]) { const x = gameplay.caveCenter.x + dx, z = gameplay.caveCenter.z + dz; ds.push([x, gameplay.groundY(x, z) + 0.12, z]); }
     squad.addDark(ds);
   }
+  const puzzles = new Puzzles({ ctx, gameplay, world, player, ui, audio, fx, minimap });
+  puzzles.onBeacon = (b) => {
+    const c = b.p.clone().add(V(0, 0.3, 0));
+    director.play([{ dur: 4.2, from: c.clone().add(V(2.6, 1.4, 0)), to: c.clone().add(V(2.6, 2.2, 0)), lookFrom: c, orbit: Math.PI * 1.1, fov: 55 }]);
+  };
   // Mina's flights: to any discovered place (fade, fly, land with the squad)
   gameplay.onMinaFlight = () => {
     const opts = REGIONS.filter((r) => gameplay.save.regions.includes(r.id) && r.id !== 'summit').map((r) => [r.name, r]);
@@ -236,7 +242,7 @@ async function boot() {
       relics: RELICS.map((r) => sv.relics.includes(r.id) ? { title: r.name, text: r.desc } : { title: '???', text: '아직 발견하지 못한 유물', unknown: true }),
       logs: [...(sv.logs || []).map((id) => ({ title: '', text: LOG[id] })), ...(sv.memories || []).map((n) => ({ title: '복구된 기록', text: MEM[n].slice(1).join(' ') }))],
       stats: [{ title: `동력 결정 ${sv.shards.length} / ${gameplay.totalShards}` }, { title: `거인의 유물 ${sv.relics.length} / ${relics.items.length}` },
-        { title: `찾은 동료 ${sv.companions.length} / 3` }, { title: `탐험한 숲 ${Math.round(minimap.explored() * 100)}%` },
+        { title: `찾은 동료 ${sv.companions.length} / 3` }, { title: `측량 비콘 ${(sv.beacons || []).length} / ${puzzles.beacons.length}` }, { title: `탐험한 숲 ${Math.round(minimap.explored() * 100)}%` },
         ...Object.entries(sv.trials || {}).map(([k, v]) => ({ title: `${k === 'trail' ? '숲길 질주' : '바람 타기'} 최고 기록 ${v.t.toFixed(2)}초` }))],
     });
   });
@@ -346,7 +352,7 @@ async function boot() {
     // water ambience along the stream + waterfall roar
     if (!G.waterSounds) {
       G.waterSounds = true;
-      for (let i = 0; i < STREAM.length; i += 2) { const [x, z] = STREAM[i]; audio.addWaterSource({ x, y: world.terrain.waterY, z }, 0.18, 1); }
+      for (let i = 0; i < STREAM.ctrl.length; i += 2) { const [x, z] = STREAM[STREAM.ctrl[i]]; audio.addWaterSource({ x, y: world.terrain.waterY, z }, 0.18, 1); }
       audio.addWaterSource(world.waterfallPos, 0.9, 0.6); audio.addWaterSource({ x: POND.x, y: world.terrain.waterY, z: POND.z }, 0.2, 0.8);
     }
   };
@@ -535,6 +541,7 @@ async function boot() {
       trials.update(dt, G.time);
       relics.update(dt, G.time);
       if (!director.active) squad.update(dt, G.time);
+      puzzles.update(dt, G.time);
       handleEvents();
       edgeCheck();
       baseExpression(dt);
@@ -683,7 +690,7 @@ async function boot() {
   frame();
   // debug / test hooks
   window.__RAPIER = RAPIER; window.__THREE = THREE;
-  window.__game = { WET, quests, minimap, trials, director, CS, relics, squad, player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, prints, marks, creatures, get dof() { return dof; }, get rays() { return rays; } };
+  window.__game = { WET, quests, minimap, trials, director, CS, relics, squad, puzzles, player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, prints, marks, creatures, get dof() { return dof; }, get rays() { return rays; } };
 }
 
 function makeRain(scene) {

@@ -16,7 +16,7 @@ function along(poly, s) {
 }
 
 export const COURSES = [
-  { id: 'trail', name: '숲길 질주', poly: PATH.slice(1), s0: 1.6, step: 2.05, heights: [0.26, 0.28, 0.5, 0.28, 0.3, 0.55, 0.3, 0.32], side: [0, 0.35, 0, -0.35, 0.3, 0, -0.3, 0],
+  { id: 'trail', name: '숲길 질주', poly: PATH.slice(PATH.ctrl[1]), s0: 1.6, step: 2.05, heights: [0.26, 0.28, 0.5, 0.28, 0.3, 0.55, 0.3, 0.32], side: [0, 0.35, 0, -0.35, 0.3, 0, -0.3, 0],
     medals: [14, 18, 24], limit: 32 },
   { id: 'wind', name: '바람 타기', poly: PATH2, s0: 1.4, step: 2.5, heights: [0.45, 0.75, 0.6, 0.9, 0.7, 1.0, 0.75], side: [0, 0.4, -0.4, 0.3, -0.3, 0.4, 0],
     medals: [13, 17, 23], limit: 30, needs: 'booster', needsText: '하늘을 나는 부스터가 있어야 해요' },
