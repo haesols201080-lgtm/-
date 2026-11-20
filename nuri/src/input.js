@@ -136,7 +136,9 @@ export class Input {
 
   update(dt) {
     // a tap can begin and end between two frames: its press is kept in `pending` until this frame takes it
-    this.pressed.clear(); this.released.clear();
+    // presses stay until something consumes them: on 90-120 Hz screens many frames run no physics step, and a jump
+    // pressed in such a frame must still reach the next step (the step loop clears them once it ran)
+    this.released.clear();
     for (const n of this.pending) this.pressed.add(n);
     this.pending.clear();
     // keyboard move
@@ -163,4 +165,5 @@ export class Input {
   consumeLook() { const l = { ...this.look }; this.look.x = 0; this.look.y = 0; return l; }
   consumeZoom() { const z = this.zoom; this.zoom = 0; return z; }
   wasPressed(n) { return this.pressed.has(n); }
+  consume(n) { const h = this.pressed.has(n); this.pressed.delete(n); return h; }
 }

@@ -334,6 +334,7 @@ async function boot() {
     G.time += dt;
     input.update(dt);
     const playing = G.mode === 'play' && !G.paused;
+    if (!playing) input.pressed.clear();      // presses made in menus never leak into play
     if (playing) {
       G.playTime += dt;
       // intro: wake up on first input
@@ -348,8 +349,8 @@ async function boot() {
         for (const [t, msg] of hints) if (G.hintStep < hints.length && hints[G.hintStep] === hints.find((h) => h[1] === msg) && G.playTime > t && !loadSave()?.regions?.length) { ui.toast(msg); G.hintStep++; break; }
       }
       if (G.wokeUp) {
-        if (input.wasPressed('interact')) gameplay.interact(player);
-        if (input.wasPressed('emote')) { player.playAction('wave', 1.2); setExpr('smile', 1.4); moodBeep('happy'); }
+        if (input.consume('interact')) gameplay.interact(player);
+        if (input.consume('emote')) { player.playAction('wave', 1.2); setExpr('smile', 1.4); moodBeep('happy'); }
       }
       acc += dt;
       let steps = 0;
