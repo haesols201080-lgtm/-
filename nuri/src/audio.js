@@ -1,5 +1,7 @@
-// Procedural Web Audio: all sound effects, ambience and the background music are synthesized at runtime
-// (original material, no samples). Positional sources use PannerNodes driven by the camera listener.
+// Web Audio: sound effects, ambience and an original generative score. Ambience, footsteps, birds and the music's
+// piano are physically-modelled sounds rendered once into buffers (src/soundbank.js); positional sources use HRTF
+// panners driven by the camera; forest and cave reverbs crossfade with where the robot is.
+import { makeBank, impulse } from './soundbank.js';
 export class Audio {
   constructor() {
     this.ctx = null; this.vol = { master: 0.8, music: 0.5, sfx: 0.8 }; this.loops = {};
@@ -12,10 +14,14 @@ export class Audio {
     this.sfx = C.createGain(); this.sfx.connect(this.comp);
     this.mus = C.createGain(); this.mus.connect(this.comp);
     this.amb = C.createGain(); this.amb.connect(this.comp);
-    // shared reverb (forest early reflections)
-    this.verb = C.createConvolver(); this.verb.buffer = this.impulse(2.2, 2.6);
-    this.verbGain = C.createGain(); this.verbGain.gain.value = 0.22; this.verb.connect(this.verbGain); this.verbGain.connect(this.comp);
+    // reverbs: open forest (short, soft, diffuse) and the cave (long, dark); sends go to both, their levels follow the place
+    this.verb = C.createGain();
+    const fv = C.createConvolver(); fv.buffer = impulse(C, 1.5, 3.2, 0.45, 8);
+    const cv = C.createConvolver(); cv.buffer = impulse(C, 3.4, 2.2, 0.25, 14);
+    this.vForest = C.createGain(); this.vForest.gain.value = 0.26; this.vCave = C.createGain(); this.vCave.gain.value = 0.0;
+    this.verb.connect(fv); this.verb.connect(cv); fv.connect(this.vForest); cv.connect(this.vCave); this.vForest.connect(this.comp); this.vCave.connect(this.comp);
     this.noiseBuf = this.makeNoise(2);
+    this.bank = makeBank(C);
     this.applyVolume();
     this.startAmbience();
     this.startMusic();
@@ -72,6 +78,13 @@ export class Audio {
     switch (name) {
       case 'step': {
         const s = o.surface || 'leaves';
+        const bank = this.bank?.steps[s === 'water' ? 'water' : s] || this.bank?.steps.leaves;
+        if (bank) {
+          const src = C.createBufferSource(); src.buffer = bank[Math.floor(Math.random() * bank.length)]; src.playbackRate.value = (0.92 + Math.random() * 0.16) * (p || 1);
+          const g = C.createGain(); g.gain.value = 0.55; src.connect(g); g.connect(d); src.start(t);
+          this.tone(d, t, 0.05, { f: 2100 + Math.random() * 300, f2: 2500, type: 'sine', gain: 0.006 });   // the boot's servo
+          break;
+        }
         if (s === 'leaves') { this.noise(d, t, 0.09, { f: 2600, q: 0.7, gain: 0.25 }); this.noise(d, t + 0.01, 0.06, { f: 5200, q: 1.2, gain: 0.12 }); }
         else if (s === 'dirt') this.noise(d, t, 0.07, { type: 'lowpass', f: 900, gain: 0.35 });
         else if (s === 'pebbles') { for (let i = 0; i < 3; i++) this.noise(d, t + i * 0.012, 0.03, { f: 3000 + Math.random() * 2000, q: 6, gain: 0.25 }); }
@@ -89,7 +102,8 @@ export class Audio {
       case 'land': this.noise(d, t, 0.12, { type: 'lowpass', f: 500, gain: 0.5 * vol }); this.tone(d, t, 0.1, { f: 110, f2: 70, gain: 0.25 * vol }); this.tone(d, t + 0.04, 0.06, { f: 2200, gain: 0.02 }); break;
       case 'roll': this.noise(d, t, 0.35, { f: 800, f2: 400, q: 0.8, gain: 0.25 }); break;
       case 'slide': this.noise(d, t, 0.5, { f: 1500, f2: 500, q: 0.7, gain: 0.25 }); break;
-      case 'splash': this.noise(d, t, 0.6, { f: 1400, f2: 300, q: 0.8, gain: 0.6 * vol }); this.noise(d, t + 0.05, 0.35, { f: 4000, q: 2, gain: 0.2 }); break;
+      case 'splash': if (this.bank) { const src = C.createBufferSource(); src.buffer = this.bank.steps.water[Math.floor(Math.random() * 4)]; src.playbackRate.value = 0.7 + Math.random() * 0.2; const g = C.createGain(); g.gain.value = 0.7 * vol; src.connect(g); g.connect(d); src.start(t); }
+        this.noise(d, t, 0.6, { f: 1400, f2: 300, q: 0.8, gain: 0.45 * vol }); this.noise(d, t + 0.05, 0.35, { f: 4000, q: 2, gain: 0.2 }); break;
       case 'swim': this.noise(d, t, 0.3, { f: 900, f2: 500, q: 1.2, gain: 0.2 }); break;
       case 'collect': [0, 0.07, 0.14].forEach((k, i) => this.tone(d, t + k, 0.35, { f: [1320, 1760, 2637][i] * p, type: 'sine', gain: 0.12 })); this.tone(d, t, 0.6, { f: 3520 * p, gain: 0.03 }); break;
       case 'discover': [0, 0.12, 0.24, 0.36].forEach((k, i) => this.tone(d, t + k, 0.9, { f: [523, 659, 784, 1047][i], type: 'triangle', gain: 0.08 })); break;
@@ -117,6 +131,13 @@ export class Audio {
       case 'clunk': this.tone(d, t, 0.2, { f: 90, f2: 60, gain: 0.4 }); this.noise(d, t, 0.15, { f: 900, q: 2, gain: 0.2 }); break;
       case 'grabledge': this.noise(d, t, 0.06, { f: 1500, q: 2, gain: 0.2 }); this.tone(d, t, 0.05, { f: 1400, type: 'square', gain: 0.012 }); break;
       case 'bird': {
+        if (this.bank) {
+          const r = Math.random(), B = this.bank;
+          const b = r < 0.72 ? B.birds[Math.floor(Math.random() * B.birds.length)] : r < 0.86 ? B.dove : B.woodpecker;
+          const src = C.createBufferSource(); src.buffer = b; src.playbackRate.value = 0.94 + Math.random() * 0.12;
+          const g = C.createGain(); g.gain.value = b === B.woodpecker ? 0.35 : 0.22; src.connect(g); g.connect(d); src.start(t);
+          break;
+        }
         const base = 2600 + Math.random() * 1600, n = 2 + Math.floor(Math.random() * 4);
         for (let i = 0; i < n; i++) this.tone(d, t + i * (0.09 + Math.random() * 0.05), 0.08, { f: base * (0.9 + Math.random() * 0.25), f2: base * (1.15 + Math.random() * 0.3), gain: 0.06 });
         break;
@@ -141,93 +162,99 @@ export class Audio {
     L.d.gain.setTargetAtTime(level, this.ctx.currentTime, 0.08);
   }
 
-  // ---- ambience: wind, leaves, distant birds, stream, insects
+  // ---- ambience: wind and leaves (baked gusts), crickets, birds around in the canopy, water sources
+  loopSrc(buffer, dest, gain, rate = 1) {
+    const C = this.ctx, src = C.createBufferSource(); src.buffer = buffer; src.loop = true; src.playbackRate.value = rate;
+    const g = C.createGain(); g.gain.value = gain; src.connect(g); g.connect(dest); src.start(0, Math.random() * buffer.duration); return g;
+  }
   startAmbience() {
-    const C = this.ctx;
-    const wind = C.createBufferSource(); wind.buffer = this.noiseBuf; wind.loop = true;
-    const wf = C.createBiquadFilter(); wf.type = 'lowpass'; wf.frequency.value = 420;
-    const wg = C.createGain(); wg.gain.value = 0.12;
-    wind.connect(wf); wf.connect(wg); wg.connect(this.amb); wind.start();
-    const leaves = C.createBufferSource(); leaves.buffer = this.noiseBuf; leaves.loop = true;
-    const lf = C.createBiquadFilter(); lf.type = 'highpass'; lf.frequency.value = 3500;
-    const lg = C.createGain(); lg.gain.value = 0.02;
-    leaves.connect(lf); lf.connect(lg); lg.connect(this.amb); leaves.start();
-    this.windNodes = { wf, wg, lg };
-    // stream: positional loops along the water
+    const B = this.bank;
+    this.windG = this.loopSrc(B.wind, this.amb, 0.16);
+    this.leavesG = this.loopSrc(B.leaves, this.amb, 0.05);
+    this.cricketG = this.loopSrc(B.crickets, this.amb, 0.0, 1);
     this.waterSources = [];
-    this.nextBird = 2; this.nextInsect = 4; this.t = 0;
+    this.nextBird = 1.5; this.t = 0;
   }
   addWaterSource(pos, level = 0.25, bright = 1) {
     if (!this.ctx) return;
-    const C = this.ctx;
-    const d = this.out(pos, this.amb, 0.1); d.gain.value = level;
-    const s = C.createBufferSource(); s.buffer = this.noiseBuf; s.loop = true; s.playbackRate.value = 0.9 + Math.random() * 0.2;
-    const f = C.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 900 * bright; f.Q.value = 0.6;
-    const f2 = C.createBiquadFilter(); f2.type = 'peaking'; f2.frequency.value = 2400 * bright; f2.gain.value = 6;
-    s.connect(f); f.connect(f2); f2.connect(d); s.start(0, Math.random());
+    const B = this.bank, buf = level >= 0.6 ? B.fall : (this.waterSources.length % 2 ? B.brook : B.stream);
+    const d = this.out(pos, this.amb, 0.12);
+    d.gain.value = level * (level >= 0.6 ? 1.1 : 2.2);
+    this.loopSrc(buf, d, 1, 0.92 + Math.random() * 0.16 * bright);
     this.waterSources.push(d);
   }
   updateAmbience(dt, playerPos, windK = 1, cave = 0) {
     if (!this.ctx) return;
     this.t += dt;
-    const w = this.windNodes;
-    const gust = 0.6 + 0.4 * Math.sin(this.t * 0.23) * Math.sin(this.t * 0.37);
-    w.wg.gain.setTargetAtTime(0.11 * gust * windK * (1 - cave * 0.7), this.ctx.currentTime, 0.5);
-    w.wf.frequency.setTargetAtTime(300 + 300 * gust, this.ctx.currentTime, 0.5);
-    w.lg.gain.setTargetAtTime(0.025 * gust * windK * (1 - cave), this.ctx.currentTime, 0.5);
+    const now = this.ctx.currentTime;
+    this.windG.gain.setTargetAtTime(0.16 * windK * (1 - cave * 0.8), now, 0.6);
+    this.leavesG.gain.setTargetAtTime(0.06 * windK * (1 - cave), now, 0.6);
+    this.cricketG.gain.setTargetAtTime(0.012 * (1 - cave), now, 1);
+    this.vForest.gain.setTargetAtTime(0.26 * (1 - cave), now, 0.4);
+    this.vCave.gain.setTargetAtTime(0.5 * cave, now, 0.4);
+    this.mood = cave > 0.5 ? 'cave' : 'forest';
     this.nextBird -= dt;
     if (this.nextBird <= 0 && cave < 0.5) {
-      this.nextBird = 2 + Math.random() * 6;
-      const a = Math.random() * 6.28, r = 6 + Math.random() * 14;
-      this.play('bird', { pos: { x: playerPos.x + Math.cos(a) * r, y: playerPos.y + 4 + Math.random() * 6, z: playerPos.z + Math.sin(a) * r }, verb: 0.5 });
+      this.nextBird = 2.5 + Math.random() * 6;
+      const a = Math.random() * 6.28, r = 7 + Math.random() * 16;
+      this.play('bird', { pos: { x: playerPos.x + Math.cos(a) * r, y: playerPos.y + 4 + Math.random() * 7, z: playerPos.z + Math.sin(a) * r }, verb: 0.55 });
     }
   }
+  // the score lifts for a while after something is found (discovery, a friend, a relic)
+  lift(sec = 20) { this.liftT = Math.max(this.liftT || 0, sec); }
 
-  // ---- background music: gentle generative piece in D major pentatonic (original)
+  // ---- background music: an original, slow generative piece for felt piano and a soft pad.
+  // D major in the open forest (Dmaj9 – Bm11 – Gmaj7 – A sus), sparse phrases that repeat and vary; in the cave it
+  // turns to B minor, lower and thinner; after a discovery it opens up for a while (fuller pad, more notes).
   startMusic() {
     const C = this.ctx;
-    this.musicT = C.currentTime + 0.5;
-    const scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21];
-    const chords = [[50, 57, 62, 66], [47, 54, 59, 62], [43, 50, 55, 59], [45, 52, 57, 61]]; // D, Bm, G, A (midi)
-    const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
-    let bar = 0, motif = [0, 2, 4, 3, 2, 4, 5, 4];
+    this.musicT = C.currentTime + 1.0;
+    const PENT = [62, 64, 66, 69, 71, 74, 76, 78, 81, 83];
+    const forest = [[50, [62, 66, 69, 73, 76]], [47, [62, 66, 69, 71, 74]], [43, [62, 66, 69, 71, 74]], [45, [62, 64, 69, 71, 76]]];
+    const cave = [[47, [62, 66, 69, 71]], [43, [59, 62, 66, 69]], [45, [61, 64, 69, 71]], [42, [61, 66, 69, 73]]];
+    const near = (m) => { const keys = Object.keys(this.bank.piano).map(Number); return keys.reduce((a, k) => (Math.abs(k - m) < Math.abs(a - m) ? k : a), keys[0]); };
+    const note = (m, t, v, dest = this.mus) => {
+      const k = near(m), src = C.createBufferSource(); src.buffer = this.bank.piano[k]; src.playbackRate.value = Math.pow(2, (m - k) / 12);
+      const g = C.createGain(); g.gain.value = v; src.connect(g); g.connect(dest);
+      const sv = C.createGain(); sv.gain.value = 0.9; g.connect(sv); sv.connect(this.verb); src.start(t);
+    };
+    const pad = (notes, t, dur, lvl) => {
+      for (const m of notes) for (const det of [-4, 4]) {
+        const o = C.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 440 * Math.pow(2, (m - 69) / 12); o.detune.value = det;
+        const f = C.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 650; f.Q.value = 0.4;
+        const g = C.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(lvl, t + dur * 0.35); g.gain.linearRampToValueAtTime(0, t + dur + 1.2);
+        o.connect(f); f.connect(g); g.connect(this.mus); const sv = C.createGain(); sv.gain.value = 0.6; g.connect(sv); sv.connect(this.verb);
+        o.start(t); o.stop(t + dur + 1.3);
+      }
+    };
+    let bar = 0, phrase = this.newPhrase(PENT);
     const schedule = () => {
       if (!this.ctx) return;
-      while (this.musicT < C.currentTime + 1.2) {
-        const t0 = this.musicT, beat = 0.42, ch = chords[bar % 4];
-        // soft pad
-        for (const n of ch) {
-          const o = C.createOscillator(); o.type = 'triangle'; o.frequency.value = mtof(n - 12) * (1 + (Math.random() - 0.5) * 0.002);
-          const g = C.createGain(); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(0.022, t0 + 0.8); g.gain.linearRampToValueAtTime(0.0, t0 + beat * 8 + 0.4);
-          const f = C.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 900;
-          o.connect(f); f.connect(g); g.connect(this.mus); const v = C.createGain(); v.gain.value = 0.5; g.connect(v); v.connect(this.verb);
-          o.start(t0); o.stop(t0 + beat * 8 + 0.5);
+      while (this.musicT < C.currentTime + 2.0) {
+        const caveMode = this.mood === 'cave', prog = caveMode ? cave : forest, beat = caveMode ? 1.05 : 0.9;
+        const [root, chord] = prog[bar % 4], t0 = this.musicT, lift = (this.liftT || 0) > 0 ? 1 : 0;
+        // left hand: a slow broken chord low down
+        note(root, t0, 0.22); note(root + 7, t0 + beat * 1.5, 0.14); note(root + 16, t0 + beat * 2.5, 0.11);
+        // the pad only under lifted moments (and softly in the cave)
+        if (lift || caveMode) pad(chord.slice(0, 3).map((m) => m - 12), t0, beat * 4, caveMode ? 0.006 : 0.009);
+        // right hand: the phrase (2 bars), repeated with small changes; rests are part of it
+        if (bar % 4 === 0) phrase = Math.random() < 0.6 ? this.varyPhrase(phrase, PENT) : this.newPhrase(PENT);
+        for (const [pos, m] of phrase[bar % 2]) {
+          if (!lift && Math.random() < 0.2) continue;
+          const mm = caveMode ? m - 3 - 12 * (m > 74 ? 1 : 0) : m;
+          note(mm, t0 + pos * beat + (Math.random() - 0.5) * 0.02, (caveMode ? 0.1 : 0.14) * (0.8 + Math.random() * 0.3));
         }
-        // plucked melody (kalimba-like), evolving motif
-        if (bar % 8 === 0) motif = motif.map((m) => Math.max(0, Math.min(9, m + Math.round((Math.random() - 0.5) * 2))));
-        for (let i = 0; i < 8; i++) {
-          if (Math.random() < 0.28) continue;
-          const tt = t0 + i * beat + (i % 2 ? 0.02 : 0);
-          const m = 62 + scale[motif[(i + bar) % 8]];
-          const f0 = mtof(m);
-          const o = C.createOscillator(); o.type = 'sine'; o.frequency.value = f0;
-          const o2 = C.createOscillator(); o2.type = 'sine'; o2.frequency.value = f0 * 3.01;
-          const g = C.createGain(); g.gain.setValueAtTime(0, tt); g.gain.linearRampToValueAtTime(0.05, tt + 0.006); g.gain.exponentialRampToValueAtTime(0.0005, tt + 1.4);
-          const g2 = C.createGain(); g2.gain.value = 0.25;
-          o.connect(g); o2.connect(g2); g2.connect(g); g.connect(this.mus);
-          const v = C.createGain(); v.gain.value = 0.8; g.connect(v); v.connect(this.verb);
-          o.start(tt); o2.start(tt); o.stop(tt + 1.5); o2.stop(tt + 1.5);
-        }
-        // light shaker on off-beats
-        for (let i = 0; i < 8; i++) if (i % 2 === 1 && bar % 2 === 1) this.noise(this.mus, t0 + i * beat, 0.05, { type: 'highpass', f: 7000, gain: 0.03 });
-        // soft bass
-        const b = C.createOscillator(); b.type = 'sine'; b.frequency.value = mtof(ch[0] - 12);
-        const bg = C.createGain(); bg.gain.setValueAtTime(0, t0); bg.gain.linearRampToValueAtTime(0.07, t0 + 0.05); bg.gain.exponentialRampToValueAtTime(0.001, t0 + beat * 4);
-        b.connect(bg); bg.connect(this.mus); b.start(t0); b.stop(t0 + beat * 4 + 0.1);
-        this.musicT += beat * 8; bar++;
+        this.musicT += beat * 4; bar++;
+        if (this.liftT > 0) this.liftT -= beat * 4;
       }
-      this.musicTimer = setTimeout(schedule, 300);
+      this.musicTimer = setTimeout(schedule, 400);
     };
     schedule();
   }
+  newPhrase(P) {
+    const bar = () => { const out = []; let pos = Math.random() < 0.5 ? 0 : 0.5, i = 2 + Math.floor(Math.random() * 5);
+      while (pos < 4) { if (Math.random() < 0.72) out.push([pos, P[Math.max(0, Math.min(P.length - 1, i))]]); i += Math.round((Math.random() - 0.5) * 3); pos += [0.5, 1, 1, 1.5][Math.floor(Math.random() * 4)]; } return out; };
+    return [bar(), bar()];
+  }
+  varyPhrase(ph, P) { return ph.map((b) => b.map(([pos, m]) => [pos, Math.random() < 0.25 ? P[Math.max(0, Math.min(P.length - 1, P.indexOf(m) + (Math.random() < 0.5 ? -1 : 1)))] : m])); }
 }

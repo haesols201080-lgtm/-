@@ -407,9 +407,9 @@ async function boot() {
         case 'grab': audio.play('grabledge', { pos: pp }); break;
         case 'climbup': audio.play('jump', { pos: pp, pitch: 0.8 }); break;
         case 'collect': setExpr('joy', 1.0); break;
-        case 'discover': setExpr('surprised', 0.9); setTimeout(() => setExpr('excited', 1.8), 900); moodBeep('surprised'); break;
-        case 'ability': setExpr('excited', 3); moodBeep('love'); break;
-        case 'friend': setExpr('love', 2.2); moodBeep('love'); break;
+        case 'discover': setExpr('surprised', 0.9); audio.lift(30); setTimeout(() => setExpr('excited', 1.8), 900); moodBeep('surprised'); break;
+        case 'ability': setExpr('excited', 3); audio.lift(30); moodBeep('love'); break;
+        case 'friend': setExpr('love', 2.2); audio.lift(30); moodBeep('love'); break;
         case 'solved': setExpr('joy', 2); moodBeep('happy'); break;
         case 'worried': setExpr('worried', 2); moodBeep('worried'); break;
         case 'curious': setExpr('curious', 2.5); moodBeep('curious'); break;
