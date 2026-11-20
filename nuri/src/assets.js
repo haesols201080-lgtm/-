@@ -75,7 +75,7 @@ export const TERRAIN_LAYERS = ['ph_floor', 'ph_path', 'ph_riverbed', 'ph_mud'];
 export const TERRAIN_SCALES = [1 / 1.5, 1 / 1.67, 1 / 2.9, 1 / 1.3]; // metres covered by each scanned set
 export const PROP_TEX = ['rock_face_03', 'mossy_rock', 'weathered_planks', 'wood_planks_grey', 'rusty_metal_04', 'green_metal_rust', 'metal_plate', 'rusty_metal_02'];
 export const PH_MODELS = [ 'rock_09', 'stone_01', 'rock_face_01', 'rock_face_02',
-  'tree_stump_01', 'tree_stump_02', 'dead_tree_trunk', 'dead_tree_trunk_02', 'root_cluster_02', 'single_root', 'fern_02', 'moss_01',
+  'tree_stump_01', 'tree_stump_02', 'dead_tree_trunk', 'dead_tree_trunk_02', 'root_cluster_02', 'single_root', 'fern_02',
   'shrub_03', 'shrub_04', 'nettle_plant', 'dandelion_01', 'weed_plant_02', 'dry_branches_medium_01', 'periwinkle_plant',
   'bark_debris_01', 'namaqualand_stones_01', 'root_cluster_01',
   // understory: grasses, wildflowers, wood sorrel, low shrubs, young conifers
@@ -182,10 +182,11 @@ export class Assets {
       this.arrayTexture(TERRAIN_LAYERS.map((l) => `${BASE}tex/${l}${suf}_orm.jpg`), false),
     ]);
     T.terrainAlb = alb; T.terrainNrm = nrm; T.terrainOrm = orm; this.step('지면'); this.step(''); this.step('');
-    const [rock, moss, bark, twig, grass, lichen] = await Promise.all([
+    const [rock, moss, bark, twig, grass] = await Promise.all([
       this.set('ph_rock'), this.set('ph_mossrock'), this.set('ph_bark'), this.set('ph_twig', { alpha: true, size: 2048 }),
-      this.set('ph_grass', { alpha: true, size: 1024 }), this.set('ph_lichen'),
+      this.set('ph_grass', { alpha: true, size: 1024 }),
     ]);
+    const lichen = null;
     Object.assign(T, { rock, moss, bark, twig, grass, lichen });
     // moss tile modelled in Blender (blender/build_moss.py): albedo + height in alpha, and its normal map
     const [mossMap, mossNrm] = await Promise.all([this.texture(`${BASE}tex/moss_tile_albedo.png`, true), this.texture(`${BASE}tex/moss_tile_normal.png`, false)]);
