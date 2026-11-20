@@ -19,6 +19,10 @@ export class UI {
   constructor() {
     if (isTouch) document.body.classList.add('touch');
     for (const m of document.querySelectorAll('.mark')) mountLogo(m);
+    // fetch the notebook pieces now, so the pocket notebook is there the moment play starts (CSS backgrounds
+    // only load when first shown)
+    this._pre = ['pocket_open', 'pocket_shut', 'spread', 'ring', 'disc'].map((n) => { const im = new Image(); im.src = `./ui/${n}.webp`; return im; })
+      .concat(['paper.jpg', 'leather.jpg'].map((n) => { const im = new Image(); im.src = `./ui/${n}`; return im; }));
     // the pocket notebook in the corner opens the notebook (pause)
     const nb = $('nb');
     const openNb = (e) => { e.preventDefault(); e.stopPropagation(); this.fire('nbpause'); };

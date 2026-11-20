@@ -52,7 +52,10 @@ export class Quests {
   init() {
     for (const q of QUESTS) if (q.done(this.g)) this.doneSet.add(q.id);
     this.ready = true; this.refresh(true);
+    this.peek();
   }
+  // open the pocket notebook on the current task for a while (start of play, waking up, a new task)
+  peek(sec = 9) { this.peekT = Math.max(this.peekT || 0, sec); }
   active() { return QUESTS.find((q) => !this.doneSet.has(q.id)) || null; }
   refresh(silent) {
     const q = this.active();
@@ -81,7 +84,7 @@ export class Quests {
     this.tick = (this.tick || 0) + dt;
     if (changed || this.tick > 0.5) { this.tick = 0; this.refresh(!changed && this.shownId !== null); }
     // the panel stays out of the way: it shows when the goal changes, when the robot stands still or the map is open
-    this.peekT = Math.max(0, (this.peekT || 0) - dt);
+    if (playing) this.peekT = Math.max(0, (this.peekT || 0) - dt);
     const visible = this.peekT > 0 || g.player.idleT > 5 || this.mapOpen?.();
     if (visible !== this.visible) { this.visible = visible; document.getElementById('quest').classList.toggle('tucked', !visible); }
     // objective marker

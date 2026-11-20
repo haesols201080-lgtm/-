@@ -341,7 +341,7 @@ async function boot() {
       // the night of the storm, told over black while the forest loads in behind it
       if (!new URLSearchParams(location.search).has('autostart')) {        // (test runs skip it)
         G.storyOpen = true;
-        ui.story(INTRO, () => { G.storyOpen = false; CS.intro(() => { G.wokeUp = true; G.newStory = false; setTimeout(() => ui.bubble('세븐', LOG.first), 600); }); }, { title: '언더그로스' });
+        ui.story(INTRO, () => { G.storyOpen = false; CS.intro(() => { G.wokeUp = true; G.newStory = false; quests.peek(); setTimeout(() => ui.bubble('세븐', LOG.first), 600); }); }, { title: '언더그로스' });
       }
     }
     orbit.set(player.yaw + Math.PI, 0.25);
@@ -521,7 +521,7 @@ async function boot() {
         G.introT += dt;
         const m = input.getMove();
         if (!G.storyOpen && G.introT > 1.2 && (Math.hypot(m.x, m.y) > 0.1 || input.pressed.size)) {
-          G.wokeUp = true; player.state = 'idle'; player.idleT = 0;
+          G.wokeUp = true; player.state = 'idle'; player.idleT = 0; quests.peek();
           if (G.newStory) { G.newStory = false; setTimeout(() => ui.bubble('세븐', LOG.first), 1600); }
           setExpr('surprised', 1); setTimeout(() => setExpr('curious', 2), 1000); moodBeep('surprised');
         } else { player.state = 'sleep'; }
