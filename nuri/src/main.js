@@ -92,6 +92,9 @@ async function boot() {
   const gameplay = new Gameplay(ctx, world, player, ui, audio, fx);
   gameplay.build();
   world.buildMoss(gameplay.mossSources);
+  // cut-out foliage (needles, leaves, grass, ferns) resolves its edges with MSAA alpha-to-coverage: smooth, thin
+  // edges instead of jagged alpha-test stairs
+  if (tier.msaa) scene.traverse((o) => { for (const m of [o.material].flat()) if (m && m.alphaTest > 0 && !m.transparent) { m.alphaToCoverage = true; m.needsUpdate = true; } });
   const creatures = new Creatures(ctx, world, audio);
   // lighting model: sky occlusion under canopy / in the cave, sun in-scattering, eye adaptation
   const lighting = new Lighting(ctx, world);
@@ -506,7 +509,7 @@ async function boot() {
   frame();
   // debug / test hooks
   window.__RAPIER = RAPIER; window.__THREE = THREE;
-  window.__game = { player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, prints, marks, creatures, get dof() { return dof; }, get rays() { return rays; } };
+  window.__game = { WET, player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, prints, marks, creatures, get dof() { return dof; }, get rays() { return rays; } };
 }
 
 function makeRain(scene) {

@@ -308,8 +308,8 @@ export function makeTerrainMaterial(T, tier = {}) {
         MUV = (vWPos.xz - uMarkOrigin) / uMarkSize; MK = vec4(0.0);
         if (MUV.x > 0.0 && MUV.y > 0.0 && MUV.x < 1.0 && MUV.y < 1.0) MK = texture2D(tMarks, MUV);
         { vec4 sw = vSplat / max(1e-3, vSplat.x + vSplat.y + vSplat.z + vSplat.w);
-          MSOFT = clamp(sw.y + sw.w + sw.x * 0.5 + sw.z * 0.25, 0.0, 1.0); }
-        TA *= 1.0 - (0.3 * MK.r + 0.08 * MK.a) * MSOFT;
+          MSOFT = clamp(sw.y + sw.w + sw.x * 0.3 + sw.z * 0.2, 0.0, 1.0); }
+        TA *= 1.0 - (0.16 * MK.r + 0.05 * MK.a) * MSOFT;
         TA = mix(TA, TA * vec3(1.18, 1.12, 1.06), clamp(MK.b, 0.0, 1.0) * MSOFT * 0.5);
         TA *= mix(1.0, 0.6, MK.g);
         diffuseColor = vec4(TA, opacity);
@@ -338,7 +338,9 @@ export function makeTerrainMaterial(T, tier = {}) {
             float mz = texture2D(tMarks, MUV + vec2(0.0, e)).r - texture2D(tMarks, MUV - vec2(0.0, e)).r;
             float bx = texture2D(tMarks, MUV + vec2(e, 0.0)).b - texture2D(tMarks, MUV - vec2(e, 0.0)).b;
             float bz = texture2D(tMarks, MUV + vec2(0.0, e)).b - texture2D(tMarks, MUV - vec2(0.0, e)).b;
-            nW = normalize(nW + (vec3(mx, 0.0, mz) * 2.6 - vec3(bx, 0.0, bz) * 1.2) * MSOFT);
+            // the print's relief, faded at grazing view angles where a decal-like normal tilt reads as a dark cut-out
+            float graze = smoothstep(0.08, 0.45, abs(dot(normalize(cameraPosition - vWPos), wn2)));
+            nW = normalize(nW + (vec3(mx, 0.0, mz) * 1.3 - vec3(bx, 0.0, bz) * 0.6) * MSOFT * graze);
           }
           normal = normalize((viewMatrix * vec4(nW, 0.0)).xyz);
         }`)

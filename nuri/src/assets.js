@@ -183,7 +183,7 @@ export class Assets {
     ]);
     T.terrainAlb = alb; T.terrainNrm = nrm; T.terrainOrm = orm; this.step('지면'); this.step(''); this.step('');
     const [rock, moss, bark, twig, grass, lichen] = await Promise.all([
-      this.set('ph_rock'), this.set('ph_mossrock'), this.set('ph_bark'), this.set('ph_twig', { alpha: true, size: Math.min(2048, tier.texSize) }),
+      this.set('ph_rock'), this.set('ph_mossrock'), this.set('ph_bark'), this.set('ph_twig', { alpha: true, size: 2048 }),
       this.set('ph_grass', { alpha: true, size: 1024 }), this.set('ph_lichen'),
     ]);
     Object.assign(T, { rock, moss, bark, twig, grass, lichen });

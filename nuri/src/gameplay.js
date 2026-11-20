@@ -233,9 +233,12 @@ export class Gameplay {
     const ring = { material: ringM };
     plate.position.set(pp.x, py, pp.z); plate.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = true; } });
     this.scene.add(plate);
-    const pc = this.W.createCollider(this.R.ColliderDesc.cylinder(0.03, 0.28).setTranslation(pp.x, py + 0.035, pp.z));
+    // colliders follow the model: the housing (top at +0.093) and the pad, which sinks with the load
+    const pc = this.W.createCollider(this.R.ColliderDesc.cylinder(0.059, 0.38).setTranslation(pp.x, py + 0.034, pp.z));
     pc.userData = { kind: 'plate', surface: 'metal' };
-    this.plate = { mesh: plate, top, ring, pos: new THREE.Vector3(pp.x, py, pp.z), press: 0 };
+    const padBody = this.W.createRigidBody(this.R.RigidBodyDesc.kinematicPositionBased().setTranslation(pp.x, py + 0.108, pp.z));
+    const padCol = this.W.createCollider(this.R.ColliderDesc.cylinder(0.016, 0.25), padBody); padCol.userData = { kind: 'plate', surface: 'metal' };
+    this.plate = { mesh: plate, top, ring, pos: new THREE.Vector3(pp.x, py, pp.z), press: 0, padBody };
     this.plateFx = this.buildPlateFx(new THREE.Vector3(pp.x, py, pp.z), gateC.clone().addScaledVector(dir, -(width / 2 + 0.19)), gy);
     // crate placed a few metres away
     this.gateCrate = this.makeCrate(pp.x + nrm.x * 1.6 + dir.x * 1.2, pp.z + nrm.z * 1.6 + dir.z * 1.2);
@@ -801,6 +804,7 @@ export class Gameplay {
     const press = clamp(load / 15, 0, 1);
     this.plate.press = damp(this.plate.press, press, 10, dt);
     this.plate.top.position.y = 0.04 - this.plate.press * 0.025;
+    this.plate.padBody.setNextKinematicTranslation({ x: this.plate.pos.x, y: this.plate.pos.y + 0.108 - this.plate.press * 0.025, z: this.plate.pos.z });
     this.updatePlateFx(dt, time, press, this.save.gateOpen);
     if (!this.save.gateOpen && load >= 15) { this.save.gateOpen = true; this.audio.play('gate'); this.ui.toast('철컥— 녹슨 문이 열렸어요!'); P.emit('solved'); this.persist(); }
     if (load > 0 && load < 15 && !this.save.gateOpen && !this.plateHintShown) { this.plateHintShown = true; this.ui.toast('발판이 살짝 눌렸지만… 더 무거운 게 필요해 보여요.'); P.emit('worried'); }

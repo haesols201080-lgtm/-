@@ -13,6 +13,7 @@ export class Input {
     this.zoom = 0;
     this.btn = { jump: false, crouch: false, interact: false, emote: false, walk: false };
     this.pressed = new Set();        // edge-triggered this frame
+    this.pending = new Set();        // presses that arrived between frames (touch / keys), handed to the next frame
     this.released = new Set();
     this.sens = 1; this.invertY = false;
     this.padMap = { ...DEFAULT_PAD };
@@ -27,7 +28,7 @@ export class Input {
   on(name, fn) { this.listeners.push([name, fn]); }
   emit(name) { for (const [n, f] of this.listeners) if (n === name) f(); }
 
-  press(name) { if (!this.btn[name]) this.pressed.add(name); this.btn[name] = true; }
+  press(name) { if (!this.btn[name]) this.pending.add(name); this.btn[name] = true; }
   release(name) { if (this.btn[name]) this.released.add(name); this.btn[name] = false; }
 
   bind() {
@@ -134,7 +135,10 @@ export class Input {
   }
 
   update(dt) {
+    // a tap can begin and end between two frames: its press is kept in `pending` until this frame takes it
     this.pressed.clear(); this.released.clear();
+    for (const n of this.pending) this.pressed.add(n);
+    this.pending.clear();
     // keyboard move
     let kx = 0, ky = 0;
     if (this.keys.has('KeyW') || this.keys.has('ArrowUp')) ky += 1;

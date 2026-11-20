@@ -110,17 +110,24 @@ export const GROUND = { y: { value: 0 }, tint: { value: new THREE.Color(1, 1, 1)
 export const REFRACT = { pass: { value: 0 }, waterY: { value: -0.32 }, inWater: { value: 0 } };
 const GROUND_TINT = { dirt: [1.16, 0.96, 0.8], leaves: [1.14, 1.0, 0.78], moss: [0.96, 1.1, 0.8], pebbles: [1.04, 1.0, 0.94], rock: [1.0, 1.0, 0.96] };
 const WEATHER_GLSL = /* glsl */`
-  varying vec3 vRest; varying vec3 vWPg; uniform float uDust, uWet, uGroundY; uniform vec3 uGroundTint; uniform float uRefrPass, uRefrWaterY, uInWater;
+  varying vec3 vRest; varying vec3 vRestN; varying vec3 vWPg; uniform float uDust, uWet, uGroundY; uniform vec3 uGroundTint; uniform float uRefrPass, uRefrWaterY, uInWater;
+  float beadH = 0.0, beadK = 0.0, wetK = 0.0;
+  vec2 bh2(vec2 p){ p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3))); return fract(sin(p) * 43758.5453); }
+  // bump from a height field via screen-space derivatives (no tangents needed)
+  vec3 beadBump(vec3 pos, vec3 n, float h, float fd){
+    vec3 sx = dFdx(pos), sy = dFdy(pos); vec3 r1 = cross(sy, n), r2 = cross(n, sx);
+    float det = dot(sx, r1) * fd; vec2 dh = vec2(dFdx(h), dFdy(h));
+    return normalize(abs(det) * n - sign(det) * (dh.x * r1 + dh.y * r2)); }
   float wh(vec3 p){ return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
   float wn(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
     return mix(mix(mix(wh(i), wh(i + vec3(1,0,0)), f.x), mix(wh(i + vec3(0,1,0)), wh(i + vec3(1,1,0)), f.x), f.y),
                mix(mix(wh(i + vec3(0,0,1)), wh(i + vec3(1,0,1)), f.x), mix(wh(i + vec3(0,1,1)), wh(i + vec3(1,1,1)), f.x), f.y), f.z); }`;
-function weather(strength) {
+function weather(strength, fabric = false) {
   return (sh) => {
     sh.uniforms.uDust = DUST; sh.uniforms.uWet = WET; sh.uniforms.uGroundY = GROUND.y; sh.uniforms.uGroundTint = GROUND.tint;
     sh.uniforms.uRefrPass = REFRACT.pass; sh.uniforms.uRefrWaterY = REFRACT.waterY; sh.uniforms.uInWater = REFRACT.inWater;
-    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRest; varying vec3 vWPg;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRest = position;')
+    sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vRest; varying vec3 vRestN; varying vec3 vWPg;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRest = position; vRestN = objectNormal;')
       .replace('#include <project_vertex>', '#include <project_vertex>\nvWPg = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\n' + WEATHER_GLSL)
       .replace('#include <map_fragment>', `#include <map_fragment>
@@ -131,13 +138,38 @@ function weather(strength) {
         diffuseColor.rgb *= 0.9 + 0.1 * wn(vRest * 420.0);`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
         roughnessFactor = mix(roughnessFactor, 0.95, clamp(dust * 1.3, 0.0, 1.0));
-        // wet: darker, glossy film (water beads dry from the top down)
-        float wetK = uWet * smoothstep(0.45 - uWet * 0.45, 0.0, vRest.y - 0.02) * (0.75 + 0.25 * wn(vRest * 90.0));
-        roughnessFactor = mix(roughnessFactor, 0.08, clamp(wetK, 0.0, 1.0));`)
-      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>')
+        // wet: a glossy water film, drying from the top down
+        wetK = min(1.0, uWet * 1.6) * smoothstep(uWet * 0.5 + 0.02, uWet * 0.5 - 0.06, vRest.y) * (0.75 + 0.25 * wn(vRest * 90.0));
+        roughnessFactor = mix(roughnessFactor, ${fabric ? '0.75' : '0.24'}, clamp(wetK, 0.0, 1.0));
+        // water beads stuck to the body (in rest space, so they ride along with every part): 2 - 7 mm drops on a
+        // jittered grid, each with its own drying time; the upper ones go first
+        if (uWet > 0.01) {
+          vec3 an = abs(vRestN);
+          vec2 q = (an.x > an.y && an.x > an.z ? vRest.zy : (an.z > an.y ? vRest.xy : vRest.xz)) * 150.0;
+          vec2 ip = floor(q), fp = fract(q);
+          float best = 2.0, bt = 1.0, br = 0.0;
+          for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+            vec2 g = vec2(float(i), float(j)), hh = bh2(ip + g);
+            vec2 o = g + 0.15 + hh * 0.7 - fp;
+            float r = 0.08 + 0.26 * pow(fract(hh.x * 17.31 + hh.y * 5.13), 2.0);
+            float d = length(o * vec2(1.0, 0.85)) / r;                      // slightly elongated under gravity
+            if (d < best) { best = d; bt = fract(hh.y * 31.7 + hh.x * 7.3); br = r; }
+          }
+          // only some cells carry a drop; fewer on steep faces, none on fabric (it soaks the water up)
+          float alive = step(bt, uWet * 0.55 - max(0.0, vRest.y - 0.16) * 1.2 - 0.04 - (1.0 - max(0.0, vRestN.y)) * 0.15) * step(-0.2, vRestN.y) * ${fabric ? '0.0' : '1.0'};
+          if (best < 1.0 && alive > 0.5) { beadK = 1.0; beadH = sqrt(1.0 - best * best) * br * 0.007; }
+          roughnessFactor = mix(roughnessFactor, 0.02, beadK);
+        }`)
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+        if (beadK > 0.0) normal = beadBump(-vViewPosition, normal, beadH, faceDirection);`)
+      .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
+        #ifdef USE_CLEARCOAT
+          material.clearcoat = max(material.clearcoat, clamp(wetK, 0.0, 1.0) * ${fabric ? '0.0' : '0.3'});
+          material.clearcoatRoughness = mix(material.clearcoatRoughness, 0.12, clamp(wetK, 0.0, 1.0));
+        #endif`)
       .replace('#include <aomap_fragment>', `#include <aomap_fragment>
-        reflectedLight.directDiffuse *= 1.0 - 0.28 * clamp(wetK, 0.0, 1.0);
-        reflectedLight.indirectDiffuse *= 1.0 - 0.28 * clamp(wetK, 0.0, 1.0);
+        reflectedLight.directDiffuse *= (1.0 - ${fabric ? '0.45' : '0.08'} * clamp(wetK, 0.0, 1.0)) * (1.0 - 0.12 * beadK);
+        reflectedLight.indirectDiffuse *= (1.0 - ${fabric ? '0.45' : '0.08'} * clamp(wetK, 0.0, 1.0)) * (1.0 - 0.12 * beadK);
         // the ground occludes the lower half of the sky near the feet and bounces earth-coloured light upward
         {
           vec3 nWg = normalize((vec4(normal, 0.0) * viewMatrix).xyz);
@@ -159,7 +191,7 @@ function weather(strength) {
   };
 }
 
-const P = (o, w = 1) => patchMaterial(new THREE.MeshPhysicalMaterial({ envMapIntensity: 0.85, vertexColors: true, ...o }), { ao: 1, extraFrag: weather(w), key: 'nuri' + w });
+const P = (o, w = 1, fabric = false) => patchMaterial(new THREE.MeshPhysicalMaterial({ envMapIntensity: 0.85, vertexColors: true, ...o }), { ao: 1, extraFrag: weather(w, fabric), key: 'nuri' + w + (fabric ? 'f' : '') });
 // per material: [physical params, weathering strength]
 const ROBOT_SPECS = {
   Nuri_PaintWhite: [{ color: 0xc9c4b9, roughness: 0.5, metalness: 0.04, clearcoat: 0.12, clearcoatRoughness: 0.35 }, 1],
@@ -185,7 +217,7 @@ function robotMaterial(key, glbMat) {
     if (glbMat.normalMap) { o.normalMap = glbMat.normalMap; o.normalScale = glbMat.normalScale.clone(); }
     for (const t of [o.map, o.roughnessMap, o.metalnessMap, o.normalMap]) if (t) t.anisotropy = 8;
   } else if (key === 'Nuri_Scarf') { o.normalMap = makeKnitNormal(); o.normalScale = new THREE.Vector2(0.9, 0.9); }
-  return P(o, w);
+  return P(o, w, key === 'Nuri_Scarf');
 }
 
 function makeKnitNormal() {
@@ -203,7 +235,7 @@ function makeKnitNormal() {
 
 // ---------------------------------------------------------------- the robot
 const AX = new THREE.Vector3(1, 0, 0), AY = new THREE.Vector3(0, 1, 0), AZ = new THREE.Vector3(0, 0, 1);
-const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3();
+const _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _e = new THREE.Euler(), _v = new THREE.Vector3(), _v2 = new THREE.Vector3(), _v3 = new THREE.Vector3(), _m4 = new THREE.Matrix4();
 
 export class Nuri {
   constructor(gltf) {
@@ -453,9 +485,14 @@ export class Nuri {
     const chest = this.b.spine.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.05, 0));
     const back = new THREE.Vector3(0, 0, -1).transformDirection(this.root.matrixWorld);
     const bodies = [{ c: head.add(new THREE.Vector3(0, 0.07, 0)), r: 0.105 }, { c: chest, r: 0.07 }];
+    // the back panel (vent housing) is a box behind the torso: x +-0.048, y 0.129..0.214, back face at z -0.065
+    // (robot space); scarf points are kept behind it so the tails drape over it instead of passing through
+    const inv = _m4.copy(this.root.matrixWorld).invert();
     for (const s of this.scarf) {
       const N = s.bones.length;
       if (!this.scarfInit) {
+        // the tails leave from the back of the scarf ring (z -0.08), not from inside the vent panel
+        s.bones[0].position.z -= 0.028; s.bones[0].updateMatrixWorld(true);
         for (let i = 0; i < N; i++) { const p = s.bones[i].getWorldPosition(new THREE.Vector3()); s.pts[i] = p; s.old[i] = p.clone(); }
         const lastDir = s.pts[N - 1].clone().sub(s.pts[N - 2]);
         s.pts[N] = s.pts[N - 1].clone().add(lastDir); s.old[N] = s.pts[N].clone();
@@ -477,6 +514,8 @@ export class Nuri {
           const p = s.pts[i];
           for (const bd of bodies) { _v2.subVectors(p, bd.c); const d = _v2.length(); if (d < bd.r) p.addScaledVector(_v2, (bd.r - d) / (d || 1e-6)); }
           _v2.subVectors(p, s.pts[0]); const f = -_v2.dot(back); if (f > -0.004) p.addScaledVector(back, f + 0.004);
+          _v3.copy(p).applyMatrix4(inv);
+          if (_v3.y > 0.105 && _v3.y < 0.225 && Math.abs(_v3.x) < 0.06 && _v3.z > -0.075) { _v3.z = -0.075; p.copy(_v3).applyMatrix4(this.root.matrixWorld); }
         }
       }
       // orient bones along the simulated chain
