@@ -5,7 +5,7 @@
 // is off the map), friends already found, the robot, and, once the light scanner is unlocked, nearby crystals.
 import { WORLD, PATH, PATH2, PATH3, TRAILS, REGIONS, GLADE_RIDGE, OUTCROP } from './layout.js';
 
-const PX = 4;                    // base map pixels per metre
+const PX = 6;                    // base map pixels per metre
 const HALF = WORLD.size / 2;
 const FOG = 48;                  // fog grid cells per side (2 m cells)
 
@@ -42,43 +42,53 @@ export class Minimap {
       if (Wt[k]) {
         // water: a pale blue wash with engraver's lines, a firm blue shore line
         put(o, 92, 132, 170, 70);
-        if (j % 4 === 0) put(o, 60, 100, 145, 55);
-        if (!Wt[k + 1] || !Wt[k + N + 1] || !Wt[k - 1] || !Wt[k - N - 1]) put(o, 40, 80, 125, 215);
+        if (j % 6 < 2) put(o, 60, 100, 145, 60);
+        if (!Wt[k + 1] || !Wt[k + N + 1] || !Wt[k - 1] || !Wt[k - N - 1] || !Wt[k + 2] || !Wt[k - 2]) put(o, 40, 80, 125, 225);
         continue;
       }
       // contour lines in brown ink; every fifth one heavier
-      const b0 = band(H[k]), b1 = band(H[k + 1]), b2 = band(H[k + N + 1]);
-      if (b0 !== b1 || b0 !== b2) { const major = Math.max(b0, b1, b2) % 5 === 0; put(o, 92, 68, 46, major ? 150 : 72); }
+      const b0 = band(H[k]), b1 = band(H[k + 1]), b2 = band(H[k + N + 1]), b3 = i > 0 ? band(H[k - 1]) : b0, b4 = j > 0 ? band(H[k - N - 1]) : b0;
+      if (b0 !== b1 || b0 !== b2 || b0 !== b3 || b0 !== b4) { const major = Math.max(b0, b1, b2, b3, b4) % 5 === 0; put(o, 86, 62, 40, major ? 190 : 110); }
     }
     g.putImageData(img, 0, 0);
     const P = (x, z) => [(x + HALF) * PX, (z + HALF) * PX];
     const line = (pts, w, col, dash) => { g.beginPath(); pts.forEach(([x, z], k) => { const [px, pz] = P(x, z); k ? g.lineTo(px, pz) : g.moveTo(px, pz); });
       g.setLineDash(dash || []); g.lineWidth = w * PX; g.strokeStyle = col; g.lineCap = g.lineJoin = 'round'; g.stroke(); g.setLineDash([]); };
     const INK = 'rgba(52,38,26,.88)';
-    for (const p of [PATH, PATH2, PATH3]) { line(p, 0.95, 'rgba(236,226,200,.9)'); line(p, 0.28, INK, [7, 4]); }
-    for (const p of TRAILS) line(p, 0.22, 'rgba(70,50,32,.7)', [1.5, 4]);
+    for (const p of [PATH, PATH2, PATH3]) { line(p, 1.0, 'rgba(236,226,200,.92)'); line(p, 0.34, INK, [1.6 * PX, 1.0 * PX]); }
+    for (const p of TRAILS) line(p, 0.26, 'rgba(70,50,32,.8)', [0.35 * PX, 0.9 * PX]);
     // trees: small pen circles with a dot for the trunk
     for (const t of this.world.treeSpots) {
       const [px, pz] = P(t.x, t.z), r = (t.hero ? 1.5 : 1.0) * t.s * PX;
-      g.strokeStyle = 'rgba(58,70,44,.62)'; g.lineWidth = 1.1; g.beginPath(); g.arc(px, pz, r, 0, Math.PI * 2); g.stroke();
-      g.fillStyle = 'rgba(58,52,40,.7)'; g.beginPath(); g.arc(px, pz, 0.9, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = 'rgba(50,62,38,.78)'; g.lineWidth = 0.32 * PX; g.beginPath(); g.arc(px, pz, r, 0, Math.PI * 2); g.stroke();
+      g.fillStyle = 'rgba(50,44,34,.8)'; g.beginPath(); g.arc(px, pz, 0.28 * PX, 0, Math.PI * 2); g.fill();
     }
     // rocks: hatched blobs
     for (const r of this.world.rocks) { if (r.r < 0.25) continue; const [px, pz] = P(r.x, r.z), rr = Math.max(2, r.r * PX);
-      g.fillStyle = 'rgba(96,84,70,.35)'; g.strokeStyle = INK; g.lineWidth = 1; g.beginPath(); g.arc(px, pz, rr, 0, Math.PI * 2); g.fill(); g.stroke(); }
+      g.fillStyle = 'rgba(96,84,70,.4)'; g.strokeStyle = INK; g.lineWidth = 0.3 * PX; g.beginPath(); g.arc(px, pz, rr, 0, Math.PI * 2); g.fill(); g.stroke(); }
     for (const l of this.world.logs) { line([[l.x1, l.z1], [l.x2, l.z2]], l.r * 2, 'rgba(120,90,60,.35)'); line([[l.x1, l.z1], [l.x2, l.z2]], 0.12, INK); }
     // the outcrop and the glade bank: hachures (short strokes down the slope)
-    { const [ox, oz] = P(OUTCROP.x, OUTCROP.z); g.strokeStyle = INK; g.lineWidth = 1.4; g.beginPath(); g.ellipse(ox, oz, 7 * PX, 5.6 * PX, 0, 0, Math.PI * 2); g.stroke();
-      g.lineWidth = 1; for (let a = 0; a < Math.PI * 2; a += 0.09) { const c1 = Math.cos(a), s1 = Math.sin(a); g.beginPath(); g.moveTo(ox + c1 * 7 * PX, oz + s1 * 5.6 * PX); g.lineTo(ox + c1 * 8.6 * PX, oz + s1 * 7 * PX); g.stroke(); } }
+    { const [ox, oz] = P(OUTCROP.x, OUTCROP.z); g.strokeStyle = INK; g.lineWidth = 0.4 * PX; g.beginPath(); g.ellipse(ox, oz, 7 * PX, 5.6 * PX, 0, 0, Math.PI * 2); g.stroke();
+      g.lineWidth = 0.28 * PX; for (let a = 0; a < Math.PI * 2; a += 0.09) { const c1 = Math.cos(a), s1 = Math.sin(a); g.beginPath(); g.moveTo(ox + c1 * 7 * PX, oz + s1 * 5.6 * PX); g.lineTo(ox + c1 * 8.6 * PX, oz + s1 * 7 * PX); g.stroke(); } }
     for (let i = 0; i + 1 < GLADE_RIDGE.length; i++) {
       const [ax, az] = GLADE_RIDGE[i], [bx, bz] = GLADE_RIDGE[i + 1], L = Math.hypot(bx - ax, bz - az), nx = -(bz - az) / L, nz = (bx - ax) / L;
       for (let t = 0; t < L; t += 0.7) { const x = ax + (bx - ax) * t / L, z = az + (bz - az) * t / L, [p1, q1] = P(x - nx * 0.6, z - nz * 0.6), [p2, q2] = P(x + nx * 0.6, z + nz * 0.6);
-        g.strokeStyle = 'rgba(52,38,26,.65)'; g.lineWidth = 1; g.beginPath(); g.moveTo(p1, q1); g.lineTo(p2, q2); g.stroke(); }
+        g.strokeStyle = 'rgba(52,38,26,.7)'; g.lineWidth = 0.26 * PX; g.beginPath(); g.moveTo(p1, q1); g.lineTo(p2, q2); g.stroke(); }
     }
     // the garden fence at the north edge
     line([[-1.6, -37.2], [2.6, -37.2]], 0.16, INK);
     for (let x = -1.6; x <= 2.6; x += 0.5) line([[x, -37.6], [x, -36.8]], 0.1, INK);
     return c;
+  }
+
+  // faint survey squares every 5 m, drawn under the ink on whatever canvas holds the map
+  grid(g, toPx, from, to, w) {
+    g.save(); g.strokeStyle = 'rgba(70,110,150,.16)'; g.lineWidth = w;
+    for (let v = Math.ceil(from / 5) * 5; v <= to; v += 5) {
+      const [x0, y0] = toPx(v, from), [x1, y1] = toPx(v, to); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
+      const [a0, b0] = toPx(from, v), [a1, b1] = toPx(to, v); g.beginPath(); g.moveTo(a0, b0); g.lineTo(a1, b1); g.stroke();
+    }
+    g.restore();
   }
 
   // ---------------------------------------------------------------- fog of war
@@ -137,7 +147,7 @@ export class Minimap {
     g.restore();
   }
   drawMini() {
-    const g = this.g, W = this.cv.width, R = W / 2, view = 24, k = R / view;       // 24 m radius
+    const g = this.g, W = this.cv.width, R = W / 2, view = 17, k = R / view;       // 17 m radius
     const p = this.player.pos, yaw = this.orbit.yaw;
     const fx = -Math.sin(yaw), fz = -Math.cos(yaw), rot = -Math.PI / 2 - Math.atan2(fz, fx);
     g.clearRect(0, 0, W, W);
@@ -145,6 +155,7 @@ export class Minimap {
     const pg = g.createRadialGradient(R, R, R * 0.2, R, R, R); pg.addColorStop(0, '#efe5cc'); pg.addColorStop(1, '#ddd0b0');
     g.fillStyle = pg; g.fillRect(0, 0, W, W);
     g.translate(R, R); g.rotate(rot); g.scale(k, k); g.translate(-p.x, -p.z);
+    this.grid(g, (a, b) => [a, b], -HALF, HALF, 1.2 / k);
     g.imageSmoothingEnabled = true;
     g.drawImage(this.inked, -HALF, -HALF, WORLD.size, WORLD.size);
     g.restore();
@@ -153,19 +164,22 @@ export class Minimap {
     for (const m of this.markers()) {
       let dx = (m.x - p.x) * k, dz = (m.z - p.z) * k;
       let x = dx * cs - dz * sn, y = dx * sn + dz * cs;
-      const d = Math.hypot(x, y), lim = R - 12;
+      const d = Math.hypot(x, y), lim = R - 24;
       if (d > lim) { if (m.kind !== 'target') continue; x *= lim / d; y *= lim / d; }
       this.drawMarker(g, m, R + x, R + y, W / 128);
     }
     // facing (sin yaw, cos yaw) on the canvas, turned with the map; the arrow is drawn pointing up
     this.drawPlayer(g, R, R, Math.atan2(Math.cos(this.player.yaw), Math.sin(this.player.yaw)) + rot + Math.PI / 2, W / 128);
     // north, written in red at the edge (the leather ring is drawn over the rim by the page)
-    const na = rot - Math.PI / 2, nx = R + Math.cos(na) * (R - 22), ny = R + Math.sin(na) * (R - 22);
-    g.fillStyle = '#a63d2c'; g.font = `${Math.round(W / 9)}px 'Nanum Pen Script', serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('N', nx, ny + 1);
+    const na = rot - Math.PI / 2, ca = Math.cos(na), sa = Math.sin(na);
+    g.strokeStyle = '#a63d2c'; g.lineWidth = W / 90; g.beginPath(); g.moveTo(R + ca * (R - 14), R + sa * (R - 14)); g.lineTo(R + ca * (R - 26), R + sa * (R - 26)); g.stroke();
+    g.fillStyle = '#a63d2c'; g.font = `${Math.round(W / 8)}px 'Nanum Pen Script', serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('N', R + ca * (R - 42), R + sa * (R - 42) + 1);
   }
   drawBig() {
     const g = this.bg, W = this.big.width, k = W / WORLD.size;
     g.clearRect(0, 0, W, W);
+    this.grid(g, (a, b) => [(a + HALF) * k, (b + HALF) * k], -HALF, HALF, 1);
     g.imageSmoothingEnabled = true; g.drawImage(this.inked, 0, 0, W, W);
     const P = (x, z) => [(x + HALF) * k, (z + HALF) * k];
     g.textAlign = 'center'; g.textBaseline = 'middle';
