@@ -472,44 +472,71 @@ export class World {
   }
 
   // ---------------------------------------------------------------- rocks
+  // photoscanned rock pieces (blender/bake_rocks.py: decimated scans with normals re-baked from the full scans)
+  rockLib() {
+    if (this._rockLib) return this._rockLib;
+    const all = ['boulder_01', 'rock_moss_set_01', 'rock_moss_set_02', 'rock_07', 'rock_09'].flatMap((k) => this.variants('rk_' + k).map((v) => ({ ...v, src: k })));
+    for (const v of all) v.w = Math.max(v.size.x, v.size.z);
+    const bySize = all.slice().sort((p, q) => q.w * q.size.y - p.w * p.size.y);
+    this._rockLib = { all, boulder: all.find((v) => v.src === 'boulder_01'), big: bySize.slice(0, 6), mid: bySize.slice(3, 12), small: bySize.slice(8) };
+    return this._rockLib;
+  }
+  // one rock piece bedded into the ground: seated on the lowest point under its footprint, sunk, leaning with the slope
+  bedRock(v, x, z, D, { sink = 0.3, yaw = 0, tilt = 0.12, hull = true, flat = 1 } = {}) {
+    const T = this.terrain, s = D / v.w;
+    let gy = T.heightAt(x, z);
+    for (let a = 0; a < 6.28; a += 0.785) gy = Math.min(gy, T.heightAt(x + Math.cos(a) * D * 0.4, z + Math.sin(a) * D * 0.4));
+    const e = 0.5, gx = T.heightAt(x + e, z) - T.heightAt(x - e, z), gz = T.heightAt(x, z + e) - T.heightAt(x, z - e);
+    const y = gy - v.size.y * s * flat * sink;
+    const m = this.place(v, null, new THREE.Vector3(x, y, z), yaw, new THREE.Vector3(s, s * flat, s));
+    // lean into the slope like a stone that settled there
+    m.rotation.x = Math.atan2(gz, 2 * e) * 0.7 + (rnd() - 0.5) * tilt; m.rotation.z = -Math.atan2(gx, 2 * e) * 0.7 + (rnd() - 0.5) * tilt;
+    m.updateMatrixWorld(true);
+    if (hull) this.hull(v.geo, m.matrixWorld, { kind: 'rock', surface: 'rock' });
+    return { m, top: y + v.size.y * s * flat };
+  }
+  // a natural group: an anchor stone bedded into the slope, a couple of mid-sized pieces leaning against it on the
+  // downhill side, and smaller stones that rolled further down — all sharing the rock's grain (yaw family)
+  rockCluster(x, z, r, seed, avoid = null) {
+    const L = this.rockLib(), R = mulberry32(seed * 7919 + 13), T = this.terrain;
+    const e = 0.8, gx = T.heightAt(x + e, z) - T.heightAt(x - e, z), gz = T.heightAt(x, z + e) - T.heightAt(x, z - e);
+    const down = Math.hypot(gx, gz) > 0.02 ? Math.atan2(-gz, -gx) : R() * 6.28, grain = R() * 6.28;
+    const pick = (list) => list[Math.floor(R() * list.length)];
+    const ok = (px, pz, d) => !avoid || Math.hypot(px - avoid.x, pz - avoid.z) > avoid.r + d * 0.5;
+    const anchor = r > 1.0 ? (seed % 2 ? L.boulder : pick(L.big)) : r > 0.45 ? pick(L.big) : pick(L.mid);
+    const A = this.bedRock(anchor, x, z, r * 2.2, { sink: 0.28 + R() * 0.12, yaw: grain + (R() - 0.5) * 0.6 });
+    this.rocks.push({ x, z, r, top: A.top, mesh: A.m });
+    if (r < 0.4) return;
+    const nMid = r > 1.0 ? 2 + Math.floor(R() * 2) : 1 + Math.floor(R() * 2);
+    for (let k = 0; k < nMid; k++) {
+      const a = down + (R() - 0.5) * 2.2, d = r * (0.95 + R() * 0.45), D = r * (0.6 + R() * 0.45);
+      const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d; if (!ok(px, pz, D)) continue;
+      const M = this.bedRock(pick(L.mid), px, pz, D, { sink: 0.32 + R() * 0.15, yaw: grain + (R() - 0.5) * 0.9, tilt: 0.3 });
+      this.rocks.push({ x: px, z: pz, r: D / 2, top: M.top, mesh: M.m, small: true });
+    }
+    const nSmall = 2 + Math.floor(R() * (2 + r * 3));
+    for (let k = 0; k < nSmall; k++) {
+      const a = down + (R() - 0.5) * 2.8, d = r * (1.4 + R() * 1.4), D = 0.16 + R() * 0.32;
+      const px = x + Math.cos(a) * d, pz = z + Math.sin(a) * d; if (!ok(px, pz, D) || T.isWater(px, pz)) continue;
+      const S = this.bedRock(pick(L.small), px, pz, D, { sink: 0.4 + R() * 0.2, yaw: R() * 6.28, tilt: 0.6, hull: D > 0.22 });
+      this.rocks.push({ x: px, z: pz, r: D / 2, top: S.top, mesh: S.m, small: true });
+    }
+  }
+
   buildRocks() {
-    // Blender-built field boulders (voxel-remeshed, jointed, AO in vertex colours) under the world-space rock + moss material
-    const rockVars = [0, 1, 2, 3].map((i) => this.variants('boulder_field_' + i)[0]);
-    BOULDERS.forEach(([x, z, r, squash, seed], i) => {
-      const v = rockVars[seed % rockVars.length];
-      const w = Math.max(v.size.x, v.size.z);
-      const s = (r * 2) / w, sy = s * (0.55 + 0.5 * squash);
-      // seat on the lowest point under the footprint (slopes bury the uphill side), sunk a little
-      let gy = this.terrain.heightAt(x, z);
-      for (let a = 0; a < 6.28; a += 0.785) gy = Math.min(gy, this.terrain.heightAt(x + Math.cos(a) * r * 0.75, z + Math.sin(a) * r * 0.75));
-      // bedded in, not set down: a third of the stone is below ground, and it leans
-      const y = gy - 0.3 * v.size.y * sy;
-      const m = this.place(v, this.ctx.assets.mats.rockOutcrop, new THREE.Vector3(x, y, z), seed * 1.7, new THREE.Vector3(s * 1.12, sy * 1.15, s * 1.12));
-      m.rotation.x = Math.sin(seed * 3.7) * 0.12; m.rotation.z = Math.cos(seed * 5.3) * 0.12; m.updateMatrixWorld(true);
-      this.hull(v.geo, m.matrixWorld, { kind: 'rock', surface: 'rock' });
-      // a few smaller stones broken off and half-buried around it
-      for (let k = 0; k < 2 + (seed % 3); k++) {
-        const a = seed * 2.3 + k * 2.1, d = r * (0.95 + 0.35 * Math.sin(seed + k * 7)), D = r * (0.22 + 0.18 * Math.abs(Math.sin(seed * 1.3 + k)));
-        const sxp = x + Math.cos(a) * d, szp = z + Math.sin(a) * d, vv = rockVars[(seed + k + 1) % rockVars.length];
-        const ss = (D * 2) / Math.max(vv.size.x, vv.size.z);
-        const mm = this.place(vv, this.ctx.assets.mats.rockOutcrop, new THREE.Vector3(sxp, this.terrain.heightAt(sxp, szp) - 0.35 * vv.size.y * ss * 0.7, szp), a * 3.1, new THREE.Vector3(ss, ss * 0.7, ss));
-        mm.rotation.x = Math.sin(a) * 0.3; mm.updateMatrixWorld(true);
-        if (D > 0.15) this.hull(vv.geo, mm.matrixWorld, { kind: 'rock', surface: 'rock' });
-        this.rocks.push({ x: sxp, z: szp, r: D, top: 0, mesh: mm, small: true });
-      }
-      this.rocks.push({ x, z, r, top: y + v.size.y * sy * 1.15, mesh: m });
-    });
+    const gate = { x: -13.0, z: -15.4, r: 2.6 };
+    BOULDERS.forEach(([x, z, r, squash, seed]) => this.rockCluster(x, z, r, seed, Math.hypot(x - gate.x, z - gate.z) < 5 ? gate : null));
     // scattered stones (instanced)
-    const small = [...this.variants('rock_07'), ...this.variants('rock_09'), ...this.variants('stone_01')];
+    const small = [...this.rockLib().small.slice(-4), ...this.variants('stone_01')];
     const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), sv = new THREE.Vector3(), p = new THREE.Vector3(), e = new THREE.Euler();
     small.forEach((v) => {
       const items = [];
-      for (let i = 0; i < 700 && items.length < 70; i++) {
+      for (let i = 0; i < 4000 && items.length < 70; i++) {
         const x = (rnd() - 0.5) * 80, z = (rnd() - 0.5) * 80;
         const near = distToPolyline(x, z, STREAM).d < 3.2;
-        if (!near && rnd() < 0.55) continue;
+        if (!near) continue;                                   // loose stones gather where water moved them
         if (Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH3).d) < 0.5) continue;
-        items.push([x, z, 0.6 + rnd() * (near ? 2.2 : 1.4)]);
+        items.push([x, z, (0.08 + rnd() * 0.22) / Math.max(0.05, v.size.x, v.size.z)]);
       }
       const im = new THREE.InstancedMesh(v.geo, v.mat, items.length);
       items.forEach(([x, z, s], i) => {

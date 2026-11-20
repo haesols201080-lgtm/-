@@ -135,7 +135,7 @@ export class Gameplay {
   makeItem(kind, x, z, opts = {}) {
     let mesh, desc, mass = 1, r = 0.05;
     if (kind === 'stone') {
-      const v = this.world.variants('rock_07')[0];
+      const v = this.world.variants('rk_rock_07')[0];
       const geo = v.geo.clone(); geo.translate(0, -v.size.y / 2, 0);
       mesh = new THREE.Mesh(geo, v.mat);
       const w = Math.max(v.size.x, v.size.z); r = 0.05 + rnd() * 0.02; mesh.scale.setScalar(r * 2 / w);
@@ -251,7 +251,7 @@ export class Gameplay {
     for (let i = 0; i + 1 < pts.length; i++) { const L = Math.hypot(pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); segs.push({ i, L, t0: total }); total += L; }
     const at = (t) => { const g = segs.find((q) => t <= q.t0 + q.L) || segs[segs.length - 1]; const f = (t - g.t0) / g.L, [x0, z0] = pts[g.i], [x1, z1] = pts[g.i + 1];
       return { x: x0 + (x1 - x0) * f, z: z0 + (z1 - z0) * f, tx: (x1 - x0) / g.L, tz: (z1 - z0) / g.L }; };
-    const vars = [0, 1, 2, 3].map((i) => this.world.variants('boulder_field_lo_' + i)[0]);
+    const L = this.world.rockLib(), vars = [...L.big.filter((v) => v.src !== 'boulder_01'), ...L.mid, ...L.small];
     const lists = vars.map(() => []);
     const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
     const stone = (x, z, D, H, sink, tilt, flat = 1) => {
@@ -283,7 +283,7 @@ export class Gameplay {
     }
     vars.forEach((v, k) => {
       if (!lists[k].length) return;
-      const im = new THREE.InstancedMesh(v.geo, this.ctx.assets.mats.rockOutcrop, lists[k].length);
+      const im = new THREE.InstancedMesh(v.geo, v.mat, lists[k].length);
       lists[k].forEach((m, i) => im.setMatrixAt(i, m));
       im.castShadow = true; im.receiveShadow = true; im.computeBoundingSphere(); this.scene.add(im);
     });

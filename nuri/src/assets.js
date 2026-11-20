@@ -74,7 +74,7 @@ function jsonToGLB(json) {
 export const TERRAIN_LAYERS = ['ph_floor', 'ph_path', 'ph_riverbed', 'ph_mud'];
 export const TERRAIN_SCALES = [1 / 1.5, 1 / 1.67, 1 / 2.9, 1 / 1.3]; // metres covered by each scanned set
 export const PROP_TEX = ['rock_face_03', 'mossy_rock', 'weathered_planks', 'wood_planks_grey', 'rusty_metal_04', 'green_metal_rust', 'metal_plate', 'rusty_metal_02'];
-export const PH_MODELS = ['rock_07', 'rock_09', 'stone_01', 'rock_face_01', 'rock_face_02',
+export const PH_MODELS = [ 'rock_09', 'stone_01', 'rock_face_01', 'rock_face_02',
   'tree_stump_01', 'tree_stump_02', 'dead_tree_trunk', 'dead_tree_trunk_02', 'root_cluster_02', 'single_root', 'fern_02', 'moss_01',
   'shrub_03', 'shrub_04', 'nettle_plant', 'dandelion_01', 'weed_plant_02', 'dry_branches_medium_01', 'periwinkle_plant',
   'bark_debris_01', 'namaqualand_stones_01', 'root_cluster_01',
@@ -174,7 +174,7 @@ export class Assets {
   async loadAll() {
     const T = this.tex, tier = this.tier, suf = this.suffix(tier.texSize);
     const modelJobs = [['nuri'], ['outcrop'], ['log_hollow'],
-      ...PH_MODELS.map((m) => [`ph/${m}`, m]), ...DEBRIS.map((m) => [`debris/${m}`, m]), ...TREES.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...SAPLINGS.map((t) => [`trees/${t}`, t]), ...SNAGS.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...[0, 1, 2, 3].flatMap((i) => [[`rocks/boulder_${i}`, 'boulder_field_' + i], [`rocks/boulder_${i}_lo`, 'boulder_field_lo_' + i]]), ['creatures/squirrel', 'squirrel'], ['creatures/robin', 'robin'], ...PROPS.map((m) => [`props/${m}`, 'prop_' + m]), ...['toto', 'bori', 'mina'].map((m) => [`companions/${m}`, 'comp_' + m])];
+      ...PH_MODELS.map((m) => [`ph/${m}`, m]), ...DEBRIS.map((m) => [`debris/${m}`, m]), ...TREES.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...SAPLINGS.map((t) => [`trees/${t}`, t]), ...SNAGS.flatMap((t) => [[`trees/${t}`, t], [`trees/${t}_lod1`, t + '_lod1']]), ...['boulder_01', 'rock_moss_set_01', 'rock_moss_set_02', 'rock_07', 'rock_09'].map((k) => [`rocks2/${k}`, 'rk_' + k]), ['creatures/squirrel', 'squirrel'], ['creatures/robin', 'robin'], ...PROPS.map((m) => [`props/${m}`, 'prop_' + m]), ...['toto', 'bori', 'mina'].map((m) => [`companions/${m}`, 'comp_' + m])];
     this.total = 3 + 6 + 1 + modelJobs.length + 8;
     const [alb, nrm, orm] = await Promise.all([
       this.arrayTexture(TERRAIN_LAYERS.map((l) => `${BASE}tex/${l}${suf}_albedo.jpg`), true),
