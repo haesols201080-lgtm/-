@@ -255,10 +255,11 @@ export class World {
       if (!chunks.has(k)) chunks.set(k, { pos: [], col: [], uv: [], fur: [], cxy: [], cz: [], idx: [] }); return chunks.get(k); };
     const TYPES = {
       cushion: { len: 1.0, cols: [[0.55, 0.62, 0.42], [0.5, 0.58, 0.38], [0.6, 0.66, 0.48]], dome: 0.6 },
-      feather: { len: 1.35, cols: [[0.47, 0.55, 0.16], [0.42, 0.5, 0.14], [0.53, 0.56, 0.2]], dome: 0.12 },
+      feather: { len: 1.35, cols: [[0.38, 0.43, 0.17], [0.33, 0.39, 0.15], [0.42, 0.44, 0.2]], dome: 0.12 },
       haircap: { len: 2.1, cols: [[0.2, 0.3, 0.08], [0.24, 0.34, 0.1], [0.18, 0.27, 0.07]], dome: 0.18 },
     };
     const lin = (c) => c.map((v) => v ** 2.2);
+    const LITTER = lin([0.3, 0.23, 0.15]);
     const ground = (x, z, under) => {
       if (under && under.length) { rc.set(new THREE.Vector3(x, 60, z), new THREE.Vector3(0, -1, 0)); const h = rc.intersectObjects(under, true)[0]; if (h) return h.point.y; }
       return T.heightAt(x, z);
@@ -273,9 +274,11 @@ export class World {
         const x1 = x + Math.cos(a) * R * f * wob, z1 = z + Math.sin(a) * R * f * wob;
         const y = ground(x1, z1, under) + tp.dome * R * Math.sqrt(Math.max(0, 1 - f * f)) * 0.5 + 0.004;
         pos.push(x1, y, z1);
-        const k = 0.85 + 0.3 * rr(); col.push(c[0] * k, c[1] * k, c[2] * k);
+        // the rim thins out and takes the litter's colour, so a patch never ends in a hard-edged green disc
+        const k = 0.85 + 0.3 * rr(), e = Math.min(1, Math.max(0, (f - 0.45) / 0.55)) ** 1.5 * (under ? 0.4 : 0.9);
+        col.push((c[0] * (1 - e) + LITTER[0] * e) * k, (c[1] * (1 - e) + LITTER[1] * e) * k, (c[2] * (1 - e) + LITTER[2] * e) * k);
         uv.push(x1 * 1.0, z1 * 1.0);
-        fur.push(tp.len * (f < 0.85 ? 1 : 1 - (f - 0.85) / 0.15 * 0.8), 0); cxy.push((rr() - 0.5) * 0.3, 1); cz.push((rr() - 0.5) * 0.3, 0);
+        fur.push(tp.len * (1 - 0.95 * Math.min(1, Math.max(0, (f - 0.4) / 0.6)) ** 1.2) * (0.65 + 0.35 * rr()), 0); cxy.push((rr() - 0.5) * 0.3, 1); cz.push((rr() - 0.5) * 0.3, 0);
       }
       for (let j = 0; j < seg; j++) idx.push(base, base + 1 + (j + 1) % seg, base + 1 + j);
       for (let i = 1; i < ring; i++) for (let j = 0; j < seg; j++) {

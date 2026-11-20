@@ -480,13 +480,13 @@ def rubble_stone(name, size, loc, pid='rock_face_03', seed=0, rot=(0, 0, 0)):
     rr = random.Random(seed); off = Vector((rr.random() * 90, rr.random() * 90, rr.random() * 90))
     bm = bmesh.new(); bmesh.ops.create_cube(bm, size=2.0)
     bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=3, use_grid_fill=True)
-    e = rr.uniform(2.6, 4.0)
-    pls = [(Vector((rr.uniform(-1, 1), rr.uniform(-1, 1), rr.uniform(-1, 1))).normalized(), rr.uniform(0.72, 0.92)) for _ in range(rr.randint(1, 3))]
+    e = rr.uniform(4.0, 7.0)
+    pls = [(Vector((rr.uniform(-1, 1), rr.uniform(-1, 1), rr.uniform(-1, 1))).normalized(), rr.uniform(0.82, 0.96)) for _ in range(rr.randint(0, 2))]
     for v in bm.verts:
         d = v.co.normalized()
         r = (abs(d.x) ** e + abs(d.y) ** e + abs(d.z) ** e) ** (-1 / e)
         p = d * r
-        p += d * (0.1 * noise.noise(p * 1.4 + off) + 0.035 * noise.noise(p * 4.0 + off))
+        p += d * (0.06 * noise.noise(p * 1.4 + off) + 0.025 * noise.noise(p * 4.0 + off))
         for n_, dd in pls:
             k = p.dot(n_) - dd
             if k > 0: p -= n_ * k
@@ -510,7 +510,7 @@ def build_wall():
                 if h > 0.05 and x1 - x > 0.07:
                     zc = z + h / 2; wd = 0.5 - 0.16 * zc / H
                     through = rr.random() < 0.12
-                    pid = 'mossy_rock' if rr.random() < 0.28 else 'rock_face_03'
+                    pid = 'rock_face_03'
                     S.append(rubble_stone('stone', (x1 - x - 0.01, wd * (1.12 if through else rr.uniform(0.86, 1.0)), h),
                                           ((x + x1) / 2, rr.uniform(-0.025, 0.025), zc), pid, seed=var * 1000 + len(S),
                                           rot=(rr.uniform(-0.04, 0.04), rr.uniform(-0.07, 0.07), rr.uniform(-0.05, 0.05))))
@@ -521,16 +521,16 @@ def build_wall():
             z += hrow; row += 1
         x = -0.6
         while x < 0.6:                                   # cope: upright stones on edge, leaning a little
-            t = rr.uniform(0.07, 0.13); x1 = min(0.6, x + t)
-            hc = rr.uniform(0.17, 0.25)
-            S.append(rubble_stone('cope', (x1 - x - 0.008, 0.36, hc), ((x + x1) / 2, rr.uniform(-0.02, 0.02), z + hc / 2 - 0.02), 'mossy_rock',
+            t = rr.uniform(0.06, 0.11); x1 = min(0.6, x + t)
+            hc = rr.uniform(0.17, 0.26)
+            S.append(rubble_stone('cope', (x1 - x - 0.006, rr.uniform(0.3, 0.38), hc), ((x + x1) / 2, rr.uniform(-0.02, 0.02), z + hc / 2 - 0.03), 'mossy_rock' if rr.random() < 0.35 else 'rock_face_03',
                                   seed=var * 2000 + len(S), rot=(0, rr.uniform(-0.18, 0.18), rr.uniform(-0.05, 0.05))))
             x = x1
         # hearting: a dark recessed core so no light shows between stones
-        S.append(box('core', (1.2, 0.28, z), (0, 0, z / 2), mat=tex_mat('rock_face_03'), bevel=0.0)); box_uv(S[-1], 2.0)
-        A_, C_ = by_mat(S, 'rock_face_03'), by_mat(S, 'mossy_rock')
+        S.append(box('core', (1.2, 0.2, z), (0, 0, z / 2), mat=flat_mat('hearting', (0.035, 0.03, 0.025), rough=1.0), bevel=0.0))
+        A_, C_, H_ = by_mat(S, 'rock_face_03'), by_mat(S, 'mossy_rock'), by_mat(S, 'hearting')
         print('wall', var, len(S), 'stones')
-        export([join(A_, 'wall_stone'), join(C_, 'wall_cope')], f'wall_{var}')
+        export([join(A_, 'wall_stone'), join(C_, 'wall_cope'), join(H_, 'wall_core')], f'wall_{var}')
 
 ONLY = sys.argv[3:]
 for f in (build_crate, build_fence, build_gate, build_plate, build_lift, build_socket, build_cell, build_shard, build_booster, build_ball, build_gate2, build_plate2, build_lift2, build_wall):
