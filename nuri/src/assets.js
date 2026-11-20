@@ -240,7 +240,7 @@ export class Assets {
              float push = smoothstep(0.35, 0.05, pd) * flex;
              transformed.xz += normalize(toP.xz + 1e-4) * push * 0.1; transformed.y -= push * 0.05;` });
     M.rock = makeRockMaterial({ rock: T.rock, moss: T.moss }, { moss: 0.55, scale: 1 / 2.7 });
-    M.rockOutcrop = makeRockMaterial({ rock: T.rock, moss: T.moss }, { moss: 0.65, scale: 1 / 2.7 });
+    M.rockOutcrop = makeRockMaterial({ rock: T.rock, moss: T.moss }, { moss: 0.28, scale: 1 / 2.7 });   // living moss is the shell layer on top
     // tune scanned GLB materials for the scene lighting
     for (const g of Object.values(this.models)) {
       g.scene.traverse((o) => {

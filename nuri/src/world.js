@@ -482,10 +482,22 @@ export class World {
       // seat on the lowest point under the footprint (slopes bury the uphill side), sunk a little
       let gy = this.terrain.heightAt(x, z);
       for (let a = 0; a < 6.28; a += 0.785) gy = Math.min(gy, this.terrain.heightAt(x + Math.cos(a) * r * 0.75, z + Math.sin(a) * r * 0.75));
-      const y = gy - 0.1 * v.size.y * sy;
-      const m = this.place(v, this.ctx.assets.mats.rockOutcrop, new THREE.Vector3(x, y, z), seed * 1.7, new THREE.Vector3(s, sy, s));
+      // bedded in, not set down: a third of the stone is below ground, and it leans
+      const y = gy - 0.3 * v.size.y * sy;
+      const m = this.place(v, this.ctx.assets.mats.rockOutcrop, new THREE.Vector3(x, y, z), seed * 1.7, new THREE.Vector3(s * 1.12, sy * 1.15, s * 1.12));
+      m.rotation.x = Math.sin(seed * 3.7) * 0.12; m.rotation.z = Math.cos(seed * 5.3) * 0.12; m.updateMatrixWorld(true);
       this.hull(v.geo, m.matrixWorld, { kind: 'rock', surface: 'rock' });
-      this.rocks.push({ x, z, r, top: y + v.size.y * sy, mesh: m });
+      // a few smaller stones broken off and half-buried around it
+      for (let k = 0; k < 2 + (seed % 3); k++) {
+        const a = seed * 2.3 + k * 2.1, d = r * (0.95 + 0.35 * Math.sin(seed + k * 7)), D = r * (0.22 + 0.18 * Math.abs(Math.sin(seed * 1.3 + k)));
+        const sxp = x + Math.cos(a) * d, szp = z + Math.sin(a) * d, vv = rockVars[(seed + k + 1) % rockVars.length];
+        const ss = (D * 2) / Math.max(vv.size.x, vv.size.z);
+        const mm = this.place(vv, this.ctx.assets.mats.rockOutcrop, new THREE.Vector3(sxp, this.terrain.heightAt(sxp, szp) - 0.35 * vv.size.y * ss * 0.7, szp), a * 3.1, new THREE.Vector3(ss, ss * 0.7, ss));
+        mm.rotation.x = Math.sin(a) * 0.3; mm.updateMatrixWorld(true);
+        if (D > 0.15) this.hull(vv.geo, mm.matrixWorld, { kind: 'rock', surface: 'rock' });
+        this.rocks.push({ x: sxp, z: szp, r: D, top: 0, mesh: mm, small: true });
+      }
+      this.rocks.push({ x, z, r, top: y + v.size.y * sy * 1.15, mesh: m });
     });
     // scattered stones (instanced)
     const small = [...this.variants('rock_07'), ...this.variants('rock_09'), ...this.variants('stone_01')];

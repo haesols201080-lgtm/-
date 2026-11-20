@@ -68,7 +68,7 @@ export class Gameplay {
     const onPath = [[0.2, 21], [-0.8, 18.5], [-2, 15.5], [-2.6, 12.5], [-2.2, 9], [-1.9, 6.5], [-2.1, 1.0], [-3.6, -3.5], [-6.8, -7.8], [2.2, -2.2], [6, -3.2], [10, -4]];
     onPath.forEach(([x, z]) => spots.push([x, null, z]));
     // on top of boulders and stumps (vertical exploration)
-    for (const r of this.world.rocks.slice(0, 12)) spots.push([r.x, r.top + 0.12, r.z]);
+    for (const r of this.world.rocks.filter((q) => !q.small).slice(0, 12)) spots.push([r.x, r.top + 0.12, r.z]);
     for (const s of this.world.stumps) spots.push([s.x, s.top + 0.12, s.z]);
     // along the bridge log
     const L = LOGS[0];
@@ -326,14 +326,14 @@ export class Gameplay {
           float n = 0.55 * vn(vec2(x * 5.0, y * 3.0 - uT * 0.35)) + 0.45 * vn(vec2(x * 11.0 + 3.0, y * 7.0 - uT * 0.6));
           float a = prof * fall * (0.45 + 0.75 * n) * uI * uK;
           gl_FragColor = vec4(uC * a, 1.0); }` });
-    const beam = new THREE.Group(); add(beam);
+    const beam = new THREE.Group();   // (kept off: a visible shaft read as a prop, not as light)
     const core = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.5), shaftMat(0.012, 0.55)); core.position.y = 0.75;
     const wide = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.7), shaftMat(0.06, 0.22)); wide.position.y = 0.85;
     beam.add(wide, core); beam.position.set(pos.x, pos.y + 0.06, pos.z);
     const flare = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex('soft'), color: C.clone(), transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false }));
-    flare.scale.set(0.9, 0.55, 1); flare.position.set(pos.x, pos.y + 0.16, pos.z); add(flare);
+    flare.scale.set(0.7, 0.3, 1); flare.position.set(pos.x, pos.y + 0.11, pos.z); add(flare);
     // hologram crate: glowing edges + faint faces, and chevrons pointing down at the pad
-    const holo = new THREE.Group(); add(holo);
+    const holo = new THREE.Group();   // (hologram hint removed: the lit pad and its cable say enough)
     const box = new THREE.BoxGeometry(0.26, 0.26, 0.26);
     const edgeM = new THREE.LineBasicMaterial({ color: C.clone(), transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: false });
     holo.add(new THREE.LineSegments(new THREE.EdgesGeometry(box), edgeM));
@@ -403,8 +403,8 @@ export class Gameplay {
     const cam = this.ctx.camera; F.beam.rotation.y = Math.atan2(cam.position.x - P.x, cam.position.z - P.z);
     F.beam.scale.set(1 + (solved ? sT * 0.5 : 0), 1 + (solved ? sT * 2.2 : 0), 1);
     F.beam.visible = F.holo.visible = waitK > 0.01;
-    F.flare.material.color.copy(col); F.flare.material.opacity = (solved ? 1 : 0.55 + pulse * 0.3) * flick;
-    F.flare.scale.set(0.9 + pulse * 0.12 + (solved ? sT : 0), 0.5 + pulse * 0.06, 1);
+    F.flare.material.color.copy(col); F.flare.material.opacity = (solved ? 0.7 : 0.3 + pulse * 0.15) * flick;
+    F.flare.scale.set(0.7 + pulse * 0.08, 0.3 + pulse * 0.04, 1);
     // dust motes drifting up through the light
     F.moteT -= dt;
     if (F.moteT < 0 && waitK > 0.2) {

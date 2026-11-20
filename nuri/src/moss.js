@@ -47,7 +47,11 @@ export function mossMaterial(tex, shells) {
           // depth inside the cushion darkens (light can't reach the stem bases), tips catch light
           float depth = clamp(vMH / max(H, 0.05), 0.0, 1.0);
           mossT = depth;
-          diffuseColor.rgb = mossA.rgb * 1.55 * mix(0.42, 1.08, depth) * mix(0.7, 1.0, vMAO);
+          // forest-shade moss: deep olive greens, a yellower cast only on the very tips
+          vec3 c = mossA.rgb;
+          float l = dot(c, vec3(0.299, 0.587, 0.114));
+          c = mix(vec3(l), c, 0.78) * vec3(0.82, 0.95, 0.72);
+          diffuseColor.rgb = c * 0.95 * mix(0.38, 1.0, depth * depth) * mix(0.65, 1.0, vMAO);
         }`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         {
@@ -95,7 +99,8 @@ export function mossFromSurface(geo, matrix, kind, damp = 0.5) {
     wp[i * 3] = v.x; wp[i * 3 + 1] = v.y; wp[i * 3 + 2] = v.z; wn[i * 3] = n.x; wn[i * 3 + 1] = n.y; wn[i * 3 + 2] = n.z;
     const f = mossField(v.x, v.y, v.z), ao = col ? (col.getX(i) + col.getY(i) + col.getZ(i)) / 3 : 1;
     let w;
-    if (kind === 'rock') w = sstep(0.15, 0.7, n.y + 0.25 * Math.max(0, -n.z)) * sstep(0.3, 0.62, f + damp * 0.25);
+    // moss runs over the crown and down the shaded (north) flank in irregular colonies, thinning into single tufts
+    if (kind === 'rock') w = sstep(-0.15, 0.55, n.y + 0.45 * Math.max(0, -n.z)) * sstep(0.32, 0.72, f + damp * 0.22) * (0.55 + 0.45 * sstep(0.2, 0.8, n.y));
     else if (kind === 'log') w = sstep(-0.05, 0.6, n.y) * sstep(0.28, 0.58, f + damp * 0.25);
     else if (kind === 'stump') w = sstep(0.2, 0.8, n.y) * sstep(0.3, 0.6, f + 0.2);
     else w = sstep(0.42, 0.7, f * 0.6 + damp * 0.6);
