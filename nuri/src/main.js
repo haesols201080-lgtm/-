@@ -121,14 +121,39 @@ async function boot() {
   const trials = new Trials({ ctx, gameplay, player, ui, audio, fx, quests });
   // ------------------------------------------------------------ cutscenes
   const director = new Director({ camera, ui });
+  {
+    const ball = new RAPIER.Ball(0.07);
+    director.collide = (look, pos) => {
+      const d = pos.clone().sub(look), L = d.length(); if (L < 0.05) return;
+      d.divideScalar(L);
+      const hit = physics.castShape(look, { x: 0, y: 0, z: 0, w: 1 }, d, ball, 0.0, L, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, player.col, player.body,
+        (c) => !['item', 'item-held', 'creature', 'player'].includes(c.userData?.kind));
+      if (hit) { const t = Math.max(0.12, (hit.time_of_impact ?? hit.timeOfImpact) - 0.02); pos.copy(look).addScaledVector(d, t); }
+      const th = world.terrain.heightAt(pos.x, pos.z) + 0.06; if (pos.y < th) pos.y = th;
+    };
+  }
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
   const CS = {
     // the opening: the camera comes down through the crowns onto the robot asleep in the clearing, which wakes
     intro(done) {
       const p = player.pos.clone(), f = V(Math.sin(player.yaw), 0, Math.cos(player.yaw)), sd = V(-f.z, 0, f.x);
       player.state = 'sleep'; setExpr('sleepy');
+      // crane down through a gap: of 16 directions, the one whose path is clear of trunks and has the most open sky
+      let best = null, bs = -1e9;
+      for (let k = 0; k < 16; k++) {
+        const a = k / 16 * Math.PI * 2, dir = V(Math.cos(a), 0, Math.sin(a));
+        const start = p.clone().addScaledVector(dir, 5.5).add(V(0, 8, 0)), end = p.clone().addScaledVector(dir, 1.5).add(V(0, 1.3, 0));
+        let score = lighting.visibility(start.x, start.y, start.z) * 2 + lighting.visibility(end.x, end.y + 2, end.z);
+        for (const q of [start, end, start.clone().lerp(end, 0.5)]) {
+          const d = q.clone().sub(p).add(V(0, -0.2, 0)), L = d.length(); d.normalize();
+          const h = physics.castRay(new RAPIER.Ray({ x: p.x, y: p.y + 0.2, z: p.z }, d), L, true, RAPIER.QueryFilterFlags.EXCLUDE_SENSORS, undefined, player.col, player.body);
+          if (h) score -= 3;
+        }
+        score += dir.dot(f) * 0.4;                                     // prefer seeing the face
+        if (score > bs) { bs = score; best = { start, end }; }
+      }
       director.play([
-        { dur: 6.5, from: p.clone().add(V(5, 9, 7)), to: p.clone().addScaledVector(f, 1.6).addScaledVector(sd, 1.2).add(V(0, 1.4, 0)), lookFrom: p.clone().add(V(0, 3, 0)), lookTo: p.clone().add(V(0, 0.15, 0)), fov: 50 },
+        { dur: 6.5, from: best.start, to: best.end, lookFrom: p.clone().add(V(0, 3, 0)), lookTo: p.clone().add(V(0, 0.15, 0)), fov: 50 },
         { dur: 3.6, from: p.clone().addScaledVector(f, 0.62).addScaledVector(sd, 0.25).add(V(0, 0.32, 0)), to: p.clone().addScaledVector(f, 0.48).addScaledVector(sd, 0.18).add(V(0, 0.3, 0)),
           lookFrom: p.clone().add(V(0, 0.24, 0)), fov: 42 },
         { dur: 2.4, from: p.clone().addScaledVector(f, 0.5).addScaledVector(sd, 0.18).add(V(0, 0.3, 0)), to: p.clone().addScaledVector(f, 0.9).addScaledVector(sd, 0.5).add(V(0, 0.42, 0)),
@@ -221,6 +246,7 @@ async function boot() {
   // edges instead of jagged alpha-test stairs
   if (tier.msaa) scene.traverse((o) => { for (const m of [o.material].flat()) if (m && m.alphaTest > 0 && !m.transparent) { m.alphaToCoverage = true; m.needsUpdate = true; } });
   const creatures = new Creatures(ctx, world, audio);
+  squad.creatures = creatures; gameplay.totalShards += creatures.thieves().length;
   // lighting model: sky occlusion under canopy / in the cave, sun in-scattering, eye adaptation
   const lighting = new Lighting(ctx, world);
   lighting.patchScene(scene);
@@ -314,6 +340,7 @@ async function boot() {
     }
     orbit.set(player.yaw + Math.PI, 0.25);
     minimap.loadFog(gameplay.save.explored); quests.init();
+    creatures.thieves().forEach((c, i) => { if (gameplay.save.shards.includes('q' + i)) { c.carry = false; c.loot.visible = false; } });
     G.mode = 'play'; ui.startPlay();
     ui.setShards(gameplay.save.shards.length, gameplay.totalShards); ui.setFriends(gameplay.save.companions.length, gameplay.companions.length);
     // water ambience along the stream + waterfall roar

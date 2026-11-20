@@ -52,6 +52,7 @@ export class Squad {
       const R = 10;
       for (const s of this.gameplay.shards) if (!s.got && s.mesh.position.distanceTo(p) < R) this.reveals.push({ s, t: 15 });
       this.onReveal?.(p, R);
+      this.creatures?.startle(p, 4.5, (id, at) => this.gameplay.dropShard(id, at));
       this.ui.toast('토토: 촬영 완료. 주변에 반응 표시.');
     } else if (c.kind === 1) {
       const L = new THREE.PointLight(0xffd9a0, 2.2, 4.5, 2); L.position.copy(p).y += 0.35; this.ctx.scene.add(L);
@@ -67,6 +68,7 @@ export class Squad {
     const last = this.trail[0];
     if (!last || last.distanceTo(P.pos) > this.trailStep) { this.trail.unshift(P.pos.clone()); if (this.trail.length > 80) this.trail.length = 80; }
     const mem = this.members();
+    this.portraits();
     mem.forEach((c, k) => {
       const m = c.mesh;
       if (!c.joined) {
@@ -137,6 +139,29 @@ export class Squad {
       s.mesh.visible = o > 0.02; s.mesh.material.opacity = o; s.mesh.material.transparent = o < 1;
       s.hidden = o < 0.3;                         // can only be picked up once it is lit
     }
+  }
+  // portraits: tap (or 1 / 2) to call a friend into Nuri's hands; tap again to throw it
+  portraits() {
+    const box = document.getElementById('squad'); if (!box) return;
+    const mem = this.members(), key = mem.map((c) => c.id + (this.holding === c ? '*' : '')).join(',');
+    if (key === this._pkey) return; this._pkey = key;
+    box.innerHTML = '';
+    mem.forEach((c, i) => {
+      const b = document.createElement('button'); b.className = this.holding === c ? 'on' : '';
+      const ic = document.createElement('i'); ic.style.background = ['#d9a04a', '#6f8797'][c.kind]; b.appendChild(ic);
+      const sp = document.createElement('span'); sp.textContent = (this.holding === c ? '던지기' : c.name); b.appendChild(sp);
+      const go = (e) => { e.preventDefault(); e.stopPropagation(); this.callOrThrow(c); };
+      b.addEventListener('click', go); b.addEventListener('touchstart', go, { passive: false });
+      box.appendChild(b);
+    });
+    if (!this._keys) { this._keys = true; addEventListener('keydown', (e) => { const k = { Digit1: 0, Digit2: 1 }[e.code]; const c = this.members()[k]; if (c !== undefined && c) this.callOrThrow(c); }); }
+  }
+  callOrThrow(c) {
+    if (this.holding === c) { this.throwHeld(); return; }
+    if (this.holding || this.player.carry || c.state === 'fly') return;
+    // the friend hops straight back into Nuri's hands (from anywhere nearby)
+    if (c.mesh.position.distanceTo(this.player.pos) > 12) { this.ui.toast(`${c.name}이(가) 너무 멀리 있어요.`); return; }
+    this.pickUp(c); this.audio.play('beep', { pitch: 1.3 });
   }
   // extra weight on the pressure plate from friends sitting on it
   plateWeight(pos) { let w = 0; for (const c of this.members()) if (c.state !== 'held' && c.state !== 'fly' && c.mesh.position.distanceTo(pos) < 0.42) w += 8; return w; }

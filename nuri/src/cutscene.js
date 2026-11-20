@@ -57,6 +57,8 @@ export class Director {
       this.cam.position.set(c.x + Math.cos(a) * r, S.from.y + (S.to.y - S.from.y) * e, c.z + Math.sin(a) * r);
     } else this.cam.position.lerpVectors(S.from, S.to, e);
     this.look.lerpVectors(lf, lt, e);
+    // never inside a trunk or a rock: pull the camera in front of whatever stands between it and its subject
+    if (this.collide) this.collide(this.look, this.cam.position);
     this.cam.lookAt(this.look);
     if (s.fov) { this.cam.fov = this.cam.fov + (s.fov - this.cam.fov) * Math.min(1, dt * 3); this.cam.updateProjectionMatrix(); }
     if (s.dur !== Infinity && S.t >= s.dur) this.next();

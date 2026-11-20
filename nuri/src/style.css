@@ -14,7 +14,8 @@ button:hover, .btn:hover { background: rgba(255, 255, 255, 0.16); }
 button:active { transform: scale(0.97); }
 
 .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 20; }
-#loading { background: radial-gradient(ellipse at 50% 60%, #1c2a22, #070b09); }
+#loading { background: #070b09; display: block; overflow: hidden; transition: opacity .8s; }
+#loading.done { opacity: 0; }
 .load-box { width: min(420px, 86vw); text-align: center; }
 .logo { font-size: 42px; font-weight: 800; letter-spacing: 0.04em; }
 .logo span { display: block; font-size: 15px; font-weight: 500; letter-spacing: 0.4em; color: var(--accent); margin-top: 4px; }
@@ -255,3 +256,36 @@ body.cutscene #squad, body.menu-open #squad { display: none; }
 
 #choice { background: rgba(4, 8, 6, .5); z-index: 33; }
 #fader { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .6s; z-index: 39; }
+
+/* ---- loading screen ---- */
+.ld-art { position: absolute; inset: -3%; background: url('./loading.jpg') center / cover no-repeat; animation: kb 28s ease-out forwards; }
+@keyframes kb { from { transform: scale(1.0); } to { transform: scale(1.09) translate(-1.2%, -0.8%); } }
+.ld-shade { position: absolute; inset: 0; background: linear-gradient(0deg, rgba(5, 9, 7, .94) 0%, rgba(5, 9, 7, .6) 30%, rgba(5, 9, 7, 0) 58%),
+  linear-gradient(90deg, rgba(5, 9, 7, .55), rgba(5, 9, 7, 0) 55%); }
+.ld-brand { position: absolute; left: max(6vw, 24px); bottom: calc(150px + var(--safe-b)); }
+.ld-brand .logo.big { font-size: clamp(48px, 8vw, 84px); text-align: left; }
+.ld-sub { margin-top: 10px; font-size: 13px; letter-spacing: .3em; color: var(--warm); }
+.ld-foot { position: absolute; left: max(6vw, 24px); right: max(6vw, 24px); bottom: calc(30px + var(--safe-b)); }
+.ld-tip { font-size: 14px; color: var(--ink); margin-bottom: 16px; transition: opacity .5s; min-height: 1.4em; }
+.ld-tip b { color: var(--accent); margin-right: 10px; letter-spacing: .2em; font-size: 11px; }
+.ld-tip.out { opacity: 0; }
+.ld-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--dim); margin-bottom: 8px; font-variant-numeric: tabular-nums; }
+#loading .bar { margin: 0; height: 3px; background: rgba(255, 255, 255, .14); }
+#loading .bar i { background: linear-gradient(90deg, #2bb8d6, #c9fbff); box-shadow: 0 0 12px #5fe6ff; }
+.ld-motes i { position: absolute; width: 3px; height: 3px; border-radius: 50%; background: rgba(255, 238, 190, .85); box-shadow: 0 0 8px rgba(255, 228, 150, .9);
+  animation: mote 11s linear infinite; opacity: 0; }
+@keyframes mote { 0% { transform: translate(0, 0); opacity: 0; } 12% { opacity: .9; } 80% { opacity: .6; } 100% { transform: translate(40px, -140px); opacity: 0; } }
+.ld-motes i:nth-child(1) { left: 28%; top: 60%; animation-delay: -4.1s; animation-duration: 12.6s; }
+.ld-motes i:nth-child(2) { left: 61%; top: 34%; animation-delay: -0.1s; animation-duration: 14.0s; }
+.ld-motes i:nth-child(3) { left: 30%; top: 43%; animation-delay: -11.0s; animation-duration: 11.8s; }
+.ld-motes i:nth-child(4) { left: 78%; top: 56%; animation-delay: -7.0s; animation-duration: 9.9s; }
+.ld-motes i:nth-child(5) { left: 61%; top: 78%; animation-delay: -5.8s; animation-duration: 13.4s; }
+.ld-motes i:nth-child(6) { left: 64%; top: 34%; animation-delay: -8.3s; animation-duration: 12.5s; }
+.ld-motes i:nth-child(7) { left: 33%; top: 32%; animation-delay: -9.5s; animation-duration: 11.8s; }
+.ld-motes i:nth-child(8) { left: 68%; top: 78%; animation-delay: -7.9s; animation-duration: 14.5s; }
+.ld-motes i:nth-child(9) { left: 41%; top: 74%; animation-delay: -4.9s; animation-duration: 14.6s; }
+.ld-motes i:nth-child(10) { left: 82%; top: 35%; animation-delay: -1.5s; animation-duration: 10.3s; }
+.ld-motes i:nth-child(11) { left: 89%; top: 54%; animation-delay: -6.9s; animation-duration: 10.8s; }
+.ld-motes i:nth-child(12) { left: 51%; top: 51%; animation-delay: -3.9s; animation-duration: 12.5s; }
+.ld-motes i:nth-child(13) { left: 57%; top: 80%; animation-delay: -7.5s; animation-duration: 14.6s; }
+.ld-motes i:nth-child(14) { left: 80%; top: 85%; animation-delay: -7.4s; animation-duration: 10.0s; }

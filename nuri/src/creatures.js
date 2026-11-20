@@ -126,7 +126,11 @@ export class Creatures {
     const pos = new THREE.Vector3(tree.x + Math.cos(a) * (r0 + 1.6), 0, tree.z + Math.sin(a) * (r0 + 1.6));
     pos.y = this.world.terrain.heightAt(pos.x, pos.z);
     g.position.copy(pos); this.scene.add(g);
-    this.list.push({ type: 'squirrel', mesh: g, tree, r0, state: 'ground', t: 0, home: pos.clone(), tail, climbY: 0, ang: a, furU });
+    // every squirrel here has taken a crystal for an acorn and carries it in its mouth
+    const loot = new THREE.Mesh(new THREE.OctahedronGeometry(0.018, 0).scale(0.75, 1.3, 0.75),
+      new THREE.MeshStandardMaterial({ color: 0x9ff6ff, emissive: 0x2bd9ff, emissiveIntensity: 1.6, roughness: 0.15 }));
+    loot.position.set(0, 0.085, 0.118); loot.rotation.z = 1.2; g.add(loot);
+    this.list.push({ type: 'squirrel', mesh: g, tree, r0, state: 'ground', t: 0, home: pos.clone(), tail, climbY: 0, ang: a, furU, loot, carry: true });
   }
 
   buildFireflies() {
@@ -145,6 +149,18 @@ export class Creatures {
     for (const c of this.gnatCenters) c.y = this.ctx.terrain.waterY + 0.5;
   }
 
+  thieves() { return this.list.filter((c) => c.type === 'squirrel'); }
+  startle(p, R, onDrop) {
+    this.thieves().forEach((c, i) => {
+      const m = c.mesh; if (m.position.distanceTo(p) > R) return;
+      if (c.carry && c.state !== 'hide') {
+        c.carry = false; c.loot.visible = false;
+        const at = m.position.clone(); onDrop?.('q' + i, at);
+      }
+      if (c.state === 'ground') { c.state = 'climb'; c.climbY = 0; }
+      this.audio.play('chitter', { pos: m.position });
+    });
+  }
   update(dt, time, player, caveCenter) {
     this.time = time;
     const pp = new THREE.Vector3(player.pos.x, player.pos.y + 0.2, player.pos.z);

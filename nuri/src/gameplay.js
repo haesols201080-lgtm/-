@@ -919,6 +919,13 @@ export class Gameplay {
     if (m) { m.flyT = undefined; const np = this.fenceGap.clone().add(new THREE.Vector3(0.75, 0, 0.9)); np.y = this.groundY(np.x, np.z); m.pos.copy(np); m.mesh.position.copy(np); m.mesh.rotation.x = 0; }   // (the interactable shares this vector)
     if (!silent) { this.ui.toast('울타리 틈 확보. 미나가 대기 중이다.'); this.audio.play('discover'); }
   }
+  dropShard(id, at) {
+    if (this.save.shards.includes(id) || this.shards.some((q) => q.id === id)) return;
+    const geo = this.shards[0].mesh.geometry, m = new THREE.Mesh(geo, this.mats.shard);
+    const gy = this.groundY(at.x, at.z) + 0.13; m.position.set(at.x, gy + 0.25, at.z); this.scene.add(m);
+    this.shards.push({ id, mesh: m, base: gy, got: false });
+    this.fx.burst(m.position, 0x7ff0ff, 12); this.ui.toast('다람쥐가 결정을 떨어뜨렸다!');
+  }
   unlocked(id) { return this.save.unlocks.includes(id); }
   collect(s) {
     s.got = true; this.scene.remove(s.mesh);

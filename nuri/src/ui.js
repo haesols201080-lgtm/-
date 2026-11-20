@@ -20,8 +20,21 @@ export class UI {
   on(name, fn) { this.handlers[name] = fn; }
   fire(name, ...a) { this.handlers[name]?.(...a); }
 
-  progress(k, label) { $('loadbar').style.width = (k * 100).toFixed(0) + '%'; if (label) $('loadtxt').textContent = `불러오는 중… ${label}`; }
-  hideLoading() { $('loading').classList.add('hidden'); }
+  progress(k, label) {
+    $('loadbar').style.width = (k * 100).toFixed(0) + '%'; $('loadpct').textContent = Math.round(k * 100) + '%';
+    if (label) $('loadtxt').textContent = `불러오는 중 · ${label}`;
+    if (!this._tipT) this.rotateTips();
+  }
+  rotateTips() {
+    const tips = ['숙이기 버튼으로 구르면 좁은 틈도 지나갈 수 있어요.', '물에 들어갔다 나오면 누리가 흠뻑 젖어요.', '무거운 상자는 발판 위에 올려 보세요.',
+      '덩굴은 벽 쪽으로 밀면 기어오를 수 있어요.', '빛 조각은 바위 위나 그루터기 근처에 숨어 있곤 해요.', '친구 로봇 셋이 숲 어딘가에서 기다리고 있어요.',
+      '미니맵을 누르면 숲 지도가 열려요.', '빛 조각을 연달아 모으면 연속 보너스 소리가 높아져요.'];
+    let i = Math.floor(Math.random() * tips.length);
+    const show = () => { const el = $('loadtip'); el.parentElement.classList.add('out'); setTimeout(() => { el.textContent = tips[i++ % tips.length]; el.parentElement.classList.remove('out'); }, 450); };
+    $('loadtip').textContent = tips[i++ % tips.length];
+    this._tipT = setInterval(show, 4200);
+  }
+  hideLoading() { clearInterval(this._tipT); const el = $('loading'); el.classList.add('done'); setTimeout(() => el.classList.add('hidden'), 850); }
 
   showTitle(hasSave) {
     $('title').classList.remove('hidden'); $('hud').classList.add('hidden'); document.body.classList.add('menu-open');
