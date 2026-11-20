@@ -17,7 +17,8 @@ import { Gameplay } from './gameplay.js';
 import { Quests } from './quests.js';
 import { Minimap } from './minimap.js';
 import { Trials } from './trials.js';
-import { INTRO, LOG, ENDING } from './story.js';
+import { INTRO, LOG, CHAPTER, MEMORY } from './story.js';
+import { Director } from './cutscene.js';
 import { Creatures } from './creatures.js';
 import { FX } from './fx.js';
 import { Audio } from './audio.js';
@@ -47,7 +48,7 @@ THREE.ShaderChunk.shadowmap_pars_fragment = THREE.ShaderChunk.shadowmap_pars_fra
   }
   return mix( 1.0, shadow, shadowIntensity );`);
 
-const DEFAULTS = { master: 0.8, music: 0.45, sfx: 0.85, sens: 1, invertY: false, timeFlow: false, weather: 'clear', quality: null, padMap: null };
+const DEFAULTS = { guide: true, master: 0.8, music: 0.45, sfx: 0.85, sens: 1, invertY: false, timeFlow: false, weather: 'clear', quality: null, padMap: null };
 
 async function boot() {
   const ui = new UI();
@@ -115,8 +116,70 @@ async function boot() {
   const quests = new Quests(gameplay, ui, audio, camera);
   const minimap = new Minimap({ world, gameplay, player, orbit, quests, ui });
   const trials = new Trials({ ctx, gameplay, player, ui, audio, fx, quests });
-  quests.onEnding = () => ui.story(ENDING, () => ui.toast('다음 이야기: 정원 마을 — 제작 중이에요. 숲을 계속 탐험해 보세요!'), { title: '다음 이야기 · 정원 마을' });
-  gameplay.onCinematic = (target, dur) => orbit.focus(target, dur);
+  // ------------------------------------------------------------ cutscenes
+  const director = new Director({ camera, ui });
+  const V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const CS = {
+    // the opening: the camera comes down through the crowns onto the robot asleep in the clearing, which wakes
+    intro(done) {
+      const p = player.pos.clone(), f = V(Math.sin(player.yaw), 0, Math.cos(player.yaw)), sd = V(-f.z, 0, f.x);
+      player.state = 'sleep'; setExpr('sleepy');
+      director.play([
+        { dur: 6.5, from: p.clone().add(V(5, 9, 7)), to: p.clone().addScaledVector(f, 1.6).addScaledVector(sd, 1.2).add(V(0, 1.4, 0)), lookFrom: p.clone().add(V(0, 3, 0)), lookTo: p.clone().add(V(0, 0.15, 0)), fov: 50 },
+        { dur: 3.6, from: p.clone().addScaledVector(f, 0.62).addScaledVector(sd, 0.25).add(V(0, 0.32, 0)), to: p.clone().addScaledVector(f, 0.48).addScaledVector(sd, 0.18).add(V(0, 0.3, 0)),
+          lookFrom: p.clone().add(V(0, 0.24, 0)), fov: 42 },
+        { dur: 2.4, from: p.clone().addScaledVector(f, 0.5).addScaledVector(sd, 0.18).add(V(0, 0.3, 0)), to: p.clone().addScaledVector(f, 0.9).addScaledVector(sd, 0.5).add(V(0, 0.42, 0)),
+          lookFrom: p.clone().add(V(0, 0.24, 0)), fov: 46,
+          onStart: () => { player.state = 'idle'; player.idleT = 0; setExpr('surprised', 1.2); moodBeep('surprised'); audio.play('beep', { pitch: 1.2 }); } },
+      ], { onDone: () => done?.() });
+    },
+    // meeting a friend: establishing two-shot, then over-the-shoulder cuts that follow who is talking
+    friend(c, lines) {
+      const P = player.pos.clone(), F = c.mesh.position.clone(), lift = c.kind === 2 ? 0.25 : 0;
+      const d = V(F.x - P.x, 0, F.z - P.z).normalize(), sd = V(-d.z, 0, d.x), mid = P.clone().lerp(F, 0.5).add(V(0, 0.18 + lift * 0.5, 0));
+      player.yaw = Math.atan2(d.x, d.z);
+      // over-the-shoulder: well behind and to the side of the listener, so the speaker is framed clear of its head
+      const ots = (who) => who === '누리'
+        ? { dur: Infinity, ease: 5, from: F.clone().addScaledVector(d, 0.8).addScaledVector(sd, -0.5).add(V(0, 0.34 + lift, 0)), to: F.clone().addScaledVector(d, 0.72).addScaledVector(sd, -0.44).add(V(0, 0.32 + lift, 0)), lookFrom: P.clone().add(V(0, 0.22, 0)), fov: 36 }
+        : { dur: Infinity, ease: 5, from: P.clone().addScaledVector(d, -0.8).addScaledVector(sd, 0.5).add(V(0, 0.36, 0)), to: P.clone().addScaledVector(d, -0.72).addScaledVector(sd, 0.44).add(V(0, 0.34, 0)), lookFrom: F.clone().add(V(0, 0.14 + lift * 0.4, 0)), fov: 36 };
+      director.play([{ dur: Infinity, ease: 2.2, from: mid.clone().addScaledVector(sd, 1.5).add(V(0, 0.5, 0)), to: mid.clone().addScaledVector(sd, 1.05).add(V(0, 0.3, 0)), lookFrom: mid, fov: 48 }],
+        { onDone: (skipped) => { if (!skipped) return; if (ui.dlg) { while (ui.dlg) ui.dlg.next(); } } });
+      setTimeout(() => {
+        ui.on('dlgline', (who) => { if (director.active) director.cut(ots(who)); });
+        ui.dialogue(lines, () => { ui.on('dlgline', null); director.finish(false); });
+      }, 1700);
+    },
+    // something happens in the world (the gate swings open, the lift powers up): a wide shot of it, then back
+    event(target, dur) {
+      const P = player.pos.clone(), toP = V(P.x - target.x, 0, P.z - target.z); if (toP.lengthSq() < 1e-4) toP.set(1, 0, 0); toP.normalize();
+      const sd = V(-toP.z, 0, toP.x);
+      director.play([{ dur, from: target.clone().addScaledVector(toP, 3.4).addScaledVector(sd, 1.4).add(V(0, 1.1, 0)), to: target.clone().addScaledVector(toP, 2.6).addScaledVector(sd, 0.6).add(V(0, 0.8, 0)),
+        lookFrom: target, fov: 50 }]);
+    },
+    // the booster clicks onto the robot's back: the camera circles it while the jets flare
+    booster() {
+      const P = player.pos.clone();
+      director.play([{ dur: 3.2, from: P.clone().add(V(0.9, 0.45, 0.4)), to: P.clone().add(V(0.9, 0.3, 0.4)), lookFrom: P.clone().add(V(0, 0.2, 0)), orbit: 2.4, fov: 46,
+        onStart: () => { nuri.jetPower = 1; } }]);
+    },
+    // the ending: Mina lifts off from the lookout and flies north over the fence
+    ending(done) {
+      const m = gameplay.companions.find((c) => c.kind === 2); if (!m) { done(); return; }
+      const M = m.pos.clone(), P = player.pos.clone(), d = V(M.x - P.x, 0, M.z - P.z).normalize(), sd = V(-d.z, 0, d.x);
+      m.flyT = 0;
+      director.play([
+        { dur: 4.2, from: M.clone().addScaledVector(d, -1.8).addScaledVector(sd, 0.8).add(V(0, 0.2, 0)), to: M.clone().addScaledVector(d, -1.4).addScaledVector(sd, 0.6).add(V(0, 0.15, 0)),
+          lookFrom: () => m.mesh.position.clone(), track: true, fov: 52 },
+        { dur: 4.5, from: M.clone().add(V(0, 0.4, 2.5)), to: M.clone().add(V(0, 0.6, 1.8)), lookFrom: () => m.mesh.position.clone(), track: true, fov: 58 },
+      ], { onDone: () => done() });
+    },
+  };
+  gameplay.onCinematic = (target, dur) => CS.event(target, dur);
+  gameplay.onMeet = (c, lines) => CS.friend(c, lines);
+  gameplay.onBooster = () => CS.booster();
+  quests.onCharged = () => CS.ending(() => ui.story(CHAPTER, () => gameplay.openFence()));
+  quests.mapOpen = () => minimap.open;
+  gameplay.onMemory = (n) => { if (!director.active) ui.story(MEMORY[n], null, { memory: true, hold: 3800 }); };
   input.on('map', () => { if (G.mode === 'play' && !G.paused) minimap.show(!minimap.open); });
   // cut-out foliage (needles, leaves, grass, ferns) resolves its edges with MSAA alpha-to-coverage: smooth, thin
   // edges instead of jagged alpha-test stairs
@@ -130,6 +193,7 @@ async function boot() {
 
   // settings
   const applySettings = () => {
+    quests.guide = S.guide !== false;
     audio.vol = { master: S.master, music: S.music, sfx: S.sfx }; audio.applyVolume();
     input.sens = S.sens; input.invertY = S.invertY;
     if (S.padMap) input.padMap = { ...input.padMap, ...S.padMap };
@@ -209,7 +273,7 @@ async function boot() {
       // the night of the storm, told over black while the forest loads in behind it
       if (!new URLSearchParams(location.search).has('autostart')) {        // (test runs skip it)
         G.storyOpen = true;
-        ui.story(INTRO, () => { G.storyOpen = false; }, { title: '누리: 작은 탐험가' });
+        ui.story(INTRO, () => { G.storyOpen = false; CS.intro(() => { G.wokeUp = true; G.newStory = false; setTimeout(() => ui.bubble('누리', LOG.first), 600); }); }, { title: '누리: 작은 탐험가' });
       }
     }
     orbit.set(player.yaw + Math.PI, 0.25);
@@ -392,7 +456,7 @@ async function boot() {
       acc += dt;
       let steps = 0;
       while (acc >= STEP && steps < 4) {
-        if (G.wokeUp) player.update(STEP, orbit.cine || ui.dlg ? FROZEN : input, orbit.yaw, gameplay);
+        if (G.wokeUp) player.update(STEP, orbit.cine || ui.dlg || director.active ? FROZEN : input, orbit.yaw, gameplay);
         else { player.vel.set(0, 0, 0); }
         physics.step();
         input.pressed.clear();
@@ -400,7 +464,7 @@ async function boot() {
       }
       if (steps === 4) acc = 0;
       gameplay.update(dt, G.time);
-      quests.update(dt, player.pos, G.wokeUp && !orbit.cine);
+      quests.update(dt, player.pos, G.wokeUp && !orbit.cine && !director.active);
       minimap.update(dt);
       trials.update(dt, G.time);
       handleEvents();
@@ -430,7 +494,8 @@ async function boot() {
       const t = G.time * 0.08;
       camera.position.set(player.pos.x + Math.sin(t) * 1.2, player.pos.y + 0.45, player.pos.z + Math.cos(t) * 1.2);
       camera.lookAt(player.pos.x, player.pos.y + 0.2, player.pos.z);
-    } else if (!G.paused) orbit.update(dt, input, player);
+    } else if (director.active) director.update(dt);
+    else if (!G.paused) orbit.update(dt, input, player);
     // world + effects
     world.update(dt, G.time, camera.position, player.pos);
     creatures.update(dt, G.time, player, gameplay.caveCenter);
@@ -550,7 +615,7 @@ async function boot() {
   frame();
   // debug / test hooks
   window.__RAPIER = RAPIER; window.__THREE = THREE;
-  window.__game = { WET, quests, minimap, trials, player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, prints, marks, creatures, get dof() { return dof; }, get rays() { return rays; } };
+  window.__game = { WET, quests, minimap, trials, director, CS, player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, prints, marks, creatures, get dof() { return dof; }, get rays() { return rays; } };
 }
 
 function makeRain(scene) {

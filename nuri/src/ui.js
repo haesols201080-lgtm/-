@@ -45,13 +45,13 @@ export class UI {
     const el = $('quest');
     if (!q) { el.classList.add('hidden'); return; }
     el.classList.remove('hidden');
-    $('q-step').textContent = `메인 퀘스트 ${q.step} / ${q.total}`;
+    $('q-step').textContent = `탐사 목표 ${q.step} / ${q.total}`;
     $('q-title').textContent = q.title; $('q-text').textContent = q.text;
     $('q-prog').textContent = q.prog ? `${q.prog[0]} / ${q.prog[1]}` : '';
     if (animate) { el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); }
   }
   questDone(title, reward) {
-    $('qdone-title').textContent = title; $('qdone-reward').textContent = reward ? '보상 · ' + reward : '';
+    $('qdone-title').textContent = title; $('qdone-reward').textContent = reward ? '획득 · ' + reward : '';
     const el = $('qdone'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 3600);
   }
   // ---- juice
@@ -83,9 +83,9 @@ export class UI {
     next();
   }
   // full-screen story text over black (intro / ending); tap to skip ahead
-  story(lines, onDone, { title = null, hold = 3400 } = {}) {
+  story(lines, onDone, { title = null, hold = 3400, memory = false } = {}) {
     const el = $('story'), box = $('story-text');
-    box.innerHTML = ''; el.classList.remove('hidden', 'fade');
+    box.innerHTML = ''; el.classList.remove('hidden', 'fade'); el.classList.toggle('memory', memory);
     let i = 0, t = null, done = false;
     const finish = () => { if (done) return; done = true; clearTimeout(t); el.classList.add('fade'); setTimeout(() => { el.classList.add('hidden'); onDone?.(); }, 1000); };
     const step = () => {
@@ -109,7 +109,7 @@ export class UI {
     const el = $('trialres'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 5500);
   }
   trialFail(name) { this.toast(`${name} — 시간 초과! 출발 지점에서 다시 도전해 보세요.`); }
-  combo(n) { const el = $('combo'); el.textContent = `연속 ×${n}`; this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 900); }
+  combo(n) { const el = $('combo'); el.textContent = `연속 회수 ×${n}`; this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 900); }
   flash() { const el = $('flash'); el.classList.remove('go'); void el.offsetWidth; el.classList.add('go'); }
 
   setShards(n, t) { $('shards').textContent = n; $('shards-total').textContent = '/' + t; }
@@ -148,6 +148,7 @@ export class UI {
     bindRange('s-master', 'master'); bindRange('s-music', 'music'); bindRange('s-sfx', 'sfx'); bindRange('s-sens', 'sens');
     $('s-invert').checked = S.invertY; $('s-invert').onchange = (e) => { S.invertY = e.target.checked; apply(); };
     $('s-tod').checked = S.timeFlow; $('s-tod').onchange = (e) => { S.timeFlow = e.target.checked; apply(); };
+    $('s-guide').checked = S.guide !== false; $('s-guide').onchange = (e) => { S.guide = e.target.checked; apply(); };
     $('s-weather').value = S.weather; $('s-weather').onchange = (e) => { S.weather = e.target.value; apply(); };
     $('s-quality').value = S.quality;
     $('s-quality').onchange = (e) => { S.quality = e.target.value; apply(); $('quality-note').textContent = '그래픽 품질은 페이지를 새로고침하면 적용돼요.'; };

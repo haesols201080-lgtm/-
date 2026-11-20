@@ -11,30 +11,33 @@ const nearestShard = (g, p) => {
 };
 
 export const QUESTS = [
-  { id: 'first', title: '첫걸음', text: () => '반짝이는 빛 조각 3개 모으기', prog: (g) => [Math.min(3, g.save.shards.length), 3],
-    done: (g) => g.save.shards.length >= 3, target: (g, p) => nearestShard(g, p), reward: '미니맵에 주변 빛 조각이 표시돼요' },
-  { id: 'toto', title: '뿌리 언덕의 목소리', text: () => '큰 나무 뿌리 사이에서 토토 찾기',
+  { id: 'first', title: '착륙 지점', text: () => '근처의 동력 결정 회수', prog: (g) => [Math.min(3, g.save.shards.length), 3],
+    done: (g) => g.save.shards.length >= 3, target: (g, p) => nearestShard(g, p), reward: '근거리 결정 탐지 (미니맵)' },
+  { id: 'toto', title: '약한 식별 신호', text: () => '거목 뿌리 부근에서 토토 찾기',
     done: (g) => g.save.companions.includes('toto'), target: (g) => g.companions[0]?.pos },
-  { id: 'gate', title: '녹슨 울타리 문', text: () => '나무 상자를 밀어 발판 위에 올리기',
+  { id: 'gate', title: '녹슨 철문', text: () => '압력판에 무게를 올려 문 열기',
     done: (g) => g.save.gateOpen, target: (g) => { const c = g.gateCrate?.body.translation(); return c && Math.hypot(c.x - g.plate.pos.x, c.z - g.plate.pos.z) > 0.5 ? new THREE.Vector3(c.x, c.y, c.z) : g.plate.pos; } },
-  { id: 'booster', title: '그루터기의 선물', text: () => '상자를 딛고 그루터기 위의 부스터 얻기',
+  { id: 'booster', title: '미확인 추진 장치', text: () => '그루터기 위의 장치 회수',
     done: (g) => g.save.booster, target: (g) => g.booster?.mesh.position || g.world.stumps[0] && new THREE.Vector3(g.world.stumps[0].x, g.world.stumps[0].top, g.world.stumps[0].z),
     reward: '2단 점프 · 호버링' },
-  { id: 'bori', title: '반딧불 동굴', text: () => '폭포 바위 아래 동굴에서 보리 찾기',
+  { id: 'bori', title: '어두운 동굴', text: () => '바위산 아래 동굴에서 보리 찾기',
     done: (g) => g.save.companions.includes('bori'), target: (g) => g.caveCenter },
-  { id: 'cell', title: '멈춘 리프트', text: (g) => (g.player.carry === g.cell ? '리프트 소켓에 동력 셀 꽂기' : '속 빈 통나무 안에서 동력 셀 찾기'),
+  { id: 'cell', title: '정지된 승강기', text: (g) => (g.player.carry === g.cell ? '승강기 소켓에 동력 셀 연결' : '속 빈 통나무에서 동력 셀 찾기'),
     done: (g) => g.save.liftPowered, target: (g) => (g.player.carry === g.cell || !g.cell ? g.lift?.socketPos : g.cell.mesh.position) },
-  { id: 'mina', title: '전망 바위', text: () => '리프트를 타고 올라가 미나 만나기',
+  { id: 'mina', title: '전망 바위의 비콘', text: () => '승강기로 올라가 미나와 합류',
     done: (g) => g.save.companions.includes('mina'), target: (g) => g.summit },
-  { id: 'all', title: '숲의 빛', text: () => '숲의 빛 조각 모두 모으기', prog: (g) => [g.save.shards.length, g.totalShards],
-    done: (g) => g.save.shards.length >= g.totalShards, target: (g, p) => (g.save.shards.length >= 30 ? nearestShard(g, p) : null) },
+  { id: 'charge', title: '미나의 연료', text: () => '동력 결정 회수', prog: (g) => [Math.min(CHARGE, g.save.shards.length), CHARGE],
+    done: (g) => g.save.shards.length >= CHARGE && g.save.companions.includes('mina'), target: (g, p) => (g.save.shards.length >= CHARGE - 6 ? nearestShard(g, p) : null) },
+  { id: 'garden', title: '울타리 너머', text: () => '울타리 틈으로 들어가기',
+    done: (g) => g.save.regions.includes('garden'), target: (g) => g.fenceGap },
 ];
+export const CHARGE = 30;
 
 // shard milestones: every few shards something new
 export const MILESTONES = [
-  { n: 3, id: 'scan', title: '빛 탐지기', desc: '미니맵에 가까운 빛 조각이 보여요.' },
+  { n: 3, id: 'scan', title: '결정 탐지기', desc: '미니맵에 가까운 동력 결정이 표시돼요.' },
   { n: 12, id: 'dash', title: '에어 대시', desc: '공중에서 숙이기 버튼을 누르면 앞으로 돌진해요.' },
-  { n: 25, id: 'magnet', title: '빛 자석', desc: '빛 조각을 더 멀리서 끌어당겨요.' },
+  { n: 25, id: 'magnet', title: '결정 자석', desc: '동력 결정을 더 멀리서 끌어당겨요.' },
   { n: 40, id: 'wide', title: '넓은 탐지기', desc: '미니맵 탐지 범위가 두 배로 넓어져요.' },
 ];
 
@@ -56,6 +59,9 @@ export class Quests {
     if (!q) { this.ui.setQuest(null); return; }
     const pr = q.prog?.(this.g);
     const isNew = !silent && q.id !== this.shownId;
+    const progKey = q.id + ':' + (pr ? pr[0] : '');
+    if (isNew || (this.progKey && progKey !== this.progKey)) this.peekT = 7;     // show the panel when something changed
+    this.progKey = progKey;
     this.ui.setQuest({ title: q.title, text: q.text(this.g), prog: pr, step: QUESTS.indexOf(q) + 1, total: QUESTS.length }, isNew);
     // Nuri thinks out loud as each new goal begins (after the completion banner has had its moment)
     if (isNew && LOG[q.id]) setTimeout(() => { if (!this.ui.dlg) this.ui.bubble('누리', LOG[q.id]); }, 2600);
@@ -69,18 +75,23 @@ export class Quests {
       this.doneSet.add(q.id); changed = true;
       this.ui.questDone(q.title, q.reward);
       this.audio.play('quest');
-      if (q.id === 'all' && !g.save.ended) { g.save.ended = true; g.persist(); setTimeout(() => this.onEnding?.(), 3500); }
+      if (q.id === 'charge' && !g.save.charged) { g.save.charged = true; g.persist(); setTimeout(() => this.onCharged?.(), 3200); }
     }
     // text/progress can change without completion (carrying the cell, shard count)
     this.tick = (this.tick || 0) + dt;
     if (changed || this.tick > 0.5) { this.tick = 0; this.refresh(!changed && this.shownId !== null); }
+    // the panel stays out of the way: it shows when the goal changes, when the robot stands still or the map is open
+    this.peekT = Math.max(0, (this.peekT || 0) - dt);
+    const visible = this.peekT > 0 || g.player.idleT > 5 || this.mapOpen?.();
+    if (visible !== this.visible) { this.visible = visible; document.getElementById('quest').classList.toggle('tucked', !visible); }
     // objective marker
     const q = this.active();
     const tgt = (playing && this.override?.()) || (playing && q ? q.target(g, playerPos) : null);
     this.target = tgt || null;
     if (!tgt || !this.el) { this.el?.classList.add('hidden'); return; }
     const d = Math.hypot(tgt.x - playerPos.x, (tgt.y ?? playerPos.y) - playerPos.y, tgt.z - playerPos.z);
-    if (d < 1.2) { this.el.classList.add('hidden'); return; }
+    // a light touch: the marker only when guidance is on and the panel is showing, the target is far, or a trial runs
+    if (d < 1.2 || this.guide === false || (!visible && d < 14 && !this.override?.())) { this.el.classList.add('hidden'); return; }
     this.el.classList.remove('hidden');
     const v = this.v.set(tgt.x, (tgt.y ?? playerPos.y) + 0.35, tgt.z).project(this.camera);
     const W = innerWidth, H = innerHeight, behind = v.z > 1;

@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { mulberry32, clamp, damp, smoothstep } from './util.js';
 import { REGIONS, START, OUTCROP, STUMPS, LOGS, WORLD, GLADE_RIDGE } from './layout.js';
 import { MILESTONES } from './quests.js';
-import { TALK } from './story.js';
+import { TALK, MEMORY } from './story.js';
 
 const rnd = mulberry32(99);
 
@@ -84,6 +84,17 @@ export class Gameplay {
     for (const p of this.caveSpots()) spots.push(p);
     // glade + north path
     spots.push([-18.5, null, -20.5], [-21, null, -24], [-3, null, -22], [0, null, -29]);
+    // the squirrel's hoard: shards it took for acorns, stashed on the highest boulder with its cones
+    {
+      const hi = this.world.rocks.filter((q) => !q.small).sort((a, b) => (b.top - this.T.heightAt(b.x, b.z)) - (a.top - this.T.heightAt(a.x, a.z)))[0];
+      if (hi) {
+        for (let k = 0; k < 3; k++) { const a = k * 2.1; spots.push([hi.x + Math.cos(a) * 0.16, hi.top + 0.1, hi.z + Math.sin(a) * 0.16]); }
+        const cones = [0, 1, 2].map((i) => this.world.variants('pinecone_' + i)[0]).filter(Boolean);
+        for (let k = 0; k < 6; k++) { const v = cones[k % cones.length]; if (!v) break; const a = k * 1.05 + 0.4, r = 0.08 + (k % 2) * 0.07;
+          const m = new THREE.Mesh(v.geo, v.mat); m.position.set(hi.x + Math.cos(a) * r, hi.top - 0.01, hi.z + Math.sin(a) * r); m.rotation.set(1.3, a, 0.4 * k); m.scale.setScalar(1.1); m.castShadow = true; this.scene.add(m); }
+        this.stash = new THREE.Vector3(hi.x, hi.top, hi.z);
+      }
+    }
     spots.forEach(([x, y, z], i) => {
       const m = new THREE.Mesh(geo, this.mats.shard);
       const gy = y ?? this.groundY(x, z) + 0.13;
@@ -549,7 +560,7 @@ export class Gameplay {
     if (!L.cellMesh) {
       const cell = this.cellModel(); cell.position.y = 0.16; L.socket.add(cell); L.cellMesh = cell;
     }
-    if (!silent) { this.audio.play('power'); this.ui.toast('승강기에 전원이 들어왔어요!'); this.player.emit('solved'); this.onCinematic?.(L.mesh.position.clone().setY(L.mesh.position.y + 0.8), 2.4); this.persist(); }
+    if (!silent) { this.audio.play('power'); this.ui.toast('승강기 전원 복구.'); this.player.emit('solved'); this.onCinematic?.(L.mesh.position.clone().setY(L.mesh.position.y + 0.8), 2.4); this.persist(); }
   }
 
   useSocket() {
@@ -755,8 +766,12 @@ export class Gameplay {
     const T = TALK[c.id];
     if (!T || this.ui.dlg) { this.ui.bubble(c.name, c.line); return; }
     c.talkN = (c.talkN || 0) + 1;
-    const lines = (first ? T.first : T.again[c.talkN % T.again.length]).map(([w, t]) => [w, t.replace('{n}', this.save.shards.length).replace('{t}', this.totalShards)]);
-    this.ui.dialogue(lines);
+    // later chatter follows the progress: only lines whose condition holds, newest-relevant first
+    const pool = T.again.filter((e) => !e.when || e.when(this)).sort((a, b) => (b.when ? 1 : 0) - (a.when ? 1 : 0));
+    const pick = first ? T.first : pool[(c.talkN - 1) % pool.length].lines;
+    const lines = pick.map(([w, t]) => [w, t.replace('{n}', this.save.shards.length).replace('{t}', 30)]);
+    if (first) c.joyT = 2.2;
+    if (first && this.onMeet) this.onMeet(c, lines); else this.ui.dialogue(lines);
   }
 
   // ---------------------------------------------------------------- north edge: garden fence (next region teaser)
@@ -771,7 +786,12 @@ export class Gameplay {
     }
     for (const yy of [0.25, 0.75]) { const r = this.prop('fence_rail'); r.position.set(0.5, y0 + yy, z + 0.027); r.scale.x = 4.1; r.rotation.z = (rnd() - 0.5) * 0.01; fence.add(r); }
     this.scene.add(fence);
-    const c = this.W.createCollider(this.R.ColliderDesc.cuboid(2.1, 1.0, 0.05).setTranslation(0.5, y0 + 0.5, z - 0.25)); c.userData = { kind: 'static', surface: 'wood' };
+    // the fence is closed except for the gap where two pickets are missing; the gap itself is held shut until Mina can fly
+    for (const [x0, x1] of [[-1.5, 0.37], [0.77, 2.5]]) {
+      const c = this.W.createCollider(this.R.ColliderDesc.cuboid((x1 - x0) / 2, 1.0, 0.05).setTranslation((x0 + x1) / 2, y0 + 0.5, z - 0.25)); c.userData = { kind: 'static', surface: 'wood' };
+    }
+    this.gapCol = this.W.createCollider(this.R.ColliderDesc.cuboid(0.2, 1.0, 0.05).setTranslation(0.57, y0 + 0.5, z - 0.25)); this.gapCol.userData = { kind: 'static', surface: 'wood' };
+    this.fenceGap = new THREE.Vector3(0.57, y0, z);
     this.edgeZ = z;
   }
 
@@ -822,8 +842,8 @@ export class Gameplay {
     this.plate.top.position.y = 0.04 - this.plate.press * 0.025;
     this.plate.padBody.setNextKinematicTranslation({ x: this.plate.pos.x, y: this.plate.pos.y + 0.108 - this.plate.press * 0.025, z: this.plate.pos.z });
     this.updatePlateFx(dt, time, press, this.save.gateOpen);
-    if (!this.save.gateOpen && load >= 15) { this.save.gateOpen = true; this.audio.play('gate'); this.ui.toast('철컥— 녹슨 문이 열렸어요!'); P.emit('solved'); this.onCinematic?.(this.gate.center.clone().setY(this.gate.y0 + 0.5), 2.8); this.persist(); }
-    if (load > 0 && load < 15 && !this.save.gateOpen && !this.plateHintShown) { this.plateHintShown = true; this.ui.toast('발판이 살짝 눌렸지만… 더 무거운 게 필요해 보여요.'); P.emit('worried'); }
+    if (!this.save.gateOpen && load >= 15) { this.save.gateOpen = true; this.audio.play('gate'); this.ui.toast('철문 개방. 경첩이 3년 만에 움직였다.'); P.emit('solved'); this.onCinematic?.(this.gate.center.clone().setY(this.gate.y0 + 0.5), 2.8); this.persist(); }
+    if (load > 0 && load < 15 && !this.save.gateOpen && !this.plateHintShown) { this.plateHintShown = true; this.ui.toast('압력판이 조금 내려갔다. 무게가 부족하다.'); P.emit('worried'); }
     const G = this.gate;
     const tgt = this.save.gateOpen ? 1 : press * 0.06;
     G.open = damp(G.open, tgt, this.save.gateOpen ? 1.2 : 6, dt);
@@ -836,7 +856,7 @@ export class Gameplay {
       const b = this.booster; b.core.rotation.y = time * 0.8; b.core.rotation.z = Math.sin(time * 1.3) * 0.15; b.mesh.position.y += Math.sin(time * 2) * 0.0005;
       if (b.mesh.position.distanceTo(new THREE.Vector3(P.pos.x, P.pos.y + 0.2, P.pos.z)) < 0.3) {
         this.scene.remove(b.mesh); this.booster = null; this.save.booster = true; P.abilities.booster = true;
-        this.audio.play('ability'); this.ui.ability('호버 부스터 획득!', '공중에서 점프를 한 번 더 누르면 2단 점프, 계속 누르고 있으면 호버링해요.');
+        this.audio.play('ability'); this.ui.ability('호버 부스터 획득!', '공중에서 점프를 한 번 더 누르면 2단 점프, 계속 누르고 있으면 호버링해요.'); this.onBooster?.();
         P.emit('ability'); this.fx.burst(b.mesh.position, 0x6ee8ff, 40); this.persist();
       }
     }
@@ -883,10 +903,20 @@ export class Gameplay {
       }
     }
     // north edge teaser
-    if (P.pos.z < this.edgeZ + 0.9 && !this.edgeShown) { this.edgeShown = true; this.ui.toast('울타리 너머는 사람들이 사는 집과 정원이에요. (다음 지역 — 아직 제작 중)'); P.emit('curious'); }
+    if (P.pos.z < this.edgeZ + 0.9 && !this.edgeShown) { this.edgeShown = true; this.ui.toast(this.save.charged ? '울타리 틈 너머로 정원이 보인다.' : '울타리 너머 거인의 거주지. 틈은 아직 막혀 있다.'); P.emit('curious'); }
+    // through the gap: the garden (next region) begins here
+    if (this.save.charged && P.pos.z < this.edgeZ - 0.4 && !this.save.regions.includes('garden')) {
+      this.save.regions.push('garden'); this.ui.discover('정원 입구'); this.audio.play('discover'); P.emit('discover'); this.persist();
+    }
     if (P.pos.z > this.edgeZ + 3) this.edgeShown = false;
   }
 
+  openFence(silent = false) {
+    if (this.gapCol) { this.W.removeCollider(this.gapCol, true); this.gapCol = null; }
+    const m = this.companions.find((c) => c.kind === 2);
+    if (m) { m.flyT = undefined; const np = this.fenceGap.clone().add(new THREE.Vector3(0.75, 0, 0.9)); np.y = this.groundY(np.x, np.z); m.pos.copy(np); m.mesh.position.copy(np); m.mesh.rotation.x = 0; }   // (the interactable shares this vector)
+    if (!silent) { this.ui.toast('울타리 틈 확보. 미나가 대기 중이다.'); this.audio.play('discover'); }
+  }
   unlocked(id) { return this.save.unlocks.includes(id); }
   collect(s) {
     s.got = true; this.scene.remove(s.mesh);
@@ -902,13 +932,14 @@ export class Gameplay {
     else this.ui.setShards(n, this.totalShards);
     this.player.emit('collect');
     for (const m of MILESTONES) if (n === m.n && !this.unlocked(m.id)) this.unlock(m);
+    if (MEMORY[n] && !this.save.memories?.includes(n)) { (this.save.memories = this.save.memories || []).push(n); setTimeout(() => this.onMemory?.(n), 1400); }
     this.persistSoon();
   }
   unlock(m, silent = false) {
     if (!this.save.unlocks.includes(m.id)) this.save.unlocks.push(m.id);
     if (m.id === 'dash') this.player.abilities.dash = true;
     if (silent) return;
-    setTimeout(() => { this.ui.ability(`${m.title} 해금!`, `빛 조각 ${m.n}개 · ${m.desc}`); this.ui.flash(); this.audio.play('ability'); this.player.emit('ability'); }, 700);
+    setTimeout(() => { this.ui.ability(`${m.title} 작동`, `결정 ${m.n}개 · ${m.desc}`); this.ui.flash(); this.audio.play('ability'); this.player.emit('ability'); }, 700);
   }
 
   // apply loaded progress
@@ -918,6 +949,7 @@ export class Gameplay {
     for (const c of this.companions) c.found = sv.companions?.includes(c.id);
     if (sv.booster && this.booster) { this.scene.remove(this.booster.mesh); this.booster = null; }
     this.player.abilities.booster = !!sv.booster;
+    if (sv.charged) this.openFence(true);
     this.save.unlocks = sv.unlocks || [];
     for (const m of MILESTONES) if (this.save.unlocks.includes(m.id)) this.unlock(m, true);
     if (sv.gateOpen) this.gate.open = 1;
@@ -964,10 +996,15 @@ function animateCompanion(c, dt, P, camera) {
   const near = toP.length() < 2.5;
   const want = near ? Math.atan2(toP.x, toP.z) : Math.sin(t * 0.3) * 1.2;
   m.rotation.y += (((want - m.rotation.y + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI) * Math.min(1, dt * 4);
-  if (c.kind === 2) { m.position.y = c.pos.y + 0.25 + Math.sin(t * 2) * 0.03; for (const r of m.userData.rotors) r.rotation.y += dt * 40; }
-  if (m.userData.wheel && c.found && near) m.userData.wheel.rotation.x += dt * 6;
+  if (c.kind === 2) {
+    m.position.y = c.pos.y + 0.25 + Math.sin(t * 2) * 0.03; for (const r of m.userData.rotors) r.rotation.y += dt * (c.flyT !== undefined ? 70 : 40);
+    // the ending: Mina lifts off and heads north over the fence
+    if (c.flyT !== undefined) { c.flyT += dt; const f = c.flyT; m.position.y += Math.min(7, f * f * 0.35); m.position.z = c.pos.z - Math.max(0, f - 2.2) ** 1.5 * 0.9; m.rotation.x = -0.18 * Math.min(1, Math.max(0, f - 2)); }
+  } else if (m.userData.wheel && c.found && near) m.userData.wheel.rotation.x += dt * 6;
   else if (c.found) m.position.y = c.pos.y + Math.abs(Math.sin(t * 5)) * 0.015 * (near ? 1 : 0);
   if (!c.found) m.rotation.z = Math.sin(t * 1.3) * 0.05; else m.rotation.z = 0;
+  // joy on being found: hops and twirls
+  if (c.joyT > 0) { c.joyT -= dt; const k = Math.min(1, c.joyT); m.position.y += Math.abs(Math.sin(c.joyT * 9)) * 0.07 * k; m.rotation.y += dt * 7 * k; }
 }
 
 // ivy-like leaf (three lobes, pale veins, darker edges) painted once into a canvas

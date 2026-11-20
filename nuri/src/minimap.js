@@ -157,7 +157,7 @@ export class Minimap {
     for (const m of this.markers()) { const [x, y] = P(m.x, m.z); this.drawMarker(g, m, x, y, 1.6); }
     const [px, py] = P(this.player.pos.x, this.player.pos.z);
     this.drawPlayer(g, px, py, Math.atan2(Math.cos(this.player.yaw), Math.sin(this.player.yaw)) + Math.PI / 2, 1.5);
-    document.getElementById('bm-explored').textContent = `탐험한 숲 ${Math.round(this.explored() * 100)}% · 빛 조각 ${this.gameplay.save.shards.length} / ${this.gameplay.totalShards}`;
+    document.getElementById('bm-explored').textContent = `탐험한 숲 ${Math.round(this.explored() * 100)}% · 동력 결정 ${this.gameplay.save.shards.length} / ${this.gameplay.totalShards}`;
   }
   show(on) {
     this.open = on;
