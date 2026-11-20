@@ -167,3 +167,44 @@ body.menu-open #minimap { display: none; }
   .bm-panel { flex-direction: column; gap: 10px; padding: 12px; } #bigmap-c { width: min(64vh, 86vw); height: min(64vh, 86vw); }
   .bm-side { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; } .bm-legend { grid-template-columns: repeat(2, auto); margin: 0; }
 }
+
+/* ---- ring trials ---- */
+#trial { position: absolute; left: 50%; top: max(12px, env(safe-area-inset-top)); transform: translateX(-50%); text-align: center; padding: 6px 18px 8px;
+  background: rgba(10, 16, 14, .55); border: 1px solid rgba(95, 230, 255, .35); border-radius: 16px; backdrop-filter: blur(8px); min-width: 130px; }
+#trial small { display: block; font-size: 10px; letter-spacing: .3em; color: var(--accent); }
+#trial b { display: block; font-size: 26px; font-variant-numeric: tabular-nums; letter-spacing: .02em; }
+#trial span { display: block; font-size: 12px; color: var(--dim); }
+#countdown { position: absolute; left: 50%; top: 34%; transform: translate(-50%, -50%); font-size: clamp(56px, 12vw, 110px); font-weight: 900; color: #fff;
+  text-shadow: 0 0 30px rgba(95, 230, 255, .9), 0 4px 20px rgba(0, 0, 0, .6); animation: cd .9s ease forwards; }
+@keyframes cd { 0% { opacity: 0; transform: translate(-50%, -50%) scale(1.8); } 20% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(.85); } }
+#trialres { position: absolute; left: 50%; top: 26%; transform: translateX(-50%); text-align: center; padding: 18px 34px 20px; background: rgba(8, 16, 18, .78);
+  border: 1px solid rgba(255, 210, 122, .45); border-radius: 22px; backdrop-filter: blur(10px); animation: qdone 5.5s ease forwards; box-shadow: 0 0 60px rgba(255, 210, 122, .18); }
+#trialres small { display: block; letter-spacing: .4em; font-size: 12px; color: var(--warm); }
+#trialres b { display: block; font-size: 34px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+#trialres span { display: block; margin-top: 4px; font-size: 13px; color: var(--accent); }
+#trr-medal { width: 54px; height: 54px; margin: 10px auto 2px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; font-size: 18px; color: #2b1d05;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .2), 0 0 24px currentColor; }
+#trr-medal.m0 { background: radial-gradient(circle at 35% 30%, #fff6c8, #f2c443 55%, #b8860b); color: #3a2a00; }
+#trr-medal.m1 { background: radial-gradient(circle at 35% 30%, #ffffff, #c9d1d6 55%, #8a949b); color: #2a3035; }
+#trr-medal.m2 { background: radial-gradient(circle at 35% 30%, #ffe2c4, #cd8a4f 55%, #8a5428); color: #3a1f0a; }
+#trr-medal.none { display: none; }
+
+/* ---- dialogue & story ---- */
+#dlg { position: fixed; left: 50%; bottom: calc(24px + var(--safe-b)); transform: translateX(-50%); width: min(620px, 92vw); z-index: 14; pointer-events: auto;
+  background: linear-gradient(180deg, rgba(14, 22, 20, .9), rgba(8, 12, 11, .92)); border: 1px solid rgba(255, 255, 255, .16); border-radius: 18px;
+  padding: 14px 20px 18px; backdrop-filter: blur(10px); box-shadow: 0 10px 40px rgba(0, 0, 0, .45); animation: dlgin .3s ease; cursor: pointer; }
+@keyframes dlgin { from { opacity: 0; transform: translate(-50%, 10px); } }
+#dlg b { display: inline-block; font-size: 13px; color: #11201c; background: var(--warm); border-radius: 8px; padding: 2px 10px; margin-bottom: 8px; }
+#dlg b.nuri { background: var(--accent); }
+#dlg p { margin: 0; font-size: 16px; line-height: 1.6; min-height: 3.2em; }
+.dlg-next { position: absolute; right: 18px; bottom: 10px; font-style: normal; font-size: 12px; color: var(--accent); animation: nb 1s ease-in-out infinite; }
+#dlg.typing .dlg-next { visibility: hidden; }
+@keyframes nb { 50% { transform: translateY(3px); opacity: .5; } }
+body.dialog #touch .tbtns, body.dialog #touch .stick { visibility: hidden; }
+#story { background: #050807; z-index: 40; flex-direction: column; cursor: pointer; transition: opacity 1s; }
+#story.fade { opacity: 0; }
+#story-text { width: min(720px, 86vw); text-align: center; font-size: clamp(17px, 2.4vw, 22px); line-height: 1.9; color: #e9e4d6; min-height: 6em; }
+#story-text p { margin: 0; opacity: 0; animation: storyline 1.4s ease forwards; }
+#story-text p.title { font-size: clamp(26px, 4vw, 38px); font-weight: 800; color: #fff; margin-top: 18px; }
+@keyframes storyline { from { opacity: 0; transform: translateY(8px); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+.story-skip { position: absolute; bottom: calc(26px + var(--safe-b)); font-size: 12px; color: var(--dim); letter-spacing: .1em; }

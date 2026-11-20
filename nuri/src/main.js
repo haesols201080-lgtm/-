@@ -16,6 +16,8 @@ import { OrbitCam } from './camera.js';
 import { Gameplay } from './gameplay.js';
 import { Quests } from './quests.js';
 import { Minimap } from './minimap.js';
+import { Trials } from './trials.js';
+import { INTRO, LOG, ENDING } from './story.js';
 import { Creatures } from './creatures.js';
 import { FX } from './fx.js';
 import { Audio } from './audio.js';
@@ -28,6 +30,22 @@ import { Prints } from './prints.js';
 import { GroundMarks } from './marks.js';
 import { DUST, WET, REFRACT } from './nuri.js';
 import { clamp, damp, angleDiff } from './util.js';
+
+// The sun's shadow map only covers a box around the robot. Past its edge three would light everything fully, so a
+// moving boundary flipped ground between shade and sun as the robot walked or the camera turned (it read as
+// flashing). Near and beyond the edge the shadow now blends into the canopy estimate (sky visibility): open ground
+// stays sunny, ground under the crowns stays shaded, and there is no edge to see.
+THREE.ShaderChunk.shadowmap_pars_fragment = THREE.ShaderChunk.shadowmap_pars_fragment.replace('return mix( 1.0, shadow, shadowIntensity );', `{
+    float eF = min(min(shadowCoord.x, 1.0 - shadowCoord.x), min(shadowCoord.y, 1.0 - shadowCoord.y));
+    float edgeK = smoothstep(0.0, 0.22, eF);
+    #ifdef LIT_SKY
+      float farS = mix(0.2, 1.0, smoothstep(0.35, 0.95, skyVisibility(litWorldPos())));
+    #else
+      float farS = 0.65;
+    #endif
+    shadow = mix(farS, shadow, edgeK);
+  }
+  return mix( 1.0, shadow, shadowIntensity );`);
 
 const DEFAULTS = { master: 0.8, music: 0.45, sfx: 0.85, sens: 1, invertY: false, timeFlow: false, weather: 'clear', quality: null, padMap: null };
 
@@ -96,6 +114,8 @@ async function boot() {
   world.buildMoss(gameplay.mossSources);
   const quests = new Quests(gameplay, ui, audio, camera);
   const minimap = new Minimap({ world, gameplay, player, orbit, quests, ui });
+  const trials = new Trials({ ctx, gameplay, player, ui, audio, fx, quests });
+  quests.onEnding = () => ui.story(ENDING, () => ui.toast('다음 이야기: 정원 마을 — 제작 중이에요. 숲을 계속 탐험해 보세요!'), { title: '다음 이야기 · 정원 마을' });
   gameplay.onCinematic = (target, dur) => orbit.focus(target, dur);
   input.on('map', () => { if (G.mode === 'play' && !G.paused) minimap.show(!minimap.open); });
   // cut-out foliage (needles, leaves, grass, ferns) resolves its edges with MSAA alpha-to-coverage: smooth, thin
@@ -185,7 +205,12 @@ async function boot() {
       }
     } else {
       writeSave(null);
-      G.wokeUp = false; G.introT = 0;
+      G.wokeUp = false; G.introT = 0; G.newStory = true;
+      // the night of the storm, told over black while the forest loads in behind it
+      if (!new URLSearchParams(location.search).has('autostart')) {        // (test runs skip it)
+        G.storyOpen = true;
+        ui.story(INTRO, () => { G.storyOpen = false; }, { title: '누리: 작은 탐험가' });
+      }
     }
     orbit.set(player.yaw + Math.PI, 0.25);
     minimap.loadFog(gameplay.save.explored); quests.init();
@@ -351,21 +376,23 @@ async function boot() {
       if (!G.wokeUp) {
         G.introT += dt;
         const m = input.getMove();
-        if (G.introT > 1.2 && (Math.hypot(m.x, m.y) > 0.1 || input.pressed.size)) {
+        if (!G.storyOpen && G.introT > 1.2 && (Math.hypot(m.x, m.y) > 0.1 || input.pressed.size)) {
           G.wokeUp = true; player.state = 'idle'; player.idleT = 0;
+          if (G.newStory) { G.newStory = false; setTimeout(() => ui.bubble('누리', LOG.first), 1600); }
           setExpr('surprised', 1); setTimeout(() => setExpr('curious', 2), 1000); moodBeep('surprised');
         } else { player.state = 'sleep'; }
       } else {
         for (const [t, msg] of hints) if (G.hintStep < hints.length && hints[G.hintStep] === hints.find((h) => h[1] === msg) && G.playTime > t && !loadSave()?.regions?.length) { ui.toast(msg); G.hintStep++; break; }
       }
-      if (G.wokeUp) {
+      if (ui.dlg) { if (input.consume('interact') || input.consume('jump')) ui.dlg.next(); }
+      else if (G.wokeUp) {
         if (input.consume('interact')) gameplay.interact(player);
         if (input.consume('emote')) { player.playAction('wave', 1.2); setExpr('smile', 1.4); moodBeep('happy'); }
       }
       acc += dt;
       let steps = 0;
       while (acc >= STEP && steps < 4) {
-        if (G.wokeUp) player.update(STEP, orbit.cine ? FROZEN : input, orbit.yaw, gameplay);
+        if (G.wokeUp) player.update(STEP, orbit.cine || ui.dlg ? FROZEN : input, orbit.yaw, gameplay);
         else { player.vel.set(0, 0, 0); }
         physics.step();
         input.pressed.clear();
@@ -375,6 +402,7 @@ async function boot() {
       gameplay.update(dt, G.time);
       quests.update(dt, player.pos, G.wokeUp && !orbit.cine);
       minimap.update(dt);
+      trials.update(dt, G.time);
       handleEvents();
       edgeCheck();
       baseExpression(dt);
@@ -522,7 +550,7 @@ async function boot() {
   frame();
   // debug / test hooks
   window.__RAPIER = RAPIER; window.__THREE = THREE;
-  window.__game = { WET, quests, minimap, player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, prints, marks, creatures, get dof() { return dof; }, get rays() { return rays; } };
+  window.__game = { WET, quests, minimap, trials, player, gameplay, world, nuri, orbit, input, G, scene, camera, renderer, physics, startGame, ui, audio, lighting, prints, marks, creatures, get dof() { return dof; }, get rays() { return rays; } };
 }
 
 function makeRain(scene) {

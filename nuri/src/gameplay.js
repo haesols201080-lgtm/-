@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { mulberry32, clamp, damp, smoothstep } from './util.js';
 import { REGIONS, START, OUTCROP, STUMPS, LOGS, WORLD, GLADE_RIDGE } from './layout.js';
 import { MILESTONES } from './quests.js';
+import { TALK } from './story.js';
 
 const rnd = mulberry32(99);
 
@@ -747,10 +748,15 @@ export class Gameplay {
     }
   }
   talk(c) {
-    this.ui.bubble(c.name, c.line);
     this.player.playAction('wave', 1.2);
-    if (!c.found) { c.found = true; this.save.companions.push(c.id); this.audio.play('friend'); this.player.emit('friend'); this.persist(); this.ui.setFriends(this.save.companions.length, this.companions.length); }
+    const first = !c.found;
+    if (first) { c.found = true; this.save.companions.push(c.id); this.audio.play('friend'); this.player.emit('friend'); this.persist(); this.ui.setFriends(this.save.companions.length, this.companions.length); }
     else this.audio.play('beep');
+    const T = TALK[c.id];
+    if (!T || this.ui.dlg) { this.ui.bubble(c.name, c.line); return; }
+    c.talkN = (c.talkN || 0) + 1;
+    const lines = (first ? T.first : T.again[c.talkN % T.again.length]).map(([w, t]) => [w, t.replace('{n}', this.save.shards.length).replace('{t}', this.totalShards)]);
+    this.ui.dialogue(lines);
   }
 
   // ---------------------------------------------------------------- north edge: garden fence (next region teaser)

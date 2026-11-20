@@ -62,6 +62,53 @@ export class UI {
     requestAnimationFrame(() => requestAnimationFrame(() => { d.style.transform = `translate(${target.left + 16}px, ${target.top + target.height / 2}px) scale(.7)`; }));
     setTimeout(() => { d.remove(); onArrive?.(); const ct = $('shards').closest('.ct'); ct.classList.remove('bump'); void ct.offsetWidth; ct.classList.add('bump'); }, 640);
   }
+  // ---- dialogue: lines = [[name, text], ...]; typewriter, advance by tap / action / jump
+  dialogue(lines, onDone) {
+    const el = $('dlg'), nm = $('dlg-name'), tx = $('dlg-text');
+    let i = -1, full = '', shown = 0, timer = null;
+    const next = () => {
+      if (timer && shown < full.length) { shown = full.length; tx.textContent = full; el.classList.remove('typing'); return; }
+      i++;
+      if (i >= lines.length) { clearInterval(timer); el.classList.add('hidden'); document.body.classList.remove('dialog'); this.dlg = null; onDone?.(); return; }
+      const [who, text] = lines[i];
+      nm.textContent = who; nm.classList.toggle('nuri', who === '누리');
+      full = text; shown = 0; tx.textContent = ''; el.classList.add('typing');
+      clearInterval(timer);
+      timer = setInterval(() => { shown += 1; tx.textContent = full.slice(0, shown); if (shown >= full.length) { clearInterval(timer); el.classList.remove('typing'); } }, 28);
+      this.fire('dlgline', who);
+    };
+    el.classList.remove('hidden'); document.body.classList.add('dialog');
+    el.onclick = next; el.ontouchstart = (e) => { e.stopPropagation(); e.preventDefault(); next(); };
+    this.dlg = { next };
+    next();
+  }
+  // full-screen story text over black (intro / ending); tap to skip ahead
+  story(lines, onDone, { title = null, hold = 3400 } = {}) {
+    const el = $('story'), box = $('story-text');
+    box.innerHTML = ''; el.classList.remove('hidden', 'fade');
+    let i = 0, t = null, done = false;
+    const finish = () => { if (done) return; done = true; clearTimeout(t); el.classList.add('fade'); setTimeout(() => { el.classList.add('hidden'); onDone?.(); }, 1000); };
+    const step = () => {
+      if (i < lines.length) { const p = document.createElement('p'); p.textContent = lines[i++]; box.appendChild(p); t = setTimeout(step, hold); }
+      else if (title && !box.querySelector('.title')) { const p = document.createElement('p'); p.className = 'title'; p.textContent = title; box.appendChild(p); t = setTimeout(finish, 3000); }
+      else finish();
+    };
+    el.onclick = () => { clearTimeout(t); step(); };
+    el.ontouchstart = (e) => { e.preventDefault(); clearTimeout(t); step(); };
+    step();
+  }
+  // ---- ring trials
+  trialShow(name, n) { $('tr-name').textContent = name; $('tr-count').textContent = `고리 0 / ${n}`; $('trial').classList.remove('hidden'); this._trN = n; }
+  trialTime(t, i) { $('tr-time').textContent = t.toFixed(2); $('tr-count').textContent = `고리 ${i} / ${this._trN}`; }
+  trialHide() { $('trial').classList.add('hidden'); }
+  countdown(v) { const el = $('countdown'); el.textContent = v; this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 900); }
+  trialResult(name, t, m, isBest, prev) {
+    $('trr-name').textContent = `${name} 완주`; $('trr-time').textContent = t.toFixed(2) + '초';
+    const md = $('trr-medal'); md.className = m >= 0 ? 'm' + m : 'none'; md.textContent = ['금', '은', '동'][m] || '';
+    $('trr-best').textContent = isBest ? (prev ? `최고 기록 경신! (이전 ${prev.toFixed(2)}초)` : '첫 기록!') : `최고 기록 ${prev.toFixed(2)}초`;
+    const el = $('trialres'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 5500);
+  }
+  trialFail(name) { this.toast(`${name} — 시간 초과! 출발 지점에서 다시 도전해 보세요.`); }
   combo(n) { const el = $('combo'); el.textContent = `연속 ×${n}`; this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 900); }
   flash() { const el = $('flash'); el.classList.remove('go'); void el.offsetWidth; el.classList.add('go'); }
 

@@ -2,6 +2,7 @@
 // they can be done out of order), a tracker panel, a world-space objective marker that clamps to the screen
 // edge with distance, completion banners, and shard milestone rewards.
 import * as THREE from 'three';
+import { LOG } from './story.js';
 
 const nearestShard = (g, p) => {
   let best = null, bd = Infinity;
@@ -54,7 +55,10 @@ export class Quests {
     const q = this.active();
     if (!q) { this.ui.setQuest(null); return; }
     const pr = q.prog?.(this.g);
-    this.ui.setQuest({ title: q.title, text: q.text(this.g), prog: pr, step: QUESTS.indexOf(q) + 1, total: QUESTS.length }, !silent && q.id !== this.shownId);
+    const isNew = !silent && q.id !== this.shownId;
+    this.ui.setQuest({ title: q.title, text: q.text(this.g), prog: pr, step: QUESTS.indexOf(q) + 1, total: QUESTS.length }, isNew);
+    // Nuri thinks out loud as each new goal begins (after the completion banner has had its moment)
+    if (isNew && LOG[q.id]) setTimeout(() => { if (!this.ui.dlg) this.ui.bubble('누리', LOG[q.id]); }, 2600);
     this.shownId = q.id;
   }
   update(dt, playerPos, playing) {
@@ -65,13 +69,14 @@ export class Quests {
       this.doneSet.add(q.id); changed = true;
       this.ui.questDone(q.title, q.reward);
       this.audio.play('quest');
+      if (q.id === 'all' && !g.save.ended) { g.save.ended = true; g.persist(); setTimeout(() => this.onEnding?.(), 3500); }
     }
     // text/progress can change without completion (carrying the cell, shard count)
     this.tick = (this.tick || 0) + dt;
     if (changed || this.tick > 0.5) { this.tick = 0; this.refresh(!changed && this.shownId !== null); }
     // objective marker
     const q = this.active();
-    const tgt = playing && q ? q.target(g, playerPos) : null;
+    const tgt = (playing && this.override?.()) || (playing && q ? q.target(g, playerPos) : null);
     this.target = tgt || null;
     if (!tgt || !this.el) { this.el?.classList.add('hidden'); return; }
     const d = Math.hypot(tgt.x - playerPos.x, (tgt.y ?? playerPos.y) - playerPos.y, tgt.z - playerPos.z);
