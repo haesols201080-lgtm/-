@@ -56,9 +56,9 @@ function robot(g, rx) {
   // field scale bar: ground to the top of the head
   const sx = rx + 19;
   el('path', { d: `M${sx - 3} 0H${sx + 3}M${sx} 0V-33M${sx - 3} -33H${sx + 3}`, stroke: 'var(--ink-2, rgba(236,234,228,.66))', 'stroke-width': 1.1, fill: 'none' }, g);
-  const t = el('text', { x: sx + 6, y: -13, 'font-size': 10.5, fill: 'var(--ink-2, rgba(236,234,228,.66))', 'font-family': "'IBM Plex Mono', ui-monospace, monospace", 'font-weight': 500 }, g);
+  const t = el('text', { x: sx + 6, y: -13, 'font-size': 10.5, fill: 'var(--ink-2, rgba(236,234,228,.66))', 'font-family': "'Courier Prime', 'Courier New', monospace", 'font-weight': 500 }, g);
   t.textContent = '35';
-  const u = el('text', { x: sx + 6, y: -3, 'font-size': 8.5, fill: 'var(--ink-3, rgba(236,234,228,.4))', 'font-family': "'IBM Plex Mono', ui-monospace, monospace" }, g);
+  const u = el('text', { x: sx + 6, y: -3, 'font-size': 8.5, fill: 'var(--ink-3, rgba(236,234,228,.4))', 'font-family': "'Courier Prime', 'Courier New', monospace" }, g);
   u.textContent = 'cm';
   return sx + 22;
 }
@@ -81,7 +81,7 @@ export function mountLogo(host, { sub = 'UNDERGROWTH' } = {}) {
     const end = robot(g, rx);
     el('line', { x1: -4, y1: 6, x2: end, y2: 6, stroke: 'var(--ink-3, rgba(236,234,228,.4))', 'stroke-width': 1.2 }, svg);   // the ground
     const s = el('text', { x: 0, y: 34, 'font-size': 13.5, 'letter-spacing': 5.2, fill: 'var(--ink-2, rgba(236,234,228,.66))',
-      'font-family': "'IBM Plex Mono', ui-monospace, monospace", 'font-weight': 500 }, svg);
+      'font-family': "'Courier Prime', 'Courier New', monospace", 'font-weight': 500 }, svg);
     s.textContent = sub;
     const W = end + 8, top = -224, H = 264;
     svg.setAttribute('viewBox', `-6 ${top} ${W + 6} ${H}`);
