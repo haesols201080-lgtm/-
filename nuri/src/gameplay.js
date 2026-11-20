@@ -2,7 +2,7 @@
 // gate puzzle, crate-stacking to the booster upgrade, the powered lift, vine climbing, companion robots,
 // region discovery, checkpoints and save data.
 import * as THREE from 'three';
-import { mulberry32, clamp, damp, smoothstep } from './util.js';
+import { mulberry32, clamp, damp, smoothstep , josa } from './util.js';
 import { REGIONS, START, OUTCROP, STUMPS, LOGS, WORLD, GLADE_RIDGE } from './layout.js';
 import { MILESTONES } from './quests.js';
 import { TALK, MEMORY } from './story.js';
@@ -741,9 +741,9 @@ export class Gameplay {
   // ---------------------------------------------------------------- companions (original little robots)
   buildCompanions() {
     const spots = [
-      { id: 'toto', name: '토토', x: -6.2 + 1.9, z: 12.2 + 0.9, line: '삐빅! 뿌리 사이에 끼어 있었어. 고마워!', kind: 0 },
-      { id: 'bori', name: '보리', kind: 1, line: '여긴 어두워서 무서웠어… 반딧불이 친구들이 있어서 다행이야.', at: this.caveCenter },
-      { id: 'mina', name: '미나', kind: 2, line: '와, 여기 경치 최고지? 저 멀리 사람들 집이 보여!', at: this.summit },
+      { id: 'toto', name: '셔터', code: 'R-2', x: -6.2 + 1.9, z: 12.2 + 0.9, line: '기록 계속 중. 뿌리 사이에서 본 하늘이 전부지만.', kind: 0 },
+      { id: 'bori', name: '랜턴', code: 'L-4', kind: 1, line: '램프 출력 40퍼센트. 반딧불이들이 아직 떠나지 않았어.', at: this.caveCenter },
+      { id: 'mina', name: '로터', code: 'D-1', kind: 2, line: '여기서는 울타리 너머 지붕이 보인다. 수취인 주소가 저기다.', at: this.summit },
     ];
     for (const s of spots) {
       const pos = s.at ? s.at.clone() : new THREE.Vector3(s.x, this.groundY(s.x, s.z), s.z);
@@ -754,7 +754,7 @@ export class Gameplay {
       const found = this.save.companions.includes(s.id);
       const c = { ...s, mesh, pos, found, t: rnd() * 6 };
       this.companions.push(c);
-      this.interactables.push({ pos, r: 0.5, label: () => (c.found ? `${s.name}와 인사하기` : `${s.name} 깨우기`), act: () => this.talk(c) });
+      this.interactables.push({ pos, r: 0.5, label: () => (c.found ? `${josa(s.name, '과', '와')} 이야기하기` : `${s.code} ${s.name} 깨우기`), act: () => this.talk(c) });
       const col = this.W.createCollider(this.R.ColliderDesc.ball(0.08).setTranslation(pos.x, pos.y + 0.09 + (s.kind === 2 ? 0.25 : 0), pos.z)); col.userData = { kind: 'creature' };
     }
   }
@@ -917,7 +917,7 @@ export class Gameplay {
     if (this.gapCol) { this.W.removeCollider(this.gapCol, true); this.gapCol = null; }
     const m = this.companions.find((c) => c.kind === 2);
     if (m) { m.flyT = undefined; const np = this.fenceGap.clone().add(new THREE.Vector3(0.75, 0, 0.9)); np.y = this.groundY(np.x, np.z); m.pos.copy(np); m.mesh.position.copy(np); m.mesh.rotation.x = 0; }   // (the interactable shares this vector)
-    if (!silent) { this.ui.toast('울타리 틈 확보. 미나가 대기 중이다.'); this.audio.play('discover'); }
+    if (!silent) { this.ui.toast('울타리 틈 확보. 로터가 대기 중이다.'); this.audio.play('discover'); }
   }
   dropShard(id, at) {
     if (this.save.shards.includes(id) || this.shards.some((q) => q.id === id)) return;

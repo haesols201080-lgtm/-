@@ -51,7 +51,7 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 /* ---- loading ---- */
 #loading { background: #070908; display: block; overflow: hidden; transition: opacity .8s; }
 #loading.done { opacity: 0; }
-.ld-art { position: absolute; inset: -2%; background: #0b0d0c url('./loading.jpg') 62% 42% / cover no-repeat; animation: kb 40s ease-out forwards; }
+.ld-art { position: absolute; inset: -2%; background: #0b0d0c url("./loading.jpg") 50% 45% / cover no-repeat; animation: kb 40s ease-out forwards; }
 @keyframes kb { from { transform: scale(1.0); } to { transform: scale(1.06) translate(-0.8%, -0.4%); } }
 .ld-shade { position: absolute; inset: 0; background: linear-gradient(0deg, rgba(6, 8, 7, .92) 0%, rgba(6, 8, 7, .55) 26%, rgba(6, 8, 7, 0) 52%),
   linear-gradient(90deg, rgba(6, 8, 7, .5), rgba(6, 8, 7, 0) 48%); }
@@ -67,8 +67,8 @@ button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px s
 
 /* ---- wordmark ---- */
 .logo { font: 600 44px/1 var(--f-display); letter-spacing: -0.01em; }
-.logo span { display: block; margin-top: 14px; font: 500 16px/1.3 var(--f-ui); letter-spacing: 0; color: var(--ink-2); }
-.logo.big { font-size: clamp(60px, 10vw, 104px); text-shadow: 0 4px 40px rgba(0, 0, 0, .45); }
+.logo span { display: block; margin-top: 14px; font: 500 12.5px/1.3 var(--f-data); letter-spacing: 0.32em; color: var(--ink-2); }
+.logo.big { font-size: clamp(50px, 8.4vw, 92px); text-shadow: 0 2px 18px rgba(0, 0, 0, .3); }
 .ld-sub { margin-top: 6px; font-size: 13px; color: var(--ink-3); }
 
 /* ---- title ---- */
@@ -245,6 +245,7 @@ body.menu-open #minimap { display: none; }
 @keyframes dlgin { from { opacity: 0; transform: translate(-50%, 6px); } }
 #dlg b { display: block; font-size: 13px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
 #dlg b.nuri { color: var(--visor); }
+#dlg b .code, #bubble b .code { margin-left: 8px; font: 500 11px var(--f-data); color: var(--ink-3); }
 #dlg p { margin: 0; font-size: 16.5px; line-height: 1.65; min-height: 3.3em; max-width: 60ch; }
 .dlg-next { position: absolute; right: 18px; bottom: 14px; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent;
   border-top: 7px solid var(--visor); animation: nb 1.1s ease-in-out infinite; }

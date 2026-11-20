@@ -6,6 +6,7 @@
 // Both also weigh enough to hold a pressure plate down. Mina is the base: with enough crystals she flies Nuri to
 // any landmark already discovered.
 import * as THREE from 'three';
+import { josa } from './util.js';
 
 const GRAV = 9.8;
 
@@ -53,12 +54,12 @@ export class Squad {
       for (const s of this.gameplay.shards) if (!s.got && s.mesh.position.distanceTo(p) < R) this.reveals.push({ s, t: 15 });
       this.onReveal?.(p, R);
       this.creatures?.startle(p, 4.5, (id, at) => this.gameplay.dropShard(id, at));
-      this.ui.toast('토토: 촬영 완료. 주변에 반응 표시.');
+      this.ui.toast('셔터: 촬영 완료. 주변 반응을 표시했어.');
     } else if (c.kind === 1) {
       const L = new THREE.PointLight(0xffd9a0, 2.2, 4.5, 2); L.position.copy(p).y += 0.35; this.ctx.scene.add(L);
       this.lights.push({ L, t: 30, p: p.clone() });
       this.audio.play('power', { pos: p, vol: 0.5 });
-      this.ui.toast('보리: 여기 비출게. 30초.');
+      this.ui.toast('랜턴: 여기를 30초 동안 비춘다.');
     }
   }
   // ---------------------------------------------------------------- per frame
@@ -74,8 +75,8 @@ export class Squad {
       if (!c.joined) {
         c.joined = true;
         setTimeout(() => this.ui.toast(c.kind === 0
-          ? '토토가 뒤따라와요. 가까이서 [행동]으로 들고, 한 번 더 누르면 던져요. 떨어진 곳을 촬영해 숨은 결정을 찾아 줘요.'
-          : '보리가 뒤따라와요. 던지면 그 자리를 30초 동안 비춰요. 어두운 곳의 숨은 결정은 빛 안에서만 보여요.'), 1500);
+          ? '셔터가 뒤따라와요. 가까이서 [행동]으로 들고, 한 번 더 누르면 던져요. 떨어진 곳을 촬영해 숨은 결정을 찾아 줘요.'
+          : '랜턴이 뒤따라와요. 던지면 그 자리를 30초 동안 비춰요. 어두운 곳의 숨은 결정은 빛 안에서만 보여요.'), 1500);
       }
       if (!c.state || c.state === 'follow' || c.state === 'idle') c.state = 'follow';
       if (c.state === 'held') {
@@ -160,7 +161,7 @@ export class Squad {
     if (this.holding === c) { this.throwHeld(); return; }
     if (this.holding || this.player.carry || c.state === 'fly') return;
     // the friend hops straight back into Nuri's hands (from anywhere nearby)
-    if (c.mesh.position.distanceTo(this.player.pos) > 12) { this.ui.toast(`${c.name}이(가) 너무 멀리 있어요.`); return; }
+    if (c.mesh.position.distanceTo(this.player.pos) > 12) { this.ui.toast(`${josa(c.name, '이', '가')} 너무 멀리 있어요.`); return; }
     this.pickUp(c); this.audio.play('beep', { pitch: 1.3 });
   }
   // extra weight on the pressure plate from friends sitting on it

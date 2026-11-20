@@ -3,6 +3,8 @@
 import { isTouch } from './quality.js';
 
 const $ = (id) => document.getElementById(id);
+// unit designations shown beside the speaker's name
+const CODES = { 세븐: 'SV-7', 셔터: 'R-2', 랜턴: 'L-4', 로터: 'D-1' };
 const SAVE_KEY = 'nuri-save-v1', SET_KEY = 'nuri-settings-v1';
 
 export function readJSON(key) { try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : null; } catch { return null; } }
@@ -22,11 +24,12 @@ export class UI {
 
   progress(k, label) {
     $('loadbar').style.width = (k * 100).toFixed(0) + '%'; $('loadpct').textContent = Math.round(k * 100) + '%';
-    if (label) $('loadtxt').textContent = `불러오는 중 · ${label}`;
+    // (players see a plain status, not asset file names)
+    if (label) $('loadtxt').textContent = k < 0.35 ? '지형과 물길을 만드는 중' : k < 0.7 ? '나무와 이끼를 심는 중' : k < 0.95 ? '친구들을 깨우는 중' : '거의 다 됐어요';
     if (!this._tipT) this.rotateTips();
   }
   rotateTips() {
-    const tips = ['숙이기 버튼으로 구르면 좁은 틈도 지나갈 수 있어요.', '물에 들어갔다 나오면 누리가 흠뻑 젖어요.', '무거운 상자는 발판 위에 올려 보세요.',
+    const tips = ['숙이기 버튼으로 구르면 좁은 틈도 지나갈 수 있어요.', '물에 들어갔다 나오면 세븐이 흠뻑 젖어요.', '무거운 상자는 발판 위에 올려 보세요.',
       '덩굴은 벽 쪽으로 밀면 기어오를 수 있어요.', '동력 결정은 바위 위나 그루터기 근처에 숨어 있곤 해요.', '친구 로봇 셋이 숲 어딘가에서 기다리고 있어요.',
       '미니맵을 누르면 숲 지도가 열려요.', '동력 결정을 연달아 모으면 회수음이 점점 높아져요.'];
     let i = Math.floor(Math.random() * tips.length);
@@ -84,7 +87,8 @@ export class UI {
       i++;
       if (i >= lines.length) { clearInterval(timer); el.classList.add('hidden'); document.body.classList.remove('dialog'); this.dlg = null; onDone?.(); return; }
       const [who, text] = lines[i];
-      nm.textContent = who; nm.classList.toggle('nuri', who === '누리');
+      nm.textContent = who; nm.classList.toggle('nuri', who === '세븐');
+      if (CODES[who]) { const c = document.createElement('span'); c.className = 'code'; c.textContent = CODES[who]; nm.appendChild(c); }
       full = text; shown = 0; tx.textContent = ''; el.classList.add('typing');
       clearInterval(timer);
       timer = setInterval(() => { shown += 1; tx.textContent = full.slice(0, shown); if (shown >= full.length) { clearInterval(timer); el.classList.remove('typing'); } }, 28);
@@ -162,7 +166,7 @@ export class UI {
   restart(el) { el.classList.add('hidden'); void el.offsetWidth; el.classList.remove('hidden'); clearTimeout(el._t); }
   discover(name) { $('discover-name').textContent = name; const el = $('discover'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 4300); }
   toast(text) { const el = $('toast'); el.textContent = text; this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 4100); }
-  bubble(name, text) { $('bubble-name').textContent = name; $('bubble-text').textContent = text; const el = $('bubble'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 5100); }
+  bubble(name, text) { $('bubble-name').textContent = name + (CODES[name] ? ' · ' + CODES[name] : ''); $('bubble-text').textContent = text; const el = $('bubble'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 5100); }
   ability(title, desc) { $('ability-title').textContent = title; $('ability-desc').textContent = desc; const el = $('ability'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 6100); }
 
   showPause(info) {

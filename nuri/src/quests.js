@@ -13,20 +13,20 @@ const nearestShard = (g, p) => {
 export const QUESTS = [
   { id: 'first', title: '착륙 지점', text: () => '근처의 동력 결정 회수', prog: (g) => [Math.min(3, g.save.shards.length), 3],
     done: (g) => g.save.shards.length >= 3, target: (g, p) => nearestShard(g, p), reward: '근거리 결정 탐지 (미니맵)' },
-  { id: 'toto', title: '약한 식별 신호', text: () => '거목 뿌리 부근에서 토토 찾기',
+  { id: 'toto', title: '약한 식별 신호', text: () => '거목 뿌리 부근에서 셔터 찾기',
     done: (g) => g.save.companions.includes('toto'), target: (g) => g.companions[0]?.pos },
   { id: 'gate', title: '녹슨 철문', text: () => '압력판에 무게를 올려 문 열기',
     done: (g) => g.save.gateOpen, target: (g) => { const c = g.gateCrate?.body.translation(); return c && Math.hypot(c.x - g.plate.pos.x, c.z - g.plate.pos.z) > 0.5 ? new THREE.Vector3(c.x, c.y, c.z) : g.plate.pos; } },
   { id: 'booster', title: '미확인 추진 장치', text: () => '그루터기 위의 장치 회수',
     done: (g) => g.save.booster, target: (g) => g.booster?.mesh.position || g.world.stumps[0] && new THREE.Vector3(g.world.stumps[0].x, g.world.stumps[0].top, g.world.stumps[0].z),
     reward: '2단 점프 · 호버링' },
-  { id: 'bori', title: '어두운 동굴', text: () => '바위산 아래 동굴에서 보리 찾기',
+  { id: 'bori', title: '어두운 동굴', text: () => '바위산 아래 동굴에서 랜턴 찾기',
     done: (g) => g.save.companions.includes('bori'), target: (g) => g.caveCenter },
   { id: 'cell', title: '정지된 승강기', text: (g) => (g.player.carry === g.cell ? '승강기 소켓에 동력 셀 연결' : '속 빈 통나무에서 동력 셀 찾기'),
     done: (g) => g.save.liftPowered, target: (g) => (g.player.carry === g.cell || !g.cell ? g.lift?.socketPos : g.cell.mesh.position) },
-  { id: 'mina', title: '전망 바위의 비콘', text: () => '승강기로 올라가 미나와 합류',
+  { id: 'mina', title: '전망 바위의 비콘', text: () => '승강기로 올라가 로터와 합류',
     done: (g) => g.save.companions.includes('mina'), target: (g) => g.summit },
-  { id: 'charge', title: '미나의 연료', text: () => '동력 결정 회수', prog: (g) => [Math.min(CHARGE, g.save.shards.length), CHARGE],
+  { id: 'charge', title: '로터의 연료', text: () => '동력 결정 회수', prog: (g) => [Math.min(CHARGE, g.save.shards.length), CHARGE],
     done: (g) => g.save.shards.length >= CHARGE && g.save.companions.includes('mina'), target: (g, p) => (g.save.shards.length >= CHARGE - 6 ? nearestShard(g, p) : null) },
   { id: 'garden', title: '울타리 너머', text: () => '울타리 틈으로 들어가기',
     done: (g) => g.save.regions.includes('garden'), target: (g) => g.fenceGap },
@@ -64,7 +64,7 @@ export class Quests {
     this.progKey = progKey;
     this.ui.setQuest({ title: q.title, text: q.text(this.g), prog: pr, step: QUESTS.indexOf(q) + 1, total: QUESTS.length }, isNew);
     // Nuri thinks out loud as each new goal begins (after the completion banner has had its moment)
-    if (isNew && LOG[q.id]) { const L = (this.g.save.logs = this.g.save.logs || []); if (!L.includes(q.id)) L.push(q.id); setTimeout(() => { if (!this.ui.dlg) this.ui.bubble('누리', LOG[q.id]); }, 2600); }
+    if (isNew && LOG[q.id]) { const L = (this.g.save.logs = this.g.save.logs || []); if (!L.includes(q.id)) L.push(q.id); setTimeout(() => { if (!this.ui.dlg) this.ui.bubble('세븐', LOG[q.id]); }, 2600); }
     this.shownId = q.id;
   }
   update(dt, playerPos, playing) {

@@ -66,6 +66,11 @@ export function makeNoise3D(seed = 7) {
   };
 }
 
+// Korean particle after a name: josa('세븐', '이', '가') -> '세븐이', josa('로터', '과', '와') -> '로터와'
+export function josa(w, withFinal, noFinal) {
+  const c = w.charCodeAt(w.length - 1), fin = c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 !== 0;
+  return w + (fin ? withFinal : noFinal);
+}
 export const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export const lerp = (a, b, t) => a + (b - a) * t;
 export const smoothstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };

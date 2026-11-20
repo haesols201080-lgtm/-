@@ -168,7 +168,7 @@ async function boot() {
       const d = V(F.x - P.x, 0, F.z - P.z).normalize(), sd = V(-d.z, 0, d.x), mid = P.clone().lerp(F, 0.5).add(V(0, 0.18 + lift * 0.5, 0));
       player.yaw = Math.atan2(d.x, d.z);
       // over-the-shoulder: well behind and to the side of the listener, so the speaker is framed clear of its head
-      const ots = (who) => who === '누리'
+      const ots = (who) => who === '세븐'
         ? { dur: Infinity, ease: 5, from: F.clone().addScaledVector(d, 0.8).addScaledVector(sd, -0.5).add(V(0, 0.34 + lift, 0)), to: F.clone().addScaledVector(d, 0.72).addScaledVector(sd, -0.44).add(V(0, 0.32 + lift, 0)), lookFrom: P.clone().add(V(0, 0.22, 0)), fov: 36 }
         : { dur: Infinity, ease: 5, from: P.clone().addScaledVector(d, -0.8).addScaledVector(sd, 0.5).add(V(0, 0.36, 0)), to: P.clone().addScaledVector(d, -0.72).addScaledVector(sd, 0.44).add(V(0, 0.34, 0)), lookFrom: F.clone().add(V(0, 0.14 + lift * 0.4, 0)), fov: 36 };
       director.play([{ dur: Infinity, ease: 2.2, from: mid.clone().addScaledVector(sd, 1.5).add(V(0, 0.5, 0)), to: mid.clone().addScaledVector(sd, 1.05).add(V(0, 0.3, 0)), lookFrom: mid, fov: 48 }],
@@ -226,7 +226,7 @@ async function boot() {
   // Mina's flights: to any discovered place (fade, fly, land with the squad)
   gameplay.onMinaFlight = () => {
     const opts = REGIONS.filter((r) => gameplay.save.regions.includes(r.id) && r.id !== 'summit').map((r) => [r.name, r]);
-    ui.choose('미나 · 어디로 날아갈까?', opts, (r) => {
+    ui.choose('로터 · 어디로 날아갈까?', opts, (r) => {
       if (!r) return;
       audio.play('djump', { pitch: 0.7 });
       ui.fadeOut(900, () => {
@@ -341,7 +341,7 @@ async function boot() {
       // the night of the storm, told over black while the forest loads in behind it
       if (!new URLSearchParams(location.search).has('autostart')) {        // (test runs skip it)
         G.storyOpen = true;
-        ui.story(INTRO, () => { G.storyOpen = false; CS.intro(() => { G.wokeUp = true; G.newStory = false; setTimeout(() => ui.bubble('누리', LOG.first), 600); }); }, { title: '누리: 작은 탐험가' });
+        ui.story(INTRO, () => { G.storyOpen = false; CS.intro(() => { G.wokeUp = true; G.newStory = false; setTimeout(() => ui.bubble('세븐', LOG.first), 600); }); }, { title: '언더그로스' });
       }
     }
     orbit.set(player.yaw + Math.PI, 0.25);
@@ -511,7 +511,7 @@ async function boot() {
         const m = input.getMove();
         if (!G.storyOpen && G.introT > 1.2 && (Math.hypot(m.x, m.y) > 0.1 || input.pressed.size)) {
           G.wokeUp = true; player.state = 'idle'; player.idleT = 0;
-          if (G.newStory) { G.newStory = false; setTimeout(() => ui.bubble('누리', LOG.first), 1600); }
+          if (G.newStory) { G.newStory = false; setTimeout(() => ui.bubble('세븐', LOG.first), 1600); }
           setExpr('surprised', 1); setTimeout(() => setExpr('curious', 2), 1000); moodBeep('surprised');
         } else { player.state = 'sleep'; }
       } else {

@@ -11,10 +11,10 @@ import { POND, HOLLOW } from './layout.js';
 const sm = (x) => x * x * (3 - 2 * x);
 
 export const BEACON_NOTES = [
-  '측량 비콘 N-03 · "이 높이에서는 숲 전체가 보인다. 거인들의 집은 북쪽. 연구소에서 보낸 건 우리가 처음이 아니다."',
-  '측량 비콘 N-03 · "비가 오면 개울이 두 배로 불어난다. 낮은 길은 피할 것."',
-  '측량 비콘 N-03 · "다람쥐는 반짝이는 것을 모은다. 높은 곳을 확인할 것."',
-  '측량 비콘 N-03 · "배터리 잔량 4%. 이 기록을 찾는 유닛에게: 울타리 너머로 가라. 그 집에 답이 있다."',
+  '측량 비콘 SV-3 · "이 높이에서는 숲 전체가 보인다. 거인들의 집은 북쪽. 연구소에서 보낸 건 우리가 처음이 아니다."',
+  '측량 비콘 SV-3 · "비가 오면 개울이 두 배로 불어난다. 낮은 길은 피할 것."',
+  '측량 비콘 SV-3 · "다람쥐는 반짝이는 것을 모은다. 높은 곳을 확인할 것."',
+  '측량 비콘 SV-3 · "배터리 잔량 4%. 이 기록을 찾는 유닛에게: 울타리 너머로 가라. 그 집에 답이 있다."',
 ];
 
 export class Puzzles {
@@ -66,7 +66,7 @@ export class Puzzles {
     this.crystal(c.x - 0.3, gy + 0.15, c.z + 0.4, 'h0'); this.crystal(c.x + 0.3, gy + 0.15, c.z + 0.5, 'h1'); this.crystal(c.x, gy + 0.15, c.z + 0.1, 'h2');
     this.hollow = { c, slab, body, pads, open: this.gameplay.save.puzzles.hollow ? 1 : 0, y0: gy };
     this.gameplay.interactables.push({ pos: new THREE.Vector3(c.x, gy, c.z - 1.3), r: 0.6, enabled: () => !this.gameplay.save.puzzles.hollow,
-      label: () => '돌판 조사 · 발판 두 개를 동시에 눌러야 할 것 같다', act: () => { this.ui.bubble('누리', '발판이 두 개. 하나는 내가 누를 수 있다. 다른 하나는…'); this.player.emit('curious'); } });
+      label: () => '돌판 조사 · 발판 두 개를 동시에 눌러야 할 것 같다', act: () => { this.ui.bubble('세븐', '발판이 두 개. 하나는 내가 누를 수 있다. 다른 하나는…'); this.player.emit('curious'); } });
   }
   // ---------------------------------------------------------------- the stepping stones
   buildStones() {
