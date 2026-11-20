@@ -273,10 +273,23 @@ export function makeTerrainMaterial(T, tier = {}) {
           TA = mix(TA, TA * vec3(0.86, 0.72, 0.6), m1 * 0.55 * fw * (1.0 - rockK));
           TA = mix(TA, TA * vec3(0.74, 0.86, 0.56), m2 * 0.45 * fw * (1.0 - rockK));
           float far = smoothstep(5.0, 28.0, length(cameraPosition - vWPos));
-          TA *= mix(1.0, 0.8, far * (1.0 - rockK * 0.5));
+          {
+            // overgrown ground seen beyond the plants' draw distance takes their colour
+            float cov = texture2D(tGroundAO, (vWPos.xz - uGAOB.xy) * uGAOB.zw).g;
+            // plus the general low cover (grass tussocks, sorrel, seedlings, moss) every forest floor carries,
+            // which is not drawn as geometry that far out
+            float fwv = vSplat.x / max(1e-3, vSplat.x + vSplat.y + vSplat.z + vSplat.w);
+            cov = max(cov, fwv * (0.35 + 0.45 * smoothstep(0.3, 0.75, vnoise(vWPos.xz * 0.21) * 0.6 + vnoise(vWPos.xz * 0.9 + 3.0) * 0.4)));
+            float dv = smoothstep(9.0, 24.0, length(cameraPosition - vWPos));
+            vec3 veg = vec3(0.075, 0.1, 0.03) * (0.7 + 0.6 * vnoise(vWPos.xz * 1.7)) + vec3(0.03, 0.02, 0.0) * vnoise(vWPos.xz * 0.6);
+            TA = mix(TA, veg, cov * dv * 0.85 * (1.0 - rockK));
+          }
+          // at a distance the litter's small shadows, needles and moss average into a darker, greener brown
+          TA *= mix(1.0, 0.7, far * (1.0 - rockK * 0.5));
+          TA = mix(TA, TA * vec3(0.88, 0.97, 0.78), far * fw * 0.6);
           // forest floor is darker and more saturated than the bare scan suggests (litter is damp, shaded by itself)
           float lum = dot(TA, vec3(0.3, 0.59, 0.11));
-          TA = mix(vec3(lum), TA, 1.18) * 0.86;
+          TA = mix(vec3(lum), TA, 1.06) * 0.88;
         }
         // grass-covered ground is greener and darker beneath the blades
         TA = mix(TA, TA * vec3(0.85, 0.92, 0.75), vAux.x * 0.35);
@@ -335,7 +348,7 @@ export function makeTerrainMaterial(T, tier = {}) {
       .replace('#include <aomap_fragment>', `
         float ambientOcclusion = mix(1.0, TO.r, 0.9);
         ambientOcclusion *= 1.0 - 0.4 * clamp(MK.r, 0.0, 1.0) * MSOFT;   // pressed hollows see less sky
-        float gAO = texture2D(tGroundAO, (vWPos.xz - uGAOB.xy) * uGAOB.zw).r;
+        vec2 gAOs = texture2D(tGroundAO, (vWPos.xz - uGAOB.xy) * uGAOB.zw).rg; float gAO = gAOs.r;
         ambientOcclusion *= gAO;
         reflectedLight.directDiffuse *= mix(1.0, gAO, 0.25);
         // contact occlusion from the robot standing on this ground (and from each boot)

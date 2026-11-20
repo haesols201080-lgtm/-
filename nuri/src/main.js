@@ -41,7 +41,7 @@ async function boot() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, tier.maxDpr));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  renderer.toneMapping = THREE.AgXToneMapping; renderer.toneMappingExposure = 1.05;
+  renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 0.9;   // keeps the hue and saturation of sunlit ground (AgX bleaches it to beige)
   renderer.outputColorSpace = THREE.SRGBColorSpace;
 
   const scene = new THREE.Scene();
@@ -489,7 +489,7 @@ async function boot() {
     if (grade) grade.uniforms.uTime.value = G.time;
     fx.updateAmbient(G.time, camera.position, 0.6 + 0.6 * lighting.visibility(camera.position.x, camera.position.y, camera.position.z));
     // eye adaptation + face light + god rays
-    const vis = lighting.update(dt, renderer, 1.0 * (1 + G.rainK * 0.15), camera.position, player.pos);
+    const vis = lighting.update(dt, renderer, 0.92 * (1 + G.rainK * 0.15), camera.position, player.pos);
     faceLight.intensity = (1 - vis) * 0.35;
     if (rays) {
       const sp = tmpV.copy(camera.position).addScaledVector(sunDir, 200).project(camera);

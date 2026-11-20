@@ -76,9 +76,10 @@ export class World {
     this.buildOutcrop();
     this.buildRockFaces();
     this.buildWater();
-    this.buildGroundAO();
+    this.colonies = [];
     this.buildPlants();
     this.buildGrass();
+    this.buildGroundAO();
     this.buildShafts();
   }
 
@@ -105,9 +106,24 @@ export class World {
     for (const r of this.rocks) stamp(r.x, r.z, r.x, r.z, r.r * 2 + 0.6, (d) => 1 - 0.55 * Math.exp(-Math.max(0, d - r.r * 0.8) / (0.2 + r.r * 0.3)));
     for (const l of this.logs) stamp(l.x1, l.z1, l.x2, l.z2, l.r * 3 + 0.4, (d) => 1 - 0.55 * Math.exp(-Math.max(0, d - l.r * 0.6) / (0.12 + l.r * 0.5)));
     for (const st of this.stumps) stamp(st.x, st.z, st.x, st.z, st.r * 3 + 0.4, (d) => 1 - 0.5 * Math.exp(-Math.max(0, d - st.r) / (0.15 + st.r * 0.4)));
-    const data = new Uint8Array(N * N);
-    for (let k = 0; k < N * N; k++) data[k] = Math.max(0, Math.min(255, ao[k] * 255));
-    const tex = new THREE.DataTexture(data, N, N, THREE.RedFormat); tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
+    // the ground under a stand of plants is shaded and damp
+    for (const c of this.colonies || []) stamp(c.x, c.z, c.x, c.z, c.r * 1.2, (d) => 1 - 0.32 * c.k * smoothstep(c.r * 1.1, c.r * 0.3, d));
+    // vegetation cover: beyond the plants' draw distance the ground itself takes on their colour, so open slopes
+    // read as overgrown instead of bare at a distance
+    const cov = new Float32Array(N * N);
+    const covStamp = (x, z, R, k) => {
+      const i0 = Math.max(0, Math.floor((x - R + half) / cell)), i1 = Math.min(N - 1, Math.ceil((x + R + half) / cell));
+      const j0 = Math.max(0, Math.floor((z - R + half) / cell)), j1 = Math.min(N - 1, Math.ceil((z + R + half) / cell));
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const d = Math.hypot(-half + (i + 0.5) * cell - x, -half + (j + 0.5) * cell - z);
+        const v = k * smoothstep(R, R * 0.35, d); const q = j * N + i; cov[q] = 1 - (1 - cov[q]) * (1 - v);
+      }
+    };
+    for (const c of this.colonies || []) covStamp(c.x, c.z, c.r, c.cover);
+    const tu = this.tussocks || []; for (let q = 0; q < tu.length; q += 2) covStamp(tu[q], tu[q + 1], 0.35, 0.5);
+    const data = new Uint8Array(N * N * 2);
+    for (let k = 0; k < N * N; k++) { data[k * 2] = Math.max(0, Math.min(255, ao[k] * 255)); data[k * 2 + 1] = Math.min(255, cov[k] * 255); }
+    const tex = new THREE.DataTexture(data, N, N, THREE.RGFormat); tex.magFilter = tex.minFilter = THREE.LinearFilter; tex.needsUpdate = true;
     const U = T.material.userData.uniforms;
     U.tGroundAO.value = tex; U.uGAOB.value.set(-half, -half, 1 / size, 1 / size);
   }
@@ -669,7 +685,7 @@ export class World {
     const geos = GRASS_SPRITES.map((spr) => grassCardGeometry(spr));
     const CH = 8, density = 7 * tier.grassDensity;
     const mtx = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
-    for (let cz = -40; cz < 40; cz += CH) for (let cx = -40; cx < 40; cx += CH) {
+    for (let cz = -48; cz < 48; cz += CH) for (let cx = -48; cx < 48; cx += CH) {
       const items = [[], [], [], [], []];
       // grass grows in tussocks: a few dozen blades from one crown, tussocks gathered into swards, bare litter between
       const nT = Math.floor(CH * CH * density * 0.22);
@@ -678,6 +694,7 @@ export class World {
         const g = this.terrain.grassAt(x0, z0) * (1 - 0.85 * smoothstep(0.2, 0.7, this.canopy(x0, z0))) * smoothstep(0.3, 0.7, this.patch(x0, z0, 0.16, 11));
         if (rnd() > g * 1.8 || this.terrain.isWater(x0, z0)) continue;
         const kk = Math.floor(rnd() * 5), m = 3 + Math.floor(rnd() * 6), R = 0.04 + rnd() * 0.09;
+        (this.tussocks = this.tussocks || []).push(x0, z0);
         for (let j = 0; j < m; j++) { const a = rnd() * 6.28, r = R * Math.sqrt(rnd()); items[rnd() < 0.75 ? kk : Math.floor(rnd() * 5)].push([x0 + Math.cos(a) * r, z0 + Math.sin(a) * r, g * (1 - r / R * 0.4)]); }
       }
       items.forEach((list, k) => {
@@ -738,7 +755,7 @@ export class World {
     };
     const k = tier.fernDensity;
     // generic ecological scatter: density per m^2 * rule(x,z) probability, variants chosen at random
-    const add = (vars, { density, rule, scale, wind = 0, cast = true, align = 0.5, sink = 0.015, radius = 30, area = 84, mat = null, tilt = 0 }) => {
+    const add = (vars, { density, rule, scale, wind = 0, cast = true, align = 0.5, sink = 0.015, radius = 30, area = 93, mat = null, tilt = 0 }) => {
       if (!Array.isArray(vars)) vars = this.variants(vars);
       const lists = vars.map(() => []);
       const n = Math.round(area * area * density * k);
@@ -768,13 +785,14 @@ export class World {
     // litter between them; not single plants sprinkled evenly
     const nearW = (x, z, d) => smoothstep(d, d * 0.3, this.waterDist(x, z));
     const pathD = (x, z) => Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d);
-    const colony = (key, { per100, r: [r0, r1], fill, habitat, scale, wind = 0, radius = 30, cast = false, align = 0.5, sink = 0.015, keep = 0.35 }) => {
+    const colony = (key, { per100, r: [r0, r1], fill, habitat, scale, wind = 0, radius = 30, cast = false, align = 0.5, sink = 0.015, keep = 0.35, cover = 0.8 }) => {
       const vars = this.variants(key), lists = vars.map(() => []);
-      const n = Math.round(84 * 84 / 100 * per100 * k * 2.5);
+      const n = Math.round(93 * 93 / 100 * per100 * k * 2.5);
       for (let c = 0; c < n; c++) {
-        const cx = (rnd() - 0.5) * 84, cz = (rnd() - 0.5) * 84, hab = habitat(cx, cz);
+        const cx = (rnd() - 0.5) * 93, cz = (rnd() - 0.5) * 93, hab = habitat(cx, cz);
         if (hab <= 0 || rnd() > hab) continue;
         const R = (r0 + (r1 - r0) * rnd() ** 1.6) * (0.6 + 0.4 * hab);
+        this.colonies.push({ x: cx, z: cz, r: R, k: Math.min(1, fill / 6), cover });
         const dom = Math.floor(rnd() * vars.length), m = Math.round(Math.PI * R * R * fill * (0.5 + 0.5 * k));
         const ang = rnd() * 6.28, el = 0.55 + rnd() * 0.45;                       // colonies are elongated, not circles
         for (let q = 0; q < m; q++) {
@@ -816,19 +834,19 @@ export class World {
       habitat: (x, z) => offPath(x, z, 1) ? smoothstep(0.1, 0.45, shade(x, z)) * this.patch(x, z, 0.07, 6) : 0 });
     add('shrub_04', { density: 0.01, scale: [0.9, 1.5], wind: 0.02, radius: 34, align: 0.3, rule: (x, z) => offPath(x, z, 1.2) ? this.patch(x, z, 0.06, 7) : 0 });
     // grass swards: along the trail edges and in the sunny gaps
-    colony('grass_medium_01', { per100: 2.0, r: [0.8, 3.5], fill: 6, scale: [0.8, 1.5], wind: 0.025, radius: 16, align: 0.6,
+    colony('grass_medium_01', { per100: 2.0, r: [0.8, 3.5], fill: 6, scale: [0.8, 1.5], wind: 0.025, radius: 26, align: 0.6,
       habitat: (x, z) => offPath(x, z, 0.4) ? smoothstep(0.6, 0.1, shade(x, z)) * (0.35 + 0.65 * smoothstep(3, 0.6, pathD(x, z))) : 0 });
-    colony('grass_medium_02', { per100: 1.4, r: [0.6, 2.8], fill: 5, scale: [0.8, 1.4], wind: 0.025, radius: 16, align: 0.6,
+    colony('grass_medium_02', { per100: 1.4, r: [0.6, 2.8], fill: 5, scale: [0.8, 1.4], wind: 0.025, radius: 26, align: 0.6,
       habitat: (x, z) => offPath(x, z, 0.4) ? smoothstep(0.65, 0.15, shade(x, z)) * (0.3 + this.patch(x, z, 0.15, 32)) : 0 });
     // wood sorrel: carpets in deep conifer shade, around the trunk bases
-    colony('shrub_sorrel_01', { per100: 2.2, r: [0.5, 2.0], fill: 28, scale: [1.0, 1.8], wind: 0.01, radius: 11, align: 0.8,
+    colony('shrub_sorrel_01', { per100: 2.2, r: [0.5, 2.0], fill: 28, scale: [1.0, 1.8], wind: 0.01, radius: 16, align: 0.8,
       habitat: (x, z) => offPath(x, z, 0.5) ? smoothstep(0.35, 0.75, shade(x, z)) * (0.25 + 0.75 * smoothstep(3, 0.6, this.nearestTrunk(x, z).d)) : 0 });
     // lesser celandine: damp margins of the stream and pond
-    colony('celandine_01', { per100: 1.2, r: [0.4, 1.8], fill: 9, scale: [0.9, 1.4], wind: 0.015, radius: 18, align: 0.7,
+    colony('celandine_01', { per100: 1.2, r: [0.4, 1.8], fill: 9, scale: [0.9, 1.4], wind: 0.015, radius: 24, align: 0.7,
       habitat: (x, z) => offPath(x, z, 0.5) ? nearW(x, z, 3.5) : 0 });
     // wildflower drifts in the sunny gaps, one kind per drift
     for (const [kf, seed] of [['flower_heliophila', 36], ['flower_empodium', 37], ['flower_stinkkruid', 38], ['flower_ursinia', 39], ['leipoldtia_schultzei', 40]])
-      colony(kf, { per100: 0.35, r: [0.4, 2.0], fill: 4, scale: [0.6, 1.0], wind: 0.02, radius: 22, align: 0.6,
+      colony(kf, { per100: 0.35, r: [0.4, 2.0], fill: 4, scale: [0.6, 1.0], wind: 0.02, radius: 28, align: 0.6,
         habitat: (x, z) => offPath(x, z, 0.5) ? smoothstep(0.35, 0.05, shade(x, z)) * smoothstep(0.35, 0.7, this.patch(x, z, 0.09, seed)) : 0 });
     colony('shrub_01', { per100: 0.08, r: [0.6, 1.6], fill: 0.5, scale: [0.5, 0.9], wind: 0.03, radius: 36, align: 0.3, cast: true,
       habitat: (x, z) => offPath(x, z, 1.2) ? smoothstep(0.55, 0.2, shade(x, z)) * this.patch(x, z, 0.06, 41) : 0 });

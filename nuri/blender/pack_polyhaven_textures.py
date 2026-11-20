@@ -8,7 +8,7 @@ SRC, OUT = sys.argv[1], sys.argv[2]
 ONLY = sys.argv[3].split(',') if len(sys.argv) > 3 else None
 os.makedirs(OUT, exist_ok=True)
 SETS = {  # game name -> poly haven id
-    'ph_floor': 'forest_leaves_04', 'ph_path': 'forest_ground_04', 'ph_riverbed': 'river_small_rocks', 'ph_mud': 'brown_mud_leaves_01',
+    'ph_floor': 'forest_leaves_04', 'ph_path': 'roots', 'ph_riverbed': 'river_small_rocks', 'ph_mud': 'brown_mud_leaves_01',
     'ph_rock': 'rock_face_03', 'ph_mossrock': 'mossy_rock', 'ph_lichen': 'lichen_rock', 'ph_bark': 'bark_brown_02', 'ph_gravel': 'rocky_trail',
 }
 def L(p, mode):

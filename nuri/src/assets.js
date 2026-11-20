@@ -72,7 +72,7 @@ function jsonToGLB(json) {
   return out.buffer;
 }
 export const TERRAIN_LAYERS = ['ph_floor', 'ph_path', 'ph_riverbed', 'ph_mud'];
-export const TERRAIN_SCALES = [1 / 1.5, 1 / 3.15, 1 / 2.9, 1 / 1.3]; // metres covered by each scanned set
+export const TERRAIN_SCALES = [1 / 1.5, 1 / 1.67, 1 / 2.9, 1 / 1.3]; // metres covered by each scanned set
 export const PH_MODELS = ['rock_moss_set_01', 'rock_moss_set_02', 'boulder_01', 'rock_07', 'rock_09', 'stone_01', 'rock_face_01', 'rock_face_02',
   'tree_stump_01', 'tree_stump_02', 'dead_tree_trunk', 'dead_tree_trunk_02', 'root_cluster_02', 'single_root', 'fern_02', 'moss_01',
   'shrub_03', 'shrub_04', 'nettle_plant', 'dandelion_01', 'weed_plant_02', 'dry_branches_medium_01', 'periwinkle_plant',
@@ -216,7 +216,7 @@ export class Assets {
         leafLight(sh, 1.5);
       } });
     M.grass = patchMaterial(new THREE.MeshStandardMaterial({ map: T.grass.map, normalMap: T.grass.normal, alphaTest: 0.42, side: THREE.DoubleSide,
-      roughness: 0.75, metalness: 0, envMapIntensity: 0.5 }), {
+      color: new THREE.Color(0.82, 0.92, 0.66), roughness: 0.9, metalness: 0, envMapIntensity: 0.25 }), {
       ao: false,
       wind: `float flex = uv.y;
              transformed += windOffset(wp0.xyz, 0.03 * flex, wp0.x * 2.1 + wp0.z * 1.3);
@@ -231,7 +231,11 @@ export class Assets {
         if (!o.isMesh || !o.material || o.material.userData.tuned) return;
         const m = o.material; m.userData.tuned = true;
         m.envMapIntensity = 0.8;
-        if (m.alphaTest > 0 || m.transparent) { m.transparent = false; m.alphaTest = 0.45; m.side = THREE.DoubleSide; }
+        if (m.alphaTest > 0 || m.transparent) {
+          m.transparent = false; m.alphaTest = 0.45; m.side = THREE.DoubleSide;
+          // leaves are matte: no glossy sky sheen that turns blades and fronds whitish
+          m.envMapIntensity = 0.35; m.roughness = Math.max(m.roughness, 0.85);
+        }
       });
     }
   }

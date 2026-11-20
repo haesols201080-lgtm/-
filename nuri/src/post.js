@@ -63,7 +63,7 @@ export function makeGradePass() {
         c = mix(c, c * c * (3.0 - 2.0 * c), 0.2);
         float l = dot(c, vec3(0.299, 0.587, 0.114));
         c += vec3(-0.012, 0.006, 0.01) * (1.0 - l) + vec3(0.018, 0.008, -0.014) * l;
-        c = mix(vec3(l), c, 1.03);
+        c = mix(vec3(l), c, 0.98);
         vec2 q = vUv - 0.5; q.x *= uRes.x / uRes.y;
         c *= 1.0 - uVig * smoothstep(0.35, 1.05, length(q) * 1.3);
         c += (h(vUv * uRes + fract(uTime) * 97.0) - 0.5) * uGrain;
