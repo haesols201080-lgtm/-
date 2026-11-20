@@ -1,6 +1,7 @@
 // DOM UI: loading, title, HUD (counters, prompts, discovery banners, toasts, bubbles), pause, settings, help,
 // gamepad remapping and save slots (localStorage, guarded).
 import { isTouch } from './quality.js';
+import { mountLogo } from './logo.js';
 
 const $ = (id) => document.getElementById(id);
 // unit designations shown beside the speaker's name
@@ -17,6 +18,7 @@ export const writeSettings = (s) => writeJSON(SET_KEY, s);
 export class UI {
   constructor() {
     if (isTouch) document.body.classList.add('touch');
+    for (const m of document.querySelectorAll('.mark')) mountLogo(m);
     this.handlers = {};
   }
   on(name, fn) { this.handlers[name] = fn; }
