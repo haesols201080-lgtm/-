@@ -87,7 +87,7 @@ const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a)
 
 // build the moss geometry for one surface (any mesh/geometry + world matrix); returns arrays to merge into a chunk
 // kind: 'rock' | 'log' | 'stump' | 'ground'
-export function mossFromSurface(geo, matrix, kind, damp = 0.5) {
+export function mossFromSurface(geo, matrix, kind, damp = 0.5, minW = 0.12) {
   const pos = geo.attributes.position, nrm = geo.attributes.normal, col = geo.attributes.color;
   const idx = geo.index ? geo.index.array : null;
   const nm = new THREE.Matrix3().getNormalMatrix(matrix);
@@ -107,7 +107,7 @@ export function mossFromSurface(geo, matrix, kind, damp = 0.5) {
     ww[i] = w * (0.75 + 0.25 * ao); wa[i] = ao;
   }
   const tri = (a, b, c) => {
-    if (Math.max(ww[a], ww[b], ww[c]) < 0.06) return;
+    if (Math.max(ww[a], ww[b], ww[c]) < minW) return;
     for (const k of [a, b, c]) { P.push(wp[k * 3], wp[k * 3 + 1], wp[k * 3 + 2]); N.push(wn[k * 3], wn[k * 3 + 1], wn[k * 3 + 2]); W.push(ww[k]); A.push(wa[k]); }
   };
   if (idx) for (let i = 0; i < idx.length; i += 3) tri(idx[i], idx[i + 1], idx[i + 2]);
@@ -168,4 +168,34 @@ export function buildMossMeshes(scene, pieces, tex, shells, chunk = 12) {
     out.push({ m: im, c: g.boundingSphere.center.clone(), full: shells + 1, tris: C.W.length / 3 });
   }
   return out;
+}
+
+// moss at the foot of a tree: the stem base and the surface roots, thickest on the shaded north side and on the
+// upper faces of the roots, thinning out up the trunk. The roots are bent onto the ground in the bark shader
+// (conformToGround); `lift` is its CPU twin so the moss lies exactly on the rendered roots.
+export function mossFromTree(geo, M, localM, groundY, lift, minW = 0.12) {
+  const pos = geo.attributes.position, nrm = geo.attributes.normal, idx = geo.index ? geo.index.array : null;
+  const full = new THREE.Matrix4().multiplyMatrices(M, localM), nm = new THREE.Matrix3().getNormalMatrix(full);
+  const cnt = pos.count, keep = new Uint8Array(cnt), wp = new Float32Array(cnt * 3), wn = new Float32Array(cnt * 3), ww = new Float32Array(cnt);
+  const v = new THREE.Vector3(), l = new THREE.Vector3(), n = new THREE.Vector3();
+  for (let i = 0; i < cnt; i++) {
+    l.fromBufferAttribute(pos, i).applyMatrix4(localM);
+    if (l.y > 0.95) continue;
+    keep[i] = 1;
+    v.copy(l).applyMatrix4(M);
+    v.y += lift(l.y, Math.hypot(l.x, l.z), v.x, v.z);
+    n.fromBufferAttribute(nrm, i).applyMatrix3(nm).normalize();
+    wp[i * 3] = v.x; wp[i * 3 + 1] = v.y; wp[i * 3 + 2] = v.z; wn[i * 3] = n.x; wn[i * 3 + 1] = n.y; wn[i * 3 + 2] = n.z;
+    const hk = sstep(0.85, 0.1, v.y - groundY(v.x, v.z));
+    const side = sstep(-0.4, 0.6, -n.z) * 0.85 + sstep(0.15, 0.7, n.y) * 0.45;
+    ww[i] = Math.min(1, side) * hk * sstep(0.28, 0.6, mossField(v.x, v.y, v.z) + 0.12);
+  }
+  const P = [], N = [], W = [], A = [];
+  const tri = (a, b, c) => {
+    if (!keep[a] || !keep[b] || !keep[c] || Math.max(ww[a], ww[b], ww[c]) < minW) return;
+    for (const k of [a, b, c]) { P.push(wp[k * 3], wp[k * 3 + 1], wp[k * 3 + 2]); N.push(wn[k * 3], wn[k * 3 + 1], wn[k * 3 + 2]); W.push(ww[k]); A.push(0.85); }
+  };
+  if (idx) for (let i = 0; i < idx.length; i += 3) tri(idx[i], idx[i + 1], idx[i + 2]);
+  else for (let i = 0; i < cnt; i += 3) tri(i, i + 1, i + 2);
+  return P.length ? { P, N, W, A } : null;
 }

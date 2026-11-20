@@ -8,7 +8,7 @@ import { WORLD, PATH, PATH2, PATH3, STREAM, POND, OUTCROP, HERO_TREES, BOULDERS,
 import { Terrain } from './terrain.js';
 import { patchMaterial, WIND, leafLight, conformToGround, rootLift, barkRootBlend, ensureRootAttributes } from './shaders.js';
 import { TREES, SAPLINGS, SNAGS } from './assets.js';
-import { mossFromSurface, mossGround, buildMossMeshes } from './moss.js';
+import { mossFromSurface, mossGround, buildMossMeshes, mossFromTree } from './moss.js';
 import { WaterSim, makeWaterMaterial } from './water.js';
 
 const rnd = mulberry32(2024);
@@ -260,18 +260,44 @@ export class World {
       return Math.max(smoothstep(2.4, 0.5, w), smoothstep(0.5, 0.85, sh) * 0.55);
     };
     const meshDamp = (m) => { const p = new THREE.Vector3().setFromMatrixPosition(m.matrixWorld); return dampAt(p.x, p.z) * 0.6 + this.canopy(p.x, p.z) * 0.4; };
-    const fromObj = (obj, kind) => { obj.updateMatrixWorld(true); obj.traverse((o) => { if (o.isMesh && !o.isInstancedMesh) pieces.push(mossFromSurface(o.geometry, o.matrixWorld, kind, meshDamp(o))); }); };
-    for (const r of this.rocks) if (r.mesh) fromObj(r.mesh, 'rock');
+    const stats = this.mossStats = {};
+    const tally = (k, pc) => { if (pc) stats[k] = (stats[k] || 0) + pc.W.length / 3; return pc; };
+    const fromObj = (obj, kind) => { obj.updateMatrixWorld(true); obj.traverse((o) => { if (o.isMesh && !o.isInstancedMesh) pieces.push(tally(kind, mossFromSurface(o.geometry, o.matrixWorld, kind, meshDamp(o)))); }); };
+    // budget: moss on the larger stones (the small ones read as bare), logs and stumps, a share of the bank stones,
+    // and ground carpets only on the damp stream banks
+    // phones (low tier) get a lighter moss budget; medium / high (PC) keep the full layer
+    const lite = !this.ctx.tier.rich;
+    for (const r of this.rocks) if (r.mesh && r.r >= (lite ? 0.7 : 0.3)) fromObj(r.mesh, 'rock');
     for (const l of this.logs) fromObj(l.group || l.mesh, 'log');
     for (const st of this.stumps) if (st.mesh) fromObj(st.mesh, 'stump');
-    for (const e of extra) { const c = new THREE.Vector3().setFromMatrixPosition(e.matrix); pieces.push(mossFromSurface(e.geo, e.matrix, e.kind, dampAt(c.x, c.z) * 0.5 + 0.3)); }
-    // ground carpets in 6 m tiles where it is damp
+    extra.forEach((e, i) => { if (i % (lite ? 3 : 2)) return; const c = new THREE.Vector3().setFromMatrixPosition(e.matrix); pieces.push(tally('bank', mossFromSurface(e.geo, e.matrix, e.kind, dampAt(c.x, c.z) * 0.5 + 0.3))); });
+    // tree feet: stem bases and surface roots (all trees on PC; hero trees and every third tree on phones)
+    const lift = (t) => (yl, rl, wx, wz) => rootLift(yl, rl, T.heightAt(wx, wz) - (t.y + 0.03));
+    const nearPath = (x, z) => Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d);
+    this.treeSpots.forEach((t, i) => {
+      // the trees you walk past get moss at their feet (that is where the camera is close enough to see it)
+      const d = nearPath(t.x, t.z);
+      if (!t.hero && (lite ? d > 5 || i % 2 : d > 11)) return;
+      const src = this.ctx.assets.models[t.t]; if (!src || t.y === undefined) return;
+      const M = new THREE.Matrix4().compose(new THREE.Vector3(t.x, t.y, t.z), treeQuat(t), new THREE.Vector3(t.s * t.w, t.s * t.h, t.s * t.w));
+      src.scene.updateMatrixWorld(true);
+      src.scene.traverse((o) => { if (o.isMesh && o.name.includes('bark')) pieces.push(tally('tree', mossFromTree(o.geometry, M, o.matrixWorld, (x, z) => T.heightAt(x, z), lift(t), lite ? 0.32 : 0.22))); });
+    });
+    // forest-floor carpets: damp stream banks, and shaded hollows under the conifers in irregular colonies
+    const floorDamp = (x, z) => {
+      if (T.isWater(x, z)) return 0;
+      const pd = Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d);
+      if (pd < 0.7) return 0;
+      const w = this.waterDist(x, z), sh = this.canopy(x, z);
+      const tr = this.nearestTrunk(x, z);
+      return Math.max(smoothstep(2.2, 0.5, w), smoothstep(0.45, 0.85, sh) * (lite ? 0.5 : 0.62), tr.d < 2.2 ? smoothstep(2.2, 0.5, tr.d) * 0.55 : 0);
+    };
     for (let x = -42; x < 42; x += 6) for (let z = -42; z < 42; z += 6) {
       let any = false;
-      for (let i = 0; i < 4 && !any; i++) for (let j = 0; j < 4 && !any; j++) if (dampAt(x + i * 2, z + j * 2) > 0.3) any = true;
-      if (any) pieces.push(mossGround(T, x, z, x + 6, z + 6, 0.16, dampAt));
+      for (let i = 0; i < 4 && !any; i++) for (let j = 0; j < 4 && !any; j++) if (floorDamp(x + i * 2, z + j * 2) > 0.3) any = true;
+      if (any) pieces.push(tally('ground', mossGround(T, x, z, x + 6, z + 6, lite ? 0.3 : 0.2, floorDamp)));
     }
-    const shells = this.ctx.tier.rich ? 14 : 9;
+    const shells = this.ctx.tier.rich ? 14 : 8;
     this.mossChunks = buildMossMeshes(this.scene, pieces, this.ctx.assets.tex.mossTile, shells);
     this.mossTris = this.mossChunks.reduce((a, k) => a + k.tris, 0);
   }
@@ -281,7 +307,7 @@ export class World {
     if (!this.mossChunks) return;
     for (const k of this.mossChunks) {
       const d = Math.hypot(k.c.x - cam.x, k.c.z - cam.z);
-      k.m.count = d < 12 ? k.full : d < 22 ? Math.ceil(k.full / 2) : d < 40 ? 3 : 1;
+      k.m.count = this.ctx.tier.rich ? (d < 14 ? k.full : d < 26 ? Math.ceil(k.full / 2) : d < 45 ? 3 : 1) : (d < 9 ? k.full : d < 16 ? Math.ceil(k.full / 2) : 1);
     }
   }
 
