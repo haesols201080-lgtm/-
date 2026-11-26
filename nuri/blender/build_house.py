@@ -745,7 +745,8 @@ def build_rooms(P, G):
     P.cyl(((cx0 + cx1) / 2, U + 1.75, KZ - 0.32), 0.012, cx1 - cx0 - 0.05, 'steel', seg=10, axis='x')
     P.box(cx0, U + 1.85, KZ - 0.6, cx1, U + 1.87, KZ - 0.08, 'trim')
     for i, x in enumerate((cx0 + 0.2, cx0 + 0.55, cx0 + 0.95)):
-        P.obox((x, U + 0.06 + (0.12 if i == 1 else 0), KZ - 0.3), (0.32, 0.12, 0.2), 'cardboard', ry=0.05 * i); P.obox((x, U + 0.125 + (0.12 if i == 1 else 0), KZ - 0.3), (0.325, 0.015, 0.205), 'cardboard', ry=0.05 * i)
+        P.obox((x, U + 0.06, KZ - 0.3), (0.32, 0.12, 0.2), 'cardboard', ry=0.05 * i); P.obox((x, U + 0.1275, KZ - 0.3), (0.325, 0.015, 0.205), 'cardboard', ry=0.05 * i)
+    P.obox((cx0 + 0.21, U + 0.135 + 0.06, KZ - 0.3), (0.3, 0.12, 0.19), 'cardboard', ry=0.12); P.obox((cx0 + 0.21, U + 0.135 + 0.1275, KZ - 0.3), (0.305, 0.015, 0.195), 'cardboard', ry=0.12)
     casing(P, ('x', KZ - 0.62), cx0, cx1, U, U + 2.05, -1)
     # curtains: lined drapes on rods over the living room and bedroom windows
     def drape(a0, a1, y0, y1, z, folds):
@@ -1143,6 +1144,11 @@ def cloth(name, w, h, res, c, colliders, mat_name, frames=50, rot=(0.0, 0.0, 0.0
     return ob
 
 # ------------------------------------------------------------------------------------------------ small made things
+def surface_y(x, z, y_hint, reach=0.3):
+    bpy.context.view_layer.update()
+    hit, loc, *_ = bpy.context.scene.ray_cast(bpy.context.evaluated_depsgraph_get(), bl((x, y_hint + reach, z)), Vector((0, 0, -1)), distance=reach * 2)
+    return loc.z if hit else y_hint
+
 def book(P, x, y, z, w, h, d, ry=0.0, cover='cover_red', lying=False):
     """a hardback: covers, spine and a cream page block set in from them"""
     if lying: P.obox((x, y + d / 2, z), (w, d, h), cover, ry=ry); P.obox((x + 0.004 * math.cos(ry), y + d / 2, z - 0.004 * math.sin(ry)), (w - 0.006, d - 0.006, h - 0.008), 'book_page', ry=ry); return
@@ -1270,8 +1276,8 @@ def furnish():
     add('hanging_picture_frame_02', -0.35, Z0 + 0.02, y=1.65, ry=0.0, collide=False, wall=('x', Z0, 1))
     add('ceiling_fan', -2.75, -2.2, y=HG - 0.5, collide=False, settle=False)
     add('mousetrap', 1.42, -2.95, ry=math.pi / 2, collide=False)
-    table_lamp(Pp, -1.45, 0.55, -0.98)
-    mug(Pp, -2.45, 0.452, -2.05, ry=0.6)
+    table_lamp(Pp, -1.45, surface_y(-1.45, -0.98, 0.55), -0.98)
+    mug(Pp, -2.45, surface_y(-2.45, -2.05, 0.44), -2.05, ry=0.6)
     # the cat's bed by the hearth
     Pp.cyl((0.72, 0.05, 3.38), 0.27, 0.1, 'carpet_grey', seg=28); Pp.cyl((0.72, 0.07, 3.38), 0.21, 0.06, 'linen', seg=28)      # (the cat's bed, by the warm radiator)
     # ---- the hall: a console with the mirror over it, the coat hooks by the door, the boots, the suitcase and the gear
@@ -1294,7 +1300,7 @@ def furnish():
         add('painted_wooden_chair_01', x, z, ry=r)
     add('wooden_bowl_01', -2.55, 1.85, y=0.7, collide=False)
     for dx, dz in ((0.0, 0.0), (0.05, 0.04), (-0.04, 0.05)): add('lemon', -2.55 + dx, 1.85 + dz, y=0.78, ry=dx * 20, collide=False)
-    mug(Pp, -2.2, 0.0, 1.62); Pp.box(-2.85, 0.0, 1.95, -2.62, 0.0, 2.25, 'shade') if False else None
+    mug(Pp, -2.25, surface_y(-2.25, 1.65, 0.76), 1.65)
     add('electric_stove', X0 + 0.34, 2.05, ry=math.pi / 2)
     add('vintage_electric_kettle', X0 + 0.32, 2.85, y=0.9, ry=-0.8, collide=False)
     add('jug_01', X0 + 0.3, 1.25, y=0.9, collide=False); add('wooden_spoon', X0 + 0.3, 1.25, y=1.0, tilt=(0.25, 0.0), collide=False, settle=False)
@@ -1327,7 +1333,7 @@ def furnish():
     add('round_spectacles', -4.4, KZ - 0.22, y=top_of(ns), ry=2.2, collide=False)
     add('alarm_clock_01', -4.5, KZ - 0.62, y=top_of(ns), ry=1.2, collide=False)
     ns2 = add('painted_wooden_nightstand', -1.95, KZ - 0.32, y=U, ry=math.pi)
-    book_stack(Pp, -1.95, top_of(ns2), KZ - 0.28, 3, seed=5)
+    book_stack(Pp, -1.95, surface_y(-1.95, KZ - 0.28, U + 0.62), KZ - 0.28, 3, seed=5)
     add('standing_picture_frame_01', -1.85, KZ - 0.42, y=top_of(ns2), ry=math.pi + 0.3, collide=False)
     add('hanging_picture_frame_03', -3.2, KZ - T / 2, y=U + 1.45, ry=math.pi, collide=False, wall=('x', KZ - T / 2, -1))
     dr = add('ClassicConsole_01', -0.4, Z0 + 0.32, y=U, ry=0.0)
@@ -1358,7 +1364,7 @@ def furnish():
     # living room, east: a console behind the sofa with a lamp and photos; a rocking chair by the window with a floor
     # lamp and a stack of books (a reading corner)
     con = add('chinese_console_table', -0.84, -2.2, ry=-math.pi / 2)
-    table_lamp(Pp, -0.86, top_of(con) if con else 0.66, -2.75, h=0.5)
+    table_lamp(Pp, -0.86, surface_y(-0.86, -2.75, 0.66), -2.75, h=0.5)
     add('standing_picture_frame_02', -0.86, -1.95, y=0.66, ry=-math.pi / 2 + 0.3, collide=False)
     add('carved_wooden_plate', -0.86, -1.6, y=0.66, ry=-math.pi / 2, collide=False)
     add('Rockingchair_01', 0.25, -3.1, ry=-0.55)
@@ -1400,7 +1406,16 @@ def furnish():
     # the landing: a runner, a bookcase, a small table with a plant, a photo
     Pp.box(2.3, U + 0.004, -3.7, 3.15, U + 0.014, 0.85, 'runner')
     add('Shelf_01', PART + T / 2 + 0.13, -3.1, y=U, ry=math.pi / 2)
-    for k, y in enumerate((0.42, 0.85, 1.28)): book_row(Pp, PART + T / 2 + 0.15, U + y, -3.5, 10 + k * 2, along='z', ry=0.0, seed=30 + k)
+    # every board of the bookcase: cast down, note the board, go on from just under it, to the floor
+    shelves, yy = [], U + 2.1
+    bpy.context.view_layer.update(); dg_ = bpy.context.evaluated_depsgraph_get()
+    while yy > U + 0.15:
+        hit, loc, *_ = bpy.context.scene.ray_cast(dg_, bl((PART + T / 2 + 0.13, yy, -3.3)), Vector((0, 0, -1)), distance=yy - U)
+        if not hit: break
+        if loc.z - U > 0.15 and loc.z < U + 1.95: shelves.append(loc.z)
+        yy = loc.z - 0.025
+    for k, y in enumerate(shelves): book_row(Pp, PART + T / 2 + 0.15, y, -3.55, 9 + (k * 5) % 7, along='z', ry=0.0, seed=30 + k)
+    print('landing shelves', [round(q - U, 2) for q in shelves])
     add('side_table_tall_01', PART + T / 2 + 0.25, 0.6, y=U, ry=math.pi / 2)
     add('calathea_orbifolia_01', PART + T / 2 + 0.25, 0.6, y=U + 0.7, ry=1.2, pick='_d$', collide=False)
     add('hanging_picture_frame_02', PART + T / 2, -0.1, y=U + 1.45, ry=math.pi / 2, collide=False, wall=('z', PART + T / 2, 1))
@@ -1585,7 +1600,8 @@ VIEWS = {
     'robot_bed': ((-2.2, U + 0.18, -0.2), (-3.6, U + 0.12, -1.6), 70), 'robot_hall': ((2.4, 0.2, -0.9), (4.4, 0.6, -2.4), 72),
     'dining': ((-0.6, 1.45, 0.9), (-2.6, 0.75, 2.1), 55), 'hall': ((3.4, 1.4, 0.6), (1.7, 1.0, -3.2), 64), 'closet': ((-0.2, U + 1.2, -1.6), (-0.6, U + 0.8, 0.1), 66),
     'living_east': ((-3.6, 1.35, -1.0), (0.6, 0.8, -3.0), 66), 'kitchen_east': ((-3.0, 1.4, 1.2), (1.2, 0.9, 3.2), 64), 'laundry': ((2.0, 1.5, 1.6), (4.3, 0.8, 3.4), 70),
-    'bed_desk': ((-2.2, U + 1.4, -1.2), (1.3, U + 0.7, -2.6), 64), 'landing2': ((3.4, U + 1.45, 0.7), (1.8, U + 0.6, -3.2), 66)
+    'bed_desk': ((-2.2, U + 1.4, -1.2), (1.3, U + 0.7, -2.6), 64), 'landing2': ((3.4, U + 1.45, 0.7), (1.8, U + 0.6, -3.2), 66),
+    'closet2': ((-0.9, U + 0.9, -1.4), (-1.1, U + 0.15, 0.0), 60), 'shelf_books': ((2.9, U + 1.2, -2.6), (1.7, U + 0.9, -3.3), 60)
 }
 def preview():
     sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.device = 'CPU'; sc.cycles.samples = opt('--psamples', 24)
