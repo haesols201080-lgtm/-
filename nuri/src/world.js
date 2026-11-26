@@ -10,6 +10,7 @@ import { patchMaterial, WIND, leafLight, conformToGround, rootLift, barkRootBlen
 import { TREES, SAPLINGS, SNAGS } from './assets.js';
 import { mossFromSurface, mossGround, buildMossMeshes, mossFromTree } from './moss.js';
 import { WaterSim, makeWaterMaterial } from './water.js';
+import { floraVariants } from './flora.js';
 
 const rnd = mulberry32(2024);
 const nzEco = makeNoise2D(4242);
@@ -67,10 +68,11 @@ export class World {
     this.terrain = new Terrain();
     this.planTrees();
     this.terrain.microRelief(this.treeSpots, this.pits);
+    // where moss tints the litter: windthrow hollows and the foot of the boulders (not round the trees: under a
+    // conifer the ground is needles; its moss is on the roots and the bark)
     const mossSources = [
-      ...this.pits.map((q) => ({ x: q.x + Math.cos(q.a) * 0.35 * q.size, z: q.z + Math.sin(q.a) * 0.35 * q.size, r: 1.6 * q.size })),
-      ...BOULDERS.map(([x, z, r]) => ({ x, z, r: r * 2.2 })),
-      ...this.treeSpots.filter((t) => t.hero).map((t) => ({ x: t.x, z: t.z, r: 2.4 })),
+      ...this.pits.map((q) => ({ x: q.x - Math.cos(q.a) * 0.45 * q.size, z: q.z - Math.sin(q.a) * 0.45 * q.size, r: 1.1 * q.size })),
+      ...BOULDERS.map(([x, z, r]) => ({ x, z, r: r * 1.5 })),
     ];
     this.scene.add(this.terrain.buildMesh(assets.tex, this.ctx.tier, mossSources));
     this.terrain.buildCollider(this.ctx.RAPIER, this.ctx.physics);
@@ -286,20 +288,21 @@ export class World {
       src.scene.updateMatrixWorld(true);
       src.scene.traverse((o) => { if (o.isMesh && o.name.includes('bark')) pieces.push(tally('tree', mossFromTree(o.geometry, M, o.matrixWorld, (x, z) => T.heightAt(x, z), lift(t), lite ? 0.32 : 0.22))); });
     });
-    // forest-floor carpets: damp stream banks, and shaded hollows under the conifers in irregular colonies
+    // on the ground moss only where it really holds: a shaded strip of bank above the waterline (not the open, sunny
+    // shore and not the mud at the edge), the damp hollow of a windthrow pit and the shaded side of its mound
     const floorDamp = (x, z) => {
       if (T.isWater(x, z)) return 0;
       const pd = Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d);
-      if (pd < 0.7) return 0;
+      if (pd < 0.9) return 0;
       const w = this.waterDist(x, z), sh = this.canopy(x, z);
-      const tr = this.nearestTrunk(x, z);
-      return Math.max(smoothstep(2.2, 0.5, w), smoothstep(0.45, 0.85, sh) * (lite ? 0.5 : 0.62), tr.d < 2.2 ? smoothstep(2.2, 0.5, tr.d) * 0.55 : 0);
+      let h = smoothstep(0.25, 0.6, w) * smoothstep(1.9, 0.9, w) * (0.35 + 0.65 * smoothstep(0.3, 0.7, sh));
+      for (const q of this.pits) { const d = Math.hypot(x - (q.x - Math.cos(q.a) * 0.4 * q.size), z - (q.z - Math.sin(q.a) * 0.4 * q.size)); if (d < 1.3 * q.size) h = Math.max(h, 0.8 * smoothstep(1.3 * q.size, 0.4 * q.size, d)); }
+      return h;
     };
-    for (let x = -42; x < 42; x += 6) for (let z = -42; z < 42; z += 6) {
-      let any = false;
-      for (let i = 0; i < 4 && !any; i++) for (let j = 0; j < 4 && !any; j++) if (floorDamp(x + i * 2, z + j * 2) > 0.3) any = true;
-      if (any) pieces.push(tally('ground', mossGround(T, x, z, x + 6, z + 6, lite ? 0.3 : 0.2, floorDamp)));
-    }
+    const cells = new Set();
+    const mark = (x, z) => cells.add(Math.floor(x / 4) + ',' + Math.floor(z / 4));
+    for (let x = -46; x < 46; x += 1) for (let z = -46; z < 46; z += 1) if (floorDamp(x, z) > 0.15) mark(x, z);
+    for (const key of cells) { const [cx, cz] = key.split(',').map(Number); pieces.push(tally('ground', mossGround(T, cx * 4, cz * 4, cx * 4 + 4, cz * 4 + 4, lite ? 0.16 : 0.1, floorDamp))); }
     const shells = this.ctx.tier.rich ? 14 : 8;
     this.mossChunks = buildMossMeshes(this.scene, pieces, this.ctx.assets.tex.mossTile, shells);
     this.mossTris = this.mossChunks.reduce((a, k) => a + k.tris, 0);
@@ -816,9 +819,14 @@ export class World {
     const windy = (mat, amt) => {
       if (Array.isArray(mat)) return mat.map((m) => windy(m, amt));
       const key = mat.uuid + amt; if (windMats.has(key)) return windMats.get(key);
-      const m = mat.clone();
-      patchMaterial(m, { ao: false, wind: `transformed += windOffset(wp0.xyz, ${amt.toFixed(3)} * smoothstep(0.0, 0.6, position.y), wp0.x + wp0.z);`, key: 'w' + amt + 'leaf',
-        extraFrag: (sh) => leafLight(sh, 1, [0.1, 0.32]) });   // ground plants dissolve right in front of the lens
+      const m = mat.clone(), unflip = !!mat.userData.thinBlades;
+      patchMaterial(m, { ao: false, wind: `transformed += windOffset(wp0.xyz, ${amt.toFixed(3)} * smoothstep(0.0, 0.6, position.y), wp0.x + wp0.z);`, key: 'w' + amt + 'leaf' + (unflip ? 'u' : ''),
+        extraFrag: (sh) => {
+          leafLight(sh, 1, [0.1, 0.32]);   // ground plants dissolve right in front of the lens
+          // hair-thin blades (src/flora.js): both faces keep the up-leaning normal, so a blade seen from behind is not
+          // shaded as if it faced the ground
+          if (unflip) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n  normal *= faceDirection;');
+        } });
       windMats.set(key, m); return m;
     };
     const k = tier.fernDensity;
@@ -848,35 +856,44 @@ export class World {
     const pines = this.treeSpots.filter((t) => t.t.startsWith('pine'));
     const nearPine = (x, z, R) => { let best = 1e9; for (const t of pines) { const d = (t.x - x) ** 2 + (t.z - z) ** 2; if (d < best) best = d; } return Math.sqrt(best) < R ? 1 - Math.sqrt(best) / R : 0; };
 
+    // the fern the robot wakes up under (the intro: "a fern ten times its size"): an old clump right behind the start,
+    // its fronds arching over the spot, and a smaller one beside it
+    {
+      const fv = this.variants('fern_02');
+      const one = (v, x, z, h, rot) => { const s = h / v.size.y, m = new THREE.Mesh(v.geo, windy(v.mat, 0.035));
+        m.position.set(x, T.heightAt(x, z) - 0.02 * s, z); m.rotation.y = rot; m.scale.setScalar(s); m.castShadow = true; m.receiveShadow = true; this.scene.add(m); };
+      one(fv[0], START.x - 0.1, START.z + 0.5, 1.3, 0.7);
+      one(fv[Math.min(1, fv.length - 1)], START.x - 0.7, START.z + 0.05, 0.8, 2.4);
+    }
     // ---- plants (scanned), placed the way a forest floor actually fills: clonal colonies and drifts of one species,
     // dense and full-grown in the middle, sparse and small at the edge, following the microhabitat, with bare
     // litter between them; not single plants sprinkled evenly
     const nearW = (x, z, d) => smoothstep(d, d * 0.3, this.waterDist(x, z));
     const pathD = (x, z) => Math.min(distToPolyline(x, z, PATH).d, distToPolyline(x, z, PATH2).d, distToPolyline(x, z, PATH3).d);
-    const colony = (key, { per100, r: [r0, r1], fill, habitat, scale, wind = 0, radius = 30, cast = false, align = 0.5, sink = 0.015, keep = 0.35, cover = 0.8 }) => {
-      const vars = this.variants(key), lists = vars.map(() => []);
+    const colony = (key, { per100, r: [r0, r1], fill, habitat, scale, wind = 0, radius = 30, cast = false, align = 0.5, sink = 0.015, keep = 0.35, cover = 0.8, rand = rnd }) => {
+      const vars = Array.isArray(key) ? key : this.variants(key), lists = vars.map(() => []);
       const n = Math.round(93 * 93 / 100 * per100 * k * 2.5);
       for (let c = 0; c < n; c++) {
-        const cx = (rnd() - 0.5) * 93, cz = (rnd() - 0.5) * 93, hab = habitat(cx, cz);
-        if (hab <= 0 || rnd() > hab) continue;
-        const R = (r0 + (r1 - r0) * rnd() ** 1.6) * (0.6 + 0.4 * hab);
+        const cx = (rand() - 0.5) * 93, cz = (rand() - 0.5) * 93, hab = habitat(cx, cz);
+        if (hab <= 0 || rand() > hab) continue;
+        const R = (r0 + (r1 - r0) * rand() ** 1.6) * (0.6 + 0.4 * hab);
         this.colonies.push({ x: cx, z: cz, r: R, k: Math.min(1, fill / 6), cover });
-        const dom = Math.floor(rnd() * vars.length), m = Math.round(Math.PI * R * R * fill * (0.5 + 0.5 * k));
-        const ang = rnd() * 6.28, el = 0.55 + rnd() * 0.45;                       // colonies are elongated, not circles
+        const dom = Math.floor(rand() * vars.length), m = Math.round(Math.PI * R * R * fill * (0.5 + 0.5 * k));
+        const ang = rand() * 6.28, el = 0.55 + rand() * 0.45;                       // colonies are elongated, not circles
         for (let q = 0; q < m; q++) {
-          const rr = R * Math.sqrt(rnd()), a = rnd() * 6.28, f = rr / R;
-          if (rnd() > Math.exp(-f * f * 2.2)) continue;                             // thins toward the edge
+          const rr = R * Math.sqrt(rand()), a = rand() * 6.28, f = rr / R;
+          if (rand() > Math.exp(-f * f * 2.2)) continue;                             // thins toward the edge
           const lx = Math.cos(a) * rr, lz = Math.sin(a) * rr * el;
           const x = cx + lx * Math.cos(ang) - lz * Math.sin(ang), z = cz + lx * Math.sin(ang) + lz * Math.cos(ang);
           if (habitat(x, z) < keep * hab * 0.6 || T.isWater(x, z) || this.onRock(x, z)) continue;
-          const sc = (scale[0] + rnd() * (scale[1] - scale[0])) * (1 - 0.45 * f * f);
-          lists[rnd() < 0.7 ? dom : Math.floor(rnd() * vars.length)].push([x, z, sc]);
+          const sc = (scale[0] + rand() * (scale[1] - scale[0])) * (1 - 0.45 * f * f);
+          lists[rand() < 0.7 ? dom : Math.floor(rand() * vars.length)].push([x, z, sc]);
         }
       }
       vars.forEach((v, vi) => {
         const L = lists[vi]; if (!L.length) return;
         const data = new Float32Array(L.length * 8);
-        L.forEach(([x, z, sc], q) => data.set([x, T.heightAt(x, z) - sink * sc, z, rnd() * 6.283, sc, 0, 0, rnd()], q * 8));
+        L.forEach(([x, z, sc], q) => data.set([x, T.heightAt(x, z) - sink * sc, z, rand() * 6.283, sc, 0, 0, rand()], q * 8));
         const material = wind ? windy(v.mat, wind) : v.mat;
         this.scatters.push(new Scatter(this.scene, v.geo, material, data, { radius, cast, align, terrain: T }));
       });
@@ -911,6 +928,24 @@ export class World {
       habitat: (x, z) => offPath(x, z, 0.4) ? smoothstep(0.6, 0.1, shade(x, z)) * (0.35 + 0.65 * smoothstep(3, 0.6, pathD(x, z))) : 0 });
     colony('grass_medium_02', { per100: 1.4, r: [0.6, 2.8], fill: 5, scale: [0.8, 1.4], wind: 0.025, radius: 26, align: 0.6,
       habitat: (x, z) => offPath(x, z, 0.4) ? smoothstep(0.65, 0.15, shade(x, z)) * (0.3 + this.patch(x, z, 0.15, 32)) : 0 });
+    const fr = mulberry32(5151);
+    const near = (r) => Math.round(r * (k < 0.7 ? 0.7 : 1));            // grown plants are drawn less far on low quality
+    // grown species (src/flora.js): the fine grasses, sedges, rushes, horsetails and bilberry of a conifer forest floor
+    // wavy hair-grass: hair-fine tufts on the dry, acid ground under pines, thickest where some light gets through
+    colony(floraVariants('hairGrass', 4, 1), { per100: 1.3, r: [0.6, 2.6], fill: 6, scale: [0.75, 1.3], wind: 0.06, radius: near(18), align: 0.6, rand: fr,
+      habitat: (x, z) => offPath(x, z, 0.35) ? (0.35 + 0.65 * nearPine(x, z, 7)) * smoothstep(0.85, 0.35, shade(x, z)) * (0.3 + 0.7 * this.patch(x, z, 0.1, 51)) : 0 });
+    // wood sedge: bright arching clumps in damp shade, along the trails and toward the water
+    colony(floraVariants('woodSedge', 3, 2), { per100: 1.8, r: [0.5, 1.8], fill: 3.5, scale: [0.8, 1.25], wind: 0.04, radius: near(22), align: 0.5, rand: fr,
+      habitat: (x, z) => offPath(x, z, 0.45) ? (0.45 + 0.55 * smoothstep(0.1, 0.5, shade(x, z))) * (0.3 + 0.7 * Math.max(nearW(x, z, 8), smoothstep(3, 0.8, pathD(x, z)))) * (0.35 + 0.65 * this.patch(x, z, 0.12, 52)) : 0 });
+    // hairy wood-rush: small low rosettes scattered in the shade
+    colony(floraVariants('woodRush', 3, 3), { per100: 1.6, r: [0.4, 1.4], fill: 6, scale: [0.8, 1.2], wind: 0.02, radius: near(15), align: 0.8, rand: fr,
+      habitat: (x, z) => offPath(x, z, 0.4) ? smoothstep(0.05, 0.45, shade(x, z)) * (0.3 + 0.7 * this.patch(x, z, 0.1, 53)) : 0 });
+    // wood horsetail: stands of feathery stems on the wet margins of the stream and pond
+    colony(floraVariants('horsetail', 4, 4), { per100: 4, r: [0.5, 2.0], fill: 16, scale: [0.75, 1.3], wind: 0.035, radius: near(20), align: 0.3, rand: fr,
+      habitat: (x, z) => offPath(x, z, 0.5) ? nearW(x, z, 4.5) * (0.6 + 0.4 * shade(x, z)) : 0 });
+    // bilberry: low carpets under the pines in the half shade
+    colony(floraVariants('bilberry', 4, 5), { per100: 0.9, r: [0.9, 3.0], fill: 7, scale: [0.8, 1.3], wind: 0.015, radius: near(16), align: 0.7, rand: fr,
+      habitat: (x, z) => offPath(x, z, 0.5) ? nearPine(x, z, 7) * smoothstep(0.15, 0.45, shade(x, z)) * (1 - smoothstep(0.8, 0.95, shade(x, z))) * this.patch(x, z, 0.08, 54) : 0 });
     // wood sorrel: carpets in deep conifer shade, around the trunk bases
     colony('shrub_sorrel_01', { per100: 2.2, r: [0.5, 2.0], fill: 28, scale: [1.0, 1.8], wind: 0.01, radius: 16, align: 0.8,
       habitat: (x, z) => offPath(x, z, 0.5) ? smoothstep(0.35, 0.75, shade(x, z)) * (0.25 + 0.75 * smoothstep(3, 0.6, this.nearestTrunk(x, z).d)) : 0 });

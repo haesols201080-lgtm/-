@@ -162,14 +162,24 @@ export class Terrain {
       const dpd = Math.hypot(x - POND.x, (z - POND.z) * 1.1);
       const wet = Math.max(smoothstep(2.6, 1.2, ds), smoothstep(POND.r + 2.2, POND.r + 0.4, dpd));
       const path = this.pathM[k];
+      // moss on the ground never as a painted disc or a lawn: only a faint green in the litter where the moss cushions
+      // grow (pit hollows, the foot of a boulder, shaded bank) and broken into small colonies; the cushions themselves
+      // are the moss layer (moss.js)
+      const colony = smoothstep(0.12, 0.5, fbm(n4, x * 0.7 + 13, z * 0.7, 3)) * smoothstep(-0.1, 0.35, fbm(n3, x * 0.22, z * 0.22, 2));
       let moss = 0;
-      for (const m of mossSources) { const d = Math.hypot(x - m.x, z - m.z); if (d < m.r) moss = Math.max(moss, smoothstep(m.r, m.r * 0.35, d)); }
-      moss *= 0.5 + 0.5 * smoothstep(-0.2, 0.4, fbm(n3, x * 0.25, z * 0.25, 3));
+      for (const m of mossSources) { const d = Math.hypot(x - m.x, z - m.z); if (d < m.r) moss = Math.max(moss, smoothstep(m.r, m.r * 0.5, d)); }
+      moss *= colony * 0.45;
       // the enclosing slopes: mossed over in drifts, with scree where they are steep (not one bare sweep of litter)
       const rim = this.rim[k], slope = Math.hypot(this.h[this.idx(Math.min(i + 1, this.res), j)] - this.h[this.idx(Math.max(i - 1, 0), j)], this.h[this.idx(i, Math.min(j + 1, this.res))] - this.h[this.idx(i, Math.max(j - 1, 0))]) / (2 * this.cell);
-      const pebbles = Math.max(smoothstep(0.55, 0.95, wet), smoothstep(0.35, 0.8, slope) * smoothstep(0.1, 0.4, rim) * 0.75 * smoothstep(-0.2, 0.25, fbm(n4, x * 0.2 + 3, z * 0.2, 2)));
-      moss = Math.max(moss * 0.6, smoothstep(0.15, 0.6, wet) * (1 - pebbles), smoothstep(0.08, 0.45, rim) * (0.3 + 0.45 * smoothstep(-0.25, 0.3, fbm(n2, x * 0.16, z * 0.16 + 5, 3))) * (1 - pebbles));
-      const dirt = Math.max(path, 0.25 * smoothstep(0.1, 0.5, fbm(n2, x * 0.11 + 7, z * 0.11, 3))) * (1 - pebbles);
+      // the shore is not a gravel ring: gravel where the water sorts it (in spits and runs), dark mud between, and in places the
+      // forest litter comes right down to the water
+      const shoreMix = fbm(n3, x * 0.55 + 21, z * 0.55, 3), gravelRun = smoothstep(-0.05, 0.35, shoreMix);
+      const pebbles = Math.max(smoothstep(0.62, 0.97, wet) * gravelRun, smoothstep(0.35, 0.8, slope) * smoothstep(0.1, 0.4, rim) * 0.75 * smoothstep(-0.2, 0.25, fbm(n4, x * 0.2 + 3, z * 0.2, 2)));
+      const bank = smoothstep(0.15, 0.55, wet) * (1 - smoothstep(0.7, 0.95, wet));            // above the waterline, not at it
+      moss = Math.max(moss, bank * colony * 0.4, smoothstep(0.12, 0.5, rim) * colony * 0.5) * (1 - pebbles);
+      // banks: dark wet soil down to the water, gravel at the edge (the shader darkens and glosses the wet band)
+      const litterReach = smoothstep(0.1, -0.35, shoreMix);          // litter down to the water where nothing sorts it
+      const dirt = Math.max(path, smoothstep(0.2, 0.7, wet) * 0.85 * (1 - litterReach * 0.7), 0.25 * smoothstep(0.1, 0.5, fbm(n2, x * 0.11 + 7, z * 0.11, 3))) * (1 - pebbles);
       const litter = Math.max(0, 1 - dirt - pebbles - moss * 0.8);
       const sum = litter + dirt + pebbles + moss || 1;
       const o = v * 4;
