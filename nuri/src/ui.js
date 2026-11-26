@@ -28,6 +28,10 @@ export class UI {
     const openNb = (e) => { e.preventDefault(); e.stopPropagation(); this.fire('nbpause'); };
     nb.addEventListener('click', openNb); nb.addEventListener('touchstart', openNb, { passive: false });
     nb.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') openNb(e); });
+    // closing a section: back to the contents when the notebook is open in play, otherwise the notebook shuts
+    const shut = (id) => () => (this.section ? this.go('toc') : this.closeBook($(id), () => $(id).classList.add('hidden')));
+    $('h-close').onclick = shut('help'); $('s-close').onclick = shut('settings'); $('jr-close').onclick = shut('journal');
+    $('bm-close').onclick = () => (this.section ? this.go('toc') : this.fire('mapkey'));
     // index tabs on the edge of every spread: jump between sections of the notebook
     const SECTION = { pause: 'toc', journal: 'journal', bigmap: 'map', settings: 'settings', help: 'help' };
     for (const nav of document.querySelectorAll('.book .tabs')) {
@@ -70,9 +74,8 @@ export class UI {
       if (hasSave && !armed) { armed = true; $('btn-new').textContent = '저장이 지워져요 · 한 번 더 누르면 시작'; return; }
       this.fire('new');
     };
-    $('btn-settings').onclick = () => this.openSettings();
-    $('btn-help').onclick = () => $('help').classList.remove('hidden');
-    $('h-close').onclick = () => $('help').classList.add('hidden');
+    $('btn-settings').onclick = () => { this.openSettings(); this.openBook($('settings')); };
+    $('btn-help').onclick = () => this.openBook($('help'));
   }
   startPlay() { $('title').classList.add('hidden'); $('hud').classList.remove('hidden'); document.body.classList.remove('menu-open'); document.body.classList.add('playing'); }
 
@@ -173,7 +176,7 @@ export class UI {
       else { const first = items.findIndex((e) => !e.unknown); if (first >= 0) body.children[first].click(); else show(tab, null); }
     };
     for (const b of el.querySelectorAll('.jr-tabs button')) b.onclick = () => render(b.dataset.tab);
-    $('jr-close').onclick = () => el.classList.add('hidden');
+
     el.classList.remove('hidden'); render('relics');
   }
   // ---- ring trials
@@ -207,7 +210,7 @@ export class UI {
   ability(title, desc) { $('ability-title').textContent = title; $('ability-desc').textContent = desc; const el = $('ability'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 6100); }
 
   showPause(info, status) {
-    $('pause').classList.remove('hidden'); document.body.classList.add('menu-open', 'paused');
+    document.body.classList.add('menu-open', 'paused'); this.section = 'toc';
     $('save-info').textContent = info || '';
     // today's record: what the robot is doing now, then the tallies, written as notebook lines
     const box = $('ps-status'); box.innerHTML = '';
@@ -231,18 +234,92 @@ export class UI {
     $('p-help').onclick = () => this.go('help');
     $('p-map').onclick = () => this.go('map');
     $('p-title').onclick = () => this.fire('title');
-    $('h-close').onclick = () => $('help').classList.add('hidden');
+    this.openBook($('pause'));
   }
-  // move to a section of the notebook (from the contents page or an index tab)
+  // ================================================================ the notebook in the hands
+  // Every section is a spread of the same notebook. Opening: it comes up and the front cover swings open on the spine;
+  // closing: the left-hand pages swing back over as the cover and it goes down; moving between sections: one leaf
+  // turns, carrying the page you were reading on its front and the next one on its back. While a leaf turns, the far
+  // page keeps the old writing until the leaf lands on it.
+  // a page's writing copied onto a face (ids dropped; the copy is placed for the face, not the book)
+  pageCopy(pg, inset) {
+    const c = pg.cloneNode(true); c.removeAttribute('id'); for (const e of c.querySelectorAll('[id]')) e.removeAttribute('id');
+    c.classList.add('pg-copy'); c.style.visibility = ''; Object.assign(c.style, inset, { position: 'absolute', overflow: 'hidden' }); c.scrollTop = pg.scrollTop; return c;
+  }
+  openBook(el, done) {
+    el.classList.remove('hidden');
+    const book = el.querySelector('.book'); this.clearBook(book);
+    const flap = document.createElement('div'); flap.className = 'flap';
+    const front = document.createElement('i'); front.className = 'face cover';
+    const back = document.createElement('i'); back.className = 'face inside';
+    // the left page as it will lie once the cover is over: the spread's left half with its writing
+    const pl = book.querySelector('.pg-l'); if (pl) back.appendChild(this.pageCopy(pl, { left: '19.2%', right: '9.2%', top: '11.5%', bottom: '11%' }));
+    flap.append(front, back); book.appendChild(flap);
+    book.classList.add('closed', 'enter');
+    const end = (e) => { if (e.target !== flap) return; flap.remove(); book.classList.remove('closed', 'enter'); this._bookAnim = null; done?.(); };
+    flap.addEventListener('animationend', end); this._bookAnim = flap;
+  }
+  closeBook(el, done) {
+    const book = el.querySelector('.book'); this.clearBook(book);
+    const flap = document.createElement('div'); flap.className = 'flap shut';
+    const front = document.createElement('i'); front.className = 'face cover';
+    const back = document.createElement('i'); back.className = 'face inside';
+    const pl = book.querySelector('.pg-l'); if (pl) back.appendChild(this.pageCopy(pl, { left: '19.2%', right: '9.2%', top: '11.5%', bottom: '11%' }));
+    flap.append(front, back); book.appendChild(flap);
+    book.classList.add('closing');
+    const end = (e) => { if (e.target !== book) return; book.removeEventListener('animationend', end); flap.remove(); book.classList.remove('closing'); this._bookAnim = null; done?.(); };
+    book.addEventListener('animationend', end); this._bookAnim = flap;
+  }
+  clearBook(book) { for (const x of book.querySelectorAll('.flap, .leaf, .pg-hold, .turn-shade')) x.remove(); book.classList.remove('closed', 'enter', 'closing'); for (const p of book.querySelectorAll('.pg')) p.style.visibility = ''; }
+  // turn one leaf from the section on screen to the next one
+  turn(fromEl, toEl, forward, done) {
+    const fb = fromEl.querySelector('.book'), tb = toEl.querySelector('.book');
+    this.clearBook(tb); this._turning = true;
+    toEl.classList.remove('hidden'); toEl.classList.add('turning');
+    const L = { left: '8.8%', right: '10.38%', top: '5.05%', bottom: '1.8%' }, R = { left: '12.19%', right: '8.8%', top: '5.05%', bottom: '1.8%' };
+    const far = forward ? 'l' : 'r', near = forward ? 'r' : 'l';
+    // the far page keeps the old writing until the leaf lands on it
+    const hold = this.pageCopy(fb.querySelector('.pg-' + far), {}); hold.className = fb.querySelector('.pg-' + far).className + ' pg-hold'; hold.style.cssText = '';
+    tb.appendChild(hold); tb.querySelector('.pg-' + far).style.visibility = 'hidden';
+    const leaf = document.createElement('div'); leaf.className = 'leaf ' + (forward ? 'fwd' : 'bwd');
+    const front = document.createElement('i'); front.className = 'face ' + (forward ? 'pr' : 'pl');
+    const back = document.createElement('i'); back.className = 'face back ' + (forward ? 'pl' : 'pr');
+    front.appendChild(this.pageCopy(fb.querySelector('.pg-' + near), forward ? R : L));
+    back.appendChild(this.pageCopy(tb.querySelector('.pg-' + far), forward ? L : R));
+    leaf.append(front, back);
+    const shade = document.createElement('i'); shade.className = 'turn-shade ' + (forward ? 'fwd' : 'bwd');
+    tb.append(shade, leaf);
+    leaf.addEventListener('animationend', (e) => {
+      if (e.target !== leaf) return;
+      leaf.remove(); hold.remove(); shade.remove(); tb.querySelector('.pg-' + far).style.visibility = '';
+      toEl.classList.remove('turning'); this._turning = false; done?.();
+    });
+    this.fire('pageturn');
+  }
+  // move to a section of the notebook (from the contents page, an index tab or a "close" on a section)
   go(where) {
-    for (const id of ['journal', 'settings', 'help']) $(id).classList.add('hidden');
-    if (where !== 'map') this.fire('closemap');
+    const ORDER = ['toc', 'journal', 'map', 'settings', 'help'], SCREEN = { toc: 'pause', journal: 'journal', map: 'bigmap', settings: 'settings', help: 'help' };
+    const cur = this.section || 'toc';
+    if (cur === where || this._turning) return;
+    const fromEl = $(SCREEN[cur]);
+    // fill the target section the usual way, then turn the leaf to it
     if (where === 'journal') this.fire('journal');
     else if (where === 'map') this.fire('openmap');
     else if (where === 'settings') this.openSettings();
     else if (where === 'help') $('help').classList.remove('hidden');
+    const toEl = $(SCREEN[where]);
+    this.section = where;
+    this.turn(fromEl, toEl, ORDER.indexOf(where) > ORDER.indexOf(cur), () => {
+      if (cur === 'map') this.fire('closemap'); else if (cur !== 'toc') fromEl.classList.add('hidden');
+    });
   }
-  hidePause() { $('pause').classList.add('hidden'); $('settings').classList.add('hidden'); $('help').classList.add('hidden'); $('journal').classList.add('hidden'); this.fire('closemap'); document.body.classList.remove('menu-open', 'paused'); }
+  hidePause() {
+    // close the notebook from whichever section is open, then put it away
+    const top = ['bigmap', 'journal', 'help', 'settings', 'pause'].map((id) => $(id)).find((el) => !el.classList.contains('hidden'));
+    const finish = () => { $('pause').classList.add('hidden'); $('settings').classList.add('hidden'); $('help').classList.add('hidden'); $('journal').classList.add('hidden'); this.fire('closemap'); };
+    document.body.classList.remove('paused'); this.section = null;
+    if (top) this.closeBook(top, () => { finish(); document.body.classList.remove('menu-open'); }); else { finish(); document.body.classList.remove('menu-open'); }
+  }
   pauseOpen() { return !$('pause').classList.contains('hidden'); }
   setSaveInfo(t) { $('save-info').textContent = t; }
 
@@ -256,7 +333,7 @@ export class UI {
     $('s-weather').value = S.weather; $('s-weather').onchange = (e) => { S.weather = e.target.value; apply(); };
     $('s-quality').value = S.quality;
     $('s-quality').onchange = (e) => { S.quality = e.target.value; apply(); $('quality-note').textContent = '그래픽 품질은 페이지를 새로고침하면 적용돼요.'; };
-    $('s-close').onclick = () => $('settings').classList.add('hidden');
+
     this.renderPadMap();
   }
   renderPadMap() {

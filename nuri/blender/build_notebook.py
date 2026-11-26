@@ -247,6 +247,41 @@ def build_spread():
     render(sc, 'spread')
     print('SPREAD', dict(W=W, H=H, PW=PW, PH=PH, hx=hx, hy=hy, cy=-0.002))
 
+# ------------------------------------------------------------------ the front cover of the big notebook (closed)
+def build_cover():
+    """Same framing as the spread; only the right half (from the spine to the fore-edge) is the cover, which the UI
+    swings open on the spine. A blind hinge groove next to the spine, stitching, foil lettering, the elastic band."""
+    sc = reset()
+    PW, PH = 0.118, 0.150
+    CM = 0.0092
+    hx, hy = PW + CM, PH / 2 + CM
+    x0 = -0.0025; half = (hx - x0) / 2; cx = (hx + x0) / 2
+    ob = slab('cover', half, hy, 0.009, 0.0, 0.0026, leather_mat(wear_sdf=(half, hy, 0.009)))
+    ob.location.x = cx
+    path = [(x + cx, y) for x, y in rounded_rect(half - 0.0034, hy - 0.0034, 0.0058, 10)]
+    stitches(path, 0.0026)
+    # the hinge: a groove pressed into the leather a few millimetres from the spine
+    groove = flat_mat('groove', (0.035, 0.022, 0.015), rough=0.7)
+    grid_sheet('groove', 0.0068, 0.0084, -hy + 0.002, hy - 0.002, lambda x, y: 0.00262 - 0.0002 * math.sin((x - 0.0068) / 0.0016 * math.pi), groove, nx=4, ny=10)
+    # foil lettering
+    foil = flat_mat('foil', (0.62, 0.46, 0.22), rough=0.36); foil.node_tree.nodes['Principled BSDF'].inputs['Metallic'].default_value = 0.85
+    def text(body, size, x, y):
+        t = bpy.data.curves.new('t', 'FONT'); t.body = body; t.size = size; t.extrude = 0.00015; t.align_x = 'CENTER'
+        try: t.font = bpy.data.fonts.load('/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf')
+        except Exception: pass
+        o = bpy.data.objects.new('t', t); bpy.context.collection.objects.link(o); o.location = (x, y, 0.00262); o.data.materials.append(foil)
+    mid = (0.0084 + hx - 0.0062) / 2
+    text('SV-7', 0.016, mid, hy - 0.040)
+    text('FIELD NOTES', 0.0062, mid, hy - 0.052)
+    text('RESEARCH UNIT  /  SURVEY', 0.0034, mid, -hy + 0.016)
+    band = band_mat()
+    grid_sheet('band', hx - 0.0062, hx + 0.0006, -hy - 0.001, hy + 0.001, lambda x, y: 0.0028 + 0.0006 * math.sin(min(1, (hx - x) / 0.006) * math.pi), band, nx=8, ny=40)
+    W = 2 * hx + 0.012
+    H = 2 * hy + 0.012
+    camera(sc, 0, -0.002, W, 2000, int(2000 * H / W))
+    lights()
+    render(sc, 'cover')
+
 # ------------------------------------------------------------------ the pocket notebook (HUD)
 def build_pocket(open_):
     sc = reset()
@@ -313,6 +348,7 @@ def build_ring():
     render(sc, 'ring')
 
 if 'spread' in WHICH: build_spread()
+if 'cover' in WHICH: build_cover()
 if 'pocket_open' in WHICH: build_pocket(True)
 if 'pocket_shut' in WHICH: build_pocket(False)
 if 'disc' in WHICH: build_disc()

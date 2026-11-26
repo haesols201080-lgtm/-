@@ -76,9 +76,62 @@ button:focus-visible, select:focus-visible, input:focus-visible, #nb:focus-visib
 #pause, #settings, #help, #journal, #bigmap { background: radial-gradient(ellipse at 50% 55%, rgba(12, 8, 5, .55), rgba(6, 4, 3, .82)); }
 #settings, #help { z-index: 30; } #journal { z-index: 31; } #bigmap { z-index: 32; } #choice { z-index: 33; background: rgba(8, 6, 4, .6); }
 .book { position: relative; width: min(94vw, calc(92vh * 1.72)); height: min(92vh, calc(min(94vw, calc(92vh * 1.72)) / 1.477));
-  filter: drop-shadow(0 26px 40px rgba(0, 0, 0, .55)); container-type: size; color: var(--ink); isolation: isolate; }
+  container-type: size; color: var(--ink); isolation: isolate; }
 /* the rendered spread is a layer of its own so the index tabs can sit under it and stick out past its edge */
-.book::before { content: ''; position: absolute; inset: 0; z-index: 0; background: url('/ui/spread.webp') center / 100% 100% no-repeat; pointer-events: none; }
+.book::before { content: ''; position: absolute; inset: 0; z-index: 0; background: url('/ui/spread.webp') center / 100% 100% no-repeat; pointer-events: none;
+  filter: drop-shadow(0 26px 40px rgba(0, 0, 0, .55)); }
+
+/* ---- the notebook moving: cover open / shut, a leaf turning ---- */
+.flap, .leaf { position: absolute; z-index: 5; transform-style: preserve-3d; pointer-events: none; }
+.flap { top: 0; bottom: 0; left: 50%; width: 50%; transform-origin: 0 50%; animation: coverOpen .95s cubic-bezier(.45, .05, .25, 1) .28s both; }
+.flap.shut { animation: coverShut .7s cubic-bezier(.55, .05, .3, 1) both; }
+.flap .face, .leaf .face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; overflow: hidden; }
+.flap .cover { background: url('/ui/cover.webp') center / 100% 100% no-repeat; }
+.flap .inside { background: url('/ui/spread.webp') 0 0 / 200% 100% no-repeat; transform: rotateY(180deg); }
+/* light across the moving cover: it darkens as it stands up, the inside brightens as it lies down */
+.flap .face::after, .leaf .face::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: 0; }
+.flap .cover::after { background: linear-gradient(90deg, rgba(0, 0, 0, .5), rgba(0, 0, 0, .1)); animation: shadeOut .95s ease .28s both; }
+.flap .inside::after { background: linear-gradient(270deg, rgba(0, 0, 0, .45), rgba(0, 0, 0, .05)); animation: shadeIn .95s ease .28s both; }
+.flap.shut .cover::after { animation: shadeIn .7s ease both reverse; } .flap.shut .inside::after { animation: shadeOut .7s ease both reverse; }
+@keyframes coverOpen { from { transform: perspective(2600px) rotateY(0deg); } to { transform: perspective(2600px) rotateY(-180deg); } }
+@keyframes coverShut { from { transform: perspective(2600px) rotateY(-180deg); } to { transform: perspective(2600px) rotateY(0deg); } }
+@keyframes shadeOut { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes shadeIn { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+/* the notebook comes up into view, and goes back down once shut */
+.book.enter { animation: bookIn .42s cubic-bezier(.2, .8, .3, 1) both; }
+.book.closing { animation: bookOut .38s cubic-bezier(.5, 0, .8, .4) .68s both; }
+@keyframes bookIn { from { transform: translateY(9%) rotate(-2.5deg) scale(.94); opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes bookOut { from { transform: none; opacity: 1; } to { transform: translateY(10%) rotate(2deg) scale(.95); opacity: 0; } }
+/* while shut, only the right half (under the cover) is there; the left half is what the cover's inside becomes */
+.book.closed::before, .book.closing::before { clip-path: inset(0 0 0 50%); }
+.book.closed > .pg-l, .book.closing > .pg-l, .book.closing > .tabs { visibility: hidden; }
+.book.closed > .pg-r { animation: none; }
+.book.closed .tabs { visibility: hidden; }
+.screen.turning { background: none !important; z-index: 60 !important; }
+/* a leaf: one page of the spread, its front the page you were on, its back the next one */
+.leaf { top: 7.3%; bottom: 9.5%; animation: .82s cubic-bezier(.42, .02, .28, 1) both; }
+.leaf.fwd { left: 50%; right: 5.7%; transform-origin: 0 50%; animation-name: leafFwd; }
+.leaf.bwd { left: 5.7%; right: 50%; transform-origin: 100% 50%; animation-name: leafBwd; }
+.leaf .face { background: url('/ui/spread.webp') 0 43.45% / 225.7% 120.2% no-repeat; }
+.leaf .face.pr { background-position-x: 89.77%; border-radius: 0 1.1cqw 1.1cqw 0; }
+.leaf .face.pl { background-position-x: 10.23%; border-radius: 1.1cqw 0 0 1.1cqw; }
+.leaf .face.back { transform: rotateY(180deg); }
+.leaf .face::after { animation: shadeOut .82s ease both; }
+.leaf.fwd .face:not(.back)::after { background: linear-gradient(90deg, rgba(0, 0, 0, .42), rgba(0, 0, 0, .08) 60%, rgba(255, 245, 225, .1)); }
+.leaf.fwd .face.back::after { background: linear-gradient(270deg, rgba(0, 0, 0, .42), rgba(0, 0, 0, .08) 60%, rgba(255, 245, 225, .1)); }
+.leaf.bwd .face:not(.back)::after { background: linear-gradient(270deg, rgba(0, 0, 0, .42), rgba(0, 0, 0, .08) 60%, rgba(255, 245, 225, .1)); }
+.leaf.bwd .face.back::after { background: linear-gradient(90deg, rgba(0, 0, 0, .42), rgba(0, 0, 0, .08) 60%, rgba(255, 245, 225, .1)); }
+@keyframes leafFwd { 0% { transform: perspective(2400px) rotateY(0deg); } 45% { transform: perspective(2400px) rotateY(-80deg) translateZ(4px); }
+  100% { transform: perspective(2400px) rotateY(-180deg); } }
+@keyframes leafBwd { 0% { transform: perspective(2400px) rotateY(0deg); } 45% { transform: perspective(2400px) rotateY(80deg) translateZ(4px); }
+  100% { transform: perspective(2400px) rotateY(180deg); } }
+/* the shadow the lifting leaf throws on the page it uncovers */
+.turn-shade { position: absolute; top: 7.3%; bottom: 9.5%; z-index: 4; pointer-events: none; animation: shadeOut .82s ease both; }
+.turn-shade.fwd { left: 50%; right: 5.7%; background: linear-gradient(90deg, rgba(0, 0, 0, .35), rgba(0, 0, 0, 0) 70%); }
+.turn-shade.bwd { left: 5.7%; right: 50%; background: linear-gradient(270deg, rgba(0, 0, 0, .35), rgba(0, 0, 0, 0) 70%); }
+.pg-copy { font-size: clamp(17.5px, 3.05cqh, 26px); color: var(--ink); }
+.pg-hold { z-index: 1; }
+@media (prefers-reduced-motion: reduce) { .flap, .leaf, .book.enter, .book.closing, .turn-shade { animation-duration: .01s !important; animation-delay: 0s !important; } }
 .book > .pg { z-index: 1; }
 /* the two writing areas, inside the page margins and clear of the curl at the gutter */
 .pg { position: absolute; top: 11.5%; bottom: 11%; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; font-size: clamp(17.5px, 3.05cqh, 26px); }
@@ -183,12 +236,15 @@ dl.keys dd { margin: 0; font-size: .95em; padding: .3em 0; border-bottom: 1px so
 #nb { position: fixed; left: calc(8px + var(--safe-l)); top: max(6px, var(--safe-t)); width: clamp(210px, 23vw, 320px); aspect-ratio: 900 / 639; z-index: 13; display: none;
   pointer-events: auto; cursor: pointer; transform: rotate(-1.4deg); transform-origin: 20% 20%; filter: drop-shadow(0 8px 12px rgba(0, 0, 0, .45));
   background: url('/ui/pocket_open.webp') center / 100% 100% no-repeat; container-type: size; color: var(--ink); transition: transform .25s; }
-#nb::before { content: ''; position: absolute; inset: 0; background: url('/ui/pocket_shut.webp') center / 100% 100% no-repeat; opacity: 0; transition: opacity .35s; }
+/* the cover is hinged on the top binding: it swings up toward you and over to open, and back down to close */
+#nb::before { content: ''; position: absolute; inset: 0; z-index: 2; background: url('/ui/pocket_shut.webp') center / 100% 100% no-repeat;
+  transform-origin: 50% 7%; transform: perspective(520px) rotateX(96deg); backface-visibility: hidden; -webkit-backface-visibility: hidden;
+  transition: transform .55s cubic-bezier(.45, .05, .3, 1); }
 #nb:hover { transform: rotate(-1.4deg) translateY(2px); }
 body.playing #nb { display: block; }
 body.menu-open #nb, body.cutscene #nb { display: none; }
 /* closed when there is nothing new to read; the counts stay on the cover label */
-#nb:has(#quest.hidden)::before, #nb:has(#quest.tucked)::before { opacity: 1; }
+#nb:has(#quest.hidden)::before, #nb:has(#quest.tucked)::before { transform: perspective(520px) rotateX(0deg); transition-duration: .5s; }
 #quest { position: absolute; left: 12.5%; right: 11%; top: 19%; transition: opacity .3s; }
 #quest.tucked { opacity: 0; }
 .q-head small { display: block; font: 400 8.6cqh/1.1 var(--f-hand); color: var(--stamp); letter-spacing: .02em; }
@@ -206,7 +262,9 @@ body.menu-open #nb, body.cutscene #nb { display: none; }
 .ico { display: inline-block; flex: none; }
 .ico.shard { width: 3.6cqh; height: 6cqh; background: #3a9bb3; clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
 .ico.friend { width: 6cqh; height: 5cqh; border: 1.5px solid var(--ink); border-radius: 1px; position: relative; }
-#nb:has(#quest.hidden) .counters, #nb:has(#quest.tucked) .counters { left: 55.5%; right: 17.5%; bottom: 20%; flex-direction: column; gap: 1cqh; border-top: 0; padding-top: 0; z-index: 1; }
+#nb:has(#quest.hidden) .counters, #nb:has(#quest.tucked) .counters { left: 55.5%; right: 17.5%; bottom: 20%; flex-direction: column; gap: 1cqh; border-top: 0; padding-top: 0; z-index: 3;
+  animation: onLabel .3s ease .38s both; }
+@keyframes onLabel { from { opacity: 0; } to { opacity: 1; } }
 #nb:has(#quest.hidden) .ct b, #nb:has(#quest.tucked) .ct b { font-size: 8.6cqh; }
 #nb:has(#quest.hidden) .ct small, #nb:has(#quest.tucked) .ct small { font-size: 7cqh; }
 .ct.bump { animation: bump .4s ease; }

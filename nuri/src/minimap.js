@@ -21,7 +21,7 @@ export class Minimap {
     this.t = 0; this.open = false;
     this.cv.addEventListener('click', () => this.show(true));
     this.cv.addEventListener('touchstart', (e) => { e.stopPropagation(); e.preventDefault(); this.show(true); }, { passive: false });
-    document.getElementById('bm-close').onclick = () => this.show(false);
+
     document.getElementById('bigmap').addEventListener('click', (e) => { if (e.target.id === 'bigmap') this.show(false); });
     this.inked = document.createElement('canvas'); this.inked.width = this.inked.height = this.base.width;
     this.paintFog();
@@ -193,10 +193,14 @@ export class Minimap {
     this.drawPlayer(g, px, py, Math.atan2(Math.cos(this.player.yaw), Math.sin(this.player.yaw)) + Math.PI / 2, 1.5);
     document.getElementById('bm-explored').textContent = `숲의 ${Math.round(this.explored() * 100)}%를 그렸다. 동력 결정 ${this.gameplay.save.shards.length} / ${this.gameplay.totalShards}.`;
   }
-  show(on) {
+  // the map is a spread of the notebook: on its own (M key, a tap on the minimap) it opens and closes like the
+  // notebook; inside the open notebook the page turn shows it (animate = false)
+  show(on, animate = true) {
+    const el = document.getElementById('bigmap');
     this.open = on;
-    document.getElementById('bigmap').classList.toggle('hidden', !on);
-    if (on) this.drawBig();
+    if (on) { this.drawBig(); if (animate && this.ui?.openBook) this.ui.openBook(el); else el.classList.remove('hidden'); }
+    else if (animate && this.ui?.closeBook && !el.classList.contains('hidden')) this.ui.closeBook(el, () => el.classList.add('hidden'));
+    else el.classList.add('hidden');
   }
   update(dt) {
     this.t += dt;

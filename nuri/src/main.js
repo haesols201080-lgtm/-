@@ -376,8 +376,9 @@ async function boot() {
   input.on('respawn', () => { if (G.mode === 'play' && !G.paused) player.respawn(); });
   ui.on('resume', togglePause);
   ui.on('nbpause', () => { if (G.mode === 'play' && !G.paused && !director.active) togglePause(); });
-  ui.on('openmap', () => minimap.show(true));
-  ui.on('closemap', () => { if (minimap.open) minimap.show(false); });
+  ui.on('openmap', () => minimap.show(true, false));
+  ui.on('closemap', () => { if (minimap.open) minimap.show(false, false); });
+  ui.on('mapkey', () => minimap.show(false));
   ui.on('save', () => { ui.setSaveInfo(save() ? `저장했어요 · ${new Date().toLocaleTimeString()}` : '저장할 수 없어요 (브라우저 저장소가 막혀 있어요)'); });
   ui.on('load', () => { if (loadSave()) location.reload(); else ui.setSaveInfo('불러올 저장 기록이 없어요'); });
   ui.on('title', () => { save(); location.reload(); });
