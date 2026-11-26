@@ -8,6 +8,7 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { isTouch } from './quality.js';
 import { Input } from './input.js';
 import { Assets } from './assets.js';
@@ -23,6 +24,7 @@ import { RELICS } from './relics.js';
 import { makeGradePass, makeContactShadow } from './post.js';
 import { makeCarRide } from './carride.js';
 import { Flat, FLAT } from './flat.js';
+import { Cat } from './cat.js';
 import { clamp, damp, angleDiff } from './util.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -32,7 +34,7 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
   document.body.classList.add('house');
   const sub = document.querySelector('.ld-sub'); if (sub) sub.textContent = '2장 · 거인의 집';
   const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.02, 420);
+  const camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.02, 520);
   renderer.toneMappingExposure = 1.05;
   const physics = new RAPIER.World({ x: 0, y: -9.81, z: 0 }); physics.timestep = 1 / 60;
   const assets = new Assets(renderer, tier, (k, l) => ui.progress(0.05 + k * 0.85, l));
@@ -48,6 +50,13 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
   const input = new Input(renderer.domElement);
   const orbit = new OrbitCam(camera, ctx); orbit.set(Math.PI + 0.3, 0.35);
   const fx = new FX(scene), audio = new Audio(), director = new Director({ camera, ui });
+  // the cat, asleep on its bed by the kitchen radiator; its bolt-hole: across the kitchen, the hall, round through the
+  // living room and up the cat tree by the front window
+  const V3 = (x, y, z, leap) => Object.assign(new THREE.Vector3(x, y, z), leap ? { leap: true } : {});
+  const cat = assets.models.h_cat ? new Cat(scene, assets.models.h_cat, { tier, audio,
+    bed: { pos: V3(0.72, 0.085, 3.38), yaw: 2.3 },
+    path: [V3(0.45, 0, 2.6), V3(0.95, 0, 1.35), V3(1.75, 0, 0.7), V3(2.6, 0, 0.1), V3(2.45, 0, -1.6), V3(1.2, 0, -1.8), V3(0.2, 0, -1.7), V3(0.55, 0, -2.6), V3(0.9, 1.46, -3.6, true)],
+    perch: { pos: V3(0.9, 1.46, -3.6), yaw: -0.46 } }) : null;
   physics.step();
   // the robot's face screen lights its surroundings a little in the dark
   const faceLight = new THREE.PointLight(0x5fe6ff, 0.45, 1.1, 2); faceLight.position.set(0, 0.29, 0.14); nuri.root.add(faceLight);
@@ -58,6 +67,11 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
     const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: tier.msaa });
     const c = new EffectComposer(renderer, rt); c.setPixelRatio(renderer.getPixelRatio());
     c.addPass(new RenderPass(sc, cam));
+    if (tier.ao && sc === scene) {   // contact shadows in the corners, under the furniture, along the skirting
+      const ao = new GTAOPass(sc, cam, innerWidth, innerHeight);
+      ao.updateGtaoMaterial({ radius: 0.25, distanceExponent: 1.5, thickness: 0.6, scale: 1, samples: 12 });
+      ao.blendIntensity = 0.9; c.addPass(ao);
+    }
     if (tier.bloom) c.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.55, 0.6, 0.85));
     c.addPass(new OutputPass()); const g = makeGradePass(); c.addPass(g); c.grade = g;
     return c;
@@ -349,6 +363,7 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
       if (G.time - (G.lastSave || 0) > 60) save();
     }
     flat.update(dt, G.time);
+    if (G.mode === 'play') cat?.update(dt, player, G);
     nuri.root.position.copy(player.pos); nuri.root.rotation.y = player.yaw;
     const fo = footOffsets(), params = player.animParams(null); params.footOffset = fo.off; params.groundDrop = fo.drop;
     nuri.update(dt, params, { wind: tmp.set(0, 0, 0) });
@@ -372,5 +387,5 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
     if (composer) { composer.grade.uniforms.uTime.value = G.time; composer.render(); } else renderer.render(scene, camera);
   }
   resize(); frame();
-  window.__game = { G, player, flat, nuri, orbit, director, camera, renderer, scene, physics, ui, audio, st, play, begin, startRide, arrive, startPlay, get ride() { return ride; } };
+  window.__game = { G, player, flat, nuri, cat, orbit, director, camera, renderer, scene, physics, ui, audio, st, play, begin, startRide, arrive, startPlay, get ride() { return ride; } };
 }

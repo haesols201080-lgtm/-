@@ -14,6 +14,12 @@ SETS = {  # game name -> poly haven id
     # (the game ships only the 1024 size of tile, linen, rug, seat and denim)
     'hs_floor': 'wood_floor', 'hs_wall': 'white_plaster_02', 'hs_tile': 'floor_tiles_06', 'hs_linen': 'rough_linen', 'hs_rug': 'curly_teddy_natural',
     'hs_seat': 'poly_wool_herringbone', 'hs_denim': 'denim_fabric', 'hs_brick': 'brick_wall_02',
+    'hs_roof': 'grey_roof_01', 'hs_siding': 'white_planks_clean', 'hs_lawn': 'leafy_grass',
+    'hs_asphalt': 'asphalt_01', 'hs_pavement': 'concrete_pavement',
+    # the house for real: painted plaster, worn oak, linoleum, marble, subway tile, stained oak, veneer, jacquard, carpet, stucco
+    'hs_paint': 'painted_plaster_wall', 'hs_oak': 'wood_floor_worn', 'hs_lino': 'old_linoleum_flooring_01', 'hs_marble': 'marble_01',
+    'hs_subway': 'long_white_tiles', 'hs_stain': 'wood_table_worn', 'hs_veneer': 'mocha_oak_veneer', 'hs_jacquard': 'quatrefoil_jacquard_fabric',
+    'hs_carpet': 'dirty_carpet', 'hs_stucco': 'white_stucco_02', 'hs_fabric': 'fabric_pattern_07',
 }
 def L(p, mode):
     return Image.open(p).convert(mode)

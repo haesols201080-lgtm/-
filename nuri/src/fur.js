@@ -63,7 +63,17 @@ export function furredMesh(srcMesh, { shells = 16, length = 0.006, density = 110
           diffuseColor.rgb *= mix(uRootDark, 1.1, pow(vFurH, 0.7)) * tone * band;
         }`);
   };
-  mat.customProgramCacheKey = () => 'shellFur2';
+  mat.customProgramCacheKey = () => 'shellFur2' + (srcMesh.isSkinnedMesh ? 's' : '');
+  if (srcMesh.isSkinnedMesh) {
+    // a skinned body (the cat): the shells are instances of one skinned mesh on the same skeleton; each is pushed out
+    // along the rest normal before skinning, so the fur moves with the body
+    const ig = new THREE.InstancedBufferGeometry(); ig.index = geo.index;
+    for (const [k, a] of Object.entries(geo.attributes)) ig.setAttribute(k, a);
+    ig.instanceCount = shells + 1; ig.boundingSphere = geo.boundingSphere;
+    const sm = new THREE.SkinnedMesh(ig, mat); sm.bind(srcMesh.skeleton, srcMesh.bindMatrix);
+    sm.castShadow = true; sm.receiveShadow = true; sm.frustumCulled = false; sm.userData.fur = U;
+    return sm;
+  }
   const im = new THREE.InstancedMesh(geo, mat, shells + 1);
   const I = new THREE.Matrix4();
   for (let i = 0; i <= shells; i++) im.setMatrixAt(i, I);

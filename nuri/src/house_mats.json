@@ -1,0 +1,445 @@
+{
+"wall_paint": {
+"set": "hs_paint",
+"tile": 1.5,
+"tint": 15327957,
+"normal": 0.6,
+"rough": 1.0
+},
+"wall_bed": {
+"set": "hs_paint",
+"tile": 1.5,
+"tint": 12766159,
+"normal": 0.6,
+"rough": 1.0
+},
+"wall_kit": {
+"set": "hs_paint",
+"tile": 1.5,
+"tint": 15787466,
+"normal": 0.6,
+"rough": 1.0
+},
+"ceiling": {
+"set": "hs_stucco",
+"tile": 1.2,
+"tint": 16118507,
+"normal": 0.4,
+"rough": 1.0
+},
+"trim": {
+"set": "hs_paint",
+"tile": 0.45,
+"tint": 15986921,
+"normal": 0.25,
+"rough": 0.45
+},
+"door": {
+"set": "hs_paint",
+"tile": 0.45,
+"tint": 15855335,
+"normal": 0.25,
+"rough": 0.45
+},
+"cabinet": {
+"set": "hs_paint",
+"tile": 0.45,
+"tint": 15264482,
+"normal": 0.25,
+"rough": 0.45
+},
+"beadboard": {
+"set": "hs_paint",
+"tile": 0.45,
+"tint": 15922159,
+"normal": 0.25,
+"rough": 0.5
+},
+"ext_trim": {
+"set": "hs_paint",
+"tile": 0.5,
+"tint": 16184817,
+"normal": 0.3,
+"rough": 0.55
+},
+"siding": {
+"set": "hs_paint",
+"tile": 0.8,
+"tint": 15133673,
+"normal": 0.4,
+"rough": 0.6
+},
+"shutter": {
+"set": "hs_paint",
+"tile": 0.5,
+"tint": 2041382,
+"normal": 0.3,
+"rough": 0.55
+},
+"door_front": {
+"set": "hs_paint",
+"tile": 0.45,
+"tint": 7085077,
+"normal": 0.25,
+"rough": 0.4
+},
+"porch_floor": {
+"set": "hs_paint",
+"tile": 0.6,
+"tint": 5989741,
+"normal": 0.4,
+"rough": 0.7
+},
+"oak": {
+"set": "hs_oak",
+"tile": 1.4,
+"tint": 14270628,
+"normal": 1.0,
+"rough": 1.0
+},
+"tread": {
+"set": "hs_stain",
+"tile": 0.9,
+"tint": 12096116,
+"normal": 0.8,
+"rough": 0.8
+},
+"rail": {
+"set": "hs_stain",
+"tile": 0.6,
+"tint": 9068094,
+"normal": 0.6,
+"rough": 0.7
+},
+"bed_wood": {
+"set": "hs_veneer",
+"tile": 0.8,
+"tint": 13150352,
+"normal": 0.6,
+"rough": 0.7
+},
+"deck": {
+"set": "hs_stain",
+"tile": 1.0,
+"tint": 10390134,
+"normal": 1.0,
+"rough": 1.0
+},
+"fence": {
+"set": "hs_stain",
+"tile": 1.0,
+"tint": 9338478,
+"normal": 1.0,
+"rough": 1.0
+},
+"tile": {
+"set": "hs_lino",
+"tile": 1.2,
+"tint": 16777215,
+"normal": 0.8,
+"rough": 1.0
+},
+"splash": {
+"set": "hs_subway",
+"tile": 0.6,
+"tint": 16777215,
+"normal": 1.0,
+"rough": 1.0
+},
+"counter": {
+"set": "hs_marble",
+"tile": 1.0,
+"tint": 16777215,
+"normal": 0.6,
+"rough": 0.6
+},
+"brick": {
+"set": "hs_brick",
+"tile": 0.9,
+"tint": 12883076,
+"normal": 1.0,
+"rough": 1.0
+},
+"hearth": {
+"set": "hs_pavement",
+"tile": 0.8,
+"tint": 10130831,
+"normal": 1.0,
+"rough": 1.0
+},
+"concrete": {
+"set": "hs_pavement",
+"tile": 1.6,
+"tint": 12762806,
+"normal": 1.0,
+"rough": 1.0
+},
+"foundation": {
+"set": "hs_pavement",
+"tile": 1.2,
+"tint": 12104876,
+"normal": 1.0,
+"rough": 1.0
+},
+"shingle": {
+"set": "hs_roof",
+"tile": 1.2,
+"tint": 10921638,
+"normal": 1.0,
+"rough": 1.0
+},
+"lawn": {
+"set": "hs_lawn",
+"tile": 2.0,
+"tint": 9215094,
+"normal": 1.0,
+"rough": 1.0
+},
+"shade": {
+"set": "hs_linen",
+"tile": 0.5,
+"tint": 15656658,
+"normal": 1.0,
+"rough": 1.0
+},
+"curtain": {
+"set": "hs_jacquard",
+"tile": 0.6,
+"tint": 14076078,
+"normal": 0.8,
+"rough": 1.0
+},
+"linen": {
+"set": "hs_linen",
+"tile": 0.5,
+"tint": 15000026,
+"normal": 1.0,
+"rough": 1.0
+},
+"mattress": {
+"set": "hs_linen",
+"tile": 0.5,
+"tint": 15986922,
+"normal": 0.8,
+"rough": 1.0
+},
+"duvet": {
+"set": "hs_linen",
+"tile": 0.45,
+"tint": 12174543,
+"normal": 1.0,
+"rough": 1.0
+},
+"throw": {
+"set": "hs_jacquard",
+"tile": 0.4,
+"tint": 10517084,
+"normal": 1.0,
+"rough": 1.0
+},
+"knit": {
+"set": "hs_linen",
+"tile": 0.25,
+"tint": 9080700,
+"normal": 1.2,
+"rough": 1.0
+},
+"jeans": {
+"set": "hs_denim",
+"tile": 0.35,
+"tint": 16777215,
+"normal": 1.0,
+"rough": 1.0
+},
+"towel": {
+"set": "hs_linen",
+"tile": 0.3,
+"tint": 14267532,
+"normal": 1.2,
+"rough": 1.0
+},
+"coat": {
+"set": "hs_linen",
+"tile": 0.3,
+"tint": 3816758,
+"normal": 1.0,
+"rough": 1.0
+},
+"rug": {
+"set": "hs_carpet",
+"tile": 0.9,
+"tint": 12622470,
+"normal": 1.0,
+"rough": 1.0
+},
+"rug_bed": {
+"set": "hs_rug",
+"tile": 0.8,
+"tint": 14472132,
+"normal": 1.0,
+"rough": 1.0
+},
+"runner": {
+"set": "hs_carpet",
+"tile": 0.6,
+"tint": 11884618,
+"normal": 1.0,
+"rough": 1.0
+},
+"carpet_grey": {
+"set": "hs_rug",
+"tile": 0.6,
+"tint": 10790052,
+"normal": 1.0,
+"rough": 1.0
+},
+"lattice": {
+"set": "hs_paint",
+"tile": 0.5,
+"tint": 15921902,
+"normal": 0.3,
+"rough": 0.6
+},
+"book_page": {
+"set": "hs_linen",
+"tile": 0.1,
+"tint": 15722192,
+"normal": 0.5,
+"rough": 1.0
+},
+"soot": {
+"color": "#2c2927",
+"rough": 1.0,
+"metal": 0
+},
+"iron": {
+"color": "#cececb",
+"rough": 0.45,
+"metal": 0.3
+},
+"steel": {
+"color": "#cecece",
+"rough": 0.25,
+"metal": 1.0
+},
+"brass": {
+"color": "#dac495",
+"rough": 0.3,
+"metal": 1.0
+},
+"black_metal": {
+"color": "#353535",
+"rough": 0.45,
+"metal": 0.5
+},
+"glass": {
+"color": "#e7edf1",
+"rough": 0.05,
+"metal": 0
+},
+"gutter": {
+"color": "#efefec",
+"rough": 0.4,
+"metal": 0
+},
+"fridge": {
+"color": "#efefec",
+"rough": 0.25,
+"metal": 0
+},
+"asphalt": {
+"color": "#505050",
+"rough": 0.85,
+"metal": 0
+},
+"lamp_glass": {
+"color": "#ffedcb",
+"rough": 0.2,
+"metal": 0
+},
+"sheathing": {
+"color": "#7c7c7c",
+"rough": 1.0,
+"metal": 0
+},
+"vent": {
+"color": "#e1e1de",
+"rough": 0.5,
+"metal": 0
+},
+"flue": {
+"color": "#b38976",
+"rough": 0.8,
+"metal": 0
+},
+"sisal": {
+"color": "#cebfa2",
+"rough": 1.0,
+"metal": 0
+},
+"plastic_white": {
+"color": "#f1f1ef",
+"rough": 0.35,
+"metal": 0
+},
+"plastic_dark": {
+"color": "#454548",
+"rough": 0.4,
+"metal": 0
+},
+"enamel": {
+"color": "#f3f3f1",
+"rough": 0.2,
+"metal": 0
+},
+"dust": {
+"color": "#c4c0bc",
+"rough": 1.0,
+"metal": 0
+},
+"sock": {
+"color": "#7c89aa",
+"rough": 1.0,
+"metal": 0
+},
+"cover_red": {
+"color": "#a0453f",
+"rough": 0.6,
+"metal": 0
+},
+"cover_blue": {
+"color": "#3f5989",
+"rough": 0.6,
+"metal": 0
+},
+"cover_green": {
+"color": "#507c61",
+"rough": 0.6,
+"metal": 0
+},
+"cover_tan": {
+"color": "#c4ad90",
+"rough": 0.6,
+"metal": 0
+},
+"cardboard": {
+"color": "#bca281",
+"rough": 0.95,
+"metal": 0
+},
+"bin_plastic": {
+"color": "#ced7dd",
+"rough": 0.35,
+"metal": 0
+},
+"ceramic": {
+"color": "#edece7",
+"rough": 0.15,
+"metal": 0
+},
+"mug_blue": {
+"color": "#6181aa",
+"rough": 0.2,
+"metal": 0
+}
+}

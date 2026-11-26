@@ -31,7 +31,7 @@ export class Director {
     if (A.i >= A.shots.length) { this.finish(false); return; }
     const s = A.shots[A.i];
     s.onStart?.();
-    this.shot = { s, t: 0, from: this.resolve(s.from), to: this.resolve(s.to ?? s.from), lf: this.resolve(s.lookFrom), lt: this.resolve(s.lookTo ?? s.lookFrom) };
+    this.shot = s.follow ? { s, t: 0 } : { s, t: 0, from: this.resolve(s.from), to: this.resolve(s.to ?? s.from), lf: this.resolve(s.lookFrom), lt: this.resolve(s.lookTo ?? s.lookFrom) };
   }
   // jump straight to a given shot list entry (dialogue cuts)
   cut(shot) { const A = this.active; if (!A) return; A.shots.splice(A.i + 1, 0, shot); this.next(); }
@@ -50,13 +50,14 @@ export class Director {
     // follow moving targets: re-resolve the look point every frame when given as a function
     const lf = typeof s.lookFrom === 'function' && s.track ? this.resolve(s.lookFrom) : S.lf;
     const lt = typeof (s.lookTo ?? s.lookFrom) === 'function' && s.track ? this.resolve(s.lookTo ?? s.lookFrom) : S.lt;
-    if (s.orbit) {
+    if (s.follow) s.follow(this.cam.position, this.look, S.t);   // a camera carried by something (a point of view)
+    else if (s.orbit) {
       // circle a centre point: from/to give start/end angle via their offsets
       const c = lt, a0 = Math.atan2(S.from.z - c.z, S.from.x - c.x), a1 = a0 + s.orbit, r = Math.hypot(S.from.x - c.x, S.from.z - c.z);
       const a = a0 + (a1 - a0) * e;
       this.cam.position.set(c.x + Math.cos(a) * r, S.from.y + (S.to.y - S.from.y) * e, c.z + Math.sin(a) * r);
     } else this.cam.position.lerpVectors(S.from, S.to, e);
-    this.look.lerpVectors(lf, lt, e);
+    if (!s.follow) this.look.lerpVectors(lf, lt, e);
     // never inside a trunk or a rock: pull the camera in front of whatever stands between it and its subject
     if (this.collide) this.collide(this.look, this.cam.position);
     this.cam.lookAt(this.look);

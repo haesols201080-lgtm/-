@@ -89,8 +89,9 @@ export const TREES = ['pine_0', 'pine_1', 'pine_2', 'pine_3', 'fir_4', 'fir_5', 
 export const SAPLINGS = []; // (the Blender saplings read as stacked card tiers; scanned saplings are used instead)
 export const SNAGS = ['snag_9', 'snag_10'];
 // chapter 2: the stranger's flat (Poly Haven scans, processed by blender/process_house_models.py)
-export const HOUSE_MODELS = ['rubber_boots', 'wicker_basket_02', 'Sofa_01', 'ArmChair_01', 'CoffeeTable_01', 'television_02', 'ClassicNightstand_01', 'GreenChair_01',
-  'WoodenTable_02', 'desk_lamp_arm_01', 'potted_plant_02', 'potted_plant_04', 'Ottoman_01', 'gamepad', 'ceramic_vase_01', 'cardboard_box_01', 'ClassicConsole_01'];
+export const HOUSE_MODELS = ['house_arch', 'wicker_basket_02', 'cat'];   // (the modelled house carries its own furniture)
+// outside the house and along the road: chapter 1's conifers (their light versions) and two scanned grasses
+export const HOUSE_TREES = ['pine_0', 'pine_2', 'fir_4', 'fir_14'];
 export const PROPS = ['crate', 'fence_picket', 'fence_rail', 'gate_pillar', 'gate_leaf', 'plate_sf_base', 'plate_sf_top', 'lift_deck', 'lift_head', 'lift_counter', 'ibeam', 'socket', 'cell', 'shard', 'booster', 'ball'];
 
 export class Assets {
@@ -227,25 +228,51 @@ export class Assets {
   // city HDRI (Poly Haven "rooftop_night", CC0) for the view and the reflections
   async loadHouse() {
     const T = this.tex, tier = this.tier;
-    this.total = HOUSE_MODELS.length + 1 + 7 + 1;
-    const [floor, wall, tile, linen, rug, seat, denim] = await Promise.all([
+    this.total = HOUSE_MODELS.length + HOUSE_TREES.length + 2 + 1 + 13 + 2 + 10;
+    const [floor, wall, tile, linen, rug, seat, denim, brick, roof, siding, lawn, asphalt, pavement, bark, twig] = await Promise.all([
       this.set('hs_floor'), this.set('hs_wall'), this.set('hs_tile', { size: 1024 }), this.set('hs_linen', { size: 1024 }),
-      this.set('hs_rug', { size: 1024 }), this.set('hs_seat', { size: 1024 }), this.set('hs_denim', { size: 1024 }),
+      this.set('hs_rug', { size: 1024 }), this.set('hs_seat', { size: 1024 }), this.set('hs_denim', { size: 1024 }), this.set('hs_brick', { size: 1024 }),
+      this.set('hs_roof', { size: 1024 }), this.set('hs_siding', { size: 1024 }), this.set('hs_lawn', { size: 1024 }),
+      this.set('hs_asphalt', { size: 1024 }), this.set('hs_pavement', { size: 1024 }),
+      this.set('ph_bark', { size: 1024 }), this.set('ph_twig', { alpha: true, size: 2048 }),
     ]);
-    Object.assign(T, { floor, wall, tile, linen, rug, seat, denim });
-    const hname = `${BASE}hdri/rooftop_night_${tier.texSize >= 2048 ? '2k' : '1k'}`;
-    const hdr = import.meta.env.PROD ? await this.loadRGBEPair(hname) : await new HDRLoader().setDataType(THREE.HalfFloatType).loadAsync(`${hname}.hdr`);
-    hdr.mapping = THREE.EquirectangularReflectionMapping; T.hdr = hdr;
-    const pm = new THREE.PMREMGenerator(this.renderer); T.envMap = pm.fromEquirectangular(hdr).texture; pm.dispose();
+    Object.assign(T, { floor, wall, tile, linen, rug, seat, denim, brick, roof, siding, lawn, asphalt, pavement, bark, twig });
+    // the modelled house's own scanned sets (painted plaster, worn oak, linoleum, marble, subway tile, stained oak,
+    // veneer, jacquard, carpet, stucco), and all of them by their names for its materials (src/house_mats.json)
+    const more = ['hs_paint', 'hs_oak', 'hs_lino', 'hs_marble', 'hs_subway', 'hs_stain', 'hs_veneer', 'hs_jacquard', 'hs_carpet', 'hs_stucco'];
+    const got = await Promise.all(more.map((n) => this.set(n, { size: 1024 })));
+    T.sets = { hs_floor: floor, hs_wall: wall, hs_tile: tile, hs_linen: linen, hs_rug: rug, hs_seat: seat, hs_denim: denim, hs_brick: brick, hs_roof: roof,
+      hs_siding: siding, hs_lawn: lawn, hs_asphalt: asphalt, hs_pavement: pavement };
+    more.forEach((n, i) => { T.sets[n] = got[i]; });
+    // the house's baked night light (blender/build_house.py --bake; tools/lightmap_pack.py), if it is there
+    const lm = async (n) => { try { const t = await this.texture(`${BASE}tex/${n}.webp`, true); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.channel = 1; return t; } catch (e) { return null; } };
+    [T.lmInt, T.lmExt] = await Promise.all([lm('lm_int'), lm('lm_ext')]);
+    // skies: the night city (Poly Haven "rooftop_night") for the house, and the forest's daylight sky for the start of the drive
+    const hdri = async (name) => {
+      const h = import.meta.env.PROD ? await this.loadRGBEPair(`${BASE}hdri/${name}`) : await new HDRLoader().setDataType(THREE.HalfFloatType).loadAsync(`${BASE}hdri/${name}.hdr`);
+      h.mapping = THREE.EquirectangularReflectionMapping; return h;
+    };
+    const [hdr, day] = await Promise.all([hdri(`rooftop_night_${tier.texSize >= 2048 ? '2k' : '1k'}`), hdri('forest_slope_1k')]);
+    T.hdr = hdr; T.hdrDay = day;
+    const pm = new THREE.PMREMGenerator(this.renderer); T.envMap = pm.fromEquirectangular(hdr).texture; T.envDay = pm.fromEquirectangular(day).texture; pm.dispose();
     this.step('도시의 밤');
-    const queue = [['nuri'], ...HOUSE_MODELS.map((m) => [`house/${m}`, 'h_' + m])];
+    const queue = [['nuri'], ...HOUSE_MODELS.map((m) => [`house/${m}`, 'h_' + m]), ...HOUSE_TREES.map((t) => [`trees/${t}_lod1`, 't_' + t]),
+      ['ph/grass_medium_01', 'g_grass_01'], ['ph/grass_medium_02', 'g_grass_02']];
     const worker = async () => { while (queue.length) { const [p, k] = queue.shift(); await this.gltf(p, k); } };
     await Promise.all([worker(), worker(), worker(), worker()]);
-    for (const [k, g] of Object.entries(this.models)) if (k.startsWith('h_')) g.scene.traverse((o) => {
+    for (const [k, g] of Object.entries(this.models)) if (k.startsWith('h_') || k.startsWith('g_')) g.scene.traverse((o) => {
       if (!o.isMesh) return; o.castShadow = true; o.receiveShadow = true;
-      const m = o.material; if (m.alphaTest > 0 || m.transparent) { m.transparent = false; m.alphaTest = 0.45; m.side = THREE.DoubleSide; }
-      m.envMapIntensity = 0.9;
+      for (const m of [o.material].flat()) {
+        if (/glass/i.test(m.name)) { m.transparent = true; m.opacity = 0.22; m.depthWrite = false; m.roughness = 0.05; m.alphaTest = 0; o.castShadow = false; }
+        else if (/flame/i.test(m.name)) o.visible = false;                        // (the candles are not lit tonight)
+        else if (m.alphaTest > 0 || m.transparent) { m.transparent = false; m.alphaTest = 0.45; m.side = THREE.DoubleSide; }
+        m.envMapIntensity = 0.9;
+      }
     });
+    // conifers: the scanned bark and the fir needle atlas (the same as in the forest, without the forest's shader tricks)
+    const M = this.mats;
+    M.hBark = new THREE.MeshStandardMaterial({ map: bark.map, normalMap: bark.normal, roughnessMap: bark.orm, vertexColors: true, color: new THREE.Color(1.15, 1.15, 1.15), roughness: 1, metalness: 0 });
+    M.hTwig = new THREE.MeshStandardMaterial({ map: twig.map, normalMap: twig.normal, alphaTest: 0.4, side: THREE.DoubleSide, color: new THREE.Color(0.5, 0.58, 0.42), roughness: 0.85, metalness: 0, envMapIntensity: 0.5 });
   }
 
   buildMaterials() {

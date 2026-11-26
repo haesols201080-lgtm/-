@@ -215,8 +215,8 @@ async function boot() {
   let cap = null;
   const prepCapture = async () => {
     if (cap) return cap;
-    const [boots, basket, denim] = await Promise.all([assets.gltf('house/rubber_boots', 'house_boots'), assets.gltf('house/wicker_basket_02', 'house_basket'), assets.set('hs_denim', { size: 1024 })]);
-    const legs = makeLegs(boots, { denim }), hand = makeHand({}, assets.models.relic_garden_gloves_01);
+    const [boots, basket, denim, linen, headM] = await Promise.all([assets.gltf('house/rubber_boots', 'house_boots'), assets.gltf('house/wicker_basket_02', 'house_basket'), assets.set('hs_denim', { size: 1024 }), assets.set('hs_linen', { size: 1024 }), assets.gltf('house/stranger_head', 'house_head')]);
+    const hand = makeHand({}, assets.models.relic_garden_gloves_01), legs = makeLegs(boots, { denim, linen }, hand, headM); legs.hand = hand.root;
     // a lidded wicker basket, big enough for the robot (the scan is 21 cm across; this one is a picnic hamper)
     const bk = new THREE.Group(), src = basket.scene.clone(true);
     let lid = null; src.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; if (/lid/.test(o.name)) lid = o; } });
@@ -229,15 +229,15 @@ async function boot() {
   };
   const weave = document.getElementById('weave');
   CS.capture = async () => {
-    G.capturing = true;
+    G.capturing = true; G.hRest = null; G.crouch = 0;
     const c = await prepCapture();
     const P = player.pos.clone(), f = V(0, 0, -1), sd = V(1, 0, 0), back = V(0, 0, 1), up = V(0, 1, 0);
     player.yaw = Math.PI; player.vel.set(0, 0, 0);
     const gy = (x, z) => gameplay.groundY(x, z);
     // the stranger walks up the path behind the robot and stops just behind it
-    const L0 = P.clone().addScaledVector(back, 4.2), L1 = P.clone().addScaledVector(back, 0.62);
-    c.legs.root.visible = true; c.legs.root.rotation.y = Math.PI / 2;             // toes (+x) toward -z: walking up to the robot
-    const basketAt = P.clone().addScaledVector(back, 0.55).addScaledVector(sd, 0.42); basketAt.y = gy(basketAt.x, basketAt.z) - 0.01;
+    const L0 = P.clone().addScaledVector(back, 4.2), L1 = P.clone().addScaledVector(back, 0.42);
+    c.legs.root.visible = true; c.hand.root.visible = true; c.legs.reaching = false; c.legs.root.rotation.y = Math.PI / 2;             // toes (+x) toward -z: walking up to the robot
+    const basketAt = P.clone().addScaledVector(back, 0.3).addScaledVector(sd, 0.42); basketAt.y = gy(basketAt.x, basketAt.z) - 0.01;
     c.basket.position.copy(basketAt); c.basket.visible = true; c.hinge.rotation.z = 1.9;   // lid open, lying back
     const head = () => nuri.root.position.clone().add(V(0, 0.37, 0));
     let t = 0, phase = 0, lastStep = 0, held = null, said = {};
@@ -253,20 +253,23 @@ async function boot() {
       lp.y = gy(lp.x, lp.z); c.legs.root.position.copy(lp);
       const amt = moving ? 1 : Math.max(0, 1 - (t - 3.4) * 3);
       phase += dt * 0.72 * amt;
-      c.legs.setGait(phase % 1, amt, t > 6 ? Math.min(0.22, (t - 6) * 0.2) : 0);
       if (Math.floor(phase * 2) !== lastStep && amt > 0.3) { lastStep = Math.floor(phase * 2); audio.play('thud', { pos: lp, vol: 1, pitch: 0.45 }); G.camShake = 0.012; }
       if (t > 3.6) { speak('see'); player.yaw = damp(player.yaw, 0.0001, 4, dt) || 0.0001; }
       if (t > 3.6 && !said.turn) { said.turn = true; setExpr('surprised', 2.4); moodBeep('surprised'); }
       if (t > 5.2) speak('look');
       // 6 - 7.6 s: the hand comes down over the robot's head and closes
-      if (t > 5.8) {
-        c.hand.root.visible = true;
+      if (t <= 5.8) { c.legs.restPose(handPose.position, handPose.quaternion); c.hand.setGrip(0.3); }
+      else {
+        c.legs.reaching = true;
+        if (!G.hRest) G.hRest = { p: handPose.position.clone(), q: handPose.quaternion.clone() };
         const k = smoothstep(5.8, 7.2, t), top = head();
-        const from = top.clone().add(V(0, 1.1, 0)).addScaledVector(back, 0.35);
         const grab = top.clone().addScaledVector(back, 0.1).add(V(0, 0.01, 0));
         if (!held) {
-          handPose.position.copy(from).lerp(grab, k); orient(0.5 + 0.25 * k);
-          c.hand.setGrip(smoothstep(6.9, 7.6, t) * 0.62);
+          // from the side, forward and down over the robot's head, turning palm down on the way
+          handPose.position.copy(G.hRest.p).lerp(grab, k).addScaledVector(back, -Math.sin(k * Math.PI) * 0.08).add(V(0, Math.sin(k * Math.PI) * 0.12, 0));
+          orient(0.5 + 0.25 * k); const qT = handPose.quaternion.clone(); handPose.quaternion.copy(G.hRest.q).slerp(qT, smoothstep(5.8, 6.9, t));
+          if (t < 6.4) c.hand.setGrip(0.3 * (1 - smoothstep(5.8, 6.4, t)));
+          else c.hand.setGrip(smoothstep(6.9, 7.6, t) * 0.62);
           if (t > 7.0 && !said.grab) { said.grab = true; setExpr('worried', 6); moodBeep('worried'); }
           if (t > 7.6) {
             handPose.updateMatrixWorld(true);
@@ -295,7 +298,12 @@ async function boot() {
         if (t > 13.0 && !said.lid) { said.lid = true; audio.play('clunk', { pos: basketAt, vol: 0.8 }); G.camShake = 0.02; }
       }
       handPose.updateMatrixWorld(true);
-      c.hand.root.position.copy(handPose.position); c.hand.root.quaternion.copy(handPose.quaternion);
+      c.hand.root.position.copy(handPose.position); c.hand.root.quaternion.copy(handPose.quaternion); c.hand.root.updateMatrixWorld(true);
+      // the body follows the hand: bending at the hips and the knees as it reaches down, straightening as it lifts
+      const reachK = c.legs.reaching ? clamp((1.25 - (handPose.position.y - lp.y)) / 0.85, 0, 1) : (t > 3.6 ? 0.1 : 0);
+      c.legs.stoop = damp(c.legs.stoop, 1.4 * reachK, 5, dt); G.crouch = damp(G.crouch || 0, 0.5 * reachK, 5, dt);
+      c.legs.look = t > 3.6 ? 0.3 : 0;
+      c.legs.setGait(phase % 1, amt, G.crouch);
     };
     // the robot rides in the glove (its world transform follows the hand until it is set down in the basket)
     G.holdRobot = () => {
@@ -306,15 +314,20 @@ async function boot() {
     };
     director.play([
       // over the robot's shoulder toward the path: Rotor beeps; the boots come up the path behind
-      { dur: 3.6, from: P.clone().addScaledVector(f, 0.62).addScaledVector(sd, 0.3).add(V(0, 0.2, 0)), to: P.clone().addScaledVector(f, 0.58).addScaledVector(sd, 0.26).add(V(0, 0.19, 0)),
-        lookFrom: P.clone().addScaledVector(back, 1.4).add(V(0, 0.35, 0)), fov: 44,
+      { dur: 3.6, from: P.clone().addScaledVector(f, 0.62).addScaledVector(sd, 0.3).add(V(0, 0.13, 0)), to: P.clone().addScaledVector(f, 0.58).addScaledVector(sd, 0.26).add(V(0, 0.12, 0)),
+        lookFrom: P.clone().addScaledVector(back, 3.0).add(V(0, 0.2, 0)), fov: 30,
         onStart: () => { ui.bubble('로터', '세븐! 뒤에—'); audio.play('beep', { pitch: 1.5 }); } },
       // from behind the robot: the boots towering over it, the jeans rising out of frame
       { dur: 2.4, from: P.clone().addScaledVector(f, 0.42).add(V(0.12, 0.1, 0)), to: P.clone().addScaledVector(f, 0.38).add(V(0.1, 0.12, 0)),
         lookFrom: P.clone().addScaledVector(back, 0.7).add(V(0, 0.55, 0)), fov: 54 },
       // side on, low: the hand comes down out of the sky, closes, and lifts the robot away
-      { dur: 4.0, from: P.clone().addScaledVector(sd, -0.95).add(V(0, 0.32, 0)).addScaledVector(back, 0.15), to: P.clone().addScaledVector(sd, -1.05).add(V(0, 0.9, 0)).addScaledVector(back, 0.2),
-        lookFrom: () => nuri.root.position.clone().add(V(0, 0.25, 0)), track: true, fov: 50 },
+      { dur: 2.1, from: P.clone().addScaledVector(sd, -0.9).add(V(0, 0.26, 0)).addScaledVector(back, 0.05), to: P.clone().addScaledVector(sd, -0.86).add(V(0, 0.3, 0)).addScaledVector(back, 0.08),
+        lookFrom: () => nuri.root.position.clone().add(V(0, 0.32, 0)), track: true, fov: 44 },
+      // the robot's own eyes as it is lifted: the forest floor dropping away, then the open basket swinging in below
+      { dur: 1.9, fov: 62, follow: (pos, look) => {
+        const h = nuri.root.position.clone().add(V(0, 0.27, 0)), to = basketAt.clone().sub(h).normalize();
+        pos.copy(h).addScaledVector(to, 0.1).addScaledVector(sd, -0.04); look.copy(basketAt).add(V(0, 0.1, 0)).addScaledVector(f, 0.5).lerp(basketAt, smoothstep(8.6, 9.8, t));
+      } },
       // the basket from above: the robot is set down inside and the lid comes over
       { dur: 3.6, from: basketAt.clone().add(V(-0.3, 1.0, -0.35)), to: basketAt.clone().add(V(-0.12, 0.78, -0.18)), lookFrom: basketAt.clone().add(V(0, 0.2, 0)), fov: 52 },
     ], { onDone: () => {

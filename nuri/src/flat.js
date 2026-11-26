@@ -8,6 +8,12 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { buildNeighborhood, glow } from './nyc.js';
+import HOUSE_MATS from './house_mats.json';
+import HOUSE_LM from './house_lm.json';
+
+// a surface with its light baked: the point lights and the sky fill are in the bake already (the moon and the spot lights,
+// which move or switch, stay real-time)
+const LIGHTS_BAKED = THREE.ShaderChunk.lights_fragment_begin.replace(/NUM_POINT_LIGHTS > 0/g, '0 > 1').replace(/NUM_HEMI_LIGHTS > 0/g, '0 > 1');
 
 export const HOUSE = {
   x0: -5, x1: 5, z0: -4, z1: 4, T: 0.14,
@@ -46,6 +52,70 @@ export class Flat {
   constructor(ctx, A) {
     this.ctx = ctx; this.A = A; this.scene = ctx.scene; this.R = ctx.RAPIER; this.W = ctx.physics;
     this.group = new THREE.Group(); this.scene.add(this.group);
+    // the house as modelled in Blender (blender/build_house.py): walls, floors, stairs, windows, doors, mouldings,
+    // the kitchen, the furniture, the outside; the procedural shell below then only gives the colliders and the
+    // things that move or matter to the game
+    this.arch = A.models.h_house_arch || null; this.keep = new Set(); this.bedDY = this.arch ? 0.12 : 0;
+  }
+  keepVis(...o) { for (const x of o) if (x) this.keep.add(x); }
+  // the modelled house's materials, as in blender/build_house.py (house_mats.json): scanned sets with their tile size
+  // (UV0 is in metres), tint, normal strength and roughness; plain paints and metals by colour
+  archMats() {
+    const sets = this.A.tex.sets || {}, out = {};
+    const tile = (S, t) => { if (!S) return {}; const c = (x) => { if (!x) return null; const y = x.clone(); y.wrapS = y.wrapT = THREE.RepeatWrapping; y.repeat.set(1 / t, 1 / t); y.needsUpdate = true; return y; }; return { map: c(S.map), normalMap: c(S.normal), roughnessMap: c(S.orm) }; };
+    for (const [name, d] of Object.entries(HOUSE_MATS)) {
+      if (d.set) {
+        const m = new THREE.MeshStandardMaterial({ color: d.tint, roughness: d.rough, metalness: 0, ...tile(sets[d.set], d.tile), envMapIntensity: 0.5 });
+        m.normalScale.setScalar(d.normal); out[name] = m;
+      } else out[name] = new THREE.MeshStandardMaterial({ color: new THREE.Color(d.color), roughness: d.rough, metalness: d.metal || 0, envMapIntensity: 0.6 });
+    }
+    for (const k of ['curtain', 'duvet', 'throw', 'knit', 'jeans', 'towel', 'coat', 'linen', 'shade']) if (out[k]) out[k].side = THREE.DoubleSide;
+    out.glass = this.mats.glassM;
+    if (out.lamp_glass) { out.lamp_glass.emissive = new THREE.Color(0xffc070); out.lamp_glass.emissiveIntensity = 2.2; }
+    return out;
+  }
+  // the modelled house into the scene: its own materials swapped for the scanned ones by name; it collides as it
+  // looks (a robot finds its way under the bed, round the cat tree, over the washing machine); the furniture is listed
+  addArch() {
+    const root = this.arch.scene; this.archRoot = root; this.group.add(root); root.updateMatrixWorld(true);
+    const M = this.archMats(); this.furn = [];
+    const tops = new Set(), LM = { int: this.A.tex.lmInt, ext: this.A.tex.lmExt }, baked = new Map();
+    const bake = (m, atlas) => {
+      const lm = LM[atlas]; if (!lm || !m) return m;
+      const key = m.uuid + atlas; if (baked.has(key)) return baked.get(key);
+      const c = m.clone(); c.lightMap = lm; c.lightMapIntensity = (HOUSE_LM[atlas] || 1) * Math.PI * (HOUSE_LM.gain || 1); c.envMapIntensity = Math.min(c.envMapIntensity ?? 1, 0.35);
+      c.onBeforeCompile = (sh) => { sh.fragmentShader = sh.fragmentShader.replace('#include <lights_fragment_begin>', LIGHTS_BAKED); };
+      c.customProgramCacheKey = () => 'baked';
+      baked.set(key, c); return c;
+    };
+    this.baked = !!(LM.int || LM.ext);
+    root.traverse((o) => {
+      if (!o.isMesh) return;
+      let top = o; while (top.parent && top.parent !== root) top = top.parent;
+      const nm = top.name || o.name;
+      o.castShadow = true; o.receiveShadow = true;
+      const atlas = (top.userData || {}).atlas;
+      if (/^(arch_|props_|soft_|glass)/.test(nm)) {
+        const sw = (m) => M[m.name.replace(/\.\d+$/, '')] || m;
+        o.material = Array.isArray(o.material) ? o.material.map(sw) : sw(o.material);
+        if (nm.startsWith('glass')) { o.castShadow = false; o.renderOrder = 2; }
+        else if (nm.startsWith('soft_')) { if (nm.startsWith('soft_duvet')) this.softDuvet = o; }       // (cloth: the robot pushes through it)
+        else this.meshCollider(o, 'wood');
+      }
+      if (o.geometry.attributes.uv1 && (atlas === 'int' || atlas === 'ext')) o.material = Array.isArray(o.material) ? o.material.map((m) => bake(m, atlas)) : bake(o.material, atlas);
+      if (nm.startsWith('f_') && !tops.has(top)) {
+        tops.add(top); const ud = top.userData || {};
+        this.furn.push({ key: ud.key || nm.slice(2).replace(/\.\d+$/, ''), obj: top, box: new THREE.Box3().setFromObject(top) });
+        if (ud.collide) this.meshCollider(top, /Sofa|Chair|Ottoman|pillow/i.test(nm) ? 'fabric' : 'wood');
+      }
+    });
+  }
+  // (with the modelled house, a piece of furniture is the model's own: the one of that kind nearest the spot)
+  archPiece(key, x, z) {
+    let best = null, bd = 1e9;
+    for (const f of this.furn || []) if (f.key === key) { const c = f.box.getCenter(new THREE.Vector3()), d = Math.hypot(c.x - x, c.z - z); if (d < bd) { bd = d; best = f; } }
+    if (!best) return null;
+    best.obj.userData.box = best.box; return best.obj;
   }
   collider(desc, surface = 'wood') { const c = this.W.createCollider(desc); c.userData = { kind: 'static', surface }; return c; }
   block(w, h, d, mat, x, y, z, { tile = 1, surface = 'wood', collide = true, shadow = true, rotY = 0 } = {}) {
@@ -55,6 +125,7 @@ export class Flat {
     return m;
   }
   place(key, x, z, { y = 0, rotY = 0, scale = 1, surface = 'wood', collide = true } = {}) {
+    if (this.arch) return this.archPiece(key, x, z);
     const src = this.A.models['h_' + key]; if (!src) return null;
     const o = src.scene.clone(true); o.scale.setScalar(scale); o.rotation.y = rotY;
     o.updateMatrixWorld(true); const bb = new THREE.Box3().setFromObject(o);
@@ -103,11 +174,15 @@ export class Flat {
     const darkWood = new THREE.MeshStandardMaterial({ color: 0x4a3426, roughness: 0.55 });
     const doorM = new THREE.MeshStandardMaterial({ color: 0xece6da, roughness: 0.45 });
     this.mats = { floorM, wallM, ceilM, trimM, brickM, glassM, darkWood, doorM };
+    if (this.arch) this.addArch();
     const W = Hs.x1 - Hs.x0, D = Hs.z1 - Hs.z0, cx = (Hs.x0 + Hs.x1) / 2, cz = (Hs.z0 + Hs.z1) / 2;
     // ---- ground floor slab, the checkered kitchen floor on it, the upstairs slab (with the stairwell left open)
     this.block(W, 0.2, D, floorM, cx, -0.1, cz, { tile: 1.2, shadow: false });
-    const chk = checkerTexture(); chk.repeat.set((Hs.part - Hs.x0) / 1.2, (Hs.z1 - Hs.kz) / 1.2);
-    const kf = new THREE.Mesh(new THREE.PlaneGeometry(Hs.part - Hs.x0, Hs.z1 - Hs.kz), new THREE.MeshStandardMaterial({ map: chk, roughness: 0.35, envMapIntensity: 0.6 }));
+    // (the scanned tiles; a drawn checkerboard only if they are missing)
+    let kfM;
+    if (A.tile) { kfM = scanMat(A.tile, 0xe6e1d8, { envMapIntensity: 0.7, roughness: 0.8 }); kfM.aoMap = null; for (const t of [A.tile.map, A.tile.normal, A.tile.orm]) t.repeat.set((Hs.part - Hs.x0) / 1.6, (Hs.z1 - Hs.kz) / 1.6); }
+    else { const chk = checkerTexture(); chk.repeat.set((Hs.part - Hs.x0) / 1.2, (Hs.z1 - Hs.kz) / 1.2); kfM = new THREE.MeshStandardMaterial({ map: chk, roughness: 0.35, envMapIntensity: 0.6 }); }
+    const kf = new THREE.Mesh(new THREE.PlaneGeometry(Hs.part - Hs.x0, Hs.z1 - Hs.kz), kfM);
     kf.rotation.x = -Math.PI / 2; kf.position.set((Hs.x0 + Hs.part) / 2, 0.002, (Hs.kz + Hs.z1) / 2); kf.receiveShadow = true; this.group.add(kf);
     this.kitchenFloor = kf;
     const S = Hs.stair, slab = (x0, x1, z0, z1) => { this.block(x1 - x0, Hs.U - Hs.H, z1 - z0, floorM, (x0 + x1) / 2, (Hs.H + Hs.U) / 2, (z0 + z1) / 2, { tile: 1.2 }); };
@@ -136,10 +211,16 @@ export class Flat {
     // skirting along the walls the robot walks beside
     const skirt = (axis, c, a0, a1, y) => { const len = a1 - a0; if (axis === 'x') this.block(len, 0.09, 0.016, trimM, (a0 + a1) / 2, y + 0.045, c, { collide: false, shadow: false }); else this.block(0.016, 0.09, len, trimM, c, y + 0.045, (a0 + a1) / 2, { collide: false, shadow: false }); };
     for (const y of [0, U0]) { skirt('x', Hs.z0 + 0.008, Hs.x0, Hs.x1, y); skirt('z', Hs.x0 + 0.008, Hs.z0, Hs.z1, y); skirt('z', Hs.x1 - 0.008, Hs.z0, Hs.z1, y); }
+    // crown moulding where the walls meet the ceilings (a cove profile: two steps)
+    const crown = (axis, c, a0, a1, y, dir) => { const len = a1 - a0;
+      for (const [h, d, dy] of [[0.07, 0.03, -0.035], [0.035, 0.055, -0.0175]]) {
+        if (axis === 'x') this.block(len, h, d, trimM, (a0 + a1) / 2, y + dy, c + dir * d / 2, { collide: false, shadow: false }); else this.block(d, h, len, trimM, c + dir * d / 2, y + dy, (a0 + a1) / 2, { collide: false, shadow: false }); } };
+    for (const y of [Hs.H, U1]) { crown('x', Hs.z0, Hs.x0, Hs.x1, y, 1); crown('x', Hs.z1, Hs.x0, Hs.x1, y, -1); crown('z', Hs.x0, Hs.z0, Hs.z1, y, 1); crown('z', Hs.x1, Hs.z0, Hs.z1, y, -1); }
     this.stairs(); this.windows(); this.backDoor(); this.yard();
     this.buildBedroom(); this.buildLiving(); this.buildKitchen();
     this.lights();
-    buildNeighborhood(this.scene);
+    this.city = buildNeighborhood(this.scene, this.A);
+    if (this.arch) for (const c of this.group.children) if (c !== this.archRoot && !this.keep.has(c) && !c.isLight) c.visible = false;
     return this;
   }
   closedDoor(axis, c, a0, a1, y0, h = 2.05, off = 0.03) {
@@ -196,25 +277,25 @@ export class Flat {
     const Hs = HOUSE, [x0, x1] = Hs.backDoor, z = Hs.z1 + Hs.T / 2, { doorM, trimM, glassM } = this.mats;
     const f0 = (x0 + x1) / 2 - 0.17, f1 = (x0 + x1) / 2 + 0.17, fh = 0.34, fb = 0.03;
     // the threshold under the door, level with the kitchen floor, out to the deck
-    this.block(x1 - x0 + 0.1, 0.08, 0.3, this.mats.trimM, (x0 + x1) / 2, -0.04, Hs.z1 + 0.08, { surface: 'wood' });
-    const part = (a, b, y0, y1) => this.block(b - a, y1 - y0, 0.05, doorM, (a + b) / 2, (y0 + y1) / 2, z, { surface: 'wood' });
+    this.keepVis(this.block(x1 - x0 + 0.1, 0.08, 0.3, this.mats.trimM, (x0 + x1) / 2, -0.04, Hs.z1 + 0.08, { surface: 'wood' }));
+    const part = (a, b, y0, y1) => this.keepVis(this.block(b - a, y1 - y0, 0.05, doorM, (a + b) / 2, (y0 + y1) / 2, z, { surface: 'wood' }));
     part(x0, f0, 0, 2.05); part(f1, x1, 0, 2.05); part(f0, f1, fb + fh, 1.2); part(f0, f1, 1.9, 2.05);
-    this.block(f1 - f0, fb, 0.05, doorM, (f0 + f1) / 2, fb / 2, z, { collide: false });          // the flap's bottom lip (stepped over)
-    const gl = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0 - 0.1, 0.65), glassM); gl.position.set((x0 + x1) / 2, 1.55, z - 0.03); this.group.add(gl);
+    this.keepVis(this.block(f1 - f0, fb, 0.05, doorM, (f0 + f1) / 2, fb / 2, z, { collide: false }));          // the flap's bottom lip (stepped over)
+    const gl = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0 - 0.1, 0.65), glassM); gl.position.set((x0 + x1) / 2, 1.55, z - 0.03); this.group.add(gl); this.keepVis(gl);
     this.collider(this.R.ColliderDesc.cuboid((x1 - x0) / 2, 0.36, 0.025).setTranslation((x0 + x1) / 2, 1.55, z), 'glass');
     // the flap frame, the flap (hinged at the top) and its lock
     const fr = new THREE.Mesh(new RoundedBoxGeometry(f1 - f0 + 0.05, fh + 0.05, 0.07, 2, 0.01), new THREE.MeshStandardMaterial({ color: 0xd9d6ce, roughness: 0.4 }));
-    fr.position.set((f0 + f1) / 2, fb + fh / 2, z); this.group.add(fr);
-    const hinge = new THREE.Group(); hinge.position.set((f0 + f1) / 2, fb + fh, z); this.group.add(hinge);
+    fr.position.set((f0 + f1) / 2, fb + fh / 2, z); this.group.add(fr); this.keepVis(fr);
+    const hinge = new THREE.Group(); hinge.position.set((f0 + f1) / 2, fb + fh, z); this.group.add(hinge); this.keepVis(hinge);
     const flap = new THREE.Mesh(new RoundedBoxGeometry(f1 - f0 - 0.01, fh - 0.01, 0.008, 2, 0.003), new THREE.MeshPhysicalMaterial({ color: 0x9aa0a6, roughness: 0.2, transparent: true, opacity: 0.55 }));
     flap.position.y = -fh / 2; hinge.add(flap);
     this.flapCol = this.collider(this.R.ColliderDesc.cuboid((f1 - f0) / 2, fh / 2, 0.03).setTranslation((f0 + f1) / 2, fb + fh / 2, z));
     const lock = new THREE.Mesh(new RoundedBoxGeometry(0.05, 0.022, 0.02, 2, 0.005), new THREE.MeshStandardMaterial({ color: 0xc8442e, roughness: 0.4 }));
-    lock.position.set((f0 + f1) / 2 - 0.05, fb + fh + 0.012, z - 0.04); this.group.add(lock);
+    lock.position.set((f0 + f1) / 2 - 0.05, fb + fh + 0.012, z - 0.04); this.group.add(lock); this.keepVis(lock);
     this.flap = { hinge, lock, pos: new THREE.Vector3((f0 + f1) / 2, 0, z - 0.25), lockPos: new THREE.Vector3((f0 + f1) / 2, fb + fh, z - 0.1), x: (f0 + f1) / 2, z };
     // the cat's bowl by the door (no cat tonight)
     const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.06, 0.05, 24, 1, true), new THREE.MeshStandardMaterial({ color: 0x3a6fb0, roughness: 0.35, side: THREE.DoubleSide }));
-    bowl.position.set(x0 - 0.35, 0.025, z - 0.3); this.group.add(bowl);
+    bowl.position.set(x0 - 0.35, 0.025, z - 0.3); this.group.add(bowl); this.keepVis(bowl);
     this.collider(this.R.ColliderDesc.cylinder(0.025, 0.075).setTranslation(bowl.position.x, 0.025, bowl.position.z));
     this.catBowl = bowl.position.clone();
   }
@@ -238,35 +319,39 @@ export class Flat {
     const { darkWood } = this.mats;
     // the bed with its head against the back (south) wall
     const bx = -3.2, bz = -0.95, BW = 1.6, BL = 2.1;
-    this.block(BW, 0.3, BL, darkWood, bx, U + 0.15, bz, { surface: 'wood' });
-    this.block(BW + 0.04, 1.0, 0.07, darkWood, bx, U + 0.5, Hs.kz - 0.035, { surface: 'wood' });
+    const DY = this.bedDY;
+    this.block(BW, 0.3, BL, darkWood, bx, U + 0.15, bz, { surface: 'wood', collide: !this.arch });
+    this.block(BW + 0.04, 1.0, 0.07, darkWood, bx, U + 0.5, Hs.kz - 0.035, { surface: 'wood', collide: !this.arch });
     const mat = new THREE.Mesh(new RoundedBoxGeometry(BW - 0.05, 0.2, BL - 0.05, 3, 0.05), pillowM); mat.position.set(bx, U + 0.4, bz); mat.receiveShadow = true; this.group.add(mat);
-    const pil = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.13, 0.4, 4, 0.06), pillowM); pil.position.set(bx - 0.15, U + 0.56, Hs.kz - 0.32); pil.rotation.y = 0.08; pil.castShadow = pil.receiveShadow = true; this.group.add(pil);
+    const pil = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.13, 0.4, 4, 0.06), pillowM); pil.position.set(bx - 0.15, U + 0.56 + DY, Hs.kz - 0.32); pil.rotation.y = 0.08; pil.castShadow = pil.receiveShadow = true; this.group.add(pil); if (!this.arch) this.keepVis(pil);
     // the stranger: asleep on their side under the duvet, a tuft of dark hair on the pillow; the duvet rises and falls
     const hair = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshStandardMaterial({ color: 0x1b140f, roughness: 0.55 }));
-    hair.scale.set(0.095, 0.085, 0.11); hair.position.set(bx - 0.2, U + 0.66, Hs.kz - 0.36); hair.castShadow = true; this.group.add(hair);
+    hair.scale.set(0.095, 0.085, 0.11); hair.position.set(bx - 0.2, U + 0.66 + DY, Hs.kz - 0.36); hair.castShadow = true; this.group.add(hair); this.keepVis(hair);
     const dg = new THREE.PlaneGeometry(BW + 0.24, BL - 0.2, 56, 64); dg.rotateX(-Math.PI / 2); dg.translate(bx, 0, bz - 0.1);
-    const duvet = new THREE.Mesh(dg, linenM); duvet.castShadow = duvet.receiveShadow = true; this.group.add(duvet);
+    const duvet = new THREE.Mesh(dg, linenM); duvet.castShadow = duvet.receiveShadow = true; this.group.add(duvet); if (!this.softDuvet) this.keepVis(duvet);
     // body under the duvet, head end toward +z (the pillow): shoulders, chest, hip, legs bent
     const body = [[-0.12, 0.72, 0.17, 0.24, 0.2], [-0.1, 0.35, 0.15, 0.22, 0.32], [-0.06, -0.05, 0.19, 0.26, 0.28], [0.0, -0.48, 0.12, 0.2, 0.3], [0.12, -0.62, 0.1, 0.2, 0.2]];
-    this.sleeper = { duvet, base: dg.attributes.position.array.slice(), body, bx, bz, BW, BL, stir: 0, U, head: new THREE.Vector3(bx, U + 0.7, Hs.kz - 0.4) };
+    this.sleeper = { duvet, base: dg.attributes.position.array.slice(), body, bx, bz, BW, BL, stir: 0, U: U + DY, head: new THREE.Vector3(bx, U + 0.7 + DY, Hs.kz - 0.4) };
     this.shapeDuvet(0);
-    this.collider(this.R.ColliderDesc.cuboid(BW / 2, 0.06, BL / 2).setTranslation(bx, U + 0.56, bz), 'fabric');
+    this.collider(this.R.ColliderDesc.cuboid(BW / 2, 0.06, BL / 2).setTranslation(bx, U + 0.56 + DY, bz), 'fabric');
     // nightstand and the bedside lamp (off; it comes on if the stranger wakes)
     const ns = this.place('ClassicNightstand_01', -4.45, Hs.kz - 0.4, { y: U, rotY: Math.PI / 2 });
     const nsTop = ns ? ns.userData.box.max.y : U + 0.7;
     this.place('desk_lamp_arm_01', -4.45, Hs.kz - 0.42, { y: nsTop, rotY: Math.PI * 0.6, scale: 0.75, collide: false });
+    this.place('round_spectacles', -4.42, Hs.kz - 0.2, { y: nsTop, rotY: 2.2, collide: false });
+    this.place('modern_ceiling_lamp_01', -2.5, -1.7, { y: U + Hs.H2 - 0.95, collide: false });
     this.bedLamp = new THREE.SpotLight(0xffc98a, 0, 6, 0.95, 0.6, 1.6); this.bedLamp.position.set(-4.35, nsTop + 0.5, Hs.kz - 0.5); this.bedLamp.target.position.set(-2.6, U, -1.6);
     this.bedLamp.castShadow = false; this.bedLamp.shadow.mapSize.set(512, 512); this.group.add(this.bedLamp, this.bedLamp.target);
     // the dresser under the window with the picnic basket on it, a chair beside it, a moving box in the corner
     const con = this.place('ClassicConsole_01', -0.4, Hs.z0 + 0.32, { y: U, rotY: 0 });
     const top = con ? con.userData.box.max.y : U + 0.95;
     this.place('GreenChair_01', 0.75, -3.1, { y: U, rotY: -Math.PI / 2 - 0.5 });
-    this.place('cardboard_box_01', -4.4, -3.55, { y: U, rotY: 0.3 });
+    const cbx = this.place('cardboard_box_01', -4.4, -3.55, { y: U, rotY: 0.3 });
+    this.place('vintage_video_camera', -4.38, -3.52, { y: cbx ? cbx.userData.box.max.y : U + 0.4, rotY: 0.9, collide: false });
     const bk = new THREE.Group(), src = this.A.models.h_wicker_basket_02?.scene.clone(true);
     let lid = null;
     if (src) { src.traverse((o) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; if (/lid/.test(o.name)) lid = o; } }); src.scale.setScalar(2.1); bk.add(src); }
-    bk.position.set(-0.65, top, Hs.z0 + 0.34); bk.rotation.y = Math.PI + 0.25; this.group.add(bk); bk.updateMatrixWorld(true);
+    bk.position.set(-0.65, top, Hs.z0 + 0.34); bk.rotation.y = Math.PI + 0.25; this.group.add(bk); this.keepVis(bk); bk.updateMatrixWorld(true);
     const hingeL = new THREE.Group(); hingeL.position.set(0, 0.42, -0.222); bk.add(hingeL);
     if (lid) { lid.removeFromParent(); const s2 = new THREE.Group(); s2.scale.setScalar(2.1); s2.add(lid); lid.position.set(0, 0, 0.106); lid.quaternion.identity(); hingeL.add(s2); }
     if (src) { const base2 = src.getObjectByName('wicker_basket_02_base') || src; src.updateMatrixWorld(true); this.meshCollider(base2, 'fabric'); }
@@ -283,11 +368,25 @@ export class Flat {
     this.doorGap = new THREE.Vector3(Hs.part, U, Hs.bedDoor[0] + 0.18);
   }
   shapeDuvet(t) {
-    const S = this.sleeper, p = S.duvet.geometry.attributes.position, a = p.array, b = S.base;
+    const S = this.sleeper;
+    if (this.softDuvet) {
+      // the modelled duvet: it rises and falls over the chest, a little more when the sleeper stirs
+      const g = this.softDuvet.geometry, p = g.attributes.position;
+      if (!S.soft) { S.soft = p.array.slice(); this.softDuvet.updateMatrixWorld(true); S.inv = this.softDuvet.matrixWorld.clone(); }
+      const br = Math.sin(t * Math.PI * 2 / 4.2) * 0.018 * (1 + S.stir * 0.8), a = p.array, b = S.soft, M = S.inv.elements;
+      for (let i = 0; i < p.count; i++) {
+        const x = b[i * 3] * M[0] + b[i * 3 + 1] * M[4] + b[i * 3 + 2] * M[8] + M[12] - S.bx, y = b[i * 3] * M[1] + b[i * 3 + 1] * M[5] + b[i * 3 + 2] * M[9] + M[13];
+        const z = b[i * 3] * M[2] + b[i * 3 + 1] * M[6] + b[i * 3 + 2] * M[10] + M[14] - S.bz;
+        const k = Math.exp(-(((x + 0.08) / 0.32) ** 2) - (((z - 0.4) / 0.38) ** 2)) * (y > S.U + 0.55 ? 1 : 0);
+        a[i * 3 + 1] = b[i * 3 + 1] + br * k;
+      }
+      p.needsUpdate = true; return;
+    }
+    const p = S.duvet.geometry.attributes.position, a = p.array, b = S.base;
     const br = 1 + 0.045 * Math.sin(t * Math.PI * 2 / 4.2), st = S.stir;
     for (let i = 0; i < p.count; i++) {
       const x = b[i * 3] - S.bx, z = b[i * 3 + 2] - S.bz;
-      let h = 0.53;
+      let h = 0.53 + 0;
       for (const [cx, cz, hh, rx, rz] of S.body) {
         const k = Math.exp(-(((x - cx - st * 0.05) / rx) ** 2) - (((z - cz) / rz) ** 2));
         h += hh * k * (cz > -0.2 ? br : 1) * (1 + st * 0.15);
@@ -311,30 +410,39 @@ export class Flat {
     this.block(0.5, 0.06, fz1 - fz0 + 0.3, brickM, Hs.x0 + fd + 0.2, 0.03, (fz0 + fz1) / 2, { tile: 0.9 });
     this.block(0.24, 0.07, fz1 - fz0 + 0.24, darkWood, Hs.x0 + fd + 0.06, 1.25, (fz0 + fz1) / 2);
     this.place('ceramic_vase_01', Hs.x0 + fd + 0.06, fz0 + 0.3, { y: 1.285, scale: 0.7 });
+    this.place('marble_bust_01', Hs.x0 + fd + 0.04, (fz0 + fz1) / 2 + 0.05, { y: 1.285, rotY: Math.PI / 2 + 0.25, scale: 0.72, collide: false });
+    this.place('brass_candleholders', Hs.x0 + fd + 0.05, fz1 - 0.32, { y: 1.285, rotY: Math.PI / 2, scale: 0.55, collide: false });
     // sofa facing the fire, a coffee table on a rug, the armchair, the old television by the front window
     const rugM = scanMat(A.rug, 0xd8cfc0, { envMapIntensity: 0.2 });
     const rug = new THREE.Mesh(boxGeo(2.4, 0.018, 1.8, 0.8), rugM); rug.position.set(-2.2, 0.009, -2.2); rug.receiveShadow = true; this.group.add(rug);
     this.collider(this.R.ColliderDesc.cuboid(1.2, 0.009, 0.9).setTranslation(-2.2, 0.009, -2.2), 'fabric');
     this.place('Sofa_01', -0.75, -2.2, { rotY: -Math.PI / 2, surface: 'fabric' });
-    this.place('CoffeeTable_01', -2.3, -2.2, { rotY: Math.PI / 2, scale: 0.8 });
+    const ct = this.place('CoffeeTable_01', -2.3, -2.2, { rotY: Math.PI / 2, scale: 0.8 });
+    this.place('chess_set', -2.36, -2.5, { y: ct ? ct.userData.box.max.y : 0.42, rotY: 0.35, scale: 0.75, collide: false });
+    this.place('modern_ceiling_lamp_01', -2.3, -2.0, { y: Hs.H - 0.95, collide: false });
     this.place('ArmChair_01', -2.6, -0.6, { rotY: Math.PI + 0.5, surface: 'fabric' });
     this.place('Ottoman_01', -0.9, -0.5, { rotY: 0.3, surface: 'fabric' });
     const tvt = this.place('WoodenTable_02', -0.4, -3.55, { scale: 1.15 }), tvTop = tvt ? tvt.userData.box.max.y : 0.48;
     const tv = this.place('television_02', -0.4, -3.55, { y: tvTop, rotY: Math.PI * 0.85 });
-    this.tvLed = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2a1a }));
-    const tb = tv?.userData.box; this.tvLed.position.set(-0.32, tvTop + 0.04, (tb?.max.z ?? -3.35) + 0.002); this.group.add(this.tvLed);
+    this.tvLed = new THREE.Mesh(new THREE.SphereGeometry(0.006, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff2a1a })); this.keepVis(this.tvLed);
+    const tb = tv?.userData.box;
+    if (this.arch && tb) { const c = tb.getCenter(new THREE.Vector3()); this.tvLed.position.set(c.x + 0.2, tb.min.y + 0.05, c.z + 0.2); } else this.tvLed.position.set(-0.32, tvTop + 0.04, (tb?.max.z ?? -3.35) + 0.002);
+    this.group.add(this.tvLed);
     this.tvLight = new THREE.PointLight(0xff2a1a, 0.08, 0.7, 2); this.tvLight.position.copy(this.tvLed.position).add(new THREE.Vector3(0, 0, 0.03)); this.group.add(this.tvLight);
     this.place('potted_plant_02', -4.4, -3.4, { rotY: 0.5 });
     this.place('potted_plant_04', -2.15, -2.05, { y: 0.42, collide: false });
     this.place('gamepad', -1.6, -1.5, { y: 0.018, rotY: 0.7, collide: false });
+    this.place('boombox', 0.55, -3.78, { rotY: -0.08 });
     this.place('cardboard_box_01', -4.45, -0.3, { rotY: 0.15 }); this.place('cardboard_box_01', -3.85, -0.2, { rotY: -0.3, scale: 0.8 });
     // the hall: the muddy rubber boots by the front door
     this.place('rubber_boots', 2.7, -3.55, { rotY: 0.4, collide: false });
+    const sc = this.place('vintage_suitcase', 1.98, -3.82, { rotY: 0.05 });
+    this.place('binoculars', 2.0, -3.8, { y: sc ? sc.userData.box.max.y : 0.35, rotY: 1.3, collide: false });
     this.notes = [
-      { at: new THREE.Vector3(-0.4, 0, -3.1), r: 0.6, text: '브라운관 텔레비전. 대기 표시등이 빨갛게 깜빡인다. 꺼진 게 아니라 잠든 것이다.' },
+      { at: this.arch ? new THREE.Vector3(-3.9, 0, -3.05) : new THREE.Vector3(-0.4, 0, -3.1), r: 0.6, text: '브라운관 텔레비전. 대기 표시등이 빨갛게 깜빡인다. 꺼진 게 아니라 잠든 것이다.' },
       { at: new THREE.Vector3(-1.6, 0, -1.5), r: 0.45, text: '거인의 조종기. 버튼 하나가 내 손바닥만 하다. 줄이 텔레비전에 꽂혀 있다.' },
       { at: new THREE.Vector3(2.7, 0, -3.3), r: 0.55, text: '숲에서 신던 장화다. 아직 흙이 묻어 있다. …내가 있던 숲의 흙.' },
-      { at: new THREE.Vector3(-4.1, 0, -0.1), r: 0.6, text: '상자에 「잡동사니」라고 적혀 있다. 열린 틈으로 낡은 장난감 로봇이 보인다. 나도 여기 들어가게 되는 걸까.' },
+      { at: this.arch ? new THREE.Vector3(0.7, 0, -0.55) : new THREE.Vector3(-4.1, 0, -0.1), r: 0.6, text: '상자에 「잡동사니」라고 적혀 있다. 열린 틈으로 낡은 장난감 로봇이 보인다. 나도 여기 들어가게 되는 걸까.' },
       { at: new THREE.Vector3(Hs.x0 + 0.75, 0, -2.2), r: 0.6, text: '벽난로. 재가 식어 있다. 거인들은 불을 집 안에 가둬 두고 쓴다.' },
       { at: new THREE.Vector3(-2.6, 0, -3.5), r: 0.7, text: '창밖은 거인들의 길. 가로등. 다른 집들. 지붕 너머로 하늘이 주황빛이다. 도시의 불빛이다.' },
     ];
@@ -345,14 +453,25 @@ export class Flat {
     const steel = new THREE.MeshStandardMaterial({ color: 0xb9bcbf, roughness: 0.25, metalness: 0.9 });
     // counters along the back wall (the sink under the window) and the west wall (the stove); the fridge
     const counter = (x0, x1, z0, z) => { this.block(x1 - x0, 0.86, Math.abs(z - z0), cab, (x0 + x1) / 2, 0.43, (z0 + z) / 2, { surface: 'wood' }); this.block(x1 - x0 + 0.03, 0.04, Math.abs(z - z0) + 0.03, counterM, (x0 + x1) / 2, 0.88, (z0 + z) / 2, { surface: 'rock' }); };
-    counter(-4.86, -1.55, z1 - 0.62, z1);
-    this.block(0.62, 0.86, 1.6, cab, Hs.x0 + 0.31, 0.43, 1.3, { surface: 'wood' }); this.block(0.65, 0.04, 1.63, counterM, Hs.x0 + 0.32, 0.88, 1.3, { surface: 'rock' });
+    if (!this.arch) {
+      counter(-4.86, -1.55, z1 - 0.62, z1);
+      this.block(0.62, 0.86, 1.6, cab, Hs.x0 + 0.31, 0.43, 1.3, { surface: 'wood' }); this.block(0.65, 0.04, 1.63, counterM, Hs.x0 + 0.32, 0.88, 1.3, { surface: 'rock' });
+    }
     const sink = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.02, 0.42), steel); sink.position.set(-3.3, 0.905, z1 - 0.32); this.group.add(sink);
     for (const [x, z] of [[-4.75, 1.05], [-4.75, 1.55], [-4.45, 1.05], [-4.45, 1.55]]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.012, 20), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 })); b.position.set(x, 0.906, z); this.group.add(b); }
     // the stove's clock glows green in the dark
     const clock = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.03), new THREE.MeshBasicMaterial({ color: 0x3dff8a })); clock.position.set(Hs.x0 + 0.625, 0.72, 1.3); clock.rotation.y = Math.PI / 2; this.group.add(clock);
     const cl = new THREE.PointLight(0x3dff8a, 0.12, 1.2, 2); cl.position.set(Hs.x0 + 0.75, 0.72, 1.3); this.group.add(cl);
-    const fridge = this.block(0.78, 1.78, 0.72, new THREE.MeshStandardMaterial({ color: 0xe9e7e1, roughness: 0.35 }), Hs.x0 + 0.4, 0.89, 0.62, { surface: 'metal' });
+    this.place('pot_enamel_01', -4.72, 1.08, { y: 0.912, rotY: 0.6, collide: false });
+    this.place('wine_bottles_01', -1.85, z1 - 0.25, { y: 0.9, collide: false }); this.place('wine_bottles_01', -1.74, z1 - 0.33, { y: 0.9, rotY: 1.1, collide: false });
+    this.place('modern_ceiling_lamp_01', -2.4, 2.0, { y: Hs.H - 0.95, collide: false });
+    // the range hood over the stove, its little lamp left on: the one warm light downstairs
+    const hood = new THREE.Mesh(new RoundedBoxGeometry(0.55, 0.16, 0.8, 2, 0.02), steel); hood.position.set(Hs.x0 + 0.29, 1.62, 1.3); hood.castShadow = true; this.group.add(hood);
+    const hl = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.06), new THREE.MeshBasicMaterial({ color: 0xffe2b0 })); hl.rotation.x = Math.PI / 2; hl.position.set(Hs.x0 + 0.33, 1.538, 1.3); this.group.add(hl);
+    const hlL = new THREE.SpotLight(0xffc888, 2.4, 4.5, 1.1, 0.8, 1.6); hlL.position.set(Hs.x0 + 0.33, this.arch ? 1.58 : 1.53, this.arch ? 2.05 : 1.3); hlL.target.position.set(Hs.x0 + 0.6, 0, this.arch ? 2.05 : 1.3);
+    hlL.castShadow = true; hlL.shadow.mapSize.set(512, 512); hlL.shadow.bias = -0.0008; this.group.add(hlL, hlL.target);
+    const fill = new THREE.PointLight(0xffb070, 0.6, 5, 1.8); fill.position.set(-3.2, 1.2, 1.6); this.group.add(fill);
+    const fridge = this.block(0.78, 1.78, 0.72, new THREE.MeshStandardMaterial({ color: 0xe9e7e1, roughness: 0.35 }), Hs.x0 + 0.4, 0.89, 0.62, { surface: 'metal', collide: !this.arch });
     fridge.material.envMapIntensity = 0.7;
     const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.5, 8), steel); handle.position.set(Hs.x0 + 0.8, 1.2, 0.36); this.group.add(handle);
     // the photos stuck on the fridge door: the forest
@@ -360,16 +479,16 @@ export class Flat {
     pg.fillStyle = '#f3efe6'; pg.fillRect(0, 0, 128, 96); const grd = pg.createLinearGradient(0, 0, 0, 80); grd.addColorStop(0, '#9fb6c8'); grd.addColorStop(1, '#3d5a35'); pg.fillStyle = grd; pg.fillRect(6, 6, 116, 70);
     for (let i = 0; i < 9; i++) { pg.fillStyle = '#1f3320'; pg.beginPath(); const x = 10 + i * 13; pg.moveTo(x, 76); pg.lineTo(x + 6, 20 + (i % 3) * 8); pg.lineTo(x + 12, 76); pg.fill(); }
     const pt = new THREE.CanvasTexture(ph); pt.colorSpace = THREE.SRGBColorSpace;
-    const photo = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.11), new THREE.MeshStandardMaterial({ map: pt, roughness: 0.6 })); photo.position.set(Hs.x0 + 0.795, 1.35, 0.7); photo.rotation.y = Math.PI / 2; photo.rotation.z = 0.06; this.group.add(photo);
+    const photo = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.11), new THREE.MeshStandardMaterial({ map: pt, roughness: 0.6 })); photo.position.set(Hs.x0 + (this.arch ? 0.763 : 0.795), this.arch ? 1.45 : 1.35, this.arch ? 0.55 : 0.7); photo.rotation.y = Math.PI / 2; photo.rotation.z = 0.06; this.group.add(photo); this.keepVis(photo);
     // the kitchen table with two chairs
     const tbl = new THREE.Group(); tbl.position.set(-2.4, 0, 2.0); this.group.add(tbl);
     const top = new THREE.Mesh(new RoundedBoxGeometry(1.2, 0.04, 0.8, 2, 0.01), darkWood); top.position.y = 0.74; top.castShadow = top.receiveShadow = true; tbl.add(top);
-    for (const [x, z] of [[-0.54, -0.34], [0.54, -0.34], [-0.54, 0.34], [0.54, 0.34]]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.72, 0.05), darkWood); l.position.set(x, 0.36, z); l.castShadow = true; tbl.add(l); this.collider(this.R.ColliderDesc.cuboid(0.025, 0.36, 0.025).setTranslation(-2.4 + x, 0.36, 2.0 + z)); }
-    this.collider(this.R.ColliderDesc.cuboid(0.6, 0.02, 0.4).setTranslation(-2.4, 0.74, 2.0));
+    for (const [x, z] of [[-0.54, -0.34], [0.54, -0.34], [-0.54, 0.34], [0.54, 0.34]]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.72, 0.05), darkWood); l.position.set(x, 0.36, z); l.castShadow = true; tbl.add(l); if (!this.arch) this.collider(this.R.ColliderDesc.cuboid(0.025, 0.36, 0.025).setTranslation(-2.4 + x, 0.36, 2.0 + z)); }
+    if (!this.arch) this.collider(this.R.ColliderDesc.cuboid(0.6, 0.02, 0.4).setTranslation(-2.4, 0.74, 2.0));
     this.place('GreenChair_01', -2.4, 1.25, { rotY: 0 }); this.place('GreenChair_01', -1.45, 2.05, { rotY: -Math.PI / 2 });
     this.notes.push(
       { at: new THREE.Vector3(Hs.x0 + 1.0, 0, 0.7), r: 0.6, text: '냉장고 문에 사진이 붙어 있다. 숲. 나무들. 거인은 숲을 좋아한다. 그래서 거기 있었던 거다.' },
-      { at: this.catBowl.clone(), r: 0.4, text: '파란 밥그릇. 고양이 냄새가 난다. 고양이는 지금 없다. …지금은.' },
+      { at: this.catBowl.clone(), r: 0.4, text: '파란 밥그릇. 고양이 냄새가 난다. 라디에이터 옆 방석에서 고양이가 자고 있다. …깨우지 말자.' },
     );
   }
 
@@ -386,12 +505,12 @@ export class Flat {
     const street = new THREE.SpotLight(0xffb066, 22, 16, 0.5, 0.7, 1.6); street.position.set(-2.6, 5.5, -12.5); street.target.position.set(-2.4, 0, -1.6);
     street.castShadow = true; street.shadow.mapSize.set(sm / 2, sm / 2); this.group.add(street, street.target);
     // city glow at the bedroom window
-    const bw = new THREE.SpotLight(0x8aa0d0, 9, 10, 0.6, 0.8, 1.5); bw.position.set(-2.6, Hs.U + 2.6, -6.5); bw.target.position.set(-2.4, Hs.U, -1.8); this.group.add(bw, bw.target);
+    if (!this.baked) { const bw = new THREE.SpotLight(0x8aa0d0, 9, 10, 0.6, 0.8, 1.5); bw.position.set(-2.6, Hs.U + 2.6, -6.5); bw.target.position.set(-2.4, Hs.U, -1.8); this.group.add(bw, bw.target); }
     const hemi = new THREE.HemisphereLight(0x5a6a8a, 0x2a2018, 0.2); this.group.add(hemi);
     // night lights: one plugged in on the landing by the top of the stairs, one in the hall at the bottom
     for (const [x, y, z] of [[3.6, Hs.U + 0.3, -3.95 + 0.06], [Hs.part + 0.07, 0.3, 0.8]]) {
       const nl = new THREE.Mesh(new RoundedBoxGeometry(0.06, 0.08, 0.02, 2, 0.008), new THREE.MeshStandardMaterial({ color: 0x332211, emissive: 0xffa25a, emissiveIntensity: 2.5 }));
-      nl.position.set(x, y, z); this.group.add(nl);
+      nl.position.set(x, y, z); this.group.add(nl); this.keepVis(nl);
       const l = new THREE.PointLight(0xffa25a, 1.0, 3.4, 1.8); l.position.set(x, y, z + (z < 0 ? 0.1 : 0)); if (x < 2) l.position.x += 0.1; this.group.add(l);
     }
   }
@@ -405,6 +524,7 @@ export class Flat {
     if (this.basket.jolt) this.basket.jolt = Math.max(0, this.basket.jolt - dt * 1.6);
     // the cat flap swings when something goes through it
     this.flap.hinge.rotation.x = this.flapSwing || 0;
+    this.city?.userData.update(t);
   }
   terrain() {
     const up = new THREE.Vector3(0, 1, 0), Hs = HOUSE;
