@@ -28,8 +28,8 @@ export const QUESTS = [
     done: (g) => g.save.companions.includes('mina'), target: (g) => g.summit },
   { id: 'charge', title: '로터의 연료', text: () => '동력 결정 회수', prog: (g) => [Math.min(CHARGE, g.save.shards.length), CHARGE],
     done: (g) => g.save.shards.length >= CHARGE && g.save.companions.includes('mina'), target: (g, p) => (g.save.shards.length >= CHARGE - 6 ? nearestShard(g, p) : null) },
-  { id: 'garden', title: '울타리 너머', text: () => '울타리 틈으로 들어가기',
-    done: (g) => g.save.regions.includes('garden'), target: (g) => g.fenceGap },
+  { id: 'garden', title: '울타리 틈', text: () => '울타리 틈에서 로터와 만나기',
+    done: (g) => !!g.save.captured, target: (g) => g.fenceGap },
 ];
 export const CHARGE = 30;
 

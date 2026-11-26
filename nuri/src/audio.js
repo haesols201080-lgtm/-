@@ -144,6 +144,21 @@ export class Audio {
       }
       case 'flap': for (let i = 0; i < 5; i++) this.noise(d, t + i * 0.05, 0.05, { f: 700, q: 1, gain: 0.2 }); break;
       case 'chitter': for (let i = 0; i < 6; i++) this.tone(d, t + i * 0.035, 0.03, { f: 3200 + Math.random() * 800, type: 'square', gain: 0.012 }); break;
+      // chapter 2: the stranger asleep, the flat, the car
+      case 'snore': {
+        // a slow nasal intake, then the soft buzzing breath out (a low sawtooth through a closed-mouth formant)
+        this.noise(d, t, 1.1, { type: 'bandpass', f: 380, f2: 620, q: 1.4, gain: 0.05, attack: 0.5 });
+        const o = this.ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.setValueAtTime(62, t + 1.2); o.frequency.linearRampToValueAtTime(54, t + 2.4);
+        const lp2 = this.ctx.createBiquadFilter(); lp2.type = 'lowpass'; lp2.frequency.value = 260; lp2.Q.value = 3;
+        const g = this.ctx.createGain(); g.gain.setValueAtTime(0, t + 1.2); g.gain.linearRampToValueAtTime(0.07, t + 1.45); g.gain.exponentialRampToValueAtTime(0.001, t + 2.5);
+        o.connect(lp2); lp2.connect(g); g.connect(d); o.start(t + 1.2); o.stop(t + 2.6);
+        this.noise(d, t + 1.2, 1.2, { type: 'lowpass', f: 500, q: 0.7, gain: 0.03, attack: 0.2 });
+        break;
+      }
+      case 'mumble': for (let i = 0; i < 3; i++) this.tone(d, t + i * 0.22, 0.26, { f: 150 + Math.random() * 40, f2: 120 + Math.random() * 30, type: 'triangle', gain: 0.06, attack: 0.04 }); this.noise(d, t, 0.7, { type: 'lowpass', f: 700, gain: 0.04, attack: 0.1 }); break;
+      case 'click': this.noise(d, t, 0.03, { type: 'highpass', f: 3000, gain: 0.5 }); this.tone(d, t, 0.04, { f: 1800, f2: 900, type: 'square', gain: 0.05 }); break;
+      case 'cardoor': this.noise(d, t, 0.35, { type: 'lowpass', f: 300, gain: 0.9 }); this.tone(d, t, 0.25, { f: 70, f2: 45, gain: 0.5 }); this.noise(d, t + 0.02, 0.08, { type: 'bandpass', f: 2200, q: 2, gain: 0.2 }); break;
+      case 'blinker': this.tone(d, t, 0.03, { f: 2400, type: 'square', gain: 0.03 }); this.tone(d, t + 0.36, 0.03, { f: 1900, type: 'square', gain: 0.025 }); break;
     }
   }
 
@@ -154,10 +169,11 @@ export class Audio {
       const C = this.ctx;
       const d = this.out(pos, this.sfx, 0.2); d.gain.value = 0;
       const s = C.createBufferSource(); s.buffer = this.noiseBuf; s.loop = true;
-      const f = C.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = name === 'lift' ? 220 : name === 'hover' ? 1800 : 800; f.Q.value = 2;
+      const f = C.createBiquadFilter(); f.type = name === 'engine' ? 'lowpass' : 'bandpass'; f.frequency.value = name === 'lift' ? 220 : name === 'hover' ? 1800 : name === 'engine' ? 160 : name === 'city' ? 420 : 800; f.Q.value = name === 'engine' ? 0.8 : 2;
       s.connect(f); f.connect(d); s.start();
       L = this.loops[name] = { d, f };
       if (name === 'lift') { const o = C.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 55; const g = C.createGain(); g.gain.value = 0.05; o.connect(g); g.connect(d); o.start(); }
+      if (name === 'engine') { const o = C.createOscillator(); o.type = 'sawtooth'; o.frequency.value = 38; const lp3 = C.createBiquadFilter(); lp3.type = 'lowpass'; lp3.frequency.value = 120; const g = C.createGain(); g.gain.value = 0.35; o.connect(lp3); lp3.connect(g); g.connect(d); o.start(); }
     }
     L.d.gain.setTargetAtTime(level, this.ctx.currentTime, 0.08);
   }

@@ -17,7 +17,9 @@ import { Gameplay } from './gameplay.js';
 import { Quests } from './quests.js';
 import { Minimap } from './minimap.js';
 import { Trials } from './trials.js';
-import { INTRO, LOG, CHAPTER, MEMORY } from './story.js';
+import { INTRO, LOG, CHAPTER, MEMORY, CAPTURE, CAPTURE_END } from './story.js';
+import { makeHand, makeLegs } from './stranger.js';
+import { bootHouse } from './house.js';
 import { Director } from './cutscene.js';
 import { Relics, RELICS } from './relics.js';
 import { Squad } from './squad.js';
@@ -34,7 +36,7 @@ import { Lighting } from './lighting.js';
 import { Prints } from './prints.js';
 import { GroundMarks } from './marks.js';
 import { DUST, WET, REFRACT } from './nuri.js';
-import { clamp, damp, angleDiff } from './util.js';
+import { clamp, damp, angleDiff, smoothstep } from './util.js';
 
 // The sun's shadow map only covers a box around the robot. Past its edge three would light everything fully, so a
 // moving boundary flipped ground between shade and sun as the robot walked or the camera turned (it read as
@@ -91,6 +93,11 @@ async function boot() {
 
   ui.progress(0.02, '물리 엔진');
   await RAPIER.init();
+  // chapter 2 is another place (the stranger's flat in the city): a save there, or ?chapter=2, boots that level instead
+  {
+    const sv = loadSave(), qs = new URLSearchParams(location.search);
+    if (qs.get('chapter') === '2' || (sv?.chapter === 2 && qs.get('chapter') !== '1')) { await bootHouse({ ui, S, tier, renderer, RAPIER }); return; }
+  }
   const physics = new RAPIER.World({ x: 0, y: -9.81, z: 0 });
   physics.timestep = 1 / 60;
   const assets = new Assets(renderer, tier, (k, l) => ui.progress(0.05 + k * 0.85, l));
@@ -203,10 +210,131 @@ async function boot() {
       ], { onDone: () => done() });
     },
   };
+  // ------------------------------------------------------------ the end of chapter 1: a stranger takes Seven
+  // (the people are seen the way a 35 cm robot sees them: boots, jeans, a gloved hand; loaded when Rotor is charged)
+  let cap = null;
+  const prepCapture = async () => {
+    if (cap) return cap;
+    const [boots, basket, denim] = await Promise.all([assets.gltf('house/rubber_boots', 'house_boots'), assets.gltf('house/wicker_basket_02', 'house_basket'), assets.set('hs_denim', { size: 1024 })]);
+    const legs = makeLegs(boots, { denim }), hand = makeHand({}, assets.models.relic_garden_gloves_01);
+    // a lidded wicker basket, big enough for the robot (the scan is 21 cm across; this one is a picnic hamper)
+    const bk = new THREE.Group(), src = basket.scene.clone(true);
+    let lid = null; src.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; if (/lid/.test(o.name)) lid = o; } });
+    bk.add(src); src.scale.setScalar(2.1);
+    const hinge = new THREE.Group(); hinge.position.set(-0.122 * 2.1, 0.2 * 2.1, 0); bk.add(hinge);
+    if (lid) { lid.removeFromParent(); lid.position.set(0.122, 0, 0); lid.quaternion.identity(); lid.scale.setScalar(1); const s2 = new THREE.Group(); s2.scale.setScalar(2.1); s2.add(lid); hinge.add(s2); }
+    for (const o of [legs.root, hand.root, bk]) { o.visible = false; scene.add(o); }
+    cap = { legs, hand, basket: bk, hinge };
+    return cap;
+  };
+  const weave = document.getElementById('weave');
+  CS.capture = async () => {
+    G.capturing = true;
+    const c = await prepCapture();
+    const P = player.pos.clone(), f = V(0, 0, -1), sd = V(1, 0, 0), back = V(0, 0, 1), up = V(0, 1, 0);
+    player.yaw = Math.PI; player.vel.set(0, 0, 0);
+    const gy = (x, z) => gameplay.groundY(x, z);
+    // the stranger walks up the path behind the robot and stops just behind it
+    const L0 = P.clone().addScaledVector(back, 4.2), L1 = P.clone().addScaledVector(back, 0.62);
+    c.legs.root.visible = true; c.legs.root.rotation.y = Math.PI / 2;             // toes (+x) toward -z: walking up to the robot
+    const basketAt = P.clone().addScaledVector(back, 0.55).addScaledVector(sd, 0.42); basketAt.y = gy(basketAt.x, basketAt.z) - 0.01;
+    c.basket.position.copy(basketAt); c.basket.visible = true; c.hinge.rotation.z = 1.9;   // lid open, lying back
+    const head = () => nuri.root.position.clone().add(V(0, 0.37, 0));
+    let t = 0, phase = 0, lastStep = 0, held = null, said = {};
+    const handPose = new THREE.Object3D();
+    // hand frame: fingers forward over the robot's head (toward -z), palm down, the arm rising behind toward the stranger
+    const orient = (pitch) => { handPose.rotation.set(0, Math.PI / 2, 0); handPose.rotateZ(-pitch); };
+    const speak = (k) => { if (said[k]) return; said[k] = true; ui.bubble(CAPTURE[k][0][0], CAPTURE[k][0][1]); };
+    G.actor = (dt) => {
+      t += dt;
+      // 0 - 3.4 s: walking in, the ground jolting at every step
+      const walkK = clamp(t / 3.4, 0, 1), moving = t < 3.4;
+      const lp = L0.clone().lerp(L1, 1 - (1 - walkK) * (1 - walkK) * 0.15 - (1 - walkK) * 0.85);
+      lp.y = gy(lp.x, lp.z); c.legs.root.position.copy(lp);
+      const amt = moving ? 1 : Math.max(0, 1 - (t - 3.4) * 3);
+      phase += dt * 0.72 * amt;
+      c.legs.setGait(phase % 1, amt, t > 6 ? Math.min(0.22, (t - 6) * 0.2) : 0);
+      if (Math.floor(phase * 2) !== lastStep && amt > 0.3) { lastStep = Math.floor(phase * 2); audio.play('thud', { pos: lp, vol: 1, pitch: 0.45 }); G.camShake = 0.012; }
+      if (t > 3.6) { speak('see'); player.yaw = damp(player.yaw, 0.0001, 4, dt) || 0.0001; }
+      if (t > 3.6 && !said.turn) { said.turn = true; setExpr('surprised', 2.4); moodBeep('surprised'); }
+      if (t > 5.2) speak('look');
+      // 6 - 7.6 s: the hand comes down over the robot's head and closes
+      if (t > 5.8) {
+        c.hand.root.visible = true;
+        const k = smoothstep(5.8, 7.2, t), top = head();
+        const from = top.clone().add(V(0, 1.1, 0)).addScaledVector(back, 0.35);
+        const grab = top.clone().addScaledVector(back, 0.1).add(V(0, 0.01, 0));
+        if (!held) {
+          handPose.position.copy(from).lerp(grab, k); orient(0.5 + 0.25 * k);
+          c.hand.setGrip(smoothstep(6.9, 7.6, t) * 0.62);
+          if (t > 7.0 && !said.grab) { said.grab = true; setExpr('worried', 6); moodBeep('worried'); }
+          if (t > 7.6) {
+            handPose.updateMatrixWorld(true);
+            held = new THREE.Matrix4().copy(handPose.matrixWorld).invert().multiply(nuri.root.matrixWorld);
+            audio.play('grabledge', { pos: grab });
+          }
+        }
+      }
+      // 7.6 - 9.8 s: up to a grown-up's height, turned toward the stranger; then over to the basket and down into it
+      if (held) {
+        const k1 = smoothstep(7.6, 9.6, t), k2 = smoothstep(9.8, 11.6, t);
+        if (!G.liftFrom) G.liftFrom = handPose.position.clone();
+        const hi = G.liftFrom.clone().add(V(0, 0.95, 0)).addScaledVector(back, 0.18);
+        const inBasket = basketAt.clone().add(V(0, 0.05 + 0.38, 0)).addScaledVector(back, 0.1);
+        const p = G.liftFrom.clone().lerp(hi, k1).lerp(inBasket, k2);
+        p.y += Math.sin(k2 * Math.PI) * 0.15;
+        handPose.position.copy(p); orient(0.75 - 0.25 * k1 + 0.2 * k2);
+        handPose.rotation.y += Math.sin(t * 1.3) * 0.04 * (k1 - k2);
+        if (t > 9.8) speak('take');
+        // let go once the robot stands in the basket, then the hand withdraws and the lid comes down
+        const rel = smoothstep(11.6, 12.1, t);
+        c.hand.setGrip(0.62 * (1 - rel));
+        if (rel > 0.6 && !G.released) { G.released = true; }
+        if (G.released) handPose.position.add(V(0, smoothstep(12.0, 12.8, t) * 0.8, 0));
+        c.hinge.rotation.z = 1.9 * (1 - smoothstep(12.3, 13.1, t));
+        if (t > 13.0 && !said.lid) { said.lid = true; audio.play('clunk', { pos: basketAt, vol: 0.8 }); G.camShake = 0.02; }
+      }
+      handPose.updateMatrixWorld(true);
+      c.hand.root.position.copy(handPose.position); c.hand.root.quaternion.copy(handPose.quaternion);
+    };
+    // the robot rides in the glove (its world transform follows the hand until it is set down in the basket)
+    G.holdRobot = () => {
+      if (G.released) { nuri.root.position.copy(basketAt).add(V(0, 0.05, 0)); nuri.root.rotation.set(0, 0.4, 0); return; }
+      if (!held) return;
+      const m = new THREE.Matrix4().multiplyMatrices(handPose.matrixWorld, held);
+      m.decompose(nuri.root.position, nuri.root.quaternion, new THREE.Vector3());
+    };
+    director.play([
+      // over the robot's shoulder toward the path: Rotor beeps; the boots come up the path behind
+      { dur: 3.6, from: P.clone().addScaledVector(f, 0.62).addScaledVector(sd, 0.3).add(V(0, 0.2, 0)), to: P.clone().addScaledVector(f, 0.58).addScaledVector(sd, 0.26).add(V(0, 0.19, 0)),
+        lookFrom: P.clone().addScaledVector(back, 1.4).add(V(0, 0.35, 0)), fov: 44,
+        onStart: () => { ui.bubble('로터', '세븐! 뒤에—'); audio.play('beep', { pitch: 1.5 }); } },
+      // from behind the robot: the boots towering over it, the jeans rising out of frame
+      { dur: 2.4, from: P.clone().addScaledVector(f, 0.42).add(V(0.12, 0.1, 0)), to: P.clone().addScaledVector(f, 0.38).add(V(0.1, 0.12, 0)),
+        lookFrom: P.clone().addScaledVector(back, 0.7).add(V(0, 0.55, 0)), fov: 54 },
+      // side on, low: the hand comes down out of the sky, closes, and lifts the robot away
+      { dur: 4.0, from: P.clone().addScaledVector(sd, -0.95).add(V(0, 0.32, 0)).addScaledVector(back, 0.15), to: P.clone().addScaledVector(sd, -1.05).add(V(0, 0.9, 0)).addScaledVector(back, 0.2),
+        lookFrom: () => nuri.root.position.clone().add(V(0, 0.25, 0)), track: true, fov: 50 },
+      // the basket from above: the robot is set down inside and the lid comes over
+      { dur: 3.6, from: basketAt.clone().add(V(-0.3, 1.0, -0.35)), to: basketAt.clone().add(V(-0.12, 0.78, -0.18)), lookFrom: basketAt.clone().add(V(0, 0.2, 0)), fov: 52 },
+    ], { onDone: () => {
+      // inside the basket: dark, light through the weave, the world swaying with the giant's steps
+      weave.classList.add('on');
+      ui.story(CAPTURE_END, () => toChapter2(), { hold: 3600 });
+    } });
+    setTimeout(() => { for (let i = 0; i < 4; i++) setTimeout(() => audio.play('beep', { pitch: 1.6, vol: 0.4 }), i * 260); }, 300);
+  };
+  // chapter 2 is another place (the stranger's flat in the city): save the turn and load it
+  const toChapter2 = () => {
+    gameplay.save.captured = true; gameplay.save.chapter = 2; save();
+    const u = new URL(location.href); u.searchParams.delete('autostart'); u.searchParams.delete('continue'); u.searchParams.set('chapter', '2'); u.searchParams.set('go', '1');
+    location.href = u.toString();
+  };
   gameplay.onCinematic = (target, dur) => CS.event(target, dur);
   gameplay.onMeet = (c, lines) => CS.friend(c, lines);
   gameplay.onBooster = () => CS.booster();
-  quests.onCharged = () => CS.ending(() => ui.story(CHAPTER, () => gameplay.openFence()));
+  gameplay.onCapture = () => CS.capture();
+  quests.onCharged = () => { prepCapture(); CS.ending(() => ui.story(CHAPTER, () => gameplay.openFence())); };
   quests.mapOpen = () => minimap.open;
   const relics = new Relics({ ctx, gameplay, world, player, ui, audio, fx });
   const squad = new Squad({ ctx, gameplay, player, ui, audio, fx, world });
@@ -347,6 +475,7 @@ async function boot() {
       }
     }
     orbit.set(player.yaw + Math.PI, 0.25);
+    if (gameplay.save.charged && !gameplay.save.captured) prepCapture();
     minimap.loadFog(gameplay.save.explored); quests.init();
     creatures.thieves().forEach((c, i) => { if (gameplay.save.shards.includes('q' + i)) { c.carry = false; c.loot.visible = false; } });
     G.mode = 'play'; ui.startPlay();
@@ -571,6 +700,8 @@ async function boot() {
       nuri.root.position.y -= G.sink;
     }
     nuri.root.rotation.y = player.yaw;
+    if (G.actor) G.actor(dt);
+    if (G.holdRobot) { G.holdRobot(); player.pos.copy(nuri.root.position); }
     const fo = footOffsets();
     const params = player.animParams(G.mode === 'play' ? lookTarget() : null);
     params.footOffset = fo.off; params.groundDrop = fo.drop;
@@ -583,7 +714,10 @@ async function boot() {
       const t = G.time * 0.08;
       camera.position.set(player.pos.x + Math.sin(t) * 1.2, player.pos.y + 0.45, player.pos.z + Math.cos(t) * 1.2);
       camera.lookAt(player.pos.x, player.pos.y + 0.2, player.pos.z);
-    } else if (director.active) director.update(dt);
+    } else if (director.active) {
+      director.update(dt);
+      if (G.camShake > 0) { camera.position.add(tmpV.set(Math.random() - 0.5, Math.random() - 0.5, Math.random() - 0.5).multiplyScalar(G.camShake)); G.camShake *= Math.pow(0.02, dt); if (G.camShake < 1e-4) G.camShake = 0; }
+    }
     else if (!G.paused) orbit.update(dt, input, player);
     // world + effects
     world.update(dt, G.time, camera.position, player.pos);

@@ -778,7 +778,7 @@ export class Gameplay {
     const spots = [
       { id: 'toto', name: '셔터', code: 'R-2', x: -6.2 + 1.9, z: 12.2 + 0.9, line: '기록 계속 중. 뿌리 사이에서 본 하늘이 전부지만.', kind: 0 },
       { id: 'bori', name: '랜턴', code: 'L-4', kind: 1, line: '램프 출력 40퍼센트. 반딧불이들이 아직 떠나지 않았어.', at: this.caveCenter },
-      { id: 'mina', name: '로터', code: 'D-1', kind: 2, line: '여기서는 울타리 너머 지붕이 보인다. 수취인 주소가 저기다.', at: this.summit },
+      { id: 'mina', name: '로터', code: 'D-1', kind: 2, line: '여기서는 숲 너머 도시의 불빛이 보인다. 수취인 주소가 저기다.', at: this.summit },
     ];
     for (const s of spots) {
       const pos = s.at ? s.at.clone() : new THREE.Vector3(s.x, this.groundY(s.x, s.z), s.z);
@@ -940,10 +940,10 @@ export class Gameplay {
       }
     }
     // north edge teaser
-    if (P.pos.z < this.edgeZ + 0.9 && !this.edgeShown) { this.edgeShown = true; this.ui.toast(this.save.charged ? '울타리 틈 너머로 정원이 보인다.' : '울타리 너머 거인의 거주지. 틈은 아직 막혀 있다.'); P.emit('curious'); }
-    // through the gap: the garden (next region) begins here
-    if (this.save.charged && P.pos.z < this.edgeZ - 0.4 && !this.save.regions.includes('garden')) {
-      this.save.regions.push('garden'); this.ui.discover('정원 입구'); this.audio.play('discover'); P.emit('discover'); this.persist();
+    if (P.pos.z < this.edgeZ + 0.9 && !this.edgeShown) { this.edgeShown = true; this.ui.toast(this.save.charged ? '울타리 틈 너머로 거인들의 길이 보인다.' : '울타리 너머는 거인들의 길이다. 틈은 아직 막혀 있다.'); P.emit('curious'); }
+    // at the gap, where Rotor waits: the stranger (chapter 1 ends here)
+    if (this.save.charged && !this.save.captured && !this.captureStarted && Math.hypot(P.pos.x - this.fenceGap.x, P.pos.z - this.fenceGap.z) < 0.75 && P.grounded) {
+      this.captureStarted = true; this.onCapture?.();
     }
     if (P.pos.z > this.edgeZ + 3) this.edgeShown = false;
   }

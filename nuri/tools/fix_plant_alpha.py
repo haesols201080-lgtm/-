@@ -14,9 +14,10 @@ ASSETS = {
     'periwinkle_plant': None, 'shrub_01': None, 'shrub_02': None, 'shrub_03': None, 'shrub_04': None, 'shrub_sorrel_01': None,
     'weed_plant_02': None,
     'pine_sapling_small': ['pine_sapling_small_twig'],
+    'potted_plant_02': ['potted_plant_02_leaves'],   # (chapter 2, public/models/house)
 }
 # (fir_sapling's twig 'alpha' does not line up with its atlas and Poly Haven ships that material opaque: left as is)
-ALPHA_FILE = {'pine_sapling_small': 'pine_sapling_small_twig_alpha_1k.png'}
+ALPHA_FILE = {'pine_sapling_small': 'pine_sapling_small_twig_alpha_1k.png', 'potted_plant_02': 'potted_plant_02_leaves_alpha_1k.png'}
 
 
 def read_glb(p):
@@ -78,6 +79,7 @@ def alpha_map(asset, size):
 
 for asset, leafMats in ASSETS.items():
     p = os.path.join(MODELS, asset + '.glb')
+    if not os.path.exists(p): continue
     js, bin_ = read_glb(p)
     views = [bin_[bv.get('byteOffset', 0): bv.get('byteOffset', 0) + bv['byteLength']] for bv in js['bufferViews']]
     done = set()

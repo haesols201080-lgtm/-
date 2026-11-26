@@ -522,3 +522,17 @@ body.css-vignette::after { content: ''; position: fixed; inset: 0; pointer-event
 @media (prefers-reduced-motion: reduce) {
   .ld-art, #qmarker .qm-dia, .dlg-next { animation: none; }
 }
+
+/* inside the wicker basket: dark, with daylight coming through the weave in small slanted chinks; it sways with the
+   steps of whoever is carrying it */
+#weave { position: fixed; inset: -6%; z-index: 39; pointer-events: none; opacity: 0; transition: opacity .8s; background-color: #050302;
+  background-image: radial-gradient(ellipse 1.4px 2.6px at 50% 50%, rgba(255, 236, 196, .85), rgba(255, 220, 170, .35) 60%, transparent 100%),
+    radial-gradient(ellipse 1.1px 2px at 50% 50%, rgba(255, 230, 190, .55), transparent 100%);
+  background-size: 15px 11px, 15px 11px; background-position: 0 0, 7.5px 5.5px; filter: blur(.6px); transform: rotate(-8deg); }
+#weave.on { opacity: 1; animation: weaveSway 1.15s ease-in-out infinite alternate; }
+@keyframes weaveSway { from { transform: rotate(-8deg) translate(-4px, -3px); } to { transform: rotate(-6deg) translate(5px, 4px); } }
+
+/* chapter 2 (the flat): no forest map here */
+body.house #minimap, body.house #mm-ring, body.house #p-map, body.house .tabs [data-go="map"] { display: none !important; }
+/* a full-screen fade to black (flights, being put back by the sleeper, the end of the car ride) */
+#fader { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 38; transition: opacity .8s; }

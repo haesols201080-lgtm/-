@@ -1,4 +1,4 @@
-// Story — Chapter 1: the forest.
+// Story — Chapter 1: the forest. Chapter 2: the giant's home in the city.
 // Tone: a small survey machine alone in a world built at another scale. Field-log voice, dry, observant; the
 // mystery is carried by recovered memory records, not by exposition. Nothing ends — each region opens the next.
 //   Survey unit SV-7 "Seven" was being carried by the transport drone D-1 "Rotor" when a storm brought it down in a forest.
@@ -20,7 +20,7 @@ export const LOG = {
   cell: '탐사 기록 006. 바위산 옆 승강 장치. 전원 없음. 랜턴이 속 빈 통나무 안에서 동력 셀을 봤다고 했다.',
   mina: '탐사 기록 007. 전망 바위 정상에서 로터의 비콘. 기체는 살아 있다.',
   charge: '탐사 기록 008. 로터의 비행에 필요한 결정은 서른 개. 기억이 돌아올 때마다, 결정 하나의 무게가 달라진다.',
-  garden: '탐사 기록 009. 울타리 너머 거인의 거주지. 기록 속 주소와 일치한다.',
+  garden: '탐사 기록 009. 울타리 너머는 거인들이 다니는 길이다. 로터가 여기서 출발하자고 한다.',
 };
 
 const N = '세븐';
@@ -63,7 +63,7 @@ export const TALK = {
       [N, '셔터 말로는, 네가 끝까지 붙잡은 게 나였다고 하던데.'],
       ['로터', '…배송 지시서 1순위였으니까. 「SV-7과 탑재물 C를 수취인에게. 경로 기록 금지.」'],
       [N, '탑재물 C가 뭔데?'],
-      ['로터', '네 몸 안에 있어. 그 이상은 나도 몰라. 수취인 주소는 저 울타리 너머 집이다.'],
+      ['로터', '네 몸 안에 있어. 그 이상은 나도 몰라. 수취인 주소는 숲 건너편 도시야.'],
     ],
     again: [
       { lines: [['로터', '결정 {n} / 30. 해가 지기 전에 최대한 모아.']] },
@@ -80,10 +80,48 @@ export const MEMORY = {
   20: ['[복구된 기록 · 일부]', '같은 목소리. 이번엔 숨이 가쁘다. 멀리서 경보음.', '"SV-7, 코어는 네 안에 있어. 우리 집으로 가. 그리고… 아무도 믿지 마."'],
 };
 
-// the turn of the chapter (not an ending): Mina flies, the next region opens
+// the turn of the chapter (not an ending): Rotor flies up to wait at the fence gap
 export const CHAPTER = [
   '서른 번째 결정이 연결되자, 로터의 회전익이 낮게 울리기 시작했다.',
-  '로터가 저장해 둔 배송 지시서의 잠금이 풀린다. 수취인: 한서윤 박사. 주소: 울타리 너머 정원이 딸린 주택.',
+  '로터가 저장해 둔 배송 지시서의 잠금이 풀린다. 수취인: 한서윤 박사. 주소: 숲 건너편 도시.',
   '발신처는 3년 전 폐쇄된 연구소였다.',
-  '세븐은 울타리 아래 좁은 틈을 바라본다. 거인들의 집. 그리고 자기를 만든 사람의 집.',
+  '"울타리 틈에서 만나. 거기서부터는 내가 너를 들고 난다." 로터가 먼저 날아올랐다.',
+];
+
+// the fence gap: a stranger out for a walk in the forest sees a little robot and simply takes it home
+export const CAPTURE = {
+  see: [['낯선 사람', '어? …이게 뭐야?']],
+  look: [['낯선 사람', '장난감인가? 와, 되게 정교하네. 눈이 움직여.']],
+  take: [['낯선 사람', '누가 버리고 갔나 보다. …같이 가자, 꼬마야.']],
+};
+export const CAPTURE_END = [
+  '바구니 뚜껑이 닫혔다. 엮은 틈으로 빛이 조각조각 들어온다.',
+  '거인의 걸음에 맞춰 세계가 흔들린다. 로터의 신호가 점점 멀어진다.',
+  '탐사 기록 010. 미확인 거인에게 포획됨. 의도 불명. …무섭다.',
+];
+
+// chapter 2: the car ride to New York, then the stranger's house (a detached house in the outer boroughs) at night
+export const CAR = {
+  title: '2장 · 거인의 집',
+  lines: [
+    [2.5, '탐사 기록 011. 바구니째 거인의 이동 장치에 실렸다. 엔진 소리. 진동.'],
+    [10, '창밖으로 나무가 흘러간다. 내가 있던 숲이 멀어진다.'],
+    [17, ['낯선 사람', '집에 가면 깨끗이 닦아 줄게. 흙투성이네.']],
+    [23, '거대한 다리를 건넌다. 물 건너편에 불빛의 숲이 솟아 있다. 표지판에 거인들의 글자. NEW YORK.'],
+    [29.5, '불빛이 줄어든다. 나무와 낮은 집들. 거인의 집이 가까워진다.'],
+  ],
+};
+export const HOUSE = {
+  arrive: [['낯선 사람', '자, 여기가 이제 네 집이야.'], ['낯선 사람', '내일 제대로 봐 줄게. 잘 자, 꼬마야.']],
+  wake: '탐사 기록 012. 거인의 집. 위층. 불이 꺼졌다. 거인은 잠들었다. …여기서 나가야 한다.',
+  room: '탐사 기록 013. 방문이 조금 열려 있다. 거인이 깨지 않게, 조용히.',
+  stairs: '탐사 기록 014. 계단. 한 칸이 내 키의 절반이 넘는다. 거인의 집은 위아래로도 크다.',
+  living: '탐사 기록 015. 아래층. 창밖으로 거인들의 길과 다른 집들. 부엌 쪽에서 바깥 공기 냄새가 난다.',
+  yard: '탐사 기록 016. 바깥. 젖은 풀 냄새. 울타리 너머로 끝없는 불빛.',
+};
+export const CHAPTER2 = [
+  '고양이 문을 빠져나오자 밤공기가 몸을 감쌌다. 울타리 너머, 물 건너편에 거대한 불빛의 숲이 서 있었다.',
+  '뉴욕. 거인들의 도시. 로터의 지도에도 없는 크기.',
+  '어딘가에 로터가 있다. 셔터와 랜턴도. 그리고 한서윤 박사도.',
+  '세븐은 처음으로 자기가 얼마나 작은지 알았다. 그래도 가야 한다는 것도.',
 ];
