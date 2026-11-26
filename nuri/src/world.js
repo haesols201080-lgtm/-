@@ -862,8 +862,9 @@ export class World {
       const fv = this.variants('fern_02');
       const one = (v, x, z, h, rot) => { const s = h / v.size.y, m = new THREE.Mesh(v.geo, windy(v.mat, 0.035));
         m.position.set(x, T.heightAt(x, z) - 0.02 * s, z); m.rotation.y = rot; m.scale.setScalar(s); m.castShadow = true; m.receiveShadow = true; this.scene.add(m); };
-      one(fv[0], START.x - 0.1, START.z + 0.5, 1.3, 0.7);
-      one(fv[Math.min(1, fv.length - 1)], START.x - 0.7, START.z + 0.05, 0.8, 2.4);
+      // (the robot faces north, -z: the clump stands just behind it so the fronds arch over it, not in front of its face)
+      one(fv[0], START.x - 0.1, START.z + 0.8, 1.3, 0.7);
+      one(fv[Math.min(1, fv.length - 1)], START.x - 0.75, START.z + 0.35, 0.8, 2.4);
     }
     // ---- plants (scanned), placed the way a forest floor actually fills: clonal colonies and drifts of one species,
     // dense and full-grown in the middle, sparse and small at the edge, following the microhabitat, with bare
