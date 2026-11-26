@@ -3,9 +3,12 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
+import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
 import { patchMaterial, makeRockMaterial, leafLight, nearFade, barkMoss } from './shaders.js';
 
 const BASE = './';
+// the artifact build (tools/artifact_assets.py) ships PNG colour maps as WebP
+const PNG = import.meta.env.PROD ? 'webp' : 'png';
 
 // Some hosts' content-security policy blocks fetch() of data: and blob: URLs. GLTFLoader decodes embedded images
 // through ImageBitmapLoader, which fetches a blob: URL; load those through an <img> element instead (allowed by img-src).
@@ -122,7 +125,7 @@ export class Assets {
   async set(name, { alpha = false, size = this.tier.texSize } = {}) {
     const suf = this.suffix(size);
     const [map, normal, orm] = await Promise.all([
-      this.texture(`${BASE}tex/${name}${suf}_albedo.${alpha ? 'png' : 'jpg'}`, true),
+      this.texture(`${BASE}tex/${name}${suf}_albedo.${alpha ? PNG : 'jpg'}`, true),
       this.texture(`${BASE}tex/${name}${suf}_normal.jpg`, false),
       this.texture(`${BASE}tex/${name}${suf}_orm.jpg`, false),
     ]);
@@ -160,12 +163,20 @@ export class Assets {
   }
 
   async gltf(path, key) {
-    const loader = this.gltfLoader || (this.gltfLoader = new GLTFLoader());
-    // production builds ship glTF JSON (.json) because some static hosts don't serve .glb
+    const loader = this.gltfLoader || (this.gltfLoader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder));
+    // production builds ship glTF JSON (.json) because the artifact host doesn't serve .glb: meshopt-compressed
+    // geometry in a base64 buffer, and the images as their own files next to it (tools/pack_models.mjs)
     let g;
     if (import.meta.env.PROD) {
-      const blob = await fetchRetry(`${BASE}models/${path}.json`);
-      g = await loader.parseAsync(jsonToGLB(JSON.parse(await blob.text())), '');
+      const json = JSON.parse(await (await fetchRetry(`${BASE}models/${path}.json`)).text());
+      const dir = `${BASE}models/${path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : ''}`;
+      const urls = await Promise.all((json.images || []).map(async (im) => {
+        if (!im.uri || im.uri.startsWith('data:')) return null;
+        im.uri = URL.createObjectURL(await fetchRetry(dir + im.uri));
+        return im.uri;
+      }));
+      try { g = await loader.parseAsync(jsonToGLB(json), ''); }
+      finally { for (const u of urls) if (u) URL.revokeObjectURL(u); }
     } else g = await loader.loadAsync(`${BASE}models/${path}.glb`);
     this.models[key || path] = g; this.step(key || path);
     return g;
@@ -190,7 +201,7 @@ export class Assets {
     const lichen = null;
     Object.assign(T, { rock, moss, bark, twig, grass, lichen });
     // moss tile modelled in Blender (blender/build_moss.py): albedo + height in alpha, and its normal map
-    const [mossMap, mossNrm] = await Promise.all([this.texture(`${BASE}tex/moss_tile_albedo.png`, true), this.texture(`${BASE}tex/moss_tile_normal.png`, false)]);
+    const [mossMap, mossNrm] = await Promise.all([this.texture(`${BASE}tex/moss_tile_albedo.${PNG}`, true), this.texture(`${BASE}tex/moss_tile_normal.${PNG}`, false)]);
     T.mossTile = { map: mossMap, normal: mossNrm };
     T.water = makeWaterNormal();
     // HDRI: Poly Haven "forest_slope" (CC0)

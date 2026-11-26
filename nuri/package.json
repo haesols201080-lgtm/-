@@ -13,6 +13,7 @@
     "three": "0.180.0"
   },
   "devDependencies": {
+    "meshoptimizer": "^0.22.0",
     "vite": "6.3.5",
     "vite-plugin-singlefile": "2.2.0"
   }

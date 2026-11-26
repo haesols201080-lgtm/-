@@ -1,27 +1,28 @@
-"""Rewrites a production build (dist/) into file types an artifact host serves:
-  * every .glb -> standard glTF JSON (.json) with the binary buffer embedded as a base64 data URI
+"""Rewrites a production build (dist/) into file types an artifact host serves (after tools/pack_models.mjs):
+  * every PNG colour map in models/ and tex/ -> WebP
   * every Radiance .hdr -> two PNGs: <name>_rgb.png (RGBE mantissas) + <name>_e.png (shared exponent)
 Run with Blender's Python (bpy) because it decodes the .hdr:  python tools/artifact_assets.py dist"""
-import sys, os, json, struct, base64, glob
+import sys, os, glob
 import numpy as np
 from PIL import Image
 
 D = sys.argv[1]
-for p in glob.glob(f'{D}/models/**/*.glb', recursive=True):
-    b = open(p, 'rb').read()
-    magic, ver, total = struct.unpack_from('<III', b, 0)
-    assert magic == 0x46546C67, p
-    off = 12; js = None; bin_ = b''
-    while off < total:
-        ln, typ = struct.unpack_from('<II', b, off); chunk = b[off + 8: off + 8 + ln]; off += 8 + ln
-        if typ == 0x4E4F534A: js = json.loads(chunk.decode('utf-8'))
-        elif typ == 0x004E4942: bin_ = chunk
-    if js.get('buffers'):
-        js['buffers'][0]['uri'] = 'data:application/octet-stream;base64,' + base64.b64encode(bin_).decode('ascii')
-    out = p[:-4] + '.json'
-    json.dump(js, open(out, 'w'), separators=(',', ':'))
+# models: tools/pack_models.mjs has already turned every .glb into glTF JSON (meshopt geometry, images as files);
+# a .glb still here means that step was skipped
+left = glob.glob(f'{D}/models/**/*.glb', recursive=True)
+assert not left, f'run "node tools/pack_models.mjs {D}" first ({len(left)} .glb left)'
+
+# PNG colour maps (leaf and flower cut-outs, the moss tile with height in alpha) -> WebP: lossy colour at q90,
+# lossless alpha, and exact=True so the colour under transparent pixels survives (it bleeds in at cut-out edges)
+for p in glob.glob(f'{D}/models/**/*.png', recursive=True) + glob.glob(f'{D}/tex/*.png'):
+    im = Image.open(p); im.load()
+    out = p[:-4] + '.webp'
+    kw = dict(quality=90, method=6)
+    if im.mode in ('RGBA', 'LA', 'P'): im = im.convert('RGBA'); kw.update(alpha_quality=100, exact=True)
+    else: im = im.convert('RGB')
+    im.save(out, 'WEBP', **kw)
+    print('webp', os.path.relpath(out, D), round(os.path.getsize(p) / 1e6, 2), '->', round(os.path.getsize(out) / 1e6, 2), 'MB')
     os.remove(p)
-    print('gltf', os.path.relpath(out, D), round(os.path.getsize(out) / 1e6, 2), 'MB')
 
 hdrs = glob.glob(f'{D}/hdri/*.hdr')
 if hdrs:
