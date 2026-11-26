@@ -2,6 +2,7 @@
 // gate puzzle, crate-stacking to the booster upgrade, the powered lift, vine climbing, companion robots,
 // region discovery, checkpoints and save data.
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mulberry32, clamp, damp, smoothstep , josa } from './util.js';
 import { REGIONS, START, OUTCROP, STUMPS, LOGS, WORLD, GLADE_RIDGE } from './layout.js';
 import { MILESTONES } from './quests.js';
@@ -61,6 +62,40 @@ export class Gameplay {
     this.buildProps();
     this.buildCompanions();
     this.buildEdge();
+    this.buildLanding();
+  }
+
+  // ---------------------------------------------------------------- where the robot came down (the intro)
+  // Rotor's cargo hatch opened in the storm: SV-7's transport case lies split open beside the fern it rolled under,
+  // its foam bed empty, the stencil on the lid half scraped off, a furrow in the litter where it slid.
+  buildLanding() {
+    const x = START.x + 0.62, z = START.z + 0.02, gy = this.T.heightAt(x, z), yaw = 0.9;
+    const shell = new THREE.MeshStandardMaterial({ color: 0x4b5244, roughness: 0.62, metalness: 0.05 });
+    const foam = new THREE.MeshStandardMaterial({ color: 0x202224, roughness: 0.95 });
+    const steel = new THREE.MeshStandardMaterial({ color: 0x9a9a92, roughness: 0.38, metalness: 0.9 });
+    // the stencil on the lid (drawn once into a small canvas)
+    const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128; const c = cv.getContext('2d');
+    c.fillStyle = '#4b5244'; c.fillRect(0, 0, 256, 128); c.fillStyle = 'rgba(226,220,200,.85)'; c.font = 'bold 34px monospace'; c.fillText('D-1 / CARGO', 18, 52); c.font = 'bold 26px monospace'; c.fillText('SV-7  FRAGILE', 18, 92);
+    c.globalCompositeOperation = 'destination-out'; for (let k = 0; k < 60; k++) { c.globalAlpha = 0.25 + Math.random() * 0.5; c.fillRect(140 + Math.random() * 120, Math.random() * 128, 4 + Math.random() * 30, 2 + Math.random() * 5); }
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const lidMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.62, metalness: 0.05 });
+    const W = 0.5, D = 0.3, Hb = 0.12, Hl = 0.06;
+    const g = new THREE.Group(); g.position.set(x, gy - 0.015, z); g.rotation.set(0.05, yaw, -0.04);
+    const base = new THREE.Mesh(new RoundedBoxGeometry(W, Hb, D, 3, 0.02), shell); base.position.y = Hb / 2; g.add(base);
+    const bed = new THREE.Mesh(new THREE.BoxGeometry(W - 0.04, 0.02, D - 0.04), foam); bed.position.y = Hb - 0.008; g.add(bed);
+    // the empty hollow the robot was packed in
+    const hol = new THREE.Mesh(new RoundedBoxGeometry(0.2, 0.03, 0.16, 2, 0.02), new THREE.MeshStandardMaterial({ color: 0x0e0f10, roughness: 1 })); hol.position.set(-0.05, Hb + 0.004, 0); g.add(hol);
+    // the lid, torn half off its hinge, hanging open
+    const hinge = new THREE.Group(); hinge.position.set(0, Hb, -D / 2); hinge.rotation.x = -1.95; hinge.rotation.z = 0.12; g.add(hinge);
+    const lid = new THREE.Mesh(new RoundedBoxGeometry(W, Hl, D, 3, 0.02), [shell, shell, lidMat, shell, shell, shell]); lid.position.set(0, Hl / 2, D / 2); hinge.add(lid);
+    for (const sx of [-0.2, 0.2]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.025, 0.02), steel); l.position.set(sx, Hb - 0.005, D / 2 + 0.008); g.add(l); }
+    g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    this.scene.add(g);
+    const col = this.W.createCollider(this.R.ColliderDesc.cuboid(W / 2, Hb / 2, D / 2).setTranslation(x, gy + Hb / 2, z).setRotation(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0))));
+    col.userData = { kind: 'static', surface: 'metal' };
+    this.landing = { pos: new THREE.Vector3(x, gy, z) };
+    this.interactables.push({ pos: new THREE.Vector3(x, gy, z), r: 0.55, label: () => '운송 케이스 살펴보기',
+      act: () => { this.ui.bubble('세븐', '내가 실려 온 케이스. 완충재가 내 모양으로 패여 있다. 탑재물 C의 자리는… 비어 있다.'); this.player.emit('curious'); } });
   }
 
   // ---------------------------------------------------------------- shards

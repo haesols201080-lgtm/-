@@ -82,12 +82,10 @@ export class Minimap {
   }
 
   // faint survey squares every 5 m, drawn under the ink on whatever canvas holds the map
+  // the round map is cut from a page of the notebook: its ruled lines run under the drawing
   grid(g, toPx, from, to, w) {
-    g.save(); g.strokeStyle = 'rgba(70,110,150,.16)'; g.lineWidth = w;
-    for (let v = Math.ceil(from / 5) * 5; v <= to; v += 5) {
-      const [x0, y0] = toPx(v, from), [x1, y1] = toPx(v, to); g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1, y1); g.stroke();
-      const [a0, b0] = toPx(from, v), [a1, b1] = toPx(to, v); g.beginPath(); g.moveTo(a0, b0); g.lineTo(a1, b1); g.stroke();
-    }
+    g.save(); g.strokeStyle = 'rgba(64,104,150,.28)'; g.lineWidth = w;
+    for (let v = Math.ceil(from / 2.4) * 2.4; v <= to; v += 2.4) { const [a0, b0] = toPx(from, v), [a1, b1] = toPx(to, v); g.beginPath(); g.moveTo(a0, b0); g.lineTo(a1, b1); g.stroke(); }
     g.restore();
   }
 
@@ -179,7 +177,6 @@ export class Minimap {
   drawBig() {
     const g = this.bg, W = this.big.width, k = W / WORLD.size;
     g.clearRect(0, 0, W, W);
-    this.grid(g, (a, b) => [(a + HALF) * k, (b + HALF) * k], -HALF, HALF, 1);
     g.imageSmoothingEnabled = true; g.drawImage(this.inked, 0, 0, W, W);
     const P = (x, z) => [(x + HALF) * k, (z + HALF) * k];
     g.textAlign = 'center'; g.textBaseline = 'middle';

@@ -32,6 +32,29 @@ export class UI {
     const shut = (id) => () => (this.section ? this.go('toc') : this.closeBook($(id), () => $(id).classList.add('hidden')));
     $('h-close').onclick = shut('help'); $('s-close').onclick = shut('settings'); $('jr-close').onclick = shut('journal');
     $('bm-close').onclick = () => (this.section ? this.go('toc') : this.fire('mapkey'));
+    // every spread is a pair of pages of the same notebook: the page underlay the flags tuck under, the ruled sheets
+    // with their printed header and page numbers (the contents page lists the same numbers)
+    const PAGES = { pause: [2, 3, 1], journal: [4, 5, 2], bigmap: [6, 7, 3], settings: [8, 9, 4], help: [10, 11, 5] };
+    for (const book of document.querySelectorAll('.book')) {
+      const [pl, pr, no] = PAGES[book.closest('.screen').id] || [0, 0, 0];
+      const top = document.createElement('i'); top.className = 'page-top';
+      const mk = (side, hdr, pno) => { const d = document.createElement('div'); d.className = 'sheet ' + side;
+        const h = document.createElement('span'); h.className = 'hdr'; h.append(...hdr); const n = document.createElement('span'); n.className = 'pno'; n.textContent = pno; d.append(h, n); return d; };
+      const nb = document.createElement('b'); nb.textContent = no;
+      book.prepend(top, mk('l', ['SV-7 FIELD NOTES'], pl), mk('r', ['No.', nb], pr));
+    }
+    // choices are written out and the chosen one circled (the <select> stays underneath for the value)
+    for (const sel of document.querySelectorAll('.pg select')) {
+      const box = document.createElement('span'); box.className = 'opts';
+      for (const o of sel.options) {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'opt'; b.dataset.v = o.value; b.textContent = o.textContent.replace(/\s*\(.*\)/, '');
+        b.onclick = (e) => { e.preventDefault(); if (sel.value === o.value) return; const old = box.querySelector('.opt.on'); if (old) this.eraseRing(old); sel.value = o.value; sel.dispatchEvent(new Event('change')); this.syncOpts(); };
+        box.appendChild(b);
+      }
+      sel.after(box); sel._opts = box;
+    }
+    // a tick rubbed out with the eraser when a box is cleared
+    document.addEventListener('change', (e) => { const t = e.target; if (t.matches?.('.pg input[type=checkbox]') && !t.checked) this.rubOut(t, '✓', 1.75); }, true);
     // index tabs on the edge of every spread: jump between sections of the notebook
     const SECTION = { pause: 'toc', journal: 'journal', bigmap: 'map', settings: 'settings', help: 'help' };
     for (const nav of document.querySelectorAll('.book .tabs')) {
@@ -83,15 +106,28 @@ export class UI {
   setQuest(q, animate) {
     const el = $('quest');
     if (!q) { el.classList.add('hidden'); return; }
+    // a task just finished stays ticked and struck through for a moment before the next one is written
+    if (this._qHold && performance.now() < this._qHold) { clearTimeout(this._qT); this._qT = setTimeout(() => this.setQuest(q, animate), this._qHold - performance.now() + 20); return; }
     el.classList.remove('hidden');
-    $('q-step').textContent = `탐사 목표 ${q.step} / ${q.total}`;
-    $('q-title').textContent = q.title; $('q-text').textContent = q.text;
-    $('q-prog').textContent = q.prog ? `${q.prog[0]} / ${q.prog[1]}` : '';
-    if (animate) { el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); }
+    const title = q.title, prog = q.prog ? `${q.prog[0]} / ${q.prog[1]}` : '';
+    const isNew = $('q-title').textContent !== title;
+    if (isNew) {
+      // the old lines rubbed out, the new task written on the same lines
+      if ($('q-title').textContent && el.offsetParent) this.rubOut($('quest').querySelector('.q-head')), this.rubOut($('quest').querySelector('.q-obj'));
+      el.classList.remove('done');
+      $('q-step').textContent = `No.${q.step} / ${q.total}`;
+      $('q-title').textContent = title; $('q-text').textContent = q.text; $('q-prog').textContent = prog;
+      if (animate !== false) { el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); }
+    } else {
+      if ($('q-text').textContent !== q.text) $('q-text').textContent = q.text;
+      this.rewrite($('q-prog'), prog);
+    }
   }
   questDone(title, reward) {
+    // in the corner notebook: the box ticked, the task struck through
+    const el = $('quest'); el.classList.remove('done'); void el.offsetWidth; el.classList.add('done'); this._qHold = performance.now() + 1500;
     $('qdone-title').textContent = title; $('qdone-reward').textContent = reward ? '획득 · ' + reward : '';
-    const el = $('qdone'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 3600);
+    const d = $('qdone'); this.restart(d); d._t = setTimeout(() => d.classList.add('hidden'), 3600);
   }
   // ---- juice
   flyShard(x, y, onArrive) {
@@ -123,11 +159,13 @@ export class UI {
     next();
   }
   // full-screen story text over black (intro / ending); tap to skip ahead
-  story(lines, onDone, { title = null, hold = 3400, memory = false } = {}) {
+  // onFade runs as the page starts to fade, so whatever comes next is already on screen behind it (no flash of the
+  // plain game view between the story and a cutscene)
+  story(lines, onDone, { title = null, hold = 3400, memory = false, onFade = null } = {}) {
     const el = $('story'), box = $('story-text');
     box.innerHTML = ''; el.classList.remove('hidden', 'fade'); el.classList.toggle('memory', memory);
     let i = 0, t = null, done = false;
-    const finish = () => { if (done) return; done = true; clearTimeout(t); el.classList.add('fade'); setTimeout(() => { el.classList.add('hidden'); onDone?.(); }, 1000); };
+    const finish = () => { if (done) return; done = true; clearTimeout(t); onFade?.(); el.classList.add('fade'); setTimeout(() => { el.classList.add('hidden'); onDone?.(); }, 1000); };
     const step = () => {
       if (i < lines.length) { const p = document.createElement('p'); p.textContent = lines[i++]; box.appendChild(p); t = setTimeout(step, hold); }
       else if (title && !box.querySelector('.title')) { const p = document.createElement('p'); p.className = 'title'; p.textContent = title; box.appendChild(p); t = setTimeout(finish, 3000); }
@@ -194,8 +232,8 @@ export class UI {
   combo(n) { const el = $('combo'); el.textContent = `연속 회수 ×${n}`; this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 900); }
   flash() { const el = $('flash'); el.classList.remove('go'); void el.offsetWidth; el.classList.add('go'); }
 
-  setShards(n, t) { $('shards').textContent = n; $('shards-total').textContent = '/' + t; }
-  setFriends(n, t) { $('friends').textContent = n; $('friends-total').textContent = '/' + t; }
+  setShards(n, t) { this.rewrite($('shards'), n); $('shards-total').textContent = '/' + t; }
+  setFriends(n, t) { this.rewrite($('friends'), n); $('friends-total').textContent = '/' + t; }
   setPrompt(text, usingPad) {
     const p = $('prompt');
     if (!text) { p.classList.add('hidden'); return; }
@@ -236,6 +274,36 @@ export class UI {
     $('p-title').onclick = () => this.fire('title');
     this.openBook($('pause'));
   }
+  // ================================================================ pen and eraser
+  syncOpts() { for (const sel of document.querySelectorAll('.pg select')) for (const b of sel._opts?.children || []) b.classList.toggle('on', b.dataset.v === sel.value); }
+  // the ink at an element rubbed out: a copy of it shaking and fading where it was, a grey smudge, crumbs
+  rubOut(el, text, scale = 1) {
+    const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+    const g = document.createElement('span'); g.className = 'rubbing'; g.textContent = text ?? el.textContent;
+    Object.assign(g.style, { left: r.left + 'px', top: (text ? r.top - r.height * 0.55 : r.top) + 'px', font: cs.font, color: text ? '#a63d2c' : cs.color, lineHeight: cs.lineHeight });
+    if (text) g.style.fontSize = parseFloat(cs.fontSize) * scale + 'px';
+    document.body.appendChild(g); setTimeout(() => g.remove(), 700);
+    const sm = document.createElement('i'); sm.className = 'smudge';
+    Object.assign(sm.style, { left: r.left - 4 + 'px', top: r.top - 2 + 'px', width: Math.max(18, r.width + 8) + 'px', height: r.height + 4 + 'px' });
+    document.body.appendChild(sm); setTimeout(() => sm.remove(), 2900);
+    for (let k = 0; k < 5; k++) {
+      const c = document.createElement('i'); c.className = 'crumb';
+      Object.assign(c.style, { left: r.left + Math.random() * r.width + 'px', top: r.top + r.height * 0.6 + 'px' });
+      c.style.setProperty('--dx', (Math.random() - 0.5) * 30 + 'px'); c.style.setProperty('--dy', 12 + Math.random() * 18 + 'px'); c.style.setProperty('--r', Math.random() * 180 + 'deg');
+      document.body.appendChild(c); setTimeout(() => c.remove(), 850);
+    }
+  }
+  eraseRing(opt) { const r = document.createElement('span'); r.className = 'rubbing'; const b = opt.getBoundingClientRect();
+    Object.assign(r.style, { left: b.left + 'px', top: b.top + b.height * 0.12 + 'px', width: b.width + 'px', height: b.height * 0.8 + 'px', border: '1.8px solid #a63d2c', borderRadius: '50%', transform: 'rotate(-4deg)' });
+    document.body.appendChild(r); setTimeout(() => r.remove(), 700); this.rubOut(opt, ''); }
+  // write a new value over an old one: the old one rubbed out, the new one written in
+  rewrite(el, text) {
+    text = String(text);
+    if (el.textContent === text) return;
+    if (el.textContent && el.offsetParent) this.rubOut(el);
+    el.textContent = text; el.classList.remove('pen'); void el.offsetWidth; el.classList.add('pen');
+  }
+
   // ================================================================ the notebook in the hands
   // Every section is a spread of the same notebook. Opening: it comes up and the front cover swings open on the spine;
   // closing: the left-hand pages swing back over as the cover and it goes down; moving between sections: one leaf
@@ -253,7 +321,8 @@ export class UI {
     const front = document.createElement('i'); front.className = 'face cover';
     const back = document.createElement('i'); back.className = 'face inside';
     // the left page as it will lie once the cover is over: the spread's left half with its writing
-    const pl = book.querySelector('.pg-l'); if (pl) back.appendChild(this.pageCopy(pl, { left: '19.2%', right: '9.2%', top: '11.5%', bottom: '11%' }));
+    this.sheetCopy(book, 'l', back, { left: '11.4%', right: '0', top: '7.3%', bottom: '9.5%' });
+    const pl = book.querySelector('.pg-l'); if (pl) back.appendChild(this.pageCopy(pl, { left: '19.2%', right: '9.2%', top: '14.5%' }));
     flap.append(front, back); book.appendChild(flap);
     book.classList.add('closed', 'enter');
     const end = (e) => { if (e.target !== flap) return; flap.remove(); book.classList.remove('closed', 'enter'); this._bookAnim = null; done?.(); };
@@ -264,19 +333,21 @@ export class UI {
     const flap = document.createElement('div'); flap.className = 'flap shut';
     const front = document.createElement('i'); front.className = 'face cover';
     const back = document.createElement('i'); back.className = 'face inside';
-    const pl = book.querySelector('.pg-l'); if (pl) back.appendChild(this.pageCopy(pl, { left: '19.2%', right: '9.2%', top: '11.5%', bottom: '11%' }));
+    this.sheetCopy(book, 'l', back, { left: '11.4%', right: '0', top: '7.3%', bottom: '9.5%' });
+    const pl = book.querySelector('.pg-l'); if (pl) back.appendChild(this.pageCopy(pl, { left: '19.2%', right: '9.2%', top: '14.5%' }));
     flap.append(front, back); book.appendChild(flap);
     book.classList.add('closing');
     const end = (e) => { if (e.target !== book) return; book.removeEventListener('animationend', end); flap.remove(); book.classList.remove('closing'); this._bookAnim = null; done?.(); };
     book.addEventListener('animationend', end); this._bookAnim = flap;
   }
+  sheetCopy(book, side, face, inset) { const sh = book.querySelector('.sheet.' + side); if (!sh) return; const c = sh.cloneNode(true); Object.assign(c.style, inset); face.appendChild(c); }
   clearBook(book) { for (const x of book.querySelectorAll('.flap, .leaf, .pg-hold, .turn-shade')) x.remove(); book.classList.remove('closed', 'enter', 'closing'); for (const p of book.querySelectorAll('.pg')) p.style.visibility = ''; }
   // turn one leaf from the section on screen to the next one
   turn(fromEl, toEl, forward, done) {
     const fb = fromEl.querySelector('.book'), tb = toEl.querySelector('.book');
     this.clearBook(tb); this._turning = true;
     toEl.classList.remove('hidden'); toEl.classList.add('turning');
-    const L = { left: '8.8%', right: '10.38%', top: '5.05%', bottom: '1.8%' }, R = { left: '12.19%', right: '8.8%', top: '5.05%', bottom: '1.8%' };
+    const L = { left: '8.8%', right: '10.38%', top: '8.65%' }, R = { left: '12.19%', right: '8.8%', top: '8.65%' };
     const far = forward ? 'l' : 'r', near = forward ? 'r' : 'l';
     // the far page keeps the old writing until the leaf lands on it
     const hold = this.pageCopy(fb.querySelector('.pg-' + far), {}); hold.className = fb.querySelector('.pg-' + far).className + ' pg-hold'; hold.style.cssText = '';
@@ -284,6 +355,8 @@ export class UI {
     const leaf = document.createElement('div'); leaf.className = 'leaf ' + (forward ? 'fwd' : 'bwd');
     const front = document.createElement('i'); front.className = 'face ' + (forward ? 'pr' : 'pl');
     const back = document.createElement('i'); back.className = 'face back ' + (forward ? 'pl' : 'pr');
+    const PAGE = { left: '0', right: '0', top: '0', bottom: '0' };
+    this.sheetCopy(fb, near, front, PAGE); this.sheetCopy(tb, far, back, PAGE);
     front.appendChild(this.pageCopy(fb.querySelector('.pg-' + near), forward ? R : L));
     back.appendChild(this.pageCopy(tb.querySelector('.pg-' + far), forward ? L : R));
     leaf.append(front, back);
@@ -332,7 +405,8 @@ export class UI {
     $('s-guide').checked = S.guide !== false; $('s-guide').onchange = (e) => { S.guide = e.target.checked; apply(); };
     $('s-weather').value = S.weather; $('s-weather').onchange = (e) => { S.weather = e.target.value; apply(); };
     $('s-quality').value = S.quality;
-    $('s-quality').onchange = (e) => { S.quality = e.target.value; apply(); $('quality-note').textContent = '그래픽 품질은 페이지를 새로고침하면 적용돼요.'; };
+    $('s-quality').onchange = (e) => { S.quality = e.target.value; apply(); this.rewrite($('quality-note'), '그래픽 품질은 페이지를 새로고침하면 적용돼요.'); };
+    this.syncOpts();
 
     this.renderPadMap();
   }

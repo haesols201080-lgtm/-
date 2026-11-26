@@ -341,7 +341,9 @@ async function boot() {
       // the night of the storm, told over black while the forest loads in behind it
       if (!new URLSearchParams(location.search).has('autostart')) {        // (test runs skip it)
         G.storyOpen = true;
-        ui.story(INTRO, () => { G.storyOpen = false; CS.intro(() => { G.wokeUp = true; G.newStory = false; quests.peek(); setTimeout(() => ui.bubble('세븐', LOG.first), 600); }); }, { title: '언더그로스' });
+        // the cutscene starts under the fading page: the first thing seen is the crane down through the canopy
+        ui.story(INTRO, () => { G.storyOpen = false; }, { title: '언더그로스',
+          onFade: () => CS.intro(() => { G.wokeUp = true; G.newStory = false; quests.peek(); setTimeout(() => ui.bubble('세븐', LOG.first), 600); }) });
       }
     }
     orbit.set(player.yaw + Math.PI, 0.25);
