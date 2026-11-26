@@ -10,6 +10,10 @@ os.makedirs(OUT, exist_ok=True)
 SETS = {  # game name -> poly haven id
     'ph_floor': 'forest_leaves_04', 'ph_path': 'roots', 'ph_riverbed': 'river_small_rocks', 'ph_mud': 'brown_mud_leaves_01',
     'ph_rock': 'rock_face_03', 'ph_mossrock': 'mossy_rock', 'ph_lichen': 'lichen_rock', 'ph_bark': 'bark_brown_02', 'ph_gravel': 'rocky_trail',
+    # chapter 2: the apartment (floor, walls, balcony tiles, bedding, rug), the car's seats, the stranger's jeans
+    # (the game ships only the 1024 size of tile, linen, rug, seat and denim)
+    'hs_floor': 'wood_floor', 'hs_wall': 'white_plaster_02', 'hs_tile': 'floor_tiles_06', 'hs_linen': 'rough_linen', 'hs_rug': 'curly_teddy_natural',
+    'hs_seat': 'poly_wool_herringbone', 'hs_denim': 'denim_fabric', 'hs_brick': 'brick_wall_02',
 }
 def L(p, mode):
     return Image.open(p).convert(mode)

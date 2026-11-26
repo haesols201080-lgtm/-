@@ -88,6 +88,9 @@ export const DEBRIS = ['pinecone_0', 'pinecone_1', 'pinecone_2', 'mush_amanita',
 export const TREES = ['pine_0', 'pine_1', 'pine_2', 'pine_3', 'fir_4', 'fir_5', 'pine_11', 'pine_12', 'pine_13', 'fir_14', 'fir_15'];
 export const SAPLINGS = []; // (the Blender saplings read as stacked card tiers; scanned saplings are used instead)
 export const SNAGS = ['snag_9', 'snag_10'];
+// chapter 2: the stranger's flat (Poly Haven scans, processed by blender/process_house_models.py)
+export const HOUSE_MODELS = ['rubber_boots', 'wicker_basket_02', 'Sofa_01', 'ArmChair_01', 'CoffeeTable_01', 'television_02', 'ClassicNightstand_01', 'GreenChair_01',
+  'WoodenTable_02', 'desk_lamp_arm_01', 'potted_plant_02', 'potted_plant_04', 'Ottoman_01', 'gamepad', 'ceramic_vase_01', 'cardboard_box_01', 'ClassicConsole_01'];
 export const PROPS = ['crate', 'fence_picket', 'fence_rail', 'gate_pillar', 'gate_leaf', 'plate_sf_base', 'plate_sf_top', 'lift_deck', 'lift_head', 'lift_counter', 'ibeam', 'socket', 'cell', 'shard', 'booster', 'ball'];
 
 export class Assets {
@@ -218,6 +221,31 @@ export class Assets {
     await Promise.all([worker(), worker(), worker(), worker()]);
     await this.propTextures();
     this.buildMaterials();
+  }
+
+  // chapter 2 (the stranger's flat in the city): only the robot, the flat's scanned furniture and fabrics, and a night
+  // city HDRI (Poly Haven "rooftop_night", CC0) for the view and the reflections
+  async loadHouse() {
+    const T = this.tex, tier = this.tier;
+    this.total = HOUSE_MODELS.length + 1 + 7 + 1;
+    const [floor, wall, tile, linen, rug, seat, denim] = await Promise.all([
+      this.set('hs_floor'), this.set('hs_wall'), this.set('hs_tile', { size: 1024 }), this.set('hs_linen', { size: 1024 }),
+      this.set('hs_rug', { size: 1024 }), this.set('hs_seat', { size: 1024 }), this.set('hs_denim', { size: 1024 }),
+    ]);
+    Object.assign(T, { floor, wall, tile, linen, rug, seat, denim });
+    const hname = `${BASE}hdri/rooftop_night_${tier.texSize >= 2048 ? '2k' : '1k'}`;
+    const hdr = import.meta.env.PROD ? await this.loadRGBEPair(hname) : await new HDRLoader().setDataType(THREE.HalfFloatType).loadAsync(`${hname}.hdr`);
+    hdr.mapping = THREE.EquirectangularReflectionMapping; T.hdr = hdr;
+    const pm = new THREE.PMREMGenerator(this.renderer); T.envMap = pm.fromEquirectangular(hdr).texture; pm.dispose();
+    this.step('도시의 밤');
+    const queue = [['nuri'], ...HOUSE_MODELS.map((m) => [`house/${m}`, 'h_' + m])];
+    const worker = async () => { while (queue.length) { const [p, k] = queue.shift(); await this.gltf(p, k); } };
+    await Promise.all([worker(), worker(), worker(), worker()]);
+    for (const [k, g] of Object.entries(this.models)) if (k.startsWith('h_')) g.scene.traverse((o) => {
+      if (!o.isMesh) return; o.castShadow = true; o.receiveShadow = true;
+      const m = o.material; if (m.alphaTest > 0 || m.transparent) { m.transparent = false; m.alphaTest = 0.45; m.side = THREE.DoubleSide; }
+      m.envMapIntensity = 0.9;
+    });
   }
 
   buildMaterials() {
