@@ -1,0 +1,8 @@
+// Cloudflare (Workers with static assets): the game is the static site in public/ (npm run build:pages writes
+// public/play.html; public/_redirects opens it at the root). No server code. The two big models are split into
+// parts under 25 MiB (tools/split_models.mjs).
+{
+  "name": "nuri",
+  "compatibility_date": "2025-11-01",
+  "assets": { "directory": "./public" }
+}
