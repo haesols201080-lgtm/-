@@ -144,7 +144,7 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
     if (G.breathT > 4.2) { G.breathT = rnd(-0.3, 0.3); if (G.lampT <= 0 && flat.sleeper.stir < 0.3) audio.play('snore', { pos: flat.sleeper.head, vol: 0.85, verb: 0.15, ref: 0.8 }); }
     if (G.lampT > 0) {
       G.lampT -= dt;
-      flat.bedLamp.intensity = damp(flat.bedLamp.intensity, G.lampT > 0.4 ? 9 : 0, 10, dt); flat.bedLamp.castShadow = flat.bedLamp.intensity > 0.05;
+      flat.bedLamp.intensity = damp(flat.bedLamp.intensity, G.lampT > 0.4 ? flat.lampOn : 0, 10, dt); flat.bedLamp.castShadow = flat.bedLamp.intensity > 0.05;
       // the sleeper is looking: anything moving in the bedroom is seen
       if (G.lampT < 3.4 && G.lampT > 0.5 && inBedroom() && Math.hypot(player.vel.x, player.vel.z) > 0.12) caught();
       if (G.lampT <= 0) { flat.man?.play('settle', { onDone: () => flat.man.play('sleep', { loop: true }) }); audio.play('lamp', { pos: flat.bedLamp.position }); audio.play('rustle', { pos: flat.sleeper.head, vol: 0.5, at: 0.5 }); flat.bedLamp.intensity = 0; flat.bedLamp.castShadow = false; ui.bubble('낯선 사람', '…꿈인가.'); }

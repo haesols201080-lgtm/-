@@ -404,6 +404,7 @@ export class Flat {
         this.bulb = bulb.material; this.bulb.emissive = new THREE.Color(0xffd7a0); this.bulb.emissiveIntensity = 0;
       }
     }
+    this.lampOn = 4.2;                                               // (a 40 W bulb in a desk lamp's shade, half a metre over the nightstand)
     this.bedLamp.castShadow = false; this.bedLamp.shadow.mapSize.set(512, 512); this.group.add(this.bedLamp, this.bedLamp.target);
     // (the bounce: from where the bulb's light lands, just over the nightstand's top, warm and dim)
     { const P = this.bedLamp.position, d = this.bedLamp.target.position.clone().sub(P).normalize(), k = d.y < -0.2 ? Math.max(0.05, (P.y - (nsTop + 0.06)) / -d.y) : 0.3;
@@ -649,7 +650,7 @@ export class Flat {
     if (this.man) this.man.bone('head').getWorldPosition(S.head);          // (the snore comes from where his head is)
     // (the duvet: cloth over him when he is there, src/quilt.js; else the modelled one, breathing)
     if (this.quilt) this.quilt.update(dt, { robot: this.robot, active: this.clothActive ?? true }); else this.shapeDuvet(t);
-    if (this.bulb) { const k = this.bedLamp.intensity / 9; this.bulb.emissiveIntensity = 3 * k; this.bedBounce.intensity = 0.45 * k; }
+    if (this.bulb) { const k = this.bedLamp.intensity / this.lampOn; this.bulb.emissiveIntensity = 3 * k; this.bedBounce.intensity = 0.4 * k; }
     const on = Math.sin(t * 1.4) > -0.2; this.tvLed.material.color.setRGB(on ? 1 : 0.25, 0.1, 0.06); this.tvLight.intensity = on ? 0.08 : 0.02;
     this.basket.hinge.rotation.x = -this.basket.open * 1.9 - (this.basket.jolt || 0);
     if (this.basket.jolt) this.basket.jolt = Math.max(0, this.basket.jolt - dt * 1.6);
