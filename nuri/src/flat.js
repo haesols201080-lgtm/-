@@ -29,6 +29,18 @@ export const HOUSE = {
   yard: { y: -0.6, deck: -0.06 },
 };
 export const FLAT = HOUSE;   // (the level code's name for it)
+// what the robot's feet are on (the footsteps, and how much noise they make), by the house's material
+const SURF_OF = {
+  oak: 'floor', tread: 'tread', deck: 'tread', porch_floor: 'tread', tile: 'lino', rug: 'rug', rug_bed: 'rug', runner: 'rug', carpet_grey: 'rug', sisal: 'rug',
+  counter: 'stone', hearth: 'stone', brick: 'stone', concrete: 'stone', foundation: 'stone', splash: 'stone', ceramic: 'stone', glass: 'stone', lamp_glass: 'stone', mug_blue: 'stone',
+  asphalt: 'rock', shingle: 'rock', lawn: 'grass', duvet: 'cloth', mattress: 'cloth', linen: 'cloth', throw: 'cloth', knit: 'cloth', curtain: 'cloth', towel: 'cloth', coat: 'cloth', jeans: 'cloth', sock: 'cloth', shade: 'cloth',
+  iron: 'metal', steel: 'metal', brass: 'metal', black_metal: 'metal', fridge: 'metal', vent: 'metal', flue: 'metal', gutter: 'metal', enamel: 'panel',
+  plastic_white: 'plastic', plastic_dark: 'plastic', bin_plastic: 'plastic', cardboard: 'paper', book_page: 'paper', cover_red: 'paper', cover_blue: 'paper', cover_green: 'paper', cover_tan: 'paper',
+};
+const surfaceOf = (mat) => SURF_OF[mat] || 'wood';
+const furnSurface = (nm) => /wooden|School|Rocking|Desk|Console|Nightstand|Table|Shelf|Cabinet|Drawer|chest/i.test(nm) ? 'wood'
+  : /Sofa|Chair|Ottoman|pillow|cushion|bed|mattress|pouf/i.test(nm) ? 'cloth' : /wash|dryer|stove|fridge|radiator|trash|bin|can_|bucket|Lantern|kettle|pot_/i.test(nm) ? 'metal'
+  : /plant|vase|planter|ceramic/i.test(nm) ? 'stone' : /suitcase|box|crate/i.test(nm) ? 'plastic' : /book|paper|magazine/i.test(nm) ? 'paper' : 'wood';
 
 function boxGeo(w, h, d, tile = 1) {
   const g = new THREE.BoxGeometry(w, h, d), uv = g.attributes.uv;
@@ -96,17 +108,18 @@ export class Flat {
       o.castShadow = true; o.receiveShadow = true;
       const atlas = (top.userData || {}).atlas;
       if (/^(arch_|props_|soft_|glass)/.test(nm)) {
+        const mat0 = (Array.isArray(o.material) ? o.material[0] : o.material)?.name?.replace(/\.\d+$/, '') || '';
         const sw = (m) => M[m.name.replace(/\.\d+$/, '')] || m;
         o.material = Array.isArray(o.material) ? o.material.map(sw) : sw(o.material);
         if (nm.startsWith('glass')) { o.castShadow = false; o.renderOrder = 2; }
         else if (nm.startsWith('soft_')) { if (nm.startsWith('soft_duvet')) this.softDuvet = o; }       // (cloth: the robot pushes through it)
-        else this.meshCollider(o, 'wood');
+        else this.meshCollider(o, surfaceOf(mat0));
       }
       if (o.geometry.attributes.uv1 && (atlas === 'int' || atlas === 'ext')) o.material = Array.isArray(o.material) ? o.material.map((m) => bake(m, atlas)) : bake(o.material, atlas);
       if (nm.startsWith('f_') && !tops.has(top)) {
         tops.add(top); const ud = top.userData || {};
         this.furn.push({ key: ud.key || nm.slice(2).replace(/\.\d+$/, ''), obj: top, box: new THREE.Box3().setFromObject(top) });
-        if (ud.collide) this.meshCollider(top, /Sofa|Chair|Ottoman|pillow/i.test(nm) ? 'fabric' : 'wood');
+        if (ud.collide) this.meshCollider(top, furnSurface(nm));
       }
     });
   }
@@ -177,7 +190,10 @@ export class Flat {
     if (this.arch) this.addArch();
     const W = Hs.x1 - Hs.x0, D = Hs.z1 - Hs.z0, cx = (Hs.x0 + Hs.x1) / 2, cz = (Hs.z0 + Hs.z1) / 2;
     // ---- ground floor slab, the checkered kitchen floor on it, the upstairs slab (with the stairwell left open)
-    this.block(W, 0.2, D, floorM, cx, -0.1, cz, { tile: 1.2, shadow: false });
+    // (with the modelled house these only catch whatever falls through it: a little below its floors, so the floor
+    // under the robot's feet is the model's own - oak, tile, a rug - and its footsteps sound of it)
+    const sink = this.arch ? 0.015 : 0;
+    this.block(W, 0.2, D, floorM, cx, -0.1 - sink, cz, { tile: 1.2, shadow: false, surface: 'floor' });
     // (the scanned tiles; a drawn checkerboard only if they are missing)
     let kfM;
     if (A.tile) { kfM = scanMat(A.tile, 0xe6e1d8, { envMapIntensity: 0.7, roughness: 0.8 }); kfM.aoMap = null; for (const t of [A.tile.map, A.tile.normal, A.tile.orm]) t.repeat.set((Hs.part - Hs.x0) / 1.6, (Hs.z1 - Hs.kz) / 1.6); }
@@ -185,7 +201,7 @@ export class Flat {
     const kf = new THREE.Mesh(new THREE.PlaneGeometry(Hs.part - Hs.x0, Hs.z1 - Hs.kz), kfM);
     kf.rotation.x = -Math.PI / 2; kf.position.set((Hs.x0 + Hs.part) / 2, 0.002, (Hs.kz + Hs.z1) / 2); kf.receiveShadow = true; this.group.add(kf);
     this.kitchenFloor = kf;
-    const S = Hs.stair, slab = (x0, x1, z0, z1) => { this.block(x1 - x0, Hs.U - Hs.H, z1 - z0, floorM, (x0 + x1) / 2, (Hs.H + Hs.U) / 2, (z0 + z1) / 2, { tile: 1.2 }); };
+    const S = Hs.stair, slab = (x0, x1, z0, z1) => { this.block(x1 - x0, Hs.U - Hs.H, z1 - z0, floorM, (x0 + x1) / 2, (Hs.H + Hs.U) / 2 - sink, (z0 + z1) / 2, { tile: 1.2, surface: 'floor' }); };
     slab(Hs.x0, S.x0, Hs.z0, Hs.z1); slab(S.x1, Hs.x1, Hs.z0, Hs.z1); slab(S.x0, S.x1, Hs.z0, S.zTop); slab(S.x0, S.x1, S.zBot, Hs.z1);
     this.block(W + 0.3, 0.12, D + 0.3, ceilM, cx, Hs.U + Hs.H2 + 0.06, cz, { tile: 2 });
     // ---- ground floor walls
@@ -302,8 +318,8 @@ export class Flat {
   yard() {
     const Hs = HOUSE, Y = Hs.yard, z = Hs.z1 + Hs.T;
     const deckM = scanMat(this.A.tex.floor, 0x8a7360, { envMapIntensity: 0.4 });
-    this.block(3.6, 0.2, 2.0, deckM, -0.85, Y.deck - 0.1, z + 1.0, { tile: 1, surface: 'wood' });
-    for (let i = 0; i < 3; i++) this.block(1.4, 0.18, 0.3, deckM, -0.85, Y.deck - 0.18 * (i + 1) - 0.09, z + 2.15 + i * 0.3, { surface: 'wood' });
+    this.block(3.6, 0.2, 2.0, deckM, -0.85, Y.deck - 0.1, z + 1.0, { tile: 1, surface: 'tread' });                                   // (hollow boards)
+    for (let i = 0; i < 3; i++) this.block(1.4, 0.18, 0.3, deckM, -0.85, Y.deck - 0.18 * (i + 1) - 0.09, z + 2.15 + i * 0.3, { surface: 'tread' });
     const lawn = new THREE.Mesh(new THREE.PlaneGeometry(16, 10), new THREE.MeshStandardMaterial({ color: 0x1d2a18, roughness: 1 })); lawn.rotation.x = -Math.PI / 2; lawn.position.set(0, Y.y + 0.005, z + 7); lawn.receiveShadow = true; this.group.add(lawn);
     this.collider(this.R.ColliderDesc.cuboid(8, 0.1, 5).setTranslation(0, Y.y - 0.1, z + 7), 'moss');
     // the backyard fence (boards), the far side open toward the view

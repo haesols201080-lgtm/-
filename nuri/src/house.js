@@ -28,7 +28,11 @@ import { Cat } from './cat.js';
 import { clamp, damp, angleDiff } from './util.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
-const SURF = { fabric: 'moss', glass: 'metal', wood: 'wood', metal: 'metal', rock: 'rock' };
+// the robot's footsteps by what it is walking on (src/flat.js names the surface of each piece of the house), and how
+// loud each is to a light sleeper: a rug or the bedding next to nothing, the washer's enamel top like a drum
+const STEP = { fabric: 'cloth', glass: 'stone', rock: 'stone', moss: 'grass', leaves: 'grass', dirt: 'grass' };
+const LOUD = { rug: 0.35, cloth: 0.3, grass: 0.4, paper: 0.6, lino: 0.8, floor: 1, wood: 1, tread: 1.2, stone: 1.1, plastic: 1.1, metal: 1.4, panel: 1.7 };
+const rnd = (a, b) => a + Math.random() * (b - a);
 
 export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
   document.body.classList.add('house');
@@ -49,7 +53,8 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
   const player = new Player(ctx, nuri, { x: B.floor.x, y: B.floor.y + 0.02, z: B.floor.z, yaw: 0.3 });
   const input = new Input(renderer.domElement);
   const orbit = new OrbitCam(camera, ctx); orbit.set(Math.PI + 0.3, 0.35);
-  const fx = new FX(scene), audio = new Audio(), director = new Director({ camera, ui });
+  const fx = new FX(scene), audio = new Audio({ place: 'house' }), director = new Director({ camera, ui });
+  audio.setLayout(FLAT);
   // the cat, asleep on its bed by the kitchen radiator; its bolt-hole: across the kitchen, the hall, round through the
   // living room and up the cat tree by the front window
   const V3 = (x, y, z, leap) => Object.assign(new THREE.Vector3(x, y, z), leap ? { leap: true } : {});
@@ -118,14 +123,14 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
   };
   function pushLid() {
     B.pushes = (B.pushes || 0) + 1; B.jolt = 0.22 + B.pushes * 0.06;
-    audio.play('thud', { pos: B.floor, vol: 0.5, pitch: 1.4 }); makeNoise(0.32);
+    audio.play('wicker', { pos: B.floor, vol: 0.9 }); audio.play('thud', { pos: B.floor, vol: 0.22, pitch: 1.7 }); makeNoise(0.32);
     player.playAction('throw', 0.35);
     if (B.pushes === 1) ui.toast('뚜껑이 조금 들렸다. 무겁다.');
-    if (B.pushes >= 3) { st.lidOpen = true; physics.removeCollider(flat.lidCol, true); audio.play('clunk', { pos: B.floor, vol: 0.7 }); makeNoise(0.28); save(); }
+    if (B.pushes >= 3) { st.lidOpen = true; physics.removeCollider(flat.lidCol, true); audio.play('wickerBig', { pos: B.floor, vol: 0.9 }); makeNoise(0.28); save(); }
   }
   function unlockFlap() {
     st.flapOpen = true; physics.removeCollider(flat.flapCol, true);
-    audio.play('click', { pos: flat.flap.lockPos, vol: 0.8 }); ui.toast('잠금쇠가 미끄러졌다. 숙이면 지나갈 수 있다.'); player.emit('solved'); save();
+    audio.play('latch', { pos: flat.flap.lockPos, vol: 0.8 }); ui.toast('잠금쇠가 미끄러졌다. 숙이면 지나갈 수 있다.'); player.emit('solved'); save();
   }
   // ---------------------------------------------------------------- the sleeper
   const inBedroom = () => player.pos.y > FLAT.U - 0.4 && player.pos.x < FLAT.part + 0.1 && player.pos.z < FLAT.kz;
@@ -135,20 +140,23 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
     G.noise = Math.max(0, G.noise - dt * 0.22);
     // the snore every breath (when settled)
     G.breathT = (G.breathT || 0) + dt;
-    if (G.breathT > 4.2) { G.breathT = 0; if (G.lampT <= 0 && flat.sleeper.stir < 0.3) audio.play('snore', { pos: flat.sleeper.head, vol: inBedroom() ? 0.9 : upstairs() ? 0.45 : 0.15, verb: 0.15 }); }
+    // (heard through the bedroom door and down the stairs as the rooms let it: src/audio.js)
+    if (G.breathT > 4.2) { G.breathT = rnd(-0.3, 0.3); if (G.lampT <= 0 && flat.sleeper.stir < 0.3) audio.play('snore', { pos: flat.sleeper.head, vol: 0.85, verb: 0.15, ref: 0.8 }); }
     if (G.lampT > 0) {
       G.lampT -= dt;
       flat.bedLamp.intensity = damp(flat.bedLamp.intensity, G.lampT > 0.4 ? 9 : 0, 10, dt); flat.bedLamp.castShadow = flat.bedLamp.intensity > 0.05;
       // the sleeper is looking: anything moving in the bedroom is seen
       if (G.lampT < 3.4 && G.lampT > 0.5 && inBedroom() && Math.hypot(player.vel.x, player.vel.z) > 0.12) caught();
-      if (G.lampT <= 0) { audio.play('click', { pos: flat.bedLamp.position }); flat.bedLamp.intensity = 0; flat.bedLamp.castShadow = false; ui.bubble('낯선 사람', '…꿈인가.'); }
+      if (G.lampT <= 0) { audio.play('lamp', { pos: flat.bedLamp.position }); audio.play('rustle', { pos: flat.sleeper.head, vol: 0.5, at: 0.5 }); flat.bedLamp.intensity = 0; flat.bedLamp.castShadow = false; ui.bubble('낯선 사람', '…꿈인가.'); }
       return;
     }
     if (G.noise > 1.2) {
       G.noise = 0.4; G.lampT = 4.6; flat.sleeper.stir = 1;
-      audio.play('click', { pos: flat.bedLamp.position }); ui.bubble('낯선 사람', '…응? 뭐야?'); setExpr('worried', 4); ui.toast('불이 켜졌다! 움직이지 마.');
+      audio.play('rustle', { pos: flat.sleeper.head, vol: 0.8 }); audio.play('bedCreak', { pos: flat.sleeper.head, vol: 0.6 }); audio.play('lamp', { pos: flat.bedLamp.position, at: 0.7 });
+      ui.bubble('낯선 사람', '…응? 뭐야?'); setExpr('worried', 4); ui.toast('불이 켜졌다! 움직이지 마.');
     } else if (G.noise > 0.65 && flat.sleeper.stir < 0.2) {
-      flat.sleeper.stir = 1; audio.play('mumble', { pos: flat.sleeper.head, vol: 0.8 }); ui.toast('거인이 뒤척인다…'); setExpr('worried', 2);
+      flat.sleeper.stir = 1; audio.play('rustle', { pos: flat.sleeper.head, vol: 0.7 }); audio.play('bedCreak', { pos: flat.sleeper.head, vol: 0.5, at: 0.3 }); audio.play('mumble', { pos: flat.sleeper.head, vol: 0.8, at: 0.9 });
+      ui.toast('거인이 뒤척인다…'); setExpr('worried', 2);
     }
   }
   function caught() {
@@ -204,13 +212,13 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
   const tmp = V(0, 0, 0);
   function handleEvents() {
     for (const e of player.events) {
-      const pp = player.pos, sf = SURF[player.groundCollider?.userData?.surface] || 'wood';
+      const gs = player.groundCollider?.userData?.surface || 'floor', pp = player.pos, sf = STEP[gs] || gs, loud = LOUD[sf] ?? 1;
       switch (e.type) {
-        case 'step': audio.play('step', { surface: sf, pos: pp, vol: clamp(0.3 + e.speed * 0.2, 0.25, 0.8) }); if (e.speed > 1.2) makeNoise(0.03); break;
+        case 'step': audio.play('step', { surface: sf, pos: pp, vol: clamp(0.3 + e.speed * 0.2, 0.25, 0.8) }); if (e.speed > 1.2) makeNoise(0.03 * loud); break;
         case 'jump': audio.play('jump', { pos: pp, vol: 0.7 }); break;
         case 'djump': audio.play('djump', { pos: pp }); for (let i = 0; i < 8; i++) fx.exhaust({ x: pp.x, y: pp.y, z: pp.z }); makeNoise(0.08); break;
         case 'dash': audio.play('djump', { pos: pp, pitch: 1.25 }); makeNoise(0.1); break;
-        case 'land': audio.play(e.impact > 3 ? 'land' : 'step', { surface: sf, pos: pp, vol: clamp(e.impact / 8, 0.3, 1) }); if (e.impact > 3.2) makeNoise((e.impact - 3.2) * 0.22 * (sf === 'moss' ? 0.4 : 1)); if (e.impact > 6) fx.dust(pp, 6, [0.5, 0.47, 0.42]); break;
+        case 'land': audio.play(e.impact > 3 ? 'land' : 'step', { surface: sf, pos: pp, vol: clamp(e.impact / 8, 0.3, 1) }); if (e.impact > 3.2) makeNoise((e.impact - 3.2) * 0.22 * loud); if (e.impact > 6) fx.dust(pp, 6, [0.5, 0.47, 0.42]); break;
         case 'roll': audio.play('roll', { pos: pp }); makeNoise(0.06); break;
         case 'solved': setExpr('joy', 2); moodBeep('happy'); break;
         case 'inspect': setExpr('curious', 1.6); moodBeep('curious'); break;
@@ -239,14 +247,20 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
   function startRide(onDone) {
     G.mode = 'ride';
     ride = makeCarRide(renderer, assets); rideComposer = makeComposer(ride.scene, ride.camera); resize();
-    audio.setLoop('engine', 0.55); audio.play('cardoor', { vol: 0.9 });
-    const shown = new Set();
+    audio.mood = 'forest'; audio.carEngine(20, 1); audio.play('carDoor', { vol: 0.7 });
+    const shown = new Set(), once = new Set(), R = { joint: 3 };
+    const at = (t, f) => { if (ride.t > t && !once.has(t)) { once.add(t); f(); } };
     G.rideTick = (dt) => {
       const ph = ride.update(dt);
+      // the car: its engine and tyres with the road speed, the joints in the highway and the bridge (the basket creaks
+      // with each), the bridge's steel deck, the city's sirens and horns, a bus, the handbrake and the engine off
+      audio.carEngine(ride.done ? 0 : ride.speed, ride.done ? 0 : 1); audio.carGrate(ph === 2);
+      if ((R.joint -= dt) <= 0) { R.joint = ph === 2 ? rnd(1.1, 1.8) : rnd(2.5, 5.5); if (ph === 1 || ph === 2) { audio.play('joint', { vol: ph === 2 ? 0.55 : 0.4 }); if (Math.random() < 0.6) audio.play('wicker', { vol: 0.3, at: 0.06 }); } }
+      at(22.5, () => audio.play('siren', { vol: 0.45, pitch: 1.03 })); at(25.5, () => audio.play('horn', { vol: 0.35 }));
+      at(29.2, () => audio.play('airBrake', { vol: 0.3 })); at(31.0, () => audio.play('horn', { vol: 0.2 }));
       for (const [t, line] of CAR.lines) if (ride.t > t && !shown.has(t)) { shown.add(t); if (typeof line === 'string') ui.bubble('세븐', line); else ui.bubble(line[0], line[1]); }
       if (ph === 2 && Math.floor(ride.t * 1.4) % 2 === 0 && ride.t > 28 && !G.blink) { G.blink = true; audio.play('blinker', { vol: 0.6 }); setTimeout(() => { G.blink = false; }, 720); }
-      audio.setLoop('engine', ph === 2 ? 0.32 : 0.55);
-      if (ride.done && !G.rideEnd) { G.rideEnd = true; ui.fadeOut(1400, () => { G.rideTick = null; audio.setLoop('engine', 0); onDone(); }); }
+      if (ride.done && !G.rideEnd) { G.rideEnd = true; audio.play('handbrake', { vol: 0.5 }); audio.play('engineOff', { vol: 0.6, at: 0.6 }); ui.fadeOut(1400, () => { G.rideTick = null; audio.carEngine(0, 0); onDone(); }); }
     };
     document.body.classList.add('cutscene'); document.getElementById('hud').classList.remove('hidden');   // (lines show as bubbles over the ride)
     ui.story([CAR.title], null, { hold: 2600 });
@@ -255,15 +269,29 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
     // heard in the dark of the basket: the car door, footsteps up the stairs, a key, the stranger's voice, a lamp
     G.mode = 'arrive';
     document.getElementById('weave').classList.add('on');
-    const seq = [[0.2, () => audio.play('cardoor', { vol: 0.8 })], [1.4, () => audio.play('thud', { vol: 0.6, pitch: 0.5 })], [2.0, () => audio.play('thud', { vol: 0.6, pitch: 0.5 })],
-      [3.2, () => audio.play('clunk', { vol: 0.5 })], [4.2, () => ui.bubble(HOUSE.arrive[0][0], HOUSE.arrive[0][1])], [8.4, () => ui.bubble(HOUSE.arrive[1][0], HOUSE.arrive[1][1])],
-      [12.2, () => audio.play('click', { vol: 0.9 })], [13.0, () => { document.getElementById('weave').classList.remove('on'); then(); }]];
+    // (all heard from inside the basket as the stranger carries it: their door and the back door, the drive, the porch
+    // steps, the keys and the deadbolt, the front door, the stairs, the bedroom, the basket set down, the lamp, the bed)
+    audio.setMusic(0.25, 1.5);
+    const P = (name, vol, o = {}) => () => audio.play(name, { vol, ...o });
+    const walk = (name, t0, n, dt, vol) => Array.from({ length: n }, (_, i) => [t0 + i * dt + rnd(-0.03, 0.03), P(name, vol * rnd(0.85, 1))]);
+    const seq = [[0.2, P('carDoor', 0.8)], [1.0, P('carDoor', 0.5)], [1.4, P('wicker', 0.9)], [1.6, P('wicker', 0.6)], [2.3, P('carDoor', 0.55)],
+      ...walk('bootConcrete', 2.0, 5, 0.52, 0.55), ...walk('bootPorch', 4.7, 3, 0.5, 0.65), [5.6, P('wicker', 0.4)],
+      [6.3, P('keys', 0.6)], [7.0, P('lock', 0.7)], [7.8, P('doorOpen', 0.6)],
+      [8.2, () => ui.bubble(HOUSE.arrive[0][0], HOUSE.arrive[0][1])], ...walk('bootFloor', 8.6, 2, 0.5, 0.55), [9.6, P('doorShut', 0.7)],
+      ...walk('bootStair', 10.2, 8, 0.38, 0.5), [13.4, P('doorOpen', 0.3)], ...walk('bootFloor', 13.9, 2, 0.5, 0.45), [14.9, P('wicker', 0.9)], [15.0, P('thud', 0.25, { pitch: 1.6 })],
+      [15.6, () => ui.bubble(HOUSE.arrive[1][0], HOUSE.arrive[1][1])], [18.6, P('lamp', 0.9)], [19.3, P('rustle', 0.6)], [19.6, P('bedCreak', 0.5)],
+      [20.4, () => { document.getElementById('weave').classList.remove('on'); then(); }]];
     for (const [t, f] of seq) setTimeout(f, t * 1000);
   }
   function startPlay(fromSave) {
     G.mode = 'play'; ui.startPlay(); document.body.classList.remove('cutscene');
     if (fromSave && base.pos && base.flat?.arrived) { player.teleport(base.pos[0], base.pos[1] + 0.05, base.pos[2]); player.yaw = base.yaw || 0; G.playTime = base.playTime || 0; }
     st.arrived = true;
+    // the house at night: its sources and the city, the music softer (and the car's engine certainly off)
+    audio.carEngine(0, 0); audio.mood = 'house';
+    audio.startHouse({ fridge: V(FLAT.x0 + 0.4, 0.9, 0.66), chime: V(FLAT.x0 + 0.5, 1.3, -2.65), flap: flat.flap.pos, street: { z: -17 },
+      clocks: [{ kind: 'tickMantel', pos: V(FLAT.x0 + 0.5, 1.3, -2.65), gain: 0.4 }, { kind: 'tickQuartz', pos: V(-0.85, 2.2, FLAT.z1 - 0.05), gain: 0.22 }, { kind: 'tickAlarm', pos: V(-4.5, FLAT.U + 0.62, FLAT.kz - 0.62), gain: 0.28 }],
+      radiators: [V(-2.6, 0.35, FLAT.z0 + 0.12), V(-2.6, FLAT.U + 0.35, FLAT.z0 + 0.12), V(FLAT.x1 - 0.12, 0.35, -3.3), V(0.7, 0.35, FLAT.z1 - 0.12)] });
     if (st.lidOpen) { physics.removeCollider(flat.lidCol, true); B.open = 1; }
     if (st.flapOpen) physics.removeCollider(flat.flapCol, true);
     G.checkpoint = { x: player.pos.x, y: player.pos.y, z: player.pos.z };
@@ -357,7 +385,7 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
       // the cat flap swings out as the robot crawls through it
       { const F = flat.flap, near = st.flapOpen && Math.abs(player.pos.x - F.x) < 0.22 && Math.abs(player.pos.z - F.z) < 0.18;
         flat.flapSwing = damp(flat.flapSwing || 0, near ? (player.pos.z > F.z ? -1.1 : 1.1) * Math.min(1, Math.abs(player.vel.z) * 2 + 0.3) : 0, near ? 9 : 4, dt);
-        if (near && !G.flapSound) { G.flapSound = true; audio.play('clack', { pos: F.lockPos, vol: 0.5 }); setTimeout(() => { G.flapSound = false; }, 900); } }
+        if (near && !G.flapSound) { G.flapSound = true; audio.play('flapSwing', { pos: V(F.x, 0.15, F.z), vol: 0.6 }); setTimeout(() => { G.flapSound = false; }, 1400); } }
       if (st.lidOpen && B.open < 1) B.open = Math.min(1, B.open + dt * 1.6);
       updateSleeper(dt); handleEvents(); updateQuest(dt); baseExpression(dt);
       if (G.time - (G.lastSave || 0) > 60) save();
@@ -374,8 +402,7 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
     } else if (director.active) director.update(dt);
     else if (!G.paused) orbit.update(dt, input, player);
     fx.update(dt); audio.setListener(camera);
-    if (audio.ctx) audio.updateAmbience(dt, player.pos, 0.2, 0.9);
-    audio.setLoop('city', player.pos.z > FLAT.z1 ? 0.08 : st.flapOpen ? 0.025 : 0.01, V(0, 2, 20));
+    if (audio.ctx && G.mode !== 'ride') { audio.updateHouse(dt, player.pos, { flapOpen: st.flapOpen }); audio.tension = G.lampT > 0 || flat.sleeper.stir > 0.4 ? 1 : 0; }
     if (G.mode === 'play' && !G.paused) ui.setPrompt(!director.active ? play.prompt(player) : null, input.usingPad);
     // contact shadow under the robot
     {

@@ -10,22 +10,22 @@
 //               (resonant clicks), moss (muffled), rock (sharp tick + knock), wood (modal resonances), metal (ringing
 //               inharmonic partials), water (splash + bubbles)
 //   piano     — additive notes with slight inharmonicity and a hammer transient, for the music
-const TAU = Math.PI * 2;
-const rnd = (a, b) => a + Math.random() * (b - a);
+export const TAU = Math.PI * 2;
+export const rnd = (a, b) => a + Math.random() * (b - a);
 
-function buf(C, sec, ch = 1) { return C.createBuffer(ch, Math.max(1, Math.round(C.sampleRate * sec)), C.sampleRate); }
-function normalize(d, peak = 0.9) { let m = 0; for (const v of d) m = Math.max(m, Math.abs(v)); if (m > 0) { const k = peak / m; for (let i = 0; i < d.length; i++) d[i] *= k; } }
+export function buf(C, sec, ch = 1) { return C.createBuffer(ch, Math.max(1, Math.round(C.sampleRate * sec)), C.sampleRate); }
+export function normalize(d, peak = 0.9) { let m = 0; for (const v of d) m = Math.max(m, Math.abs(v)); if (m > 0) { const k = peak / m; for (let i = 0; i < d.length; i++) d[i] *= k; } }
 // one-pole low / high pass in place
-function lp(d, sr, f) { const a = Math.exp(-TAU * f / sr); let y = 0; for (let i = 0; i < d.length; i++) { y = (1 - a) * d[i] + a * y; d[i] = y; } }
-function hp(d, sr, f) { const a = Math.exp(-TAU * f / sr); let y = 0, x0 = 0; for (let i = 0; i < d.length; i++) { const x = d[i]; y = a * (y + x - x0); x0 = x; d[i] = y; } }
+export function lp(d, sr, f) { const a = Math.exp(-TAU * f / sr); let y = 0; for (let i = 0; i < d.length; i++) { y = (1 - a) * d[i] + a * y; d[i] = y; } }
+export function hp(d, sr, f) { const a = Math.exp(-TAU * f / sr); let y = 0, x0 = 0; for (let i = 0; i < d.length; i++) { const x = d[i]; y = a * (y + x - x0); x0 = x; d[i] = y; } }
 // state-variable band pass (returns a new array)
-function bp(src, sr, f, q) { const out = new Float32Array(src.length), F = 2 * Math.sin(Math.PI * Math.min(f, sr / 6) / sr), Q = 1 / q; let lo = 0, ba = 0;
+export function bp(src, sr, f, q) { const out = new Float32Array(src.length), F = 2 * Math.sin(Math.PI * Math.min(f, sr / 6) / sr), Q = 1 / q; let lo = 0, ba = 0;
   for (let i = 0; i < src.length; i++) { const hi = src[i] - lo - Q * ba; ba += F * hi; lo += F * ba; out[i] = ba; } return out; }
 // crossfade the loop seam so loops play without a click
-function seam(d, sr, sec = 0.08) { const n = Math.round(sr * sec); for (let i = 0; i < n; i++) { const k = i / n; d[i] = d[i] * k + d[d.length - n + i] * (1 - k); } return d.subarray(0, d.length - n); }
-function loopBuf(C, data) { const b = C.createBuffer(1, data.length, C.sampleRate); b.copyToChannel(data, 0); return b; }
+export function seam(d, sr, sec = 0.08) { const n = Math.round(sr * sec); for (let i = 0; i < n; i++) { const k = i / n; d[i] = d[i] * k + d[d.length - n + i] * (1 - k); } return d.subarray(0, d.length - n); }
+export function loopBuf(C, data) { const b = C.createBuffer(1, data.length, C.sampleRate); b.copyToChannel(data, 0); return b; }
 
-function bubbles(d, sr, rate, fLo, fHi, amp) {
+export function bubbles(d, sr, rate, fLo, fHi, amp) {
   const n = Math.round(d.length / sr * rate);
   for (let k = 0; k < n; k++) {
     const t0 = Math.floor(Math.random() * d.length), f0 = fLo * Math.pow(fHi / fLo, Math.random() ** 1.6);
@@ -38,8 +38,8 @@ function bubbles(d, sr, rate, fLo, fHi, amp) {
   }
 }
 
-export function makeBank(C) {
-  const sr = C.sampleRate, B = {};
+export function makeBank(C, { place = 'forest' } = {}) {
+  const sr = C.sampleRate, B = {}, forest = place === 'forest';
   // ---- water
   const water = (sec, rate, fLo, fHi, bed, roar) => {
     const n = Math.round(sr * sec), L = new Float32Array(n), R = new Float32Array(n);
@@ -58,40 +58,12 @@ export function makeBank(C) {
     }
     const a = seam(L, sr), b = seam(R, sr), bf = C.createBuffer(2, a.length, sr); bf.copyToChannel(a, 0); bf.copyToChannel(b, 1); return bf;
   };
-  B.stream = water(7, 140, 380, 2600, 0.05, 0);
-  B.brook = water(6, 260, 300, 1900, 0.09, 0.0);
-  B.fall = water(6, 900, 160, 1300, 0.35, 0.9);
-  // ---- wind: brown noise with wandering resonances and gusts; pine needles hiss in the crowns; branches creak now and
-  // then; leaves: fine crackle that follows the gusts. All stereo (left and right independent).
-  {
-    const sec = 18, n = Math.round(sr * sec);
-    const gust = (t) => Math.max(0.1, 0.55 + 0.45 * Math.sin(t * 0.39 + 1) * Math.sin(t * 0.23) + 0.15 * Math.sin(t * 1.7));
-    const ch = (seed) => {
-      const d = new Float32Array(n), lv = new Float32Array(n), nd = new Float32Array(n);
-      let br = 0; for (let i = 0; i < n; i++) { br = (br + (Math.random() * 2 - 1) * 0.02) * 0.998; d[i] = br; nd[i] = Math.random() * 2 - 1; }
-      const f1 = bp(d, sr, 240 + seed * 40, 2.2), f2 = bp(d, sr, 520, 3), needles = bp(nd, sr, 3600, 0.9);
-      for (let i = 0; i < n; i++) { const g = gust(i / sr + seed); d[i] = d[i] * 0.5 + (f1[i] * 3 + f2[i] * 2) * g + needles[i] * 0.12 * g * g; }
-      for (let i = 0; i < n; i++) { const g = Math.max(0, gust(i / sr + seed) - 0.35); if (Math.random() < 0.03 * g) { const a = rnd(0.2, 1) * g; for (let k = 0; k < 40 && i + k < n; k++) lv[i + k] += a * (Math.random() * 2 - 1) * Math.exp(-k / 8); } }
-      // creaks: a slow friction squeal through a body resonance
-      for (let c = 0; c < 2; c++) { const s0 = Math.floor(rnd(1, sec - 2) * sr), len = Math.floor(rnd(0.4, 0.9) * sr), f0 = rnd(90, 180); let ph = 0;
-        const cr = new Float32Array(len); for (let i = 0; i < len; i++) { const u = i / len; ph += TAU * f0 * (1 + 0.25 * Math.sin(u * 6) + 0.03 * (Math.random() * 2 - 1)) / sr; cr[i] = (ph % TAU) / TAU - 0.5; }
-        const res = bp(cr, sr, rnd(380, 700), 6); for (let i = 0; i < len && s0 + i < n; i++) d[s0 + i] += res[i] * Math.sin(Math.PI * i / len) * 0.05; }
-      hp(lv, sr, 2500); normalize(d, 0.8); normalize(lv, 0.6); return [seam(d, sr, 0.5), seam(lv, sr, 0.3)];
-    };
-    const [wl, ll] = ch(0), [wr, lr] = ch(7.3);
-    const st = (a, b) => { const bf = C.createBuffer(2, Math.min(a.length, b.length), sr); bf.copyToChannel(a.subarray(0, bf.length), 0); bf.copyToChannel(b.subarray(0, bf.length), 1); return bf; };
-    B.wind = st(wl, wr); B.leaves = st(ll, lr);
+  if (forest) {
+    B.stream = water(7, 140, 380, 2600, 0.05, 0);
+    B.brook = water(6, 260, 300, 1900, 0.09, 0.0);
+    B.fall = water(6, 900, 160, 1300, 0.35, 0.9);
   }
-  // ---- crickets
-  {
-    const sec = 4, n = Math.round(sr * sec), d = new Float32Array(n);
-    for (let c = 0; c < 9; c++) {
-      const t0 = c * 0.44 + rnd(0, 0.05), f = 4600 + rnd(-80, 80);
-      for (let p = 0; p < 3; p++) { const s0 = Math.floor((t0 + p * 0.032) * sr), len = Math.floor(0.022 * sr);
-        for (let i = 0; i < len && s0 + i < n; i++) d[s0 + i] += Math.sin(TAU * f * i / sr) * Math.sin(Math.PI * i / len) * (0.8 + 0.2 * Math.sin(TAU * 140 * i / sr)); }
-    }
-    normalize(d, 0.6); B.crickets = loopBuf(C, d);
-  }
+  if (forest) { Object.assign(B, makeWind(C)); B.crickets = makeCrickets(C); }   // (the house renders these later, in the background)
   // ---- birds: phrases from pitch trajectories (fundamental + a weaker 2nd harmonic)
   const sing = (notes) => {
     const total = notes.reduce((a, n) => Math.max(a, n.t + n.d), 0) + 0.15, d = new Float32Array(Math.round(sr * total));
@@ -108,6 +80,7 @@ export function makeBank(C) {
     normalize(d, 0.7); return loopBuf(C, d);
   };
   B.birds = [];
+  if (forest) {
   // thrush-like: 3 phrases, each repeated 2-3 times
   for (let v = 0; v < 3; v++) { const N = []; let t = 0;
     for (let ph = 0; ph < 3; ph++) { const f = rnd(2200, 4200), kind = Math.floor(rnd(0, 3)), rep = 2 + (Math.random() < 0.5 ? 1 : 0);
@@ -134,6 +107,7 @@ export function makeBank(C) {
     for (let k = 0; k < 17; k++) { const s0 = Math.floor((k * 0.048 + (k * k) * 0.0004) * sr);
       for (let i = 0; i < 400 && s0 + i < n; i++) d[s0 + i] += (Math.random() * 2 - 1) * Math.exp(-i / 50) * 0.6 + Math.sin(TAU * 950 * i / sr) * Math.exp(-i / 120) * 0.5; }
     normalize(d, 0.7); B.woodpecker = loopBuf(C, d); }
+  }
   // ---- footsteps
   const step1 = (kind) => {
     const n = Math.round(sr * 0.32), d = new Float32Array(n), nz = () => Math.random() * 2 - 1;
@@ -150,6 +124,24 @@ export function makeBank(C) {
     else if (kind === 'wood') { modes([rnd(170, 210), rnd(390, 440), rnd(680, 760)], [0.09, 0.06, 0.04], 0.6); clicks(2, 0.004, 2000, 3000, 0.4, 0.002); }
     else if (kind === 'metal') { modes([rnd(880, 940), 1430, 2210, 3020].map((f) => f * rnd(0.97, 1.03)), [0.25, 0.18, 0.12, 0.08], 0.35); clicks(2, 0.003, 4000, 6000, 0.5, 0.002); }
     else if (kind === 'water') { grit(1200, 0.6, 0.09, 0.8); bubbles(d, sr, 120, 500, 2400, 0.25); thump(80, 0.04, 0.3); }
+    // the house: a varnished oak floor on joists (the tap, and the board under it ringing low); a stair tread (a
+    // hollow box: longer, lower); linoleum on plywood (dull, a little squeak of the rubber now and then); rug and
+    // carpet (fibres brushing, no tap at all); marble and brick (a hard high tick, nothing under it rings); bedding
+    // and cushions (a soft press, a rustle, a spring); the enamelled steel of the washer (an oil-can boom); plastic
+    // (a light hollow click); paper and card (a dry tap); the lawn out back (blades swishing, the soil under them)
+    else if (kind === 'floor') { clicks(2, 0.003, 2600, 4200, 0.45, 0.0016); modes([rnd(105, 135), rnd(240, 290), rnd(560, 640), rnd(1150, 1300)], [0.07, 0.05, 0.03, 0.015], 0.55); grit(1800, 1.5, 0.01, 0.12); }
+    else if (kind === 'tread') { clicks(2, 0.003, 2400, 3800, 0.4, 0.0018); modes([rnd(85, 105), rnd(190, 230), rnd(420, 480), rnd(900, 1000)], [0.12, 0.09, 0.05, 0.02], 0.6); }
+    else if (kind === 'lino') { clicks(1, 0.002, 1600, 2400, 0.35, 0.0012); thump(130, 0.012, 0.45); grit(900, 0.8, 0.012, 0.18);
+      if (Math.random() < 0.35) { const s0 = Math.floor(rnd(0.01, 0.03) * sr), len = Math.floor(rnd(0.02, 0.04) * sr), f0 = rnd(1700, 2300); let ph = 0;
+        for (let i = 0; i < len && s0 + i < n; i++) { ph += TAU * f0 * (1 + 0.25 * i / len) / sr; d[s0 + i] += 0.08 * Math.sin(ph) * Math.sin(Math.PI * i / len); } } }
+    else if (kind === 'rug') { thump(65, 0.02, 0.35); grit(1300, 0.6, 0.035, 0.32); grit(3800, 0.7, 0.02, 0.1); }
+    else if (kind === 'stone') { clicks(2, 0.003, 3600, 5200, 0.6, 0.0012); modes([rnd(2100, 2500), rnd(3300, 3700)], [0.012, 0.008], 0.18); thump(260, 0.006, 0.2); }
+    else if (kind === 'cloth') { thump(55, 0.05, 0.4); grit(2400, 0.5, 0.07, 0.22); grit(600, 0.8, 0.05, 0.25);
+      if (Math.random() < 0.3) modes([rnd(380, 460), rnd(1050, 1250)], [0.14, 0.08], 0.06); }
+    else if (kind === 'panel') { clicks(2, 0.003, 3000, 4500, 0.45, 0.0015); modes([rnd(170, 230), rnd(440, 520), rnd(880, 960), 1640 * rnd(0.97, 1.03)], [0.16, 0.12, 0.07, 0.05], 0.4); }
+    else if (kind === 'plastic') { clicks(2, 0.003, 2200, 3400, 0.5, 0.0014); modes([rnd(620, 760), rnd(1400, 1700)], [0.025, 0.015], 0.3); }
+    else if (kind === 'paper') { thump(150, 0.01, 0.3); grit(3200, 0.6, 0.02, 0.3); grit(1100, 1, 0.015, 0.15); }
+    else if (kind === 'grass') { thump(60, 0.035, 0.45); grit(4200, 0.5, 0.06, 0.3); grit(1600, 0.8, 0.04, 0.25); clicks(18, 0.07, 2500, 6000, 0.12, 0.0008); }
     return d;
   };
   // a step is a heel strike and then the toe rolling down ~60-90 ms later (softer)
@@ -159,7 +151,9 @@ export function makeBank(C) {
     lp(d, sr, 6500); normalize(d, 0.85); return loopBuf(C, d);
   };
   B.steps = {};
-  for (const k of ['leaves', 'dirt', 'pebbles', 'moss', 'rock', 'wood', 'metal', 'water']) B.steps[k] = [0, 1, 2, 3].map(() => step(k));
+  const kinds = forest ? ['leaves', 'dirt', 'pebbles', 'moss', 'rock', 'wood', 'metal', 'water']
+    : ['wood', 'metal', 'rock', 'floor', 'tread', 'lino', 'rug', 'stone', 'cloth', 'panel', 'plastic', 'paper', 'grass'];
+  for (const k of kinds) B.steps[k] = [0, 1, 2, 3].map(() => step(k));
   // ---- piano voice for the music (D-major pentatonic over three octaves + chord tones)
   B.piano = {};
   const piano = (m) => {
@@ -181,8 +175,48 @@ export function makeBank(C) {
     for (let i = 0; i < 64; i++) d[i] *= i / 64;
     normalize(d, 0.5); return loopBuf(C, d);
   };
-  for (let m = 38; m <= 86; m++) if ([2, 4, 6, 9, 11, 1].includes(m % 12)) B.piano[m] = piano(m);
+  const pcs = forest ? [2, 4, 6, 9, 11, 1] : [2, 4, 6, 7, 9, 11, 1];
+  for (let m = 38; m <= 86; m++) if (pcs.includes(m % 12)) B.piano[m] = piano(m);
   return B;
+}
+
+export function makeWind(C) {
+  // ---- wind: brown noise with wandering resonances and gusts; pine needles hiss in the crowns; branches creak now and
+  // then; leaves: fine crackle that follows the gusts. All stereo (left and right independent).
+  const sr = C.sampleRate, B = {};
+  {
+    const sec = 18, n = Math.round(sr * sec);
+    const gust = (t) => Math.max(0.1, 0.55 + 0.45 * Math.sin(t * 0.39 + 1) * Math.sin(t * 0.23) + 0.15 * Math.sin(t * 1.7));
+    const ch = (seed) => {
+      const d = new Float32Array(n), lv = new Float32Array(n), nd = new Float32Array(n);
+      let br = 0; for (let i = 0; i < n; i++) { br = (br + (Math.random() * 2 - 1) * 0.02) * 0.998; d[i] = br; nd[i] = Math.random() * 2 - 1; }
+      const f1 = bp(d, sr, 240 + seed * 40, 2.2), f2 = bp(d, sr, 520, 3), needles = bp(nd, sr, 3600, 0.9);
+      for (let i = 0; i < n; i++) { const g = gust(i / sr + seed); d[i] = d[i] * 0.5 + (f1[i] * 3 + f2[i] * 2) * g + needles[i] * 0.12 * g * g; }
+      for (let i = 0; i < n; i++) { const g = Math.max(0, gust(i / sr + seed) - 0.35); if (Math.random() < 0.03 * g) { const a = rnd(0.2, 1) * g; for (let k = 0; k < 40 && i + k < n; k++) lv[i + k] += a * (Math.random() * 2 - 1) * Math.exp(-k / 8); } }
+      // creaks: a slow friction squeal through a body resonance
+      for (let c = 0; c < 2; c++) { const s0 = Math.floor(rnd(1, sec - 2) * sr), len = Math.floor(rnd(0.4, 0.9) * sr), f0 = rnd(90, 180); let ph = 0;
+        const cr = new Float32Array(len); for (let i = 0; i < len; i++) { const u = i / len; ph += TAU * f0 * (1 + 0.25 * Math.sin(u * 6) + 0.03 * (Math.random() * 2 - 1)) / sr; cr[i] = (ph % TAU) / TAU - 0.5; }
+        const res = bp(cr, sr, rnd(380, 700), 6); for (let i = 0; i < len && s0 + i < n; i++) d[s0 + i] += res[i] * Math.sin(Math.PI * i / len) * 0.05; }
+      hp(lv, sr, 2500); normalize(d, 0.8); normalize(lv, 0.6); return [seam(d, sr, 0.5), seam(lv, sr, 0.3)];
+    };
+    const [wl, ll] = ch(0), [wr, lr] = ch(7.3);
+    const st = (a, b) => { const bf = C.createBuffer(2, Math.min(a.length, b.length), sr); bf.copyToChannel(a.subarray(0, bf.length), 0); bf.copyToChannel(b.subarray(0, bf.length), 1); return bf; };
+    B.wind = st(wl, wr); B.leaves = st(ll, lr);
+  }
+  return B;
+}
+export function makeCrickets(C) {
+  // ---- crickets
+  const sr = C.sampleRate;
+  {
+    const sec = 4, n = Math.round(sr * sec), d = new Float32Array(n);
+    for (let c = 0; c < 9; c++) {
+      const t0 = c * 0.44 + rnd(0, 0.05), f = 4600 + rnd(-80, 80);
+      for (let p = 0; p < 3; p++) { const s0 = Math.floor((t0 + p * 0.032) * sr), len = Math.floor(0.022 * sr);
+        for (let i = 0; i < len && s0 + i < n; i++) d[s0 + i] += Math.sin(TAU * f * i / sr) * Math.sin(Math.PI * i / len) * (0.8 + 0.2 * Math.sin(TAU * 140 * i / sr)); }
+    }
+    normalize(d, 0.6); return loopBuf(C, d);
+  }
 }
 
 // a reverb impulse response: early reflections + a diffuse tail with high frequencies dying faster

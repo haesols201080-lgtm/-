@@ -3,7 +3,10 @@
 // springs up - back arched, fur on end, side on to the robot - then bolts: across the kitchen, out into the hall,
 // round through the living room, and up its cat tree, knocking aside anything small in the way; from the top it
 // watches the robot. All the poses are made here on its skeleton (a rotation per bone about the cat's own axes:
-// x across it, y up, z forward).
+// x across it, y up, z forward). Its sounds (src/housebank.js): it purrs in its sleep, on and off; woken, it hisses and
+// its claws scrabble on the floorboards for grip; it runs on soft pads with a claw ticking now and then, lands on the
+// cat tree with a thump that rocks it; from up there it chirrups and mews at the robot, growls if it comes too close
+// and hisses if it stays.
 import * as THREE from 'three';
 import { furredMesh } from './fur.js';
 
@@ -56,7 +59,10 @@ export class Cat {
     this.state = 'sleep'; this.t = 0; this.st = 0; this.seg = 0; this.segT = 0;
     this.group.position.copy(bed.pos); this.group.rotation.y = bed.yaw;
     this.pose = {}; this.blend = 0;
+    this.purrOn = true; this.purrT = 18 + Math.random() * 20; this.voiceT = 6; this.closeT = 0; this.growlT = 0;
   }
+  say(name, vol, o = {}) { this.audio?.play(name, { pos: this.head(), vol, verb: 0.2, ref: 0.4, ...o }); }
+  head() { const p = this.group.position; return { x: p.x + Math.sin(this.group.rotation.y) * 0.2, y: p.y + 0.22, z: p.z + Math.cos(this.group.rotation.y) * 0.2 }; }
   // a pose: { bone: [[axis, angle], ...] } in the cat's frame
   apply(P) {
     const D = new THREE.Quaternion(), r = new THREE.Quaternion();
@@ -130,7 +136,8 @@ export class Cat {
     // side on to whatever woke it
     const away = this.group.position.clone().sub(from); away.y = 0;
     this.startYaw = Math.atan2(away.x, away.z) + Math.PI / 2;
-    this.audio?.play('click', { pos: this.group.position, vol: 0.9, pitch: 0.5 });
+    this.audio?.follow('purr', 'purr', this.group.position, 0);
+    this.say('hiss', 1.0, { verb: 0.3 });
   }
   update(dt, robot, G) {
     this.t += dt; this.st += dt;
@@ -140,6 +147,9 @@ export class Cat {
       this.body.rotation.set(0, 0, Math.PI / 2); this.body.position.set(0.19, 0.072, 0);
       this.apply(this.sleepPose(this.t));
       for (const l of this.lids) l.visible = true;
+      // purring in its sleep a while, then just breathing
+      this.purrT -= dt; if (this.purrT <= 0) { this.purrOn = !this.purrOn; this.purrT = this.purrOn ? 20 + Math.random() * 30 : 12 + Math.random() * 20; }
+      this.audio?.follow('purr', 'purr', { x: pos.x, y: pos.y + 0.1, z: pos.z }, this.purrOn ? 0.55 : 0, { ref: 0.25, verb: 0.1, tau: 1.5 });
       if (rp && Math.abs(rp.y - pos.y) < 0.6 && (near < 0.5 || ((G?.noise || 0) > 1.0 && near < 2.5))) this.wake(rp);
       return;
     }
@@ -151,7 +161,7 @@ export class Cat {
       this.group.rotation.y = this.startYaw;
       this.apply(this.startlePose(k));
       if (this.fur) this.fur.userData.fur.uFurLen.value = this.furLen * (1 + 0.75 * k);
-      if (this.st > 0.75) { this.state = 'flee'; this.seg = 0; this.segT = 0; this.phase = 0; }
+      if (this.st > 0.75) { this.state = 'flee'; this.seg = 0; this.segT = 0; this.phase = 0; this.audio?.play('scrabble', { pos, vol: 0.8, verb: 0.25 }); }
       return;
     }
     if (this.fur) this.fur.userData.fur.uFurLen.value += (this.furLen * (this.state === 'flee' ? 1.4 : 1.0) - this.fur.userData.fur.uFurLen.value) * Math.min(1, dt * 1.5);
@@ -174,14 +184,15 @@ export class Cat {
         this.apply(this.runPose(this.phase)); pos.y += Math.max(0, Math.sin(this.phase * Math.PI * 2)) * 0.03;
         this.body.rotation.x = -0.2 * Math.sin(this.phase * Math.PI * 2); this.body.position.set(0, 0.0, 0);
       }
-      if (Math.floor(this.phase * 2) !== this.lastStep) { this.lastStep = Math.floor(this.phase * 2); if (!leap) this.audio?.play('thud', { pos, vol: 0.25, pitch: 1.6 }); }
+      // a gallop: the fore paws, then the hind (soft pads, a claw ticking on the boards now and then)
+      if (Math.floor(this.phase * 2) !== this.lastStep) { this.lastStep = Math.floor(this.phase * 2); if (!leap) { this.audio?.play('pad', { pos, vol: 0.5, verb: 0.2 }); this.audio?.play('pad', { pos, vol: 0.35, verb: 0.2, at: 0.07 }); } }
       // anything small in its way is bowled over
       if (rp && near < 0.32 && Math.abs(rp.y - pos.y) < 0.4 && !this.hitT) {
         this.hitT = 1.2; const dir = new THREE.Vector3(Math.sin(this.group.rotation.y), 0, Math.cos(this.group.rotation.y));
-        robot.vel?.addScaledVector(dir, 3.2).add(new THREE.Vector3(0, 2.2, 0)); this.audio?.play('thud', { pos, vol: 0.9, pitch: 0.8 });
+        robot.vel?.addScaledVector(dir, 3.2).add(new THREE.Vector3(0, 2.2, 0)); this.audio?.play('thud', { pos, vol: 0.7, pitch: 0.9 }); this.say('yowl', 0.8);
         if (G) G.camShake = 0.03;
       }
-      if (u >= 1) { this.seg++; this.segT = 0; }
+      if (u >= 1) { if (leap) this.audio?.play('catLand', { pos, vol: 0.85, verb: 0.3 }); this.seg++; this.segT = 0; }
     }
     if (this.hitT) this.hitT = Math.max(0, this.hitT - dt);
     if (this.state === 'perch') {
@@ -193,6 +204,14 @@ export class Cat {
       let look = want - this.group.rotation.y; while (look > Math.PI) look -= Math.PI * 2; while (look < -Math.PI) look += Math.PI * 2;
       this.body.position.y = -0.09;
       this.apply(this.loafPose(this.t, THREE.MathUtils.clamp(look, -1.1, 1.1)));
+      // talking to the robot from up there: a chirrup or a mew while it watches; a growl if the robot comes to the foot
+      // of its tree, a hiss if it stays
+      if (rp) {
+        const d = Math.hypot(rp.x - pos.x, rp.z - pos.z);
+        this.voiceT -= dt; this.growlT = Math.max(0, this.growlT - dt);
+        if (d < 0.9) { this.closeT += dt; if (!this.growlT) { this.growlT = 5 + Math.random() * 3; this.say(this.closeT > 2.5 ? 'hiss' : 'growl', 0.8); } }
+        else { this.closeT = 0; if (d < 4.5 && this.voiceT <= 0) { this.voiceT = 12 + Math.random() * 14; this.say(Math.random() < 0.55 ? 'trill' : 'meow', 0.55); } }
+      }
     }
   }
 }

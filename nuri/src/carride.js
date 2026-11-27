@@ -138,7 +138,7 @@ export function makeCarRide(renderer, A) {
   ride.update = (dt) => {
     ride.t += dt; const t = ride.t;
     const ph = t < 12 ? 0 : t < 21 ? 1 : t < 28.5 ? 2 : 3;
-    const sp = SPEED[ph];
+    const sp = SPEED[ph]; ride.speed = sp; ride.ph = ph;
     for (const o of items) {
       const on = o.userData.phase === ph; o.visible = on;
       if (!on) continue;
