@@ -4,9 +4,11 @@
 // shut. Positions of the clips are in his own frame (he faces his local +z, the ground or mattress at y = 0).
 import * as THREE from 'three';
 
+// (no cards on his face: his brows are painted into his skin, and he has no lash cards; an older model's are left
+// hidden)
 const OUTFIT = {
-  out: /body_out|eyes|lashes|brows|teeth|tongue|hair|outfit|boot/,
-  bed: /body_bed|eyes|lashes|brows|teeth|tongue|hair|sleepwear/,
+  out: /body_out|eyes|teeth|tongue|hair|outfit|boot/,
+  bed: /body_bed|eyes|teeth|tongue|hair|sleepwear/,
 };
 
 export class Person {
@@ -17,7 +19,7 @@ export class Person {
       o.visible = OUTFIT[outfit].test(o.name); o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
       const m = o.material;
       // hair, brows and lashes are cards with their strands in the alpha: blended, double sided, a light cut-off
-      if (/hair|brows|lashes/.test(m.name)) { m.transparent = true; m.alphaTest = /lashes/.test(m.name) ? 0.02 : 0.08; m.depthWrite = !/lashes/.test(m.name); m.side = THREE.DoubleSide; o.renderOrder = 2; if (!/hair/.test(m.name)) o.castShadow = false; }
+      if (/hair/.test(m.name)) { m.transparent = true; m.alphaTest = 0.08; m.depthWrite = true; m.side = THREE.DoubleSide; o.renderOrder = 2; }
       // the cornea: clear, so only its reflections show, added over the eye (the catchlights; nothing darkened)
       if (/cornea/.test(m.name)) { m.transparent = true; m.opacity = 1; m.alphaTest = 0; m.color.setRGB(0, 0, 0); m.roughness = 0.04; m.metalness = 0; m.blending = THREE.AdditiveBlending; m.depthWrite = false; m.envMapIntensity = 1.3; o.castShadow = false; o.renderOrder = 3; }
       // the eyeball: moist, not a mirror (the cornea gives the shine)
