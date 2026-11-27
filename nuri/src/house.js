@@ -43,7 +43,7 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
   const physics = new RAPIER.World({ x: 0, y: -9.81, z: 0 }); physics.timestep = 1 / 60;
   const assets = new Assets(renderer, tier, (k, l) => ui.progress(0.05 + k * 0.85, l));
   await assets.loadHouse();
-  scene.environment = assets.tex.envMap; scene.environmentIntensity = 0.32;
+  scene.environment = assets.tex.envMap; scene.environmentIntensity = 0.55;         // (the sky's own lamps capped: src/assets.js)
   scene.background = new THREE.Color(0x05070d);                 // (the night sky is a dome in nyc.js; the HDRI lights and reflects)
   const ctx = { scene, RAPIER, physics, assets, tier, camera, renderer, terrain: null };
   ui.progress(0.93, '거인의 집');

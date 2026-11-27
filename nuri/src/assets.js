@@ -98,6 +98,22 @@ export const HOUSE_MODELS = ['house_arch', 'wicker_basket_02', 'cat', 'stranger'
 export const HOUSE_TREES = ['pine_0', 'pine_2', 'fir_4', 'fir_14'];
 export const PROPS = ['crate', 'fence_picket', 'fence_rail', 'gate_pillar', 'gate_leaf', 'plate_sf_base', 'plate_sf_top', 'lift_deck', 'lift_head', 'lift_counter', 'ibeam', 'socket', 'cell', 'shard', 'booster', 'ball'];
 
+// a copy of an equirect HDR (half floats) with no pixel brighter than cap (its colour kept): small, very bright
+// sources baked into a sky, which as image-based light would come through every wall
+function capHDR(tex, cap) {
+  const img = tex.image, d = img?.data;
+  if (!d || !(d instanceof Uint16Array)) return tex;
+  const out = new Uint16Array(d.length), from = THREE.DataUtils.fromHalfFloat, to = THREE.DataUtils.toHalfFloat, n = d.length / 4;
+  for (let i = 0; i < n; i++) {
+    const r = from(d[i * 4]), g = from(d[i * 4 + 1]), b = from(d[i * 4 + 2]), l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    if (l > cap) { const k = cap / l; out[i * 4] = to(r * k); out[i * 4 + 1] = to(g * k); out[i * 4 + 2] = to(b * k); out[i * 4 + 3] = d[i * 4 + 3]; }
+    else { out[i * 4] = d[i * 4]; out[i * 4 + 1] = d[i * 4 + 1]; out[i * 4 + 2] = d[i * 4 + 2]; out[i * 4 + 3] = d[i * 4 + 3]; }
+  }
+  const t = new THREE.DataTexture(out, img.width, img.height, tex.format, THREE.HalfFloatType);
+  t.mapping = tex.mapping; t.colorSpace = tex.colorSpace; t.flipY = tex.flipY; t.minFilter = tex.minFilter; t.magFilter = tex.magFilter; t.generateMipmaps = false; t.needsUpdate = true;
+  return t;
+}
+
 export class Assets {
   constructor(renderer, tier, onProgress) {
     this.renderer = renderer; this.tier = tier; this.onProgress = onProgress || (() => {});
@@ -261,7 +277,12 @@ export class Assets {
     };
     const [hdr, day] = await Promise.all([hdri(`rooftop_night_${tier.texSize >= 2048 ? '2k' : '1k'}`), hdri('forest_slope_1k')]);
     T.hdr = hdr; T.hdrDay = day;
-    const pm = new THREE.PMREMGenerator(this.renderer); T.envMap = pm.fromEquirectangular(hdr).texture; T.envDay = pm.fromEquirectangular(day).texture; pm.dispose();
+    // (the night city's lamps, a few pixels near the horizon to the north-east, carry two thirds of its light: as
+    // the environment, which no wall stops, they would light every room from that side. Capped, the sky lights the
+    // house evenly and dimly, and the lamps that matter are the house's own, where they stand)
+    const lit = capHDR(hdr, 4);
+    const pm = new THREE.PMREMGenerator(this.renderer); T.envMap = pm.fromEquirectangular(lit).texture; T.envDay = pm.fromEquirectangular(day).texture; pm.dispose();
+    if (lit !== hdr) lit.dispose();
     this.step('도시의 밤');
     const queue = [['nuri'], ...HOUSE_MODELS.map((m) => [`house/${m}`, 'h_' + m]), ...HOUSE_TREES.map((t) => [`trees/${t}_lod1`, 't_' + t]),
       ['ph/grass_medium_01', 'g_grass_01'], ['ph/grass_medium_02', 'g_grass_02']];
