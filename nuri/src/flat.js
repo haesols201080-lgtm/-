@@ -84,10 +84,12 @@ export class Flat {
         m.normalScale.setScalar(d.normal); out[name] = m;
       } else out[name] = new THREE.MeshStandardMaterial({ color: new THREE.Color(d.color), roughness: d.rough, metalness: d.metal || 0, envMapIntensity: 0.6 });
     }
-    // (one paint for the upstairs walls: the house's builder chose each wall face's paint by which room its middle
-    // was in, so the faces round the bedroom's windows, where the wall runs past the room's end, came out in two
-    // colours, blue-grey patches in the cream)
-    if (out.wall_paint) out.wall_bed = out.wall_paint;
+    // (one paint for all the walls: the house's builder chose each wall face's paint by which room its middle was
+    // in, so the faces round the windows, where a wall runs past a room's end, came out in two or three colours,
+    // blue-grey and yellow patches in the cream)
+    if (out.wall_paint) { out.wall_bed = out.wall_kit = out.wall_paint; out.wall_paint.normalScale.setScalar(0.22); }
+    // (the paint's own relief at a third of the scan's: walls are split round every opening, their UVs restarting,
+    // and a strong relief shows each split as a seam)
     // (the curtains: the jacquard scan they were tinted from is a burgundy one, and showed through as red; they are
     // lined drapes in a warm beige cotton, the bedding's scanned weave, with a cloth's sheen)
     if (sets.hs_sheet) out.curtain = fabric(sets.hs_sheet, { tile: 0.29, color: 0xcbbca2, sheenColor: 0xeadfca, sheenRoughness: 0.6, crinkle: 0.6, crease: 0.35 });
