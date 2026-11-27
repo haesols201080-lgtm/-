@@ -10,6 +10,9 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { buildNeighborhood, glow } from './nyc.js';
 import HOUSE_MATS from './house_mats.json';
 import HOUSE_LM from './house_lm.json';
+import { Person } from './person.js';
+import { Quilt } from './quilt.js';
+import { fabric, undersideOf, makeMattress, makePillow } from './bedding.js';
 
 // a surface with its light baked: the point lights and the sky fill are in the bake already (the moon and the spot lights,
 // which move or switch, stay real-time)
@@ -90,7 +93,7 @@ export class Flat {
   // looks (a robot finds its way under the bed, round the cat tree, over the washing machine); the furniture is listed
   addArch() {
     const root = this.arch.scene; this.archRoot = root; this.group.add(root); root.updateMatrixWorld(true);
-    const M = this.archMats(); this.furn = [];
+    const M = this.archM = this.archMats(); this.furn = [];
     const tops = new Set(), LM = { int: this.A.tex.lmInt, ext: this.A.tex.lmExt }, baked = new Map();
     const bake = (m, atlas) => {
       const lm = LM[atlas]; if (!lm || !m) return m;
@@ -114,6 +117,7 @@ export class Flat {
         if (nm.startsWith('glass')) { o.castShadow = false; o.renderOrder = 2; }
         else if (nm.startsWith('soft_')) { if (nm.startsWith('soft_duvet')) this.softDuvet = o; }       // (cloth: the robot pushes through it)
         else this.meshCollider(o, surfaceOf(mat0));
+        o.userData.mat0 = mat0;
       }
       if (o.geometry.attributes.uv1 && (atlas === 'int' || atlas === 'ext')) o.material = Array.isArray(o.material) ? o.material.map((m) => bake(m, atlas)) : bake(o.material, atlas);
       if (nm.startsWith('f_') && !tops.has(top)) {
@@ -340,15 +344,35 @@ export class Flat {
     this.block(BW + 0.04, 1.0, 0.07, darkWood, bx, U + 0.5, Hs.kz - 0.035, { surface: 'wood', collide: !this.arch });
     const mat = new THREE.Mesh(new RoundedBoxGeometry(BW - 0.05, 0.2, BL - 0.05, 3, 0.05), pillowM); mat.position.set(bx, U + 0.4, bz); mat.receiveShadow = true; this.group.add(mat);
     const pil = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.13, 0.4, 4, 0.06), pillowM); pil.position.set(bx - 0.15, U + 0.56 + DY, Hs.kz - 0.32); pil.rotation.y = 0.08; pil.castShadow = pil.receiveShadow = true; this.group.add(pil); if (!this.arch) this.keepVis(pil);
-    // the stranger: asleep on their side under the duvet, a tuft of dark hair on the pillow; the duvet rises and falls
-    const hair = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshStandardMaterial({ color: 0x1b140f, roughness: 0.55 }));
-    hair.scale.set(0.095, 0.085, 0.11); hair.position.set(bx - 0.2, U + 0.66 + DY, Hs.kz - 0.36); hair.castShadow = true; this.group.add(hair); this.keepVis(hair);
+    // the stranger: asleep on his back under the duvet, his head on the pillow, his forearms on the duvet; the duvet
+    // rises and falls (src/person.js: the model and his clips, in his T-shirt). Without the model, a tuft of hair
+    if (this.A.models.h_stranger) {
+      // on his side of the bed (the lamp's), his head on its pillow, on the mattress (his clips' frame has the mattress
+      // top at y = 0: U + 0.5 + DY here)
+      const man = this.man = new Person(this.A.models.h_stranger, 'bed');
+      man.root.rotation.y = Math.PI;                                   // (his head toward the headboard)
+      man.root.position.set(bx - 0.08, U + 0.5 + DY, Hs.kz - 1.1); this.group.add(man.root); this.keepVis(man.root);
+      man.play('sleep', { loop: true, fade: 0 }); man.mixer.update(0); man.root.updateMatrixWorld(true);
+      const pw = this.arch?.scene.getObjectByName('soft_pillow0'), pc = pw ? new THREE.Box3().setFromObject(pw).getCenter(new THREE.Vector3()) : new THREE.Vector3(bx - 0.14, 0, Hs.kz - 0.3);
+      const h = man.bone('head').getWorldPosition(new THREE.Vector3());
+      man.root.position.x += pc.x + 0.03 - h.x; man.root.position.z += pc.z + 0.02 - h.z; man.root.updateMatrixWorld(true);
+      // (the house's bat was left standing up through the mattress: it lies on the floor under the bed)
+      const bat = this.arch?.scene.getObjectByName('f_baseball_bat');
+      if (bat) {
+        bat.rotateOnWorldAxis(new THREE.Vector3(Math.cos(1.25), 0, -Math.sin(1.25)), Math.PI / 2); bat.updateMatrixWorld(true);
+        const bb = new THREE.Box3().setFromObject(bat), c = bb.getCenter(new THREE.Vector3());
+        bat.position.add(new THREE.Vector3(bx - c.x, U + 0.003 - bb.min.y, -0.55 - c.z)); bat.updateMatrixWorld(true);
+      }
+    } else {
+      const hair = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshStandardMaterial({ color: 0x1b140f, roughness: 0.55 }));
+      hair.scale.set(0.095, 0.085, 0.11); hair.position.set(bx - 0.2, U + 0.66 + DY, Hs.kz - 0.36); hair.castShadow = true; this.group.add(hair); this.keepVis(hair);
+    }
     const dg = new THREE.PlaneGeometry(BW + 0.24, BL - 0.2, 56, 64); dg.rotateX(-Math.PI / 2); dg.translate(bx, 0, bz - 0.1);
     const duvet = new THREE.Mesh(dg, linenM); duvet.castShadow = duvet.receiveShadow = true; this.group.add(duvet); if (!this.softDuvet) this.keepVis(duvet);
     // body under the duvet, head end toward +z (the pillow): shoulders, chest, hip, legs bent
     const body = [[-0.12, 0.72, 0.17, 0.24, 0.2], [-0.1, 0.35, 0.15, 0.22, 0.32], [-0.06, -0.05, 0.19, 0.26, 0.28], [0.0, -0.48, 0.12, 0.2, 0.3], [0.12, -0.62, 0.1, 0.2, 0.2]];
     this.sleeper = { duvet, base: dg.attributes.position.array.slice(), body, bx, bz, BW, BL, stir: 0, U: U + DY, head: new THREE.Vector3(bx, U + 0.7 + DY, Hs.kz - 0.4) };
-    this.shapeDuvet(0);
+    if (this.man) this.makeBed({ pil, mattress: mat, duvet }); else this.shapeDuvet(0);
     this.collider(this.R.ColliderDesc.cuboid(BW / 2, 0.06, BL / 2).setTranslation(bx, U + 0.56 + DY, bz), 'fabric');
     // nightstand and the bedside lamp (off; it comes on if the stranger wakes)
     const ns = this.place('ClassicNightstand_01', -4.45, Hs.kz - 0.4, { y: U, rotY: Math.PI / 2 });
@@ -382,6 +406,37 @@ export class Flat {
     { const qq = new THREE.Quaternion(); hinge.getWorldQuaternion(qq); const p = new THREE.Vector3(-0.022, 1.02, -dw / 2).applyMatrix4(hinge.matrixWorld);
       this.collider(this.R.ColliderDesc.cuboid(0.022, 1.02, dw / 2).setTranslation(p.x, p.y, p.z).setRotation({ x: qq.x, y: qq.y, z: qq.z, w: qq.w })); }
     this.doorGap = new THREE.Vector3(Hs.part, U, Hs.bedDoor[0] + 0.18);
+  }
+  // the bed made up (src/bedding.js): the mattress in its fitted sheet and two pillows in their cases, all sinking
+  // where he lies (he sinks a little into them), and the duvet, as cloth (src/quilt.js): it falls over him and the bed
+  // as the house is built and moves with him; it lies on the mattress, the pillows and the bed's frame (as
+  // blender/build_house.py made it; the procedural bed's without the modelled house). The modelled bedding is put away
+  makeBed({ pil, mattress, duvet }) {
+    const Hs = HOUSE, S = this.sleeper, MT = S.U + 0.5, { bx, bz, BW, BL } = S, sets = this.A.tex.sets || {}, man = this.man;
+    man.root.position.y -= 0.025; man.root.updateMatrixWorld(true);
+    const under = undersideOf(man, { x0: bx - BW / 2, x1: bx + BW / 2, z0: bz - BL / 2, z1: Hs.kz });
+    const sheetM = fabric(sets.hs_sheet, { tile: 0.29, sheenColor: 0xf2f0ec, crinkle: 0.6, crease: 0.5 });
+    const caseM = fabric(sets.hs_sheet, { tile: 0.29, color: 0xfbf9f5, sheenColor: 0xffffff, crinkle: 0.45, crease: 0.6 });
+    const duvetM = fabric(sets.hs_duvet, { tile: 0.27, sheenColor: 0xc9d5e3, sheenRoughness: 0.6, crinkle: 0.5, crease: 1.05, vertexColors: true });
+    const W = BW - 0.06, L = BL - 0.06;
+    const bedTop = makeMattress({ bx, bz, W, L, top: MT, under, material: sheetM }); this.group.add(bedTop); this.keepVis(bedTop);
+    const spots = this.arch ? [[-3.6, Hs.kz - 0.3, 0.06], [-2.8, Hs.kz - 0.28, -0.05]] : [[pil.position.x, pil.position.z, pil.rotation.y]];
+    const pillows = spots.map(([x, z, ry], k) => { const p = makePillow({ c: [x, MT, z], ry, seed: k + 1, under, material: caseM }); this.group.add(p); this.keepVis(p); return p; });
+    const boxes = [{ c: [bx, MT - 0.105, bz], h: [W / 2, 0.105, L / 2], r: 0.055 }, ...pillows.map((p) => p.userData.collider)];
+    if (this.arch) {
+      const U = Hs.U, fz = bz - BL / 2;
+      boxes.push({ c: [bx - BW / 2 + 0.02, U + 0.36, bz], h: [0.02, 0.06, BL / 2] }, { c: [bx + BW / 2 - 0.02, U + 0.36, bz], h: [0.02, 0.06, BL / 2] },
+        { c: [bx, U + 0.635, fz - 0.0375], h: [BW / 2 - 0.04, 0.185, 0.0275] }, { c: [bx - BW / 2 + 0.005, U + 0.45, fz - 0.035], h: [0.035, 0.45, 0.035] },
+        { c: [bx + BW / 2 - 0.005, U + 0.45, fz - 0.035], h: [0.035, 0.45, 0.035] }, { c: [bx, U + 0.91, Hs.kz - 0.06], h: [BW / 2 - 0.04, 0.29, 0.02] });
+      for (const nm of ['soft_pillow0', 'soft_pillow1']) { const o = this.arch.scene.getObjectByName(nm); if (o) o.visible = false; }
+      this.arch.scene.traverse((o) => { if (o.isMesh && o.userData.mat0 === 'mattress') o.visible = false; });
+    } else { boxes.push({ c: [bx, Hs.U + 0.5, Hs.kz - 0.035], h: [BW / 2, 0.5, 0.035] }); pil.visible = false; mattress.visible = false; }
+    this.quilt = new Quilt({ parent: this.group, material: duvetM, man, boxes, floor: Hs.U,
+      layout: { x0: bx - 1.05, x1: bx + 1.05, z0: bz - BL / 2 + 0.06, z1: Hs.kz - 0.54, y: MT + 0.34, nx: 53, nz: 42 },
+      field: { x0: bx - BW / 2, x1: bx + BW / 2, z0: bz - BL / 2, z1: bz + BL / 2 } });
+    this.keepVis(this.quilt.mesh);
+    if (this.softDuvet) this.softDuvet.visible = false;
+    duvet.visible = false;
   }
   shapeDuvet(t) {
     const S = this.sleeper;
@@ -534,7 +589,9 @@ export class Flat {
   update(dt, t) {
     const S = this.sleeper;
     S.stir = Math.max(0, S.stir - dt * 0.6);
-    this.shapeDuvet(t);
+    if (this.man) this.man.bone('head').getWorldPosition(S.head);          // (the snore comes from where his head is)
+    // (the duvet: cloth over him when he is there, src/quilt.js; else the modelled one, breathing)
+    if (this.quilt) this.quilt.update(dt, { robot: this.robot, active: this.clothActive ?? true }); else this.shapeDuvet(t);
     const on = Math.sin(t * 1.4) > -0.2; this.tvLed.material.color.setRGB(on ? 1 : 0.25, 0.1, 0.06); this.tvLight.intensity = on ? 0.08 : 0.02;
     this.basket.hinge.rotation.x = -this.basket.open * 1.9 - (this.basket.jolt || 0);
     if (this.basket.jolt) this.basket.jolt = Math.max(0, this.basket.jolt - dt * 1.6);

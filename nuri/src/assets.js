@@ -93,7 +93,7 @@ export const TREES = ['pine_0', 'pine_1', 'pine_2', 'pine_3', 'fir_4', 'fir_5', 
 export const SAPLINGS = []; // (the Blender saplings read as stacked card tiers; scanned saplings are used instead)
 export const SNAGS = ['snag_9', 'snag_10'];
 // chapter 2: the stranger's flat (Poly Haven scans, processed by blender/process_house_models.py)
-export const HOUSE_MODELS = ['house_arch', 'wicker_basket_02', 'cat'];   // (the modelled house carries its own furniture)
+export const HOUSE_MODELS = ['house_arch', 'wicker_basket_02', 'cat', 'stranger'];   // (the modelled house carries its own furniture)
 // outside the house and along the road: chapter 1's conifers (their light versions) and two scanned grasses
 export const HOUSE_TREES = ['pine_0', 'pine_2', 'fir_4', 'fir_14'];
 export const PROPS = ['crate', 'fence_picket', 'fence_rail', 'gate_pillar', 'gate_leaf', 'plate_sf_base', 'plate_sf_top', 'lift_deck', 'lift_head', 'lift_counter', 'ibeam', 'socket', 'cell', 'shard', 'booster', 'ball'];
@@ -232,7 +232,7 @@ export class Assets {
   // city HDRI (Poly Haven "rooftop_night", CC0) for the view and the reflections
   async loadHouse() {
     const T = this.tex, tier = this.tier;
-    this.total = HOUSE_MODELS.length + HOUSE_TREES.length + 2 + 1 + 13 + 2 + 10;
+    this.total = HOUSE_MODELS.length + HOUSE_TREES.length + 2 + 1 + 13 + 2 + 10 + 2;
     const [floor, wall, tile, linen, rug, seat, denim, brick, roof, siding, lawn, asphalt, pavement, bark, twig] = await Promise.all([
       this.set('hs_floor'), this.set('hs_wall'), this.set('hs_tile', { size: 1024 }), this.set('hs_linen', { size: 1024 }),
       this.set('hs_rug', { size: 1024 }), this.set('hs_seat', { size: 1024 }), this.set('hs_denim', { size: 1024 }), this.set('hs_brick', { size: 1024 }),
@@ -244,10 +244,12 @@ export class Assets {
     // the modelled house's own scanned sets (painted plaster, worn oak, linoleum, marble, subway tile, stained oak,
     // veneer, jacquard, carpet, stucco), and all of them by their names for its materials (src/house_mats.json)
     const more = ['hs_paint', 'hs_oak', 'hs_lino', 'hs_marble', 'hs_subway', 'hs_stain', 'hs_veneer', 'hs_jacquard', 'hs_carpet', 'hs_stucco'];
-    const got = await Promise.all(more.map((n) => this.set(n, { size: 1024 })));
+    // (and the bedding's, at full size: the duvet cover's linen and the sheet's poplin, Poly Haven, CC0)
+    const bedding = ['hs_duvet', 'hs_sheet'];
+    const got = await Promise.all([...more.map((n) => this.set(n, { size: 1024 })), ...bedding.map((n) => this.set(n, { size: 2048 }))]);
     T.sets = { hs_floor: floor, hs_wall: wall, hs_tile: tile, hs_linen: linen, hs_rug: rug, hs_seat: seat, hs_denim: denim, hs_brick: brick, hs_roof: roof,
       hs_siding: siding, hs_lawn: lawn, hs_asphalt: asphalt, hs_pavement: pavement };
-    more.forEach((n, i) => { T.sets[n] = got[i]; });
+    [...more, ...bedding].forEach((n, i) => { T.sets[n] = got[i]; });
     // the house's baked night light (blender/build_house.py --bake; tools/lightmap_pack.py), when one is shipped
     // (src/house_lm.json says so: none is, for now, so nothing is asked of the server)
     const lm = async (n) => { if (!HOUSE_LM.baked) return null; try { const t = await this.texture(`${BASE}tex/${n}.webp`, true); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.channel = 1; return t; } catch (e) { return null; } };

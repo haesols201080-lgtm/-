@@ -1,13 +1,18 @@
 """The stranger: a grown man of about 45, built from MakeHuman's CC0 data (the base mesh, its shape targets, the
 game-engine rig with its weights, the eyes) read here directly - none of MakeHuman's or MPFB's code is run.
 
-Stages (each can be previewed): the body (macro shape: gender, age, muscle, weight, height, proportions, a mix of
-ethnicities; a few face and body details that make him someone in particular), the rig built on the shaped body
-(its joints at the means of MakeHuman's joint helpers, so they follow the shape) and skinned with MakeHuman's
-weights, eye-closure and a few expression shape keys, the eyes fitted to the sockets.
+Stages: the body (macro shape: gender, age, muscle, weight, height, proportions, a mix of ethnicities; a few face
+and body details that make him someone in particular), the rig built on the shaped body (its joints at the means of
+MakeHuman's joint helpers, so they follow the shape) and skinned with MakeHuman's weights, eye-closure and a few
+expression shape keys, the eyes fitted to the sockets; then MakeHuman's own assets fitted to him as proxies (the
+skin photo, short hair, brows, lashes, teeth and tongue; a field jacket and jeans, with Poly Haven's scanned rubber
+boots, for the forest; a T-shirt and jeans for bed), the body under each outfit cut where it can't be seen.
 
-usage: python -I blender/build_person.py <makehuman data dir> [--preview out.png]
-  the data dir holds MPFB2's src/mpfb/data (3dobjs, targets, rigs) and MakeHuman's makehuman/data/eyes"""
+usage: python -I blender/build_person.py <data dir> [--tex dir] [--bake dir --size N] [--preview png] [--export glb]
+                                         [--save blend] [--boots rubber_boots.glb]
+  the data dir (blender/fetch_person_data.sh fetches it) holds mpfb/ (MPFB2's src/mpfb/data: 3dobjs, targets, rigs),
+  eyes/ (MakeHuman's makehuman/data/eyes) and assets/ (MakeHuman's system assets: skins, clothes, hair, eyebrows,
+  eyelashes). Then blender/animate_person.py gives him his clips."""
 import bpy, gzip, json, math, os, sys
 import numpy as np
 from mathutils import Vector, Matrix
@@ -17,7 +22,7 @@ DATA = ARGS[0]
 def opt(name, default=None):
     return ARGS[ARGS.index(name) + 1] if name in ARGS and ARGS.index(name) + 1 < len(ARGS) else default
 MPFB = os.path.join(DATA, 'mpfb')        # (MPFB2's data folder: 3dobjs, targets, rigs, textures)
-CLOTH = os.path.join(DATA, 'cloth')      # (Poly Haven fabrics: <id>/Diffuse_2k.jpg, nor_gl_2k.jpg, arm_2k.jpg)
+ASSETS = os.path.join(DATA, 'assets')    # (MakeHuman's system assets, CC0: skins/, clothes/, hair/, eyebrows/, eyelashes/)
 TEXOUT = opt('--tex', '/tmp/stranger_tex')
 EYES = os.path.join(DATA, 'eyes')        # (MakeHuman's eyes: high-poly mesh, its fitting, the iris texture)
 
@@ -175,18 +180,24 @@ def landmarks(X, groups):
     return out
 
 # ---------------------------------------------------------------- the eyes (MakeHuman's high-poly eyes fitted to the shaped sockets)
-def read_mhclo(path):
-    scales, refs, in_verts = {}, [], False
+def read_mhclo(path, with_delete=False):
+    scales, refs, dele, mode = {}, [], set(), None
     for line in open(path, encoding='utf-8', errors='replace'):
         p = line.split()
         if not p or line.startswith('#'): continue
         if p[0] in ('x_scale', 'y_scale', 'z_scale'): scales[p[0][0]] = (int(p[1]), int(p[2]), float(p[3])); continue
-        if p[0] == 'verts': in_verts = True; continue
-        if in_verts:
-            if p[0] in ('delete_verts',) or not p[0].lstrip('-').replace('.', '').isdigit(): in_verts = False; continue
+        if p[0] == 'verts': mode = 'verts'; continue
+        if p[0] == 'delete_verts': mode = 'delete'; continue
+        if not p[0].lstrip('-').replace('.', '').isdigit(): mode = None; continue
+        if mode == 'verts':
             if len(p) == 1: refs.append(([int(p[0])], [1.0], [0, 0, 0]))
             elif len(p) >= 9: refs.append(([int(p[0]), int(p[1]), int(p[2])], [float(p[3]), float(p[4]), float(p[5])], [float(p[6]), float(p[7]), float(p[8])]))
-    return scales, refs
+        elif mode == 'delete':
+            i = 0
+            while i < len(p):
+                if i + 2 < len(p) and p[i + 1] == '-': dele.update(range(int(p[i]), int(p[i + 2]) + 1)); i += 3
+                else: dele.add(int(p[i])); i += 1
+    return (scales, refs, dele) if with_delete else (scales, refs)
 
 def fit_proxy(X, obj_path, mhclo_path):
     V, VT, F, FT, G = read_obj(obj_path)
@@ -209,8 +220,6 @@ def make_eyes(X, rig):
     vg = ob.vertex_groups.new(name='head'); vg.add(list(range(len(P))), 1.0, 'REPLACE')
     ob.parent = rig; mod = ob.modifiers.new('rig', 'ARMATURE'); mod.object = rig
     return ob
-
-
 
 # ---------------------------------------------------------------- eyes that turn, lashes, teeth
 def split_eyes(eyes, rig, LM):
@@ -240,18 +249,7 @@ def helper_object(name, X, VT, F, FT, G, want, expr, W, rig, color, rough=0.5):
     b.inputs['Base Color'].default_value = (*color, 1); b.inputs['Roughness'].default_value = rough; ob.data.materials.append(m)
     return ob
 
-def lash_alpha(lashes, body):
-    """lashes: dark at the lid, fading to their tips (how far each vertex stands off the skin)"""
-    from mathutils.kdtree import KDTree
-    kd = KDTree(len(body.data.vertices))
-    for v in body.data.vertices: kd.insert(v.co, v.index)
-    kd.balance()
-    d = np.array([kd.find(v.co)[2] for v in lashes.data.vertices])
-    a = np.clip(1 - (d - 0.0008) / 0.0055, 0, 1) ** 0.8
-    col = np.zeros((len(d), 4), np.float32); col[:, :3] = (0.035, 0.028, 0.024); col[:, 3] = a
-    at = lashes.data.color_attributes.new('Col', 'FLOAT_COLOR', 'POINT'); at.data.foreach_set('color', col.ravel())
-
-# ---------------------------------------------------------------- hair: the scalp the game grows short hair on
+# ---------------------------------------------------------------- where his hair grows (the skin's scalp, darkened)
 def hair_mask(co, LM):
     E = (LM['l-eye'] + LM['r-eye']) / 2; N = LM['neck']
     x, y, z = co[:, 0], co[:, 1], co[:, 2]; ax = np.abs(x)
@@ -270,37 +268,7 @@ def hair_mask(co, LM):
     ear = (ax > 0.066) & (z < E.z + 0.035) & (z > E.z - 0.045) & (y > E.y + 0.06) & (y < E.y + 0.13)
     return np.where(ear, 0.0, m)
 
-def make_scalp(body, LM, rig):
-    co = np.array([v.co[:] for v in body.data.vertices]); h = hair_mask(co, LM)
-    keep = [p.index for p in body.data.polygons if min(h[v] for v in p.vertices) > 0.03]
-    sc = body.copy(); sc.data = body.data.copy(); sc.name = sc.data.name = 'stranger_hair'; bpy.context.scene.collection.objects.link(sc)
-    if sc.data.shape_keys: sc.shape_key_clear()
-    import bmesh
-    bm = bmesh.new(); bm.from_mesh(sc.data); bm.faces.ensure_lookup_table(); ks = set(keep)
-    bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.index not in ks], context='FACES'); bm.to_mesh(sc.data); bm.free()
-    sc.data.materials.clear()
-    m = bpy.data.materials.new('hair'); m.use_nodes = True; b = m.node_tree.nodes['Principled BSDF']
-    b.inputs['Base Color'].default_value = (0.03, 0.022, 0.018, 1); b.inputs['Roughness'].default_value = 0.6; sc.data.materials.append(m)
-    # the fur data: length (by the mask, longer on top), comb (back and down over the crown, down at the sides and the
-    # nape, forward and to the side at the front), in glTF's axes; the exporter turns v into 1 - v, so it is stored so
-    me = sc.data; C = np.array([v.co[:] for v in me.vertices]); hm = hair_mask(C, LM)
-    E = (LM['l-eye'] + LM['r-eye']) / 2
-    top = np.clip((C[:, 2] - E.z) / 0.12, 0, 1)
-    length = hm * (0.55 + 0.45 * top)
-    me.normals_split_custom_set_from_vertices if False else None
-    furl = me.uv_layers.new(name='Fur'); cA = me.uv_layers.new(name='CombXY'); cB = me.uv_layers.new(name='CombZ')
-    for p in me.polygons:
-        for li in p.loop_indices:
-            vi = me.loops[li].vertex_index; v = me.vertices[vi]; n = v.normal; c = C[vi]
-            want = Vector((np.sign(c[0]) * 0.25 * (1 - top[vi]), 0.55 + 0.4 * top[vi], -0.8 * (1 - top[vi]) - 0.15))
-            if c[1] < E.y + 0.06 and c[2] > E.z + 0.05: want = Vector((np.sign(c[0]) * 0.5, -0.25, -0.2))   # (the front: forward and aside)
-            t = (want - n * want.dot(n)); t = t.normalized() if t.length > 1e-6 else Vector((0, 0, -1))
-            furl.data[li].uv = (float(length[vi]), 1.0 - 1.0 / 8.0)
-            cA.data[li].uv = (t.x, 1.0 - t.z); cB.data[li].uv = (-t.y, 1.0)
-    print(f'hair: {len(me.polygons)} faces of scalp')
-    return sc
-
-# ---------------------------------------------------------------- clothes: the body's own faces, stood off it
+# ---------------------------------------------------------------- his bones by region
 BONES = {'legs': ['thigh_l', 'thigh_r', 'calf_l', 'calf_r', 'foot_l', 'foot_r', 'ball_l', 'ball_r'],
          'torso': ['pelvis', 'spine_01', 'spine_02', 'spine_03', 'clavicle_l', 'clavicle_r'],
          'arms': ['upperarm_l', 'upperarm_r', 'lowerarm_l', 'lowerarm_r'],
@@ -318,287 +286,7 @@ def weight_sums(body):
             bone.setdefault(name, np.zeros(n))[v.index] = g.weight
     return per, bone
 
-def garment(body, name, sel, thick, mat, smooth=2, solid=0.0025, planes=(), relax=0):
-    """the body's faces whose vertices are all selected, moved out along its normals by thick(v), cut clean along
-    planes [(point, normal) - keeps the side the normal points to], then relaxed (the body's detail smoothed out of it)"""
-    import bmesh
-    me = body.data; co = np.array([v.co[:] for v in me.vertices]); nrm = np.array([v.normal[:] for v in me.vertices])
-    faces = [p.index for p in me.polygons if all(sel[v] for v in p.vertices)]
-    ob = body.copy(); ob.data = me.copy(); ob.name = ob.data.name = name; bpy.context.scene.collection.objects.link(ob)
-    if ob.data.shape_keys: ob.shape_key_clear()
-    ob.data.vertices.foreach_set('co', (co + nrm * thick[:, None]).ravel())
-    bm = bmesh.new(); bm.from_mesh(ob.data); bm.faces.ensure_lookup_table(); keep = set(faces)
-    bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.index not in keep], context='FACES')
-    for pl in planes:
-        pt, n = pl[0], pl[1]; region = pl[2] if len(pl) > 2 else None
-        fs = [f for f in bm.faces if region is None or region(f.calc_center_median())]
-        geom = list({v for f in fs for v in f.verts}) + list({e for f in fs for e in f.edges}) + fs
-        bmesh.ops.bisect_plane(bm, geom=geom, plane_co=Vector(pt), plane_no=-Vector(n).normalized(), clear_outer=True, dist=0.0005)
-    loose = [v for v in bm.verts if not v.link_faces]
-    if loose: bmesh.ops.delete(bm, geom=loose, context='VERTS')
-    inner = [v for v in bm.verts if not v.is_boundary]
-    from mathutils.bvhtree import BVHTree
-    bvh = BVHTree.FromPolygons([v.co for v in me.vertices], [p.vertices[:] for p in me.polygons])
-    gap = float(np.percentile(thick, 30))
-    for it in range(smooth + relax):
-        bmesh.ops.smooth_vert(bm, verts=inner, factor=0.5, use_axis_x=True, use_axis_y=True, use_axis_z=True)
-        # (smoothing shrinks: push back out to keep the cloth off the skin)
-        for v in bm.verts:
-            hit = bvh.find_nearest(v.co)
-            if hit[0] is None: continue
-            d = v.co - hit[0]
-            if d.dot(hit[1]) < gap: v.co = hit[0] + hit[1].normalized() * gap
-    bm.to_mesh(ob.data); bm.free()
-    for a in list(ob.data.color_attributes): ob.data.color_attributes.remove(a)
-    ob.data.materials.clear(); ob.data.materials.append(mat)
-    ob['solid'] = solid
-    return ob, set(faces)
-
-def finish_garment(ob):
-    if ob.get('solid'):
-        so = ob.modifiers.new('cloth_thickness', 'SOLIDIFY'); so.thickness = ob['solid']; so.offset = -1; so.use_rim = True
-        ob.modifiers.move(len(ob.modifiers) - 1, 0)
-
-def drape(garments, body, pins, frames=40):
-    """gravity on the garments, against the body: the fabric settles and folds where it gathers. pins(ob) gives each
-    garment's held vertices (shoulders, waistband) and how firmly"""
-    sc = bpy.context.scene; sc.frame_start = 1; sc.frame_end = frames
-    col = body.modifiers.new('collide', 'COLLISION'); body.collision.thickness_outer = 0.004; body.collision.cloth_friction = 6
-    arm = body.modifiers.get('rig'); arm.show_viewport = False
-    for ob in garments:
-        a = ob.modifiers.get('rig')
-        if a: a.show_viewport = False
-        w = pins(ob); vg = ob.vertex_groups.new(name='pin')
-        for i, x in enumerate(w):
-            if x > 0: vg.add([i], float(x), 'REPLACE')
-        c = ob.modifiers.new('drape', 'CLOTH'); st = c.settings
-        st.quality = 6; st.mass = 0.25; st.air_damping = 2.0; st.tension_stiffness = 18; st.compression_stiffness = 18; st.shear_stiffness = 6; st.bending_stiffness = 0.6
-        st.vertex_group_mass = 'pin'; st.pin_stiffness = 2.0
-        c.collision_settings.use_self_collision = False; c.collision_settings.distance_min = 0.003
-        c.point_cache.frame_start = 1; c.point_cache.frame_end = frames
-    for f in range(1, frames + 1): sc.frame_set(f)
-    for ob in garments:
-        bpy.context.view_layer.objects.active = ob
-        dg = bpy.context.evaluated_depsgraph_get(); ev = ob.evaluated_get(dg)
-        co = [v.co.copy() for v in ev.data.vertices]
-        ob.modifiers.remove(ob.modifiers['drape'])
-        for v, c_ in zip(ob.data.vertices, co): v.co = c_
-        a = ob.modifiers.get('rig')
-        if a: a.show_viewport = True
-        ob.vertex_groups.remove(ob.vertex_groups['pin'])
-    body.modifiers.remove(col); arm.show_viewport = True
-    sc.frame_set(1)
-
-def extrude_rim(ob, test, offset):
-    """extrude the boundary edges whose vertices pass test(co) by offset(co) (a collar up from the neckline)"""
-    import bmesh
-    bm = bmesh.new(); bm.from_mesh(ob.data)
-    edges = [e for e in bm.edges if e.is_boundary and all(test(v.co) for v in e.verts)]
-    if not edges: bm.free(); return
-    r = bmesh.ops.extrude_edge_only(bm, edges=edges)
-    for v in [g for g in r['geom'] if isinstance(g, bmesh.types.BMVert)]: v.co += offset(v.co)
-    bm.to_mesh(ob.data); bm.free()
-
-def cloth_material(name, src, tint=None, tile=8.0, size=2048):
-    """a Poly Haven fabric (CC0): its colour (tinted if asked), normal, and AO/roughness/metal, tiled tile times"""
-    from PIL import Image
-    d = os.path.join(CLOTH, src); out = os.path.join(TEXOUT, name); os.makedirs(TEXOUT, exist_ok=True)
-    alb = Image.open(os.path.join(d, 'Diffuse_2k.jpg')).convert('RGB')
-    if tint:
-        a = np.asarray(alb).astype(np.float32) / 255; lum = (a @ np.array([0.3, 0.59, 0.11]))[..., None]
-        a = np.clip(lum / max(lum.mean(), 1e-3) * np.array(tint)[None, None, :], 0, 1); alb = Image.fromarray((a * 255).astype(np.uint8))
-    alb.resize((size, size)).save(out + '_albedo.jpg', quality=92)
-    Image.open(os.path.join(d, 'nor_gl_2k.jpg')).convert('RGB').resize((size, size)).save(out + '_normal.jpg', quality=92)
-    Image.open(os.path.join(d, 'arm_2k.jpg')).convert('RGB').resize((size, size)).save(out + '_orm.jpg', quality=92)
-    m = bpy.data.materials.new(name); m.use_nodes = True; nt = m.node_tree; b = nt.nodes['Principled BSDF']
-    tc = nt.nodes.new('ShaderNodeTexCoord'); mp = nt.nodes.new('ShaderNodeMapping'); mp.inputs['Scale'].default_value = (tile, tile, 1); nt.links.new(tc.outputs['UV'], mp.inputs['Vector'])
-    def tex(path, cs):
-        t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(path); t.image.colorspace_settings.name = cs; nt.links.new(mp.outputs['Vector'], t.inputs['Vector']); return t
-    ta = tex(out + '_albedo.jpg', 'sRGB'); nt.links.new(ta.outputs['Color'], b.inputs['Base Color'])
-    tn = tex(out + '_normal.jpg', 'Non-Color'); nm = nt.nodes.new('ShaderNodeNormalMap'); nt.links.new(tn.outputs['Color'], nm.inputs['Color']); nt.links.new(nm.outputs['Normal'], b.inputs['Normal'])
-    to = tex(out + '_orm.jpg', 'Non-Color'); sp = nt.nodes.new('ShaderNodeSeparateColor'); nt.links.new(to.outputs['Color'], sp.inputs[0])
-    nt.links.new(sp.outputs[1], b.inputs['Roughness']); nt.links.new(sp.outputs[2], b.inputs['Metallic'])
-    return m
-
-def bone_points(rig):
-    B = rig.data.bones
-    return {n: (B[n].head_local.copy(), B[n].tail_local.copy()) for n in B.keys()}
-
-def crotch_z(body, LM):
-    """the lowest point of the body's midline just below the hips (where the legs part)"""
-    co = np.array([v.co[:] for v in body.data.vertices]); zP = LM['pelvis'].z
-    cand = co[(np.abs(co[:, 0]) < 0.012) & (co[:, 2] < zP + 0.05) & (co[:, 2] > zP - 0.3)]
-    return float(cand[:, 2].min())
-
-def make_clothes(body, rig, LM):
-    me = body.data; co = np.array([v.co[:] for v in me.vertices]); x, y, z = co.T
-    per, bone = weight_sums(body); BP = bone_points(rig)
-    legs, torso, arms, hands, head = per['legs'], per['torso'], per['arms'], per['hands'], per['head']
-    zP = LM['pelvis'].z; zN = LM['neck'].z; zC = crotch_z(body, LM); zA = (LM['l-ankle'].z + LM['r-ankle'].z) / 2
-    sm = lambda e0, e1, v: np.clip((v - e0) / (e1 - e0), 0, 1)
-    def side(pt, n, margin=0.012, region=None):   # vertices on the kept side of a plane (a margin past it: the cut is clean)
-        ok = ((co - np.array(pt)) @ np.array(n) / np.linalg.norm(n)) > -margin
-        if region is not None: ok |= ~np.array([region(Vector(c)) for c in co])
-        return ok
-    ARM = {s_: (lambda c, s_=s_: c.x * (1 if s_ == 'l' else -1) > 0.2) for s_ in 'lr'}
-    wrist, fore, arm_mid, arm_dir = {}, {}, {}, {}
-    for s_ in 'lr':
-        h0 = BP['hand_' + s_][0]; e0 = BP['lowerarm_' + s_][0]; u0, u1 = BP['upperarm_' + s_]
-        fore[s_] = (h0 - e0).normalized(); wrist[s_] = h0; arm_dir[s_] = (u1 - u0).normalized(); arm_mid[s_] = u0 + (u1 - u0) * 0.5
-    out, covered = {}, {}
-    # --- the sweater: crew neck, over the hips, to the wrists
-    hem = zC + 0.075
-    neck_pt = Vector((0, LM['neck'].y - 0.03, zN - 0.012)); neck_n = Vector((0, 0.35, -1))            # (lower in front)
-    planes = [((0, 0, hem), (0, 0, 1)), (neck_pt, neck_n)] + [(wrist[s_] - fore[s_] * 0.015, -fore[s_], ARM[s_]) for s_ in 'lr']
-    sel = (torso + arms + head * (z < zN)) > 0.4
-    for pl in planes: sel &= side(pl[0], pl[1], region=pl[2] if len(pl) > 2 else None)
-    sel &= hands < 0.5
-    th = np.where(arms > 0.5, 0.016, 0.024) + 0.01 * sm(zP + 0.12, hem, z)
-    sw, cov = garment(body, 'stranger_sweater', sel, th, cloth_material('sweater', 'jersey_melange', (0.30, 0.27, 0.23), tile=16), smooth=3, solid=0.003, planes=planes, relax=10)
-    out['sweater'] = sw; covered['sweater'] = cov
-    # --- jeans: from the waist into the boots
-    waist = zP + 0.075
-    planes = [((0, 0, waist), (0, 0, -1)), ((0, 0, zA + 0.07), (0, 0, 1))]
-    sel = (legs + torso) > 0.5
-    for pt, n in planes: sel &= side(pt, n)
-    th = 0.011 + 0.012 * sm(zP - 0.1, zP - 0.45, z)
-    jn, cov = garment(body, 'stranger_jeans', sel, th, cloth_material('jeans', 'denim_fabric', (0.16, 0.2, 0.3), tile=12), smooth=2, solid=0.0025, planes=planes, relax=8)
-    out['jeans'] = jn; covered['jeans'] = cov
-    # --- gloves, with a short cuff past the wrist
-    planes = [(wrist[s_] - fore[s_] * 0.05, fore[s_]) for s_ in 'lr']
-    sel = (hands + arms) > 0.3
-    sel &= np.array([side(planes[0][0], planes[0][1])[i] if x[i] > 0 else side(planes[1][0], planes[1][1])[i] for i in range(len(co))])
-    th = 0.0028 + 0.003 * (hands < 0.5)
-    gl, cov = garment(body, 'stranger_gloves', sel, th, cloth_material('gloves', 'brown_leather', None, tile=6), smooth=1, solid=0.0015,
-                      planes=[], relax=0)
-    out['gloves'] = gl; covered['gloves'] = cov
-    # --- for bed: a T-shirt, sleeves to mid upper arm, over the hips
-    planes = [((0, 0, zC + 0.07), (0, 0, 1)), (neck_pt + Vector((0, 0, 0.004)), neck_n)] + [(arm_mid[s_], -arm_dir[s_], ARM[s_]) for s_ in 'lr']
-    sel = (torso + arms + head * (z < zN)) > 0.4
-    for pl in planes: sel &= side(pl[0], pl[1], region=pl[2] if len(pl) > 2 else None)
-    th = 0.011 + 0.01 * sm(zP + 0.2, zP, z)
-    ts, cov = garment(body, 'stranger_tshirt', sel, th, cloth_material('tshirt', 'cotton_jersey', (0.52, 0.52, 0.55), tile=12), smooth=2, solid=0.002, planes=planes, relax=8)
-    out['tshirt'] = ts; covered['tshirt'] = cov
-    # gravity and the body under them
-    def pins(ob):
-        c = np.array([v.co[:] for v in ob.data.vertices])
-        if ob.name == 'stranger_jeans': return sm(waist - 0.12, waist - 0.02, c[:, 2])
-        top = sm(zN - 0.17, zN - 0.07, c[:, 2])
-        ax = np.abs(c[:, 0]); sleeve_top = sm(0.12, 0.2, ax) * sm(-0.2, 0.0, c[:, 2] - (zN - 0.1)) * 0.5
-        return np.clip(top + sleeve_top, 0, 1)
-    drape([out['sweater'], out['jeans'], out['tshirt']], body, pins, frames=int(opt('--drape', 36)))
-    # rib bands: the sweater's hem, cuffs and collar; the T-shirt's neck band
-    rib = rib_material('rib', (0.2, 0.18, 0.15))
-    for ob, test, off in (
-            (out['sweater'], lambda c: c.z < hem + 0.02, lambda c: Vector((-c.x * 0.03, -(c.y - LM['pelvis'].y) * 0.04, -0.05))),
-            (out['sweater'], lambda c: c.z > zN - 0.08, lambda c: Vector((-c.x * 0.1, -(c.y - LM['neck'].y) * 0.1, 0.018))),
-            (out['tshirt'], lambda c: c.z > zN - 0.08, lambda c: Vector((-c.x * 0.08, -(c.y - LM['neck'].y) * 0.08, 0.01)))):
-        band(ob, test, off, rib if ob is out['sweater'] else None)
-    for s_ in 'lr':
-        band(out['sweater'], lambda c, s_=s_: (c - wrist[s_]).length < 0.09 and ((c.x > 0) == (s_ == 'l')), lambda c, s_=s_: fore[s_] * 0.05 - (c - (wrist[s_] - fore[s_] * 0.015)) * 0.12, rib)
-    for ob in out.values(): finish_garment(ob)
-    print('clothes:', {k: len(v.data.polygons) for k, v in out.items()}, 'crotch', round(zC, 3))
-    return out, covered
-
-def band(ob, test, offset, mat):
-    """a ribbed band from a garment's open edge (hem, cuff, collar)"""
-    import bmesh
-    if mat and mat.name not in [m.name for m in ob.data.materials if m]: ob.data.materials.append(mat)
-    mi = [m.name for m in ob.data.materials].index(mat.name) if mat else 0
-    bm = bmesh.new(); bm.from_mesh(ob.data)
-    edges = [e for e in bm.edges if e.is_boundary and all(test(v.co) for v in e.verts)]
-    if not edges: bm.free(); return
-    r = bmesh.ops.extrude_edge_only(bm, edges=edges)
-    for v in [g for g in r['geom'] if isinstance(g, bmesh.types.BMVert)]: v.co += offset(v.co)
-    for f in [g for g in r['geom'] if isinstance(g, bmesh.types.BMFace)]: f.material_index = mi
-    bm.to_mesh(ob.data); bm.free()
-
-def rib_material(name, color):
-    """a knit rib: vertical ridges every few millimetres (a normal map drawn here), the yarn's colour"""
-    from PIL import Image
-    os.makedirs(TEXOUT, exist_ok=True); W = 512
-    u = np.arange(W) / W; ridge = np.sin(u * 2 * np.pi * 24)
-    nx = np.tile(((ridge * 0.6) * 0.5 + 0.5)[None, :], (W, 1)); ny = np.full((W, W), 0.5); nz = np.sqrt(np.clip(1 - (nx * 2 - 1) ** 2, 0, 1)) * 0.5 + 0.5
-    Image.fromarray((np.stack([nx, ny, nz], -1) * 255).astype(np.uint8)).save(os.path.join(TEXOUT, name + '_normal.png'))
-    m = bpy.data.materials.new(name); m.use_nodes = True; nt = m.node_tree; b = nt.nodes['Principled BSDF']
-    b.inputs['Base Color'].default_value = (*color, 1); b.inputs['Roughness'].default_value = 0.9
-    tc = nt.nodes.new('ShaderNodeTexCoord'); mp = nt.nodes.new('ShaderNodeMapping'); mp.inputs['Scale'].default_value = (12, 12, 1); nt.links.new(tc.outputs['UV'], mp.inputs['Vector'])
-    t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(os.path.join(TEXOUT, name + '_normal.png')); t.image.colorspace_settings.name = 'Non-Color'; nt.links.new(mp.outputs['Vector'], t.inputs['Vector'])
-    nm = nt.nodes.new('ShaderNodeNormalMap'); nt.links.new(t.outputs['Color'], nm.inputs['Color']); nt.links.new(nm.outputs['Normal'], b.inputs['Normal'])
-    return m
-
-# ---------------------------------------------------------------- hair cards
-def make_hair_cards(body, LM, strands):
-    """short hair as cards: strips carrying the strand texture, rooted over the scalp in layers, each following the
-    comb and the curve of the head (re-projected onto it as it goes): longer on top, combed back from a side parting,
-    short at the sides and the nape"""
-    from mathutils.bvhtree import BVHTree
-    from mathutils.kdtree import KDTree
-    rnd = np.random.default_rng(11)
-    me = body.data; co = np.array([v.co[:] for v in me.vertices]); hm = hair_mask(co, LM)
-    bvh = BVHTree.FromObject(body, bpy.context.evaluated_depsgraph_get())
-    E = (LM['l-eye'] + LM['r-eye']) / 2; part = 0.028
-    # root points: scattered over the scalp faces by area, where the mask says hair grows
-    tris = [(p.vertices[0], p.vertices[i], p.vertices[i + 1]) for p in me.polygons for i in range(1, len(p.vertices) - 1)]
-    tris = [t for t in tris if hm[list(t)].mean() > 0.35]
-    A = np.array([0.5 * np.linalg.norm(np.cross(co[b] - co[a], co[c] - co[a])) for a, b, c in tris]); cdf = np.cumsum(A) / A.sum()
-    def comb(p, n):
-        # how far up the head (0 at the ear tops, 1 on the crown) and how far back (0 at the face, 1 at the back)
-        up = float(np.clip((p.z - E.z - 0.02) / 0.07, 0, 1)); back = float(np.clip((p.y - E.y - 0.10) / 0.07, 0, 1))
-        top = Vector((np.sign(p.x - part) * 0.3, 1.0, 0.9))                       # (back over the top, away from the parting: up the forehead)
-        side = Vector((0, 0.55, -1.0))                                             # (the sides: down and back)
-        nape = Vector((0, 0.1, -1.0))                                              # (the back: straight down)
-        d = side.lerp(top, up); d = d.lerp(nape, back * (1 - up) ** 0.5)
-        t = d - n * d.dot(n); return t.normalized() if t.length > 1e-6 else Vector((0, 0, -1))
-    verts, faces, uvs = [], [], []
-    for layer, (count, lift, lscale) in enumerate(((1500, 0.0012, 0.8), (1200, 0.003, 0.95), (800, 0.0048, 1.05))):
-        for _ in range(count):
-            t = tris[int(np.searchsorted(cdf, rnd.random()))]; r1, r2 = rnd.random(), rnd.random()
-            if r1 + r2 > 1: r1, r2 = 1 - r1, 1 - r2
-            p = Vector(co[t[0]] + r1 * (co[t[1]] - co[t[0]]) + r2 * (co[t[2]] - co[t[0]]))
-            loc, n, _, _ = bvh.find_nearest(p); n = n.normalized()
-            top = np.clip((p.z - E.z - 0.06) / 0.05, 0, 1); back = np.clip((p.y - E.y - 0.09) / 0.06, 0, 1)
-            L = (0.014 + 0.022 * top) * (1 - 0.25 * back * (1 - top)) * lscale * rnd.uniform(0.8, 1.15)
-            if p.z < LM['neck'].z + 0.09: L *= 0.6
-            W = rnd.uniform(0.007, 0.011) * (0.85 + 0.3 * top)
-            segs = 4; pts = []; cur = loc - n * 0.001; nn = n
-            for k in range(segs + 1):
-                if k:
-                    d = comb(cur, nn); step = d * (L / segs)
-                    cur = cur + step
-                    hit = bvh.find_nearest(cur)
-                    if hit[0] is not None:
-                        nn = hit[1].normalized(); h = lift * min(1, k / 1.5) + 0.0015 * layer * (k / segs)
-                        cur = hit[0] + nn * h
-                pts.append((cur.copy(), nn.copy()))
-            col = int(rnd.integers(0, 4)); u0 = col / 4 + 0.01; u1 = (col + 1) / 4 - 0.01; vmax = min(1.0, L / 0.04)
-            base = len(verts)
-            for k, (q, nq) in enumerate(pts):
-                d = comb(q, nq); side = nq.cross(d).normalized() * (W / 2) * (1 - 0.3 * k / segs)
-                tw = nq * (rnd.uniform(-0.3, 0.3) * W * 0.2)
-                verts += [q - side + tw, q + side - tw]; v = k / segs * vmax
-                uvs += [(u0, 1 - v), (u1, 1 - v)]
-            for k in range(segs): faces.append((base + 2 * k, base + 2 * k + 1, base + 2 * k + 3, base + 2 * k + 2))
-    mh = bpy.data.meshes.new('stranger_hair'); mh.from_pydata([v[:] for v in verts], [], faces)
-    uv = mh.uv_layers.new(name='UVMap')
-    for p in mh.polygons:
-        for li, vi in zip(p.loop_indices, p.vertices): uv.data[li].uv = uvs[vi]
-    for p in mh.polygons: p.use_smooth = True
-    ob = bpy.data.objects.new('stranger_hair', mh); bpy.context.scene.collection.objects.link(ob)
-    m = bpy.data.materials.new('hair'); m.use_nodes = True; nt = m.node_tree; b = nt.nodes['Principled BSDF']
-    ta = nt.nodes.new('ShaderNodeTexImage'); ta.image = bpy.data.images.load(strands + '_albedo.png')
-    nt.links.new(ta.outputs['Color'], b.inputs['Base Color']); nt.links.new(ta.outputs['Alpha'], b.inputs['Alpha'])
-    tn = nt.nodes.new('ShaderNodeTexImage'); tn.image = bpy.data.images.load(strands + '_normal.png'); tn.image.colorspace_settings.name = 'Non-Color'
-    nm = nt.nodes.new('ShaderNodeNormalMap'); nt.links.new(tn.outputs['Color'], nm.inputs['Color']); nt.links.new(nm.outputs['Normal'], b.inputs['Normal'])
-    b.inputs['Roughness'].default_value = 0.45; b.inputs['Coat Weight'].default_value = 0.0
-    try: m.blend_method = 'CLIP'
-    except Exception: pass
-    m.use_backface_culling = False
-    mh.materials.append(m)
-    vg = ob.vertex_groups.new(name='head'); vg.add(list(range(len(verts))), 1.0, 'REPLACE')
-    print(f'hair: {len(faces)} card segments, {len(faces) // 4} cards')
-    return ob
-
+# ---------------------------------------------------------------- the boots
 def make_boots(body, rig, LM, boots_path):
     """the scanned rubber boots (Poly Haven, CC0) on the feet: sized to them, sole to sole, weighted from the leg"""
     if not os.path.exists(boots_path): print('  (no boots)'); return []
@@ -664,17 +352,93 @@ def make_boots(body, rig, LM, boots_path):
     print('boots:', [(o.name, len(o.data.vertices)) for o in out])
     return out
 
-def dressed_body(body, covered, name='stranger_body_out'):
-    """the body with the skin under the clothes taken away (no poking through), for the outdoor outfit"""
+# ---------------------------------------------------------------- MakeHuman's assets fitted to him (clothes, hair, brows, lashes)
+def proxy(name, folder, X, expr, W, rig, rough=0.85, alpha=False, keys=False):
+    """an asset fitted to the shaped body (each vertex hangs off three body vertices plus an offset scaled to the
+    body's size), weighted from those vertices, given the expressions too if asked; with its own textures"""
+    mh = [f for f in os.listdir(folder) if f.endswith('.mhclo')][0]
+    scales, refs, dele = read_mhclo(os.path.join(folder, mh), with_delete=True)
+    objf = [l.split()[1] for l in open(os.path.join(folder, mh), errors='replace') if l.startswith('obj_file')][0]
+    V, VT, F, FT, G = read_obj(os.path.join(folder, objf))
+    def fit(XX):
+        s = [abs(XX[scales[a][0]][k] - XX[scales[a][1]][k]) / scales[a][2] if a in scales else 1.0 for k, a in enumerate('xyz')]
+        return np.array([sum(w * XX[v] for v, w in zip(vs, ws)) + np.array(d) * s for vs, ws, d in refs])
+    P = fit(X)
+    me = bpy.data.meshes.new(name); me.from_pydata(to_bl(P).tolist(), [], F)
+    uv = me.uv_layers.new(name='UVMap'); li = 0
+    for f, ft in zip(F, FT):
+        for k in range(len(f)): uv.data[li].uv = VT[ft[k]] if ft[k] >= 0 else (0, 0); li += 1
+    for p in me.polygons: p.use_smooth = True
+    ob = bpy.data.objects.new(name, me); bpy.context.scene.collection.objects.link(ob)
+    if keys and expr:
+        ob.shape_key_add(name='Basis', from_mix=False)
+        for key, d in expr.items():
+            sk = ob.shape_key_add(name=key, from_mix=False); sk.data.foreach_set('co', to_bl(fit(X + d)).ravel())
+    # weights from the body vertices each proxy vertex hangs off
+    inv = {}
+    for bone, pairs in W.items():
+        for i, w in pairs: inv.setdefault(int(i), []).append((bone, float(w)))
+    groups = {}
+    for pi, (vs, ws, _) in enumerate(refs):
+        acc = {}
+        for v, rw in zip(vs, ws):
+            for bone, w in inv.get(v, []): acc[bone] = acc.get(bone, 0) + w * rw
+        tot = sum(acc.values())
+        for bone, w in acc.items():
+            if w > 1e-4: groups.setdefault(bone, []).append((pi, w / tot))
+    for bone, pairs in groups.items():
+        vg = ob.vertex_groups.new(name=bone)
+        for pi, w in pairs: vg.add([pi], w, 'REPLACE')
+    ob.parent = rig; m = ob.modifiers.new('rig', 'ARMATURE'); m.object = rig
+    # material from its .mhmat: the diffuse (and normal map) beside it
+    mat = [l.split() for l in open(os.path.join(folder, [f for f in os.listdir(folder) if f.endswith('.mhmat')][0]), errors='replace')]
+    tx = {l[0]: l[1] for l in mat if len(l) > 1 and l[0] in ('diffuseTexture', 'normalmapTexture')}
+    m = bpy.data.materials.new(name); m.use_nodes = True; nt = m.node_tree; b = nt.nodes['Principled BSDF']
+    if 'diffuseTexture' in tx and os.path.exists(os.path.join(folder, tx['diffuseTexture'])):
+        t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(os.path.join(folder, tx['diffuseTexture']))
+        nt.links.new(t.outputs['Color'], b.inputs['Base Color'])
+        if alpha: nt.links.new(t.outputs['Alpha'], b.inputs['Alpha'])
+    if 'normalmapTexture' in tx and os.path.exists(os.path.join(folder, tx['normalmapTexture'])):
+        t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(os.path.join(folder, tx['normalmapTexture'])); t.image.colorspace_settings.name = 'Non-Color'
+        nm = nt.nodes.new('ShaderNodeNormalMap'); nt.links.new(t.outputs['Color'], nm.inputs['Color']); nt.links.new(nm.outputs['Normal'], b.inputs['Normal'])
+    b.inputs['Roughness'].default_value = rough
+    if alpha: m.use_backface_culling = False
+    me.materials.append(m)
+    print(f'{name}: {len(P)} verts, hides {len(dele)} body verts')
+    return ob, dele
+
+def hide_under(body, remap, dele, name):
+    """the body without the vertices a garment hides (none of it pokes through)"""
     import bmesh
+    gone = {remap[i] for i in dele if i in remap}
     ob = body.copy(); ob.data = body.data.copy(); ob.name = ob.data.name = name; bpy.context.scene.collection.objects.link(ob)
-    bm = bmesh.new(); bm.from_mesh(ob.data); bm.faces.ensure_lookup_table()
-    gone = [f for f in bm.faces if f.index in covered]
-    # keep a ring under each garment's edge
-    edge = {v for f in bm.faces if f.index not in covered for v in f.verts}
-    gone = [f for f in gone if not any(v in edge for v in f.verts)]
-    bmesh.ops.delete(bm, geom=gone, context='FACES'); bm.to_mesh(ob.data); bm.free()
+    bm = bmesh.new(); bm.from_mesh(ob.data); bm.verts.ensure_lookup_table()
+    bmesh.ops.delete(bm, geom=[bm.verts[i] for i in gone], context='VERTS'); bm.to_mesh(ob.data); bm.free()
     return ob
+
+def trim_below(ob, zcut, region=None):
+    """drop a garment's faces below a height (the jeans' legs inside the boots)"""
+    import bmesh
+    bm = bmesh.new(); bm.from_mesh(ob.data)
+    gone = [f for f in bm.faces if all(v.co.z < zcut for v in f.verts) and (region is None or region(f.calc_center_median()))]
+    bmesh.ops.delete(bm, geom=gone, context='FACES'); bm.to_mesh(ob.data); bm.free()
+
+def clean_tshirt_logo(path_in, path_out):
+    """MakeHuman's white tee carries its logo on the chest: painted out with the plain cloth around it"""
+    from PIL import Image, ImageFilter
+    im = Image.open(path_in).convert('RGB'); a = np.asarray(im).astype(np.float32)
+    lum = a.mean(-1); H, Wd = lum.shape
+    # the shirt pieces are the near-white part of the upper half; the logo the darker/coloured marks on them
+    region = np.zeros_like(lum, bool); region[: H // 2, :] = True
+    cloth = np.median(a[region & (lum > 200)], axis=0) if (region & (lum > 200)).any() else np.array([235, 235, 235])
+    sat = a.max(-1) - a.min(-1)
+    marks = region & (lum > 60) & ((lum < 215) | (sat > 25))
+    m = Image.fromarray((marks * 255).astype(np.uint8)).filter(ImageFilter.MaxFilter(9))
+    blur = np.asarray(im.filter(ImageFilter.GaussianBlur(28))).astype(np.float32)
+    mk = np.asarray(m).astype(np.float32)[..., None] / 255
+    fill = blur * 0.3 + cloth * 0.7
+    out = a * (1 - mk) + fill * mk
+    Image.fromarray(np.clip(out, 0, 255).astype(np.uint8)).save(path_out)
 
 # ---------------------------------------------------------------- the skin, baked
 def face_masks(body, LM):
@@ -791,7 +555,7 @@ def skin_nodes(m, masks_dir):
 def node_sep_z(N, L, vec):
     s = N.new('ShaderNodeSeparateXYZ'); L.new(vec, s.inputs[0]); return s.outputs['Z']
 
-def bake_skin(body, size, outdir):
+def bake_skin(body, size, outdir, only=('albedo', 'rough', 'normal', 'ao')):
     """albedo, normal, and roughness + occlusion, baked from the material on the rest pose"""
     sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.samples = 16; sc.cycles.use_denoising = False
     m = body.data.materials[0]; nt = m.node_tree; bsdf = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED'); out = next(n for n in nt.nodes if n.type == 'OUTPUT_MATERIAL')
@@ -807,13 +571,16 @@ def bake_skin(body, size, outdir):
     # colour and roughness: through an emission shader (exact values, no lighting)
     em = nt.nodes.new('ShaderNodeEmission'); keep = out.inputs[0].links[0].from_socket
     for name, sock, cs in (('albedo', bsdf.inputs['Base Color'], 'sRGB'), ('rough', bsdf.inputs['Roughness'], 'Non-Color')):
+        if name not in only: continue
         src = sock.links[0].from_socket; nt.links.new(src, em.inputs['Color']); nt.links.new(em.outputs[0], out.inputs[0])
         im, n = target('skin_' + name, cs); sc.cycles.bake_type = 'EMIT'
         bpy.ops.object.bake(type='EMIT', margin=16, use_clear=True); save(im, os.path.join(outdir, f'skin_{name}.png')); nt.nodes.remove(n)
     nt.links.new(keep, out.inputs[0]); nt.nodes.remove(em)
-    im, n = target('skin_normal', 'Non-Color'); bpy.ops.object.bake(type='NORMAL', normal_space='TANGENT', margin=16, use_clear=True); save(im, os.path.join(outdir, 'skin_normal.png')); nt.nodes.remove(n)
-    sc.cycles.samples = 64
-    im, n = target('skin_ao', 'Non-Color'); bpy.ops.object.bake(type='AO', margin=16, use_clear=True); save(im, os.path.join(outdir, 'skin_ao.png')); nt.nodes.remove(n)
+    if 'normal' in only:
+        im, n = target('skin_normal', 'Non-Color'); bpy.ops.object.bake(type='NORMAL', normal_space='TANGENT', margin=16, use_clear=True); save(im, os.path.join(outdir, 'skin_normal.png')); nt.nodes.remove(n)
+    if 'ao' in only:
+        sc.cycles.samples = 64
+        im, n = target('skin_ao', 'Non-Color'); bpy.ops.object.bake(type='AO', margin=16, use_clear=True); save(im, os.path.join(outdir, 'skin_ao.png')); nt.nodes.remove(n)
     arm.show_render = True
     print('baked', sorted(res))
     return res
@@ -824,25 +591,7 @@ def eye_material(eyes):
     nt.links.new(t.outputs['Color'], b.inputs['Base Color']); b.inputs['Roughness'].default_value = 0.05; b.inputs['Coat Weight'].default_value = 1.0; b.inputs['Coat Roughness'].default_value = 0.02
     eyes.data.materials.append(m)
 
-
 # ---------------------------------------------------------------- export
-def skin_export_material(body, baked):
-    """the body's material for the game: the baked maps (occlusion folded into the colour, cavities darker)"""
-    from PIL import Image
-    alb = np.asarray(Image.open(baked['skin_albedo.png']).convert('RGB')).astype(np.float32)
-    ao = np.asarray(Image.open(baked['skin_ao.png']).convert('L')).astype(np.float32)[..., None] / 255
-    out = os.path.join(TEXOUT, 'skin')
-    Image.fromarray(np.clip(alb * (0.5 + 0.5 * ao), 0, 255).astype(np.uint8)).save(out + '_albedo.jpg', quality=93)
-    Image.open(baked['skin_normal.png']).convert('RGB').save(out + '_normal.jpg', quality=95)
-    r = Image.open(baked['skin_rough.png']).convert('L'); Image.merge('RGB', (Image.fromarray((ao[..., 0] * 255).astype(np.uint8)), r, Image.new('L', r.size, 0))).save(out + '_orm.jpg', quality=93)
-    m = bpy.data.materials.new('skin_game'); m.use_nodes = True; nt = m.node_tree; b = nt.nodes['Principled BSDF']
-    def tex(path, cs):
-        t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(path); t.image.colorspace_settings.name = cs; return t
-    nt.links.new(tex(out + '_albedo.jpg', 'sRGB').outputs['Color'], b.inputs['Base Color'])
-    nm = nt.nodes.new('ShaderNodeNormalMap'); nt.links.new(tex(out + '_normal.jpg', 'Non-Color').outputs['Color'], nm.inputs['Color']); nt.links.new(nm.outputs['Normal'], b.inputs['Normal'])
-    sp = nt.nodes.new('ShaderNodeSeparateColor'); nt.links.new(tex(out + '_orm.jpg', 'Non-Color').outputs['Color'], sp.inputs[0]); nt.links.new(sp.outputs[1], b.inputs['Roughness'])
-    b.inputs['Metallic'].default_value = 0
-    return m
 
 def export(path, rig, objs):
     for o in bpy.context.scene.objects: o.select_set(False)
@@ -883,6 +632,20 @@ def preview(path, objs):
         f = path.replace('.png', f'_{name}.png'); sc.render.filepath = f; bpy.ops.render.render(write_still=True); shots.append(f)
     print('preview', shots)
 
+def skin_photo_material(body, baked):
+    """the photographed skin (MakeHuman's middle-aged lightskinned male, CC0) with the baked pores and fine lines on it"""
+    m = bpy.data.materials.new('skin_game'); m.use_nodes = True; nt = m.node_tree; b = nt.nodes['Principled BSDF']
+    t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(os.path.join(ASSETS, 'skins', 'middleage_lightskinned_male_diffuse.png'))
+    nt.links.new(t.outputs['Color'], b.inputs['Base Color'])
+    if baked:
+        tn = nt.nodes.new('ShaderNodeTexImage'); tn.image = bpy.data.images.load(baked['skin_normal.png']); tn.image.colorspace_settings.name = 'Non-Color'
+        nm = nt.nodes.new('ShaderNodeNormalMap'); nt.links.new(tn.outputs['Color'], nm.inputs['Color']); nt.links.new(nm.outputs['Normal'], b.inputs['Normal'])
+        tr = nt.nodes.new('ShaderNodeTexImage'); tr.image = bpy.data.images.load(baked['skin_rough.png']); tr.image.colorspace_settings.name = 'Non-Color'
+        nt.links.new(tr.outputs['Color'], b.inputs['Roughness'])
+    else: b.inputs['Roughness'].default_value = 0.5
+    b.inputs['Subsurface Weight'].default_value = 0.15; b.inputs['Subsurface Radius'].default_value = (0.012, 0.005, 0.003); b.inputs['Subsurface Scale'].default_value = 0.4
+    return m
+
 if __name__ == '__main__':
     bpy.ops.wm.read_factory_settings(use_empty=True)
     V, X, VT, F, FT, G, expr = build_shape()
@@ -890,30 +653,48 @@ if __name__ == '__main__':
     rig, W = make_rig(body, X, groups, remap)
     eyes = make_eyes(X, rig)
     LM = landmarks(X, groups)
-    for k in ('head', 'head-2', 'neck', 'jaw', 'mouth', 'l-eye', 'r-eye'): print('  landmark', k, tuple(round(c, 3) for c in LM[k]))
-    # feet on the ground
     zmin = min((body.matrix_world @ v.co).z for v in body.data.vertices); rig.location.z -= zmin
     bpy.context.view_layer.update()
     zs = [(body.matrix_world @ v.co).z for v in body.data.vertices]
     print(f'body: {len(body.data.vertices)} verts, height {max(zs) - min(zs):.3f} m, bones {len(rig.data.bones)}, shape keys {len(body.data.shape_keys.key_blocks) - 1}')
-    masks = face_masks(body, LM)
-    sm_ = bpy.data.materials.new('skin'); sm_.use_nodes = True; body.data.materials.append(sm_)
-    skin_nodes(sm_, os.path.join(MPFB, 'textures'))
+    # the skin: the photograph; pores and the forehead's lines baked from the procedural material as a normal map
+    face_masks(body, LM)
+    proc = bpy.data.materials.new('skin'); proc.use_nodes = True; body.data.materials.append(proc)
+    skin_nodes(proc, os.path.join(MPFB, 'textures'))
+    baked = bake_skin(body, int(opt('--size', 2048)), opt('--bake'), only=('rough', 'normal')) if opt('--bake') else None
+    skin_m = skin_photo_material(body, baked); body.data.materials.clear(); body.data.materials.append(skin_m)
     if eyes: eye_material(eyes); split_eyes(eyes, rig, LM)
-    baked = bake_skin(body, int(opt('--size', 4096)), opt('--bake')) if opt('--bake') else None
-    lashes = helper_object('stranger_lashes', X, VT, F, FT, G, {g for g in groups if g and 'eyelashes' in g}, expr, W, rig, (0.035, 0.028, 0.024), 0.6)
-    lash_alpha(lashes, body)
     teeth = helper_object('stranger_teeth', X, VT, F, FT, G, {'helper-upper-teeth', 'helper-lower-teeth'}, expr, W, rig, (0.78, 0.74, 0.66), 0.25)
     tongue = helper_object('stranger_tongue', X, VT, F, FT, G, {'helper-tongue'}, expr, W, rig, (0.55, 0.25, 0.24), 0.4)
-    strands = os.path.join(TEXOUT, 'hair')
-    if not os.path.exists(strands + '_albedo.png'): os.system(f'"{sys.executable}" -I "{os.path.join(os.path.dirname(__file__), "hair_strands.py")}" "{strands}" 1024 1024')
-    hair = make_hair_cards(body, LM, strands); hair.parent = rig; hm_ = hair.modifiers.new('rig', 'ARMATURE'); hm_.object = rig
-    clothes, covered = make_clothes(body, rig, LM)
+    A = ASSETS
+    hair, _ = proxy('stranger_hair', os.path.join(A, 'hair', 'short02'), X, expr, W, rig, rough=0.5, alpha=True)
+    brows, _ = proxy('stranger_brows', os.path.join(A, 'eyebrows', 'eyebrow001'), X, expr, W, rig, rough=0.6, alpha=True, keys=True)
+    lashes, _ = proxy('stranger_lashes', os.path.join(A, 'eyelashes', 'eyelashes01'), X, expr, W, rig, rough=0.6, alpha=True, keys=True)
+    # (only the upper lashes: a man's lower ones barely show, and as cards they read as a smudge under the eye)
+    import bmesh
+    ez = (LM['l-eye'].z + LM['r-eye'].z) / 2
+    bm = bmesh.new(); bm.from_mesh(lashes.data)
+    bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.calc_center_median().z < ez], context='FACES'); bm.to_mesh(lashes.data); bm.free()
+    outfit, del_out = proxy('stranger_outfit', os.path.join(A, 'clothes', 'male_casualsuit05'), X, expr, W, rig, rough=0.85)
+    tee_dir = os.path.join(A, 'clothes', 'male_casualsuit06'); clean = os.path.join(tee_dir, 'male_casualsuit06_clean.png')
+    if not os.path.exists(clean): clean_tshirt_logo(os.path.join(tee_dir, 'male_casualsuit06_diffuse.png'), clean)
+    sleep, del_bed = proxy('stranger_sleepwear', tee_dir, X, expr, W, rig, rough=0.85)
+    for n in sleep.data.materials[0].node_tree.nodes:
+        if n.type == 'TEX_IMAGE' and 'diffuse' in n.image.name: n.image = bpy.data.images.load(clean)
     boots = make_boots(body, rig, LM, opt('--boots', os.path.join(os.path.dirname(__file__), '..', 'public', 'models', 'house', 'rubber_boots.glb')))
-    cover = covered['jeans'] | covered['sweater'] | covered['gloves']
-    body_out = dressed_body(body, cover)
-    OUTDOOR = [body_out, eyes, lashes, teeth, tongue, hair, clothes['jeans'], clothes['sweater'], clothes['gloves'], *boots]
-    BED = [body, eyes, lashes, teeth, tongue, hair, clothes['tshirt']]
+    # the jeans' legs and the feet go inside the boots
+    if boots:
+        btop = min(max(v.co.z for v in b.data.vertices) for b in boots) - 0.03
+        trim_below(outfit, btop, lambda c: abs(c.x) < 0.3)
+    body_out = hide_under(body, remap, del_out, 'stranger_body_out')
+    if boots:
+        import bmesh
+        bm = bmesh.new(); bm.from_mesh(body_out.data)
+        bmesh.ops.delete(bm, geom=[f for f in bm.faces if all(v.co.z < btop for v in f.verts)], context='FACES'); bm.to_mesh(body_out.data); bm.free()
+    body_bed = hide_under(body, remap, del_bed, 'stranger_body_bed')
+    OUTDOOR = [body_out, eyes, lashes, brows, teeth, tongue, hair, outfit, *boots]
+    BED = [body_bed, eyes, lashes, brows, teeth, tongue, hair, sleep]
+    body.hide_render = True
     def show(objs):
         for o in bpy.context.scene.objects:
             if o.type == 'MESH': o.hide_render = o not in objs
@@ -921,13 +702,9 @@ if __name__ == '__main__':
         show(OUTDOOR); preview(opt('--preview').replace('.png', '_out.png'), OUTDOOR)
         show(BED); preview(opt('--preview').replace('.png', '_bed.png'), BED)
     if opt('--export'):
-        if baked:
-            gm = skin_export_material(body, baked)
-            for o in (body, body_out): o.data.materials.clear(); o.data.materials.append(gm)
-        for o in (body, body_out, hair, *clothes.values(), *boots, teeth, tongue, eyes):
-            for a in list(o.data.color_attributes): o.data.color_attributes.remove(a)
-        for o in (body, body_out, hair, *clothes.values()):
-            for uvn in ('Fur', 'CombXY', 'CombZ'):
-                if uvn in o.data.uv_layers: o.data.uv_layers.remove(o.data.uv_layers[uvn])
+        for o in [*OUTDOOR, *BED]:
+            if o and o.type == 'MESH':
+                for a in list(o.data.color_attributes): o.data.color_attributes.remove(a)
+        bpy.data.objects.remove(body)
         export(opt('--export'), rig, list({*OUTDOOR, *BED}))
     if opt('--save'): bpy.ops.wm.save_as_mainfile(filepath=opt('--save'))

@@ -147,15 +147,17 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
       flat.bedLamp.intensity = damp(flat.bedLamp.intensity, G.lampT > 0.4 ? 9 : 0, 10, dt); flat.bedLamp.castShadow = flat.bedLamp.intensity > 0.05;
       // the sleeper is looking: anything moving in the bedroom is seen
       if (G.lampT < 3.4 && G.lampT > 0.5 && inBedroom() && Math.hypot(player.vel.x, player.vel.z) > 0.12) caught();
-      if (G.lampT <= 0) { audio.play('lamp', { pos: flat.bedLamp.position }); audio.play('rustle', { pos: flat.sleeper.head, vol: 0.5, at: 0.5 }); flat.bedLamp.intensity = 0; flat.bedLamp.castShadow = false; ui.bubble('낯선 사람', '…꿈인가.'); }
+      if (G.lampT <= 0) { flat.man?.play('settle', { onDone: () => flat.man.play('sleep', { loop: true }) }); audio.play('lamp', { pos: flat.bedLamp.position }); audio.play('rustle', { pos: flat.sleeper.head, vol: 0.5, at: 0.5 }); flat.bedLamp.intensity = 0; flat.bedLamp.castShadow = false; ui.bubble('낯선 사람', '…꿈인가.'); }
       return;
     }
     if (G.noise > 1.2) {
       G.noise = 0.4; G.lampT = 4.6; flat.sleeper.stir = 1;
+      flat.man?.play('wake', { onDone: () => flat.man.play('look', { loop: true }) });
       audio.play('rustle', { pos: flat.sleeper.head, vol: 0.8 }); audio.play('bedCreak', { pos: flat.sleeper.head, vol: 0.6 }); audio.play('lamp', { pos: flat.bedLamp.position, at: 0.7 });
       ui.bubble('낯선 사람', '…응? 뭐야?'); setExpr('worried', 4); ui.toast('불이 켜졌다! 움직이지 마.');
     } else if (G.noise > 0.65 && flat.sleeper.stir < 0.2) {
-      flat.sleeper.stir = 1; audio.play('rustle', { pos: flat.sleeper.head, vol: 0.7 }); audio.play('bedCreak', { pos: flat.sleeper.head, vol: 0.5, at: 0.3 }); audio.play('mumble', { pos: flat.sleeper.head, vol: 0.8, at: 0.9 });
+      flat.sleeper.stir = 1; flat.man?.play('stir', { onDone: () => flat.man.play('sleep', { loop: true }) });
+      audio.play('rustle', { pos: flat.sleeper.head, vol: 0.7 }); audio.play('bedCreak', { pos: flat.sleeper.head, vol: 0.5, at: 0.3 }); audio.play('mumble', { pos: flat.sleeper.head, vol: 0.8, at: 0.9 });
       ui.toast('거인이 뒤척인다…'); setExpr('worried', 2);
     }
   }
@@ -390,7 +392,11 @@ export async function bootHouse({ ui, S, tier, renderer, RAPIER }) {
       updateSleeper(dt); handleEvents(); updateQuest(dt); baseExpression(dt);
       if (G.time - (G.lastSave || 0) > 60) save();
     }
+    // (the duvet moves while anyone could see it: the robot or the camera upstairs; the robot can push into it)
+    flat.robot = player.pos; flat.clothActive = upstairs() || camera.position.y > FLAT.U - 0.4;
     flat.update(dt, G.time);
+    // (his eyes are shut unless the lamp is on and he is looking about)
+    flat.man?.update(dt, { eyesShut: G.lampT > 0 ? 0 : 1 });
     if (G.mode === 'play') cat?.update(dt, player, G);
     nuri.root.position.copy(player.pos); nuri.root.rotation.y = player.yaw;
     const fo = footOffsets(), params = player.animParams(null); params.footOffset = fo.off; params.groundDrop = fo.drop;
