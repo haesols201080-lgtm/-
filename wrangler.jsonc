@@ -1,0 +1,8 @@
+// Cloudflare (Workers with static assets), when it builds from the repository's root: the game is the static site
+// in nuri/public (npm run build:pages writes nuri/public/play.html; nuri/public/_redirects opens it at the root).
+// No server code. (nuri/wrangler.jsonc is the same for a build whose root directory is nuri.)
+{
+  "name": "nuri",
+  "compatibility_date": "2025-11-01",
+  "assets": { "directory": "./nuri/public" }
+}

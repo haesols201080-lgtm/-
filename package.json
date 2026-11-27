@@ -1,0 +1,8 @@
+{
+  "name": "nuri-site",
+  "private": true,
+  "description": "Builds the game in nuri/ for a static host (Cloudflare reads this when it builds from the repository's root)",
+  "scripts": {
+    "build:pages": "cd nuri && npm ci && npm run build:pages"
+  }
+}
