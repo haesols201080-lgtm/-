@@ -2,6 +2,7 @@
 // the robot, and the forest_slope HDRI used for image-based lighting and the distant background.
 import * as THREE from 'three';
 import HOUSE_LM from './house_lm.json';
+import SPLIT from './split_models.json';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -203,6 +204,14 @@ export class Assets {
       }));
       try { g = await loader.parseAsync(jsonToGLB(json), ''); }
       finally { for (const u of urls) if (u) URL.revokeObjectURL(u); }
+    } else if (SPLIT[path]) {
+      // (a model too big for one file on a static host, split byte for byte by tools/split_models.mjs: its parts
+      // fetched together and joined back into the same .glb)
+      const { parts, bytes } = SPLIT[path], all = new Uint8Array(bytes);
+      const bufs = await Promise.all(Array.from({ length: parts }, async (_, i) => new Uint8Array(await (await fetchRetry(`${BASE}models/${path}.glb.part${i}`)).arrayBuffer())));
+      let o = 0; for (const b of bufs) { all.set(b, o); o += b.length; }
+      if (o !== bytes) throw new Error(`${path}: ${o} of ${bytes} bytes`);
+      g = await loader.parseAsync(all.buffer, `${BASE}models/`);
     } else g = await loader.loadAsync(`${BASE}models/${path}.glb`);
     this.models[key || path] = g; this.step(key || path);
     return g;

@@ -1,0 +1,10 @@
+{
+  "house/house_arch": {
+    "parts": 4,
+    "bytes": 73466304
+  },
+  "house/stranger": {
+    "parts": 2,
+    "bytes": 34156460
+  }
+}
