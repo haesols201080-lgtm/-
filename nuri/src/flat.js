@@ -84,6 +84,9 @@ export class Flat {
         m.normalScale.setScalar(d.normal); out[name] = m;
       } else out[name] = new THREE.MeshStandardMaterial({ color: new THREE.Color(d.color), roughness: d.rough, metalness: d.metal || 0, envMapIntensity: 0.6 });
     }
+    // (the curtains: the jacquard scan they were tinted from is a burgundy one, and showed through as red; they are
+    // lined drapes in a warm beige cotton, the bedding's scanned weave, with a cloth's sheen)
+    if (sets.hs_sheet) out.curtain = fabric(sets.hs_sheet, { tile: 0.29, color: 0xcbbca2, sheenColor: 0xeadfca, sheenRoughness: 0.6, crinkle: 0.6, crease: 0.35 });
     for (const k of ['curtain', 'duvet', 'throw', 'knit', 'jeans', 'towel', 'coat', 'linen', 'shade']) if (out[k]) out[k].side = THREE.DoubleSide;
     out.glass = this.mats.glassM;
     if (out.lamp_glass) { out.lamp_glass.emissive = new THREE.Color(0xffc070); out.lamp_glass.emissiveIntensity = 2.2; }
@@ -557,7 +560,7 @@ export class Flat {
     // (on the modelled house's stove: its front faces the room at x0 + 0.66, the clock above the oven door)
     const ck = this.arch ? [Hs.x0 + 0.666, 0.86, 2.05] : [Hs.x0 + 0.625, 0.72, 1.3];
     const clock = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.03), new THREE.MeshBasicMaterial({ color: 0x3dff8a })); clock.position.set(...ck); clock.rotation.y = Math.PI / 2; this.group.add(clock); this.keepVis(clock);
-    const cl = new THREE.PointLight(0x3dff8a, 0.12, 1.2, 2); cl.position.set(ck[0] + 0.1, ck[1], ck[2]); this.group.add(cl);
+    const cl = new THREE.PointLight(0x3dff8a, 0.025, 0.45, 2); cl.position.set(ck[0] + 0.05, ck[1], ck[2]); this.group.add(cl);   // (a display's faint glow)
     this.place('pot_enamel_01', -4.72, 1.08, { y: 0.912, rotY: 0.6, collide: false });
     this.place('wine_bottles_01', -1.85, z1 - 0.25, { y: 0.9, collide: false }); this.place('wine_bottles_01', -1.74, z1 - 0.33, { y: 0.9, rotY: 1.1, collide: false });
     this.place('modern_ceiling_lamp_01', -2.4, 2.0, { y: Hs.H - 0.95, collide: false });
