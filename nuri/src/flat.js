@@ -73,6 +73,19 @@ export class Flat {
     this.arch = A.models.h_house_arch || null; this.keep = new Set(); this.bedDY = this.arch ? 0.12 : 0;
   }
   keepVis(...o) { for (const x of o) if (x) this.keep.add(x); }
+  dropRails(o) {
+    const Hs = HOUSE, P = o.geometry.attributes.position, idx = o.geometry.index, v = new THREE.Vector3(), W = o.matrixWorld;
+    const bands = [2.2, Hs.U + 2.05], near = (a, b) => Math.abs(a - b) < 0.002;
+    const onRail = (i) => {
+      v.fromBufferAttribute(P, i).applyMatrix4(W);
+      if (!bands.some((y) => near(v.y, y) || near(v.y, y + 0.035))) return false;
+      // (against one of the rails' walls: the front wall, the living room / bedroom side of kz, the west wall)
+      return v.z < Hs.z0 + 0.03 || Math.abs(v.z - (Hs.kz - Hs.T / 2)) < 0.03 || v.x < Hs.x0 + 0.03;
+    };
+    const a = idx.array, keep = [];
+    for (let t = 0; t < a.length; t += 3) if (!(onRail(a[t]) && onRail(a[t + 1]) && onRail(a[t + 2]))) keep.push(a[t], a[t + 1], a[t + 2]);
+    if (keep.length !== a.length) { o.geometry.setIndex(keep); o.geometry.computeBoundingSphere(); }
+  }
   // the modelled house's materials, as in blender/build_house.py (house_mats.json): scanned sets with their tile size
   // (UV0 is in metres), tint, normal strength and roughness; plain paints and metals by colour
   archMats() {
@@ -129,6 +142,10 @@ export class Flat {
         o.userData.mat0 = mat0;
       }
       if (o.geometry.attributes.uv1 && (atlas === 'int' || atlas === 'ext')) o.material = Array.isArray(o.material) ? o.material.map((m) => bake(m, atlas)) : bake(o.material, atlas);
+      // (the picture rails the builder ran round the living room and the bedroom went straight across their windows'
+      // heads, a white line over the glass: the rails' faces, every corner at the rail's two heights and against
+      // the wall, are taken out of the trim)
+      if (o.userData.mat0 === 'trim' && o.geometry.index) this.dropRails(o);
       // (the ceiling lights and the fan's are off at night: their bulbs don't glow)
       for (const m of [o.material].flat()) if (m && /modern_ceiling_globe|ceiling_fan/.test(m.name || '')) { m.emissive?.setRGB(0, 0, 0); m.emissiveMap = null; m.emissiveIntensity = 0; }
       if (nm.startsWith('f_') && !tops.has(top)) {
@@ -416,7 +433,7 @@ export class Flat {
     this.bedLamp.castShadow = false; this.bedLamp.shadow.mapSize.set(512, 512); this.group.add(this.bedLamp, this.bedLamp.target);
     // (the bounce: from where the bulb's light lands, just over the nightstand's top, warm and dim)
     { const P = this.bedLamp.position, d = this.bedLamp.target.position.clone().sub(P).normalize(), k = d.y < -0.2 ? Math.max(0.05, (P.y - (nsTop + 0.06)) / -d.y) : 0.3;
-      this.bedBounce = new THREE.PointLight(0xffc98a, 0, 3.5, 2); this.bedBounce.position.copy(P).addScaledVector(d, k); this.group.add(this.bedBounce); }
+      this.bedBounce = new THREE.PointLight(0xffc98a, 0, 3.5, 2); this.bedBounce.position.copy(P).addScaledVector(d, k).add(new THREE.Vector3(0.25, 0, -0.1)); this.group.add(this.bedBounce); }   // (a little toward the room: against the wall it glares)
     // the dresser under the window with the picnic basket on it, a chair beside it, a moving box in the corner
     const con = this.place('ClassicConsole_01', -0.4, Hs.z0 + 0.32, { y: U, rotY: 0 });
     const top = con ? con.userData.box.max.y : U + 0.95;
@@ -658,7 +675,7 @@ export class Flat {
     if (this.man) this.man.bone('head').getWorldPosition(S.head);          // (the snore comes from where his head is)
     // (the duvet: cloth over him when he is there, src/quilt.js; else the modelled one, breathing)
     if (this.quilt) this.quilt.update(dt, { robot: this.robot, active: this.clothActive ?? true }); else this.shapeDuvet(t);
-    if (this.bulb) { const k = this.bedLamp.intensity / this.lampOn; this.bulb.emissiveIntensity = 3 * k; this.bedBounce.intensity = 0.4 * k; }
+    if (this.bulb) { const k = this.bedLamp.intensity / this.lampOn; this.bulb.emissiveIntensity = 3 * k; this.bedBounce.intensity = 0.25 * k; }
     const on = Math.sin(t * 1.4) > -0.2; this.tvLed.material.color.setRGB(on ? 1 : 0.25, 0.1, 0.06); this.tvLight.intensity = on ? 0.08 : 0.02;
     this.basket.hinge.rotation.x = -this.basket.open * 1.9 - (this.basket.jolt || 0);
     if (this.basket.jolt) this.basket.jolt = Math.max(0, this.basket.jolt - dt * 1.6);

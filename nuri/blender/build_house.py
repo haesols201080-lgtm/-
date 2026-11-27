@@ -1230,12 +1230,7 @@ def walls_dressing(P):
             else: P.box(a - 0.0025, 0.12, c + 0.0105, a + 0.0025, 0.9, c + 0.0135, 'soot')
         if ax == 'z': P.box(c - 0.03, 0.9, a0, c, 0.94, a1, 'trim')
         else: P.box(a0, 0.9, c, a1, 0.94, c + 0.03, 'trim')
-    # picture rails in the living room and the bedroom
-    for y, faces in ((2.2, (('x', Z0, 1, X0, PART - T / 2), ('x', KZ - T / 2, -1, X0, PART - T / 2), ('z', X0, 1, Z0, KZ - T / 2))),
-                     (U + 2.05, (('x', Z0, 1, X0, PART - T / 2), ('x', KZ - T / 2, -1, X0, PART - T / 2), ('z', X0, 1, Z0, KZ - T / 2)))):
-        for ax, c, sg, a0, a1 in faces:
-            if ax == 'x': P.box(a0, y, c + (0 if sg > 0 else -0.02), a1, y + 0.035, c + (0.02 if sg > 0 else 0), 'trim')
-            else: P.box(c, y, a0, c + 0.02, y + 0.035, a1, 'trim')
+    # (no picture rails: run round the walls at 2.2 m they crossed the windows' heads)
     # the ceiling medallion over the fan
     P.cyl((-2.75, HG - 0.012, -2.2), 0.28, 0.024, 'trim', seg=40); P.cyl((-2.75, HG - 0.03, -2.2), 0.2, 0.02, 'trim', seg=40)
 def furnish():
