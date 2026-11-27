@@ -402,7 +402,9 @@ export class Flat {
       }
     }
     this.bedLamp.castShadow = false; this.bedLamp.shadow.mapSize.set(512, 512); this.group.add(this.bedLamp, this.bedLamp.target);
-    this.bedBounce = new THREE.PointLight(0xffc98a, 0, 4.5, 1.8); this.bedBounce.position.copy(this.bedLamp.position).add(new THREE.Vector3(0.35, -0.35, -0.1)); this.group.add(this.bedBounce);
+    // (the bounce: from where the bulb's light lands, just over the nightstand's top, warm and dim)
+    { const P = this.bedLamp.position, d = this.bedLamp.target.position.clone().sub(P).normalize(), k = d.y < -0.2 ? Math.max(0.05, (P.y - (nsTop + 0.06)) / -d.y) : 0.3;
+      this.bedBounce = new THREE.PointLight(0xffc98a, 0, 3.5, 2); this.bedBounce.position.copy(P).addScaledVector(d, k); this.group.add(this.bedBounce); }
     // the dresser under the window with the picnic basket on it, a chair beside it, a moving box in the corner
     const con = this.place('ClassicConsole_01', -0.4, Hs.z0 + 0.32, { y: U, rotY: 0 });
     const top = con ? con.userData.box.max.y : U + 0.95;
@@ -620,7 +622,7 @@ export class Flat {
     if (this.man) this.man.bone('head').getWorldPosition(S.head);          // (the snore comes from where his head is)
     // (the duvet: cloth over him when he is there, src/quilt.js; else the modelled one, breathing)
     if (this.quilt) this.quilt.update(dt, { robot: this.robot, active: this.clothActive ?? true }); else this.shapeDuvet(t);
-    if (this.bulb) { const k = this.bedLamp.intensity / 9; this.bulb.emissiveIntensity = 3 * k; this.bedBounce.intensity = 0.9 * k; }
+    if (this.bulb) { const k = this.bedLamp.intensity / 9; this.bulb.emissiveIntensity = 3 * k; this.bedBounce.intensity = 0.45 * k; }
     const on = Math.sin(t * 1.4) > -0.2; this.tvLed.material.color.setRGB(on ? 1 : 0.25, 0.1, 0.06); this.tvLight.intensity = on ? 0.08 : 0.02;
     this.basket.hinge.rotation.x = -this.basket.open * 1.9 - (this.basket.jolt || 0);
     if (this.basket.jolt) this.basket.jolt = Math.max(0, this.basket.jolt - dt * 1.6);
