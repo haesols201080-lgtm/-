@@ -1,6 +1,7 @@
 // Asset loading: Poly Haven (CC0) scanned texture sets + scanned models processed in Blender, Blender-built conifers,
 // the robot, and the forest_slope HDRI used for image-based lighting and the distant background.
 import * as THREE from 'three';
+import HOUSE_LM from './house_lm.json';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { HDRLoader } from 'three/examples/jsm/loaders/HDRLoader.js';
 import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.js';
@@ -244,8 +245,9 @@ export class Assets {
     T.sets = { hs_floor: floor, hs_wall: wall, hs_tile: tile, hs_linen: linen, hs_rug: rug, hs_seat: seat, hs_denim: denim, hs_brick: brick, hs_roof: roof,
       hs_siding: siding, hs_lawn: lawn, hs_asphalt: asphalt, hs_pavement: pavement };
     more.forEach((n, i) => { T.sets[n] = got[i]; });
-    // the house's baked night light (blender/build_house.py --bake; tools/lightmap_pack.py), if it is there
-    const lm = async (n) => { try { const t = await this.texture(`${BASE}tex/${n}.webp`, true); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.channel = 1; return t; } catch (e) { return null; } };
+    // the house's baked night light (blender/build_house.py --bake; tools/lightmap_pack.py), when one is shipped
+    // (src/house_lm.json says so: none is, for now, so nothing is asked of the server)
+    const lm = async (n) => { if (!HOUSE_LM.baked) return null; try { const t = await this.texture(`${BASE}tex/${n}.webp`, true); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.channel = 1; return t; } catch (e) { return null; } };
     [T.lmInt, T.lmExt] = await Promise.all([lm('lm_int'), lm('lm_ext')]);
     // skies: the night city (Poly Haven "rooftop_night") for the house, and the forest's daylight sky for the start of the drive
     const hdri = async (name) => {
