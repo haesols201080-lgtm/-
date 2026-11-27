@@ -84,6 +84,10 @@ export class Flat {
         m.normalScale.setScalar(d.normal); out[name] = m;
       } else out[name] = new THREE.MeshStandardMaterial({ color: new THREE.Color(d.color), roughness: d.rough, metalness: d.metal || 0, envMapIntensity: 0.6 });
     }
+    // (one paint for the upstairs walls: the house's builder chose each wall face's paint by which room its middle
+    // was in, so the faces round the bedroom's windows, where the wall runs past the room's end, came out in two
+    // colours, blue-grey patches in the cream)
+    if (out.wall_paint) out.wall_bed = out.wall_paint;
     // (the curtains: the jacquard scan they were tinted from is a burgundy one, and showed through as red; they are
     // lined drapes in a warm beige cotton, the bedding's scanned weave, with a cloth's sheen)
     if (sets.hs_sheet) out.curtain = fabric(sets.hs_sheet, { tile: 0.29, color: 0xcbbca2, sheenColor: 0xeadfca, sheenRoughness: 0.6, crinkle: 0.6, crease: 0.35 });
@@ -123,6 +127,8 @@ export class Flat {
         o.userData.mat0 = mat0;
       }
       if (o.geometry.attributes.uv1 && (atlas === 'int' || atlas === 'ext')) o.material = Array.isArray(o.material) ? o.material.map((m) => bake(m, atlas)) : bake(o.material, atlas);
+      // (the ceiling lights and the fan's are off at night: their bulbs don't glow)
+      for (const m of [o.material].flat()) if (m && /modern_ceiling_globe|ceiling_fan/.test(m.name || '')) { m.emissive?.setRGB(0, 0, 0); m.emissiveMap = null; m.emissiveIntensity = 0; }
       if (nm.startsWith('f_') && !tops.has(top)) {
         tops.add(top); const ud = top.userData || {};
         this.furn.push({ key: ud.key || nm.slice(2).replace(/\.\d+$/, ''), obj: top, box: new THREE.Box3().setFromObject(top) });
