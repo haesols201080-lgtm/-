@@ -613,7 +613,7 @@ def cabinets(P, run_axis, a0, a1, wall_c, sgn, drawers=True, upper=None, skip=()
 
 def build_kitchen(P):
     # the west wall: the fridge, then cabinets with the stove between them; the south wall: cabinets with the sink
-    cabinets(P, 'z', 1.05, 3.38, X0, 1, skip=((1.66, 2.44),), upper=[(1.05, 1.6, 1.42, 2.17), (2.5, 3.38, 1.42, 2.17)])
+    cabinets(P, 'z', 1.05, Z1, X0, 1, skip=((1.66, 2.44),), upper=[(1.05, 1.6, 1.42, 2.17), (2.5, 3.38, 1.42, 2.17)])     # (to the corner: the microwave stands there)
     cabinets(P, 'x', X0 + 0.62, -1.55, Z1, -1, skip=(), upper=[(X0 + 0.62, -4.2, 1.42, 2.17), (-2.4, -1.55, 1.42, 2.17)])
     # the sink: a stainless bowl in the counter under the window, a gooseneck tap
     P.box(-3.62, 0.72, Z1 - 0.52, -2.98, 0.905, Z1 - 0.1, 'steel'); P.box(-3.58, 0.74, Z1 - 0.48, -3.02, 0.906, Z1 - 0.14, 'soot')

@@ -544,7 +544,31 @@ export class Flat {
       { at: new THREE.Vector3(-2.6, 0, -3.5), r: 0.7, text: '창밖은 거인들의 길. 가로등. 다른 집들. 지붕 너머로 하늘이 주황빛이다. 도시의 불빛이다.' },
     ];
   }
+  // the corner where the kitchen's two counter runs meet (the west wall's ends at z 3.38, the south wall's starts at
+  // x0 + 0.62) was left empty in the modelled house, and its microwave stood there on nothing: the corner filled with
+  // a base cabinet, the countertop and the tiled splash (unless a rebuilt house has them)
+  kitchenCorner() {
+    const Hs = HOUSE, M = this.archM; if (!this.arch || !M) return;
+    const rc = new THREE.Raycaster(new THREE.Vector3(Hs.x0 + 0.31, 1.6, Hs.z1 - 0.31), new THREE.Vector3(0, -1, 0), 0, 1.0);
+    const hit = rc.intersectObject(this.archRoot, true).find((h) => !/^f_/.test(h.object.parent?.name || '') && !/^f_/.test(h.object.name));
+    if (hit && hit.point.y > 0.8) return;
+    const box = (x0, y0, z0, x1, y1, z1, m) => {
+      const w = x1 - x0, h = y1 - y0, d = z1 - z0, g = new THREE.BoxGeometry(w, h, d), uv = g.attributes.uv;
+      // (UVs in metres, as the house's materials expect)
+      const size = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
+      for (let f = 0; f < 6; f++) for (let k = 0; k < 4; k++) { const i = f * 4 + k; uv.setXY(i, uv.getX(i) * size[f][0], uv.getY(i) * size[f][1]); }
+      const o = new THREE.Mesh(g, m); o.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2); o.castShadow = o.receiveShadow = true;
+      this.group.add(o); this.keepVis(o); return o;
+    };
+    const X0 = Hs.x0, Z1 = Hs.z1, xe = X0 + 0.62, ze = 3.38;
+    box(X0, 0.1, ze, xe, 0.86, Z1, M.cabinet);
+    box(X0, 0, ze, xe - 0.07, 0.1, Z1 - 0.07, M.black_metal || this.mats.darkWood);
+    box(X0, 0.86, ze - 0.02, xe + 0.02, 0.9, Z1, M.counter);
+    box(X0, 0.9, ze, X0 + 0.078, 1.42, Z1, M.splash); box(X0, 0.9, Z1 - 0.078, xe, 1.42, Z1, M.splash);
+    this.collider(this.R.ColliderDesc.cuboid((xe - X0) / 2, 0.45, (Z1 - ze) / 2).setTranslation((X0 + xe) / 2, 0.45, (ze + Z1) / 2), 'rock');
+  }
   buildKitchen() {
+    this.kitchenCorner();
     const Hs = HOUSE, z1 = Hs.z1, { trimM, darkWood } = this.mats;
     const cab = new THREE.MeshStandardMaterial({ color: 0x8aa39a, roughness: 0.55 }), counterM = new THREE.MeshStandardMaterial({ color: 0xdedad2, roughness: 0.3, envMapIntensity: 0.6 });
     const steel = new THREE.MeshStandardMaterial({ color: 0xb9bcbf, roughness: 0.25, metalness: 0.9 });
