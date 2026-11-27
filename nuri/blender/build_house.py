@@ -1331,7 +1331,7 @@ def furnish():
     ns = add('ClassicNightstand_01', -4.45, KZ - 0.32, y=U, ry=math.pi)
     add('desk_lamp_arm_01', -4.45, KZ - 0.45, y=top_of(ns), ry=math.pi * 0.6, scale=0.75, collide=False)
     add('round_spectacles', -4.4, KZ - 0.22, y=top_of(ns), ry=2.2, collide=False)
-    add('alarm_clock_01', -4.5, KZ - 0.62, y=top_of(ns), ry=1.2, collide=False)
+    add('alarm_clock_01', -4.62, KZ - 0.2, y=top_of(ns), ry=1.2, collide=False)        # (on the nightstand: its back corner)
     ns2 = add('painted_wooden_nightstand', -1.95, KZ - 0.32, y=U, ry=math.pi)
     book_stack(Pp, -1.95, surface_y(-1.95, KZ - 0.28, U + 0.62), KZ - 0.28, 3, seed=5)
     add('standing_picture_frame_01', -1.85, KZ - 0.42, y=top_of(ns2), ry=math.pi + 0.3, collide=False)

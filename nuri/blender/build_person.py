@@ -5,14 +5,14 @@ Stages: the body (macro shape: gender, age, muscle, weight, height, proportions,
 and body details that make him someone in particular), the rig built on the shaped body (its joints at the means of
 MakeHuman's joint helpers, so they follow the shape) and skinned with MakeHuman's weights, eye-closure and a few
 expression shape keys, the eyes fitted to the sockets; then MakeHuman's own assets fitted to him as proxies (the
-skin photo, short hair, brows, lashes, teeth and tongue; a field jacket and jeans, with Poly Haven's scanned rubber
+skin photo with his brows painted into it, short hair, teeth and tongue; a field jacket and jeans, with Poly Haven's scanned rubber
 boots, for the forest; a T-shirt and jeans for bed), the body under each outfit cut where it can't be seen.
 
 usage: python -I blender/build_person.py <data dir> [--tex dir] [--bake dir --size N] [--preview png] [--export glb]
                                          [--save blend] [--boots rubber_boots.glb]
   the data dir (blender/fetch_person_data.sh fetches it) holds mpfb/ (MPFB2's src/mpfb/data: 3dobjs, targets, rigs),
-  eyes/ (MakeHuman's makehuman/data/eyes) and assets/ (MakeHuman's system assets: skins, clothes, hair, eyebrows,
-  eyelashes). Then blender/animate_person.py gives him his clips."""
+  eyes/ (MakeHuman's makehuman/data/eyes) and assets/ (MakeHuman's system assets: skins, clothes, hair, eyebrows).
+  Then blender/animate_person.py gives him his clips."""
 import bpy, gzip, json, math, os, sys
 import numpy as np
 from mathutils import Vector, Matrix
@@ -353,17 +353,40 @@ def make_boots(body, rig, LM, boots_path):
     return out
 
 # ---------------------------------------------------------------- MakeHuman's assets fitted to him (clothes, hair, brows, lashes)
-def proxy(name, folder, X, expr, W, rig, rough=0.85, alpha=False, keys=False):
+def skin_standoff(P, X, faces, s, exact=False):
+    """how far to move each point (MakeHuman units) so it sits at least s off the skin (exactly s: laid on it), along
+    the skin's normal at the nearest skin vertex (an asset whose fitting leaves it under the shaped skin shows only
+    in pieces; one that stands well off it shows as a ledge from the side)"""
+    from mathutils.kdtree import KDTree
+    used = sorted({i for f in faces for i in f}); N = np.zeros_like(X)
+    for f in faces:
+        a, b, c = X[f[0]], X[f[1]], X[f[2]]; n = np.cross(b - a, c - a)
+        for i in f: N[i] += n
+    N /= np.maximum(np.linalg.norm(N, axis=1)[:, None], 1e-12)
+    kd = KDTree(len(used))
+    for k, i in enumerate(used): kd.insert(X[i], i)
+    kd.balance()
+    D = np.zeros_like(P)
+    for k, p in enumerate(P):
+        _, i, _ = kd.find(p); d = float(np.dot(p - X[i], N[i]))
+        if d < s or exact: D[k] = N[i] * (s - d)
+    return D
+
+def proxy(name, folder, X, expr, W, rig, rough=0.85, alpha=False, keys=False, standoff=0.0, skin=None, recolor=None, lay=False, anchor=False):
     """an asset fitted to the shaped body (each vertex hangs off three body vertices plus an offset scaled to the
-    body's size), weighted from those vertices, given the expressions too if asked; with its own textures"""
+    body's size), weighted from those vertices, given the expressions too if asked; with its own textures (passed
+    through recolor(rgba array) -> rgba array if given); kept standoff off the skin (skin: the body's faces)"""
     mh = [f for f in os.listdir(folder) if f.endswith('.mhclo')][0]
     scales, refs, dele = read_mhclo(os.path.join(folder, mh), with_delete=True)
     objf = [l.split()[1] for l in open(os.path.join(folder, mh), errors='replace') if l.startswith('obj_file')][0]
     V, VT, F, FT, G = read_obj(os.path.join(folder, objf))
     def fit(XX):
         s = [abs(XX[scales[a][0]][k] - XX[scales[a][1]][k]) / scales[a][2] if a in scales else 1.0 for k, a in enumerate('xyz')]
-        return np.array([sum(w * XX[v] for v, w in zip(vs, ws)) + np.array(d) * s for vs, ws, d in refs])
+        return np.array([sum(w * XX[v] for v, w in zip(vs, ws)) + (0 if anchor else np.array(d) * s) for vs, ws, d in refs])
     P = fit(X)
+    D = skin_standoff(P, X, skin, standoff, exact=lay) if standoff and skin is not None else np.zeros_like(P)
+    if standoff: print(f'  {name}: {int((np.linalg.norm(D, axis=1) > 0).sum())} of {len(P)} verts lifted off the skin, up to {np.linalg.norm(D, axis=1).max() * 100:.1f} mm')
+    P = P + D
     me = bpy.data.meshes.new(name); me.from_pydata(to_bl(P).tolist(), [], F)
     uv = me.uv_layers.new(name='UVMap'); li = 0
     for f, ft in zip(F, FT):
@@ -373,7 +396,7 @@ def proxy(name, folder, X, expr, W, rig, rough=0.85, alpha=False, keys=False):
     if keys and expr:
         ob.shape_key_add(name='Basis', from_mix=False)
         for key, d in expr.items():
-            sk = ob.shape_key_add(name=key, from_mix=False); sk.data.foreach_set('co', to_bl(fit(X + d)).ravel())
+            sk = ob.shape_key_add(name=key, from_mix=False); sk.data.foreach_set('co', to_bl(fit(X + d) + D).ravel())
     # weights from the body vertices each proxy vertex hangs off
     inv = {}
     for bone, pairs in W.items():
@@ -395,7 +418,12 @@ def proxy(name, folder, X, expr, W, rig, rough=0.85, alpha=False, keys=False):
     tx = {l[0]: l[1] for l in mat if len(l) > 1 and l[0] in ('diffuseTexture', 'normalmapTexture')}
     m = bpy.data.materials.new(name); m.use_nodes = True; nt = m.node_tree; b = nt.nodes['Principled BSDF']
     if 'diffuseTexture' in tx and os.path.exists(os.path.join(folder, tx['diffuseTexture'])):
-        t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(os.path.join(folder, tx['diffuseTexture']))
+        src = os.path.join(folder, tx['diffuseTexture'])
+        if recolor:
+            from PIL import Image
+            os.makedirs(TEXOUT, exist_ok=True); out = os.path.join(TEXOUT, name + '_diffuse.png')
+            Image.fromarray(recolor(np.asarray(Image.open(src).convert('RGBA')).astype(np.float64) / 255)).save(out); src = out
+        t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(src)
         nt.links.new(t.outputs['Color'], b.inputs['Base Color'])
         if alpha: nt.links.new(t.outputs['Alpha'], b.inputs['Alpha'])
     if 'normalmapTexture' in tx and os.path.exists(os.path.join(folder, tx['normalmapTexture'])):
@@ -556,7 +584,10 @@ def node_sep_z(N, L, vec):
     s = N.new('ShaderNodeSeparateXYZ'); L.new(vec, s.inputs[0]); return s.outputs['Z']
 
 def bake_skin(body, size, outdir, only=('albedo', 'rough', 'normal', 'ao')):
-    """albedo, normal, and roughness + occlusion, baked from the material on the rest pose"""
+    """albedo, normal, and roughness + occlusion, baked from the material on the rest pose (kept in outdir: a
+    rebuild reuses what is there; --rebake bakes again)"""
+    have = {f'skin_{k}.png': os.path.join(outdir, f'skin_{k}.png') for k in only}
+    if '--rebake' not in ARGS and all(os.path.exists(v) for v in have.values()): print('baked (kept)', sorted(have)); return have
     sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.samples = 16; sc.cycles.use_denoising = False
     m = body.data.materials[0]; nt = m.node_tree; bsdf = next(n for n in nt.nodes if n.type == 'BSDF_PRINCIPLED'); out = next(n for n in nt.nodes if n.type == 'OUTPUT_MATERIAL')
     for o in bpy.context.scene.objects: o.select_set(False)
@@ -585,10 +616,99 @@ def bake_skin(body, size, outdir, only=('albedo', 'rough', 'normal', 'ao')):
     print('baked', sorted(res))
     return res
 
+def paint_brows(skin_png, out_png, folder, X, VT, F, FT, G, color=(0.27, 0.19, 0.135), strength=0.8, ss=4):
+    """the brows drawn into the skin itself (on the skin whatever the light or the angle: the brow asset's cards
+    stood off it, a ledge from the side and a second outline from the front): each triangle of the brow asset, as
+    fitted to him, laid into the skin texture by the skin UVs of the body vertices it hangs off, its hairs
+    composited there in his brow colour"""
+    from PIL import Image
+    mh = [f for f in os.listdir(folder) if f.endswith('.mhclo')][0]
+    _, refs, _ = read_mhclo(os.path.join(folder, mh), with_delete=True)
+    objf = [l.split()[1] for l in open(os.path.join(folder, mh), errors='replace') if l.startswith('obj_file')][0]
+    _, BVT, BF, BFT, _ = read_obj(os.path.join(folder, objf))
+    tex = np.asarray(Image.open(os.path.join(folder, objf.replace('.obj', '.png'))).convert('RGBA')).astype(np.float64) / 255
+    uvb = {}
+    for f, ft, g in zip(F, FT, G):
+        if g != 'body': continue
+        for v, t in zip(f, ft):
+            if t >= 0: uvb.setdefault(v, VT[t])
+    suv = []
+    for vs, ws, _ in refs:
+        acc, wt = np.zeros(2), 0.0
+        for v, w in zip(vs, ws):
+            if v in uvb: acc += w * uvb[v]; wt += w
+        suv.append(acc / wt if wt else acc)
+    suv = np.array(suv)
+    skin = np.asarray(Image.open(skin_png).convert('RGB')).astype(np.float64) / 255; H, Wd = skin.shape[:2]; th, tw = tex.shape[:2]
+    col = np.array(color); acc = np.zeros((H, Wd))
+    for f, ft in zip(BF, BFT):
+        for a, b, c in ((0, 1, 2), (0, 2, 3)) if len(f) == 4 else ((0, 1, 2),):
+            P = np.array([[suv[f[k]][0] * Wd, (1 - suv[f[k]][1]) * H] for k in (a, b, c)]); T = np.array([BVT[ft[k]] for k in (a, b, c)])
+            x0, y0 = np.floor(P.min(0)).astype(int); x1, y1 = np.ceil(P.max(0)).astype(int)
+            if x1 <= x0 or y1 <= y0: continue
+            yy, xx = np.mgrid[y0 * ss:(y1 + 1) * ss, x0 * ss:(x1 + 1) * ss] / ss + 0.5 / ss
+            m = np.array([[P[1, 0] - P[0, 0], P[2, 0] - P[0, 0]], [P[1, 1] - P[0, 1], P[2, 1] - P[0, 1]]])
+            if abs(np.linalg.det(m)) < 1e-9: continue
+            l12 = np.linalg.solve(m, np.stack([(xx - P[0, 0]).ravel(), (yy - P[0, 1]).ravel()]))
+            l0 = 1 - l12[0] - l12[1]; ins = (l0 >= -0.01) & (l12[0] >= -0.01) & (l12[1] >= -0.01)
+            if not ins.any(): continue
+            uv = l0[ins, None] * T[0] + l12[0][ins, None] * T[1] + l12[1][ins, None] * T[2]
+            # (bilinear in the brow's texture; each skin pixel the mean of its ss x ss samples)
+            fx = np.clip(uv[:, 0] * tw - 0.5, 0, tw - 1.001); fy = np.clip((1 - uv[:, 1]) * th - 0.5, 0, th - 1.001)
+            ix, iy = fx.astype(int), fy.astype(int); u, v = (fx - ix)[:, None], (fy - iy)[:, None]
+            s4 = (tex[iy, ix] * (1 - u) + tex[iy, ix + 1] * u) * (1 - v) + (tex[iy + 1, ix] * (1 - u) + tex[iy + 1, ix + 1] * u) * v
+            al = np.clip(s4[:, 3] * strength, 0, 1)
+            # (each pixel's cover by this triangle; where triangles meet, the greater, not the sum)
+            px = np.clip(xx.ravel()[ins].astype(int), x0, x1) - x0; py = np.clip(yy.ravel()[ins].astype(int), y0, y1) - y0
+            bw, bh = x1 - x0 + 1, y1 - y0 + 1
+            cov = np.bincount(py * bw + px, weights=al, minlength=bw * bh).reshape(bh, bw) / (ss * ss)
+            ya, yb, xa, xb = max(y0, 0), min(y1 + 1, H), max(x0, 0), min(x1 + 1, Wd)
+            if yb > ya and xb > xa: acc[ya:yb, xa:xb] = np.maximum(acc[ya:yb, xa:xb], cov[ya - y0:yb - y0, xa - x0:xb - x0])
+    al = np.clip(acc, 0, 1)[..., None]
+    skin = skin * (1 - al) + col * al
+    Image.fromarray(np.clip(skin * 255 + 0.5, 0, 255).astype(np.uint8)).save(out_png)
+    print('  brows painted into the skin from', os.path.basename(folder))
+    return out_png
+
+def natural_eye(src, out):
+    """MakeHuman's only iris is a saturated red-brown: each iris (found as the red in each eyeball) is recoloured from
+    its own fibres into a dark hazel-brown (amber round the pupil, a dark limbal ring at the edge); the whites are
+    toned down, warmed, and darkened away from the iris as the lids and the eye's curve shade them"""
+    from PIL import Image
+    a = np.asarray(Image.open(src).convert('RGB')).astype(np.float64) / 255; H, Wd = a.shape[:2]
+    yy, xx = np.mgrid[0:H, 0:Wd] / np.array([H, Wd])[:, None, None]
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]; lum = a @ [0.3, 0.59, 0.11]
+    red = (r - np.maximum(g, b) > 0.12) & (lum < 0.75)
+    out_a = a.copy()
+    for side in (xx > yy, xx <= yy):                                   # (the two eyeballs lie either side of the diagonal)
+        m = red & side
+        if m.sum() < 50: continue
+        cy, cx = yy[m].mean(), xx[m].mean(); dist = np.hypot(yy - cy, xx - cx); R = np.percentile(dist[m], 99.5)
+        t = dist / R; ref = lum[m].mean()
+        inner, outer, ring = np.array([0.40, 0.26, 0.11]), np.array([0.19, 0.12, 0.06]), np.array([0.07, 0.045, 0.03])
+        k = np.clip((t - 0.3) / 0.5, 0, 1)[..., None]; col = inner * (1 - k) + outer * k
+        col = col * (1 - np.clip((t - 0.82) / 0.16, 0, 1)[..., None]) + ring * np.clip((t - 0.82) / 0.16, 0, 1)[..., None]
+        col = col * np.clip(lum / ref, 0.35, 1.6)[..., None] ** 0.9
+        reddish = (r - np.maximum(g, b) > 0.04) & (t < 1.1) & (lum < 0.55)   # (the red's soft fringe too)
+        pupil = (lum < 0.09) & (t < 0.42) & (r - np.maximum(g, b) < 0.025)
+        iris = ((t < 1.0) | reddish) & ~pupil                            # (the pupil stays black)
+        edge = np.where(reddish[..., None], 1.0, np.clip((1.06 - t) / 0.12, 0, 1)[..., None])
+        w = np.where(iris[..., None], 1.0, 0.0) * edge
+        out_a = out_a * (1 - w) + col * w
+        # the white: a little darker and warmer, darker still away from the iris
+        white = side & (t >= 1.0) & (lum > 0.35)
+        shade = 0.84 * (1 - 0.5 * np.clip((t - 1.6) / 1.6, 0, 1))
+        out_a = np.where(white[..., None], out_a * shade[..., None] * np.array([1.0, 0.965, 0.93]), out_a)
+    Image.fromarray(np.clip(out_a * 255 + 0.5, 0, 255).astype(np.uint8)).save(out)
+    return out
+
 def eye_material(eyes):
     m = bpy.data.materials.new('eye'); m.use_nodes = True; nt = m.node_tree; b = nt.nodes['Principled BSDF']
-    t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(os.path.join(EYES, 'materials', 'brown_eye.png'))
-    nt.links.new(t.outputs['Color'], b.inputs['Base Color']); b.inputs['Roughness'].default_value = 0.05; b.inputs['Coat Weight'].default_value = 1.0; b.inputs['Coat Roughness'].default_value = 0.02
+    os.makedirs(TEXOUT, exist_ok=True)
+    tex = natural_eye(os.path.join(EYES, 'materials', 'brown_eye.png'), os.path.join(TEXOUT, 'eye_natural.png'))
+    t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(tex)
+    # (the eyeball itself is moist but not a mirror: the clear cornea over it gives the catchlights)
+    nt.links.new(t.outputs['Color'], b.inputs['Base Color']); b.inputs['Roughness'].default_value = 0.3
     eyes.data.materials.append(m)
 
 # ---------------------------------------------------------------- export
@@ -632,10 +752,11 @@ def preview(path, objs):
         f = path.replace('.png', f'_{name}.png'); sc.render.filepath = f; bpy.ops.render.render(write_still=True); shots.append(f)
     print('preview', shots)
 
-def skin_photo_material(body, baked):
-    """the photographed skin (MakeHuman's middle-aged lightskinned male, CC0) with the baked pores and fine lines on it"""
+def skin_photo_material(body, baked, diffuse=None):
+    """the photographed skin (MakeHuman's middle-aged lightskinned male, CC0; his brows painted in) with the baked
+    pores and fine lines on it"""
     m = bpy.data.materials.new('skin_game'); m.use_nodes = True; nt = m.node_tree; b = nt.nodes['Principled BSDF']
-    t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(os.path.join(ASSETS, 'skins', 'middleage_lightskinned_male_diffuse.png'))
+    t = nt.nodes.new('ShaderNodeTexImage'); t.image = bpy.data.images.load(diffuse or os.path.join(ASSETS, 'skins', 'middleage_lightskinned_male_diffuse.png'))
     nt.links.new(t.outputs['Color'], b.inputs['Base Color'])
     if baked:
         tn = nt.nodes.new('ShaderNodeTexImage'); tn.image = bpy.data.images.load(baked['skin_normal.png']); tn.image.colorspace_settings.name = 'Non-Color'
@@ -662,19 +783,20 @@ if __name__ == '__main__':
     proc = bpy.data.materials.new('skin'); proc.use_nodes = True; body.data.materials.append(proc)
     skin_nodes(proc, os.path.join(MPFB, 'textures'))
     baked = bake_skin(body, int(opt('--size', 2048)), opt('--bake'), only=('rough', 'normal')) if opt('--bake') else None
-    skin_m = skin_photo_material(body, baked); body.data.materials.clear(); body.data.materials.append(skin_m)
+    BROWS = opt('--brows', 'eyebrow012')
+    os.makedirs(TEXOUT, exist_ok=True)
+    painted = paint_brows(os.path.join(ASSETS, 'skins', 'middleage_lightskinned_male_diffuse.png'), os.path.join(TEXOUT, 'skin_brows.png'),
+                          os.path.join(ASSETS, 'eyebrows', BROWS), X, VT, F, FT, G)
+    skin_m = skin_photo_material(body, baked, painted); body.data.materials.clear(); body.data.materials.append(skin_m)
     if eyes: eye_material(eyes); split_eyes(eyes, rig, LM)
     teeth = helper_object('stranger_teeth', X, VT, F, FT, G, {'helper-upper-teeth', 'helper-lower-teeth'}, expr, W, rig, (0.78, 0.74, 0.66), 0.25)
     tongue = helper_object('stranger_tongue', X, VT, F, FT, G, {'helper-tongue'}, expr, W, rig, (0.55, 0.25, 0.24), 0.4)
     A = ASSETS
     hair, _ = proxy('stranger_hair', os.path.join(A, 'hair', 'short02'), X, expr, W, rig, rough=0.5, alpha=True)
-    brows, _ = proxy('stranger_brows', os.path.join(A, 'eyebrows', 'eyebrow001'), X, expr, W, rig, rough=0.6, alpha=True, keys=True)
-    lashes, _ = proxy('stranger_lashes', os.path.join(A, 'eyelashes', 'eyelashes01'), X, expr, W, rig, rough=0.6, alpha=True, keys=True)
-    # (only the upper lashes: a man's lower ones barely show, and as cards they read as a smudge under the eye)
-    import bmesh
-    ez = (LM['l-eye'].z + LM['r-eye'].z) / 2
-    bm = bmesh.new(); bm.from_mesh(lashes.data)
-    bmesh.ops.delete(bm, geom=[f for f in bm.faces if f.calc_center_median().z < ez], context='FACES'); bm.to_mesh(lashes.data); bm.free()
+    # (the brow is painted into the skin, above: a card over it, however it is laid, shows as a ledge from the side
+    # and a second outline from the front)
+    brows = None
+    lashes = None                                     # (no lash cards: fitted to his lids they stood off them)
     outfit, del_out = proxy('stranger_outfit', os.path.join(A, 'clothes', 'male_casualsuit05'), X, expr, W, rig, rough=0.85)
     tee_dir = os.path.join(A, 'clothes', 'male_casualsuit06'); clean = os.path.join(tee_dir, 'male_casualsuit06_clean.png')
     if not os.path.exists(clean): clean_tshirt_logo(os.path.join(tee_dir, 'male_casualsuit06_diffuse.png'), clean)
@@ -692,8 +814,8 @@ if __name__ == '__main__':
         bm = bmesh.new(); bm.from_mesh(body_out.data)
         bmesh.ops.delete(bm, geom=[f for f in bm.faces if all(v.co.z < btop for v in f.verts)], context='FACES'); bm.to_mesh(body_out.data); bm.free()
     body_bed = hide_under(body, remap, del_bed, 'stranger_body_bed')
-    OUTDOOR = [body_out, eyes, lashes, brows, teeth, tongue, hair, outfit, *boots]
-    BED = [body_bed, eyes, lashes, brows, teeth, tongue, hair, sleep]
+    OUTDOOR = [o for o in (body_out, eyes, lashes, brows, teeth, tongue, hair, outfit, *boots) if o]
+    BED = [o for o in (body_bed, eyes, lashes, brows, teeth, tongue, hair, sleep) if o]
     body.hide_render = True
     def show(objs):
         for o in bpy.context.scene.objects:

@@ -356,16 +356,22 @@ export class Flat {
       const pw = this.arch?.scene.getObjectByName('soft_pillow0'), pc = pw ? new THREE.Box3().setFromObject(pw).getCenter(new THREE.Vector3()) : new THREE.Vector3(bx - 0.14, 0, Hs.kz - 0.3);
       const h = man.bone('head').getWorldPosition(new THREE.Vector3());
       man.root.position.x += pc.x + 0.03 - h.x; man.root.position.z += pc.z + 0.02 - h.z; man.root.updateMatrixWorld(true);
-      // (the house's bat was left standing up through the mattress: it lies on the floor under the bed)
-      const bat = this.arch?.scene.getObjectByName('f_baseball_bat');
-      if (bat) {
-        bat.rotateOnWorldAxis(new THREE.Vector3(Math.cos(1.25), 0, -Math.sin(1.25)), Math.PI / 2); bat.updateMatrixWorld(true);
-        const bb = new THREE.Box3().setFromObject(bat), c = bb.getCenter(new THREE.Vector3());
-        bat.position.add(new THREE.Vector3(bx - c.x, U + 0.003 - bb.min.y, -0.55 - c.z)); bat.updateMatrixWorld(true);
-      }
     } else {
       const hair = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshStandardMaterial({ color: 0x1b140f, roughness: 0.55 }));
       hair.scale.set(0.095, 0.085, 0.11); hair.position.set(bx - 0.2, U + 0.66 + DY, Hs.kz - 0.36); hair.castShadow = true; this.group.add(hair); this.keepVis(hair);
+    }
+    // (the house's alarm clock was set down past the nightstand's front edge, in the air: onto its back corner)
+    const clk = this.arch?.scene.getObjectByName('f_alarm_clock_01'), nst = this.arch?.scene.getObjectByName('f_ClassicNightstand_01');
+    if (clk && nst) {
+      const nb = new THREE.Box3().setFromObject(nst), cb = new THREE.Box3().setFromObject(clk), c = cb.getCenter(new THREE.Vector3());
+      clk.position.add(new THREE.Vector3(nb.min.x + 0.11 - c.x, nb.max.y - cb.min.y, nb.max.z - 0.09 - c.z)); clk.updateMatrixWorld(true);
+    }
+    // (the house's bat was left standing up through the mattress: it lies on the floor under the bed)
+    const bat = this.arch?.scene.getObjectByName('f_baseball_bat');
+    if (bat) {
+      bat.rotateOnWorldAxis(new THREE.Vector3(Math.cos(1.25), 0, -Math.sin(1.25)), Math.PI / 2); bat.updateMatrixWorld(true);
+      const bb = new THREE.Box3().setFromObject(bat), c = bb.getCenter(new THREE.Vector3());
+      bat.position.add(new THREE.Vector3(bx - c.x, U + 0.003 - bb.min.y, -0.55 - c.z)); bat.updateMatrixWorld(true);
     }
     const dg = new THREE.PlaneGeometry(BW + 0.24, BL - 0.2, 56, 64); dg.rotateX(-Math.PI / 2); dg.translate(bx, 0, bz - 0.1);
     const duvet = new THREE.Mesh(dg, linenM); duvet.castShadow = duvet.receiveShadow = true; this.group.add(duvet); if (!this.softDuvet) this.keepVis(duvet);
@@ -380,8 +386,23 @@ export class Flat {
     this.place('desk_lamp_arm_01', -4.45, Hs.kz - 0.42, { y: nsTop, rotY: Math.PI * 0.6, scale: 0.75, collide: false });
     this.place('round_spectacles', -4.42, Hs.kz - 0.2, { y: nsTop, rotY: 2.2, collide: false });
     this.place('modern_ceiling_lamp_01', -2.5, -1.7, { y: U + Hs.H2 - 0.95, collide: false });
-    this.bedLamp = new THREE.SpotLight(0xffc98a, 0, 6, 0.95, 0.6, 1.6); this.bedLamp.position.set(-4.35, nsTop + 0.5, Hs.kz - 0.5); this.bedLamp.target.position.set(-2.6, U, -1.6);
+    // (its light from the lamp's own bulb, the way the bulb faces: down onto the nightstand and the bed's head; the
+    // bulb itself glows only while it is on; and a little of it bounced round the room)
+    this.bedLamp = new THREE.SpotLight(0xffc98a, 0, 6, 1.05, 0.7, 1.6); this.bedLamp.position.set(-4.35, nsTop + 0.5, Hs.kz - 0.5); this.bedLamp.target.position.set(-2.6, U, -1.6);
+    const lampObj = this.arch?.scene.getObjectByName('f_desk_lamp_arm_01');
+    if (lampObj) {
+      let bulb = null; lampObj.traverse((o) => { if (o.isMesh && /_light$/.test(o.material?.name || '')) bulb = o; });
+      if (bulb) {
+        bulb.updateMatrixWorld(true);
+        const P = bulb.geometry.attributes.position, N = bulb.geometry.attributes.normal, c = new THREE.Vector3(), n = new THREE.Vector3(), v = new THREE.Vector3(), nm = new THREE.Matrix3().getNormalMatrix(bulb.matrixWorld);
+        for (let i = 0; i < P.count; i++) { c.add(v.fromBufferAttribute(P, i).applyMatrix4(bulb.matrixWorld)); if (N) n.add(v.fromBufferAttribute(N, i).applyMatrix3(nm)); }
+        c.divideScalar(P.count); if (n.lengthSq() < 1e-6) n.set(0, -1, 0); n.normalize();
+        this.bedLamp.position.copy(c).addScaledVector(n, 0.02); this.bedLamp.target.position.copy(c).addScaledVector(n, 1.0);
+        this.bulb = bulb.material; this.bulb.emissive = new THREE.Color(0xffd7a0); this.bulb.emissiveIntensity = 0;
+      }
+    }
     this.bedLamp.castShadow = false; this.bedLamp.shadow.mapSize.set(512, 512); this.group.add(this.bedLamp, this.bedLamp.target);
+    this.bedBounce = new THREE.PointLight(0xffc98a, 0, 4.5, 1.8); this.bedBounce.position.copy(this.bedLamp.position).add(new THREE.Vector3(0.35, -0.35, -0.1)); this.group.add(this.bedBounce);
     // the dresser under the window with the picnic basket on it, a chair beside it, a moving box in the corner
     const con = this.place('ClassicConsole_01', -0.4, Hs.z0 + 0.32, { y: U, rotY: 0 });
     const top = con ? con.userData.box.max.y : U + 0.95;
@@ -531,8 +552,10 @@ export class Flat {
     const sink = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.02, 0.42), steel); sink.position.set(-3.3, 0.905, z1 - 0.32); this.group.add(sink);
     for (const [x, z] of [[-4.75, 1.05], [-4.75, 1.55], [-4.45, 1.05], [-4.45, 1.55]]) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.012, 20), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 })); b.position.set(x, 0.906, z); this.group.add(b); }
     // the stove's clock glows green in the dark
-    const clock = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.03), new THREE.MeshBasicMaterial({ color: 0x3dff8a })); clock.position.set(Hs.x0 + 0.625, 0.72, 1.3); clock.rotation.y = Math.PI / 2; this.group.add(clock);
-    const cl = new THREE.PointLight(0x3dff8a, 0.12, 1.2, 2); cl.position.set(Hs.x0 + 0.75, 0.72, 1.3); this.group.add(cl);
+    // (on the modelled house's stove: its front faces the room at x0 + 0.66, the clock above the oven door)
+    const ck = this.arch ? [Hs.x0 + 0.666, 0.86, 2.05] : [Hs.x0 + 0.625, 0.72, 1.3];
+    const clock = new THREE.Mesh(new THREE.PlaneGeometry(0.1, 0.03), new THREE.MeshBasicMaterial({ color: 0x3dff8a })); clock.position.set(...ck); clock.rotation.y = Math.PI / 2; this.group.add(clock); this.keepVis(clock);
+    const cl = new THREE.PointLight(0x3dff8a, 0.12, 1.2, 2); cl.position.set(ck[0] + 0.1, ck[1], ck[2]); this.group.add(cl);
     this.place('pot_enamel_01', -4.72, 1.08, { y: 0.912, rotY: 0.6, collide: false });
     this.place('wine_bottles_01', -1.85, z1 - 0.25, { y: 0.9, collide: false }); this.place('wine_bottles_01', -1.74, z1 - 0.33, { y: 0.9, rotY: 1.1, collide: false });
     this.place('modern_ceiling_lamp_01', -2.4, 2.0, { y: Hs.H - 0.95, collide: false });
@@ -541,7 +564,8 @@ export class Flat {
     const hl = new THREE.Mesh(new THREE.PlaneGeometry(0.22, 0.06), new THREE.MeshBasicMaterial({ color: 0xffe2b0 })); hl.rotation.x = Math.PI / 2; hl.position.set(Hs.x0 + 0.33, 1.538, 1.3); this.group.add(hl);
     const hlL = new THREE.SpotLight(0xffc888, 2.4, 4.5, 1.1, 0.8, 1.6); hlL.position.set(Hs.x0 + 0.33, this.arch ? 1.58 : 1.53, this.arch ? 2.05 : 1.3); hlL.target.position.set(Hs.x0 + 0.6, 0, this.arch ? 2.05 : 1.3);
     hlL.castShadow = true; hlL.shadow.mapSize.set(512, 512); hlL.shadow.bias = -0.0008; this.group.add(hlL, hlL.target);
-    const fill = new THREE.PointLight(0xffb070, 0.6, 5, 1.8); fill.position.set(-3.2, 1.2, 1.6); this.group.add(fill);
+    // (the hood light's warmth bounced off the hob and the counter into the kitchen)
+    const fill = new THREE.PointLight(0xffb070, 0.45, 4.5, 1.8); fill.position.set(Hs.x0 + 0.75, 1.15, this.arch ? 2.05 : 1.3); this.group.add(fill);
     const fridge = this.block(0.78, 1.78, 0.72, new THREE.MeshStandardMaterial({ color: 0xe9e7e1, roughness: 0.35 }), Hs.x0 + 0.4, 0.89, 0.62, { surface: 'metal', collide: !this.arch });
     fridge.material.envMapIntensity = 0.7;
     const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.5, 8), steel); handle.position.set(Hs.x0 + 0.8, 1.2, 0.36); this.group.add(handle);
@@ -573,13 +597,17 @@ export class Flat {
     Object.assign(moon.shadow.camera, { left: -9, right: 9, top: 9, bottom: -9, near: 1, far: 45 }); moon.shadow.bias = -0.0004; moon.shadow.normalBias = 0.02;
     this.group.add(moon, moon.target);
     // the street lamp outside the front window: a warm sodium wash into the living room
-    const street = new THREE.SpotLight(0xffb066, 22, 16, 0.5, 0.7, 1.6); street.position.set(-2.6, 5.5, -12.5); street.target.position.set(-2.4, 0, -1.6);
+    // (from the head of the lamp in front of the house, src/nyc.js: x = 0, 6.6 m up over the kerb)
+    const street = new THREE.SpotLight(0xffb066, 26, 18, 0.5, 0.7, 1.6); street.position.set(0, 6.55, -14.1); street.target.position.set(-2.6, 0, -1.6);
     street.castShadow = true; street.shadow.mapSize.set(sm / 2, sm / 2); this.group.add(street, street.target);
     // city glow at the bedroom window
-    if (!this.baked) { const bw = new THREE.SpotLight(0x8aa0d0, 9, 10, 0.6, 0.8, 1.5); bw.position.set(-2.6, Hs.U + 2.6, -6.5); bw.target.position.set(-2.4, Hs.U, -1.8); this.group.add(bw, bw.target); }
+    // (through the bedroom's front window, x -3.6 to -1.6; the walls stop it elsewhere)
+    if (!this.baked) { const bw = new THREE.SpotLight(0x8aa0d0, 9, 10, 0.6, 0.8, 1.5); bw.position.set(-2.6, Hs.U + 2.6, -6.5); bw.target.position.set(-2.4, Hs.U, -1.8); bw.castShadow = true; bw.shadow.mapSize.set(512, 512); bw.shadow.bias = -0.0006; this.group.add(bw, bw.target); }
+    // the porch lantern by the front door (blender/build_house.py), left on
+    if (this.arch && !this.baked) { const pl = new THREE.PointLight(0xffb873, 2.2, 7, 1.8); pl.position.set(2.05, 1.75, Hs.z0 - Hs.T - 0.13); this.group.add(pl); }
     const hemi = new THREE.HemisphereLight(0x5a6a8a, 0x2a2018, 0.2); this.group.add(hemi);
     // night lights: one plugged in on the landing by the top of the stairs, one in the hall at the bottom
-    for (const [x, y, z] of [[3.6, Hs.U + 0.3, -3.95 + 0.06], [Hs.part + 0.07, 0.3, 0.8]]) {
+    for (const [x, y, z] of [[3.6, Hs.U + 0.3, Hs.z0 + Hs.T / 2 + 0.01], [Hs.part + Hs.T / 2 + 0.01, 0.3, 0.8]]) {
       const nl = new THREE.Mesh(new RoundedBoxGeometry(0.06, 0.08, 0.02, 2, 0.008), new THREE.MeshStandardMaterial({ color: 0x332211, emissive: 0xffa25a, emissiveIntensity: 2.5 }));
       nl.position.set(x, y, z); this.group.add(nl); this.keepVis(nl);
       const l = new THREE.PointLight(0xffa25a, 1.0, 3.4, 1.8); l.position.set(x, y, z + (z < 0 ? 0.1 : 0)); if (x < 2) l.position.x += 0.1; this.group.add(l);
@@ -592,6 +620,7 @@ export class Flat {
     if (this.man) this.man.bone('head').getWorldPosition(S.head);          // (the snore comes from where his head is)
     // (the duvet: cloth over him when he is there, src/quilt.js; else the modelled one, breathing)
     if (this.quilt) this.quilt.update(dt, { robot: this.robot, active: this.clothActive ?? true }); else this.shapeDuvet(t);
+    if (this.bulb) { const k = this.bedLamp.intensity / 9; this.bulb.emissiveIntensity = 3 * k; this.bedBounce.intensity = 0.9 * k; }
     const on = Math.sin(t * 1.4) > -0.2; this.tvLed.material.color.setRGB(on ? 1 : 0.25, 0.1, 0.06); this.tvLight.intensity = on ? 0.08 : 0.02;
     this.basket.hinge.rotation.x = -this.basket.open * 1.9 - (this.basket.jolt || 0);
     if (this.basket.jolt) this.basket.jolt = Math.max(0, this.basket.jolt - dt * 1.6);

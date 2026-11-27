@@ -17,8 +17,11 @@ export class Person {
       o.visible = OUTFIT[outfit].test(o.name); o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
       const m = o.material;
       // hair, brows and lashes are cards with their strands in the alpha: blended, double sided, a light cut-off
-      if (/hair|brows|lashes/.test(m.name)) { m.transparent = true; m.alphaTest = 0.08; m.depthWrite = true; m.side = THREE.DoubleSide; o.renderOrder = 2; if (!/hair/.test(m.name)) o.castShadow = false; }
-      if (/cornea/.test(m.name)) { m.transparent = true; m.opacity = 0.12; m.alphaTest = 0; m.roughness = 0; m.depthWrite = false; o.castShadow = false; o.renderOrder = 3; }
+      if (/hair|brows|lashes/.test(m.name)) { m.transparent = true; m.alphaTest = /lashes/.test(m.name) ? 0.02 : 0.08; m.depthWrite = !/lashes/.test(m.name); m.side = THREE.DoubleSide; o.renderOrder = 2; if (!/hair/.test(m.name)) o.castShadow = false; }
+      // the cornea: clear, so only its reflections show, added over the eye (the catchlights; nothing darkened)
+      if (/cornea/.test(m.name)) { m.transparent = true; m.opacity = 1; m.alphaTest = 0; m.color.setRGB(0, 0, 0); m.roughness = 0.04; m.metalness = 0; m.blending = THREE.AdditiveBlending; m.depthWrite = false; m.envMapIntensity = 1.3; o.castShadow = false; o.renderOrder = 3; }
+      // the eyeball: moist, not a mirror (the cornea gives the shine)
+      if (m.name === 'eye') { m.roughness = 0.3; if ('clearcoat' in m) m.clearcoat = 0; o.castShadow = false; }
       if (o.morphTargetDictionary) this.morphs.push(o);
     });
     this.mixer = new THREE.AnimationMixer(this.root);
