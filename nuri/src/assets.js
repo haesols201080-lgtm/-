@@ -99,15 +99,17 @@ export const HOUSE_TREES = ['pine_0', 'pine_2', 'fir_4', 'fir_14'];
 export const PROPS = ['crate', 'fence_picket', 'fence_rail', 'gate_pillar', 'gate_leaf', 'plate_sf_base', 'plate_sf_top', 'lift_deck', 'lift_head', 'lift_counter', 'ibeam', 'socket', 'cell', 'shard', 'booster', 'ball'];
 
 // a copy of an equirect HDR (half floats) with no pixel brighter than cap (its colour kept): small, very bright
-// sources baked into a sky, which as image-based light would come through every wall
-function capHDR(tex, cap) {
+// sources baked into a sky, which as image-based light would come through every wall; its colour taken toward
+// grey (sat) and tinted, if asked
+function capHDR(tex, cap, { sat = 1, tint = [1, 1, 1] } = {}) {
   const img = tex.image, d = img?.data;
   if (!d || !(d instanceof Uint16Array)) return tex;
   const out = new Uint16Array(d.length), from = THREE.DataUtils.fromHalfFloat, to = THREE.DataUtils.toHalfFloat, n = d.length / 4;
   for (let i = 0; i < n; i++) {
-    const r = from(d[i * 4]), g = from(d[i * 4 + 1]), b = from(d[i * 4 + 2]), l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    if (l > cap) { const k = cap / l; out[i * 4] = to(r * k); out[i * 4 + 1] = to(g * k); out[i * 4 + 2] = to(b * k); out[i * 4 + 3] = d[i * 4 + 3]; }
-    else { out[i * 4] = d[i * 4]; out[i * 4 + 1] = d[i * 4 + 1]; out[i * 4 + 2] = d[i * 4 + 2]; out[i * 4 + 3] = d[i * 4 + 3]; }
+    let r = from(d[i * 4]), g = from(d[i * 4 + 1]), b = from(d[i * 4 + 2]); const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    const k = l > cap ? cap / l : 1;
+    r = (l + (r - l) * sat) * k * tint[0]; g = (l + (g - l) * sat) * k * tint[1]; b = (l + (b - l) * sat) * k * tint[2];
+    out[i * 4] = to(r); out[i * 4 + 1] = to(g); out[i * 4 + 2] = to(b); out[i * 4 + 3] = d[i * 4 + 3];
   }
   const t = new THREE.DataTexture(out, img.width, img.height, tex.format, THREE.HalfFloatType);
   t.mapping = tex.mapping; t.colorSpace = tex.colorSpace; t.flipY = tex.flipY; t.minFilter = tex.minFilter; t.magFilter = tex.magFilter; t.generateMipmaps = false; t.needsUpdate = true;
@@ -280,7 +282,9 @@ export class Assets {
     // (the night city's lamps, a few pixels near the horizon to the north-east, carry two thirds of its light: as
     // the environment, which no wall stops, they would light every room from that side. Capped, the sky lights the
     // house evenly and dimly, and the lamps that matter are the house's own, where they stand)
-    const lit = capHDR(hdr, 4);
+    // (and its colour mostly taken out: the city's glow on the clouds is a magenta that tinted every room purple; the
+    // night's ambient is a faint cool grey-blue)
+    const lit = capHDR(hdr, 4, { sat: 0.2, tint: [0.92, 0.98, 1.1] });
     const pm = new THREE.PMREMGenerator(this.renderer); T.envMap = pm.fromEquirectangular(lit).texture; T.envDay = pm.fromEquirectangular(day).texture; pm.dispose();
     if (lit !== hdr) lit.dispose();
     this.step('도시의 밤');
