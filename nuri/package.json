@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "build:pages": "VITE_ASSETS=full vite build --outDir .pages && cp .pages/index.html public/play.html && rm -rf .pages"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.14.0",

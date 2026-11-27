@@ -8,8 +8,11 @@ import { MeshoptDecoder } from 'three/examples/jsm/libs/meshopt_decoder.module.j
 import { patchMaterial, makeRockMaterial, leafLight, nearFade, barkMoss } from './shaders.js';
 
 const BASE = './';
-// the artifact build (tools/artifact_assets.py) ships PNG colour maps as WebP
-const PNG = import.meta.env.PROD ? 'webp' : 'png';
+// two kinds of production build: the artifact one (packed: models as meshopt glTF JSON, PNG colour maps as WebP, skies
+// as RGBE PNG pairs - tools/pack_models.mjs, tools/artifact_assets.py) and the full one for GitHub Pages
+// (VITE_ASSETS=full: the original .glb, .png and .hdr files, nothing re-encoded), which loads like the dev server does
+const PACKED = import.meta.env.PROD && import.meta.env.VITE_ASSETS !== 'full';
+const PNG = PACKED ? 'webp' : 'png';
 
 // Some hosts' content-security policy blocks fetch() of data: and blob: URLs. GLTFLoader decodes embedded images
 // through ImageBitmapLoader, which fetches a blob: URL; load those through an <img> element instead (allowed by img-src).
@@ -172,7 +175,7 @@ export class Assets {
     // production builds ship glTF JSON (.json) because the artifact host doesn't serve .glb: meshopt-compressed
     // geometry in a base64 buffer, and the images as their own files next to it (tools/pack_models.mjs)
     let g;
-    if (import.meta.env.PROD) {
+    if (PACKED) {
       const json = JSON.parse(await (await fetchRetry(`${BASE}models/${path}.json`)).text());
       const dir = `${BASE}models/${path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : ''}`;
       const urls = await Promise.all((json.images || []).map(async (im) => {
@@ -211,7 +214,7 @@ export class Assets {
     T.water = makeWaterNormal();
     // HDRI: Poly Haven "forest_slope" (CC0)
     const hname = `${BASE}hdri/forest_slope_${tier.texSize >= 2048 ? '2k' : '1k'}`;
-    const hdr = import.meta.env.PROD ? await this.loadRGBEPair(hname) : await new HDRLoader().setDataType(THREE.HalfFloatType).loadAsync(`${hname}.hdr`);
+    const hdr = PACKED ? await this.loadRGBEPair(hname) : await new HDRLoader().setDataType(THREE.HalfFloatType).loadAsync(`${hname}.hdr`);
     hdr.mapping = THREE.EquirectangularReflectionMapping;
     T.hdr = hdr;
     const pm = new THREE.PMREMGenerator(this.renderer);
@@ -251,7 +254,7 @@ export class Assets {
     [T.lmInt, T.lmExt] = await Promise.all([lm('lm_int'), lm('lm_ext')]);
     // skies: the night city (Poly Haven "rooftop_night") for the house, and the forest's daylight sky for the start of the drive
     const hdri = async (name) => {
-      const h = import.meta.env.PROD ? await this.loadRGBEPair(`${BASE}hdri/${name}`) : await new HDRLoader().setDataType(THREE.HalfFloatType).loadAsync(`${BASE}hdri/${name}.hdr`);
+      const h = PACKED ? await this.loadRGBEPair(`${BASE}hdri/${name}`) : await new HDRLoader().setDataType(THREE.HalfFloatType).loadAsync(`${BASE}hdri/${name}.hdr`);
       h.mapping = THREE.EquirectangularReflectionMapping; return h;
     };
     const [hdr, day] = await Promise.all([hdri(`rooftop_night_${tier.texSize >= 2048 ? '2k' : '1k'}`), hdri('forest_slope_1k')]);

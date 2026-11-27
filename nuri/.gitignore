@@ -4,3 +4,4 @@ public/tex/_*
 __pycache__
 sound_preview/
 sound_preview_mp3/
+.pages
