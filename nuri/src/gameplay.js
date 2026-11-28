@@ -50,7 +50,7 @@ export class Gameplay {
 
   groundY(x, z) {
     const hit = this.W.castRay(new this.R.Ray({ x, y: 30, z }, { x: 0, y: -1, z: 0 }), 60, true, this.R.QueryFilterFlags.EXCLUDE_SENSORS, undefined, undefined, undefined,
-      (c) => c.userData?.kind !== 'player' && c.userData?.kind !== 'item' && c.userData?.kind !== 'item-held');
+      (c) => !['player', 'item', 'item-held', 'creature'].includes(c.userData?.kind));
     return hit ? 30 - hit.timeOfImpact : this.T.heightAt(x, z);
   }
 
@@ -66,10 +66,66 @@ export class Gameplay {
   }
 
   // ---------------------------------------------------------------- where the robot came down (the intro)
-  // Rotor's cargo hatch opened in the storm: SV-7's transport case lies split open beside the fern it rolled under,
-  // its foam bed empty, the stencil on the lid half scraped off, a furrow in the litter where it slid.
+  // Rotor's cargo hatch opened in the storm: SV-7's transport case came down beside the fern it rolled under, a rugged
+  // field case (blender/build_props.py: build_case), its lid thrown open on its hinge and lying on the litter, the
+  // pick-and-pluck foam inside plucked out in the robot's shape and in the slot beside it (payload C), both empty; the
+  // stencil on the lid half scraped off. It sits on the slope as the ground lies, on its feet; it collides as it is
+  // shaped (the walls, the foam, the open lid), so the robot can climb into its own hollow.
   buildLanding() {
-    const x = START.x + 0.62, z = START.z + 0.02, gy = this.T.heightAt(x, z), yaw = 0.9;
+    const x = START.x + 0.62, z = START.z + 0.02, gy = this.T.heightAt(x, z);
+    if (!this.ctx.assets.models.prop_case) return this.buildLandingPlain(x, z, gy);
+    // (its front, the latches and the open foam, toward where the robot wakes; the lid thrown open away from it)
+    const yaw = -Math.PI / 2 + 0.25, e = 0.22;
+    const n = new THREE.Vector3(this.T.heightAt(x - e, z) - this.T.heightAt(x + e, z), 2 * e, this.T.heightAt(x, z - e) - this.T.heightAt(x, z + e)).normalize();
+    const g = new THREE.Group();
+    g.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n).multiply(new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw));
+    g.position.set(x, gy + 0.007 - 0.008, z);                     // (on its feet, sunk a little into the litter)
+    const all = this.prop('case'), hinge = new THREE.Group(), pivot = new THREE.Vector3(0, 0.17, -0.219);
+    hinge.position.copy(pivot);
+    for (const m of [...all.children]) { if (m.name.startsWith('case_lid')) { m.position.sub(pivot); hinge.add(m); } else g.add(m); }
+    g.add(hinge); this.scene.add(g);
+    // the foam: charcoal polyurethane, dull, deep in the shell (the sky reaches little of it)
+    const foamM = new THREE.MeshStandardMaterial({ color: 0x0e0d0c, roughness: 1, metalness: 0, envMapIntensity: 0.25 });
+    g.traverse((o) => { if (o.isMesh && /foam/.test(o.name)) o.material = foamM; });
+    // stencils, sprayed through a template and worn off in strokes where it slid: along the front under the rib, and on
+    // the side between the rib and the lip (the lid's own lies face down on the litter)
+    const stencil = (w, h, lines, px) => {
+      const cv = document.createElement('canvas'); cv.width = 1024; cv.height = Math.round(1024 * h / w); const c = cv.getContext('2d');
+      c.fillStyle = 'rgba(216,210,190,0.92)'; c.textBaseline = 'middle';
+      lines.forEach(([t, size, y]) => { c.font = `bold ${size * cv.height}px monospace`; c.fillText(t, 0.04 * cv.width, y * cv.height); });
+      c.globalCompositeOperation = 'destination-out';
+      for (let k = 0; k < 90; k++) { c.globalAlpha = 0.2 + rnd() * 0.7; c.fillRect(rnd() * cv.width, rnd() * cv.height, 8 + rnd() * 90, 1 + rnd() * cv.height * 0.06); }
+      const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: tex, transparent: true, alphaTest: 0.05, roughness: 0.8, polygonOffset: true, polygonOffsetFactor: -2 }));
+      m.position.set(...px.p); m.rotation.y = px.ry; m.receiveShadow = true; g.add(m); return m;
+    };
+    const decals = [
+      stencil(0.42, 0.03, [['D-1 CARGO  ·  SV-7  ·  THIS SIDE UP', 0.62, 0.52]], { p: [0, 0.031, 0.21 + 0.0012], ry: 0 }),
+      stencil(0.3, 0.074, [['SV-7', 0.42, 0.3], ['FRAGILE  ▲', 0.3, 0.75]], { p: [0.28 + 0.0012, 0.106, 0], ry: Math.PI / 2 }),
+    ];
+    // the lid opened back on its hinge until it lies on the ground
+    const lb = new THREE.Box3(); for (const m of hinge.children) { if (!m.geometry) continue; m.geometry.computeBoundingBox(); lb.union(m.geometry.boundingBox.clone().applyMatrix4(m.matrix)); }
+    const corners = [[lb.min.x, lb.max.y, lb.max.z], [lb.max.x, lb.max.y, lb.max.z], [lb.min.x, lb.min.y, lb.max.z], [lb.max.x, lb.min.y, lb.max.z]].map((q) => new THREE.Vector3(...q));
+    hinge.rotation.z = 0.035;
+    for (let ang = 1.6; ang < 3.3; ang += 0.015) {
+      hinge.rotation.x = -ang; g.updateMatrixWorld(true);
+      let low = Infinity; for (const q of corners) { const w = q.clone().applyMatrix4(hinge.matrixWorld); low = Math.min(low, w.y - this.T.heightAt(w.x, w.z)); }
+      if (low < 0.004) break;
+    }
+    g.updateMatrixWorld(true);
+    g.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    // collisions as it is shaped: the shell and the lid (hard), the foam (soft)
+    for (const m of [...g.children, ...hinge.children]) {
+      if (!m.isMesh || decals.includes(m)) continue;
+      this.world.trimesh(m.geometry, m.matrixWorld, { kind: 'static', surface: /foam/.test(m.name) ? 'moss' : 'wood' });
+    }
+    this.landing = { pos: new THREE.Vector3(x, gy, z) };
+    this.interactables.push({ pos: new THREE.Vector3(x, gy, z), r: 0.6, label: () => '운송 케이스 살펴보기',
+      act: () => { this.ui.bubble('세븐', '내가 실려 온 케이스. 완충재가 내 모양으로 뜯겨 나가 있다. 옆의 칸, 탑재물 C의 자리는… 비어 있다.'); this.player.emit('curious'); } });
+  }
+  // (without the modelled case: boxes in its shape)
+  buildLandingPlain(x, z, gy) {
+    const yaw = 0.9;
     const shell = new THREE.MeshStandardMaterial({ color: 0x4b5244, roughness: 0.62, metalness: 0.05 });
     const foam = new THREE.MeshStandardMaterial({ color: 0x202224, roughness: 0.95 });
     const steel = new THREE.MeshStandardMaterial({ color: 0x9a9a92, roughness: 0.38, metalness: 0.9 });
@@ -738,16 +794,22 @@ export class Gameplay {
     } else { p.body.setLinvel({ x: 0, y: 0, z: 0 }, true); this.audio.play('drop'); }
   }
 
-  // primary interact button
+  // the interactable in reach (the nearest; a little more reach with something in the hands)
+  reachable(player, slack = 0) {
+    let best = null, bd = 1e9;
+    for (const it of this.interactables) { const d = it.pos.distanceTo(player.pos); if (d < it.r + slack && d < bd && (!it.enabled || it.enabled())) { bd = d; best = it; } }
+    return best;
+  }
+  // primary interact button (talking, inspecting, using, lifting things). Friends are lifted and thrown with their
+  // own button (squad.js), so a friend trailing close behind never takes this one.
   interact(player) {
     if (player.grab) { player.grab = null; return; }
     if (player.carry) {
-      for (const it of this.interactables) if (it.pos.distanceTo(player.pos) < it.r + 0.25) { it.act(); return; }
-      this.dropCarry(player, true); return;
+      const it = this.reachable(player, 0.25); if (it) { it.act(); return; }
+      if (player.carry.kind !== 'friend') this.dropCarry(player, true);
+      return;
     }
-    // interactables (companions, socket)
-    let best = null, bd = 1e9;
-    for (const it of this.interactables) { const d = it.pos.distanceTo(player.pos); if (d < it.r && d < bd && (!it.enabled || it.enabled())) { bd = d; best = it; } }
+    const best = this.reachable(player);
     if (best) { best.act(); return; }
     const item = this.nearestItem(player);
     if (item) { this.pickUp(player, item); return; }
@@ -759,10 +821,10 @@ export class Gameplay {
   prompt(player) {
     if (player.grab) return '놓기';
     if (player.carry) {
-      for (const it of this.interactables) if (it.pos.distanceTo(player.pos) < it.r + 0.25) return it.label();
-      return '던지기';
+      const it = this.reachable(player, 0.25); if (it) return it.label();
+      return player.carry.kind === 'friend' ? null : '던지기';
     }
-    for (const it of this.interactables) if (it.pos.distanceTo(player.pos) < it.r && (!it.enabled || it.enabled())) return it.label();
+    const it = this.reachable(player); if (it) return it.label();
     const item = this.nearestItem(player);
     if (item) return item.kind === 'ball' ? '공 차기' : item.kind === 'cell' ? '전력 셀 들기' : '들기';
     const f = new THREE.Vector3(Math.sin(player.yaw), 0, Math.cos(player.yaw));
@@ -789,9 +851,20 @@ export class Gameplay {
       const found = this.save.companions.includes(s.id);
       const c = { ...s, mesh, pos, found, t: rnd() * 6 };
       this.companions.push(c);
-      this.interactables.push({ pos, r: 0.5, label: () => (c.found ? `${josa(s.name, '과', '와')} 이야기하기` : `${s.code} ${s.name} 깨우기`), act: () => this.talk(c) });
-      const col = this.W.createCollider(this.R.ColliderDesc.ball(0.08).setTranslation(pos.x, pos.y + 0.09 + (s.kind === 2 ? 0.25 : 0), pos.z)); col.userData = { kind: 'creature' };
+      this.interactables.push({ pos, r: 0.5, label: () => (c.found ? `${josa(s.name, '과', '와')} 이야기하기` : `${s.code} ${s.name} 깨우기`), act: () => this.talk(c),
+        // (a found friend trails right behind the robot: talk to it only when turned toward it, never while it is held or flying)
+        enabled: () => !c.found || c.kind === 2 || ((!c.state || c.state === 'follow' || c.state === 'idle' || c.state === 'work') && this.facing(c.mesh.position, 0.3)) });
+      // a body of its own in its shape (Toto and Bori: a 13 cm x 21 cm capsule; Mina: her frame between the rotors),
+      // which goes where it goes: squad.js walks the found ones with a character controller of their own
+      const small = s.kind !== 2; c.cy = small ? 0.107 : 0;
+      c.body = this.W.createRigidBody(this.R.RigidBodyDesc.kinematicPositionBased().setTranslation(mesh.position.x, mesh.position.y + c.cy, mesh.position.z));
+      c.col = this.W.createCollider(small ? this.R.ColliderDesc.capsule(0.045, 0.062).setTranslation(0, 0, 0.01) : this.R.ColliderDesc.cuboid(0.15, 0.056, 0.055), c.body);
+      c.col.userData = { kind: 'creature', robot: c.id };
     }
+  }
+  facing(p, cos) {
+    const P = this.player, dx = p.x - P.pos.x, dz = p.z - P.pos.z, l = Math.hypot(dx, dz);
+    return l < 1e-3 || (dx * Math.sin(P.yaw) + dz * Math.cos(P.yaw)) / l > cos;
   }
   talk(c) {
     this.player.playAction('wave', 1.2);

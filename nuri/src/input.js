@@ -2,7 +2,7 @@
 // (virtual move stick on the left, camera drag on the right, action buttons).
 import { isTouch } from './quality.js';
 
-const DEFAULT_PAD = { jump: 0, crouch: 1, interact: 2, emote: 3, pause: 9, zoomIn: 5, zoomOut: 4 };
+const DEFAULT_PAD = { jump: 0, crouch: 1, interact: 2, emote: 3, friend: 7, pause: 9, zoomIn: 5, zoomOut: 4 };
 
 export class Input {
   constructor(dom) {
@@ -11,7 +11,7 @@ export class Input {
     this.move = { x: 0, y: 0 };      // x right, y forward, magnitude 0..1
     this.look = { x: 0, y: 0 };      // accumulated camera delta (radians-ish) consumed per frame
     this.zoom = 0;
-    this.btn = { jump: false, crouch: false, interact: false, emote: false, walk: false };
+    this.btn = { jump: false, crouch: false, interact: false, emote: false, friend: false, walk: false };
     this.pressed = new Set();        // edge-triggered this frame
     this.pending = new Set();        // presses that arrived between frames (touch / keys), handed to the next frame
     this.released = new Set();
@@ -32,7 +32,7 @@ export class Input {
   release(name) { if (this.btn[name]) this.released.add(name); this.btn[name] = false; }
 
   bind() {
-    const keymap = { Space: 'jump', KeyC: 'crouch', ControlLeft: 'crouch', KeyE: 'interact', KeyF: 'interact', KeyQ: 'emote', ShiftLeft: 'walk', ShiftRight: 'walk' };
+    const keymap = { Space: 'jump', KeyC: 'crouch', ControlLeft: 'crouch', KeyE: 'interact', KeyF: 'interact', KeyQ: 'emote', KeyG: 'friend', ShiftLeft: 'walk', ShiftRight: 'walk' };
     addEventListener('keydown', (e) => {
       if (e.repeat) return;
       this.keys.add(e.code);
@@ -58,6 +58,9 @@ export class Input {
     if (isTouch) this.buildTouch();
   }
 
+  // The touch layer only draws the stick and the action buttons; it lets every other touch through, so the HUD's own
+  // buttons beneath it (the friends' portraits, the notebook, the map, the dialogue) take their taps. Touches that
+  // land on the game itself (the canvas) drive the stick (left of the screen) or the camera (right).
   buildTouch() {
     const root = document.getElementById('touch');
     root.classList.add('on');
@@ -71,37 +74,46 @@ export class Input {
       const a = Math.atan2(dy, dx);
       this.move.x = Math.cos(a) * m; this.move.y = -Math.sin(a) * m;
     };
-    root.addEventListener('touchstart', (e) => {
+    const live = () => { if (!root.classList.contains('on')) return false; const cs = getComputedStyle(root); return cs.display !== 'none' && cs.visibility !== 'hidden'; };
+    // anything that is a control of its own keeps its touch
+    const UI = 'button, a, input, select, label, [role=button], canvas#minimap, #nb, #dlg, #squad, #cs-skip, .screen';
+    const ours = (t) => t.target instanceof Element && !t.target.closest(UI);
+    addEventListener('touchstart', (e) => {
+      if (!live()) return;
+      let took = false;
       for (const t of e.changedTouches) {
-        const el = t.target.closest('[data-btn]');
-        if (el) { this.press(el.dataset.btn); el.classList.add('down'); continue; }
+        const el = t.target instanceof Element ? t.target.closest('#touch [data-btn]') : null;
+        if (el) { this.press(el.dataset.btn); el.classList.add('down'); took = true; continue; }
+        if (!ours(t)) continue;
+        took = true;
         if (t.clientX < innerWidth * 0.45 && moveId === null) {
           moveId = t.identifier; ox = t.clientX; oy = t.clientY;
           stick.style.left = ox + 'px'; stick.style.top = oy + 'px'; stick.classList.add('active'); setStick(0, 0);
         } else if (lookId === null) { lookId = t.identifier; lx = t.clientX; ly = t.clientY; }
       }
-      e.preventDefault();
+      if (took && e.cancelable) e.preventDefault();
     }, { passive: false });
-    root.addEventListener('touchmove', (e) => {
+    addEventListener('touchmove', (e) => {
+      let took = false;
       for (const t of e.changedTouches) {
-        if (t.identifier === moveId) setStick(t.clientX - ox, t.clientY - oy);
+        if (t.identifier === moveId) { setStick(t.clientX - ox, t.clientY - oy); took = true; }
         if (t.identifier === lookId) {
           this.look.x += (t.clientX - lx) * 0.006 * this.sens; this.look.y += (t.clientY - ly) * 0.005 * this.sens * (this.invertY ? -1 : 1);
-          lx = t.clientX; ly = t.clientY;
+          lx = t.clientX; ly = t.clientY; took = true;
         }
       }
-      e.preventDefault();
+      if (took && e.cancelable) e.preventDefault();
     }, { passive: false });
     const end = (e) => {
       for (const t of e.changedTouches) {
-        const el = t.target.closest('[data-btn]');
+        const el = t.target instanceof Element ? t.target.closest('#touch [data-btn]') : null;
         if (el) { this.release(el.dataset.btn); el.classList.remove('down'); }
         if (t.identifier === moveId) { moveId = null; this.move.x = this.move.y = 0; stick.classList.remove('active'); knob.style.transform = ''; }
         if (t.identifier === lookId) lookId = null;
       }
     };
-    root.addEventListener('touchend', end); root.addEventListener('touchcancel', end);
-    root.querySelector('[data-act=pause]').addEventListener('touchstart', (e) => { e.stopPropagation(); this.emit('pause'); });
+    addEventListener('touchend', end); addEventListener('touchcancel', end);
+    root.querySelector('[data-act=pause]').addEventListener('touchstart', (e) => { e.stopPropagation(); e.preventDefault(); this.emit('pause'); }, { passive: false });
   }
 
   pollGamepad() {

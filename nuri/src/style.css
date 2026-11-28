@@ -345,6 +345,8 @@ body.menu-open #nb, body.cutscene #nb { display: none; }
 kbd { display: inline-grid; place-items: center; min-width: 28px; height: 28px; padding: 0 7px; border-radius: 3px; font: 700 13px var(--f-type);
   box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .45); outline: 1px dashed var(--stitch); outline-offset: -4px; }
 body.touch kbd { font-family: var(--f-hand); font-size: 16px; }
+#prompt [hidden] { display: none !important; }
+#prompt-key:not([hidden]) ~ #prompt-key2 { margin-left: 10px; }
 /* a new place: a label written by hand, stamped */
 #discover { position: absolute; left: 50%; top: 11%; transform: translateX(-50%) rotate(-1.2deg); text-align: center; padding: 12px 40px 14px; border-radius: 2px;
   box-shadow: 0 10px 24px rgba(0, 0, 0, .45); animation: disc 4.2s ease forwards; white-space: nowrap; }
@@ -489,7 +491,8 @@ body.cutscene #dlg { bottom: calc(11vh + 14px); }
 body.cutscene #squad, body.menu-open #squad { display: none; }
 
 /* ---- touch controls: domed leather buttons ---- */
-#touch { display: none; position: fixed; inset: 0; z-index: 12; }
+#touch { display: none; position: fixed; inset: 0; z-index: 12; pointer-events: none; }
+#touch .tb, #touch .tpause { pointer-events: auto; }
 #touch.on { display: block; }
 body.menu-open #touch { display: none; }
 .stick { position: absolute; left: 22%; top: 70%; width: 116px; height: 116px; margin: -58px 0 0 -58px; border-radius: 50%; border: 1.5px dashed rgba(226, 198, 150, .45);

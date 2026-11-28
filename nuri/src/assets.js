@@ -81,7 +81,7 @@ function jsonToGLB(json) {
 }
 export const TERRAIN_LAYERS = ['ph_floor', 'ph_path', 'ph_riverbed', 'ph_mud'];
 export const TERRAIN_SCALES = [1 / 1.5, 1 / 1.67, 1 / 2.9, 1 / 1.3]; // metres covered by each scanned set
-export const PROP_TEX = ['rock_face_03', 'mossy_rock', 'weathered_planks', 'wood_planks_grey', 'rusty_metal_04', 'green_metal_rust', 'metal_plate', 'rusty_metal_02'];
+export const PROP_TEX = ['case_shell', 'rock_face_03', 'mossy_rock', 'weathered_planks', 'wood_planks_grey', 'rusty_metal_04', 'green_metal_rust', 'metal_plate', 'rusty_metal_02'];
 export const PH_MODELS = [ 'rock_09', 'stone_01', 'rock_face_01', 'rock_face_02',
   'tree_stump_01', 'tree_stump_02', 'dead_tree_trunk', 'dead_tree_trunk_02', 'root_cluster_02', 'single_root', 'fern_02',
   'shrub_03', 'shrub_04', 'nettle_plant', 'dandelion_01', 'weed_plant_02', 'dry_branches_medium_01', 'periwinkle_plant',
@@ -97,7 +97,7 @@ export const SNAGS = ['snag_9', 'snag_10'];
 export const HOUSE_MODELS = ['house_arch', 'wicker_basket_02', 'cat', 'stranger'];   // (the modelled house carries its own furniture)
 // outside the house and along the road: chapter 1's conifers (their light versions) and two scanned grasses
 export const HOUSE_TREES = ['pine_0', 'pine_2', 'fir_4', 'fir_14'];
-export const PROPS = ['crate', 'fence_picket', 'fence_rail', 'gate_pillar', 'gate_leaf', 'plate_sf_base', 'plate_sf_top', 'lift_deck', 'lift_head', 'lift_counter', 'ibeam', 'socket', 'cell', 'shard', 'booster', 'ball'];
+export const PROPS = ['case', 'crate', 'fence_picket', 'fence_rail', 'gate_pillar', 'gate_leaf', 'plate_sf_base', 'plate_sf_top', 'lift_deck', 'lift_head', 'lift_counter', 'ibeam', 'socket', 'cell', 'shard', 'booster', 'ball'];
 
 // a copy of an equirect HDR (half floats) with no pixel brighter than cap (its colour kept): small, very bright
 // sources baked into a sky, which as image-based light would come through every wall; its colour taken toward

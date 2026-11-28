@@ -532,8 +532,137 @@ def build_wall():
         print('wall', var, len(S), 'stones')
         export([join(A_, 'wall_stone'), join(C_, 'wall_cope'), join(H_, 'wall_core')], f'wall_{var}')
 
+# ------------------------------------------------------------------ the transport case (where SV-7 came down)
+# A rugged field case, the kind equipment ships in: a moulded polypropylene shell (olive drab: case_textures.py) with
+# rounded corners, a lip round the parting line and a rib below it, two double-throw latches and a fold-down handle
+# on the front, a full-length hinge at the back, a purge valve, rubber feet. Inside the base, pick-and-pluck foam: a
+# solid layer and a grid of 2 cm cubes over it, the cubes plucked out in the robot's shape (lying on its back, its
+# head toward +x) and in a smaller slot beside it (payload C), both empty; convoluted foam in the lid. The base and
+# the lid are separate objects (case_base_*, case_lid_*): the game opens the lid on its hinge (Blender y = +D/2,
+# z = HB) and lays it on the ground. Blender Z up, front toward -Y (the game's +Z); the bottom at z = 0, the feet
+# below it.
+CASE = dict(W=0.56, D=0.42, HB=0.17, HL=0.07, R=0.04, T=0.01)
+
+def rrect(w, d, r, n=8):
+    pts = []
+    for cx, cy, a0 in ((w / 2 - r, d / 2 - r, 0), (-(w / 2 - r), d / 2 - r, 90), (-(w / 2 - r), -(d / 2 - r), 180), (w / 2 - r, -(d / 2 - r), 270)):
+        for k in range(n + 1):
+            a = math.radians(a0 + 90 * k / n); pts.append((cx + r * math.cos(a), cy + r * math.sin(a)))
+    return pts
+
+def tub(name, w, d, r, t, h, floor, mat, bevel=0.0025):
+    """an open-topped shell: outer wall, the rim, the inner wall, the inner floor and the outside of the bottom"""
+    bm = bmesh.new(); o, i = rrect(w, d, r), rrect(w - 2 * t, d - 2 * t, max(0.004, r - t)); n = len(o)
+    ob0 = [bm.verts.new((x, y, 0)) for x, y in o]; ot = [bm.verts.new((x, y, h)) for x, y in o]
+    it = [bm.verts.new((x, y, h)) for x, y in i]; ib = [bm.verts.new((x, y, floor)) for x, y in i]
+    for k in range(n):
+        q = (k + 1) % n
+        bm.faces.new((ob0[k], ob0[q], ot[q], ot[k])); bm.faces.new((ot[k], ot[q], it[q], it[k])); bm.faces.new((it[k], it[q], ib[q], ib[k]))
+    bm.faces.new(list(reversed(ob0))); bm.faces.new(ib)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    rim = [e for e in bm.edges if all(abs(v.co.z - h) < 1e-6 for v in e.verts)]
+    bot = [e for e in bm.edges if all(abs(v.co.z) < 1e-6 for v in e.verts)]
+    bmesh.ops.bevel(bm, geom=rim, offset=bevel, segments=2, affect='EDGES', profile=0.5)
+    bmesh.ops.bevel(bm, geom=[e for e in bot if e.is_valid], offset=0.006, segments=3, affect='EDGES', profile=0.5)
+    return obj_from_bm(name, bm, mat)
+
+def band(name, w, d, r, out, z0, z1, mat):
+    """a raised band round a tub's outside (a lip or a rib): its face `out` proud of the wall, chamfered top and bottom"""
+    bm = bmesh.new(); a, b = rrect(w, d, r), rrect(w + 2 * out, d + 2 * out, r + out); n = len(a)
+    c = out * 0.6
+    rings = [[bm.verts.new((x, y, z0)) for x, y in a], [bm.verts.new((x, y, z0 + c)) for x, y in b],
+             [bm.verts.new((x, y, z1 - c)) for x, y in b], [bm.verts.new((x, y, z1)) for x, y in a]]
+    for k in range(n):
+        q = (k + 1) % n
+        for j in range(3): bm.faces.new((rings[j][k], rings[j][q], rings[j + 1][q], rings[j + 1][k]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    ob = obj_from_bm(name, bm, mat)
+    # (normals outward: the band's faces are all on its outside)
+    return ob
+
+def egg_crate(name, w, d, z, amp, period, mat, down=True, res=0.006):
+    bm = bmesh.new(); nx, ny = int(w / res) + 1, int(d / res) + 1; vs = []
+    for j in range(ny):
+        row = []
+        for i in range(nx):
+            x, y = -w / 2 + i * res, -d / 2 + j * res
+            e = amp * (0.5 + 0.5 * math.sin(2 * math.pi * x / period) * math.sin(2 * math.pi * y / period))
+            row.append(bm.verts.new((x, y, z - e if down else z + e)))
+        vs.append(row)
+    for j in range(ny - 1):
+        for i in range(nx - 1):
+            f = (vs[j][i], vs[j][i + 1], vs[j + 1][i + 1], vs[j + 1][i])
+            bm.faces.new(f if not down else tuple(reversed(f)))
+    return obj_from_bm(name, bm, mat)
+
+def build_case():
+    reset(); C = CASE; W, D, HB, HL, RR, T = C['W'], C['D'], C['HB'], C['HL'], C['R'], C['T']
+    shell = flat_mat('case_shell', (0.255, 0.275, 0.205), rough=0.6); metal = flat_mat('metal_plate', (0.6, 0.6, 0.58), rough=0.35, metal=1.0)
+    foam = flat_mat('case_foam', (0.032, 0.033, 0.036), rough=1.0); rubber = flat_mat('case_rubber', (0.018, 0.018, 0.018), rough=0.85)
+    base, lid = [], []
+    # the shells, their lips at the parting line, a rib round the base
+    b = tub('case_base_tub', W, D, RR, T, HB, 0.012, shell); base.append(b)
+    base.append(band('case_base_lip', W, D, RR, 0.006, HB - 0.02, HB, shell)); base.append(band('case_base_rib', W, D, RR, 0.004, 0.05, 0.062, shell))
+    l = tub('case_lid_tub', W, D, RR, T, HL, 0.012, shell); l.data.transform(Matrix.Translation((0, 0, HB + HL)) @ Matrix.Scale(-1, 4, (0, 0, 1)))
+    l.data.flip_normals(); lid.append(l)
+    lid.append(band('case_lid_lip', W, D, RR, 0.006, HB, HB + 0.02, shell))
+    # the lid's top: a recessed panel (the stencil goes in it) framed by a raised border
+    lid.append(box('case_lid_panel', (W - 0.12, D - 0.12, 0.003), (0, 0, HB + HL + 0.0015), mat=shell, bevel=0.0012, segs=2))
+    # the latches (two, on the front), open: the catch on the lid, the lever hanging from its pivot on the base
+    for x in (-0.16, 0.16):
+        base.append(box('case_base_latchseat', (0.085, 0.014, 0.045), (x, -D / 2 - 0.006, HB - 0.032), mat=shell, bevel=0.004, segs=2))
+        base.append(cyl('case_base_pivot', 0.005, 0.07, (x, -D / 2 - 0.016, HB - 0.045), (0, math.pi / 2, 0), mat=metal, seg=12))
+        lev = box('case_base_latch', (0.068, 0.007, 0.06), (x, -D / 2 - 0.02, HB - 0.08), (0.18, 0, 0), mat=shell, bevel=0.0025, segs=2); base.append(lev)
+        base.append(box('case_base_latchbar', (0.06, 0.004, 0.006), (x, -D / 2 - 0.026, HB - 0.11), mat=metal, bevel=0.001, segs=1))
+        lid.append(box('case_lid_catch', (0.07, 0.012, 0.02), (x, -D / 2 - 0.004, HB + 0.03), mat=shell, bevel=0.003, segs=2))
+        lid.append(box('case_lid_hook', (0.05, 0.006, 0.006), (x, -D / 2 - 0.012, HB + 0.022), mat=metal, bevel=0.001, segs=1))
+    # the handle, folded down: two pivot blocks, the bow, a rubber grip
+    for x in (-0.075, 0.075):
+        base.append(box('case_base_handleblock', (0.026, 0.02, 0.03), (x, -D / 2 - 0.008, HB - 0.03), mat=shell, bevel=0.004, segs=2))
+        base.append(box('case_base_handlearm', (0.012, 0.012, 0.07), (x, -D / 2 - 0.022, HB - 0.06), (0.12, 0, 0), mat=shell, bevel=0.003, segs=2))
+    base.append(cyl('case_base_handlebar', 0.007, 0.16, (0, -D / 2 - 0.026, HB - 0.094), (0, math.pi / 2, 0), mat=shell, seg=16))
+    base.append(cyl('case_base_grip', 0.012, 0.11, (0, -D / 2 - 0.026, HB - 0.094), (0, math.pi / 2, 0), mat=rubber, seg=20, bevel=0.003))
+    # the hinge at the back: the barrel and its knuckles (the base's and the lid's in turn)
+    base.append(cyl('case_base_hingepin', 0.004, W - 0.08, (0, D / 2 + 0.009, HB), (0, math.pi / 2, 0), mat=metal, seg=12))
+    n = 9; seg = (W - 0.1) / n
+    for k in range(n):
+        x = -(W - 0.1) / 2 + seg * (k + 0.5); tgt = base if k % 2 == 0 else lid
+        tgt.append(cyl(('case_base_knuckle' if k % 2 == 0 else 'case_lid_knuckle'), 0.0085, seg - 0.003, (x, D / 2 + 0.009, HB), (0, math.pi / 2, 0), mat=shell, seg=16, bevel=0.0015))
+    # the purge valve, the feet
+    base.append(cyl('case_base_valve', 0.014, 0.006, (-0.23, -D / 2 - 0.003, 0.11), (math.pi / 2, 0, 0), mat=shell, seg=24, bevel=0.0015))
+    base.append(cyl('case_base_valvecap', 0.009, 0.004, (-0.23, -D / 2 - 0.007, 0.11), (math.pi / 2, 0, 0), mat=rubber, seg=20, bevel=0.001))
+    for cx in (-1, 1):
+        for cy in (-1, 1):
+            base.append(cyl('case_base_foot', 0.02, 0.007, (cx * (W / 2 - 0.06), cy * (D / 2 - 0.06), -0.0035), mat=rubber, seg=20, bevel=0.002))
+    # the foam: a solid layer, and the pluck cubes over it, plucked in the robot's shape and in payload C's slot
+    iw, idp = W - 2 * T - 0.006, D - 2 * T - 0.006; fl = 0.012; layer = 0.028; top = HB - 0.014
+    base.append(box('case_base_foamlayer', (iw, idp, layer), (0, 0, fl + layer / 2), mat=foam, bevel=0.003, segs=1))
+    def robot(x, y):
+        # (lying on its back, head toward +x: the body, the head, the arms down its sides, its feet)
+        body = abs(x + 0.03) < 0.13 and abs(y) < 0.085; head = (x - 0.15) ** 2 + y ** 2 < 0.07 ** 2
+        arms = -0.13 < x < 0.06 and 0.085 <= abs(y) < 0.125; feet = -0.2 < x < -0.15 and abs(y) < 0.07
+        return body or head or arms or feet
+    def payload(x, y): return -0.23 < x < -0.13 and -0.185 < y < -0.12
+    c, pitch = 0.0198, 0.0215; nx, ny = int(iw / pitch), int(idp / pitch); x0, y0 = -nx * pitch / 2, -ny * pitch / 2; cubes = 0
+    for i in range(nx):
+        for j in range(ny):
+            x, y = x0 + (i + 0.5) * pitch, y0 + (j + 0.5) * pitch
+            if robot(x, y) or payload(x, y): continue
+            h = top - (fl + layer) - R.uniform(0, 0.002)
+            base.append(box('case_base_pluck', (c, c, h), (x, y, fl + layer + h / 2), mat=foam, bevel=0.0018, segs=1)); cubes += 1
+    # convoluted foam in the lid (facing down)
+    lid.append(egg_crate('case_lid_eggcrate', W - 2 * T - 0.01, D - 2 * T - 0.01, HB + HL - 0.014, 0.014, 0.05, foam))
+    lid.append(box('case_lid_foamback', (W - 2 * T - 0.01, D - 2 * T - 0.01, 0.004), (0, 0, HB + HL - 0.014), mat=foam, bevel=0.0, segs=1))
+    print('case: pluck cubes', cubes)
+    for o in base + lid: box_uv(o, 0.5, off=(R.random(), R.random()))
+    smooth_all(base + lid, 0.7)
+    # (one object per part and material; sorted before any join, which removes the objects it merges)
+    sets = [(f'{pre}_{m}', [o for o in grp if o.data.materials[0].name == m]) for grp, pre in ((base, 'case_base'), (lid, 'case_lid'))
+            for m in ('case_shell', 'metal_plate', 'case_foam', 'case_rubber')]
+    export([join(obs, name) for name, obs in sets if obs], 'case')
+
 ONLY = sys.argv[3:]
-for f in (build_crate, build_fence, build_gate, build_plate, build_lift, build_socket, build_cell, build_shard, build_booster, build_ball, build_gate2, build_plate2, build_lift2, build_wall):
+for f in (build_crate, build_fence, build_gate, build_plate, build_lift, build_socket, build_cell, build_shard, build_booster, build_ball, build_gate2, build_plate2, build_lift2, build_wall, build_case):
     if ONLY and f.__name__ not in ONLY: continue
     try: f()
     except Exception as e:

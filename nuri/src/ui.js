@@ -8,6 +8,9 @@ const $ = (id) => document.getElementById(id);
 const CODES = { 세븐: 'SV-7', 셔터: 'R-2', 랜턴: 'L-4', 로터: 'D-1' };
 const SAVE_KEY = 'nuri-save-v1', SET_KEY = 'nuri-settings-v1';
 
+// a pad button's name on a standard (Xbox-layout) pad
+const PAD_NAMES = ['A', 'B', 'X', 'Y', 'LB', 'RB', 'LT', 'RT', 'Back', 'Start', 'LS', 'RS'];
+const padName = (i) => PAD_NAMES[i] || String(i);
 export function readJSON(key) { try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : null; } catch { return null; } }
 export function writeJSON(key, v) { try { localStorage.setItem(key, JSON.stringify(v)); return true; } catch { return false; } }
 export const loadSave = () => readJSON(SAVE_KEY);
@@ -234,12 +237,18 @@ export class UI {
 
   setShards(n, t) { this.rewrite($('shards'), n); $('shards-total').textContent = '/' + t; }
   setFriends(n, t) { this.rewrite($('friends'), n); $('friends-total').textContent = '/' + t; }
-  setPrompt(text, usingPad) {
+  // two lines at most: [행동] (what is in reach) and [동료] (lifting or throwing a friend), each with its own key
+  setPrompt(text, usingPad, friend = null) {
     const p = $('prompt');
-    if (!text) { p.classList.add('hidden'); return; }
+    if (!text && !friend) { p.classList.add('hidden'); return; }
     p.classList.remove('hidden');
-    $('prompt-key').textContent = isTouch ? '행동' : usingPad ? 'X' : 'E';
-    $('prompt-text').textContent = text;
+    const k = this.input?.padMap || {};
+    $('prompt-key').textContent = isTouch ? '행동' : usingPad ? padName(k.interact ?? 2) : 'E';
+    $('prompt-text').textContent = text || '';
+    $('prompt-key').hidden = $('prompt-text').hidden = !text;
+    $('prompt-key2').textContent = usingPad ? padName(k.friend ?? 7) : 'G';
+    $('prompt-text2').textContent = friend || '';
+    $('prompt-key2').hidden = $('prompt-text2').hidden = !friend;
   }
   restart(el) { el.classList.add('hidden'); void el.offsetWidth; el.classList.remove('hidden'); clearTimeout(el._t); }
   discover(name) { $('discover-name').textContent = name; const el = $('discover'); this.restart(el); el._t = setTimeout(() => el.classList.add('hidden'), 4300); }
@@ -412,10 +421,10 @@ export class UI {
   }
   renderPadMap() {
     const box = $('pad-map'); box.innerHTML = '';
-    const names = { jump: '점프', crouch: '숙이기', interact: '행동', emote: '인사' };
+    const names = { jump: '점프', crouch: '숙이기', interact: '행동', emote: '인사', friend: '동료 부르기·던지기' };
     for (const [k, label] of Object.entries(names)) {
       const b = document.createElement('button');
-      b.textContent = `${label}: 버튼 ${this.input.padMap[k]}`;
+      b.textContent = `${label}: ${padName(this.input.padMap[k])}`;
       b.onclick = () => {
         b.textContent = `${label}: 버튼을 누르세요…`;
         this.input.capture = (idx) => { this.input.padMap[k] = idx; this.S.padMap = { ...this.input.padMap }; this.applyS(); this.renderPadMap(); };

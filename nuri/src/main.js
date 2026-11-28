@@ -642,10 +642,13 @@ async function boot() {
       }
       if (ui.dlg) { if (input.consume('interact') || input.consume('jump')) ui.dlg.next(); }
       else if (G.wokeUp) {
+        // [행동]: talk, inspect, use, lift things (with a friend in the hands: what is in reach, else throw it);
+        // [동료] (G / RT / the friend's portrait): call the nearest friend into the hands, throw it
         if (input.consume('interact')) {
-          if (squad.holding) squad.throwHeld();
-          else { const fr = !player.carry && squad.near(); if (fr) squad.pickUp(fr); else gameplay.interact(player); }
+          if (squad.holding && !gameplay.reachable(player, 0.25)) squad.throwHeld();
+          else gameplay.interact(player);
         }
+        if (input.consume('friend')) squad.friendButton();
         if (input.consume('emote')) { player.playAction('wave', 1.2); setExpr('smile', 1.4); moodBeep('happy'); }
       }
       acc += dt;
@@ -653,6 +656,7 @@ async function boot() {
       while (acc >= STEP && steps < 4) {
         if (G.wokeUp) player.update(STEP, orbit.cine || ui.dlg || director.active ? FROZEN : input, orbit.yaw, gameplay);
         else { player.vel.set(0, 0, 0); }
+        if (!director.active) squad.step(STEP);
         physics.step();
         input.pressed.clear();
         acc -= STEP; steps++;
@@ -738,7 +742,7 @@ async function boot() {
     sun.target.position.set(sx, tgt.y, sz);
     sun.position.set(sx + sunDir.x * 40, tgt.y + sunDir.y * 40, sz + sunDir.z * 40);
     // HUD prompt
-    if (G.mode === 'play' && !G.paused) ui.setPrompt(G.wokeUp ? gameplay.prompt(player) : null, input.usingPad);
+    if (G.mode === 'play' && !G.paused) ui.setPrompt(G.wokeUp ? gameplay.prompt(player) : null, input.usingPad, G.wokeUp && !ui.dlg ? squad.prompt() : null);
     // autosave every 60 s
     if (G.mode === 'play' && G.time - G.lastSaveAt > 60) save();
     // wake behind the robot in water, dripping and drying afterwards

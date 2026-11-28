@@ -7,6 +7,7 @@
 // any landmark already discovered.
 import * as THREE from 'three';
 import { josa } from './util.js';
+import { isTouch } from './quality.js';
 
 const GRAV = 9.8;
 
@@ -35,11 +36,25 @@ export class Squad {
     for (const c of this.members()) { if (c.state === 'fly' || c.state === 'work') continue; const d = c.mesh.position.distanceTo(P); if (d < bd) { bd = d; best = c; } }
     return best;
   }
+  // the friend button (G, the pad's RT): throw the one in the hands, else call the nearest into them
+  friendButton() {
+    if (this.holding) { this.throwHeld(); return; }
+    const P = this.player.pos; let best = null, bd = 1e9;
+    for (const c of this.members()) { if (c.state === 'fly') continue; const d = c.mesh.position.distanceTo(P); if (d < bd) { bd = d; best = c; } }
+    if (best) this.callOrThrow(best);
+  }
+  // its prompt (keyboard and pad only: on touch the portraits are the buttons)
+  prompt() {
+    if (isTouch) return null;
+    if (this.holding) return `${josa(this.holding.name, '을', '를')} 던지기`;
+    if (this.player.carry) return null;
+    const c = this.near(0.9); return c ? `${josa(c.name, '을', '를')} 들기` : null;
+  }
   pickUp(c) { this.holding = c; c.state = 'held'; this.player.carry = { kind: 'friend', r: 0.08 }; this.audio.play('pickup'); this.player.emit('grab'); }
   throwHeld() {
     const c = this.holding; if (!c) return; this.holding = null; this.player.carry = null;
     const P = this.player, f = new THREE.Vector3(Math.sin(P.yaw), 0, Math.cos(P.yaw));
-    c.state = 'fly'; c.vel = new THREE.Vector3(f.x * 3.2, 3.1, f.z * 3.2); c.spin = 9;
+    c.state = 'fly'; c.flyT = 0; c.vel = new THREE.Vector3(f.x * 3.2, 3.1, f.z * 3.2); c.spin = 9; c.col?.setEnabled(true);
     this.audio.play('throw'); P.playAction('wave', 0.4);
   }
   land(c) {
@@ -75,19 +90,22 @@ export class Squad {
       if (!c.joined) {
         c.joined = true;
         setTimeout(() => this.ui.toast(c.kind === 0
-          ? '셔터가 뒤따라와요. 가까이서 [행동]으로 들고, 한 번 더 누르면 던져요. 떨어진 곳을 촬영해 숨은 결정을 찾아 줘요.'
+          ? `셔터가 뒤따라와요. ${isTouch ? '왼쪽의 셔터 버튼' : 'G 키 (또는 1)'}로 불러 들고, 한 번 더 누르면 던져요. 떨어진 곳을 촬영해 숨은 결정을 찾아 줘요.`
           : '랜턴이 뒤따라와요. 던지면 그 자리를 30초 동안 비춰요. 어두운 곳의 숨은 결정은 빛 안에서만 보여요.'), 1500);
       }
       if (!c.state || c.state === 'follow' || c.state === 'idle') c.state = 'follow';
+      // moved from outside (a flight with Mina, a cutscene): the body goes where the model was put
+      if (c._set && m.position.distanceToSquared(c._set) > 0.0025 && c.state !== 'held') this.place(c, m.position.x, m.position.y, m.position.z);
       if (c.state === 'held') {
         // overhead, in both hands
         m.position.set(P.pos.x, P.pos.y + 0.42, P.pos.z); m.rotation.set(0, P.yaw, 0);
+        (c._set ||= new THREE.Vector3()).copy(m.position);
         return;
       }
+      const t = c.body.translation();
       if (c.state === 'fly') {
-        c.vel.y -= GRAV * dt; m.position.addScaledVector(c.vel, dt); m.rotation.x += c.spin * dt;
-        const gy = this.gameplay.groundY(m.position.x, m.position.z);
-        if (m.position.y <= gy && c.vel.y < 0) { m.position.y = gy; m.rotation.x = 0; this.land(c); }
+        m.position.set(t.x, t.y - c.cy, t.z); m.rotation.x += c.spin * dt;
+        (c._set ||= new THREE.Vector3()).copy(m.position); c.pos.copy(m.position);
         return;
       }
       if (c.state === 'work') {
@@ -95,29 +113,28 @@ export class Squad {
         // a little celebration on the spot, then hurry back into the line
         m.rotation.y += dt * (c.kind === 0 ? 4 : 1.5);
         if (c.workT > (c.kind === 0 ? 2.2 : 1.4)) c.state = 'follow';
-        return;
+      } else {
+        // follow: a point on the trail ~0.55 m per place in the line (step() walks it there, round what is in the way)
+        // walk back along the trail by the place's spacing; a jump in the trail (teleport, lift) ends it there
+        const want = 0.55 + k * 0.5; let acc = 0, tgt = this.trail[0] || P.pos;
+        for (let i = 1; i < this.trail.length; i++) {
+          const seg = this.trail[i].distanceTo(this.trail[i - 1]);
+          if (seg > 1.0) break;
+          acc += seg; tgt = this.trail[i];
+          if (acc >= want) break;
+        }
+        // (never closer than its place in the line: with a short trail, just after a jump or a lift, it stands off)
+        const gap = 0.42 + k * 0.32, ox = m.position.x - P.pos.x, oz = m.position.z - P.pos.z, od = Math.hypot(ox, oz) || 1;
+        if (Math.hypot(tgt.x - P.pos.x, tgt.z - P.pos.z) < gap) tgt = new THREE.Vector3(P.pos.x + ox / od * gap, tgt.y, P.pos.z + oz / od * gap);
+        c.tgt = tgt;
+        const moving = (c.speed || 0) > 0.04;
+        if (moving) { const dy = (((c.dir - m.rotation.y) % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI; m.rotation.y += dy * Math.min(1, dt * 12); }
+        if (m.userData.wheel && moving) m.userData.wheel.rotation.x += dt * 14 * Math.min(2, c.speed / 0.5);
+        m.position.set(t.x, t.y - c.cy + (moving ? Math.abs(Math.sin(time * 14 + k)) * 0.012 : 0), t.z);
       }
-      // follow: a point on the trail ~0.55 m per place in the line, eased; jump back in when far behind
-      // walk back along the trail by the place's spacing; a jump in the trail (teleport, lift) ends it there
-      const want = 0.55 + k * 0.5; let acc = 0, tgt = this.trail[0] || P.pos;
-      for (let i = 1; i < this.trail.length; i++) {
-        const seg = this.trail[i].distanceTo(this.trail[i - 1]);
-        if (seg > 1.0) break;
-        acc += seg; tgt = this.trail[i];
-        if (acc >= want) break;
-      }
-      const d = m.position.distanceTo(tgt);
-      if (d > 6) { m.position.copy(tgt); }
-      else {
-        const k2 = Math.min(1, dt * (d > 1 ? 6 : 3.5));
-        const nx = m.position.x + (tgt.x - m.position.x) * k2, nz = m.position.z + (tgt.z - m.position.z) * k2;
-        const moving = Math.hypot(nx - m.position.x, nz - m.position.z) > 0.002;
-        if (moving) m.rotation.y = Math.atan2(nx - m.position.x, nz - m.position.z);
-        m.position.x = nx; m.position.z = nz;
-        m.position.y = this.gameplay.groundY(nx, nz) + (moving ? Math.abs(Math.sin(time * 14 + k)) * 0.012 : 0);
-        if (m.userData.wheel && moving) m.userData.wheel.rotation.x += dt * 14;
-      }
-      c.pos.copy(m.position);
+      if (c.state === 'work') m.position.set(t.x, t.y - c.cy, t.z);
+      (c._set ||= new THREE.Vector3()).copy(m.position);
+      c.pos.set(t.x, t.y - c.cy, t.z);
     });
     // Toto's reveals: revealed crystals pulse brighter and show on the minimap scan
     for (let i = this.reveals.length - 1; i >= 0; i--) {
@@ -139,6 +156,79 @@ export class Squad {
       const o = Math.max(0, Math.min(1, lit * 2));
       s.mesh.visible = o > 0.02; s.mesh.material.opacity = o; s.mesh.material.transparent = o < 1;
       s.hidden = o < 0.3;                         // can only be picked up once it is lit
+    }
+  }
+  // ---------------------------------------------------------------- physics (each fixed step, before the world steps)
+  // The found friends walk with a character controller of their own: round rocks and roots, up small steps, never
+  // through a wall, a crate or the robot. They make way when the robot walks back into them; one that is pinned
+  // against it lets it through for a moment (so a friend can never wall the robot into a tunnel). Thrown, they fly
+  // until they hit something: a wall knocks them back, the ground (or a crate, a plate) is where they land.
+  place(c, x, y, z) { const p = { x, y: y + c.cy, z }; c.body.setTranslation(p, true); c.body.setNextKinematicTranslation(p); c.vy = 0; }
+  ccOf(c) {
+    if (c.cc) return c.cc;
+    const cc = c.cc = this.ctx.physics.createCharacterController(0.006);
+    cc.enableAutostep(0.05, 0.03, false); cc.enableSnapToGround(0.05);
+    cc.setMaxSlopeClimbAngle(55 * Math.PI / 180); cc.setMinSlopeSlideAngle(60 * Math.PI / 180);
+    cc.setSlideEnabled(true); cc.setApplyImpulsesToDynamicBodies(true); cc.setCharacterMass(0.8);
+    return cc;
+  }
+  step(dt) {
+    const R = this.ctx.RAPIER, P = this.player, pc = P.col;
+    for (const c of this.gameplay.companions) {
+      if (!c.body) continue;
+      if (c.kind === 2) { c.body.setNextKinematicTranslation(c.mesh.position); continue; }
+      if (!c.found || !c.state) continue;                       // asleep where it was found: it stays where it is
+      const col = c.col, t = c.body.translation();
+      if (c.state === 'held') {
+        if (col.isEnabled()) col.setEnabled(false);
+        c.body.setNextKinematicTranslation({ x: P.pos.x, y: P.pos.y + 0.42 + c.cy, z: P.pos.z }); continue;
+      }
+      const cc = this.ccOf(c), filter = (o) => o.handle !== col.handle && !o.isSensor() && o.userData?.kind !== 'item-held' && !(o.handle === pc.handle && c.state === 'fly' && c.flyT < 0.3);
+      if (c.state === 'fly') {
+        if (!col.isEnabled()) col.setEnabled(true);
+        c.flyT += dt; c.vel.y -= GRAV * dt;
+        const want = { x: c.vel.x * dt, y: c.vel.y * dt, z: c.vel.z * dt };
+        cc.disableSnapToGround(); cc.computeColliderMovement(col, want, R.QueryFilterFlags.EXCLUDE_SENSORS, undefined, filter); cc.enableSnapToGround(0.05);
+        const mv = cc.computedMovement(), wh = Math.hypot(want.x, want.z);
+        if (wh > 1e-4 && Math.hypot(mv.x, mv.z) < wh * 0.4) { c.vel.x *= -0.3; c.vel.z *= -0.3; this.audio.play('clack', { pos: c.mesh.position, vol: 0.4 }); }
+        if (want.y > 0 && mv.y < want.y * 0.3) c.vel.y = Math.min(c.vel.y, 0);       // a branch overhead
+        const nx = t.x + mv.x, ny = t.y + mv.y, nz = t.z + mv.z, gy = this.gameplay.groundY(nx, nz);
+        c.body.setNextKinematicTranslation({ x: nx, y: Math.max(ny, gy + c.cy - 0.02), z: nz });
+        if ((cc.computedGrounded() && c.vel.y < 0) || ny - c.cy <= gy) { c.mesh.position.set(nx, Math.max(ny, gy + c.cy) - c.cy, nz); c.mesh.rotation.x = 0; c.vy = 0; this.land(c); }
+        continue;
+      }
+      // follow / work: toward its place in the line, falling under gravity, snapped to the ground
+      let mx = 0, mz = 0;
+      const tg = c.state === 'follow' ? c.tgt : null;
+      if (tg) {
+        const dx = tg.x - t.x, dz = tg.z - t.z, d = Math.hypot(dx, dz);
+        if (d > 6) { this.place(c, tg.x, this.gameplay.groundY(tg.x, tg.z), tg.z); c.ghostT = 0.5; col.setEnabled(false); continue; }
+        const k = Math.min(1, dt * (d > 1 ? 6 : 3.5)); mx = dx * k; mz = dz * k;
+      }
+      // make way for the robot
+      const px = t.x - P.pos.x, pz = t.z - P.pos.z, pd = Math.hypot(px, pz), level = Math.abs(t.y - c.cy - P.pos.y) < 0.35;
+      if (level && pd < 0.32) { const s = (0.32 - pd) * 7 * dt / Math.max(pd, 1e-3); mx += px * s; mz += pz * s; }
+      c.vy = Math.max(-6, (c.vy || 0) - GRAV * dt);
+      if (c.ghostT > 0) {
+        // passing through: no collisions until clear of the robot again
+        c.ghostT -= dt;
+        const nx = t.x + mx, nz = t.z + mz;
+        c.body.setNextKinematicTranslation({ x: nx, y: this.gameplay.groundY(nx, nz) + c.cy, z: nz });
+        if (c.ghostT <= 0 && !(level && pd < 0.24)) col.setEnabled(true); else if (c.ghostT <= 0) c.ghostT = 0.1;
+        c.speed = Math.hypot(mx, mz) / dt; if (c.speed > 0.04) c.dir = Math.atan2(mx, mz); c.vy = 0;
+        continue;
+      }
+      if (!col.isEnabled()) col.setEnabled(true);
+      cc.computeColliderMovement(col, { x: mx, y: c.vy * dt, z: mz }, R.QueryFilterFlags.EXCLUDE_SENSORS, undefined, filter);
+      const mv = cc.computedMovement();
+      if (cc.computedGrounded() && c.vy < 0) c.vy = 0;
+      let nx = t.x + mv.x, ny = t.y + mv.y, nz = t.z + mv.z;
+      const gy = this.gameplay.groundY(nx, nz);
+      if (ny - c.cy < gy - 0.25) { ny = gy + c.cy; c.vy = 0; }               // fell through something: back on the ground
+      c.body.setNextKinematicTranslation({ x: nx, y: ny, z: nz });
+      c.speed = Math.hypot(mv.x, mv.z) / dt; if (c.speed > 0.04) c.dir = Math.atan2(mv.x, mv.z);
+      // pinned against the robot (it walks into it and it cannot get out of the way): let it through
+      if (level && pd < 0.19) { c.pressT = (c.pressT || 0) + dt; if (c.pressT > 0.3) { c.pressT = 0; c.ghostT = 0.8; col.setEnabled(false); } } else c.pressT = 0;
     }
   }
   // portraits: tap (or 1 / 2) to call a friend into Nuri's hands; tap again to throw it
